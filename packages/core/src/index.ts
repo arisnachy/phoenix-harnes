@@ -17,9 +17,14 @@ interface RegisteredProvider {
   adapter: ProviderAdapter;
 }
 
+export interface RequestPolicy {
+  apply(request: PhoenixRequest): PhoenixRequest;
+}
+
 export interface PhoenixRuntimeOptions {
   ledger?: InMemoryLedger;
   evolution?: EvolutionEngine;
+  policy?: RequestPolicy;
 }
 
 export class PhoenixRuntime {
@@ -27,10 +32,12 @@ export class PhoenixRuntime {
   readonly #health = new Map<string, ProviderHealth>();
   public readonly ledger: InMemoryLedger;
   public readonly evolution: EvolutionEngine;
+  public readonly policy?: RequestPolicy;
 
   public constructor(options: PhoenixRuntimeOptions = {}) {
     this.ledger = options.ledger ?? new InMemoryLedger();
     this.evolution = options.evolution ?? new EvolutionEngine();
+    this.policy = options.policy;
   }
 
   public registerProvider(definition: ProviderDefinition, adapter: ProviderAdapter): void {
@@ -55,7 +62,14 @@ export class PhoenixRuntime {
   }
 
   public async generate(request: PhoenixRequest, signal?: AbortSignal): Promise<PhoenixResponse> {
-    const decision = route(request, { providers: this.providers(), health: this.health() });
+    const effectiveRequest = this.policy?.apply(request) ?? request;
+    if (effectiveRequest !== request) {
+      this.ledger.append('routing.policy_applied', {
+        metadata: effectiveRequest.metadata ?? {},
+        preferences: effectiveRequest.preferences ?? {},
+      });
+    }
+    const decision = route(effectiveRequest, { providers: this.providers(), health: this.health() });
     this.ledger.append('route.decision', {
       requestId: decision.requestId,
       candidates: decision.candidates.map((candidate) => ({
@@ -78,7 +92,7 @@ export class PhoenixRuntime {
         const response = await registered.adapter.generate(
           candidate.provider,
           candidate.model,
-          request,
+          effectiveRequest,
           signal ? { signal } : undefined,
         );
         const observation: ExecutionObservation = {
