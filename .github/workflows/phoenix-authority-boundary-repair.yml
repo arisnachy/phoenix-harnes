@@ -29,7 +29,7 @@ jobs:
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
 
-      - name: Enforce capability-authority separation and host graph ownership
+      - name: Harden authority and align PHOENIX with native DSH types
         shell: bash
         run: |
           python - <<'PY'
@@ -86,6 +86,25 @@ jobs:
 
           runtime_path = Path('packages/phoenix/runtime/src/index.ts')
           runtime = runtime_path.read_text()
+
+          token_import_anchor = "import type { LlmCallConfig, LlmModelInfo } from '@deepseek-ai/dsh-llm'"
+          if runtime.count(token_import_anchor) != 1:
+              raise SystemExit('token-meter import anchor missing')
+          runtime = runtime.replace(
+              token_import_anchor,
+              token_import_anchor + "\nimport type {} from '@deepseek-ai/dsh-token-meter'",
+              1,
+          )
+
+          schema_replacements = {
+              'hardContextTokens: z.number().min(1).optional(),': 'hardContextTokens: z.number().min(1),',
+              'statePath: z.string().optional(),': 'statePath: z.string(),',
+          }
+          for old_schema, new_schema in schema_replacements.items():
+              if runtime.count(old_schema) != 1:
+                  raise SystemExit(f'schema anchor missing: {old_schema}')
+              runtime = runtime.replace(old_schema, new_schema, 1)
+
           runtime = sub_once(
               runtime,
               r"  recordBenchmark\(evidence: CapabilityEvidence\): void \{.*?\n  \}\n\n  quarantine",
@@ -164,11 +183,11 @@ jobs:
       - name: Validate diff
         run: git diff --check
 
-      - name: Commit authority and host-graph hardening
+      - name: Commit authority and native-type hardening
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add packages/phoenix/runtime/src/model-ladder.ts packages/phoenix/runtime/src/index.ts packages/phoenix/runtime/tests/model-ladder.spec.ts tsconfig.host.json
-          git commit -m "fix(phoenix): separate mission evidence from authority"
+          git commit -m "fix(phoenix): enforce authority boundary in native type graph"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
