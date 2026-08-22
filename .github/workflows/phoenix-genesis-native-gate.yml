@@ -23,7 +23,7 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Establish PHOENIX downstream package identity
+      - name: Establish PHOENIX downstream package identity and native catalog ownership
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -71,7 +71,6 @@ jobs:
               '  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now = Date.now()): RankedModel[] {',
               '  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now: number = Date.now()): RankedModel[] {',
           )
-          # Normalize formatting left by the earlier authority-boundary repair.
           code = code.replace(
               "  private hasAuthorityEvidence(state: ModelState): boolean {\n  let weightedSamples = 0\n  for (const points of state.evidence.values()) {\n    for (const point of points) {\n      if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n    }\n  }\n  return weightedSamples >= 3\n}\n\nprivate dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {",
               "  private hasAuthorityEvidence(state: ModelState): boolean {\n    let weightedSamples = 0\n    for (const points of state.evidence.values()) {\n      for (const point of points) {\n        if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n      }\n    }\n    return weightedSamples >= 3\n  }\n\n  private dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {",
@@ -147,6 +146,27 @@ jobs:
                   raise SystemExit('tsconfig PHOENIX mapping anchor missing')
               text = text.replace(anchor, mappings + anchor, 1)
               config.write_text(text)
+
+          # Register the new service and its signature types with the curated
+          # Typert catalog instead of exempting them from documentation.
+          catalog = Path('scripts/gen-cordis-catalog.ts')
+          text = catalog.read_text()
+          service_anchor = "  planMode: 'plan.md',\n"
+          if "  phoenix: 'core.md',\n" not in text:
+              if service_anchor not in text:
+                  raise SystemExit('Typert SERVICE_PAGE anchor missing')
+              text = text.replace(service_anchor, service_anchor + "  phoenix: 'core.md',\n", 1)
+          link_anchor = "  ModelSelection: 'core.md',\n"
+          phoenix_types = """  CapabilityEvidence: 'core.md',
+            ModelRef: 'core.md',
+            PhoenixRole: 'core.md',
+            RankedModel: 'core.md',
+          """
+          if "  CapabilityEvidence: 'core.md',\n" not in text:
+              if link_anchor not in text:
+                  raise SystemExit('Typert LINK_MAP anchor missing')
+              text = text.replace(link_anchor, link_anchor + phoenix_types, 1)
+          catalog.write_text(text)
 
           # Assert no PHOENIX-owned package still claims the DeepSeek npm scope.
           for root in roots:
