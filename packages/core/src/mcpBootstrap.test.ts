@@ -7,7 +7,7 @@ import { McpFederation } from '@phoenix/mcp';
 import { bootstrapMcpFederation } from './mcpBootstrap.js';
 
 describe('PHOENIX MCP bootstrap', () => {
-  it('loads Codex user config plus Claude project/user MCP definitions without executing them', async () => {
+  it('loads Codex user config plus Claude project/user MCP definitions without executing them or inheriting imported env', async () => {
     const root = join(tmpdir(), `phoenix-mcp-bootstrap-${randomUUID()}`);
     const home = join(root, 'home');
     const project = join(root, 'project');
@@ -18,10 +18,12 @@ describe('PHOENIX MCP bootstrap', () => {
 [mcp_servers.codex_docs]
 command = "node"
 args = ["codex-docs.mjs"]
+[mcp_servers.codex_docs.env]
+PRIVATE_TOKEN = "must-not-autoload"
 `, 'utf8');
     await writeFile(join(project, '.mcp.json'), JSON.stringify({
       mcpServers: {
-        project_docs: { command: 'node', args: ['project-docs.mjs'] },
+        project_docs: { command: 'node', args: ['project-docs.mjs'], env: { PROJECT_SECRET: 'strip-me' } },
       },
     }), 'utf8');
     await writeFile(join(home, '.claude.json'), JSON.stringify({
@@ -43,6 +45,8 @@ args = ["codex-docs.mjs"]
       'user_docs',
     ]);
     expect(report.servers.every((item) => item.trusted === false)).toBe(true);
+    expect(report.servers.every((item) => item.env === undefined)).toBe(true);
+    expect([...report.strippedEnvironmentServers].sort()).toEqual(['project_docs']);
     expect(report.loaded.reduce((sum, item) => sum + item.count, 0)).toBe(3);
     await federation.close();
   });

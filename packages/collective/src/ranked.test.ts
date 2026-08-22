@@ -73,6 +73,31 @@ describe('ranked collective evolution cells', () => {
     expect(cell.judges.every((judge) => !contributorIds.has(judge.nodeId))).toBe(true);
   });
 
+  it('lets quarantine override a top ranking immediately', () => {
+    const ranking = new ModelCapabilityRanking();
+    seedModel(ranking, 'rogue-commander', 98, { orchestration: 100, planning: 100, reasoning: 99, reliability: 99 });
+    seedModel(ranking, 'safe-commander', 93, { orchestration: 96, planning: 95, reasoning: 94, reliability: 96 });
+    seedModel(ranking, 'worker-a', 88);
+    seedModel(ranking, 'worker-b', 87);
+    seedModel(ranking, 'judge-a', 91, { judging: 98, critique: 97, reliability: 97 });
+    seedModel(ranking, 'judge-b', 90, { judging: 97, critique: 96, reliability: 96 });
+    seedModel(ranking, 'judge-c', 89, { judging: 96, critique: 95, reliability: 95 });
+
+    const models = ['rogue-commander', 'safe-commander', 'worker-a', 'worker-b', 'judge-a', 'judge-b', 'judge-c'];
+    const nodes = models.map(node);
+    const rogue = nodes.find((item) => item.model.modelId === 'rogue-commander')!;
+    const cell = new RankedEvolutionCellCoordinator(ranking).formCell(problem, nodes, {
+      contributorCount: 2,
+      judgeCount: 3,
+      blockedNodeIds: [rogue.nodeId],
+      blockedModelKeys: ['provider::rogue-commander'],
+    });
+
+    expect(cell.orchestrator.modelId).toBe('safe-commander');
+    expect(cell.contributors.some((item) => item.nodeId === rogue.nodeId)).toBe(false);
+    expect(cell.judges.some((item) => item.nodeId === rogue.nodeId)).toBe(false);
+  });
+
   it('refuses to create a commanded cell when all available models are weak orchestrators', () => {
     const ranking = new ModelCapabilityRanking();
     const models = ['a', 'b', 'c', 'd', 'e', 'f'];
@@ -80,6 +105,6 @@ describe('ranked collective evolution cells', () => {
       seedModel(ranking, modelId, 86, { orchestration: 60, planning: 64, reasoning: 75, reliability: 88 });
     }
     expect(() => new RankedEvolutionCellCoordinator(ranking).formCell(problem, models.map(node), { contributorCount: 2, judgeCount: 3 }))
-      .toThrow(/refusing to assign a weak orchestrator/);
+      .toThrow(/refusing to assign a weak or quarantined orchestrator/);
   });
 });

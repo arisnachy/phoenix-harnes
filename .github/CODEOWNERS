@@ -1,0 +1,7 @@
+# PHOENIX Mother security/control-plane ownership
+/packages/security/ @arisnachy
+/.github/ @arisnachy
+/SECURITY.md @arisnachy
+/LICENSE @arisnachy
+/package.json @arisnachy
+/pnpm-lock.yaml @arisnachy

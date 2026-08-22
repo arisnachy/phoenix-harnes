@@ -42,6 +42,8 @@ function modelKey(node: RankedNodeProfile): string {
 
 export interface RankedCellPolicy extends CellPolicy {
   requireQualifiedModels?: boolean;
+  blockedNodeIds?: readonly string[];
+  blockedModelKeys?: readonly string[];
 }
 
 export class RankedEvolutionCellCoordinator {
@@ -58,8 +60,11 @@ export class RankedEvolutionCellCoordinator {
     const maxCpuMs = Math.max(0, Math.floor(policy.maxCpuMsPerContributor ?? 10_000));
     const ttlMs = Math.max(60_000, Math.floor(policy.ttlMs ?? 30 * 60_000));
     const requireQualified = policy.requireQualifiedModels ?? true;
+    const blockedNodes = new Set(policy.blockedNodeIds ?? []);
+    const blockedModels = new Set(policy.blockedModelKeys ?? []);
 
     const eligible = nodes.filter((node) => {
+      if (blockedNodes.has(node.nodeId) || blockedModels.has(modelKey(node))) return false;
       if (!node.optIn || (node.budget.maxAiTokens <= 0 && node.budget.maxCpuMs <= 0)) return false;
       const profile = this.ranking.profile(node.model.providerId, node.model.modelId);
       if (!profile) return !requireQualified;
@@ -72,7 +77,7 @@ export class RankedEvolutionCellCoordinator {
       .sort((a, b) => (b.ranked?.composite ?? 0) - (a.ranked?.composite ?? 0) || (b.ranked?.confidence ?? 0) - (a.ranked?.confidence ?? 0));
     const orchestratorCandidate = orchestratorCandidates[0];
     if (!orchestratorCandidate?.ranked) {
-      throw new Error('No PHOENIX model clears the command authority gate; refusing to assign a weak orchestrator');
+      throw new Error('No PHOENIX model clears the command authority gate; refusing to assign a weak or quarantined orchestrator');
     }
     const orchestratorNode = orchestratorCandidate.node;
 
@@ -103,7 +108,7 @@ export class RankedEvolutionCellCoordinator {
     }
 
     if (contributors.length < Math.min(2, contributorCount)) {
-      throw new Error('PHOENIX ranking could not find enough qualified contributor models');
+      throw new Error('PHOENIX ranking could not find enough qualified non-quarantined contributor models');
     }
 
     const contributorIds = new Set(contributors.map((item) => item.nodeId));
@@ -130,7 +135,7 @@ export class RankedEvolutionCellCoordinator {
     }
 
     if (judges.length < judgeCount) {
-      throw new Error('No sufficient independent judge models clear the PHOENIX authority ranking gates');
+      throw new Error('No sufficient independent non-quarantined judge models clear the PHOENIX authority ranking gates');
     }
 
     const createdAt = new Date();
