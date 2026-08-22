@@ -17,12 +17,19 @@ export interface McpBootstrapOptions {
   includeClaudeProjectConfig?: boolean;
   includeClaudeUserConfig?: boolean;
   includeAgentServers?: boolean;
+  /**
+   * Imported MCP configs can contain environment values. PHOENIX strips them by default
+   * so an unreviewed server cannot gain ambient credentials merely by being discovered.
+   * Enable only for explicitly trusted local MCP configuration.
+   */
+  allowImportedServerEnv?: boolean;
 }
 
 export interface McpBootstrapReport {
   loaded: readonly { source: string; count: number }[];
   skipped: readonly { source: string; reason: string }[];
   servers: readonly McpServerSpec[];
+  strippedEnvironmentServers: readonly string[];
 }
 
 async function readOptional(path: string): Promise<string | undefined> {
@@ -57,6 +64,17 @@ function nestedClaudeServers(text: string): McpServerSpec[] {
   return [...direct, ...extra];
 }
 
+function stripImportedEnvironment(spec: McpServerSpec, allow: boolean, stripped: string[]): McpServerSpec {
+  if (allow || !spec.env) return spec;
+  const { env: _env, ...safe } = spec;
+  stripped.push(spec.id);
+  return {
+    ...safe,
+    trusted: false,
+    tags: [...(spec.tags ?? []), 'environment-stripped'],
+  };
+}
+
 export async function bootstrapMcpFederation(
   federation: McpFederation,
   options: McpBootstrapOptions = {},
@@ -66,6 +84,8 @@ export async function bootstrapMcpFederation(
   const loaded: Array<{ source: string; count: number }> = [];
   const skipped: Array<{ source: string; reason: string }> = [];
   const specs: McpServerSpec[] = [];
+  const strippedEnvironmentServers: string[] = [];
+  const allowImportedServerEnv = options.allowImportedServerEnv === true;
 
   if (options.includeAgentServers !== false) {
     specs.push(codexAsMcpServer(), claudeCodeAsMcpServer());
@@ -76,7 +96,9 @@ export async function bootstrapMcpFederation(
     const path = join(homeDir, '.codex', 'config.toml');
     const text = await readOptional(path);
     if (text) {
-      const imported = importCodexMcpToml(text).map((spec) => ({ ...spec, scope: 'user' as const }));
+      const imported = importCodexMcpToml(text)
+        .map((spec) => ({ ...spec, scope: 'user' as const }))
+        .map((spec) => stripImportedEnvironment(spec, allowImportedServerEnv, strippedEnvironmentServers));
       specs.push(...imported);
       loaded.push({ source: path, count: imported.length });
     } else {
@@ -88,7 +110,9 @@ export async function bootstrapMcpFederation(
     const path = join(projectDir, '.mcp.json');
     const text = await readOptional(path);
     if (text) {
-      const imported = importClaudeMcpJson(text, 'project').map((spec) => ({ ...spec, scope: 'project' as const }));
+      const imported = importClaudeMcpJson(text, 'project')
+        .map((spec) => ({ ...spec, scope: 'project' as const }))
+        .map((spec) => stripImportedEnvironment(spec, allowImportedServerEnv, strippedEnvironmentServers));
       specs.push(...imported);
       loaded.push({ source: path, count: imported.length });
     } else {
@@ -100,7 +124,9 @@ export async function bootstrapMcpFederation(
     const path = join(homeDir, '.claude.json');
     const text = await readOptional(path);
     if (text) {
-      const imported = nestedClaudeServers(text).map((spec) => ({ ...spec, scope: spec.scope ?? 'user' as const }));
+      const imported = nestedClaudeServers(text)
+        .map((spec) => ({ ...spec, scope: spec.scope ?? 'user' as const }))
+        .map((spec) => stripImportedEnvironment(spec, allowImportedServerEnv, strippedEnvironmentServers));
       specs.push(...imported);
       loaded.push({ source: path, count: imported.length });
     } else {
@@ -114,5 +140,5 @@ export async function bootstrapMcpFederation(
     if (!existing || existing.source === 'codex' || existing.source === 'claude-code') unique.set(spec.id, spec);
   }
   federation.registerMany([...unique.values()]);
-  return { loaded, skipped, servers: federation.servers() };
+  return { loaded, skipped, servers: federation.servers(), strippedEnvironmentServers };
 }
