@@ -1,5 +1,4 @@
 import type { ModelCapabilities, ModelDefinition, ProviderDefinition } from '@phoenix/contracts';
-import { customOpenAIProvider, ProviderTransportError } from './index.js';
 
 export interface DiscoveryOptions {
   id: string;
@@ -18,6 +17,17 @@ export interface ProviderDiscoveryReport {
   source: 'openai-models';
   modelIds: readonly string[];
   warnings: readonly string[];
+}
+
+export class ProviderDiscoveryError extends Error {
+  public constructor(
+    message: string,
+    public readonly statusCode?: number,
+    public readonly retryable = false,
+  ) {
+    super(message);
+    this.name = 'ProviderDiscoveryError';
+  }
 }
 
 const conservativeCapabilities: ModelCapabilities = {
@@ -39,7 +49,7 @@ export async function discoverOpenAICompatible(
   const fetchImpl = options.fetchImpl ?? fetch;
   const key = options.apiKeyEnv ? process.env[options.apiKeyEnv] : undefined;
   if (options.apiKeyEnv && !key) {
-    throw new ProviderTransportError(
+    throw new ProviderDiscoveryError(
       `Missing credential environment variable ${options.apiKeyEnv}`,
       undefined,
       false,
@@ -58,7 +68,7 @@ export async function discoverOpenAICompatible(
       signal: controller.signal,
     });
   } catch (error) {
-    throw new ProviderTransportError(
+    throw new ProviderDiscoveryError(
       error instanceof Error ? error.message : 'Provider discovery transport failure',
       undefined,
       true,
@@ -69,7 +79,7 @@ export async function discoverOpenAICompatible(
 
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 1000);
-    throw new ProviderTransportError(
+    throw new ProviderDiscoveryError(
       `Provider discovery returned HTTP ${response.status}: ${detail}`,
       response.status,
       retryableStatus(response.status),
@@ -95,15 +105,19 @@ export async function discoverOpenAICompatible(
     tags: ['discovered'],
   }));
 
+  const provider: ProviderDefinition = {
+    id: options.id,
+    displayName: options.displayName ?? options.id,
+    baseUrl: options.baseUrl.replace(/\/$/, ''),
+    protocol: 'openai-chat',
+    ...(options.apiKeyEnv ? { apiKeyEnv: options.apiKeyEnv } : {}),
+    ...(options.local !== undefined ? { local: options.local } : {}),
+    models,
+    tags: ['discovered'],
+  };
+
   return {
-    provider: customOpenAIProvider({
-      id: options.id,
-      ...(options.displayName ? { displayName: options.displayName } : {}),
-      baseUrl: options.baseUrl,
-      ...(options.apiKeyEnv ? { apiKeyEnv: options.apiKeyEnv } : {}),
-      ...(options.local !== undefined ? { local: options.local } : {}),
-      models,
-    }),
+    provider,
     discoveredAt: new Date().toISOString(),
     source: 'openai-models',
     modelIds,
