@@ -64,4 +64,21 @@ describe('PHOENIX DSH model router', () => {
       .toEqual({ provider: 'safe', model: 'safe' })
     expect(getPhoenixModelLadderSnapshot()[0]?.status).toBe('provisional')
   })
+
+  it('fails over to another qualified provider for transient/quota failures without retrying invalid credentials forever', async () => {
+    const primary = { ...strongCoder, provider: 'primary' }
+    const backup = { ...strongCoder, provider: 'backup', model: 'coder-backup', scores: { ...strongCoder.scores, coding: 95 } }
+    const subject = agent('implement this TypeScript class')
+    const { events } = setup([primary, backup])
+    const route = events.get('agent/request')?.[0]!
+    const onError = events.get('agent/request-error')?.[0]!
+
+    expect(await route({ agent: subject }, async () => ({ provider: 'base', model: 'base' }))).toMatchObject({ provider: 'primary' })
+    expect(await onError({ agent: subject, provider: 'primary', failure: { code: 'RATE_LIMIT' } }, async () => undefined))
+      .toEqual({ kind: 'retry' })
+    expect(await route({ agent: subject }, async () => ({ provider: 'base', model: 'base' }))).toMatchObject({ provider: 'backup' })
+
+    expect(await onError({ agent: subject, provider: 'backup', failure: { code: 'INVALID_CREDENTIAL' } }, async () => undefined))
+      .toBeUndefined()
+  })
 })
