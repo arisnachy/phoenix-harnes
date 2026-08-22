@@ -82,10 +82,11 @@ export class PhoenixRuntime {
   }
 
   public async generate(request: PhoenixRequest, signal?: AbortSignal): Promise<PhoenixResponse> {
-    const plan = this.governor?.plan(request);
-    const governedRequest: PhoenixRequest = plan ? {
+    const governor = this.governor;
+    const plan = governor?.plan(request);
+    const governedRequest: PhoenixRequest = plan && governor ? {
       ...request,
-      preferences: this.governor?.preferencesFor(plan, request.preferences ?? {}),
+      preferences: governor.preferencesFor(plan, request.preferences ?? {}),
       metadata: {
         ...(request.metadata ?? {}),
         phoenixComplexity: plan.complexity,
