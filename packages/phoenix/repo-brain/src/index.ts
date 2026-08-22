@@ -9,7 +9,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { open, readdir, stat } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 
 const DEFAULT_MAX_FILES = 20_000
@@ -194,8 +194,15 @@ export class RepoBrainIndex {
         continue
       }
       const bytesToRead = Math.min(info.size, this.config.maxFileBytes)
-      const handle = await readFile(absolute)
-      const text = handle.subarray(0, bytesToRead).toString('utf8')
+      const file = await open(absolute, 'r')
+      let text: string
+      try {
+        const buffer = Buffer.alloc(bytesToRead)
+        const { bytesRead } = await file.read(buffer, 0, bytesToRead, 0)
+        text = buffer.subarray(0, bytesRead).toString('utf8')
+      } finally {
+        await file.close()
+      }
       const extension = extname(path).toLowerCase()
       const symbols = extractSymbols(text, extension)
       const termSource = [path, ...symbols, ...words(text)]
@@ -255,6 +262,11 @@ export class RepoBrainIndex {
         const base = resolve(importerDir, spec)
         if (!insideRoot(this.config.root, base)) continue
         const candidates: string[] = [base]
+        const declaredExtension = extname(base).toLowerCase()
+        if (['.js', '.jsx', '.mjs', '.cjs'].includes(declaredExtension)) {
+          const stem = base.slice(0, -declaredExtension.length)
+          for (const extension of ['.ts', '.tsx', '.mts', '.cts']) candidates.push(`${stem}${extension}`)
+        }
         for (const extension of IMPORTABLE_EXTENSIONS) {
           candidates.push(`${base}${extension}`)
           candidates.push(resolve(base, `index${extension}`))

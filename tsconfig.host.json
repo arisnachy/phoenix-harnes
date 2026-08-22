@@ -308,6 +308,8 @@
     { "path": "./packages/lsp/lsp-stdio" },
     { "path": "./packages/lsp/tool-lsp" },
     { "path": "./packages/phoenix/runtime" },
+    { "path": "./packages/phoenix/ai-bus" },
+    { "path": "./packages/phoenix/repo-brain" },
     { "path": "./packages/bundle/phoenix" },
     { "path": "./apps/cli" }
   ]
