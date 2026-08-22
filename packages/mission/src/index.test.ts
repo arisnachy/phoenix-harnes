@@ -83,7 +83,10 @@ describe('PHOENIX Mission Graph', () => {
 
   it('assigns each ready role to a model qualified for that role and excludes quarantined model keys', () => {
     const ranking = new ModelCapabilityRanking();
-    seed(ranking, 'great-builder', 88, { coding: 99, debugging: 97, orchestration: 60, planning: 64 });
+    seed(ranking, 'great-builder', 88, {
+      coding: 99, debugging: 97, toolUse: 94, reliability: 92,
+      orchestration: 55, planning: 50, reasoning: 50, research: 50,
+    });
     seed(ranking, 'great-analyst', 91, { reasoning: 98, research: 98, planning: 94 });
     const graph = new MissionGraph({
       id: 'ranked', objective: 'Use specialists', tasks: [
