@@ -11,7 +11,9 @@ export interface LedgerEvent<T = unknown> {
 }
 
 function stable(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (value === undefined) return '"__phoenix_undefined__"';
+  if (value === null) return 'null';
+  if (typeof value !== 'object') return JSON.stringify(value) ?? JSON.stringify(String(value));
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
   const record = value as Record<string, unknown>;
   return `{${Object.keys(record)
