@@ -64,6 +64,24 @@ function digestMessage(message: PhoenixMessage): string {
   return `${message.role}${tools}: ${clipped}`;
 }
 
+function clipText(text: string, tokenBudget: number): string {
+  if (tokenBudget <= 0) return '';
+  if (estimateTokens(text) <= tokenBudget) return text;
+  const maxChars = Math.max(0, tokenBudget * 4);
+  if (maxChars <= 14) return text.slice(0, maxChars);
+  return `${text.slice(0, maxChars - 14)}…[compacted]`;
+}
+
+function clipMessage(message: PhoenixMessage, tokenBudget: number): PhoenixMessage | undefined {
+  const structural = estimateTokens(JSON.stringify(message.toolCalls ?? [])) + 4;
+  if (tokenBudget <= structural) {
+    // Tool-call structure is more important than prose when preserving a live tool transaction.
+    if (message.toolCalls?.length && tokenBudget >= structural) return { ...message, content: '' };
+    return undefined;
+  }
+  return { ...message, content: clipText(message.content, tokenBudget - structural) };
+}
+
 export function compactAgentHistory(messages: readonly PhoenixMessage[], budgetTokens: number): PhoenixMessage[] {
   const budget = Math.max(256, budgetTokens);
   const total = messages.reduce((sum, message) => sum + messageTokens(message), 0);
@@ -71,30 +89,63 @@ export function compactAgentHistory(messages: readonly PhoenixMessage[], budgetT
 
   const system = messages.filter((message) => message.role === 'system');
   const nonSystem = messages.filter((message) => message.role !== 'system');
-  const tail: PhoenixMessage[] = [];
-  let used = system.reduce((sum, item) => sum + messageTokens(item), 0);
+  const instructionBudget = Math.max(64, Math.floor(budget * 0.30));
+  const auxiliarySystemBudget = Math.max(32, Math.floor(budget * 0.15));
+  const oldDigestBudget = Math.max(32, Math.floor(budget * 0.15));
+  const tailBudget = Math.max(96, budget - instructionBudget - auxiliarySystemBudget - oldDigestBudget);
+  const result: PhoenixMessage[] = [];
 
-  // Preserve the newest interaction first. This keeps assistant tool_calls adjacent to their tool results.
-  for (let index = nonSystem.length - 1; index >= 0; index -= 1) {
-    const message = nonSystem[index];
-    if (!message) continue;
-    const cost = messageTokens(message);
-    if (tail.length >= 6 || used + cost > Math.floor(budget * 0.82)) break;
-    tail.unshift({ ...message });
-    used += cost;
+  const primaryInstruction = system[0];
+  if (primaryInstruction) {
+    const clipped = clipMessage(primaryInstruction, instructionBudget);
+    if (clipped) result.push(clipped);
   }
 
-  const tailSet = new Set(tail.map((item) => item));
-  const tailStart = Math.max(0, nonSystem.length - tail.length);
-  const omitted = nonSystem.slice(0, tailStart);
-  let digest = omitted.map(digestMessage).join('\n');
-  const digestBudget = Math.max(64, budget - used - 16);
-  if (estimateTokens(digest) > digestBudget) digest = `${digest.slice(0, Math.max(0, digestBudget * 4 - 15))}\n…[compacted]`;
+  const auxiliary = system.slice(1);
+  if (auxiliary.length) {
+    const digest = clipText(auxiliary.map(digestMessage).join('\n'), auxiliarySystemBudget - 6);
+    if (digest.trim()) result.push({ role: 'system', content: `Auxiliary context digest:\n${digest}` });
+  }
 
-  const result: PhoenixMessage[] = [...system.map((item) => ({ ...item }))];
-  if (digest.trim()) result.push({ role: 'system', content: `Earlier interaction digest:\n${digest}` });
-  result.push(...tail);
-  void tailSet;
+  let tailStart = Math.max(0, nonSystem.length - 6);
+  for (let index = nonSystem.length - 1; index >= 0; index -= 1) {
+    const item = nonSystem[index];
+    if (item?.role === 'assistant' && item.toolCalls?.length) {
+      const followedByTool = nonSystem.slice(index + 1).some((candidate) =>
+        candidate.role === 'tool' && item.toolCalls?.some((call) => call.id === candidate.toolCallId));
+      if (followedByTool) tailStart = Math.min(tailStart, index);
+      break;
+    }
+  }
+
+  const omitted = nonSystem.slice(0, tailStart);
+  if (omitted.length) {
+    const digest = clipText(omitted.map(digestMessage).join('\n'), oldDigestBudget - 6);
+    if (digest.trim()) result.push({ role: 'system', content: `Earlier interaction digest:\n${digest}` });
+  }
+
+  const tailCandidates = nonSystem.slice(tailStart);
+  const selected: PhoenixMessage[] = [];
+  let remaining = tailBudget;
+  for (let index = tailCandidates.length - 1; index >= 0; index -= 1) {
+    const message = tailCandidates[index];
+    if (!message || remaining <= 8) break;
+    const cost = messageTokens(message);
+    if (cost <= remaining) {
+      selected.unshift({ ...message });
+      remaining -= cost;
+      continue;
+    }
+    const criticalTransaction = message.role === 'tool' || Boolean(message.toolCalls?.length);
+    if (criticalTransaction || selected.length < 2) {
+      const clipped = clipMessage(message, remaining);
+      if (clipped) selected.unshift(clipped);
+      remaining = 0;
+    }
+  }
+  result.push(...selected);
+
+  // The section budgets are disjoint, so the estimated total stays bounded aside from tiny estimator rounding.
   return result;
 }
 
