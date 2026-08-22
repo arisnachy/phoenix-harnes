@@ -71,6 +71,7 @@ interface EvidencePoint {
   score: number
   weight: number
   observedAt: number
+  source: EvidenceSource
 }
 
 interface ModelState {
@@ -140,9 +141,10 @@ export class ModelCapabilityLadder {
       score: evidence.score,
       weight: Math.max(0.05, evidence.weight ?? 1) * (evidence.reproducible === true ? 1.35 : 1),
       observedAt: evidence.observedAt ?? Date.now(),
+      source: evidence.source,
     })
     state.evidence.set(evidence.dimension, points.slice(-100))
-    if (state.trust !== 'quarantined' && this.hasOperationalEvidence(state)) state.trust = 'qualified'
+    if (state.trust !== 'quarantined' && this.hasAuthorityEvidence(state)) state.trust = 'qualified'
   }
 
   quarantine(ref: ModelRef): void {
@@ -153,7 +155,7 @@ export class ModelCapabilityLadder {
   releaseQuarantine(ref: ModelRef): void {
     const state = this.states.get(key(ref))
     if (state === undefined) return
-    state.trust = this.hasOperationalEvidence(state) ? 'qualified' : 'provisional'
+    state.trust = this.hasAuthorityEvidence(state) ? 'qualified' : 'provisional'
   }
 
   snapshot(ref: ModelRef, now = Date.now()): ModelSnapshot | undefined {
@@ -206,15 +208,17 @@ export class ModelCapabilityLadder {
     return ranked.sort((a, b) => b.score - a.score || b.confidence - a.confidence || a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model))
   }
 
-  private hasOperationalEvidence(state: ModelState): boolean {
-    let weightedSamples = 0
-    for (const points of state.evidence.values()) {
-      for (const point of points) weightedSamples += point.weight
+  private hasAuthorityEvidence(state: ModelState): boolean {
+  let weightedSamples = 0
+  for (const points of state.evidence.values()) {
+    for (const point of points) {
+      if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight
     }
-    return weightedSamples >= 3
   }
+  return weightedSamples >= 3
+}
 
-  private dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {
+private dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {
     if (points === undefined || points.length === 0) return undefined
     let weightedScore = 0
     let weight = 0

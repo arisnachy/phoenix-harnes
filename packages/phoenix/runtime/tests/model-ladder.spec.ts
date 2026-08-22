@@ -41,4 +41,25 @@ describe('PHOENIX Model Capability Ladder', () => {
     expect(ladder.snapshot(A)?.trust).toBe('provisional')
     expect(ladder.rank('routine')).toEqual([])
   })
+
+  it('never grants authority from mission or collective observation alone', () => {
+    const ladder = new ModelCapabilityLadder()
+    for (let i = 0; i < 40; i++) {
+      ladder.record({ ...A, dimension: 'reliability', score: 100, source: 'mission', reproducible: true })
+      ladder.record({ ...A, dimension: 'reasoning', score: 100, source: 'collective-observation', reproducible: true })
+    }
+    expect(ladder.snapshot(A)?.trust).toBe('provisional')
+    expect(ladder.rank('routine')).toEqual([])
+  })
+
+  it('returns to provisional after quarantine when only non-authority evidence exists', () => {
+    const ladder = new ModelCapabilityLadder()
+    for (let i = 0; i < 20; i++) {
+      ladder.record({ ...A, dimension: 'reliability', score: 99, source: 'mission', reproducible: true })
+    }
+    ladder.quarantine(A)
+    ladder.releaseQuarantine(A)
+    expect(ladder.snapshot(A)?.trust).toBe('provisional')
+  })
+
 })

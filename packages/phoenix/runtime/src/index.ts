@@ -8,6 +8,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { LlmCallConfig, LlmModelInfo } from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-token-meter'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { classifyTaskRole, isTrivialDelegation } from './task-role.ts'
@@ -104,9 +105,9 @@ export default class PhoenixRuntime extends Service {
     failover: z.boolean().default(true),
     agentRoi: z.boolean().default(true),
     localEvolution: z.boolean().default(true),
-    hardContextTokens: z.number().min(1).optional(),
+    hardContextTokens: z.number().min(1),
     maxFailoversPerStep: z.number().min(0).max(8).step(1).default(2),
-    statePath: z.string().optional(),
+    statePath: z.string(),
   }) as z<PhoenixRuntimeConfig>
 
   readonly ladder = new ModelCapabilityLadder()
@@ -235,16 +236,19 @@ export default class PhoenixRuntime extends Service {
 
   /** Operator/benchmark evidence is the only path that grants role authority. */
   recordBenchmark(evidence: CapabilityEvidence): void {
-    const safe = { ...evidence, source: evidence.source === 'mission' ? 'benchmark' as const : evidence.source }
-    this.ladder.record(safe)
-    if (this.config.localEvolution) {
-      this.localState.evidence.push(safe)
-      this.localState.evidence = this.localState.evidence.slice(-5000)
-      this.flushState()
-    }
+  if (evidence.source !== 'benchmark' && evidence.source !== 'operator') {
+    throw new Error('PHOENIX authority evidence must come from benchmark or operator sources')
   }
+  const safe: CapabilityEvidence = { ...evidence }
+  this.ladder.record(safe)
+  if (this.config.localEvolution) {
+    this.localState.evidence.push(safe)
+    this.localState.evidence = this.localState.evidence.slice(-5000)
+    this.flushState()
+  }
+}
 
-  quarantine(ref: ModelRef): void {
+quarantine(ref: ModelRef): void {
     this.ladder.quarantine(ref)
     if (this.config.localEvolution) {
       if (!this.localState.quarantined.some(value => sameRef(value, ref))) this.localState.quarantined.push({ ...ref })
