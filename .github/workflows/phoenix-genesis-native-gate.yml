@@ -1,0 +1,36 @@
+name: PHOENIX Genesis native gate
+
+on:
+  pull_request:
+    branches:
+      - phoenix/genesis-v12
+
+permissions:
+  contents: read
+
+jobs:
+  genesis-native:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/genesis-native-contracts'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Package constraints
+        run: pnpm run constraints
+      - name: Documentation contracts
+        run: pnpm run doc-sync
+      - name: Native static gate
+        run: pnpm run check:ci:static
+      - name: Build
+        run: pnpm run build
+      - name: Hygiene
+        run: pnpm run hygiene
+      - name: Patch hygiene
+        run: git diff --check
