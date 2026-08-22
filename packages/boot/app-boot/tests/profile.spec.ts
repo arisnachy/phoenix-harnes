@@ -84,6 +84,20 @@ describe('manifest round-trip', () => {
 })
 
 describe('resolveBundleDir', () => {
+  it('resolves the app package itself when it also exports a bundle layer', () => {
+    const anchor = stageInstallation({})
+    const appDir = join(anchor, '..')
+    const profileDir = tmp()
+    writeFileSync(anchor, JSON.stringify({
+      name: 'dsh-app',
+      dependencies: {},
+      dsh: { bundle: { patch: './cordis.patch.yml' } },
+    }))
+    writeFileSync(join(appDir, 'cordis.patch.yml'), '[]\n')
+    writeFileSync(join(profileDir, 'package.json'), '{}')
+    expect(resolveBundleDir('t', 'dsh-app', anchor, profileDir)).toBe(appDir)
+  })
+
   it('prefers the installation anchor, falls back to the profile, and fails loud', () => {
     const anchor = stageInstallation({ 'in-box': { patch: '[]\n' } })
     const profileDir = tmp()
@@ -152,6 +166,11 @@ describe('loadProfile', () => {
     // cannot be asserted to fail here: the source-plane test runner resolves
     // @deepseek-ai/* through tsconfig paths regardless of the staged anchor.
     expect(PROFILE_TEMPLATES.web).toContain('@deepseek-ai/dsh-base')
+    expect(PROFILE_TEMPLATES.phoenix).toEqual([
+      '@deepseek-ai/dsh-base',
+      '@deepseek-ai/dsh-web-app',
+      '@deepseek-ai/dsh',
+    ])
     try {
       loadProfile('t', 'web', anchor, home)
     } catch {

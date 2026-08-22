@@ -10,6 +10,22 @@ It uses an architecture where **everything is a plugin**, and is powered by [Cor
 
 DeepSeek Harness is currently in _developer preview_ and is iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
 
+## PHOENIX downstream profile
+
+This repository preserves DeepSeek Harness as its upstream body and develops PHOENIX as plugin, preset, and profile layers on top. The first PHOENIX profile provides deterministic routing between local Ollama (`qwen3:8b`) for routine work and OrcaRouter's free-only route (`orcarouter/free`) for long or configured high-complexity tasks. It contains no paid fallback and does not modify HealthIA.
+
+From this checkout:
+
+```sh
+pnpm install
+pnpm run build
+ollama pull qwen3:8b
+$env:ORCAROUTER_API_KEY = '<your key>' # PowerShell; use your shell's equivalent elsewhere
+pnpm dsh --profile phoenix web
+```
+
+Ollama must be running locally. The environment-variable command above uses PowerShell; use your shell's equivalent elsewhere. Store credentials outside the repository. See the [PHOENIX profile](docs/phoenix-profile.md) and [routing policy](docs/phoenix-routing.md) for the exact composition and limitations.
+
 ## Run
 
 ### Run from `npm`

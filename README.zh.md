@@ -10,6 +10,22 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 
 DeepSeek Harness 目前处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
 
+## PHOENIX 下游配置
+
+本仓库保留 DeepSeek Harness 作为上游主体，并通过插件、预设和配置层在其上开发 PHOENIX。首个 PHOENIX 配置采用确定性路由：日常任务使用本地 Ollama（`qwen3:8b`），长任务或命中已配置高复杂度规则的任务使用 OrcaRouter 仅免费路由（`orcarouter/free`）。配置中没有付费回退，也不修改 HealthIA。
+
+在本检出中运行：
+
+```sh
+pnpm install
+pnpm run build
+ollama pull qwen3:8b
+$env:ORCAROUTER_API_KEY = '<your key>' # PowerShell; use your shell's equivalent elsewhere
+pnpm dsh --profile phoenix web
+```
+
+Ollama 必须在本地运行。上面的环境变量命令使用 PowerShell；其他 shell 请采用对应语法。凭据应保存在仓库之外。确切组成和限制见 [PHOENIX 配置](docs/phoenix-profile.zh.md) 与 [路由策略](docs/phoenix-routing.zh.md)。
+
 <a id="run"></a>
 
 ## 运行

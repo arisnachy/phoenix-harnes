@@ -1,0 +1,73 @@
+# PHOENIX downstream layer. Applied after dsh-base + dsh-web-app, leaving
+# upstream package behavior intact and replacing only deployment-owned values.
+
+# Routine work starts on local Ollama. The router may replace this selection
+# before prompt assembly for each new task.
+- id: agent-default-model
+  config:
+    provider: phoenix-local
+    model: qwen3:8b
+
+# Both lanes use the existing generic OpenAI-compatible adapter. Ollama's local
+# API ignores the documented dummy bearer token; no local secret is needed.
+# OrcaRouter resolves only ORCAROUTER_API_KEY and exposes only its free model,
+# so this layer cannot silently consume wallet balance.
+- id: llm-pi-ai
+  config:
+    providers:
+      phoenix-local:
+        displayName: PHOENIX Local (Ollama)
+        api: openai-completions
+        baseURL: http://127.0.0.1:11434/v1
+        headers:
+          Authorization: Bearer ollama
+        defaultContextWindow: 32768
+        defaultMaxTokens: 8192
+        models:
+          - id: qwen3:8b
+            name: Qwen 3 8B (local)
+      phoenix-free:
+        displayName: PHOENIX Free (OrcaRouter)
+        apiKeyEnv: ORCAROUTER_API_KEY
+        api: openai-completions
+        baseURL: https://api.orcarouter.ai/v1
+        defaultContextWindow: 131072
+        defaultMaxTokens: 32768
+        models:
+          - id: orcarouter/free
+            name: OrcaRouter Free
+
+# The web layer owns the roster; PHOENIX changes only its default preset.
+- id: agent-presets
+  config:
+    default: phoenix
+
+- insert:
+    - id: phoenix-model-router
+      name: '@deepseek-ai/dsh/phoenix-router'
+      config:
+        local:
+          provider: phoenix-local
+          model: qwen3:8b
+        free:
+          provider: phoenix-free
+          model: orcarouter/free
+        externalMinChars: 1200
+        externalSignalThreshold: 1
+        externalSignals:
+          - architecture
+          - arquitectura
+          - security audit
+          - auditoría de seguridad
+          - threat model
+          - modelo de amenazas
+          - migration plan
+          - plan de migración
+          - race condition
+          - condición de carrera
+          - root cause
+          - causa raíz
+          - cross-module
+          - multi-package
+          - formal proof
+          - prueba formal

@@ -1,0 +1,9 @@
+- id: llm-pi-ai
+  disabled: true
+
+- id: system-prompt
+  config:
+    persona: PHOENIX snapshot uses {{model}}.
+
+- id: session-telemetry-otel
+  disabled: true

@@ -114,6 +114,7 @@ export function resolveProfileDir(name: string, home: string = resolveDshHome())
 export const PROFILE_TEMPLATES: Record<string, readonly string[]> = {
   web: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
   headless: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'],
+  phoenix: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh'],
 }
 
 /** Installation-owned bundle tuples normalized to the shipped template. */
@@ -320,6 +321,8 @@ function normalizeShippedProfile(name: string, dir: string, manifest: ProfileMan
  * `existsSync` follows the symlinks pnpm's isolated layout uses.
  */
 function packageDirFromAnchor(anchor: string, packageName: string): string | undefined {
+  const anchorManifest = JSON.parse(readFileSync(anchor, 'utf8')) as ProfileManifest
+  if (anchorManifest.name === packageName) return dirname(anchor)
   // resolve.paths returns null only for builtins, which no bundle name is.
   /* v8 ignore next */
   for (const searchPath of createRequire(anchor).resolve.paths(packageName) ?? []) {
