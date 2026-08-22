@@ -133,6 +133,12 @@ export class PhoenixRuntime {
   }
 }
 
+export * from './agents.js';
+export * from './arena.js';
+export * from './memory.js';
+export * from './scheduler.js';
+export * from './singularity.js';
+export * from './tools.js';
 export * from '@phoenix/contracts';
 export * from '@phoenix/evolution';
 export * from '@phoenix/ledger';
