@@ -14,16 +14,17 @@ const ROLE_WEIGHTS = {
 const FAILOVER_CODES = new Set([
   'RATE_LIMIT', 'SERVER', 'TRANSPORT', 'TIMEOUT', 'QUOTA_EXCEEDED', 'EMPTY_RESPONSE', 'OVERLOADED',
 ])
+const DIMENSIONS = [
+  'planning', 'orchestration', 'reasoning', 'coding', 'debugging', 'research',
+  'toolUse', 'critique', 'judging', 'security', 'reliability', 'efficiency',
+]
 
 function key(provider, model) { return `${provider}\u0000${model}` }
 function clamp(n) { return Math.max(0, Math.min(100, Number(n) || 0)) }
 
 function normalize(entry, discovered = false) {
   const scores = {}
-  for (const dimension of [
-    'planning', 'orchestration', 'reasoning', 'coding', 'debugging', 'research',
-    'toolUse', 'critique', 'judging', 'security', 'reliability', 'efficiency',
-  ]) scores[dimension] = clamp(entry.scores?.[dimension])
+  for (const dimension of DIMENSIONS) scores[dimension] = clamp(entry.scores?.[dimension])
   return {
     provider: String(entry.provider),
     model: String(entry.model),
@@ -37,6 +38,30 @@ function normalize(entry, discovered = false) {
 
 export function getPhoenixModelLadderSnapshot() {
   return [...ladder.values()].map(item => ({ ...item, scores: { ...item.scores } }))
+}
+
+export function recordPhoenixModelEvidence(evidence) {
+  if (!evidence?.provider || !evidence?.model) throw new TypeError('provider and model are required')
+  const id = key(evidence.provider, evidence.model)
+  let entry = ladder.get(id)
+  if (!entry) {
+    entry = normalize({ provider: evidence.provider, model: evidence.model, status: 'provisional', scores: {} }, true)
+    ladder.set(id, entry)
+  }
+  const priorSamples = entry.samples
+  const nextSamples = priorSamples + 1
+  for (const dimension of DIMENSIONS) {
+    const observed = evidence.scores?.[dimension]
+    if (observed === undefined) continue
+    const bounded = clamp(observed)
+    entry.scores[dimension] = priorSamples === 0
+      ? bounded
+      : ((entry.scores[dimension] * priorSamples) + bounded) / nextSamples
+  }
+  entry.samples = nextSamples
+  if (evidence.success === false) entry.failures += 1
+  if (evidence.qualifying === true && entry.samples >= 5 && entry.scores.reliability >= 60) entry.status = 'qualified'
+  return { ...entry, scores: { ...entry.scores } }
 }
 
 function lastUserText(agent) {
