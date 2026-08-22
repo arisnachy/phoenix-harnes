@@ -55,13 +55,8 @@ jobs:
           """,
             ),
             (
-              """      observedAt: evidence.observedAt ?? Date.now(),
-            })
-          """,
-              """      observedAt: evidence.observedAt ?? Date.now(),
-              source: evidence.source,
-            })
-          """,
+              "      observedAt: evidence.observedAt ?? Date.now(),",
+              "      observedAt: evidence.observedAt ?? Date.now(),\n      source: evidence.source,",
             ),
             (
               "if (state.trust !== 'quarantined' && this.hasOperationalEvidence(state)) state.trust = 'qualified'",
