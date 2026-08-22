@@ -1,6 +1,48 @@
 # PHOENIX profile layer. Apply after the standard dsh-base bundle.
 # It adds PHOENIX policy/intelligence while keeping the DSH capability seams.
+#
+# The base bundle already mounts @deepseek-ai/dsh-llm-pi-ai dormant. PHOENIX
+# activates only the verified OrcaRouter free route here. Ollama remains
+# operator/discovery-configured because PHOENIX must never invent a local model
+# id that may not be installed.
+
+- id: llm-pi-ai
+  config:
+    providers:
+      orcarouter:
+        displayName: OrcaRouter Free
+        apiKeyEnv: ORCAROUTER_API_KEY
+        api: openai-completions
+        baseURL: https://api.orcarouter.ai/v1
+        compat:
+          thinkingFormat: deepseek
+          supportsDeveloperRole: false
+          maxTokensField: max_tokens
+        models:
+          - id: orcarouter/free
+            name: OrcaRouter Free
+            contextWindow: 1048576
+            # Deliberately conservative PHOENIX cap; upstream can expose more.
+            maxTokens: 32768
+            reasoningEfforts:
+              off:
+              high: high
+
 - insert:
+    - id: phoenix-ai-bus
+      name: '@deepseek-ai/dsh-phoenix-ai-bus'
+      config:
+        localProvider: ollama
+        remoteFreeProvider: orcarouter
+
+    - id: phoenix-repo-brain
+      name: '@deepseek-ai/dsh-phoenix-repo-brain'
+      config:
+        maxFiles: 20000
+        maxFileBytes: 262144
+        maxTermsPerFile: 2048
+        defaultLimit: 12
+
     - id: phoenix-runtime
       name: '@deepseek-ai/dsh-phoenix-runtime'
       config:
