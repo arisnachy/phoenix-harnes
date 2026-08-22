@@ -32,8 +32,8 @@ jobs:
             exit 0
           fi
 
-          cp LICENSE /tmp/phoenix-agpl-license
-          if [[ -f SECURITY.md ]]; then cp SECURITY.md /tmp/phoenix-security-v10.md; fi
+          cp -L LICENSE /tmp/phoenix-agpl-license
+          if [[ -f SECURITY.md ]]; then cp -L SECURITY.md /tmp/phoenix-security-v10.md; fi
 
           git clone --filter=blob:none "$DSH_REPO" /tmp/deepseek-harness
           git -C /tmp/deepseek-harness checkout --detach "$DSH_SHA"
@@ -42,9 +42,16 @@ jobs:
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           rsync -a --exclude='.git/' --exclude='.github/' /tmp/deepseek-harness/ ./
 
-          cp LICENSE LICENSE.deepseek-harness
+          rm -f LICENSE.deepseek-harness
+          if [[ -f LICENSE-MIT ]]; then
+            cp -L LICENSE-MIT LICENSE.deepseek-harness
+          else
+            cp -L LICENSE LICENSE.deepseek-harness
+          fi
+          rm -f LICENSE
           cp /tmp/phoenix-agpl-license LICENSE
-          cp README.md README.deepseek-harness.md
+          rm -f README.deepseek-harness.md
+          cp -L README.md README.deepseek-harness.md
           mkdir -p docs/phoenix .github/workflows
           if [[ -f /tmp/phoenix-security-v10.md ]]; then cp /tmp/phoenix-security-v10.md docs/phoenix/SECURITY-v10-legacy.md; fi
 
