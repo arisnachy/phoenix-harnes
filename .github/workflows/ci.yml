@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     name: node 24 / snapshots and artifacts
     env:
-      DSH_GATE_CONCURRENCY: '2'
+      DSH_GATE_CONCURRENCY: '1'
       DSH_NODE_COMPAT_SKIP_TYPECHECK: '1'
       DSH_OXLINT_THREADS: '2'
       DSH_PUBLINT_CONCURRENCY: '2'
@@ -105,7 +105,7 @@ jobs:
           exit "$sandbox_status"
       - name: Install Playwright Chromium
         run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
-      - name: Run compatibility, snapshot, and artifact gates
+      - name: Run compatibility, snapshot, and artifact gates serially
         run: pnpm run check:ci:consumers
 
   node-compat:
