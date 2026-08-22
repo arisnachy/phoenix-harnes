@@ -82,8 +82,20 @@ function roleFor(task: MissionTaskRole): EvolutionModelRole {
   return task;
 }
 
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, item]) => [key, canonical(item)]),
+    );
+  }
+  return value;
+}
+
 function stableHash(value: unknown): string {
-  return createHash('sha256').update(JSON.stringify(value, Object.keys(value as object).sort())).digest('hex');
+  return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
 }
 
 export class MissionGraphError extends Error {
@@ -139,7 +151,7 @@ export class MissionGraph {
     task.state = 'running';
     task.attempts += 1;
     task.assignedModel = model;
-    task.lastError = undefined;
+    delete task.lastError;
   }
 
   public succeed(taskId: string, output: unknown): void {
@@ -147,7 +159,7 @@ export class MissionGraph {
     if (task.state !== 'running') throw new MissionGraphError(`Task is not running: ${taskId}`);
     task.state = 'succeeded';
     task.outputFingerprint = stableHash({ taskId, output });
-    task.lastError = undefined;
+    delete task.lastError;
     this.#refreshStates();
   }
 
@@ -174,13 +186,15 @@ export class MissionGraph {
       throw new MissionGraphError('Pivot is allowed only for blocked or exhausted tasks');
     }
     if (this.#tasks.has(replacement.id)) throw new MissionGraphError(`Duplicate pivot task id: ${replacement.id}`);
-    const tasks = this.#definition.tasks.map((task) => {
-      const deps = (task.dependencies ?? []).map((dependency) => dependency === failedTaskId ? replacement.id : dependency);
-      return { ...task, dependencies: deps };
-    });
-    const failedIndex = tasks.findIndex((task) => task.id === failedTaskId);
+    const failedIndex = this.#definition.tasks.findIndex((task) => task.id === failedTaskId);
     if (failedIndex < 0) throw new MissionGraphError(`Unknown task: ${failedTaskId}`);
-    tasks.splice(failedIndex + 1, 0, {
+    const tasks = this.#definition.tasks
+      .filter((task) => task.id !== failedTaskId)
+      .map((task) => ({
+        ...task,
+        dependencies: (task.dependencies ?? []).map((dependency) => dependency === failedTaskId ? replacement.id : dependency),
+      }));
+    tasks.splice(failedIndex, 0, {
       ...replacement,
       dependencies: [...(failed.definition.dependencies ?? [])],
     });
@@ -234,7 +248,7 @@ export class MissionGraph {
 
   #refreshStates(): void {
     for (const task of this.#tasks.values()) {
-      if (['running', 'succeeded', 'pivot_required', 'blocked'].includes(task.state)) continue;
+      if (task.state === 'running' || task.state === 'succeeded' || task.state === 'pivot_required' || task.state === 'blocked') continue;
       const dependencies = (task.definition.dependencies ?? []).map((id) => this.task(id));
       if (dependencies.some((dependency) => dependency.state === 'pivot_required' || dependency.state === 'blocked')) {
         task.state = 'blocked';
