@@ -4,6 +4,7 @@ import {
   DEFAULT_COLLECTIVE_SAFETY_POLICY,
   observeOnlyCollectivePolicy,
   validateRemoteCollectiveEnvelope,
+  type CollectiveSafetyPolicy,
 } from './safety.js';
 
 describe('collective remote safety', () => {
@@ -37,11 +38,13 @@ describe('collective remote safety', () => {
     }, observeOnlyCollectivePolicy())).toThrow(CollectiveSafetyError);
   });
 
-  it('rejects any future policy that enables peer execution or automatic remote promotion', () => {
+  it('rejects a malicious runtime object that tries to enable peer execution', () => {
+    // Compile-time types already make this state unrepresentable. The cast simulates
+    // untrusted JSON/config bypassing TypeScript so runtime must still fail closed.
     const unsafe = {
       ...observeOnlyCollectivePolicy(),
       allowPeerToPeerExecution: true,
-    };
+    } as unknown as CollectiveSafetyPolicy;
     expect(() => validateRemoteCollectiveEnvelope(inertEvidence, unsafe)).toThrow(/unsafe collective policy/i);
   });
 });
