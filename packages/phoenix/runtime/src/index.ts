@@ -1,7 +1,7 @@
 /**
  * PHOENIX Runtime — adaptive policy layer mounted inside DeepSeek Harness.
  * It uses DSH seams rather than replacing the agent loop.
- * @module @deepseek-ai/dsh-phoenix-runtime
+ * @module @arisnachy/phoenix-runtime
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -110,7 +110,7 @@ export default class PhoenixRuntime extends Service {
     statePath: z.string(),
   }) as z<PhoenixRuntimeConfig>
 
-  readonly ladder = new ModelCapabilityLadder()
+  readonly ladder: ModelCapabilityLadder = new ModelCapabilityLadder()
   readonly flight: FlightRecord[] = []
   private readonly config: Required<Pick<PhoenixRuntimeConfig, 'routing' | 'failover' | 'agentRoi' | 'localEvolution' | 'maxFailoversPerStep'>> & PhoenixRuntimeConfig
   private readonly roles = new WeakMap<Agent, PhoenixRole>()
@@ -234,21 +234,29 @@ export default class PhoenixRuntime extends Service {
     ctx.tools.guard(exec => this.motherGuard(exec))
   }
 
-  /** Operator/benchmark evidence is the only path that grants role authority. */
+  /**
+   * Record authority-grade benchmark or operator evidence for one model capability.
+   * Mission and collective observations are rejected here so they cannot grant role authority.
+   * @param evidence - benchmark/operator capability evidence to add to the ladder and durable local state.
+   */
   recordBenchmark(evidence: CapabilityEvidence): void {
-  if (evidence.source !== 'benchmark' && evidence.source !== 'operator') {
-    throw new Error('PHOENIX authority evidence must come from benchmark or operator sources')
+    if (evidence.source !== 'benchmark' && evidence.source !== 'operator') {
+      throw new Error('PHOENIX authority evidence must come from benchmark or operator sources')
+    }
+    const safe: CapabilityEvidence = { ...evidence }
+    this.ladder.record(safe)
+    if (this.config.localEvolution) {
+      this.localState.evidence.push(safe)
+      this.localState.evidence = this.localState.evidence.slice(-5000)
+      this.flushState()
+    }
   }
-  const safe: CapabilityEvidence = { ...evidence }
-  this.ladder.record(safe)
-  if (this.config.localEvolution) {
-    this.localState.evidence.push(safe)
-    this.localState.evidence = this.localState.evidence.slice(-5000)
-    this.flushState()
-  }
-}
 
-quarantine(ref: ModelRef): void {
+  /**
+   * Quarantine a provider/model so it cannot win PHOENIX routing.
+   * @param ref - provider/model identity to quarantine.
+   */
+  quarantine(ref: ModelRef): void {
     this.ladder.quarantine(ref)
     if (this.config.localEvolution) {
       if (!this.localState.quarantined.some(value => sameRef(value, ref))) this.localState.quarantined.push({ ...ref })
@@ -256,6 +264,10 @@ quarantine(ref: ModelRef): void {
     }
   }
 
+  /**
+   * Release a provider/model from quarantine; it regains only the trust justified by authority-grade evidence.
+   * @param ref - provider/model identity whose quarantine marker should be removed.
+   */
   releaseQuarantine(ref: ModelRef): void {
     this.ladder.releaseQuarantine(ref)
     if (this.config.localEvolution) {
@@ -264,6 +276,11 @@ quarantine(ref: ModelRef): void {
     }
   }
 
+  /**
+   * Rank currently discovered, qualified models for one PHOENIX role.
+   * @param role - capability role whose weighted evidence profile should be applied.
+   * @returns Qualified model candidates ordered from strongest to weakest evidence score.
+   */
   rank(role: PhoenixRole): RankedModel[] {
     return this.ladder.rank(role, this.catalog)
   }
