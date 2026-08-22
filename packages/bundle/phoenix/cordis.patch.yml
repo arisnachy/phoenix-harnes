@@ -35,6 +35,14 @@
         localProvider: ollama
         remoteFreeProvider: orcarouter
 
+    - id: phoenix-repo-brain
+      name: '@deepseek-ai/dsh-phoenix-repo-brain'
+      config:
+        maxFiles: 20000
+        maxFileBytes: 262144
+        maxTermsPerFile: 2048
+        defaultLimit: 12
+
     - id: phoenix-runtime
       name: '@deepseek-ai/dsh-phoenix-runtime'
       config:
