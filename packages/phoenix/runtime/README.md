@@ -1,6 +1,6 @@
 # PHOENIX Runtime
 
-`@deepseek-ai/dsh-phoenix-runtime` is the first native PHOENIX intelligence layer inside the DeepSeek Harness tree. It deliberately reuses the DSH agent loop, LLM registry, token meter, tools pipeline, sandbox seams, durable sessions, compaction, jobs, and subagents instead of cloning them.
+`@arisnachy/phoenix-runtime` is the first native PHOENIX intelligence layer inside the DeepSeek Harness tree. It deliberately reuses the DSH agent loop, LLM registry, token meter, tools pipeline, sandbox seams, durable sessions, compaction, jobs, and subagents instead of cloning them.
 
 ## What it adds
 
@@ -26,7 +26,7 @@ The runtime does **not** claim to be an OS sandbox. DSH's sandbox packages remai
 
 #### What the model sees
 
-Nothing directly. PHOENIX Runtime registers no mandatory prompt prose and does not expose its policy state to the model by default. It acts around existing DSH request, tool, and subagent seams.
+Nothing directly. The policy service is exposed to the harness as `ctx.phoenix`, but PHOENIX Runtime registers no mandatory prompt prose and does not expose its policy state to the model by default. It acts around existing DSH request, tool, and subagent seams.
 
 #### Token effect
 
