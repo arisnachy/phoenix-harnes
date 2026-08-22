@@ -53,6 +53,7 @@ export interface McpCallResult {
   toolName: string;
   content: unknown;
   isError: boolean;
+  truncated?: boolean;
 }
 
 export interface McpDiscoveryReport {
@@ -66,6 +67,7 @@ export interface McpFederationOptions {
   discoveryTtlMs?: number;
   discoverOnSearch?: boolean;
   maxServersPerSearch?: number;
+  maxToolResultChars?: number;
 }
 
 interface ConnectionState {
@@ -96,8 +98,8 @@ function overlap(query: Set<string>, value: string): number {
 
 function inferRisk(name: string, description: string): McpRisk {
   const text = `${name} ${description}`.toLowerCase();
-  if (/delete|remove|deploy|publish|send|write|update|create|merge|commit|push|execute|run shell|payment/.test(text)) return 'write';
   if (/shell|terminal|command|exec|process/.test(text)) return 'exec';
+  if (/delete|remove|deploy|publish|send|write|update|create|merge|commit|push|payment/.test(text)) return 'write';
   if (/http|fetch|web|browser|network|download|upload|api/.test(text)) return 'network';
   return 'read';
 }
@@ -141,11 +143,23 @@ async function connect(spec: McpServerSpec): Promise<ConnectionState> {
     const transport = new StreamableHTTPClientTransport(new URL(spec.url), {
       ...(spec.headers ? { requestInit: { headers: { ...spec.headers } } } : {}),
     });
-    await client.connect(transport);
+    // The SDK currently exposes sessionId as optional in one transport and exact-optional
+    // in the base Transport interface. Runtime behavior is compatible; keep our project strict.
+    await client.connect(transport as unknown as Parameters<Client['connect']>[0]);
     return { client, close: async () => { await transport.close(); } };
   }
 
   throw new Error(`MCP transport ${spec.transport} is catalogued but not executable by PHOENIX v3 yet`);
+}
+
+function boundContent(content: unknown, maxChars: number): { content: unknown; truncated: boolean } {
+  let serialized: string;
+  try { serialized = JSON.stringify(content); } catch { serialized = String(content); }
+  if (serialized.length <= maxChars) return { content, truncated: false };
+  return {
+    content: [{ type: 'text', text: `${serialized.slice(0, Math.max(0, maxChars - 40))}\n…[PHOENIX MCP output truncated]` }],
+    truncated: true,
+  };
 }
 
 export class McpFederation {
@@ -159,6 +173,7 @@ export class McpFederation {
       discoveryTtlMs: options.discoveryTtlMs ?? 5 * 60_000,
       discoverOnSearch: options.discoverOnSearch ?? true,
       maxServersPerSearch: options.maxServersPerSearch ?? 12,
+      maxToolResultChars: options.maxToolResultChars ?? 40_000,
     };
   }
 
@@ -227,11 +242,7 @@ export class McpFederation {
     const reports: McpDiscoveryReport[] = [];
     for (const server of this.#servers.values()) {
       if (server.enabled === false) continue;
-      try {
-        reports.push(await this.discover(server.id, true));
-      } catch {
-        // Federation is fail-soft: an unavailable server must not prevent other tools from working.
-      }
+      try { reports.push(await this.discover(server.id, true)); } catch { /* one offline server must not poison federation */ }
     }
     return reports;
   }
@@ -242,7 +253,7 @@ export class McpFederation {
         .filter((server) => server.enabled !== false && !this.#discoveries.has(server.id))
         .slice(0, this.#options.maxServersPerSearch);
       await Promise.all(undiscovered.map(async (server) => {
-        try { await this.discover(server.id); } catch { /* lazy federation tolerates offline servers */ }
+        try { await this.discover(server.id); } catch { /* lazy search tolerates unavailable servers */ }
       }));
     }
 
@@ -264,9 +275,7 @@ export class McpFederation {
         ],
       });
     }
-    return hits
-      .sort((a, b) => b.score - a.score || a.tool.name.localeCompare(b.tool.name))
-      .slice(0, Math.max(1, limit));
+    return hits.sort((a, b) => b.score - a.score || a.tool.name.localeCompare(b.tool.name)).slice(0, Math.max(1, limit));
   }
 
   public async toolDefinitions(query: string, limit = 8): Promise<readonly PhoenixTool[]> {
@@ -293,18 +302,18 @@ export class McpFederation {
     const descriptor = report.tools.find((tool) => tool.name === toolName);
     if (!descriptor) throw new Error(`MCP tool ${serverId}/${toolName} not found`);
     const allowed = new Set(policy.allowedRisks ?? ['read']);
-    if (!allowed.has(descriptor.risk)) {
-      throw new Error(`MCP tool ${serverId}/${toolName} risk=${descriptor.risk} is not allowed by policy`);
-    }
+    if (!allowed.has(descriptor.risk)) throw new Error(`MCP tool ${serverId}/${toolName} risk=${descriptor.risk} is not allowed by policy`);
 
     const run = async (): Promise<McpCallResult> => {
       const connection = await this.#connection(serverId);
       const result = await connection.client.callTool({ name: toolName, arguments: args });
+      const bounded = boundContent(result.content, this.#options.maxToolResultChars);
       return {
         serverId,
         toolName,
-        content: result.content,
+        content: bounded.content,
         isError: result.isError === true,
+        ...(bounded.truncated ? { truncated: true } : {}),
       };
     };
 
@@ -312,11 +321,7 @@ export class McpFederation {
       return await run();
     } catch (error) {
       await this.disconnect(serverId);
-      try {
-        return await run();
-      } catch {
-        throw error;
-      }
+      try { return await run(); } catch { throw error; }
     }
   }
 
@@ -344,12 +349,7 @@ export class McpFederation {
 
 export function codexAsMcpServer(): McpServerSpec {
   return {
-    id: 'codex-agent',
-    transport: 'stdio',
-    source: 'codex',
-    command: 'codex',
-    args: ['mcp-server'],
-    trusted: false,
+    id: 'codex-agent', transport: 'stdio', source: 'codex', command: 'codex', args: ['mcp-server'], trusted: false,
     instructions: 'Use Codex as a callable coding/reasoning engine through its official MCP server.',
     tags: ['coding', 'review', 'repository', 'agent'],
   };
@@ -357,12 +357,7 @@ export function codexAsMcpServer(): McpServerSpec {
 
 export function claudeCodeAsMcpServer(): McpServerSpec {
   return {
-    id: 'claude-code-agent',
-    transport: 'stdio',
-    source: 'claude-code',
-    command: 'claude',
-    args: ['mcp', 'serve'],
-    trusted: false,
+    id: 'claude-code-agent', transport: 'stdio', source: 'claude-code', command: 'claude', args: ['mcp', 'serve'], trusted: false,
     instructions: 'Use Claude Code tools through its official stdio MCP server.',
     tags: ['coding', 'repository', 'agent', 'analysis'],
   };
@@ -392,6 +387,8 @@ export function importClaudeMcpJson(text: string, source: McpSource = 'claude-co
     const command = typeof entry.command === 'string' ? entry.command : undefined;
     const url = typeof entry.url === 'string' ? entry.url : undefined;
     const declaredType = typeof entry.type === 'string' ? entry.type : undefined;
+    const env = trimRecord(entry.env);
+    const headers = trimRecord(entry.headers);
     const transport: McpTransportKind = declaredType === 'streamable-http' ? 'http'
       : declaredType === 'http' || declaredType === 'sse' || declaredType === 'ws' || declaredType === 'stdio'
         ? declaredType
@@ -403,9 +400,9 @@ export function importClaudeMcpJson(text: string, source: McpSource = 'claude-co
       source,
       ...(command ? { command } : {}),
       ...(Array.isArray(entry.args) ? { args: entry.args.filter((item): item is string => typeof item === 'string') } : {}),
-      ...(trimRecord(entry.env) ? { env: trimRecord(entry.env) } : {}),
+      ...(env ? { env } : {}),
       ...(url ? { url } : {}),
-      ...(trimRecord(entry.headers) ? { headers: trimRecord(entry.headers) } : {}),
+      ...(headers ? { headers } : {}),
       enabled: entry.disabled !== true,
       trusted: false,
     });
@@ -415,10 +412,8 @@ export function importClaudeMcpJson(text: string, source: McpSource = 'claude-co
 
 function parseTomlString(value: string): string | undefined {
   const trimmed = value.trim();
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    try { return JSON.parse(trimmed) as string; } catch { return trimmed.slice(1, -1); }
-  }
-  return undefined;
+  if (!trimmed.startsWith('"') || !trimmed.endsWith('"')) return undefined;
+  try { return JSON.parse(trimmed) as string; } catch { return trimmed.slice(1, -1); }
 }
 
 function parseTomlArray(value: string): string[] | undefined {
@@ -427,22 +422,19 @@ function parseTomlArray(value: string): string[] | undefined {
   try {
     const parsed = JSON.parse(trimmed) as unknown;
     return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : undefined;
-  } catch {
-    return undefined;
-  }
+  } catch { return undefined; }
 }
 
 function parseInlineTomlMap(value: string): Record<string, string> | undefined {
   const trimmed = value.trim();
   if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return undefined;
   const result: Record<string, string> = {};
-  const body = trimmed.slice(1, -1);
-  for (const pair of body.split(',')) {
+  for (const pair of trimmed.slice(1, -1).split(',')) {
     const index = pair.indexOf('=');
     if (index < 0) continue;
-    const rawKey = pair.slice(0, index).trim().replace(/^"|"$/g, '');
-    const rawValue = parseTomlString(pair.slice(index + 1));
-    if (rawKey && rawValue !== undefined) result[rawKey] = rawValue;
+    const key = pair.slice(0, index).trim().replace(/^"|"$/g, '');
+    const parsedValue = parseTomlString(pair.slice(index + 1));
+    if (key && parsedValue !== undefined) result[key] = parsedValue;
   }
   return Object.keys(result).length ? result : undefined;
 }
@@ -462,11 +454,9 @@ export function importCodexMcpToml(text: string): McpServerSpec[] {
     if (!current) continue;
     const index = line.indexOf('=');
     if (index < 0) continue;
-    servers.get(current)?.set?.('noop', 'noop');
-    const key = line.slice(0, index).trim();
-    const value = line.slice(index + 1).trim();
     const target = servers.get(current);
-    if (target) target[key] = value;
+    if (!target) continue;
+    target[line.slice(0, index).trim()] = line.slice(index + 1).trim();
   }
 
   const specs: McpServerSpec[] = [];
