@@ -5,6 +5,7 @@ import {
   countVisibleUnits,
   nextResolvingIssueStatus,
   parseReferences,
+  resolveRepositoryCoordinates,
   retainIssueReferences,
   resolvingIssueStatusCommand,
   requiresPullRequestPolicy,
@@ -410,4 +411,17 @@ test('allows missing Priority only when resolving Issues are also unprioritized'
       '有 Priority 的解决型 PR 要求每个被解决 Issue 都设置 Priority',
     ),
   )
+})
+
+
+test('resolves the active downstream repository independently of project config', () => {
+  assert.deepEqual(resolveRepositoryCoordinates('arisnachy/phoenix-harnes'), {
+    owner: 'arisnachy',
+    repository: 'phoenix-harnes',
+    slug: 'arisnachy/phoenix-harnes',
+  })
+})
+
+test('rejects malformed workflow repository coordinates', () => {
+  assert.throws(() => resolveRepositoryCoordinates('broken/repo/slug'), /GITHUB_REPOSITORY/)
 })
