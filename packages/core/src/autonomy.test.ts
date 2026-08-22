@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
-import type { PhoenixRequest, PhoenixResponse } from '@phoenix/contracts';
+import type { PhoenixRequest, PhoenixResponse, ProviderAdapter, ProviderDefinition } from '@phoenix/contracts';
 import { AgentRunner } from './agents.js';
 import type { BenchmarkResult } from './arena.js';
+import { bootstrapProviderManifest } from './bootstrap.js';
 import { LocalMemoryStore } from './memory.js';
 import { LocalScheduler } from './scheduler.js';
-import { SingularityLab } from './singularity.js';
+import { AdaptiveRoutingPolicy, SingularityLab } from './singularity.js';
 import { ToolPolicyError, ToolRegistry } from './tools.js';
 
 class ScriptedRuntime {
@@ -92,13 +93,42 @@ describe('PHOENIX local autonomy', () => {
     expect(scheduler.missions()[0]?.runAt).toBe('2026-01-01T00:00:02.000Z');
   });
 
-  it('promotes only evidence-backed improvements and always requires approval', () => {
+  it('promotes only evidence-backed improvements, applies them after approval, and rolls back', () => {
     const proposal = new SingularityLab().evaluate(
       benchmark('baseline', 0.70, 1, 100),
       benchmark('challenger', 0.82, 1, 110),
     );
+    const policy = new AdaptiveRoutingPolicy();
     expect(proposal.verdict).toBe('promote_candidate');
     expect(proposal.requiresApproval).toBe(true);
-    expect(proposal.rollbackPlan).toContain('baseline');
+
+    policy.approve(proposal);
+    const evolved = policy.apply({ messages: [{ role: 'user', content: 'test' }] });
+    expect(evolved.preferences?.preferredProviders).toEqual(['challenger']);
+    expect(evolved.metadata?.adaptivePolicyProposal).toBe(proposal.id);
+
+    policy.rollback();
+    const rolledBack = policy.apply({ messages: [{ role: 'user', content: 'test' }] });
+    expect(rolledBack.preferences?.preferredProviders).toEqual(['baseline']);
+  });
+
+  it('bootstraps a declared provider without hard-coding the vendor in core', async () => {
+    const registered: Array<{ definition: ProviderDefinition; adapter: ProviderAdapter }> = [];
+    await bootstrapProviderManifest({
+      registerProvider(definition, adapter) { registered.push({ definition, adapter }); },
+    }, {
+      providers: [{
+        id: 'custom-local',
+        baseUrl: 'http://127.0.0.1:9999/v1',
+        local: true,
+        discover: false,
+        models: ['m1'],
+        capabilityPreset: 'agentic-text',
+      }],
+    });
+
+    expect(registered[0]?.definition.id).toBe('custom-local');
+    expect(registered[0]?.definition.models[0]?.capabilities.tools).toBe(true);
+    expect(registered[0]?.adapter.providerId).toBe('custom-local');
   });
 });
