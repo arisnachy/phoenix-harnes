@@ -1,9 +1,9 @@
 name: PHOENIX lockfile repair
 
 on:
-  push:
+  pull_request:
     branches:
-      - phoenix/genesis-v12
+      - main
     paths:
       - packages/phoenix/**
       - packages/bundle/phoenix/**
@@ -12,15 +12,19 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: phoenix-lockfile-repair-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   repair-lockfile:
-    if: ${{ !contains(github.event.head_commit.message, 'chore(lockfile): sync PHOENIX workspaces') }}
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout branch
+      - name: Checkout PHOENIX head branch
         uses: actions/checkout@v4
         with:
-          ref: phoenix/genesis-v12
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - name: Setup Node
@@ -37,7 +41,7 @@ jobs:
       - name: Verify frozen install accepts regenerated lockfile
         run: pnpm install --frozen-lockfile
 
-      - name: Commit only when lockfile changed
+      - name: Commit synchronized lockfile
         shell: bash
         run: |
           if git diff --quiet -- pnpm-lock.yaml; then
@@ -48,4 +52,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pnpm-lock.yaml
           git commit -m "chore(lockfile): sync PHOENIX workspaces"
-          git push origin HEAD:phoenix/genesis-v12
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
