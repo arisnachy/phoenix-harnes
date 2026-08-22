@@ -59,9 +59,9 @@ interface CliRunOptions {
   binary: string;
   args: readonly string[];
   input: string;
-  cwd?: string;
-  signal?: AbortSignal;
-  timeoutMs?: number;
+  cwd?: string | undefined;
+  signal?: AbortSignal | undefined;
+  timeoutMs?: number | undefined;
 }
 
 function looksRetryable(text: string): boolean {
