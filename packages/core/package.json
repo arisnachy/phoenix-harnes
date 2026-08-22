@@ -14,6 +14,7 @@
     "@phoenix/evolution": "workspace:*",
     "@phoenix/ledger": "workspace:*",
     "@phoenix/mcp": "workspace:*",
+    "@phoenix/mission": "workspace:*",
     "@phoenix/model-rank": "workspace:*",
     "@phoenix/providers": "workspace:*",
     "@phoenix/router": "workspace:*",
