@@ -181,6 +181,8 @@ jobs:
           from pathlib import Path
           import subprocess
 
+          # Config catalog: keep the generated PHOENIX config declaration at the
+          # same ordinal as English, and mirror the downstream library entry.
           english = Path('docs/config-catalog.md')
           chinese = Path('docs/config-catalog.zh.md')
           en = english.read_text()
@@ -211,7 +213,40 @@ jobs:
               if first_entry < 0:
                   raise SystemExit('Chinese config catalog has no package entry anchor')
               zh = zh[:first_entry] + section + '\n\n' + zh[first_entry:]
+          phoenix_bundle_line = '- `@arisnachy/phoenix-bundle` ([`packages/bundle/phoenix/src/index.ts`](../packages/bundle/phoenix/src/index.ts))\n'
+          acp_snapshot = '- `@deepseek-ai/dsh-acp-snapshot`'
+          if phoenix_bundle_line.strip() not in zh:
+              lib_index = zh.find(acp_snapshot)
+              if lib_index < 0:
+                  raise SystemExit('Chinese config catalog library-list anchor missing')
+              zh = zh[:lib_index] + phoenix_bundle_line + zh[lib_index:]
           chinese.write_text(zh)
+
+          # Capability graph: generated Mermaid blocks are structural protocol
+          # and therefore byte-identical between language peers. Add only the
+          # downstream node/edge/row; keep surrounding Chinese prose untouched.
+          capability = Path('docs/capability-seams.zh.md')
+          cap = capability.read_text()
+          nodes = '  pkg_phoenix_runtime["phoenix-runtime"]\n  svc_phoenix["ctx.phoenix<br/>PHOENIX adaptive policy runtime"]\n'
+          if 'svc_phoenix["ctx.phoenix<br/>PHOENIX adaptive policy runtime"]' not in cap:
+              anchor = 'flowchart LR\n'
+              if anchor not in cap:
+                  raise SystemExit('Chinese capability Mermaid anchor missing')
+              cap = cap.replace(anchor, anchor + nodes, 1)
+          edge = '  pkg_phoenix_runtime --> svc_phoenix\n'
+          if edge.strip() not in cap:
+              anchor = '  pkg_permission_presets --> svc_permissionPresets\n'
+              if anchor not in cap:
+                  raise SystemExit('Chinese capability edge anchor missing')
+              cap = cap.replace(anchor, anchor + edge, 1)
+          row = '| `ctx.phoenix` | `core` | `phoenix-runtime` | - | - | - | Downstream evidence-ranked routing, bounded cross-provider recovery, token-flight observation, ROI gating, quarantine, and monotonic safety policy around native DSH seams. |\n'
+          if '| `ctx.phoenix` |' not in cap:
+              anchor = '| `ctx.attachments` |'
+              index = cap.find(anchor)
+              if index < 0:
+                  raise SystemExit('Chinese capability table anchor missing')
+              cap = cap[:index] + row + cap[index:]
+          capability.write_text(cap)
 
           def blob(path: Path) -> str:
               return subprocess.check_output(['git', 'hash-object', str(path)], text=True).strip()
@@ -243,7 +278,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '4189822+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'refactor(phoenix): materialize downstream native contracts'
+          git commit -m 'refactor(phoenix): synchronize downstream bilingual contracts'
           git push origin HEAD:${{ github.head_ref }}
 
       - name: Prove documentation contract
