@@ -2,55 +2,103 @@
 
 **Universal Adaptive AI Harness**
 
-PHOENIX is a provider-agnostic runtime for building resilient AI agents and workflows without locking the application to one model vendor, API protocol, cloud, or local inference engine.
+PHOENIX is a local-first, provider-agnostic runtime for resilient AI agents and workflows. It is designed so the identity of the system lives in the harness — memory, tools, missions, evidence and policy — rather than in any single model vendor.
 
-> One harness. Any provider. Measurable routing. Recoverable execution.
+> One harness. Any provider. Local when possible. Measurable evolution. Recoverable execution.
 
-## Genesis principles
+## What PHOENIX does now
 
-1. **Provider independence** — provider details terminate at adapters; the core operates on PHOENIX contracts.
-2. **Capability-aware routing** — route by tools, reasoning, modality, context, cost, latency, privacy, health and user policy instead of model-name folklore.
-3. **Free/local first when requested** — OrcaRouter or local Ollama may be preferred, but neither becomes a single point of failure.
-4. **Traceable decisions** — routing and execution outcomes are written to an append-only ledger.
-5. **Gated evolution** — measurements may propose routing-policy improvements; evolution never silently rewrites production behavior.
+- **Universal OpenAI-compatible provider fabric** for gateways, hosted APIs, self-hosted servers and local engines.
+- **OrcaRouter free bootstrap preset** via `orcarouter/free`.
+- **Ollama local route** and automatic `/models` discovery.
+- **Universal provider manifest**: add an endpoint, API-key environment variable and model/discovery policy without editing PHOENIX core.
+- **Capability-aware routing** with provider and model-level preferences/exclusions.
+- **Fallback + circuit breaking** after retryable provider failures.
+- **Append-only hash-chained execution ledger**.
+- **Durable local memory** using JSONL with namespaces and episodic/semantic/checkpoint records.
+- **Policy-gated Tool Registry** with `read`, `write`, `network` and `exec` risk classes.
+- **Provider-agnostic Agent Runner** with multi-turn tool execution and correct tool-call history.
+- **Local mission scheduler** for one-shot and recurring work.
+- **Benchmark Arena** for repeatable provider/model comparisons.
+- **Singularity Lab** for evidence-gated improvement proposals.
+- **Adaptive Routing Policy** that can promote an approved challenger and roll back to the previous target.
 
-## Genesis architecture
+## Evolution model
 
 ```text
-Application / Agent / Workflow
-          |
-          v
-+-----------------------------+
-|       PHOENIX Runtime       |
-|-----------------------------|
-| universal request contract  |
-| capability router           |
-| circuit breaking + fallback |
-| execution ledger            |
-| evolution observations      |
-+-----------------------------+
-          |
-          v
-+-----------------------------+
-|       Provider Fabric       |
-| OpenAI-compatible | native  |
-+-----------------------------+
-   |       |       |       |
- Orca   Ollama   OpenAI   custom...
- Router           APIs
+Discover providers/models
+        ↓
+Conservative capability registry
+        ↓
+Route → Execute → Observe → Remember
+        ↓
+Benchmark Arena
+        ↓
+Singularity Lab
+        ↓
+Reject ───── or ───── Promotion proposal
+                         ↓
+                  explicit approval
+                         ↓
+                adaptive routing policy
+                         ↓
+                    rollbackable
+```
+
+PHOENIX uses **singularity** as an engineering direction, not as a claim of AGI or consciousness. Self-improvement is evidence-based, permission-gated, auditable and reversible.
+
+See [`docs/SINGULARITY_RUNTIME.md`](docs/SINGULARITY_RUNTIME.md).
+
+## Provider manifest
+
+Copy `phoenix.providers.example.json` and customize it. Credentials are referenced by environment-variable name; keys do not belong in the manifest.
+
+```json
+{
+  "providers": [
+    {
+      "id": "ollama",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "local": true,
+      "discover": true,
+      "capabilityPreset": "conservative"
+    },
+    {
+      "id": "my-api",
+      "baseUrl": "https://provider.example/v1",
+      "apiKeyEnv": "MY_PROVIDER_API_KEY",
+      "discover": true
+    }
+  ]
+}
+```
+
+Unknown discovered models are deliberately conservative. `agentic-text` is an explicit opt-in for endpoints whose tools/JSON/reasoning support has been verified by the operator.
+
+## Bootstrap
+
+```ts
+import {
+  AdaptiveRoutingPolicy,
+  PhoenixRuntime,
+  bootstrapProviderManifest,
+  loadPhoenixManifest,
+} from '@phoenix/core';
+
+const policy = new AdaptiveRoutingPolicy();
+const phoenix = new PhoenixRuntime({ policy });
+const manifest = await loadPhoenixManifest('phoenix.providers.json');
+await bootstrapProviderManifest(phoenix, manifest);
+
+const response = await phoenix.generate({
+  messages: [{ role: 'user', content: 'Analyze this task.' }],
+  preferences: { preferLocal: true, preferFree: true },
+});
 ```
 
 ## Provider strategy
 
-The first provider fabric supports **OpenAI-compatible endpoints**, covering hosted APIs, gateways, self-hosted servers and local runtimes. Native adapters can coexist whenever a provider exposes capabilities that cannot be represented faithfully through a compatibility layer.
-
-Initial presets:
-
-- **OrcaRouter** — optional free bootstrap route via `orcarouter/free`; requires `ORCAROUTER_API_KEY`.
-- **Ollama** — local endpoint at `http://127.0.0.1:11434/v1`.
-- **Custom OpenAI-compatible provider** — arbitrary base URL, API-key environment variable and model catalog.
-
-No provider has privileged access to the PHOENIX core.
+No provider has privileged access to PHOENIX core. The first universal transport targets OpenAI-compatible APIs because it covers many gateways and local runtimes. Native adapters can coexist whenever a provider exposes capabilities that cannot be represented faithfully through compatibility mode.
 
 ## Development
 
@@ -64,7 +112,7 @@ pnpm run verify
 
 ## Status
 
-**Genesis / pre-alpha.** The first milestone is hardening universal provider contracts, routing and failure semantics before expanding the agent surface.
+**Pre-alpha / evolutionary runtime.** Contracts and safety semantics are intentionally being hardened before adding unrestricted execution surfaces.
 
 ## License
 
