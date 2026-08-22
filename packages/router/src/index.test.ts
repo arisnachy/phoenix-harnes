@@ -49,4 +49,23 @@ describe('route', () => {
     expect(result.candidates).toHaveLength(0);
     expect(result.rejected[0]?.reason).toBe('tools_required');
   });
+
+  it('can target and exclude exact models for benchmark and adaptive-policy runs', () => {
+    const multi: ProviderDefinition = {
+      id: 'multi',
+      displayName: 'Multi',
+      baseUrl: 'https://example.invalid/v1',
+      protocol: 'openai-chat',
+      models: [
+        { id: 'a', capabilities: baseCapabilities },
+        { id: 'b', capabilities: baseCapabilities },
+      ],
+    };
+    const result = route({
+      messages: [{ role: 'user', content: 'benchmark' }],
+      preferences: { preferredModels: ['b'], excludedModels: ['a'] },
+    }, { providers: [multi] });
+    expect(result.candidates.map((candidate) => candidate.model.id)).toEqual(['b']);
+    expect(result.rejected[0]?.reason).toBe('model_excluded');
+  });
 });

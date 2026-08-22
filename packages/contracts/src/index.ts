@@ -45,12 +45,19 @@ export interface ProviderDefinition {
   tags?: readonly string[];
 }
 
+export interface PhoenixToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export interface PhoenixMessage {
   role: MessageRole;
   content: string;
   toolCallId?: string;
+  toolCalls?: readonly PhoenixToolCall[];
 }
 
 export interface PhoenixTool {
@@ -74,6 +81,8 @@ export interface RoutingPreferences {
   maxEstimatedCostUsd?: number;
   excludedProviders?: readonly string[];
   preferredProviders?: readonly string[];
+  excludedModels?: readonly string[];
+  preferredModels?: readonly string[];
 }
 
 export interface PhoenixRequest {
@@ -82,12 +91,6 @@ export interface PhoenixRequest {
   requirements?: RequestRequirements;
   preferences?: RoutingPreferences;
   metadata?: Record<string, string>;
-}
-
-export interface PhoenixToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
 }
 
 export interface PhoenixResponse {

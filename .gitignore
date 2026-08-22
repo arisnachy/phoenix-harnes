@@ -7,3 +7,5 @@ coverage/
 .DS_Store
 *.log
 .pnpm-store/
+.phoenix/
+phoenix.providers.json

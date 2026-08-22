@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
   ModelDefinition,
+  PhoenixMessage,
   PhoenixRequest,
   PhoenixResponse,
   PhoenixToolCall,
@@ -86,6 +87,24 @@ function toOpenAITools(request: PhoenixRequest) {
   }));
 }
 
+function toOpenAIMessage(message: PhoenixMessage): Record<string, unknown> {
+  return {
+    role: message.role,
+    content: message.content,
+    ...(message.toolCallId ? { tool_call_id: message.toolCallId } : {}),
+    ...(message.toolCalls?.length ? {
+      tool_calls: message.toolCalls.map((call) => ({
+        id: call.id,
+        type: 'function',
+        function: {
+          name: call.name,
+          arguments: JSON.stringify(call.arguments),
+        },
+      })),
+    } : {}),
+  };
+}
+
 function normalizeToolCalls(value: unknown): PhoenixToolCall[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const calls: PhoenixToolCall[] = [];
@@ -134,11 +153,7 @@ export class OpenAICompatibleAdapter implements ProviderAdapter {
 
     const body: Record<string, unknown> = {
       model: model.id,
-      messages: request.messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-        ...(message.toolCallId ? { tool_call_id: message.toolCallId } : {}),
-      })),
+      messages: request.messages.map(toOpenAIMessage),
       stream: false,
     };
     const tools = toOpenAITools(request);
@@ -207,3 +222,5 @@ export class ProviderTransportError extends Error {
     this.name = 'ProviderTransportError';
   }
 }
+
+export * from './discovery.js';

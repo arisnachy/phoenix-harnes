@@ -55,6 +55,10 @@ function scoreCandidate(
     score += 20;
     reasons.push('preferred_provider:+20');
   }
+  if (preferences?.preferredModels?.includes(model.id)) {
+    score += 25;
+    reasons.push('preferred_model:+25');
+  }
   if (typeof model.quality === 'number') {
     const qualityScore = Math.max(0, Math.min(1, model.quality)) * 25;
     score += qualityScore;
@@ -80,13 +84,18 @@ export function route(request: PhoenixRequest, input: RouterInput): RouteDecisio
   );
   const candidates: RouteCandidate[] = [];
   const rejected: Array<{ providerId: string; modelId: string; reason: string }> = [];
-  const excluded = new Set(request.preferences?.excludedProviders ?? []);
+  const excludedProviders = new Set(request.preferences?.excludedProviders ?? []);
+  const excludedModels = new Set(request.preferences?.excludedModels ?? []);
 
   for (const provider of input.providers) {
     const providerHealth = healthByProvider.get(provider.id);
     for (const model of provider.models) {
-      if (excluded.has(provider.id)) {
+      if (excludedProviders.has(provider.id)) {
         rejected.push({ providerId: provider.id, modelId: model.id, reason: 'provider_excluded' });
+        continue;
+      }
+      if (excludedModels.has(model.id)) {
+        rejected.push({ providerId: provider.id, modelId: model.id, reason: 'model_excluded' });
         continue;
       }
       if (providerHealth?.available === false) {

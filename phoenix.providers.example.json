@@ -1,0 +1,29 @@
+{
+  "providers": [
+    {
+      "id": "orcarouter",
+      "displayName": "OrcaRouter Free Bootstrap",
+      "baseUrl": "https://api.orcarouter.ai/v1",
+      "apiKeyEnv": "ORCAROUTER_API_KEY",
+      "discover": false,
+      "models": ["orcarouter/free"],
+      "capabilityPreset": "agentic-text"
+    },
+    {
+      "id": "ollama",
+      "displayName": "Local Ollama",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "local": true,
+      "discover": true,
+      "capabilityPreset": "conservative"
+    },
+    {
+      "id": "my-provider",
+      "displayName": "Any OpenAI-compatible API",
+      "baseUrl": "https://provider.example/v1",
+      "apiKeyEnv": "MY_PROVIDER_API_KEY",
+      "discover": true,
+      "capabilityPreset": "conservative"
+    }
+  ]
+}
