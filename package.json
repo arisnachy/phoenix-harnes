@@ -10,7 +10,7 @@
     "build": "pnpm -r --if-present build",
     "test": "vitest run",
     "typecheck": "pnpm -r --if-present typecheck",
-    "ci": "pnpm build && pnpm typecheck && pnpm test"
+    "verify": "pnpm build && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
