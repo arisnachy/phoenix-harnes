@@ -1275,7 +1275,7 @@ importers:
 
   packages/bundle/phoenix:
     dependencies:
-      '@deepseek-ai/dsh-phoenix-runtime':
+      '@arisnachy/phoenix-runtime':
         specifier: workspace:^
         version: link:../../phoenix/runtime
       '@deepseek-ai/dsh-subagent-claude-code':

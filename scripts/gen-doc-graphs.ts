@@ -98,6 +98,14 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+  key: 'phoenix',
+  pkg: 'phoenix-runtime',
+  title: 'PHOENIX adaptive policy runtime',
+  mode: 'core',
+  consumers: [],
+  note: 'Downstream evidence-ranked routing, bounded cross-provider recovery, token-flight observation, ROI gating, quarantine, and monotonic safety policy around native DSH seams.',
+},
+  {
     key: 'attachments',
     pkg: 'attachment',
     title: 'Durable binary attachment storage',

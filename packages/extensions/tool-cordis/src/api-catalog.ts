@@ -1116,6 +1116,44 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'phoenix',
+    summary: 'PHOENIX adaptive policy service.',
+    description: 'PHOENIX adaptive policy service. Capability ranking and authority stay separate: quarantined/provisional models are never selected by the router.',
+    methods: [
+      {
+        signature: 'readonly ladder: ModelCapabilityLadder = new ModelCapabilityLadder()',
+        description: 'Evidence-driven capability and authority ladder used by PHOENIX routing.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly flight: FlightRecord[] = []',
+        description: 'Bounded in-process Token Flight Recorder observations, oldest entries evicted first.',
+        parameters: [],
+      },
+      {
+        signature: 'recordBenchmark(evidence: CapabilityEvidence): void',
+        description: 'Record authority-grade benchmark or operator evidence for one model capability. Mission and collective observations are rejected here so they cannot grant role authority.',
+        parameters: [{ name: 'evidence', description: 'benchmark/operator capability evidence to add to the ladder and durable local state.' }],
+      },
+      {
+        signature: 'quarantine(ref: ModelRef): void',
+        description: 'Quarantine a provider/model so it cannot win PHOENIX routing.',
+        parameters: [{ name: 'ref', description: 'provider/model identity to quarantine.' }],
+      },
+      {
+        signature: 'releaseQuarantine(ref: ModelRef): void',
+        description: 'Release a provider/model from quarantine; it regains only the trust justified by authority-grade evidence.',
+        parameters: [{ name: 'ref', description: 'provider/model identity whose quarantine marker should be removed.' }],
+      },
+      {
+        signature: 'rank(role: PhoenixRole): RankedModel[]',
+        description: 'Rank currently discovered, qualified models for one PHOENIX role.',
+        parameters: [{ name: 'role', description: 'capability role whose weighted evidence profile should be applied.' }],
+        returns: 'Qualified model candidates ordered from strongest to weakest evidence score.',
+      },
+    ],
+  },
+  {
     key: 'planMode',
     summary: '`ctx.planMode`: owns logged plan state, applies and narrates selected state at step start, the `plan:policy` section, the `/plan` command, and the stable exit tool.',
     description: '`ctx.planMode`: owns logged plan state, applies and narrates selected state at step start, the `plan:policy` section, the `/plan` command, and the stable exit tool. UIs observe committed flips through `session/event`; there is no live mirror.',
@@ -3022,6 +3060,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface CancelOptions {\n    keepInbox?: boolean | undefined;\n}',
   },
   {
+    name: 'CapabilityDimension',
+    declaration: 'export type CapabilityDimension = typeof capabilityDimensions[number];',
+  },
+  {
+    name: 'CapabilityEvidence',
+    declaration: 'export interface CapabilityEvidence extends ModelRef {\n    dimension: CapabilityDimension;\n    score: number;\n    weight?: number;\n    source: EvidenceSource;\n    observedAt?: number;\n    reproducible?: boolean;\n}',
+  },
+  {
     name: 'ClientResponse',
     declaration: 'export interface ClientResponse {\n    type: \'client-response\';\n    rpcId: RpcId;\n    result: RpcResult<unknown>;\n}',
   },
@@ -3234,6 +3280,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DiffResultView {\n    card: \'diff\';\n    title?: string;\n    diffs: FileDiff[];\n}',
   },
   {
+    name: 'DimensionSnapshot',
+    declaration: 'export interface DimensionSnapshot {\n    score: number;\n    confidence: number;\n    effectiveSamples: number;\n}',
+  },
+  {
     name: 'DirectoryPickerBrowseCapability',
     declaration: 'export interface DirectoryPickerBrowseCapability {\n    kind: \'browse\';\n    list(path?: string, signal?: AbortSignal): Promise<DirectoryListing>;\n    createDirectory(path: string, name: string): Promise<string>;\n}',
   },
@@ -3338,6 +3388,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    system?: string;\n    tools?: ToolSchema[];\n}',
   },
   {
+    name: 'EvidenceSource',
+    declaration: 'export type EvidenceSource = \'benchmark\' | \'mission\' | \'collective-observation\' | \'operator\';',
+  },
+  {
     name: 'FileDiff',
     declaration: 'export interface FileDiff {\n    path: string;\n    oldText: string | null;\n    newText: string;\n}',
   },
@@ -3356,6 +3410,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FinishReasonMap',
     declaration: 'export interface FinishReasonMap {\n    \'stop\': {\n        kind: \'stop\';\n    };\n    \'tool-calls\': {\n        kind: \'tool-calls\';\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    \'aborted\': {\n        kind: \'aborted\';\n        failure: LlmFailure;\n    };\n    \'error\': {\n        kind: \'error\';\n        failure: LlmFailure;\n    };\n}',
+  },
+  {
+    name: 'FlightRecord',
+    declaration: 'export interface FlightRecord {\n    at: number;\n    agentId: string;\n    turn: number;\n    step: number;\n    role: PhoenixRole;\n    totalTokens: number;\n    surfaceTokens: number;\n    systemTokens?: number;\n    toolsTokens?: number;\n    messageTokens?: number;\n}',
   },
   {
     name: 'FsDirEntry',
@@ -3786,6 +3844,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    plugin: {\n        kind: \'plugin\';\n        plugin: string;\n    } & ContextFormed;\n    model: ModelMessageSource;\n    tool: ToolMessageSource;\n}',
   },
   {
+    name: 'ModelCapabilityLadder',
+    declaration: 'export class ModelCapabilityLadder {\n    constructor(options: ModelLadderOptions = {});\n    register(ref: ModelRef): void;\n    record(evidence: CapabilityEvidence): void;\n    quarantine(ref: ModelRef): void;\n    releaseQuarantine(ref: ModelRef): void;\n    snapshot(ref: ModelRef, now: number = Date.now()): ModelSnapshot | undefined;\n    all(now: number = Date.now()): ModelSnapshot[];\n    rank(role: PhoenixRole, candidates?: readonly ModelRef[], now: number = Date.now()): RankedModel[];\n}',
+  },
+  {
+    name: 'ModelLadderOptions',
+    declaration: 'export interface ModelLadderOptions {\n    halfLifeMs?: number;\n    minimumConfidence?: number;\n}',
+  },
+  {
     name: 'ModelMessageSource',
     declaration: 'export interface ModelMessageSource extends AssistantProvenance {\n    kind: \'model\';\n}',
   },
@@ -3798,6 +3864,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ModelModalityMap {\n    text: \'text\';\n    image: \'image\';\n}',
   },
   {
+    name: 'ModelRef',
+    declaration: 'export interface ModelRef {\n    provider: string;\n    model: string;\n}',
+  },
+  {
+    name: 'ModelSnapshot',
+    declaration: 'export interface ModelSnapshot extends ModelRef {\n    trust: ModelTrust;\n    dimensions: Partial<Record<CapabilityDimension, DimensionSnapshot>>;\n}',
+  },
+  {
+    name: 'ModelTrust',
+    declaration: 'export type ModelTrust = \'provisional\' | \'qualified\' | \'quarantined\';',
+  },
+  {
     name: 'ObjectJsonSchema',
     declaration: 'export type ObjectJsonSchema = JsonSchemaNode & {\n    type: \'object\';\n};',
   },
@@ -3808,6 +3886,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PermissionSelect',
     declaration: 'export interface PermissionSelect {\n    options: PresetOption[];\n    currentValue: string;\n}',
+  },
+  {
+    name: 'PhoenixRole',
+    declaration: 'export type PhoenixRole = typeof phoenixRoles[number];',
   },
   {
     name: 'PostToolDecision',
@@ -3892,6 +3974,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PruneResult',
     declaration: 'export interface PruneResult {\n    readonly pruned: readonly PrunedEntry[];\n    readonly charsRemoved: number;\n}',
+  },
+  {
+    name: 'RankedModel',
+    declaration: 'export interface RankedModel extends ModelRef {\n    role: PhoenixRole;\n    score: number;\n    confidence: number;\n}',
   },
   {
     name: 'ReadFileLine',

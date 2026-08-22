@@ -52,6 +52,10 @@ const publishedRepositoryUrl = 'git+https://github.com/deepseek-ai/deepseek-harn
 const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 /** npm namespace reserved for private experimental packages. */
 const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'
+/** Downstream PHOENIX packages published from this repository, not DeepSeek's namespace. */
+const phoenixPackageDirectory = /^(?:packages\/phoenix\/[^/]+|packages\/bundle\/phoenix)$/
+const phoenixPackageNamePrefix = '@arisnachy/phoenix-'
+const phoenixPublishedRepositoryUrl = 'git+https://github.com/arisnachy/phoenix-harnes.git'
 /** Directories whose packages this repository publishes: one release member each. */
 const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/[^/]+|vendor\/[^/]+)$/
 
@@ -275,7 +279,16 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
       || manifest.repository.directory !== expectedDirectory) {
       errors.push(`${label}: published Landlock package repository must use ${repositoryUrl} with directory ${expectedDirectory} for trusted publishing`)
     }
-  } else if (releaseMemberDirectory.test(dir)) {
+  } else if (phoenixPackageDirectory.test(dir)) {
+  if (manifest.name?.startsWith(phoenixPackageNamePrefix) !== true) {
+    errors.push(`${label}: downstream PHOENIX package name must start with ${JSON.stringify(phoenixPackageNamePrefix)}`)
+  }
+  if (manifest.private === true) errors.push(`${label}: downstream PHOENIX package must not set "private": true`)
+  if (manifest.publishConfig?.access !== 'public') errors.push(`${label}: downstream PHOENIX package must set publishConfig.access to "public"`)
+  if (manifest.repository?.type !== 'git' || manifest.repository.url !== phoenixPublishedRepositoryUrl || manifest.repository.directory !== dir) {
+    errors.push(`${label}: downstream PHOENIX package repository must use ${phoenixPublishedRepositoryUrl} with directory ${dir}`)
+  }
+} else if (releaseMemberDirectory.test(dir)) {
     // Release members state that they are publishable: npm refuses a private
     // package, and the repository field is how a consumer finds the source of
     // the package it installed.
@@ -332,7 +345,7 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
     }
   }
 
-  if (dir.startsWith('packages/') && manifest.name?.startsWith('@deepseek-ai/dsh-')) {
+  if (dir.startsWith('packages/') && (manifest.name?.startsWith('@deepseek-ai/dsh-') || phoenixPackageDirectory.test(dir))) {
     const peer = manifest.peerDependencies?.['@deepseek-ai/cordis']
     const dev = manifest.devDependencies?.['@deepseek-ai/cordis']
 

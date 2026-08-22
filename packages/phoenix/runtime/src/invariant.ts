@@ -1,12 +1,12 @@
 /**
- * Package-owned invariant companion for `@deepseek-ai/dsh-phoenix-runtime`.
- * @module @deepseek-ai/dsh-phoenix-runtime/invariant
+ * Package-owned invariant companion for `@arisnachy/phoenix-runtime`.
+ * @module @arisnachy/phoenix-runtime/invariant
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-phoenix-runtime'
+const PACKAGE_NAME = '@arisnachy/phoenix-runtime'
 
 /** Cordis companion plugin name. */
 export const name = 'phoenix-runtime-invariant'

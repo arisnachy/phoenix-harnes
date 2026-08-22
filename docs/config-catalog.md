@@ -9,6 +9,34 @@ This file is GENERATED from source (`scripts/gen-config-catalog.ts`) and verifie
 
 A `Requires:` line lists the service keys the plugin `inject`s: its `cordis.yml` tree must also load providers for those services. Scope is the harness tier (`packages/`); the vendored cordis plugins a config tree may also load (`hmr`, the console logger, …) are pinned upstream source ([vendoring policy](../vendor/README.md)) and not catalogued here.
 
+<a id="arisnachyphoenix-runtime"></a>
+
+## `@arisnachy/phoenix-runtime`
+
+Requires: `llm` · `tokenMeter` · `tools`
+
+```ts config-catalog
+/** PHOENIX runtime policy knobs; all defaults preserve native DSH execution seams. */
+export interface PhoenixRuntimeConfig {
+  /** Enable evidence-ranked model selection for qualified candidates. */
+  routing?: boolean
+  /** Permit bounded cross-provider failover after the native provider retry chain declines. */
+  failover?: boolean
+  /** Deny trivial delegations whose model cost exceeds the expected deterministic-tool value. */
+  agentRoi?: boolean
+  /** Persist local benchmark evidence and quarantine state between harness launches. */
+  localEvolution?: boolean
+  /** Optional fail-closed ceiling for measured request-context tokens before a model step may enter. */
+  hardContextTokens?: number
+  /** Maximum cross-provider retries PHOENIX may request for one agent step. */
+  maxFailoversPerStep?: number
+  /** Optional local state file; defaults under the DSH home directory. */
+  statePath?: string
+}
+```
+
+Source: [`packages/phoenix/runtime/src/index.ts:29`](../packages/phoenix/runtime/src/index.ts)
+
 <a id="deepseek-aidsh-acp"></a>
 
 ## `@deepseek-ai/dsh-acp`
@@ -3318,6 +3346,7 @@ Abstract service classes — a deployment loads a concrete implementation packag
 
 Imported as libraries by other packages; a `cordis.yml` cannot load them.
 
+- `@arisnachy/phoenix-bundle` ([`packages/bundle/phoenix/src/index.ts`](../packages/bundle/phoenix/src/index.ts))
 - `@deepseek-ai/dsh-acp-snapshot` ([`packages/test-support/acp-snapshot/src/index.ts`](../packages/test-support/acp-snapshot/src/index.ts))
 - `@deepseek-ai/dsh-agent-loop-testkit` ([`packages/test-support/agent-loop-testkit/src/index.ts`](../packages/test-support/agent-loop-testkit/src/index.ts))
 - `@deepseek-ai/dsh-anonymous-user-id` ([`packages/identity/anonymous-user-id/src/index.ts`](../packages/identity/anonymous-user-id/src/index.ts))

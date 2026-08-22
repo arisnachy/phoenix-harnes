@@ -1,12 +1,12 @@
 /**
- * Package-owned invariant companion for `@deepseek-ai/dsh-phoenix`.
- * @module @deepseek-ai/dsh-phoenix/invariant
+ * Package-owned invariant companion for `@arisnachy/phoenix-bundle`.
+ * @module @arisnachy/phoenix-bundle/invariant
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-phoenix'
+const PACKAGE_NAME = '@arisnachy/phoenix-bundle'
 export const name = 'phoenix-bundle-invariant'
 export const inject = ['invariants']
 
