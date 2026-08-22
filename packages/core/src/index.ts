@@ -246,6 +246,7 @@ export * from '@phoenix/contracts';
 export * from '@phoenix/evolution';
 export * from '@phoenix/ledger';
 export * from '@phoenix/mcp';
+export * from '@phoenix/mission';
 export * from '@phoenix/providers';
 export * from '@phoenix/router';
 export * from '@phoenix/security';
