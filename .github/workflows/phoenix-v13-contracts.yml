@@ -48,7 +48,6 @@ jobs:
                       text = text.replace(old, new)
                   file.write_text(text)
 
-          # Every empty invariant owner needs the repository's audited rationale marker.
           for file in [
               Path('packages/phoenix/runtime/src/invariant.ts'),
               Path('packages/phoenix/ai-bus/src/invariant.ts'),
@@ -64,14 +63,57 @@ jobs:
                   )
                   file.write_text(text)
 
-          # Repo Brain complete output bound and Typert-visible signatures.
+          # Repo Brain gets a complete UTF-8 output cap, explicit public signatures,
+          # and documented configuration so both Typert and config-catalog own it.
           path = Path('packages/phoenix/repo-brain/src/index.ts')
           code = path.read_text()
           code = code.replace(
               'const DEFAULT_LIMIT = 12\nconst MAX_TOOL_LIMIT = 50',
               'const DEFAULT_LIMIT = 12\nconst DEFAULT_MAX_OUTPUT_BYTES = 65_536\nconst MAX_TOOL_LIMIT = 50',
           )
-          code = code.replace('  defaultLimit?: number\n}', '  defaultLimit?: number\n  maxOutputBytes?: number\n}', 1)
+          old_config = """export interface RepoBrainConfig {
+            root?: string
+            maxFiles?: number
+            maxFileBytes?: number
+            maxTermsPerFile?: number
+            defaultLimit?: number
+          }
+          """
+          new_config = """/** PHOENIX repository-index bounds and root selection. */
+          export interface RepoBrainConfig {
+            /** Repository root to index; defaults to the harness working directory. */
+            root?: string
+            /** Maximum source/config/document files retained by one refresh. */
+            maxFiles?: number
+            /** Maximum bytes read from any one indexed file. */
+            maxFileBytes?: number
+            /** Maximum distinct lexical terms retained for one file. */
+            maxTermsPerFile?: number
+            /** Default number of search/impact rows returned before per-call overrides. */
+            defaultLimit?: number
+            /** Maximum UTF-8 bytes in the complete model-facing text of one repo_brain result. */
+            maxOutputBytes?: number
+          }
+          """
+          if 'maxOutputBytes?: number' not in code:
+              if old_config not in code:
+                  raise SystemExit('Repo Brain config block anchor not found')
+              code = code.replace(old_config, new_config, 1)
+          else:
+              # Earlier runs may already have added the field but not its prose.
+              code = code.replace('export interface RepoBrainConfig {', '/** PHOENIX repository-index bounds and root selection. */\nexport interface RepoBrainConfig {', 1)
+              field_docs = {
+                  '  root?: string': '  /** Repository root to index; defaults to the harness working directory. */\n  root?: string',
+                  '  maxFiles?: number': '  /** Maximum source/config/document files retained by one refresh. */\n  maxFiles?: number',
+                  '  maxFileBytes?: number': '  /** Maximum bytes read from any one indexed file. */\n  maxFileBytes?: number',
+                  '  maxTermsPerFile?: number': '  /** Maximum distinct lexical terms retained for one file. */\n  maxTermsPerFile?: number',
+                  '  defaultLimit?: number': '  /** Default number of search/impact rows returned before per-call overrides. */\n  defaultLimit?: number',
+                  '  maxOutputBytes?: number': '  /** Maximum UTF-8 bytes in the complete model-facing text of one repo_brain result. */\n  maxOutputBytes?: number',
+              }
+              for plain, documented in field_docs.items():
+                  if documented not in code:
+                      code = code.replace(plain, documented, 1)
+
           code = code.replace('  defaultLimit: number\n}', '  defaultLimit: number\n  maxOutputBytes: number\n}', 1)
           query_anchor = """function queryTerms(query: string): string[] {\n  return uniqueBounded(words(query), 64)\n}\n"""
           cap_function = """function queryTerms(query: string): string[] {\n  return uniqueBounded(words(query), 64)\n}\n\n/** Bound complete model-facing text by UTF-8 bytes without splitting a code point. */\nexport function capToolText(text: string, maxBytes: number): string {\n  assertPositiveInteger('maxOutputBytes', maxBytes)\n  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text\n  const normalSuffix = '\\n...[truncated]'\n  const suffix = Buffer.byteLength(normalSuffix, 'utf8') <= maxBytes ? normalSuffix : '.'.repeat(maxBytes)\n  const budget = maxBytes - Buffer.byteLength(suffix, 'utf8')\n  let prefix = ''\n  let used = 0\n  for (const character of text) {\n    const bytes = Buffer.byteLength(character, 'utf8')\n    if (used + bytes > budget) break\n    prefix += character\n    used += bytes\n  }\n  return prefix + suffix\n}\n"""
@@ -97,6 +139,9 @@ jobs:
               "    assertPositiveInteger('defaultLimit', resolved.defaultLimit)\n",
               "    assertPositiveInteger('defaultLimit', resolved.defaultLimit)\n    assertPositiveInteger('maxOutputBytes', resolved.maxOutputBytes)\n", 1)
           code = code.replace(
+              '  readonly index: RepoBrainIndex\n',
+              '  /** Programmatic access to the same deterministic index used by the repo_brain tool. */\n  readonly index: RepoBrainIndex\n', 1)
+          code = code.replace(
               '    this.index = new RepoBrainIndex(resolved)\n\n    ctx.systemPrompt.section({',
               "    this.index = new RepoBrainIndex(resolved)\n    const bounded = (text: string) => ({ text: capToolText(text, resolved.maxOutputBytes) })\n\n    ctx.systemPrompt.section({", 1)
           code = code.replace("          return { text: formatSearch(await this.index.search(query, limit)) }", "          return bounded(formatSearch(await this.index.search(query, limit)))")
@@ -109,7 +154,6 @@ jobs:
               "          return bounded(`Repo Brain stats: files=${stats.files}, symbols=${stats.symbols}, edges=${stats.edges}, indexed=${String(stats.indexed)}.`)")
           path.write_text(code)
 
-          # Runtime/Ladder public surfaces must be explicit for Typert.
           runtime = Path('packages/phoenix/runtime/src/index.ts')
           code = runtime.read_text().replace(
               '  readonly ladder = new ModelCapabilityLadder()\n',
@@ -128,7 +172,6 @@ jobs:
               "  private hasAuthorityEvidence(state: ModelState): boolean {\n    let weightedSamples = 0\n    for (const points of state.evidence.values()) {\n      for (const point of points) {\n        if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n      }\n    }\n    return weightedSamples >= 3\n  }\n\n  private dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {")
           ladder.write_text(code)
 
-          # Downstream release identity while retaining all DSH package-shape gates.
           constraints = Path('scripts/check-workspace-constraints.ts')
           text = constraints.read_text()
           marker = "const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'\n"
@@ -173,7 +216,32 @@ jobs:
               if anchor not in text: raise SystemExit('tsconfig PHOENIX mapping anchor missing')
               config.write_text(text.replace(anchor, mappings + anchor, 1))
 
-          # No PHOENIX-owned package may claim the upstream npm scope.
+          # Curated Typert ownership for all v13 services and service-signature types.
+          catalog = Path('scripts/gen-cordis-catalog.ts')
+          text = catalog.read_text()
+          service_anchor = "  planMode: 'plan.md',\n"
+          service_rows = """  phoenix: 'core.md',
+            phoenixAiBus: 'llm-streaming.md',
+            phoenixRepoBrain: 'filesystem.md',
+          """
+          if "  phoenix: 'core.md',\n" not in text:
+              if service_anchor not in text: raise SystemExit('Typert SERVICE_PAGE anchor missing')
+              text = text.replace(service_anchor, service_anchor + service_rows, 1)
+          link_anchor = "  ModelSelection: 'core.md',\n"
+          type_rows = """  CapabilityEvidence: 'core.md',
+            ModelRef: 'core.md',
+            PhoenixRole: 'core.md',
+            RankedModel: 'core.md',
+            PhoenixComputeLane: 'llm-streaming.md',
+            PhoenixModelRef: 'llm-streaming.md',
+            PhoenixRouteSnapshot: 'llm-streaming.md',
+            RepoBrainIndex: 'filesystem.md',
+          """
+          if "  CapabilityEvidence: 'core.md',\n" not in text:
+              if link_anchor not in text: raise SystemExit('Typert LINK_MAP anchor missing')
+              text = text.replace(link_anchor, link_anchor + type_rows, 1)
+          catalog.write_text(text)
+
           for root in roots:
               for file in root.rglob('*'):
                   if file.is_file() and file.suffix in text_suffixes:
