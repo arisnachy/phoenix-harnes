@@ -6,11 +6,13 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
-    "./model-router": "./model-router.js"
+    "./model-router": "./model-router.js",
+    "./agent-roi": "./agent-roi.js"
   },
   "files": [
     "index.js",
     "model-router.js",
+    "agent-roi.js",
     "cordis.patch.yml"
   ],
   "dsh": {
