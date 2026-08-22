@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-phoenix
+# @arisnachy/phoenix-bundle
 
 PHOENIX profile bundle for DeepSeek Harness. Apply it after the standard base profile to mount the PHOENIX adaptive runtime and the official Codex and Claude Code subagent bridges.
 
@@ -6,7 +6,7 @@ The bundle does not grant Codex, Claude Code, or any newly discovered model comm
 
 ## What the bundle mounts
 
-- `@deepseek-ai/dsh-phoenix-runtime`
+- `@arisnachy/phoenix-runtime`
 - `@deepseek-ai/dsh-subagent-codex`
 - `@deepseek-ai/dsh-subagent-claude-code`
 
@@ -18,7 +18,7 @@ The runtime adds capability-ranked routing, bounded cross-provider failover, Tok
 
 #### What the model sees
 
-The bundle itself contributes no independent prompt text. Any model-visible behavior belongs to the child packages it mounts; the PHOENIX Runtime policy layer adds no mandatory prose by default.
+The bundle itself contributes no independent prompt text. Its `cordis.patch.yml` composes child packages; any model-visible behavior belongs to those children, while the PHOENIX Runtime policy layer adds no mandatory prose by default.
 
 #### Token effect
 
