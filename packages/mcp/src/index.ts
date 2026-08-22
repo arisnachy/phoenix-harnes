@@ -118,6 +118,22 @@ function trimRecord(value: unknown): Record<string, string> | undefined {
   return Object.keys(result).length ? result : undefined;
 }
 
+const SAFE_STDIO_ENV_KEYS = [
+  'PATH', 'PATHEXT', 'SYSTEMROOT', 'COMSPEC', 'WINDIR',
+  'HOME', 'USER', 'USERPROFILE', 'SHELL',
+  'TMP', 'TEMP', 'TMPDIR', 'LANG', 'LC_ALL', 'TERM',
+] as const;
+
+export function safeMcpStdioEnvironment(explicit: Readonly<Record<string, string>> = {}): Record<string, string> {
+  const safe: Record<string, string> = {};
+  for (const key of SAFE_STDIO_ENV_KEYS) {
+    const value = process.env[key];
+    if (typeof value === 'string') safe[key] = value;
+  }
+  for (const [key, value] of Object.entries(explicit)) safe[key] = value;
+  return safe;
+}
+
 function makeClient(id: string): Client {
   return new Client({ name: `phoenix-${id}`, version: '0.0.1' });
 }
@@ -132,7 +148,7 @@ async function connect(spec: McpServerSpec): Promise<ConnectionState> {
       command: spec.command,
       ...(spec.args ? { args: [...spec.args] } : {}),
       ...(spec.cwd ? { cwd: spec.cwd } : {}),
-      ...(spec.env ? { env: { ...process.env, ...spec.env } as Record<string, string> } : {}),
+      env: safeMcpStdioEnvironment(spec.env),
     });
     await client.connect(transport);
     return { client, close: async () => { await transport.close(); } };
