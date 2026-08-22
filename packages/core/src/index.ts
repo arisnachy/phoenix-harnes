@@ -32,7 +32,7 @@ export class PhoenixRuntime {
   readonly #health = new Map<string, ProviderHealth>();
   public readonly ledger: InMemoryLedger;
   public readonly evolution: EvolutionEngine;
-  public readonly policy?: RequestPolicy;
+  public readonly policy: RequestPolicy | undefined;
 
   public constructor(options: PhoenixRuntimeOptions = {}) {
     this.ledger = options.ledger ?? new InMemoryLedger();
