@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-phoenix",
+  "name": "@arisnachy/phoenix-bundle",
   "description": "PHOENIX profile bundle for DeepSeek Harness: adaptive runtime plus official Codex and Claude Code subagent bridges",
   "version": "0.1.1-rc.2",
   "publishConfig": { "access": "public" },
@@ -22,7 +22,7 @@
   "license": "MIT",
   "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
   "dependencies": {
-    "@deepseek-ai/dsh-phoenix-runtime": "workspace:^",
+    "@arisnachy/phoenix-runtime": "workspace:^",
     "@deepseek-ai/dsh-subagent-codex": "workspace:^",
     "@deepseek-ai/dsh-subagent-claude-code": "workspace:^"
   },

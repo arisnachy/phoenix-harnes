@@ -1,0 +1,213 @@
+name: PHOENIX Genesis native gate
+
+on:
+  pull_request:
+    branches:
+      - phoenix/genesis-v12
+
+permissions:
+  contents: write
+
+jobs:
+  genesis-native:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/genesis-native-contracts'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Establish PHOENIX downstream package identity and native catalog ownership
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          OLD_RUNTIME = '@deepseek-ai/dsh-phoenix-runtime'
+          NEW_RUNTIME = '@arisnachy/phoenix-runtime'
+          OLD_BUNDLE = '@deepseek-ai/dsh-phoenix'
+          NEW_BUNDLE = '@arisnachy/phoenix-bundle'
+
+          roots = [Path('packages/phoenix/runtime'), Path('packages/bundle/phoenix')]
+          text_suffixes = {'.json', '.ts', '.md', '.yml', '.yaml'}
+          for root in roots:
+              for path in root.rglob('*'):
+                  if not path.is_file() or path.suffix not in text_suffixes:
+                      continue
+                  text = path.read_text()
+                  next_text = text.replace(OLD_RUNTIME, NEW_RUNTIME).replace(OLD_BUNDLE, NEW_BUNDLE)
+                  if next_text != text:
+                      path.write_text(next_text)
+
+          # Typert requires explicit annotations on public service properties
+          # and on default-valued public parameters.
+          runtime = Path('packages/phoenix/runtime/src/index.ts')
+          code = runtime.read_text()
+          code = code.replace(
+              '  readonly ladder = new ModelCapabilityLadder()\n',
+              '  readonly ladder: ModelCapabilityLadder = new ModelCapabilityLadder()\n',
+              1,
+          )
+          if 'readonly ladder: ModelCapabilityLadder' not in code:
+              raise SystemExit('PHOENIX runtime public ladder annotation missing')
+          runtime.write_text(code)
+
+          ladder = Path('packages/phoenix/runtime/src/model-ladder.ts')
+          code = ladder.read_text()
+          code = code.replace(
+              '  snapshot(ref: ModelRef, now = Date.now()): ModelSnapshot | undefined {',
+              '  snapshot(ref: ModelRef, now: number = Date.now()): ModelSnapshot | undefined {',
+          )
+          code = code.replace(
+              '  all(now = Date.now()): ModelSnapshot[] {',
+              '  all(now: number = Date.now()): ModelSnapshot[] {',
+          )
+          code = code.replace(
+              '  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now = Date.now()): RankedModel[] {',
+              '  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now: number = Date.now()): RankedModel[] {',
+          )
+          code = code.replace(
+              "  private hasAuthorityEvidence(state: ModelState): boolean {\n  let weightedSamples = 0\n  for (const points of state.evidence.values()) {\n    for (const point of points) {\n      if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n    }\n  }\n  return weightedSamples >= 3\n}\n\nprivate dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {",
+              "  private hasAuthorityEvidence(state: ModelState): boolean {\n    let weightedSamples = 0\n    for (const points of state.evidence.values()) {\n      for (const point of points) {\n        if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n      }\n    }\n    return weightedSamples >= 3\n  }\n\n  private dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {",
+          )
+          required_ladder = [
+              'now: number = Date.now()',
+              'private hasAuthorityEvidence',
+              '  private dimensionSnapshot',
+          ]
+          if any(marker not in code for marker in required_ladder):
+              raise SystemExit('PHOENIX ladder public signature/format patch incomplete')
+          ladder.write_text(code)
+
+          # Preserve all upstream release rules, but recognize exactly the
+          # downstream PHOENIX package family as owned by this repository.
+          constraints = Path('scripts/check-workspace-constraints.ts')
+          text = constraints.read_text()
+          marker = "const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'\n"
+          addition = marker + """/** Downstream PHOENIX packages published from this repository, not DeepSeek's namespace. */
+          const phoenixPackageDirectory = /^(?:packages\\/phoenix\\/[^/]+|packages\\/bundle\\/phoenix)$/
+          const phoenixPackageNamePrefix = '@arisnachy/phoenix-'
+          const phoenixPublishedRepositoryUrl = 'git+https://github.com/arisnachy/phoenix-harnes.git'
+          """
+          if 'const phoenixPackageDirectory' not in text:
+              if marker not in text:
+                  raise SystemExit('constraints identity anchor missing')
+              text = text.replace(marker, addition, 1)
+
+          release_anchor = "  } else if (releaseMemberDirectory.test(dir)) {\n"
+          phoenix_branch = """  } else if (phoenixPackageDirectory.test(dir)) {
+            if (manifest.name?.startsWith(phoenixPackageNamePrefix) !== true) {
+              errors.push(`${label}: downstream PHOENIX package name must start with ${JSON.stringify(phoenixPackageNamePrefix)}`)
+            }
+            if (manifest.private === true) {
+              errors.push(`${label}: downstream PHOENIX package must not set \"private\": true`)
+            }
+            if (manifest.publishConfig?.access !== 'public') {
+              errors.push(`${label}: downstream PHOENIX package must set publishConfig.access to \"public\"`)
+            }
+            if (manifest.repository?.type !== 'git'
+              || manifest.repository.url !== phoenixPublishedRepositoryUrl
+              || manifest.repository.directory !== dir) {
+              errors.push(`${label}: downstream PHOENIX package repository must use ${phoenixPublishedRepositoryUrl} with directory ${dir}`)
+            }
+          } else if (releaseMemberDirectory.test(dir)) {
+          """
+          if 'downstream PHOENIX package repository must use' not in text:
+              if release_anchor not in text:
+                  raise SystemExit('constraints release branch anchor missing')
+              text = text.replace(release_anchor, phoenix_branch, 1)
+
+          shape_anchor = "  if (dir.startsWith('packages/') && manifest.name?.startsWith('@deepseek-ai/dsh-')) {\n"
+          shape_replacement = "  if (dir.startsWith('packages/') && (manifest.name?.startsWith('@deepseek-ai/dsh-') || phoenixPackageDirectory.test(dir))) {\n"
+          if shape_anchor in text:
+              text = text.replace(shape_anchor, shape_replacement, 1)
+          elif shape_replacement not in text:
+              raise SystemExit('constraints package-shape anchor missing')
+          constraints.write_text(text)
+
+          # Give TypeScript an explicit source facade for the independent scope.
+          config = Path('tsconfig.base.json')
+          text = config.read_text()
+          anchor = '      "@deepseek-ai/dsh-*": [\n'
+          mappings = """      "@arisnachy/phoenix-runtime": ["./packages/phoenix/runtime/src"],
+                "@arisnachy/phoenix-runtime/invariant": ["./packages/phoenix/runtime/src/invariant.ts"],
+                "@arisnachy/phoenix-bundle": ["./packages/bundle/phoenix/src"],
+                "@arisnachy/phoenix-bundle/invariant": ["./packages/bundle/phoenix/src/invariant.ts"],
+                "@arisnachy/phoenix-*": ["./packages/phoenix/*/src"],
+                "@arisnachy/phoenix-*/invariant": ["./packages/phoenix/*/src/invariant.ts"],
+          """
+          if '"@arisnachy/phoenix-runtime"' not in text:
+              if anchor not in text:
+                  raise SystemExit('tsconfig PHOENIX mapping anchor missing')
+              text = text.replace(anchor, mappings + anchor, 1)
+              config.write_text(text)
+
+          # Register the new service and its signature types with the curated
+          # Typert catalog instead of exempting them from documentation.
+          catalog = Path('scripts/gen-cordis-catalog.ts')
+          text = catalog.read_text()
+          service_anchor = "  planMode: 'plan.md',\n"
+          if "  phoenix: 'core.md',\n" not in text:
+              if service_anchor not in text:
+                  raise SystemExit('Typert SERVICE_PAGE anchor missing')
+              text = text.replace(service_anchor, service_anchor + "  phoenix: 'core.md',\n", 1)
+          link_anchor = "  ModelSelection: 'core.md',\n"
+          phoenix_types = """  CapabilityEvidence: 'core.md',
+            ModelRef: 'core.md',
+            PhoenixRole: 'core.md',
+            RankedModel: 'core.md',
+          """
+          if "  CapabilityEvidence: 'core.md',\n" not in text:
+              if link_anchor not in text:
+                  raise SystemExit('Typert LINK_MAP anchor missing')
+              text = text.replace(link_anchor, link_anchor + phoenix_types, 1)
+          catalog.write_text(text)
+
+          # Assert no PHOENIX-owned package still claims the DeepSeek npm scope.
+          for root in roots:
+              for path in root.rglob('*'):
+                  if path.is_file() and path.suffix in text_suffixes:
+                      content = path.read_text()
+                      if OLD_RUNTIME in content or OLD_BUNDLE in content:
+                          raise SystemExit(f'stale DeepSeek PHOENIX package identity in {path}')
+          PY
+
+      - name: Synchronize workspace lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Prove frozen install
+        run: pnpm install --frozen-lockfile
+      - name: Package constraints
+        run: pnpm run constraints
+      - name: Regenerate native catalogs
+        run: |
+          pnpm run gen-cordis-catalog
+          pnpm run gen-cordis-api
+          pnpm run gen-tool-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-module-graph
+      - name: Documentation contracts
+        run: pnpm run doc-sync
+      - name: Native static gate
+        run: pnpm run check:ci:static
+      - name: Build
+        run: pnpm run build
+      - name: Hygiene
+        run: pnpm run hygiene
+      - name: Patch hygiene
+        run: git diff --check
+      - name: Commit verified Genesis contract state
+        run: |
+          if git diff --quiet; then
+            echo 'Genesis contract state already clean.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor(phoenix): establish independent package identity'
+          git push origin HEAD:${{ github.head_ref }}

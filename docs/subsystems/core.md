@@ -722,6 +722,42 @@ roots(): Agent[]
 
 Source: [`packages/core/agent/src/index.ts`](../../packages/core/agent/src/index.ts)
 
+<a id="ctxphoenix--phoenixruntime"></a>
+
+### `ctx.phoenix` — `PhoenixRuntime`
+
+PHOENIX adaptive policy service. Capability ranking and authority stay separate: quarantined/provisional models are never selected by the router.
+
+```ts cordis-catalog
+/**
+ * Record authority-grade benchmark or operator evidence for one model capability.
+ * Mission and collective observations are rejected here so they cannot grant role authority.
+ * @param evidence - benchmark/operator capability evidence to add to the ladder and durable local state.
+ */
+recordBenchmark(evidence: CapabilityEvidence): void
+
+/**
+ * Quarantine a provider/model so it cannot win PHOENIX routing.
+ * @param ref - provider/model identity to quarantine.
+ */
+quarantine(ref: ModelRef): void
+
+/**
+ * Release a provider/model from quarantine; it regains only the trust justified by authority-grade evidence.
+ * @param ref - provider/model identity whose quarantine marker should be removed.
+ */
+releaseQuarantine(ref: ModelRef): void
+
+/**
+ * Rank currently discovered, qualified models for one PHOENIX role.
+ * @param role - capability role whose weighted evidence profile should be applied.
+ * @returns Qualified model candidates ordered from strongest to weakest evidence score.
+ */
+rank(role: PhoenixRole): RankedModel[]
+```
+
+Source: [`packages/phoenix/runtime/src/index.ts`](../../packages/phoenix/runtime/src/index.ts)
+
 <a id="agent-events"></a>
 
 ### `agent/*` events

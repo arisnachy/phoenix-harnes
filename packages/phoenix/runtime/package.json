@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-phoenix-runtime",
+  "name": "@arisnachy/phoenix-runtime",
   "description": "PHOENIX adaptive runtime: capability-ranked routing, failover, token flight recording, agent ROI, local evolution, and Mother Guard for DeepSeek Harness",
   "version": "0.1.1-rc.2",
   "publishConfig": { "access": "public" },

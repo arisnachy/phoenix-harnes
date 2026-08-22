@@ -1,5 +1,2 @@
-version: 1
-source: README.md
-translations:
-  - locale: zh
-    path: README.zh.md
+README.md: f6a6ea7d7ad64458280b122187868c76a2231136
+README.zh.md: 8da4dbba399fc192728c192fefd7dd65eb80cf34

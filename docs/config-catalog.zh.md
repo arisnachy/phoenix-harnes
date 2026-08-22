@@ -11,6 +11,34 @@
 
 `Requires:` 行列出插件通过 `inject` 注入的服务键：其 `cordis.yml` 树还必须加载这些服务的提供者。范围限定为 harness 层级（`packages/`）；配置树还可能加载的 vendored cordis 插件（`hmr`、控制台日志记录器等）固定为上游源代码（参见 [vendoring policy](../vendor/README.md)），未收录于此目录。
 
+<a id="arisnachyphoenix-runtime"></a>
+
+## `@arisnachy/phoenix-runtime`
+
+Requires: `llm` · `tokenMeter` · `tools`
+
+```ts config-catalog
+/** PHOENIX runtime policy knobs; all defaults preserve native DSH execution seams. */
+export interface PhoenixRuntimeConfig {
+  /** Enable evidence-ranked model selection for qualified candidates. */
+  routing?: boolean
+  /** Permit bounded cross-provider failover after the native provider retry chain declines. */
+  failover?: boolean
+  /** Deny trivial delegations whose model cost exceeds the expected deterministic-tool value. */
+  agentRoi?: boolean
+  /** Persist local benchmark evidence and quarantine state between harness launches. */
+  localEvolution?: boolean
+  /** Optional fail-closed ceiling for measured request-context tokens before a model step may enter. */
+  hardContextTokens?: number
+  /** Maximum cross-provider retries PHOENIX may request for one agent step. */
+  maxFailoversPerStep?: number
+  /** Optional local state file; defaults under the DSH home directory. */
+  statePath?: string
+}
+```
+
+Source: [`packages/phoenix/runtime/src/index.ts:29`](../packages/phoenix/runtime/src/index.ts)
+
 <a id="deepseek-aidsh-acp"></a>
 
 ## `@deepseek-ai/dsh-acp`
@@ -3319,6 +3347,7 @@ export interface Config {
 
 由其他包作为库导入；`cordis.yml` 无法加载它们。
 
+- `@arisnachy/phoenix-bundle` ([`packages/bundle/phoenix/src/index.ts`](../packages/bundle/phoenix/src/index.ts))
 - `@deepseek-ai/dsh-acp-snapshot`（[`packages/test-support/acp-snapshot/src/index.ts`](../packages/test-support/acp-snapshot/src/index.ts)）
 - `@deepseek-ai/dsh-agent-loop-testkit`（[`packages/test-support/agent-loop-testkit/src/index.ts`](../packages/test-support/agent-loop-testkit/src/index.ts)）
 - `@deepseek-ai/dsh-anonymous-user-id`（[`packages/identity/anonymous-user-id/src/index.ts`](../packages/identity/anonymous-user-id/src/index.ts)）

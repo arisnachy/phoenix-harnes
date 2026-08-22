@@ -2,7 +2,7 @@
 # It adds PHOENIX policy/intelligence while keeping the DSH capability seams.
 - insert:
     - id: phoenix-runtime
-      name: '@deepseek-ai/dsh-phoenix-runtime'
+      name: '@arisnachy/phoenix-runtime'
       config:
         routing: true
         failover: true

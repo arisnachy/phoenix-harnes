@@ -1,5 +1,7 @@
 # phoenix/ — PHOENIX evolution layer
 
+English | [中文](README.zh.md)
+
 PHOENIX is the downstream evolution of DeepSeek Harness in this repository. Packages in this group add provider-neutral intelligence, safety, efficiency, continuity, and self-improvement while reusing DSH's mature capability seams.
 
 | Package | Role | ctx key |

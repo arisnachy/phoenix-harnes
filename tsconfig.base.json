@@ -237,6 +237,12 @@
       "@deepseek-ai/dsh-sdk-jsonrpc-server": ["./packages/sdk/server/src"],
       "@deepseek-ai/dsh-experimental-agent-team": ["./packages/experimental/agent-team/src"],
       "@deepseek-ai/dsh-experimental-tool-agent-team": ["./packages/experimental/tool-agent-team/src"],
+      "@arisnachy/phoenix-runtime": ["./packages/phoenix/runtime/src"],
+      "@arisnachy/phoenix-runtime/invariant": ["./packages/phoenix/runtime/src/invariant.ts"],
+      "@arisnachy/phoenix-bundle": ["./packages/bundle/phoenix/src"],
+      "@arisnachy/phoenix-bundle/invariant": ["./packages/bundle/phoenix/src/invariant.ts"],
+      "@arisnachy/phoenix-*": ["./packages/phoenix/*/src"],
+      "@arisnachy/phoenix-*/invariant": ["./packages/phoenix/*/src/invariant.ts"],
       "@deepseek-ai/dsh-*": [
         "./packages/core/*/src",
         "./packages/prompt/*/src",

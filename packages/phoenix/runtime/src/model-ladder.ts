@@ -3,6 +3,7 @@
  * Models earn authority per role from evidence; provider labels never grant authority.
  */
 
+/** Capability axes scored independently by PHOENIX evidence. */
 export const capabilityDimensions = [
   'planning',
   'orchestration',
@@ -18,8 +19,10 @@ export const capabilityDimensions = [
   'efficiency',
 ] as const
 
+/** One capability axis in the PHOENIX evidence model. */
 export type CapabilityDimension = typeof capabilityDimensions[number]
 
+/** Stable role vocabulary used for model qualification and routing. */
 export const phoenixRoles = [
   'orchestrator',
   'builder',
@@ -32,15 +35,20 @@ export const phoenixRoles = [
   'routine',
 ] as const
 
+/** One PHOENIX task role. */
 export type PhoenixRole = typeof phoenixRoles[number]
+/** Trust state controlling whether a model may participate in PHOENIX routing. */
 export type ModelTrust = 'provisional' | 'qualified' | 'quarantined'
+/** Provenance class attached to every capability observation. */
 export type EvidenceSource = 'benchmark' | 'mission' | 'collective-observation' | 'operator'
 
+/** Provider/model identity independent of trust or capability. */
 export interface ModelRef {
   provider: string
   model: string
 }
 
+/** One scored observation about one model capability. */
 export interface CapabilityEvidence extends ModelRef {
   dimension: CapabilityDimension
   score: number
@@ -50,17 +58,20 @@ export interface CapabilityEvidence extends ModelRef {
   reproducible?: boolean
 }
 
+/** Time-decayed aggregate for one model capability. */
 export interface DimensionSnapshot {
   score: number
   confidence: number
   effectiveSamples: number
 }
 
+/** Detached model state with trust and all currently observed dimensions. */
 export interface ModelSnapshot extends ModelRef {
   trust: ModelTrust
   dimensions: Partial<Record<CapabilityDimension, DimensionSnapshot>>
 }
 
+/** Qualified candidate score for one requested PHOENIX role. */
 export interface RankedModel extends ModelRef {
   role: PhoenixRole
   score: number
@@ -97,8 +108,11 @@ const ROLE_MINIMUMS: Partial<Record<PhoenixRole, Partial<Record<CapabilityDimens
   security: { security: 80, reliability: 74 },
 }
 
+/** Time-decay and confidence thresholds for a capability ladder instance. */
 export interface ModelLadderOptions {
+  /** Half-life for old observations before their effective sample weight halves. */
   halfLifeMs?: number
+  /** Minimum aggregate confidence required for a model to rank. */
   minimumConfidence?: number
 }
 
@@ -117,6 +131,10 @@ export class ModelCapabilityLadder {
   private readonly halfLifeMs: number
   private readonly minimumConfidence: number
 
+  /**
+   * Create an empty ladder.
+   * @param options - optional time decay and confidence thresholds.
+   */
   constructor(options: ModelLadderOptions = {}) {
     this.halfLifeMs = options.halfLifeMs ?? 30 * 24 * 60 * 60 * 1000
     this.minimumConfidence = options.minimumConfidence ?? 0.55
@@ -125,6 +143,10 @@ export class ModelCapabilityLadder {
     }
   }
 
+  /**
+   * Register a model as provisional if unseen.
+   * @param ref - provider/model identity to add without granting authority.
+   */
   register(ref: ModelRef): void {
     const id = key(ref)
     if (this.states.has(id)) return
@@ -132,6 +154,10 @@ export class ModelCapabilityLadder {
     this.states.set(id, { trust: 'provisional', evidence: new Map() })
   }
 
+  /**
+   * Add one capability observation and recompute whether authority-grade evidence is sufficient for qualification.
+   * @param evidence - scored observation with explicit provenance.
+   */
   record(evidence: CapabilityEvidence): void {
     assertScore(evidence.score)
     this.register(evidence)
@@ -147,18 +173,32 @@ export class ModelCapabilityLadder {
     if (state.trust !== 'quarantined' && this.hasAuthorityEvidence(state)) state.trust = 'qualified'
   }
 
+  /**
+   * Force a model out of every ranked candidate set.
+   * @param ref - provider/model identity to quarantine.
+   */
   quarantine(ref: ModelRef): void {
     this.register(ref)
     this.states.get(key(ref))!.trust = 'quarantined'
   }
 
+  /**
+   * Remove quarantine while restoring only the trust justified by authority-grade evidence.
+   * @param ref - provider/model identity to release.
+   */
   releaseQuarantine(ref: ModelRef): void {
     const state = this.states.get(key(ref))
     if (state === undefined) return
     state.trust = this.hasAuthorityEvidence(state) ? 'qualified' : 'provisional'
   }
 
-  snapshot(ref: ModelRef, now = Date.now()): ModelSnapshot | undefined {
+  /**
+   * Snapshot one model's trust and time-decayed capability aggregates.
+   * @param ref - provider/model identity to inspect.
+   * @param now - evaluation timestamp used for deterministic decay calculations.
+   * @returns Detached model snapshot, or undefined when the model is unknown.
+   */
+  snapshot(ref: ModelRef, now: number = Date.now()): ModelSnapshot | undefined {
     const state = this.states.get(key(ref))
     if (state === undefined) return undefined
     const dimensions: Partial<Record<CapabilityDimension, DimensionSnapshot>> = {}
@@ -169,11 +209,23 @@ export class ModelCapabilityLadder {
     return { ...ref, trust: state.trust, dimensions }
   }
 
-  all(now = Date.now()): ModelSnapshot[] {
+  /**
+   * Snapshot every registered model.
+   * @param now - evaluation timestamp shared by all decay calculations.
+   * @returns Detached snapshots in registration order.
+   */
+  all(now: number = Date.now()): ModelSnapshot[] {
     return [...this.refs.values()].map(ref => this.snapshot(ref, now)!)
   }
 
-  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now = Date.now()): RankedModel[] {
+  /**
+   * Rank qualified candidates for one role using role weights, minimums, confidence, and deterministic tie-breaking.
+   * @param role - PHOENIX capability role to score.
+   * @param candidates - optional candidate subset; omission uses every registered model.
+   * @param now - evaluation timestamp used for time decay.
+   * @returns Eligible qualified models from strongest to weakest aggregate evidence.
+   */
+  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now: number = Date.now()): RankedModel[] {
     const pool = candidates ?? [...this.refs.values()]
     const weights = ROLE_WEIGHTS[role]
     const minimums = ROLE_MINIMUMS[role] ?? {}
@@ -209,16 +261,16 @@ export class ModelCapabilityLadder {
   }
 
   private hasAuthorityEvidence(state: ModelState): boolean {
-  let weightedSamples = 0
-  for (const points of state.evidence.values()) {
-    for (const point of points) {
-      if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight
+    let weightedSamples = 0
+    for (const points of state.evidence.values()) {
+      for (const point of points) {
+        if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight
+      }
     }
+    return weightedSamples >= 3
   }
-  return weightedSamples >= 3
-}
 
-private dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {
+  private dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {
     if (points === undefined || points.length === 0) return undefined
     let weightedScore = 0
     let weight = 0

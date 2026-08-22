@@ -1,4 +1,6 @@
-# @deepseek-ai/dsh-phoenix
+# @arisnachy/phoenix-bundle
+
+English | [中文](README.zh.md)
 
 PHOENIX profile bundle for DeepSeek Harness. Apply it after the standard base profile to mount the PHOENIX adaptive runtime and the official Codex and Claude Code subagent bridges.
 
@@ -6,7 +8,7 @@ The bundle does not grant Codex, Claude Code, or any newly discovered model comm
 
 ## What the bundle mounts
 
-- `@deepseek-ai/dsh-phoenix-runtime`
+- `@arisnachy/phoenix-runtime`
 - `@deepseek-ai/dsh-subagent-codex`
 - `@deepseek-ai/dsh-subagent-claude-code`
 
@@ -14,8 +16,24 @@ The runtime adds capability-ranked routing, bounded cross-provider failover, Tok
 
 ## Model Experience
 
-The bundle adds no mandatory prompt text. Codex and Claude Code remain dormant providers until the existing DSH subagent layer delegates work to them. PHOENIX policy is deterministic where possible so idle overhead stays small.
+### PHOENIX Genesis composition
+
+#### What the model sees
+
+The bundle itself contributes no independent prompt text. Its `cordis.patch.yml` composes child packages; any model-visible behavior belongs to those children, while the PHOENIX Runtime policy layer adds no mandatory prose by default.
+
+#### Token effect
+
+Indirect through mounted children. The bundle carrier itself adds zero direct request tokens; PHOENIX Runtime's deterministic routing/ROI policy does not require another model request.
+
+#### KV Cache effect
+
+The bundle is a composition carrier. Its own patch-list adds no request text, but changing the mounted package set can change the composed request prefix or available tool surfaces and therefore cache reuse.
 
 ## Known Limitations and Deferred Work
 
-This first PHOENIX profile does not yet include the desktop application, Repo Brain, Sandbox Farm orchestration, Model Team Genome, automatic benchmark arena, or a collective observe-only transport. It deliberately contains no peer-to-peer executable evolution path.
+- **Repository cognition** — Genesis does not yet include Repo Brain.
+- **Parallel execution** — Sandbox Farm orchestration is deferred.
+- **Model teams** — Model Team Genome and automatic benchmark arena are deferred.
+- **Desktop surface** — the Windows PHOENIX application/Flight Deck is deferred.
+- **Collective evolution** — there is no collective observe-only transport, and the profile deliberately contains no peer-to-peer executable evolution path.
