@@ -1,5 +1,7 @@
 # @arisnachy/phoenix-bundle
 
+English | [中文](README.zh.md)
+
 PHOENIX profile bundle for DeepSeek Harness. Apply it after the standard base profile to mount the PHOENIX adaptive runtime and the official Codex and Claude Code subagent bridges.
 
 The bundle does not grant Codex, Claude Code, or any newly discovered model command authority. PHOENIX ranks models by demonstrated capabilities, keeps new models provisional, and applies local policy/ROI/security gates around the existing DSH seams.
