@@ -1,0 +1,199 @@
+name: PHOENIX CI diagnostics
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  DSH_TELEMETRY_DISABLED: '1'
+
+concurrency:
+  group: phoenix-ci-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage-diagnostics:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    name: coverage / named lanes
+    env:
+      DSH_COVERAGE_MAX_WORKERS: '2'
+      DSH_COVERAGE_PARTITIONS: '2'
+      DSH_COVERAGE_TEST_TIMEOUT_MS: '30000'
+      DSH_GATE_CONCURRENCY: '2'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+      - name: Install dependencies and prepare bubblewrap
+        shell: bash
+        run: |
+          pnpm install --frozen-lockfile &
+          install_pid=$!
+          bash scripts/prepare-ci-bubblewrap.sh &
+          sandbox_pid=$!
+          install_status=0
+          wait "$install_pid" || install_status=$?
+          sandbox_status=0
+          wait "$sandbox_pid" || sandbox_status=$?
+          if (( install_status != 0 )); then exit "$install_status"; fi
+          exit "$sandbox_status"
+      - name: Coverage / instrumented partitions
+        env:
+          DSH_COVERAGE_EXEMPT_HEAVY: '1'
+        run: pnpm run test:coverage:partitioned -- --testTimeout=30000 --expect.poll.timeout=30000
+      - name: Coverage / exempt heavy suites
+        run: >-
+          pnpm exec vitest run
+          packages/typert/generator/tests/
+          scripts/install-lefthook.spec.ts
+          scripts/oxlint-contract.spec.ts
+          scripts/change-scope.spec.ts
+          scripts/translation-pairing-merge.spec.ts
+          --maxWorkers=1
+          --testTimeout=30000
+          --expect.poll.timeout=30000
+
+  consumer-diagnostics:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    name: consumers / named gates
+    env:
+      DSH_NODE_COMPAT_SKIP_TYPECHECK: '1'
+      DSH_OXLINT_THREADS: '2'
+      DSH_PUBLINT_CONCURRENCY: '2'
+      DSH_WEB_SNAPSHOT_WORKERS: '2'
+      DSH_SNAPSHOT_MAX_CONCURRENCY: '4'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+      - name: Install dependencies and prepare bubblewrap
+        shell: bash
+        run: |
+          pnpm install --frozen-lockfile &
+          install_pid=$!
+          bash scripts/prepare-ci-bubblewrap.sh &
+          sandbox_pid=$!
+          install_status=0
+          wait "$install_pid" || install_status=$?
+          sandbox_status=0
+          wait "$sandbox_pid" || sandbox_status=$?
+          if (( install_status != 0 )); then exit "$install_status"; fi
+          exit "$sandbox_status"
+      - name: Install Playwright Chromium
+        run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
+      - name: Consumers / official build
+        env:
+          DSH_BUILD_CLIENT_PROFILE: official
+        run: pnpm run build
+      - name: Consumers / Node compatibility
+        env:
+          DSH_BUILD_CLIENT_PROFILE: official
+        run: pnpm run check:node-compat
+      - name: Consumers / publint
+        run: pnpm run publint
+      - name: Consumers / built package invariants
+        run: pnpm run verify-built-package-invariants
+      - name: Consumers / lint and duplication
+        run: pnpm run check:ci:lint:contracts-ready
+      - name: Consumers / snapshots
+        env:
+          DSH_EXAMPLE_MODE: lib
+        run: pnpm run test:snapshot
+      - name: Consumers / browser snapshots
+        env:
+          DSH_SNAPSHOT: replay
+        run: pnpm run test:web:ci
+      - name: Consumers / documentation typecheck
+        env:
+          DSH_DOC_TYPECHECK_USE_BUILD_OUTPUT: '1'
+        run: pnpm run doc-typecheck:contracts-ready
+      - name: Consumers / NodeNext types
+        run: pnpm run verify-node-next-types
+      - name: Consumers / built-bin smoke
+        env:
+          DSH_EXAMPLE_MODE: lib
+        run: >-
+          pnpm exec vitest run --config vitest.e2e.config.ts
+          examples/headless-agent/tests/keyless-smoke.e2e.ts
+          apps/cli/tests/built-bin.e2e.ts
+          packages/examples/acp-demo/tests/built-bin.e2e.ts
+          packages/host/directory-picker-native/tests/built-worker.e2e.ts
+          packages/sdk/server/tests/built-scope-carrier.e2e.ts
+          packages/subagent/subagent-codex/tests/loader-composition.e2e.ts
+          packages/subagent/subagent-claude-code/tests/loader-composition.e2e.ts
+          packages/api/remotes/tests/built-lib.e2e.ts
+          packages/workflow/workflow-worker-thread/tests/built-worker.e2e.ts
+          packages/code-runtime/code-runtime-worker-thread/tests/built-lib.e2e.ts
+          packages/lsp/lsp-stdio/tests/built-lib.e2e.ts
+
+  windows-diagnostics:
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    name: windows / named required gates
+    timeout-minutes: 120
+    env:
+      DSH_COVERAGE_MAX_WORKERS: '2'
+      DSH_COVERAGE_PARTITIONS: '4'
+      DSH_COVERAGE_TEST_TIMEOUT_MS: '30000'
+      DSH_GATE_CONCURRENCY: '2'
+      DSH_PUBLINT_CONCURRENCY: '2'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Enable Developer Mode
+        shell: pwsh
+        run: >-
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock"
+          /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+      - name: Install immutable workspace
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+      - name: Windows / official build
+        shell: pwsh
+        env:
+          DSH_BUILD_CLIENT_PROFILE: official
+        run: pnpm run build
+      - name: Windows / production documentation site
+        shell: pwsh
+        run: pnpm run docs:build
+      - name: Windows / instrumented coverage partitions
+        shell: pwsh
+        env:
+          DSH_COVERAGE_EXEMPT_HEAVY: '1'
+        run: pnpm run test:coverage:partitioned -- --testTimeout=30000 --expect.poll.timeout=30000
+      - name: Windows / coverage exempt heavy suites
+        shell: pwsh
+        run: >-
+          pnpm exec vitest run
+          packages/typert/generator/tests/
+          scripts/install-lefthook.spec.ts
+          scripts/oxlint-contract.spec.ts
+          scripts/change-scope.spec.ts
+          scripts/translation-pairing-merge.spec.ts
+          --maxWorkers=1
+          --testTimeout=30000
+          --expect.poll.timeout=30000
+      - name: Windows / observational inventory
+        shell: pwsh
+        run: pnpm run check:ci:windows-observational
