@@ -1,8 +1,8 @@
 # @deepseek-ai/dsh-phoenix
 
-PHOENIX 是 DeepSeek Harness 的 profile bundle。它在标准 base profile 之后挂载 PHOENIX 自适应运行时，以及官方 Codex 与 Claude Code 子代理桥接。
+PHOENIX 是 DeepSeek Harness 的 profile bundle。它在标准 base profile 之后挂载 PHOENIX 自适应 runtime，以及官方 Codex 与 Claude Code 子代理桥接。
 
-该 bundle 不会因为模型来自 Codex、Claude Code 或新发现的 provider 就自动授予指挥权。PHOENIX 根据可验证能力进行排名，新模型保持 provisional，并在 DSH 原生能力接缝周围执行本地策略、ROI 与安全门控。
+该 bundle 不会因为模型来自 Codex、Claude Code 或任何新 provider 就自动授予指挥权。PHOENIX 根据可验证能力进行排名，新模型保持 provisional，并在 DSH 原生能力接缝周围执行本地策略、ROI 与安全门控。
 
 ## Bundle 挂载内容
 
@@ -10,12 +10,28 @@ PHOENIX 是 DeepSeek Harness 的 profile bundle。它在标准 base profile 之�
 - `@deepseek-ai/dsh-subagent-codex`
 - `@deepseek-ai/dsh-subagent-claude-code`
 
-运行时增加能力排名路由、有界跨 provider 故障转移、Token Flight Recorder、Agent ROI Gate、本地策略演进、隔离与 Mother Guard。
+Runtime 增加能力排名路由、有界跨 provider 故障转移、Token Flight Recorder、Agent ROI Gate、本地策略演进、隔离与 Mother Guard。
 
 ## Model Experience
 
-该 bundle 默认不增加强制 prompt 文本。Codex 与 Claude Code 在现有 DSH 子代理层真正委派工作之前保持休眠。PHOENIX 尽可能使用确定性策略，因此空闲开销很小。
+### PHOENIX Genesis composition
+
+#### What the model sees
+
+bundle 本身不增加独立 prompt 文本。模型可见行为由它挂载的子包拥有；PHOENIX Runtime 默认也不增加强制提示文本。
+
+#### Token effect
+
+通过子包间接产生。bundle 载体自身直接请求 token 开销为零；PHOENIX Runtime 的确定性 routing/ROI 策略不需要额外模型请求。
+
+#### KV Cache effect
+
+bundle 是组合载体。自身 patch-list 不增加请求文本，但改变挂载包集合可能改变组合请求前缀或工具表面，因此可能影响 cache 复用。
 
 ## Known Limitations and Deferred Work
 
-首个 PHOENIX profile 尚未包含桌面应用、Repo Brain、Sandbox Farm 编排、Model Team Genome、自动 benchmark arena 或 collective observe-only transport。它刻意不提供任何 peer-to-peer 可执行演进路径。
+- **仓库认知** — Genesis 尚不包含 Repo Brain。
+- **并行执行** — Sandbox Farm 编排尚未加入。
+- **模型团队** — Model Team Genome 与自动 benchmark arena 尚未加入。
+- **桌面表面** — Windows PHOENIX 应用/Flight Deck 尚未加入。
+- **Collective evolution** — 尚无 collective observe-only transport，并明确不提供 peer-to-peer executable evolution。
