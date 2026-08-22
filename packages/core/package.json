@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@phoenix/collective": "workspace:*",
     "@phoenix/contracts": "workspace:*",
     "@phoenix/evolution": "workspace:*",
     "@phoenix/ledger": "workspace:*",
