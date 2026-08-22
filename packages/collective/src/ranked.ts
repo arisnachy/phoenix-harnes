@@ -17,6 +17,16 @@ export interface RankedNodeProfile extends EvolutionNodeProfile {
   };
 }
 
+export interface RankedEvolutionCell extends EvolutionCell {
+  orchestrator: {
+    nodeId: string;
+    providerId: string;
+    modelId: string;
+    composite: number;
+    confidence: number;
+  };
+}
+
 function collectiveRole(role: EvolutionRole): EvolutionModelRole {
   if (role === 'builder') return 'builder';
   if (role === 'analyst') return 'analyst';
@@ -41,7 +51,7 @@ export class RankedEvolutionCellCoordinator {
     problem: EvolutionProblem,
     nodes: readonly RankedNodeProfile[],
     policy: RankedCellPolicy = {},
-  ): EvolutionCell {
+  ): RankedEvolutionCell {
     const contributorCount = Math.max(2, Math.floor(policy.contributorCount ?? 6));
     const judgeCount = Math.max(3, Math.floor(policy.judgeCount ?? 5));
     const maxTokens = Math.max(0, Math.floor(policy.maxTokensPerContributor ?? 200));
@@ -56,8 +66,22 @@ export class RankedEvolutionCellCoordinator {
       return requireQualified ? profile.status !== 'provisional' && profile.status !== 'restricted' : true;
     });
 
+    const orchestratorCandidates = eligible
+      .map((node) => ({ node, ranked: this.ranking.evaluateRole(node.model.providerId, node.model.modelId, 'orchestrator') }))
+      .filter((item) => item.ranked?.eligible)
+      .sort((a, b) => (b.ranked?.composite ?? 0) - (a.ranked?.composite ?? 0) || (b.ranked?.confidence ?? 0) - (a.ranked?.confidence ?? 0));
+    const orchestratorCandidate = orchestratorCandidates[0];
+    if (!orchestratorCandidate?.ranked) {
+      throw new Error('No PHOENIX model clears the command authority gate; refusing to assign a weak orchestrator');
+    }
+    const orchestratorNode = orchestratorCandidate.node;
+
     const rolePlan: EvolutionRole[] = ['reproducer', 'analyst', 'builder', 'critic', 'benchmark', 'observer'];
-    const available = new Map(eligible.map((node) => [node.nodeId, node]));
+    const available = new Map(
+      eligible
+        .filter((node) => node.nodeId !== orchestratorNode.nodeId)
+        .map((node) => [node.nodeId, node]),
+    );
     const contributors: CellAssignment[] = [];
 
     for (let index = 0; index < contributorCount; index += 1) {
@@ -84,8 +108,9 @@ export class RankedEvolutionCellCoordinator {
 
     const contributorIds = new Set(contributors.map((item) => item.nodeId));
     const contributorModels = new Set(nodes.filter((node) => contributorIds.has(node.nodeId)).map(modelKey));
+    const orchestratorModel = modelKey(orchestratorNode);
     const judgeCandidates = eligible
-      .filter((node) => !contributorIds.has(node.nodeId))
+      .filter((node) => node.nodeId !== orchestratorNode.nodeId && !contributorIds.has(node.nodeId))
       .map((node) => ({ node, ranked: this.ranking.evaluateRole(node.model.providerId, node.model.modelId, 'judge') }))
       .filter((item) => item.ranked?.eligible)
       .sort((a, b) => (b.ranked?.composite ?? 0) - (a.ranked?.composite ?? 0) || b.node.judgeReliability - a.node.judgeReliability);
@@ -94,10 +119,10 @@ export class RankedEvolutionCellCoordinator {
     const usedModels = new Set<string>();
     for (const candidate of judgeCandidates) {
       if (judges.length >= judgeCount) break;
-      const key = modelKey(candidate.node);
-      if (usedModels.has(key)) continue;
-      if (contributorModels.has(key)) continue;
-      usedModels.add(key);
+      const candidateModel = modelKey(candidate.node);
+      if (usedModels.has(candidateModel)) continue;
+      if (contributorModels.has(candidateModel) || candidateModel === orchestratorModel) continue;
+      usedModels.add(candidateModel);
       judges.push({
         nodeId: candidate.node.nodeId,
         weight: Math.min(1, Math.max(0.5, 0.5 + (candidate.ranked?.confidence ?? 0) / 2)),
@@ -112,6 +137,13 @@ export class RankedEvolutionCellCoordinator {
     return {
       id: randomUUID(),
       problem,
+      orchestrator: {
+        nodeId: orchestratorNode.nodeId,
+        providerId: orchestratorNode.model.providerId,
+        modelId: orchestratorNode.model.modelId,
+        composite: orchestratorCandidate.ranked.composite,
+        confidence: orchestratorCandidate.ranked.confidence,
+      },
       contributors,
       judges,
       createdAt: createdAt.toISOString(),
