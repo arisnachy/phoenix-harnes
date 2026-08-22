@@ -1,32 +1,34 @@
-name: PHOENIX Birth Gate
+name: PHOENIX CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: write
 
-concurrency:
-  group: phoenix-birth-pr-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
-  birth-root:
-    if: github.head_ref == 'phoenix/birth-root-v11'
+  birth-import:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'phoenix/birth-root-v11'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: phoenix/birth-root-v11
           fetch-depth: 0
-      - name: Materialize DeepSeek Harness root and PHOENIX genealogy
+          ref: phoenix/birth-root-v11
+      - name: Import exact DeepSeek Harness snapshot into PHOENIX root
         shell: bash
         run: |
           set -Eeuo pipefail
           trap 'echo "PHOENIX birth failed at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
           DSH_SHA=b150a551b8d465e31e418e1b2eaf5e79bbb7d28e
           birth_head="$(git rev-parse HEAD)"
+          if [[ -f PHOENIX_UPSTREAM.json ]] && node -e "const p=require('./PHOENIX_UPSTREAM.json'); process.exit(p.importMode==='root-downstream'?0:1)"; then
+            echo 'PHOENIX root already materialized.'
+            exit 0
+          fi
           cp -L LICENSE /tmp/phoenix-agpl
           [[ -f SECURITY.md ]] && cp -L SECURITY.md /tmp/phoenix-security || true
           rm -rf /tmp/dsh /tmp/dsh.tgz
@@ -132,3 +134,18 @@ jobs:
           remote="$(git rev-parse origin/phoenix/birth-root-v11)"
           [[ "$remote" == "$birth_head" ]]
           git push --force-with-lease=refs/heads/phoenix/birth-root-v11:${birth_head} origin HEAD:phoenix/birth-root-v11
+
+  verify:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.ref != 'phoenix/birth-root-v11'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm run verify
