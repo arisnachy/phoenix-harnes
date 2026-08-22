@@ -34,47 +34,40 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
+
+          def sub_once(text, pattern, replacement, label, flags=0):
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, got {count}')
+              return updated
 
           ladder_path = Path('packages/phoenix/runtime/src/model-ladder.ts')
           ladder = ladder_path.read_text()
+          ladder = sub_once(
+              ladder,
+              r"interface EvidencePoint \{\n  score: number\n  weight: number\n  observedAt: number\n\}",
+              "interface EvidencePoint {\n  score: number\n  weight: number\n  observedAt: number\n  source: EvidenceSource\n}",
+              'evidence source field',
+          )
+          old_line = "      observedAt: evidence.observedAt ?? Date.now(),"
+          if ladder.count(old_line) != 1:
+              raise SystemExit(f'observedAt anchor count={ladder.count(old_line)}')
+          ladder = ladder.replace(old_line, old_line + "\n      source: evidence.source,", 1)
 
-          replacements = [
-            (
-              """interface EvidencePoint {
-            score: number
-            weight: number
-            observedAt: number
-          }
-          """,
-              """interface EvidencePoint {
-            score: number
-            weight: number
-            observedAt: number
-            source: EvidenceSource
-          }
-          """,
-            ),
-            (
-              "      observedAt: evidence.observedAt ?? Date.now(),",
-              "      observedAt: evidence.observedAt ?? Date.now(),\n      source: evidence.source,",
-            ),
-            (
-              "if (state.trust !== 'quarantined' && this.hasOperationalEvidence(state)) state.trust = 'qualified'",
-              "if (state.trust !== 'quarantined' && this.hasAuthorityEvidence(state)) state.trust = 'qualified'",
-            ),
-            (
-              "state.trust = this.hasOperationalEvidence(state) ? 'qualified' : 'provisional'",
-              "state.trust = this.hasAuthorityEvidence(state) ? 'qualified' : 'provisional'",
-            ),
-            (
-              """  private hasOperationalEvidence(state: ModelState): boolean {
-            let weightedSamples = 0
-            for (const points of state.evidence.values()) {
-              for (const point of points) weightedSamples += point.weight
-            }
-            return weightedSamples >= 3
-          }
-          """,
+          old = "if (state.trust !== 'quarantined' && this.hasOperationalEvidence(state)) state.trust = 'qualified'"
+          if ladder.count(old) != 1:
+              raise SystemExit('qualification anchor missing')
+          ladder = ladder.replace(old, "if (state.trust !== 'quarantined' && this.hasAuthorityEvidence(state)) state.trust = 'qualified'", 1)
+
+          old = "state.trust = this.hasOperationalEvidence(state) ? 'qualified' : 'provisional'"
+          if ladder.count(old) != 1:
+              raise SystemExit('quarantine release anchor missing')
+          ladder = ladder.replace(old, "state.trust = this.hasAuthorityEvidence(state) ? 'qualified' : 'provisional'", 1)
+
+          ladder = sub_once(
+              ladder,
+              r"  private hasOperationalEvidence\(state: ModelState\): boolean \{.*?\n  \}\n\n  private dimensionSnapshot",
               """  private hasAuthorityEvidence(state: ModelState): boolean {
             let weightedSamples = 0
             for (const points of state.evidence.values()) {
@@ -84,24 +77,19 @@ jobs:
             }
             return weightedSamples >= 3
           }
-          """,
-            ),
-          ]
-          for old, new in replacements:
-              if old not in ladder:
-                  raise SystemExit(f'model-ladder patch anchor missing: {old[:80]!r}')
-              ladder = ladder.replace(old, new, 1)
+
+          private dimensionSnapshot""",
+              'authority evidence function',
+              re.S,
+          )
           ladder_path.write_text(ladder)
 
           runtime_path = Path('packages/phoenix/runtime/src/index.ts')
           runtime = runtime_path.read_text()
-          old = """  recordBenchmark(evidence: CapabilityEvidence): void {
-            const safe = { ...evidence, source: evidence.source === 'mission' ? 'benchmark' as const : evidence.source }
-            this.ladder.record(safe)
-            if (this.config.localEvolution) {
-              this.localState.evidence.push(safe)
-          """
-          new = """  recordBenchmark(evidence: CapabilityEvidence): void {
+          runtime = sub_once(
+              runtime,
+              r"  recordBenchmark\(evidence: CapabilityEvidence\): void \{.*?\n  \}\n\n  quarantine",
+              """  recordBenchmark(evidence: CapabilityEvidence): void {
             if (evidence.source !== 'benchmark' && evidence.source !== 'operator') {
               throw new Error('PHOENIX authority evidence must come from benchmark or operator sources')
             }
@@ -109,45 +97,46 @@ jobs:
             this.ladder.record(safe)
             if (this.config.localEvolution) {
               this.localState.evidence.push(safe)
-          """
-          if old not in runtime:
-              raise SystemExit('recordBenchmark patch anchor missing')
-          runtime_path.write_text(runtime.replace(old, new, 1))
+              this.localState.evidence = this.localState.evidence.slice(-5000)
+              this.flushState()
+            }
+          }
+
+          quarantine""",
+              'recordBenchmark authority gate',
+              re.S,
+          )
+          runtime_path.write_text(runtime)
 
           test_path = Path('packages/phoenix/runtime/tests/model-ladder.spec.ts')
           tests = test_path.read_text()
-          marker = """  it('keeps newly discovered models provisional', () => {
-            const ladder = new ModelCapabilityLadder()
-            ladder.register(A)
-            expect(ladder.snapshot(A)?.trust).toBe('provisional')
-            expect(ladder.rank('routine')).toEqual([])
-          })
-          """
-          addition = marker + """
+          close = '\n})\n'
+          if not tests.endswith(close):
+              raise SystemExit('model-ladder describe closing anchor missing')
+          addition = """
 
-          it('never grants authority from mission or collective observation alone', () => {
-            const ladder = new ModelCapabilityLadder()
-            for (let i = 0; i < 40; i++) {
-              ladder.record({ ...A, dimension: 'reliability', score: 100, source: 'mission', reproducible: true })
-              ladder.record({ ...A, dimension: 'reasoning', score: 100, source: 'collective-observation', reproducible: true })
-            }
-            expect(ladder.snapshot(A)?.trust).toBe('provisional')
-            expect(ladder.rank('routine')).toEqual([])
-          })
+            it('never grants authority from mission or collective observation alone', () => {
+              const ladder = new ModelCapabilityLadder()
+              for (let i = 0; i < 40; i++) {
+                ladder.record({ ...A, dimension: 'reliability', score: 100, source: 'mission', reproducible: true })
+                ladder.record({ ...A, dimension: 'reasoning', score: 100, source: 'collective-observation', reproducible: true })
+              }
+              expect(ladder.snapshot(A)?.trust).toBe('provisional')
+              expect(ladder.rank('routine')).toEqual([])
+            })
 
-          it('returns to provisional after quarantine when only non-authority evidence exists', () => {
-            const ladder = new ModelCapabilityLadder()
-            for (let i = 0; i < 20; i++) {
-              ladder.record({ ...A, dimension: 'reliability', score: 99, source: 'mission', reproducible: true })
-            }
-            ladder.quarantine(A)
-            ladder.releaseQuarantine(A)
-            expect(ladder.snapshot(A)?.trust).toBe('provisional')
-          })
+            it('returns to provisional after quarantine when only non-authority evidence exists', () => {
+              const ladder = new ModelCapabilityLadder()
+              for (let i = 0; i < 20; i++) {
+                ladder.record({ ...A, dimension: 'reliability', score: 99, source: 'mission', reproducible: true })
+              }
+              ladder.quarantine(A)
+              ladder.releaseQuarantine(A)
+              expect(ladder.snapshot(A)?.trust).toBe('provisional')
+            })
           """
-          if marker not in tests:
-              raise SystemExit('model-ladder test anchor missing')
-          test_path.write_text(tests.replace(marker, addition, 1))
+          tests = tests[:-len(close)] + addition + close
+          test_path.write_text(tests)
           PY
 
       - name: Run PHOENIX ladder tests
