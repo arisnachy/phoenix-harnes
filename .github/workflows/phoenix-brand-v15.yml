@@ -35,12 +35,12 @@ jobs:
           pnpm run verify-export-jsdoc
       - name: Canonical typecheck
         run: pnpm run typecheck
-      - name: Build PHOENIX brand package
-        run: pnpm --filter @deepseek-ai/dsh-client-ui-brand-official bundle
-      - name: Web build
+      - name: Build PHOENIX production web dependency closure
+        run: pnpm --filter @deepseek-ai/dsh-web-frontend... build
+      - name: Verify PHOENIX production artifacts
         run: |
-          pnpm --filter @deepseek-ai/dsh-web-frontend build
           grep -q 'PHOENIX' apps/web/dist/index.html
           grep -q '"name": "PHOENIX"' apps/web/public/manifest.webmanifest
+          grep -q '"short_name": "PHOENIX"' apps/web/public/manifest.webmanifest
       - name: Diff hygiene
         run: git diff --check
