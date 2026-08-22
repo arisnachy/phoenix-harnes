@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PhoenixRequest, PhoenixResponse } from '@phoenix/contracts';
+import { safeMcpStdioEnvironment } from '@phoenix/mcp';
 import { AgentRoiGate } from './agentEconomy.js';
 import { TokenFlightRecorder } from './flightRecorder.js';
 import { HibernatingMcpBroker } from './mcpHibernate.js';
@@ -12,6 +13,7 @@ import { ResilientGenerationRuntime, classifyFailure } from './resilience.js';
 const roots: string[] = [];
 
 afterEach(async () => {
+  delete process.env.PHOENIX_AMBIENT_SECRET;
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -136,6 +138,13 @@ describe('Memory Genome', () => {
 });
 
 describe('MCP Hibernate', () => {
+  it('constructs a minimal stdio environment instead of leaking ambient host secrets', () => {
+    process.env.PHOENIX_AMBIENT_SECRET = 'do-not-leak';
+    const env = safeMcpStdioEnvironment({ EXPLICIT_FOR_SERVER: 'allowed' });
+    expect(env.PHOENIX_AMBIENT_SECRET).toBeUndefined();
+    expect(env.EXPLICIT_FOR_SERVER).toBe('allowed');
+  });
+
   it('strips server env and sleeps the MCP after discovery and use', async () => {
     const server = await fakeMcpServer();
     const broker = new HibernatingMcpBroker();
