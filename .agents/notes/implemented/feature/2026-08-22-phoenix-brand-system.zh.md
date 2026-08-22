@@ -2,6 +2,8 @@
 
 Status: implemented
 
+[English](2026-08-22-phoenix-brand-system.md) | 中文
+
 ## Problem
 
 这个下游仓库已经是 PHOENIX，但发布的 Web 呈现仍使用上游 DeepSeek Harness 的鲸鱼、字标、浏览器标题、PWA 名称和 favicon。这样会让产品身份与运行时及仓库身份互相矛盾，同时还迫使一张上游组合标志适配尺寸完全不同的界面。
