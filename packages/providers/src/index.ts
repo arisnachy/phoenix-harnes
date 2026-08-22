@@ -30,7 +30,7 @@ export function orcaRouterProvider(): ProviderDefinition {
         id: 'orcarouter/free',
         displayName: 'OrcaRouter Free',
         capabilities: textCapabilities,
-        economics: { free: true },
+        economics: { free: true, billingMode: 'free', quotaBucket: 'orcarouter-free' },
         tags: ['free-bootstrap', 'adaptive-router'],
       },
     ],
@@ -48,7 +48,7 @@ export function ollamaProvider(models: readonly string[] = []): ProviderDefiniti
     models: models.map((id) => ({
       id,
       capabilities: textCapabilities,
-      economics: { free: true },
+      economics: { free: true, billingMode: 'local', quotaBucket: 'local-compute' },
       tags: ['local'],
     })),
     tags: ['local'],
@@ -159,6 +159,7 @@ export class OpenAICompatibleAdapter implements ProviderAdapter {
     const tools = toOpenAITools(request);
     if (tools?.length) body.tools = tools;
     if (request.requirements?.json) body.response_format = { type: 'json_object' };
+    if (request.preferences?.maxOutputTokens) body.max_tokens = request.preferences.maxOutputTokens;
 
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (key) headers.authorization = `Bearer ${key}`;
@@ -196,6 +197,7 @@ export class OpenAICompatibleAdapter implements ProviderAdapter {
     const choice = choices[0] as Record<string, unknown>;
     const message = (choice.message ?? {}) as Record<string, unknown>;
     const usage = (payload.usage ?? {}) as Record<string, unknown>;
+    const promptDetails = (usage.prompt_tokens_details ?? {}) as Record<string, unknown>;
     const toolCalls = normalizeToolCalls(message.tool_calls);
 
     return {
@@ -206,6 +208,7 @@ export class OpenAICompatibleAdapter implements ProviderAdapter {
       ...(typeof choice.finish_reason === 'string' ? { finishReason: choice.finish_reason } : {}),
       usage: {
         ...(typeof usage.prompt_tokens === 'number' ? { inputTokens: usage.prompt_tokens } : {}),
+        ...(typeof promptDetails.cached_tokens === 'number' ? { cachedInputTokens: promptDetails.cached_tokens } : {}),
         ...(typeof usage.completion_tokens === 'number' ? { outputTokens: usage.completion_tokens } : {}),
       },
     };
@@ -224,3 +227,4 @@ export class ProviderTransportError extends Error {
 }
 
 export * from './discovery.js';
+export * from './subscription.js';

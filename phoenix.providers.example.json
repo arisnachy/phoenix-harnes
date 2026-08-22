@@ -1,7 +1,20 @@
 {
   "providers": [
     {
+      "id": "codex-cli",
+      "kind": "codex-cli",
+      "displayName": "Codex via authenticated ChatGPT plan",
+      "models": ["default"]
+    },
+    {
+      "id": "claude-code-cli",
+      "kind": "claude-code-cli",
+      "displayName": "Claude Code via authenticated Claude plan",
+      "models": ["default"]
+    },
+    {
       "id": "orcarouter",
+      "kind": "openai-compatible",
       "displayName": "OrcaRouter Free Bootstrap",
       "baseUrl": "https://api.orcarouter.ai/v1",
       "apiKeyEnv": "ORCAROUTER_API_KEY",
@@ -11,6 +24,7 @@
     },
     {
       "id": "ollama",
+      "kind": "openai-compatible",
       "displayName": "Local Ollama",
       "baseUrl": "http://127.0.0.1:11434/v1",
       "local": true,
@@ -19,6 +33,7 @@
     },
     {
       "id": "my-provider",
+      "kind": "openai-compatible",
       "displayName": "Any OpenAI-compatible API",
       "baseUrl": "https://provider.example/v1",
       "apiKeyEnv": "MY_PROVIDER_API_KEY",

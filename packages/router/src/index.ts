@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  BillingMode,
   ModelDefinition,
   PhoenixRequest,
   ProviderDefinition,
@@ -30,6 +31,13 @@ function incompatibility(model: ModelDefinition, request: PhoenixRequest): strin
   return undefined;
 }
 
+function billingMode(provider: ProviderDefinition, model: ModelDefinition): BillingMode {
+  if (model.economics?.billingMode) return model.economics.billingMode;
+  if (model.economics?.free) return 'free';
+  if (provider.local) return 'local';
+  return 'unknown';
+}
+
 function scoreCandidate(
   provider: ProviderDefinition,
   model: ModelDefinition,
@@ -39,10 +47,19 @@ function scoreCandidate(
   let score = 0;
   const reasons: string[] = [];
   const preferences = request.preferences;
+  const billing = billingMode(provider, model);
 
-  if (preferences?.preferFree !== false && model.economics?.free) {
+  if (preferences?.preferFree !== false && billing === 'free') {
     score += 30;
     reasons.push('free_preference:+30');
+  }
+  if (preferences?.preferFree !== false && billing === 'metered') {
+    score -= 8;
+    reasons.push('metered_penalty:-8');
+  }
+  if (preferences?.preferSubscription && billing === 'subscription') {
+    score += 30;
+    reasons.push('subscription_preference:+30');
   }
   if (preferences?.preferLocal && provider.local) {
     score += 30;

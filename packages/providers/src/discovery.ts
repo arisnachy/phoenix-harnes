@@ -102,7 +102,10 @@ export async function discoverOpenAICompatible(
   const models: ModelDefinition[] = modelIds.map((id) => ({
     id,
     capabilities: options.capabilitiesForModel?.(id) ?? conservativeCapabilities,
-    tags: ['discovered'],
+    ...(options.local ? {
+      economics: { free: true, billingMode: 'local' as const, quotaBucket: 'local-compute' },
+    } : {}),
+    tags: ['discovered', ...(options.local ? ['local'] : [])],
   }));
 
   const provider: ProviderDefinition = {
@@ -113,7 +116,7 @@ export async function discoverOpenAICompatible(
     ...(options.apiKeyEnv ? { apiKeyEnv: options.apiKeyEnv } : {}),
     ...(options.local !== undefined ? { local: options.local } : {}),
     models,
-    tags: ['discovered'],
+    tags: ['discovered', ...(options.local ? ['local'] : [])],
   };
 
   return {
