@@ -43,6 +43,7 @@ export interface PhoenixRuntimeConfig {
   statePath?: string
 }
 
+/** One bounded Token Flight Recorder observation captured before a model step enters. */
 export interface FlightRecord {
   at: number
   agentId: string
@@ -118,7 +119,9 @@ export default class PhoenixRuntime extends Service {
     statePath: z.string(),
   }) as z<PhoenixRuntimeConfig>
 
+  /** Evidence-driven capability and authority ladder used by PHOENIX routing. */
   readonly ladder: ModelCapabilityLadder = new ModelCapabilityLadder()
+  /** Bounded in-process Token Flight Recorder observations, oldest entries evicted first. */
   readonly flight: FlightRecord[] = []
   private readonly config: Required<Pick<PhoenixRuntimeConfig, 'routing' | 'failover' | 'agentRoi' | 'localEvolution' | 'maxFailoversPerStep'>> & PhoenixRuntimeConfig
   private readonly roles = new WeakMap<Agent, PhoenixRole>()
