@@ -117,7 +117,13 @@ export function extractContinuityAnchors(messages: readonly PhoenixMessage[]): r
   const anchors: ContinuityAnchor[] = [];
   const push = (item: ContinuityAnchor | undefined): void => { if (item) anchors.push(item); };
 
-  const latestUserIndex = clean.findLastIndex((message) => message.role === 'user');
+  let latestUserIndex = -1;
+  for (let index = clean.length - 1; index >= 0; index -= 1) {
+    if (clean[index]?.role === 'user') {
+      latestUserIndex = index;
+      break;
+    }
+  }
   if (latestUserIndex >= 0) {
     push(anchor('goal', clip(clean[latestUserIndex]!.content, 600), latestUserIndex, 100, true, 'latest-user'));
   }
@@ -171,7 +177,7 @@ export function extractContinuityAnchors(messages: readonly PhoenixMessage[]): r
   const byFingerprint = new Map<string, ContinuityAnchor>();
   for (const item of anchors) {
     const current = byFingerprint.get(item.fingerprint);
-    if (!current || item.required && !current.required || item.priority > current.priority) byFingerprint.set(item.fingerprint, item);
+    if (!current || (item.required && !current.required) || item.priority > current.priority) byFingerprint.set(item.fingerprint, item);
   }
   return [...byFingerprint.values()].sort((a, b) =>
     Number(b.required) - Number(a.required)
