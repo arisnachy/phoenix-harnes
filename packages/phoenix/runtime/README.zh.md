@@ -22,8 +22,24 @@ PHOENIX 不把 provider 名、模型名、流行度或 frontier 标签视作权�
 
 ## Model Experience
 
-默认不增加新的 prompt 文本。PHOENIX 主要作为现有 request/tool seams 周围的 policy 层，因此在未请求可观测性 UI 时 token 开销接近零。
+### Runtime policy layer
+
+#### What the model sees
+
+模型不会直接看到新的强制提示文本。PHOENIX Runtime 默认不把策略状态暴露给模型，而是在现有 DSH request、tool 与 subagent 接缝周围执行策略。
+
+#### Token effect
+
+未显式请求可观测性表面时，直接请求上下文开销为零。路由与 ROI 决策是确定性策略，不需要额外模型调用。
+
+#### KV Cache effect
+
+Runtime 本身不改写 prompt 前缀，因此保持组合后的 DSH 请求已有的可复用前缀。若策略切换到不同模型/provider，则不假设可跨模型复用 cache。
 
 ## Known Limitations and Deferred Work
 
-首个 runtime 尚未包含自动质量 benchmark、Model Team Genome、Evolution Mesh transport、Windows desktop shell 或 Repo Brain semantic graph。这些会作为独立 PHOENIX 层加入，并保持 fail-closed authority boundary。
+- **自动证据** — Genesis 尚无自动质量 benchmark arena；资格证据仍来自显式 benchmark/operator 记录。
+- **团队智能** — 尚无 Model Team Genome。
+- **Collective evolution** — 尚无分布式 Evolution Mesh transport，并明确拒绝 peer-supplied executable evolution。
+- **仓库认知** — Repo Brain 留给独立 PHOENIX 层。
+- **桌面表面** — Genesis 不包含 Windows PHOENIX desktop shell/Flight Deck。
