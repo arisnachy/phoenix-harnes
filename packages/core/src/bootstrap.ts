@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import type { ModelCapabilities, ModelDefinition, ProviderAdapter, ProviderDefinition } from '@phoenix/contracts';
+import type { ModelCapabilityRanking } from '@phoenix/model-rank';
+import { onboardDiscoveredModels } from '@phoenix/model-rank/onboarding';
 import {
   ClaudeCodeCliAdapter,
   CodexCliAdapter,
@@ -34,6 +36,10 @@ export interface ProviderRegistrationRuntime {
   registerProvider(definition: ProviderDefinition, adapter: ProviderAdapter): void;
 }
 
+export interface ProviderBootstrapOptions {
+  ranking?: ModelCapabilityRanking;
+}
+
 const conservative: ModelCapabilities = {
   input: ['text'], output: ['text'], tools: false, json: false, reasoning: false, streaming: true,
 };
@@ -65,6 +71,14 @@ function validateManifest(value: unknown): PhoenixManifest {
   return value as PhoenixManifest;
 }
 
+function onboardProvider(ranking: ModelCapabilityRanking | undefined, provider: ProviderDefinition): void {
+  if (!ranking) return;
+  onboardDiscoveredModels(ranking, {
+    providerId: provider.id,
+    modelIds: provider.models.map((model) => model.id),
+  });
+}
+
 export async function loadPhoenixManifest(path = 'phoenix.providers.json'): Promise<PhoenixManifest> {
   return validateManifest(JSON.parse(await readFile(path, 'utf8')) as unknown);
 }
@@ -72,6 +86,7 @@ export async function loadPhoenixManifest(path = 'phoenix.providers.json'): Prom
 export async function bootstrapProviderManifest(
   runtime: ProviderRegistrationRuntime,
   manifest: PhoenixManifest,
+  options: ProviderBootstrapOptions = {},
 ): Promise<readonly ProviderDefinition[]> {
   const registered: ProviderDefinition[] = [];
   for (const entry of manifest.providers) {
@@ -79,12 +94,14 @@ export async function bootstrapProviderManifest(
     if (kind === 'codex-cli') {
       const provider = codexSubscriptionProvider(entry.models?.length ? entry.models : ['default']);
       runtime.registerProvider(provider, new CodexCliAdapter(entry.binary ?? 'codex'));
+      onboardProvider(options.ranking, provider);
       registered.push(provider);
       continue;
     }
     if (kind === 'claude-code-cli') {
       const provider = claudeCodeSubscriptionProvider(entry.models?.length ? entry.models : ['default']);
       runtime.registerProvider(provider, new ClaudeCodeCliAdapter(entry.binary ?? 'claude'));
+      onboardProvider(options.ranking, provider);
       registered.push(provider);
       continue;
     }
@@ -119,6 +136,7 @@ export async function bootstrapProviderManifest(
       });
     }
     runtime.registerProvider(provider, new OpenAICompatibleAdapter(provider.id));
+    onboardProvider(options.ranking, provider);
     registered.push(provider);
   }
   return registered;
