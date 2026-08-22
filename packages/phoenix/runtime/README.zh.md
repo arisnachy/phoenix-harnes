@@ -1,5 +1,7 @@
 # PHOENIX Runtime
 
+[English](README.md) | 中文
+
 `@arisnachy/phoenix-runtime` 是 DeepSeek Harness 树中的首个原生 PHOENIX 智能层。它复用 DSH 的 agent loop、LLM registry、token meter、tools pipeline、sandbox seam、durable sessions、compaction、jobs 与 subagents，而不是复制这些能力。
 
 ## 它增加什么
