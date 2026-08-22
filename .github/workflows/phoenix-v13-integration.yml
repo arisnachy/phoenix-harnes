@@ -1,0 +1,76 @@
+name: PHOENIX v13 integration
+
+on:
+  pull_request:
+    branches:
+      - phoenix/genesis-v12
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'phoenix/cognition-v13'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PHOENIX v13 head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Add AI Bus to canonical host project graph
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tsconfig.host.json')
+          text = path.read_text()
+          needle = '    { "path": "./packages/phoenix/runtime" },\n'
+          addition = needle + '    { "path": "./packages/phoenix/ai-bus" },\n'
+          if '"./packages/phoenix/ai-bus"' not in text:
+              if needle not in text:
+                  raise SystemExit('PHOENIX runtime reference anchor not found')
+              text = text.replace(needle, addition, 1)
+              path.write_text(text)
+          PY
+
+      - name: Synchronize workspace lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+
+      - name: Prove frozen install
+        run: pnpm install --frozen-lockfile
+
+      - name: Run focused PHOENIX tests
+        run: >-
+          pnpm exec vitest run
+          packages/phoenix/ai-bus/tests/ai-bus.spec.ts
+          packages/phoenix/runtime/tests/model-ladder.spec.ts
+          packages/phoenix/runtime/tests/task-role.spec.ts
+          packages/bundle/phoenix/tests/phoenix.spec.ts
+
+      - name: Run canonical typecheck
+        run: pnpm run typecheck
+
+      - name: Check patch hygiene
+        run: git diff --check
+
+      - name: Commit generated integration state
+        run: |
+          if git diff --quiet -- tsconfig.host.json pnpm-lock.yaml; then
+            echo 'Canonical project graph and lockfile are already synchronized.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tsconfig.host.json pnpm-lock.yaml
+          git commit -m 'chore(phoenix): synchronize v13 workspace graph'
+          git push origin HEAD:${{ github.head_ref }}
