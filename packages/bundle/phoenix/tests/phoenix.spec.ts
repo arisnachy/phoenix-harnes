@@ -6,7 +6,7 @@ import * as yaml from 'js-yaml'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 
 describe('PHOENIX profile bundle', () => {
-  it('declares a parseable native DSH patch with adaptive runtime, AI bus, and dormant official bridges', () => {
+  it('declares a parseable native DSH patch with adaptive runtime, AI bus, Repo Brain, and dormant official bridges', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
@@ -14,6 +14,7 @@ describe('PHOENIX profile bundle', () => {
     }
     expect(manifest.dsh?.bundle?.patch).toBe('./cordis.patch.yml')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-phoenix-ai-bus')
+    expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-phoenix-repo-brain')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-phoenix-runtime')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-subagent-codex')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-subagent-claude-code')
@@ -27,6 +28,7 @@ describe('PHOENIX profile bundle', () => {
     }[]
     const rows = patches.flatMap(patch => patch.insert ?? [])
     expect(rows).toContainEqual(expect.objectContaining({ id: 'phoenix-ai-bus', name: '@deepseek-ai/dsh-phoenix-ai-bus' }))
+    expect(rows).toContainEqual(expect.objectContaining({ id: 'phoenix-repo-brain', name: '@deepseek-ai/dsh-phoenix-repo-brain' }))
     expect(rows).toContainEqual(expect.objectContaining({ id: 'phoenix-runtime', name: '@deepseek-ai/dsh-phoenix-runtime' }))
     expect(rows).toContainEqual(expect.objectContaining({ id: 'subagent-codex', name: '@deepseek-ai/dsh-subagent-codex' }))
     expect(rows).toContainEqual(expect.objectContaining({ id: 'subagent-claude-code', name: '@deepseek-ai/dsh-subagent-claude-code' }))
