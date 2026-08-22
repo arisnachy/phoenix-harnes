@@ -105,7 +105,7 @@ export class AgentRunner {
       }
 
       if (!this.options.tools) throw new Error(`Agent ${agent.id} requested tools but no ToolRegistry is configured`);
-      messages.push({ role: 'assistant', content: response.content });
+      messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls });
       for (const call of response.toolCalls) {
         const result = await this.options.tools.execute(
           call.name,
