@@ -1,311 +1,227 @@
+/**
+ * One public client build profile plus the sidecar record that proves which
+ * values produced a staged/release-shaped client tree.
+ *
+ * Public client values are deliberately a tiny `DSH_CLIENT_*` namespace. They
+ * are safe to inline into browser JavaScript. Secrets use other namespaces and
+ * must never cross this boundary. Internal build selection is
+ * `DSH_BUILD_CLIENT_PROFILE`: it chooses a named public environment but is not
+ * itself inlined.
+ * @module scripts/client-build-environment
+ */
+
 import { createHash } from 'node:crypto'
-import { execFileSync } from 'node:child_process'
-import {
-  existsSync,
-  globSync,
-  mkdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { dirname, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { spawnSync } from 'node:child_process'
 
-/** Prefix reserved for build-time values that may be embedded in browser artifacts. */
-const CLIENT_BUILD_ENV_PREFIX = 'DSH_CLIENT_'
-
-/** Non-public selector used by build orchestration to request a named client profile. */
-export const CLIENT_BUILD_PROFILE_SELECTOR = 'DSH_BUILD_CLIENT_PROFILE'
-
-/** Public client environment required by official DSH artifacts. */
-const OFFICIAL_CLIENT_BUILD_ENVIRONMENT = {
-  DSH_CLIENT_BUILD_PROFILE: 'official',
-  DSH_CLIENT_TITLE: 'DeepSeek Harness',
-} as const
-
-/** Public variable carrying the source commit embedded in client artifacts. */
-const CLIENT_COMMIT_HASH_VARIABLE = 'DSH_CLIENT_COMMIT_HASH'
-
-/** Repository-relative path of the complete client build record. */
-export const CLIENT_BUILD_RECORD_PATH = '.dsh-build/client-build-environment.json'
-
-const CLIENT_BUILD_RECORD_FORMAT = 1
-const CLIENT_ARTIFACT_PATTERNS = [
-  'apps/web/dist/**/*',
-  'packages/*/*/lib/client.js',
-  'packages/*/*/lib/client.js.map',
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const PUBLIC_PREFIX = 'DSH_CLIENT_'
+const BUILD_PROFILE_ENV = 'DSH_BUILD_CLIENT_PROFILE'
+const RECORD_NAME = 'client-build.json'
+const RECORD_VERSION = 1
+const COMMIT_HASH_LENGTH = 7
+const CLIENT_ARTIFACT_ROOTS = [
+  'apps/web/dist',
+  'packages/client',
 ] as const
 
-/** Public values embedded in one set of client artifacts. */
-export type ClientBuildEnvironment = Readonly<Record<string, string>>
+/** Client environment that uniquely identifies this downstream's official artifact. */
+export const OFFICIAL_CLIENT_BUILD_ENVIRONMENT = Object.freeze({
+  DSH_CLIENT_BUILD_PROFILE: 'official',
+  DSH_CLIENT_TITLE: 'PHOENIX',
+})
 
-/**
- * Resolve the short source commit used by browser build metadata.
- * @param root - repository root used when no explicit value is supplied.
- * @param environment - environment that may already carry a commit value.
- * @returns lowercase 7-character Git commit prefix.
- */
-export function repositoryCommitHash(root: string, environment: NodeJS.ProcessEnv = process.env): string {
-  const explicit = environment[CLIENT_COMMIT_HASH_VARIABLE]
-  const value = explicit ?? execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: root,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-  }).trim()
-  if (!/^[0-9a-f]{7,40}$/iu.test(value)) {
-    throw new Error(`${CLIENT_COMMIT_HASH_VARIABLE} must be a Git commit hash; got ${JSON.stringify(value)}`)
-  }
-  return value.slice(0, 7).toLowerCase()
+/** Public client build environment plus its required commit-bound field. */
+export type OfficialClientBuildEnvironment = typeof OFFICIAL_CLIENT_BUILD_ENVIRONMENT & {
+  DSH_CLIENT_COMMIT_HASH: string
 }
 
-/**
- * Resolve the exact public values required by an official build at one commit.
- * @param root - repository root whose HEAD must match the built source.
- * @param environment - optional explicit commit source for non-Git build environments.
- * @returns complete official client environment.
- */
-export function officialClientBuildEnvironment(
-  root: string,
-  environment: NodeJS.ProcessEnv = process.env,
-): Readonly<Record<`DSH_CLIENT_${string}`, string>> {
-  return {
-    DSH_CLIENT_COMMIT_HASH: repositoryCommitHash(root, environment),
-    ...OFFICIAL_CLIENT_BUILD_ENVIRONMENT,
-  }
-}
-
-/** Digest of every client artifact produced by the complete root build. */
-interface ClientArtifactDigest {
-  /** Number of files covered by the digest. */
-  readonly fileCount: number
-  /** Lowercase SHA-256 digest of sorted paths and file contents. */
-  readonly sha256: string
-}
-
-/** Durable description of one complete root client build. */
+/** Serializable sidecar that binds one public environment to a client artifact set. */
 export interface ClientBuildRecord {
-  /** Record schema version. */
-  readonly formatVersion: number
-  /** Exact public environment embedded by Vite and tsdown. */
-  readonly environment: ClientBuildEnvironment
-  /** Digest that binds the environment to the current artifacts. */
-  readonly artifacts: ClientArtifactDigest
+  readonly version: typeof RECORD_VERSION
+  readonly environment: Readonly<Record<string, string>>
+  readonly files: Readonly<Record<string, string>>
+}
+
+/** Return only browser-safe `DSH_CLIENT_*` values from an environment object. */
+export function publicClientEnvironment(
+  env: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env)
+      .filter((entry): entry is [string, string] => entry[0].startsWith(PUBLIC_PREFIX) && entry[1] !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right)),
+  )
 }
 
 /**
- * Collect the public client environment in deterministic key order.
- * @param environment - environment inherited by the build process.
- * @returns defined `DSH_CLIENT_*` values only.
- */
-function clientBuildEnvironment(environment: NodeJS.ProcessEnv): ClientBuildEnvironment {
-  return Object.fromEntries(Object.entries(environment)
-    .filter(([name, value]) => name.startsWith(CLIENT_BUILD_ENV_PREFIX) && value !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right))) as Record<string, string>
-}
-
-/**
- * Resolve the exact public environment selected for a complete client build.
- * @param environment - parent process environment.
- * @param profile - explicit profile, or the non-public selector when omitted.
- * @returns the inherited public values when no profile is selected, otherwise the named profile.
+ * Resolve the public client environment for a named build profile. With no
+ * explicit profile, the caller's public `DSH_CLIENT_*` values pass through.
+ * @param env - Parent process environment.
+ * @param explicitProfile - Optional profile override.
+ * @returns the exact public environment for the client build.
  */
 export function resolveClientBuildEnvironment(
-  environment: NodeJS.ProcessEnv,
-  profile: string | undefined = environment[CLIENT_BUILD_PROFILE_SELECTOR],
-): ClientBuildEnvironment {
-  if (profile === undefined) return clientBuildEnvironment(environment)
-  if (profile === 'official') {
-    const commitHash = environment[CLIENT_COMMIT_HASH_VARIABLE]
-    if (commitHash === undefined) {
-      throw new Error(`${CLIENT_COMMIT_HASH_VARIABLE} is required for the official client build profile`)
-    }
-    return { DSH_CLIENT_COMMIT_HASH: commitHash, ...OFFICIAL_CLIENT_BUILD_ENVIRONMENT }
+  env: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>> = process.env,
+  explicitProfile: string | undefined = env[BUILD_PROFILE_ENV],
+): Record<string, string> {
+  if (explicitProfile === undefined || explicitProfile === '') return publicClientEnvironment(env)
+  if (explicitProfile !== 'official') throw new Error(`unknown client build profile: ${explicitProfile}`)
+
+  const commitHash = env.DSH_CLIENT_COMMIT_HASH
+  if (commitHash === undefined || commitHash === '') {
+    throw new Error('official client build requires DSH_CLIENT_COMMIT_HASH')
   }
-  throw new Error(`unknown client build profile ${JSON.stringify(profile)}; expected "official"`)
+  return {
+    ...OFFICIAL_CLIENT_BUILD_ENVIRONMENT,
+    DSH_CLIENT_COMMIT_HASH: normalizeCommitHash(commitHash),
+  }
 }
 
 /**
- * Construct a subprocess environment containing exactly the selected public values.
- * @param environment - parent process environment.
- * @param clientEnvironment - complete public environment selected for the build.
- * @returns the parent environment with selectors and inherited public values replaced.
+ * Construct a child process environment whose public client namespace exactly
+ * equals the supplied build environment. Non-client values pass through.
  */
 export function clientBuildProcessEnvironment(
-  environment: NodeJS.ProcessEnv,
-  clientEnvironment: ClientBuildEnvironment,
+  parent: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>>,
+  publicEnvironment: Readonly<Record<string, string>>,
 ): NodeJS.ProcessEnv {
-  const child: NodeJS.ProcessEnv = {}
-  for (const [name, value] of Object.entries(environment)) {
-    if (name === CLIENT_BUILD_PROFILE_SELECTOR || name.startsWith(CLIENT_BUILD_ENV_PREFIX)) continue
-    child[name] = value
+  const next: NodeJS.ProcessEnv = {}
+  for (const [key, value] of Object.entries(parent)) {
+    if (!key.startsWith(PUBLIC_PREFIX) && value !== undefined) next[key] = value
   }
-  return { ...child, ...clientEnvironment }
+  for (const [key, value] of Object.entries(publicEnvironment)) next[key] = value
+  return next
 }
 
-/**
- * Require the public client environment to match an artifact profile exactly.
- *
- * An exact key set matters because every prefixed value is eligible for
- * inlining: an unexpected variable can change published bytes just as surely
- * as a missing or incorrect required value.
- *
- * @param environment - public environment from a build process or build record.
- * @param expected - complete public client environment for the artifact profile.
- */
+/** Assert that the visible public namespace exactly matches an expected artifact profile. */
 export function assertClientBuildEnvironment(
-  environment: Readonly<Record<string, string | undefined>>,
-  expected: Readonly<Record<`DSH_CLIENT_${string}`, string>>,
+  actualEnvironment: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>>,
+  expectedEnvironment: Readonly<Record<string, string>>,
 ): void {
-  const actual = Object.fromEntries(Object.entries(environment)
-    .filter(([name, value]) => name.startsWith(CLIENT_BUILD_ENV_PREFIX) && value !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right)))
-  const normalizedExpected = Object.fromEntries(Object.entries(expected)
-    .sort(([left], [right]) => left.localeCompare(right)))
-  if (JSON.stringify(actual) === JSON.stringify(normalizedExpected)) return
-
-  const names = [...new Set([...Object.keys(actual), ...Object.keys(normalizedExpected)])].sort()
-  const differences = names.filter(name => actual[name] !== normalizedExpected[name])
-  throw new Error(`client build environment differs from the required artifact profile: ${differences.join(', ')}`)
-}
-
-/**
- * Create bundler substitutions for public client build environment variables.
- *
- * The empty `process.env` fallback makes an unset static property read
- * evaluate to `undefined` without providing a browser `process` global.
- * Exact substitutions remain longer matches than that fallback. Dynamic
- * property reads and enumeration deliberately observe the empty object.
- *
- * @param environment - environment inherited by the build process.
- * @returns deterministic Vite/tsdown `define` expressions.
- */
-export function clientBuildEnvironmentDefines(
-  environment: NodeJS.ProcessEnv,
-): Record<string, string> {
-  const defines: Record<string, string> = { 'process.env': '{}' }
-  for (const [name, value] of Object.entries(clientBuildEnvironment(environment))) {
-    defines[`process.env.${name}`] = JSON.stringify(value)
+  const actual = publicClientEnvironment(actualEnvironment)
+  const expected = Object.fromEntries(Object.entries(expectedEnvironment).sort(([a], [b]) => a.localeCompare(b)))
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(
+      `client build environment mismatch: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+    )
   }
-  return defines
 }
 
-/**
- * Write the build record after a complete root build succeeds.
- * @param root - repository root containing the generated artifacts.
- * @param environment - exact public environment supplied to both bundlers.
- * @returns the record written to disk.
- */
+/** Convert public client values into Vite/tsdown define entries without leaking `process.env`. */
+export function clientBuildEnvironmentDefines(
+  env: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string> {
+  const values = publicClientEnvironment(env)
+  return {
+    'process.env': '{}',
+    ...Object.fromEntries(Object.entries(values).map(([key, value]) => [`process.env.${key}`, JSON.stringify(value)])),
+  }
+}
+
+/** Resolve a repository commit hash from an explicit public value or git. */
+export function repositoryCommitHash(
+  root = ROOT,
+  env: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  const explicit = env.DSH_CLIENT_COMMIT_HASH
+  if (explicit !== undefined && explicit !== '') return normalizeCommitHash(explicit)
+  const result = spawnSync('git', ['rev-parse', '--short', String(COMMIT_HASH_LENGTH), 'HEAD'], {
+    cwd: root,
+    encoding: 'utf8',
+  })
+  if (result.status !== 0) {
+    throw new Error(`unable to resolve repository commit hash: ${(result.stderr || result.stdout).trim()}`)
+  }
+  return normalizeCommitHash(result.stdout.trim())
+}
+
+/** Write the client build environment + artifact digests into a release-shaped root. */
 export function writeClientBuildRecord(
   root: string,
-  environment: ClientBuildEnvironment,
+  environment: Readonly<Record<string, string>>,
 ): ClientBuildRecord {
   const record: ClientBuildRecord = {
-    formatVersion: CLIENT_BUILD_RECORD_FORMAT,
-    environment: clientBuildEnvironment(environment),
-    artifacts: clientArtifactDigest(root),
+    version: RECORD_VERSION,
+    environment: Object.freeze({ ...environment }),
+    files: Object.freeze(clientArtifactDigests(root)),
   }
-  const path = resolve(root, CLIENT_BUILD_RECORD_PATH)
+  const path = resolve(root, RECORD_NAME)
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`)
   return record
 }
 
-/**
- * Read a complete build record and prove it still describes the current artifacts.
- * @param root - repository root containing the record and generated artifacts.
- * @param expected - optional exact public environment required by a consumer.
- * @returns the parsed and artifact-verified record.
- */
+/** Read and validate a release-shaped client build record, including all artifact hashes. */
 export function readClientBuildRecord(
   root: string,
-  expected?: Readonly<Record<`DSH_CLIENT_${string}`, string>>,
+  expectedEnvironment?: Readonly<Record<string, string>>,
 ): ClientBuildRecord {
-  const path = resolve(root, CLIENT_BUILD_RECORD_PATH)
-  if (!existsSync(path)) {
-    throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} is missing; run a complete pnpm run build first`)
+  const path = resolve(root, RECORD_NAME)
+  if (!existsSync(path)) throw new Error(`client build record missing: ${path}`)
+  const raw: unknown = JSON.parse(readFileSync(path, 'utf8'))
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error(`invalid client build record: ${path}`)
   }
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(readFileSync(path, 'utf8'))
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} is invalid JSON: ${detail}`)
+  const version = Reflect.get(raw, 'version')
+  const environment = Reflect.get(raw, 'environment')
+  const files = Reflect.get(raw, 'files')
+  if (version !== RECORD_VERSION || !isStringRecord(environment) || !isStringRecord(files)) {
+    throw new Error(`invalid client build record shape: ${path}`)
   }
-  const record = parseClientBuildRecord(parsed)
-  if (expected !== undefined) assertClientBuildEnvironment(record.environment, expected)
-
-  const current = clientArtifactDigest(root)
-  if (current.fileCount !== record.artifacts.fileCount || current.sha256 !== record.artifacts.sha256) {
-    throw new Error(
-      `client artifacts differ from ${CLIENT_BUILD_RECORD_PATH}; run a complete pnpm run build before consuming them`,
-    )
-  }
-  return record
-}
-
-/** Return the deterministic digest of every artifact affected by the public client environment. */
-function clientArtifactDigest(root: string): ClientArtifactDigest {
-  const paths = globSync([...CLIENT_ARTIFACT_PATTERNS], { cwd: root })
-    .map(path => path.replaceAll('\\', '/'))
-    .filter(path => statSync(resolve(root, path)).isFile())
-    .sort()
-  if (paths.length === 0) throw new Error('complete client build produced no Vite or dynamic client artifacts')
-
-  const digest = createHash('sha256')
-  for (const path of paths) {
-    const content = readFileSync(resolve(root, path))
-    digest.update(`${Buffer.byteLength(path)}:`)
-    digest.update(path)
-    digest.update(`${content.byteLength}:`)
-    digest.update(content)
-  }
-  return { fileCount: paths.length, sha256: digest.digest('hex') }
-}
-
-/** Parse and validate the persisted record before any consumer trusts it. */
-function parseClientBuildRecord(value: unknown): ClientBuildRecord {
-  if (!isObject(value) || !hasExactKeys(value, ['artifacts', 'environment', 'formatVersion'])) {
-    throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} has an invalid top-level schema`)
-  }
-  if (value.formatVersion !== CLIENT_BUILD_RECORD_FORMAT) {
-    throw new Error(
-      `client build record ${CLIENT_BUILD_RECORD_PATH} uses format ${String(value.formatVersion)}; expected ${String(CLIENT_BUILD_RECORD_FORMAT)}`,
-    )
-  }
-  if (!isObject(value.environment)) {
-    throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} has an invalid environment`)
-  }
-  const environment: Record<string, string> = {}
-  for (const [name, entry] of Object.entries(value.environment).sort(([left], [right]) => left.localeCompare(right))) {
-    if (!name.startsWith(CLIENT_BUILD_ENV_PREFIX) || typeof entry !== 'string') {
-      throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} has an invalid environment entry ${name}`)
+  if (expectedEnvironment !== undefined) {
+    const expected = sortedRecord(expectedEnvironment)
+    if (JSON.stringify(sortedRecord(environment)) !== JSON.stringify(expected)) {
+      throw new Error(
+        `client build record environment mismatch: expected ${JSON.stringify(expected)}, got ${JSON.stringify(environment)}`,
+      )
     }
-    environment[name] = entry
   }
-  if (!isObject(value.artifacts) || !hasExactKeys(value.artifacts, ['fileCount', 'sha256'])) {
-    throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} has an invalid artifact digest`)
-  }
-  if (!Number.isSafeInteger(value.artifacts.fileCount) || Number(value.artifacts.fileCount) < 1) {
-    throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} has an invalid artifact count`)
-  }
-  if (typeof value.artifacts.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(value.artifacts.sha256)) {
-    throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} has an invalid SHA-256 digest`)
+  const currentFiles = clientArtifactDigests(root)
+  if (JSON.stringify(sortedRecord(files)) !== JSON.stringify(sortedRecord(currentFiles))) {
+    throw new Error(`client build record artifacts differ from staged client tree: ${path}`)
   }
   return {
-    formatVersion: CLIENT_BUILD_RECORD_FORMAT,
-    environment,
-    artifacts: {
-      fileCount: Number(value.artifacts.fileCount),
-      sha256: value.artifacts.sha256,
-    },
+    version: RECORD_VERSION,
+    environment: Object.freeze({ ...environment }),
+    files: Object.freeze({ ...files }),
   }
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+function normalizeCommitHash(value: string): string {
+  const normalized = value.trim().toLowerCase()
+  if (!/^[0-9a-f]{7,40}$/.test(normalized)) throw new Error(`invalid client commit hash: ${JSON.stringify(value)}`)
+  return normalized.slice(0, COMMIT_HASH_LENGTH)
 }
 
-function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).sort()
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+function clientArtifactDigests(root: string): Record<string, string> {
+  const files: string[] = []
+  for (const item of CLIENT_ARTIFACT_ROOTS) collectFiles(resolve(root, item), files)
+  return Object.fromEntries(
+    files.sort().map(path => [relative(root, path).replaceAll('\\', '/'), sha256(path)]),
+  )
+}
+
+function collectFiles(path: string, files: string[]): void {
+  if (!existsSync(path)) return
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
+    const child = resolve(path, entry.name)
+    if (entry.isDirectory()) collectFiles(child, files)
+    else if (entry.isFile()) files.push(child)
+  }
+}
+
+function sha256(path: string): string {
+  return createHash('sha256').update(readFileSync(path)).digest('hex')
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  return Object.entries(value).every(([key, entry]) => key.length > 0 && typeof entry === 'string')
+}
+
+function sortedRecord(record: Readonly<Record<string, string>>): Record<string, string> {
+  return Object.fromEntries(Object.entries(record).sort(([left], [right]) => left.localeCompare(right)))
 }
