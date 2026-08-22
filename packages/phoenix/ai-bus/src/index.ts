@@ -2,7 +2,7 @@
  * PHOENIX AI Bus — provider-neutral cost-lane policy over the native DSH LLM
  * registry. It does not grant model authority; the capability ladder remains
  * the only PHOENIX authority gate.
- * @module @deepseek-ai/dsh-phoenix-ai-bus
+ * @module @arisnachy/phoenix-ai-bus
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -71,7 +71,9 @@ export const ORCAROUTER_FREE_PROFILE: Readonly<PiAiProviderPreset> = Object.free
 
 /**
  * Build an Ollama OpenAI-compatible profile without inventing a local model.
- * The caller must name a model that actually exists in its Ollama catalog.
+ * @param model - model id that the caller has already confirmed exists in Ollama.
+ * @param baseURL - OpenAI-compatible Ollama endpoint.
+ * @returns Provider preset that can be handed to the native pi-ai adapter.
  */
 export function createOllamaProfile(
   model: string,
@@ -91,7 +93,11 @@ export function createOllamaProfile(
   }
 }
 
-/** A free alias must say so explicitly; gateway membership alone is not free. */
+/**
+ * Test whether a model id explicitly declares itself free.
+ * @param model - provider model id to classify.
+ * @returns True only for explicit free aliases; gateway membership alone is insufficient.
+ */
 export function isExplicitFreeModel(model: string): boolean {
   const normalized = model.trim().toLowerCase()
   return normalized === 'orcarouter/free'
@@ -139,14 +145,22 @@ export default class PhoenixAiBus extends Service {
     if (this.remoteFreeProvider.length === 0) throw new Error('PHOENIX AI Bus remoteFreeProvider must not be blank')
   }
 
-  /** Classify cost only; this says nothing about trust, quality, or authority. */
+  /**
+   * Classify one already-registered model by cost lane only.
+   * @param ref - provider/model identity whose cost lane should be classified.
+   * @returns Local-free, explicitly remote-free, or metered/unknown; never a trust decision.
+   */
   laneOf(ref: PhoenixModelRef): PhoenixComputeLane {
     if (providerMatches(ref.provider, this.localProvider)) return 'local-free'
     if (providerMatches(ref.provider, this.remoteFreeProvider) && isExplicitFreeModel(ref.model)) return 'remote-free'
     return 'metered-or-unknown'
   }
 
-  /** Stable cost ordering for a set already filtered by an authority gate. */
+  /**
+   * Apply stable cheapest-first ordering to candidates already filtered by an authority gate.
+   * @param refs - authority-approved model candidates to order without mutating the input array.
+   * @returns A new array ordered local-free, remote-free, then metered/unknown while preserving ties.
+   */
   orderByCost<T extends PhoenixModelRef>(refs: readonly T[]): T[] {
     return refs
       .map((ref, index) => ({ ref, index, rank: LANE_ORDER[this.laneOf(ref)] }))
@@ -154,7 +168,10 @@ export default class PhoenixAiBus extends Service {
       .map(entry => entry.ref)
   }
 
-  /** Observe the live native DSH registry without issuing any model request. */
+  /**
+   * Observe the live native DSH registry without issuing any model request.
+   * @returns Discovered provider/model routes with their display names and PHOENIX cost lanes.
+   */
   async snapshot(): Promise<PhoenixRouteSnapshot[]> {
     const result: PhoenixRouteSnapshot[] = []
     for (const provider of this.ctx.llm.listProviders()) {
