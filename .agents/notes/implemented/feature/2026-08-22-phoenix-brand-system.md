@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-08-22-phoenix-brand-system.zh.md)
+
 ## Problem
 
 This downstream repository is PHOENIX, but the shipped web presentation still used the upstream DeepSeek Harness whale, wordmark, browser title, PWA name, and favicon. That made the product identity contradict the runtime and repository identity and forced one upstream composite mark to serve surfaces with different size requirements.
