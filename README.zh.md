@@ -42,7 +42,7 @@ PHOENIX 不声称拥有上游 DeepSeek Harness 代码的作者身份。上游署
 
 ## 开发
 
-请先阅读[开发指南](docs/development.zh.md)、[架构文档](docs/architecture.zh.md)，以及 [`packages/phoenix/`](packages/phoenix/) 下的 PHOENIX 包组。
+请先阅读[开发指南](docs/development.zh.md)与[架构文档](docs/architecture.zh.md)。PHOENIX 能力会通过分阶段、独立验证的 branch 与 pull request 集成，使稳定的下游基础始终保持可审计。
 
 面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
 
