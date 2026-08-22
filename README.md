@@ -59,7 +59,7 @@ Requirements: Node.js 22+ and Corepack.
 ```bash
 corepack enable
 pnpm install
-pnpm ci
+pnpm run verify
 ```
 
 ## Status
