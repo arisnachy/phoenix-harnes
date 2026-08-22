@@ -74,6 +74,8 @@ export interface RoutingPreferences {
   maxEstimatedCostUsd?: number;
   excludedProviders?: readonly string[];
   preferredProviders?: readonly string[];
+  excludedModels?: readonly string[];
+  preferredModels?: readonly string[];
 }
 
 export interface PhoenixRequest {
