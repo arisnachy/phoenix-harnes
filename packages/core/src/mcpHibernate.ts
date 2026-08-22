@@ -1,4 +1,5 @@
-import { McpFederation, type McpCallPolicy, type McpCallResult, type McpServerSpec, type PhoenixTool } from '@phoenix/mcp';
+import type { PhoenixTool } from '@phoenix/contracts';
+import { McpFederation, type McpCallPolicy, type McpCallResult, type McpServerSpec } from '@phoenix/mcp';
 
 export interface McpHibernateStats {
   wakes: number;
