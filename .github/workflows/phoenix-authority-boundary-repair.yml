@@ -29,7 +29,7 @@ jobs:
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
 
-      - name: Enforce capability-authority separation
+      - name: Enforce capability-authority separation and host graph ownership
         shell: bash
         run: |
           python - <<'PY'
@@ -137,22 +137,38 @@ jobs:
           """
           tests = tests[:-len(close)] + addition + close
           test_path.write_text(tests)
+
+          host_path = Path('tsconfig.host.json')
+          host = host_path.read_text()
+          if './packages/phoenix/runtime' in host or './packages/bundle/phoenix' in host:
+              raise SystemExit('PHOENIX host references unexpectedly already present')
+          anchor = '    { "path": "./apps/cli" }'
+          if host.count(anchor) != 1:
+              raise SystemExit('host aggregate insertion anchor missing')
+          host = host.replace(
+              anchor,
+              '    { "path": "./packages/phoenix/runtime" },\n'
+              '    { "path": "./packages/bundle/phoenix" },\n'
+              + anchor,
+              1,
+          )
+          host_path.write_text(host)
           PY
 
-      - name: Run PHOENIX ladder tests
-        run: pnpm exec vitest run packages/phoenix/runtime/tests/model-ladder.spec.ts
+      - name: Run PHOENIX focused tests
+        run: pnpm exec vitest run packages/phoenix/runtime/tests/model-ladder.spec.ts packages/phoenix/runtime/tests/task-role.spec.ts packages/bundle/phoenix/tests/phoenix.spec.ts
 
-      - name: Typecheck PHOENIX package surface
-        run: pnpm exec tsc -p packages/phoenix/runtime/tsconfig.json --noEmit
+      - name: Run canonical DSH typecheck
+        run: pnpm run typecheck
 
       - name: Validate diff
         run: git diff --check
 
-      - name: Commit authority hardening
+      - name: Commit authority and host-graph hardening
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/phoenix/runtime/src/model-ladder.ts packages/phoenix/runtime/src/index.ts packages/phoenix/runtime/tests/model-ladder.spec.ts
+          git add packages/phoenix/runtime/src/model-ladder.ts packages/phoenix/runtime/src/index.ts packages/phoenix/runtime/tests/model-ladder.spec.ts tsconfig.host.json
           git commit -m "fix(phoenix): separate mission evidence from authority"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
