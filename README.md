@@ -4,7 +4,7 @@
 
 # PHOENIX
 
-English | [中文](README.zh.md)
+English |
 
 **PHOENIX is a universal, provider-agnostic AI agent harness for local-first and bring-your-own-provider workflows.**
 
