@@ -5,10 +5,12 @@
   "type": "module",
   "main": "index.js",
   "exports": {
-    ".": "./index.js"
+    ".": "./index.js",
+    "./model-router": "./model-router.js"
   },
   "files": [
     "index.js",
+    "model-router.js",
     "cordis.patch.yml"
   ],
   "dsh": {
