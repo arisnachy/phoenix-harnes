@@ -135,6 +135,7 @@ export class PhoenixRuntime {
 
 export * from './agents.js';
 export * from './arena.js';
+export * from './bootstrap.js';
 export * from './memory.js';
 export * from './scheduler.js';
 export * from './singularity.js';
