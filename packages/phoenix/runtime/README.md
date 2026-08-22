@@ -22,8 +22,24 @@ The runtime does **not** claim to be an OS sandbox. DSH's sandbox packages remai
 
 ## Model Experience
 
-The model sees no new prose by default. PHOENIX acts as policy around existing request/tool seams, so token overhead is near-zero until observability or future UI surfaces request flight/evolution state.
+### Runtime policy layer
+
+#### What the model sees
+
+Nothing directly. PHOENIX Runtime registers no mandatory prompt prose and does not expose its policy state to the model by default. It acts around existing DSH request, tool, and subagent seams.
+
+#### Token effect
+
+Zero direct request-context tokens while observability surfaces are not explicitly requested. Routing and ROI decisions are deterministic policy work and do not require an additional model call.
+
+#### KV Cache effect
+
+The runtime does not rewrite the prompt prefix by itself, so it preserves any reusable prefix the composed DSH request already has. A policy-driven route change may move a request to a different model/provider cache domain; cross-model cache reuse is not assumed.
 
 ## Known Limitations and Deferred Work
 
-The initial runtime has no automated quality benchmark suite, no pairwise Model Team Genome, no distributed Evolution Mesh transport, no Windows desktop shell, and no Repo Brain semantic graph yet. Those are separate PHOENIX layers and must preserve the same fail-closed authority boundary.
+- **Automated evidence** — the initial runtime has no automatic quality benchmark arena; qualification evidence still comes from explicit benchmark/operator records.
+- **Team intelligence** — no pairwise Model Team Genome exists yet.
+- **Collective evolution** — there is no distributed Evolution Mesh transport; peer-supplied executable evolution is deliberately rejected.
+- **Repository cognition** — Repo Brain semantic/structural indexing is deferred to a separate PHOENIX layer.
+- **Desktop surface** — no Windows PHOENIX desktop shell or Flight Deck is included in Genesis.
