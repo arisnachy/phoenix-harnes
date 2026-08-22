@@ -46,7 +46,7 @@ PRIVATE_TOKEN = "must-not-autoload"
     ]);
     expect(report.servers.every((item) => item.trusted === false)).toBe(true);
     expect(report.servers.every((item) => item.env === undefined)).toBe(true);
-    expect(report.strippedEnvironmentServers.sort()).toEqual(['codex_docs', 'project_docs']);
+    expect([...report.strippedEnvironmentServers].sort()).toEqual(['codex_docs', 'project_docs']);
     expect(report.loaded.reduce((sum, item) => sum + item.count, 0)).toBe(3);
     await federation.close();
   });
