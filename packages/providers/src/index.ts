@@ -207,3 +207,5 @@ export class ProviderTransportError extends Error {
     this.name = 'ProviderTransportError';
   }
 }
+
+export * from './discovery.js';
