@@ -22,7 +22,10 @@ jobs:
       - name: Install reproducibly
         run: pnpm install --frozen-lockfile
       - name: Focused PHOENIX brand tests
-        run: pnpm exec vitest run packages/client/ui-brand-official/tests/browser-plugin.client.spec.tsx
+        run: >-
+          pnpm exec vitest run
+          packages/client/ui-brand-official/tests/browser-plugin.client.spec.tsx
+          scripts/client-build-environment.client.spec.ts
       - name: Client package contracts
         run: pnpm run verify-client-packages
       - name: Branding documentation contracts
@@ -35,6 +38,9 @@ jobs:
       - name: Build PHOENIX brand package
         run: pnpm --filter @deepseek-ai/dsh-client-ui-brand-official bundle
       - name: Web build
-        run: pnpm --filter @deepseek-ai/dsh-web-frontend build
+        run: |
+          pnpm --filter @deepseek-ai/dsh-web-frontend build
+          grep -q 'PHOENIX' apps/web/dist/index.html
+          grep -q '"name": "PHOENIX"' apps/web/public/manifest.webmanifest
       - name: Diff hygiene
         run: git diff --check
