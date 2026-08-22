@@ -19,6 +19,10 @@ export interface BenchmarkSample {
   score: number;
   latencyMs: number;
   success: boolean;
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  estimatedCostUsd?: number;
   error?: string;
 }
 
@@ -28,6 +32,25 @@ export interface BenchmarkResult {
   meanScore: number;
   successRate: number;
   p50LatencyMs: number;
+  tokenEfficiency: {
+    knownUsageSamples: number;
+    inputTokens: number;
+    cachedInputTokens: number;
+    freshInputTokens: number;
+    outputTokens: number;
+    estimatedCostUsd: number;
+  };
+}
+
+export interface EfficiencyComparison {
+  qualityDelta: number;
+  successRateDelta: number;
+  freshInputTokenDelta: number;
+  outputTokenDelta: number;
+  costDeltaUsd: number;
+  qualityNotWorse: boolean;
+  usesFewerFreshInputTokens: boolean;
+  dominates: boolean;
 }
 
 export interface ArenaRuntime {
@@ -44,6 +67,50 @@ function median(values: readonly number[]): number {
   if (sorted.length % 2) return value;
   const before = sorted[middle - 1] ?? value;
   return (before + value) / 2;
+}
+
+function aggregateUsage(samples: readonly BenchmarkSample[]): BenchmarkResult['tokenEfficiency'] {
+  let knownUsageSamples = 0;
+  let inputTokens = 0;
+  let cachedInputTokens = 0;
+  let outputTokens = 0;
+  let estimatedCostUsd = 0;
+  for (const sample of samples) {
+    if (sample.inputTokens !== undefined || sample.outputTokens !== undefined) knownUsageSamples += 1;
+    inputTokens += sample.inputTokens ?? 0;
+    cachedInputTokens += sample.cachedInputTokens ?? 0;
+    outputTokens += sample.outputTokens ?? 0;
+    estimatedCostUsd += sample.estimatedCostUsd ?? 0;
+  }
+  return {
+    knownUsageSamples,
+    inputTokens,
+    cachedInputTokens,
+    freshInputTokens: Math.max(0, inputTokens - cachedInputTokens),
+    outputTokens,
+    estimatedCostUsd,
+  };
+}
+
+export function compareEfficiency(baseline: BenchmarkResult, challenger: BenchmarkResult): EfficiencyComparison {
+  const qualityDelta = challenger.meanScore - baseline.meanScore;
+  const successRateDelta = challenger.successRate - baseline.successRate;
+  const freshInputTokenDelta = challenger.tokenEfficiency.freshInputTokens - baseline.tokenEfficiency.freshInputTokens;
+  const outputTokenDelta = challenger.tokenEfficiency.outputTokens - baseline.tokenEfficiency.outputTokens;
+  const costDeltaUsd = challenger.tokenEfficiency.estimatedCostUsd - baseline.tokenEfficiency.estimatedCostUsd;
+  const qualityNotWorse = qualityDelta >= -0.01 && successRateDelta >= -0.01;
+  const hasComparableUsage = baseline.tokenEfficiency.knownUsageSamples > 0 && challenger.tokenEfficiency.knownUsageSamples > 0;
+  const usesFewerFreshInputTokens = hasComparableUsage && freshInputTokenDelta < 0;
+  return {
+    qualityDelta,
+    successRateDelta,
+    freshInputTokenDelta,
+    outputTokenDelta,
+    costDeltaUsd,
+    qualityNotWorse,
+    usesFewerFreshInputTokens,
+    dominates: qualityNotWorse && usesFewerFreshInputTokens,
+  };
 }
 
 export class BenchmarkArena {
@@ -82,6 +149,10 @@ export class BenchmarkArena {
           score: Math.max(0, Math.min(1, scenario.evaluate(response))),
           latencyMs: performance.now() - started,
           success: true,
+          ...(typeof response.usage?.inputTokens === 'number' ? { inputTokens: response.usage.inputTokens } : {}),
+          ...(typeof response.usage?.cachedInputTokens === 'number' ? { cachedInputTokens: response.usage.cachedInputTokens } : {}),
+          ...(typeof response.usage?.outputTokens === 'number' ? { outputTokens: response.usage.outputTokens } : {}),
+          ...(typeof response.usage?.estimatedCostUsd === 'number' ? { estimatedCostUsd: response.usage.estimatedCostUsd } : {}),
         });
       } catch (error) {
         samples.push({
@@ -103,6 +174,7 @@ export class BenchmarkArena {
       meanScore,
       successRate,
       p50LatencyMs: median(samples.map((item) => item.latencyMs)),
+      tokenEfficiency: aggregateUsage(samples),
     };
   }
 }
