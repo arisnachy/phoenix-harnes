@@ -1,16 +1,19 @@
 {
   "id": "/",
-  "name": "DeepSeek Harness",
-  "short_name": "DSH",
+  "name": "PHOENIX",
+  "short_name": "PHOENIX",
+  "description": "PHOENIX universal AI harness",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
+  "theme_color": "#0f1115",
+  "background_color": "#0f1115",
   "icons": [
     {
       "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }
