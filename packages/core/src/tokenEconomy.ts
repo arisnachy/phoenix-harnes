@@ -269,15 +269,26 @@ export class TokenGovernor {
   public preferencesFor(plan: TokenPlan, base: RoutingPreferences = {}): RoutingPreferences {
     const first = plan.lanes[0];
     if (!first) return base;
-    return {
+    const preferences: RoutingPreferences = {
       ...base,
-      ...(first.providerId ? { preferredProviders: [first.providerId, ...(base.preferredProviders ?? []).filter((id) => id !== first.providerId)] } : {}),
-      ...(first.modelId ? { preferredModels: [first.modelId, ...(base.preferredModels ?? []).filter((id) => id !== first.modelId)] } : {}),
-      preferLocal: first.kind === 'local' ? true : base.preferLocal,
-      preferSubscription: first.kind === 'subscription' ? true : base.preferSubscription,
       maxInputTokens: Math.min(base.maxInputTokens ?? plan.inputBudget, plan.inputBudget),
       maxOutputTokens: Math.min(base.maxOutputTokens ?? plan.outputBudget, plan.outputBudget),
     };
+    if (first.providerId) {
+      preferences.preferredProviders = [
+        first.providerId,
+        ...(base.preferredProviders ?? []).filter((id) => id !== first.providerId),
+      ];
+    }
+    if (first.modelId) {
+      preferences.preferredModels = [
+        first.modelId,
+        ...(base.preferredModels ?? []).filter((id) => id !== first.modelId),
+      ];
+    }
+    if (first.kind === 'local') preferences.preferLocal = true;
+    if (first.kind === 'subscription') preferences.preferSubscription = true;
+    return preferences;
   }
 }
 
