@@ -1,0 +1,174 @@
+name: PHOENIX authority boundary repair
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/phoenix-authority-boundary-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PHOENIX head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Enforce capability-authority separation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          ladder_path = Path('packages/phoenix/runtime/src/model-ladder.ts')
+          ladder = ladder_path.read_text()
+
+          replacements = [
+            (
+              """interface EvidencePoint {
+            score: number
+            weight: number
+            observedAt: number
+          }
+          """,
+              """interface EvidencePoint {
+            score: number
+            weight: number
+            observedAt: number
+            source: EvidenceSource
+          }
+          """,
+            ),
+            (
+              """      observedAt: evidence.observedAt ?? Date.now(),
+            })
+          """,
+              """      observedAt: evidence.observedAt ?? Date.now(),
+              source: evidence.source,
+            })
+          """,
+            ),
+            (
+              "if (state.trust !== 'quarantined' && this.hasOperationalEvidence(state)) state.trust = 'qualified'",
+              "if (state.trust !== 'quarantined' && this.hasAuthorityEvidence(state)) state.trust = 'qualified'",
+            ),
+            (
+              "state.trust = this.hasOperationalEvidence(state) ? 'qualified' : 'provisional'",
+              "state.trust = this.hasAuthorityEvidence(state) ? 'qualified' : 'provisional'",
+            ),
+            (
+              """  private hasOperationalEvidence(state: ModelState): boolean {
+            let weightedSamples = 0
+            for (const points of state.evidence.values()) {
+              for (const point of points) weightedSamples += point.weight
+            }
+            return weightedSamples >= 3
+          }
+          """,
+              """  private hasAuthorityEvidence(state: ModelState): boolean {
+            let weightedSamples = 0
+            for (const points of state.evidence.values()) {
+              for (const point of points) {
+                if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight
+              }
+            }
+            return weightedSamples >= 3
+          }
+          """,
+            ),
+          ]
+          for old, new in replacements:
+              if old not in ladder:
+                  raise SystemExit(f'model-ladder patch anchor missing: {old[:80]!r}')
+              ladder = ladder.replace(old, new, 1)
+          ladder_path.write_text(ladder)
+
+          runtime_path = Path('packages/phoenix/runtime/src/index.ts')
+          runtime = runtime_path.read_text()
+          old = """  recordBenchmark(evidence: CapabilityEvidence): void {
+            const safe = { ...evidence, source: evidence.source === 'mission' ? 'benchmark' as const : evidence.source }
+            this.ladder.record(safe)
+            if (this.config.localEvolution) {
+              this.localState.evidence.push(safe)
+          """
+          new = """  recordBenchmark(evidence: CapabilityEvidence): void {
+            if (evidence.source !== 'benchmark' && evidence.source !== 'operator') {
+              throw new Error('PHOENIX authority evidence must come from benchmark or operator sources')
+            }
+            const safe: CapabilityEvidence = { ...evidence }
+            this.ladder.record(safe)
+            if (this.config.localEvolution) {
+              this.localState.evidence.push(safe)
+          """
+          if old not in runtime:
+              raise SystemExit('recordBenchmark patch anchor missing')
+          runtime_path.write_text(runtime.replace(old, new, 1))
+
+          test_path = Path('packages/phoenix/runtime/tests/model-ladder.spec.ts')
+          tests = test_path.read_text()
+          marker = """  it('keeps newly discovered models provisional', () => {
+            const ladder = new ModelCapabilityLadder()
+            ladder.register(A)
+            expect(ladder.snapshot(A)?.trust).toBe('provisional')
+            expect(ladder.rank('routine')).toEqual([])
+          })
+          """
+          addition = marker + """
+
+          it('never grants authority from mission or collective observation alone', () => {
+            const ladder = new ModelCapabilityLadder()
+            for (let i = 0; i < 40; i++) {
+              ladder.record({ ...A, dimension: 'reliability', score: 100, source: 'mission', reproducible: true })
+              ladder.record({ ...A, dimension: 'reasoning', score: 100, source: 'collective-observation', reproducible: true })
+            }
+            expect(ladder.snapshot(A)?.trust).toBe('provisional')
+            expect(ladder.rank('routine')).toEqual([])
+          })
+
+          it('returns to provisional after quarantine when only non-authority evidence exists', () => {
+            const ladder = new ModelCapabilityLadder()
+            for (let i = 0; i < 20; i++) {
+              ladder.record({ ...A, dimension: 'reliability', score: 99, source: 'mission', reproducible: true })
+            }
+            ladder.quarantine(A)
+            ladder.releaseQuarantine(A)
+            expect(ladder.snapshot(A)?.trust).toBe('provisional')
+          })
+          """
+          if marker not in tests:
+              raise SystemExit('model-ladder test anchor missing')
+          test_path.write_text(tests.replace(marker, addition, 1))
+          PY
+
+      - name: Run PHOENIX ladder tests
+        run: pnpm exec vitest run packages/phoenix/runtime/tests/model-ladder.spec.ts
+
+      - name: Typecheck PHOENIX package surface
+        run: pnpm exec tsc -p packages/phoenix/runtime/tsconfig.json --noEmit
+
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Commit authority hardening
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/phoenix/runtime/src/model-ladder.ts packages/phoenix/runtime/src/index.ts packages/phoenix/runtime/tests/model-ladder.spec.ts
+          git commit -m "fix(phoenix): separate mission evidence from authority"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
