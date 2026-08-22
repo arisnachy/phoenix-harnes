@@ -5,7 +5,9 @@ import type {
   RequestRequirements,
   RoutingPreferences,
 } from '@phoenix/contracts';
+import type { SkillLibrary } from './experience.js';
 import type { LocalMemoryStore } from './memory.js';
+import { estimateTokens } from './tokenEconomy.js';
 import type { ToolPolicy, ToolRegistry } from './tools.js';
 
 export interface AgentDefinition {
@@ -23,6 +25,7 @@ export interface AgentRunResult {
   response: PhoenixResponse;
   turns: number;
   toolExecutions: number;
+  historyCompactions: number;
 }
 
 export interface AgentGenerationRuntime {
@@ -36,6 +39,9 @@ export interface AgentRunnerOptions {
   tools?: ToolRegistry;
   toolPolicy?: ToolPolicy;
   memory?: LocalMemoryStore;
+  skills?: SkillLibrary;
+  skillTokenBudget?: number;
+  historyTokenBudget?: number;
 }
 
 function renderToolResult(value: unknown): string {
@@ -47,6 +53,51 @@ function renderToolResult(value: unknown): string {
   }
 }
 
+function messageTokens(message: PhoenixMessage): number {
+  return estimateTokens(message.content) + estimateTokens(JSON.stringify(message.toolCalls ?? [])) + 4;
+}
+
+function digestMessage(message: PhoenixMessage): string {
+  const content = message.content.replace(/\s+/g, ' ').trim();
+  const clipped = content.length > 220 ? `${content.slice(0, 205)}…` : content;
+  const tools = message.toolCalls?.length ? ` tools=${message.toolCalls.map((item) => item.name).join(',')}` : '';
+  return `${message.role}${tools}: ${clipped}`;
+}
+
+export function compactAgentHistory(messages: readonly PhoenixMessage[], budgetTokens: number): PhoenixMessage[] {
+  const budget = Math.max(256, budgetTokens);
+  const total = messages.reduce((sum, message) => sum + messageTokens(message), 0);
+  if (total <= budget) return messages.map((item) => ({ ...item }));
+
+  const system = messages.filter((message) => message.role === 'system');
+  const nonSystem = messages.filter((message) => message.role !== 'system');
+  const tail: PhoenixMessage[] = [];
+  let used = system.reduce((sum, item) => sum + messageTokens(item), 0);
+
+  // Preserve the newest interaction first. This keeps assistant tool_calls adjacent to their tool results.
+  for (let index = nonSystem.length - 1; index >= 0; index -= 1) {
+    const message = nonSystem[index];
+    if (!message) continue;
+    const cost = messageTokens(message);
+    if (tail.length >= 6 || used + cost > Math.floor(budget * 0.82)) break;
+    tail.unshift({ ...message });
+    used += cost;
+  }
+
+  const tailSet = new Set(tail.map((item) => item));
+  const tailStart = Math.max(0, nonSystem.length - tail.length);
+  const omitted = nonSystem.slice(0, tailStart);
+  let digest = omitted.map(digestMessage).join('\n');
+  const digestBudget = Math.max(64, budget - used - 16);
+  if (estimateTokens(digest) > digestBudget) digest = `${digest.slice(0, Math.max(0, digestBudget * 4 - 15))}\n…[compacted]`;
+
+  const result: PhoenixMessage[] = [...system.map((item) => ({ ...item }))];
+  if (digest.trim()) result.push({ role: 'system', content: `Earlier interaction digest:\n${digest}` });
+  result.push(...tail);
+  void tailSet;
+  return result;
+}
+
 export class AgentRunner {
   public constructor(
     private readonly runtime: AgentGenerationRuntime,
@@ -54,7 +105,7 @@ export class AgentRunner {
   ) {}
 
   public async run(agent: AgentDefinition, input: string, signal?: AbortSignal): Promise<AgentRunResult> {
-    const messages: PhoenixMessage[] = [{ role: 'system', content: agent.instructions }];
+    let messages: PhoenixMessage[] = [{ role: 'system', content: agent.instructions }];
     const namespace = agent.memoryNamespace ?? `agent:${agent.id}`;
     if (this.options.memory) {
       const memories = await this.options.memory.search(input, { namespace, limit: 6 });
@@ -65,13 +116,38 @@ export class AgentRunner {
         });
       }
     }
+    if (this.options.skills) {
+      const skillContext = await this.options.skills.compactContext(input, this.options.skillTokenBudget ?? 500);
+      if (skillContext) messages.push({ role: 'system', content: `Verified reusable PHOENIX skills:\n${skillContext}` });
+    }
     messages.push({ role: 'user', content: input });
 
     const toolDefinitions = this.options.tools?.definitions(agent.toolNames) ?? [];
     const maxTurns = Math.max(1, agent.maxTurns ?? 8);
+    const historyBudget = Math.max(512, this.options.historyTokenBudget ?? 4_000);
     let toolExecutions = 0;
+    let historyCompactions = 0;
+    let providerSessionId: string | undefined;
+    let pinnedProviderId: string | undefined;
+    let pinnedModelId: string | undefined;
 
     for (let turn = 1; turn <= maxTurns; turn += 1) {
+      const compacted = compactAgentHistory(messages, historyBudget);
+      if (compacted.length !== messages.length || compacted.some((item, index) => item.content !== messages[index]?.content)) {
+        historyCompactions += 1;
+        this.runtime.ledger?.append('economy.history_compacted', {
+          agentId: agent.id,
+          turn,
+          beforeTokens: messages.reduce((sum, item) => sum + messageTokens(item), 0),
+          afterTokens: compacted.reduce((sum, item) => sum + messageTokens(item), 0),
+        });
+      }
+      messages = compacted;
+      const preferences: RoutingPreferences = {
+        ...(agent.preferences ?? {}),
+        ...(pinnedProviderId ? { preferredProviders: [pinnedProviderId] } : {}),
+        ...(pinnedModelId ? { preferredModels: [pinnedModelId] } : {}),
+      };
       const request: PhoenixRequest = {
         messages,
         ...(toolDefinitions.length ? { tools: toolDefinitions } : {}),
@@ -79,16 +155,27 @@ export class AgentRunner {
           ...(agent.requirements ?? {}),
           ...(toolDefinitions.length ? { tools: true } : {}),
         },
-        ...(agent.preferences ? { preferences: agent.preferences } : {}),
-        metadata: { agentId: agent.id, turn: String(turn) },
+        ...(Object.keys(preferences).length ? { preferences } : {}),
+        metadata: {
+          agentId: agent.id,
+          turn: String(turn),
+          ...(providerSessionId ? { providerSessionId } : {}),
+        },
       };
       const response = await this.runtime.generate(request, signal);
+      if (response.providerSessionId) {
+        providerSessionId = response.providerSessionId;
+        pinnedProviderId = response.providerId;
+        pinnedModelId = response.modelId;
+      }
       this.runtime.ledger?.append('agent.turn', {
         agentId: agent.id,
         turn,
         providerId: response.providerId,
         modelId: response.modelId,
+        providerSessionId: response.providerSessionId ?? null,
         toolCalls: response.toolCalls?.map((call) => call.name) ?? [],
+        usage: response.usage ?? {},
       });
 
       if (!response.toolCalls?.length) {
@@ -101,7 +188,7 @@ export class AgentRunner {
             metadata: { providerId: response.providerId, modelId: response.modelId },
           });
         }
-        return { agentId: agent.id, response, turns: turn, toolExecutions };
+        return { agentId: agent.id, response, turns: turn, toolExecutions, historyCompactions };
       }
 
       if (!this.options.tools) throw new Error(`Agent ${agent.id} requested tools but no ToolRegistry is configured`);
