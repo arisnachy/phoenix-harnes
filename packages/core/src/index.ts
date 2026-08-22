@@ -11,6 +11,7 @@ import { EvolutionEngine } from '@phoenix/evolution';
 import { InMemoryLedger } from '@phoenix/ledger';
 import { ProviderTransportError } from '@phoenix/providers';
 import { route } from '@phoenix/router';
+import { TokenFlightRecorder } from './flightRecorder.js';
 import {
   estimateTokens,
   ExactResultCache,
@@ -34,11 +35,16 @@ export interface PhoenixRuntimeOptions {
   governor?: TokenGovernor;
   resultCache?: ExactResultCache;
   usageBook?: TokenUsageBook;
+  flightRecorder?: TokenFlightRecorder;
 }
 
 function estimatedRequestTokens(request: PhoenixRequest): number {
   return request.messages.reduce((sum, message) => sum + estimateTokens(message.content) + 4, 0)
     + estimateTokens(JSON.stringify(request.tools ?? []));
+}
+
+function missionKey(request: PhoenixRequest): string {
+  return request.metadata?.missionId ?? request.metadata?.agentId ?? 'global';
 }
 
 export class PhoenixRuntime {
@@ -50,6 +56,7 @@ export class PhoenixRuntime {
   public readonly governor: TokenGovernor | undefined;
   public readonly resultCache: ExactResultCache | undefined;
   public readonly usageBook: TokenUsageBook;
+  public readonly flightRecorder: TokenFlightRecorder;
 
   public constructor(options: PhoenixRuntimeOptions = {}) {
     this.ledger = options.ledger ?? new InMemoryLedger();
@@ -58,6 +65,7 @@ export class PhoenixRuntime {
     this.governor = options.governor;
     this.resultCache = options.resultCache;
     this.usageBook = options.usageBook ?? new TokenUsageBook();
+    this.flightRecorder = options.flightRecorder ?? new TokenFlightRecorder();
   }
 
   public registerProvider(definition: ProviderDefinition, adapter: ProviderAdapter): void {
@@ -111,6 +119,17 @@ export class PhoenixRuntime {
       });
     }
 
+    const missionId = missionKey(effectiveRequest);
+    const forecast = this.flightRecorder.recordRequest(missionId, effectiveRequest);
+    this.ledger.append('economy.flight_forecast', {
+      missionId,
+      estimatedInputTokens: forecast.estimatedInputTokens,
+      tokenBudget: forecast.tokenBudget ?? null,
+      projectedUtilization: forecast.projectedUtilization ?? null,
+      warning: forecast.warning ?? null,
+      breakdown: forecast.breakdown,
+    });
+
     const cacheable = effectiveRequest.metadata?.cacheable === 'true';
     if (cacheable && this.resultCache) {
       const cached = this.resultCache.get(effectiveRequest);
@@ -124,6 +143,7 @@ export class PhoenixRuntime {
           avoidedInputTokens: avoided,
           cacheHit: true,
         });
+        this.flightRecorder.recordAvoided(missionId, avoided);
         this.ledger.append('economy.cache_hit', { providerId: cached.providerId, modelId: cached.modelId, avoidedInputTokens: avoided });
         return {
           ...cached,
@@ -175,7 +195,9 @@ export class PhoenixRuntime {
           outputTokens,
           ...(typeof response.usage?.cachedInputTokens === 'number' ? { cachedInputTokens: response.usage.cachedInputTokens } : {}),
         });
+        this.flightRecorder.recordResponse(missionId, response, inputTokens);
         this.ledger.append('economy.usage', {
+          missionId,
           providerId: response.providerId,
           modelId: response.modelId,
           inputTokens,
@@ -229,13 +251,19 @@ export class PhoenixRuntime {
 }
 
 export * from './adaptiveMission.js';
+export * from './agentEconomy.js';
 export * from './agents.js';
 export * from './arena.js';
 export * from './bootstrap.js';
 export * from './experience.js';
+export * from './flightRecorder.js';
+export * from './localEvolution.js';
 export * from './mcpBootstrap.js';
+export * from './mcpHibernate.js';
 export * from './memory.js';
+export * from './memoryGenome.js';
 export * from './rebirth.js';
+export * from './resilience.js';
 export * from './scheduler.js';
 export * from './singularity.js';
 export * from './tokenEconomy.js';
