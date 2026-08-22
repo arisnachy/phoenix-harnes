@@ -33,10 +33,7 @@ jobs:
               ('@deepseek-ai/dsh-phoenix', '@arisnachy/phoenix-bundle'),
           ]
           targets = [Path('packages/phoenix'), Path('packages/bundle/phoenix')]
-          extra = [
-              Path('packages/bundle/README.md'),
-              Path('packages/bundle/README.zh.md'),
-          ]
+          extra = [Path('packages/bundle/README.md'), Path('packages/bundle/README.zh.md')]
           suffixes = {'.json', '.ts', '.md', '.yml', '.yaml'}
           for root in targets:
               for path in root.rglob('*'):
@@ -52,52 +49,28 @@ jobs:
                   text = text.replace(old, new)
               path.write_text(text)
 
-          # Make the package index describe both ownership scopes without growing its budget.
           path = Path('packages/README.md')
           text = path.read_text()
-          text = text.replace(
-              'npm scope: `@deepseek-ai/dsh-*`;',
-              'Scopes: DSH `@deepseek-ai/dsh-*`, PHOENIX `@arisnachy/phoenix-*`;',
-          )
-          text = text.replace(
-              'Groups hold `packages/<group>/<pkg>/`; names stay `@deepseek-ai/dsh-<pkg>`.',
-              'Groups hold `packages/<group>/<pkg>/`; names follow their owning scope.',
-          )
+          text = text.replace('npm scope: `@deepseek-ai/dsh-*`;', 'Scopes: DSH `@deepseek-ai/dsh-*`, PHOENIX `@arisnachy/phoenix-*`;')
+          text = text.replace('Groups hold `packages/<group>/<pkg>/`; names stay `@deepseek-ai/dsh-<pkg>`.', 'Groups hold `packages/<group>/<pkg>/`; names follow their owning scope.')
           path.write_text(text)
           path = Path('packages/README.zh.md')
           text = path.read_text()
-          text = text.replace(
-              'npm scope 为 `@deepseek-ai/dsh-*`；',
-              'Scope：DSH 使用 `@deepseek-ai/dsh-*`，PHOENIX 使用 `@arisnachy/phoenix-*`；',
-          )
-          text = text.replace(
-              '包按组置于 `packages/<group>/<pkg>/`；包名仍为 `@deepseek-ai/dsh-<pkg>`。',
-              '包按组置于 `packages/<group>/<pkg>/`；包名遵循各自的所有权 scope。',
-          )
+          text = text.replace('npm scope 为 `@deepseek-ai/dsh-*`；', 'Scope：DSH 使用 `@deepseek-ai/dsh-*`，PHOENIX 使用 `@arisnachy/phoenix-*`；')
+          text = text.replace('包按组置于 `packages/<group>/<pkg>/`；包名仍为 `@deepseek-ai/dsh-<pkg>`。', '包按组置于 `packages/<group>/<pkg>/`；包名遵循各自的所有权 scope。')
           path.write_text(text)
 
-          # Persist Typert-visible signatures that the native gate had previously applied only in-memory.
           ladder = Path('packages/phoenix/runtime/src/model-ladder.ts')
           code = ladder.read_text()
-          code = code.replace(
-              '  snapshot(ref: ModelRef, now = Date.now()): ModelSnapshot | undefined {',
-              '  snapshot(ref: ModelRef, now: number = Date.now()): ModelSnapshot | undefined {',
-          )
-          code = code.replace(
-              '  all(now = Date.now()): ModelSnapshot[] {',
-              '  all(now: number = Date.now()): ModelSnapshot[] {',
-          )
-          code = code.replace(
-              '  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now = Date.now()): RankedModel[] {',
-              '  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now: number = Date.now()): RankedModel[] {',
-          )
+          code = code.replace('  snapshot(ref: ModelRef, now = Date.now()): ModelSnapshot | undefined {', '  snapshot(ref: ModelRef, now: number = Date.now()): ModelSnapshot | undefined {')
+          code = code.replace('  all(now = Date.now()): ModelSnapshot[] {', '  all(now: number = Date.now()): ModelSnapshot[] {')
+          code = code.replace('  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now = Date.now()): RankedModel[] {', '  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now: number = Date.now()): RankedModel[] {')
           code = code.replace(
               "  private hasAuthorityEvidence(state: ModelState): boolean {\n  let weightedSamples = 0\n  for (const points of state.evidence.values()) {\n    for (const point of points) {\n      if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n    }\n  }\n  return weightedSamples >= 3\n}\n\nprivate dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {",
               "  private hasAuthorityEvidence(state: ModelState): boolean {\n    let weightedSamples = 0\n    for (const points of state.evidence.values()) {\n      for (const point of points) {\n        if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n      }\n    }\n    return weightedSamples >= 3\n  }\n\n  private dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {",
           )
           ladder.write_text(code)
 
-          # Teach package constraints about exactly the downstream PHOENIX family.
           constraints = Path('scripts/check-workspace-constraints.ts')
           text = constraints.read_text()
           marker = "const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'\n"
@@ -134,7 +107,6 @@ jobs:
               raise SystemExit('constraints package-shape anchor missing')
           constraints.write_text(text)
 
-          # Source aliases for the independent package scope.
           config = Path('tsconfig.base.json')
           text = config.read_text()
           anchor = '      "@deepseek-ai/dsh-*": [\n'
@@ -150,7 +122,6 @@ jobs:
                   raise SystemExit('tsconfig PHOENIX mapping anchor missing')
               config.write_text(text.replace(anchor, mappings + anchor, 1))
 
-          # Catalog ownership for ctx.phoenix and its signature types.
           catalog = Path('scripts/gen-cordis-catalog.ts')
           text = catalog.read_text()
           service_anchor = "  planMode: 'plan.md',\n"
@@ -170,7 +141,6 @@ jobs:
               text = text.replace(link_anchor, link_anchor + phoenix_types, 1)
           catalog.write_text(text)
 
-          # Relationship graph role: PHOENIX is a downstream core policy service, not a replacement seam.
           graphs = Path('scripts/gen-doc-graphs.ts')
           text = graphs.read_text()
           role_anchor = 'const SERVICE_ROLES: ServiceRole[] = [\n'
@@ -237,7 +207,10 @@ jobs:
                   old_end = len(zh)
               zh = zh[:old_start].rstrip() + '\n\n' + section + '\n' + zh[old_end:]
           else:
-              zh = zh.rstrip() + '\n\n<!-- PHOENIX downstream configuration declaration is mirrored verbatim from the generated English contract so field names, code, and source coordinates remain exact. -->\n\n' + section + '\n'
+              first_entry = zh.find('<a id=')
+              if first_entry < 0:
+                  raise SystemExit('Chinese config catalog has no package entry anchor')
+              zh = zh[:first_entry] + section + '\n\n' + zh[first_entry:]
           chinese.write_text(zh)
 
           def blob(path: Path) -> str:
@@ -249,6 +222,8 @@ jobs:
 
           pairs = [
               ('docs/config-catalog.md', 'docs/config-catalog.zh.md', 'docs/config-catalog.i18n.yaml'),
+              ('docs/capability-seams.md', 'docs/capability-seams.zh.md', 'docs/capability-seams.i18n.yaml'),
+              ('docs/event-producer-consumer.md', 'docs/event-producer-consumer.zh.md', 'docs/event-producer-consumer.i18n.yaml'),
               ('packages/README.md', 'packages/README.zh.md', 'packages/README.i18n.yaml'),
               ('packages/bundle/README.md', 'packages/bundle/README.zh.md', 'packages/bundle/README.i18n.yaml'),
               ('packages/bundle/phoenix/README.md', 'packages/bundle/phoenix/README.zh.md', 'packages/bundle/phoenix/README.i18n.yaml'),
@@ -259,6 +234,18 @@ jobs:
               record(left, right, output)
           PY
 
+      - name: Checkpoint materialized contract state
+        run: |
+          if git diff --quiet; then
+            echo 'PHOENIX Genesis materialized state already committed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '4189822+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor(phoenix): materialize downstream native contracts'
+          git push origin HEAD:${{ github.head_ref }}
+
       - name: Prove documentation contract
         run: |
           pnpm run verify-doc-graphs
@@ -267,15 +254,3 @@ jobs:
           pnpm run verify-package-readme-model-experience
           pnpm run verify-doc-budgets
           git diff --check
-
-      - name: Commit materialized contract state
-        run: |
-          if git diff --quiet; then
-            echo 'PHOENIX Genesis documentation already materialized.'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'refactor(phoenix): materialize downstream native contracts'
-          git push origin HEAD:${{ github.head_ref }}
