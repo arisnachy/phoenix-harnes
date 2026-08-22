@@ -1,4 +1,5 @@
 import type { PhoenixTool } from '@phoenix/contracts';
+import type { AuthorityScope, AuthorityVerifier } from '@phoenix/security';
 
 export type ToolRisk = 'read' | 'write' | 'network' | 'exec';
 
@@ -15,11 +16,21 @@ export interface RuntimeTool {
   execute(input: Record<string, unknown>, context?: ToolContext): Promise<unknown>;
 }
 
+export interface ToolAuthorityRequest {
+  token: string;
+  subjectId: string;
+  missionId: string;
+  resource?: string;
+}
+
 export interface ToolPolicy {
   allowedRisks?: readonly ToolRisk[];
   deniedTools?: readonly string[];
   requireApprovalFor?: readonly ToolRisk[];
   approve?: (tool: RuntimeTool, input: Record<string, unknown>) => Promise<boolean>;
+  authority?: AuthorityVerifier;
+  requireAuthorityFor?: readonly ToolRisk[];
+  authorityFor?: (tool: RuntimeTool, input: Record<string, unknown>) => Promise<ToolAuthorityRequest | undefined>;
 }
 
 export class ToolPolicyError extends Error {
@@ -27,6 +38,13 @@ export class ToolPolicyError extends Error {
     super(message);
     this.name = 'ToolPolicyError';
   }
+}
+
+function authorityScope(risk: ToolRisk): AuthorityScope {
+  if (risk === 'write') return 'write';
+  if (risk === 'network') return 'network';
+  if (risk === 'exec') return 'exec';
+  return 'read';
 }
 
 export class ToolRegistry {
@@ -83,6 +101,23 @@ export class ToolRegistry {
     if (policy.requireApprovalFor?.includes(tool.risk)) {
       if (!policy.approve) throw new ToolPolicyError(`Approval required for ${tool.risk} tool: ${name}`);
       if (!(await policy.approve(tool, input))) throw new ToolPolicyError(`Approval denied for tool: ${name}`);
+    }
+    if (policy.requireAuthorityFor?.includes(tool.risk)) {
+      if (!policy.authority || !policy.authorityFor) {
+        throw new ToolPolicyError(`Capability lease required for ${tool.risk} tool: ${name}`);
+      }
+      const request = await policy.authorityFor(tool, input);
+      if (!request) throw new ToolPolicyError(`No capability lease supplied for tool: ${name}`);
+      try {
+        policy.authority.verifyLease(request.token, {
+          subjectId: request.subjectId,
+          missionId: request.missionId,
+          scope: authorityScope(tool.risk),
+          ...(request.resource !== undefined ? { resource: request.resource } : {}),
+        });
+      } catch (error) {
+        throw new ToolPolicyError(error instanceof Error ? `Capability lease denied: ${error.message}` : 'Capability lease denied');
+      }
     }
     return tool.execute(input, context);
   }
