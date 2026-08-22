@@ -11,54 +11,51 @@ permissions:
 jobs:
   birth-import:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'phoenix/birth-root-v11'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - name: Checkout PHOENIX birth branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: phoenix/birth-root-v11
-
-      - name: Import DeepSeek Harness into repository root once
+      - name: Import exact DeepSeek Harness snapshot into PHOENIX root
         shell: bash
-        env:
-          DSH_SHA: b150a551b8d465e31e418e1b2eaf5e79bbb7d28e
-          DSH_REPO: https://github.com/deepseek-ai/deepseek-harness.git
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          trap 'echo "PHOENIX birth failed at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
+          DSH_SHA=b150a551b8d465e31e418e1b2eaf5e79bbb7d28e
+          birth_head="$(git rev-parse HEAD)"
           if [[ -f PHOENIX_UPSTREAM.json ]] && node -e "const p=require('./PHOENIX_UPSTREAM.json'); process.exit(p.importMode==='root-downstream'?0:1)"; then
-            echo 'PHOENIX root import already complete; refusing to overwrite the evolved tree.'
+            echo 'PHOENIX root already materialized.'
             exit 0
           fi
-
-          cp -L LICENSE /tmp/phoenix-agpl-license
-          if [[ -f SECURITY.md ]]; then cp -L SECURITY.md /tmp/phoenix-security-v10.md; fi
-
-          git clone --filter=blob:none "$DSH_REPO" /tmp/deepseek-harness
-          git -C /tmp/deepseek-harness checkout --detach "$DSH_SHA"
-          test "$(git -C /tmp/deepseek-harness rev-parse HEAD)" = "$DSH_SHA"
-
-          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          rsync -a --exclude='.git/' --exclude='.github/' /tmp/deepseek-harness/ ./
-
-          rm -f LICENSE.deepseek-harness
-          if [[ -f LICENSE-MIT ]]; then
-            cp -L LICENSE-MIT LICENSE.deepseek-harness
-          else
-            cp -L LICENSE LICENSE.deepseek-harness
-          fi
+          cp -L LICENSE /tmp/phoenix-agpl
+          [[ -f SECURITY.md ]] && cp -L SECURITY.md /tmp/phoenix-security || true
+          rm -rf /tmp/dsh /tmp/dsh.tgz
+          mkdir -p /tmp/dsh
+          curl --fail --location --retry 5 --retry-all-errors \
+            "https://github.com/deepseek-ai/DeepSeek-Harness/archive/${DSH_SHA}.tar.gz" -o /tmp/dsh.tgz
+          tar -xzf /tmp/dsh.tgz --strip-components=1 -C /tmp/dsh
+          for path in apps packages native scripts vendor website; do test -d "/tmp/dsh/${path}"; done
+          test -f /tmp/dsh/pnpm-lock.yaml
+          test -f /tmp/dsh/LICENSE
+          node -e "const p=require('/tmp/dsh/package.json'); if(p.version!=='0.1.1-rc.2') process.exit(1)"
+          cp -L /tmp/dsh/LICENSE /tmp/dsh-license
+          cp -L /tmp/dsh/README.md /tmp/dsh-readme
+          [[ -f /tmp/dsh/NOTICE ]] && cp -L /tmp/dsh/NOTICE /tmp/dsh-notice || true
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
+          rsync -a --exclude='.git/' --exclude='.github/' /tmp/dsh/ ./
           rm -f LICENSE
-          cp /tmp/phoenix-agpl-license LICENSE
-          rm -f README.deepseek-harness.md
-          cp -L README.md README.deepseek-harness.md
+          cp /tmp/phoenix-agpl LICENSE
+          cp /tmp/dsh-license LICENSE.deepseek-harness
+          cp /tmp/dsh-readme README.deepseek-harness.md
+          [[ -f /tmp/dsh-notice ]] && cp /tmp/dsh-notice NOTICE.deepseek-harness || true
           mkdir -p docs/phoenix .github/workflows
-          if [[ -f /tmp/phoenix-security-v10.md ]]; then cp /tmp/phoenix-security-v10.md docs/phoenix/SECURITY-v10-legacy.md; fi
-
+          [[ -f /tmp/phoenix-security ]] && cp /tmp/phoenix-security docs/phoenix/SECURITY-v10-legacy.md || true
           cat > PHOENIX_UPSTREAM.json <<'JSON'
           {
             "product": "PHOENIX",
-            "upstream": "https://github.com/deepseek-ai/deepseek-harness",
+            "upstream": "https://github.com/deepseek-ai/DeepSeek-Harness",
             "upstreamCommit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e",
             "upstreamVersion": "0.1.1-rc.2",
             "importMode": "root-downstream",
@@ -67,108 +64,88 @@ jobs:
             "legacyPhoenixBranch": "legacy/standalone-v10"
           }
           JSON
-
           cat > README.md <<'MD'
           # PHOENIX
 
-          **PHOENIX is an evolutive, provider-neutral AI engineering harness born from DeepSeek Harness and transformed as an independent downstream product.**
+          **PHOENIX is an evolutive, provider-neutral AI engineering harness born from DeepSeek Harness and evolved as an independent downstream product.**
 
-          This repository intentionally keeps the recognizable DeepSeek Harness monorepo anatomy (`apps/`, `packages/`, `native/`, `scripts/`, `vendor/`, `website/`) because PHOENIX evolves that codebase rather than wrapping it beside another harness.
+          PHOENIX intentionally keeps the DeepSeek Harness monorepo anatomy (`apps/`, `packages/`, `native/`, `scripts/`, `vendor/`, `website/`). DeepSeek Harness is the initial DNA; PHOENIX evolves that runtime rather than wrapping it beside a second harness.
 
-          PHOENIX adds a capability-ranked model mesh, intelligent routing, cost/context governance, resilient mission execution, security membranes, local evidence-driven evolution, judge/critic separation, clean-room collective observations, and a Windows-first desktop distribution roadmap. These capabilities are integrated into native DeepSeek Harness extension seams rather than maintained as a competing second runtime.
+          The first native PHOENIX evolution is capability-aware model routing in the provider-neutral LLM seam. Historical standalone PHOENIX v1-v10 is preserved at `legacy/standalone-v10` as a migration quarry.
 
-          ## Genealogy
-
-          PHOENIX root was imported from `deepseek-ai/deepseek-harness` commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e` (`dsh@0.1.1-rc.2`). See `PHOENIX_UPSTREAM.json` and `README.deepseek-harness.md` for the pristine upstream documentation preserved at birth.
-
-          ## Licensing
-
-          Original DeepSeek Harness material retains its MIT copyright/license notice in `LICENSE.deepseek-harness`. PHOENIX-specific modifications are distributed under `AGPL-3.0-only`; see the root `LICENSE` and `NOTICE`.
-
-          ## Birth principle
-
-          > DeepSeek Harness is the initial DNA. PHOENIX is the organism we evolve from it.
-
-          Historical standalone PHOENIX v1-v10 is preserved on branch `legacy/standalone-v10` as a migration quarry; it is not the new runtime body.
+          Genealogy is pinned in `PHOENIX_UPSTREAM.json`. Original upstream documentation is preserved as `README.deepseek-harness.md`; upstream MIT terms are preserved as `LICENSE.deepseek-harness` and its notice as `NOTICE.deepseek-harness` when supplied. PHOENIX-specific additions are AGPL-3.0-only under root `LICENSE`.
           MD
-
           cat > NOTICE <<'TXT'
-          PHOENIX
-
           PHOENIX is an independent downstream work derived in part from DeepSeek Harness.
-          The imported DeepSeek Harness snapshot is identified in PHOENIX_UPSTREAM.json and retains the MIT notice in LICENSE.deepseek-harness.
-          PHOENIX-specific modifications are licensed under AGPL-3.0-only as stated in LICENSE.
-
-          DeepSeek and DeepSeek Harness names remain the property of their respective owners. PHOENIX is not represented here as an official DeepSeek product.
+          Imported upstream material retains the MIT terms in LICENSE.deepseek-harness and upstream notice in NOTICE.deepseek-harness when supplied.
+          PHOENIX-specific additions are licensed AGPL-3.0-only under root LICENSE.
+          PHOENIX is not represented as an official DeepSeek product.
           TXT
-
-          node <<'NODE'
-          const fs = require('fs')
-          const p = JSON.parse(fs.readFileSync('package.json', 'utf8'))
-          p.name = '@phoenix-ai/phoenix-root'
-          p.description = 'PHOENIX evolutive AI engineering harness, downstream of DeepSeek Harness'
-          p.phoenix = {
-            upstream: 'deepseek-ai/deepseek-harness',
-            upstreamCommit: 'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e',
-            lineage: 'root-downstream'
-          }
-          fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n')
-          NODE
-
           cat > .github/workflows/ci.yml <<'YAML'
           name: PHOENIX Root CI
-
           on:
             pull_request:
             push:
               branches: [main]
-
           permissions:
             contents: read
-
+          concurrency:
+            group: phoenix-ci-${{ github.ref }}
+            cancel-in-progress: true
+          env:
+            DSH_TELEMETRY_DISABLED: '1'
           jobs:
-            verify-root:
-              runs-on: ubuntu-22.04
+            verify:
+              runs-on: ubuntu-24.04
               timeout-minutes: 60
               steps:
                 - uses: actions/checkout@v4
+                  with:
+                    fetch-depth: 0
+                - uses: pnpm/action-setup@v4
+                  with:
+                    version: 11.7.0
+                    run_install: false
                 - uses: actions/setup-node@v4
                   with:
-                    node-version: '22.20.0'
-                - run: corepack enable
-                - name: Verify PHOENIX genealogy
+                    node-version: '24'
+                    cache: pnpm
+                - name: Verify PHOENIX root
                   run: |
                     node -e "const p=require('./PHOENIX_UPSTREAM.json'); if(p.upstreamCommit!=='b150a551b8d465e31e418e1b2eaf5e79bbb7d28e'||p.importMode!=='root-downstream') process.exit(1)"
-                    test -d apps
-                    test -d packages
-                    test -d native
-                    test -d scripts
-                    test -d vendor
-                    test -f README.deepseek-harness.md
+                    for path in apps packages native scripts vendor website; do test -d "$path"; done
                     test -f LICENSE.deepseek-harness
-                - name: Install upstream-derived workspace
-                  run: pnpm install --frozen-lockfile
-                - name: Build host contracts
-                  run: pnpm run build:lib:host
-                - name: Run upstream primary gate
-                  run: pnpm run check:ci
+                    test -f README.deepseek-harness.md
+                - run: pnpm install --frozen-lockfile
+                - run: pnpm run build:lib:host
+                - run: pnpm run typecheck:contracts-ready
+                - run: pnpm test
           YAML
-
+          for path in apps packages native scripts vendor website; do test -d "$path"; done
+          test -f pnpm-lock.yaml
           git add -A
+          staged="$(git diff --cached --name-only | wc -l | tr -d ' ')"
+          echo "PHOENIX birth staged paths: ${staged}"
+          if (( staged < 5000 )); then echo "Incomplete root import" >&2; exit 1; fi
           git config user.name 'PHOENIX Birth Bot'
           git config user.email 'actions@users.noreply.github.com'
           git commit -m 'birth: PHOENIX rises from DeepSeek Harness root'
-          git push origin HEAD:phoenix/birth-root-v11
+          git fetch origin phoenix/birth-root-v11
+          remote="$(git rev-parse origin/phoenix/birth-root-v11)"
+          [[ "$remote" == "$birth_head" ]]
+          git push --force-with-lease=refs/heads/phoenix/birth-root-v11:${birth_head} origin HEAD:phoenix/birth-root-v11
 
   verify:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.ref != 'phoenix/birth-root-v11'
     runs-on: ubuntu-22.04
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: '22'
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm run verify
