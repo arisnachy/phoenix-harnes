@@ -1,0 +1,10 @@
+- insert:
+    - id: phoenix-runtime
+      name: '@phoenix/dsh-bundle'
+      config:
+        hardContextTokens: 180000
+        protectedPaths:
+          - '.github/'
+          - 'PHOENIX_UPSTREAM.json'
+          - 'packages/security/'
+          - 'upstream/deepseek-harness/'

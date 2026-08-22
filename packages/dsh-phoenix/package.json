@@ -1,0 +1,19 @@
+{
+  "name": "@phoenix/dsh-bundle",
+  "version": "0.1.0",
+  "description": "PHOENIX downstream runtime layer for DeepSeek Harness",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
