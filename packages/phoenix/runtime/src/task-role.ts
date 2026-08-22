@@ -9,7 +9,11 @@ function messageText(messages: readonly UserMessage[]): string {
     .toLowerCase()
 }
 
-/** Deterministic, zero-token first-pass task classifier. */
+/**
+ * Deterministic, zero-token first-pass task classifier.
+ * @param messages - current user-message context whose plain text should be classified.
+ * @returns PHOENIX role selected by stable lexical intent rules.
+ */
 export function classifyTaskRole(messages: readonly UserMessage[]): PhoenixRole {
   const text = messageText(messages)
   if (/security|vulnerab|exploit|threat|attack|secret|credential|permission|sandbox/.test(text)) return 'security'
@@ -23,8 +27,13 @@ export function classifyTaskRole(messages: readonly UserMessage[]): PhoenixRole 
   return 'routine'
 }
 
-/** Cheap tasks should not automatically spawn a separate model process. */
-export function isTrivialDelegation(task: string, maxChars = 220): boolean {
+/**
+ * Decide whether delegation is too small to justify starting another model process.
+ * @param task - delegated objective text.
+ * @param maxChars - maximum length still eligible for the cheap lexical triviality rule.
+ * @returns True for empty or short lookup-style objectives that should use deterministic tools directly.
+ */
+export function isTrivialDelegation(task: string, maxChars: number = 220): boolean {
   const normalized = task.trim().toLowerCase()
   if (normalized.length === 0) return true
   if (normalized.length > maxChars) return false
