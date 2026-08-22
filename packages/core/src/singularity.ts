@@ -1,4 +1,5 @@
-import type { BenchmarkResult } from './arena.js';
+import type { PhoenixRequest } from '@phoenix/contracts';
+import type { BenchmarkResult, BenchmarkTarget } from './arena.js';
 
 export interface EvolutionGate {
   minimumSamples: number;
@@ -11,6 +12,8 @@ export interface EvolutionProposal {
   id: string;
   baseline: string;
   challenger: string;
+  baselineTarget: BenchmarkTarget;
+  challengerTarget: BenchmarkTarget;
   verdict: 'promote_candidate' | 'reject_candidate' | 'insufficient_evidence';
   requiresApproval: true;
   evidence: {
@@ -55,6 +58,8 @@ export class SingularityLab {
       id: `evolution:${baseline.target.id}->${challenger.target.id}`,
       baseline: baseline.target.id,
       challenger: challenger.target.id,
+      baselineTarget: baseline.target,
+      challengerTarget: challenger.target,
       verdict,
       requiresApproval: true,
       evidence: {
@@ -67,6 +72,61 @@ export class SingularityLab {
         samples,
       },
       rollbackPlan: `Restore routing policy to baseline target ${baseline.target.id}`,
+    };
+  }
+}
+
+export interface RoutingPolicySnapshot {
+  active?: BenchmarkTarget;
+  previous?: BenchmarkTarget;
+  approvedProposalId?: string;
+}
+
+export class AdaptiveRoutingPolicy {
+  #active: BenchmarkTarget | undefined;
+  #previous: BenchmarkTarget | undefined;
+  #approvedProposalId: string | undefined;
+
+  public apply(request: PhoenixRequest): PhoenixRequest {
+    if (!this.#active) return request;
+    return {
+      ...request,
+      preferences: {
+        ...(request.preferences ?? {}),
+        preferredProviders: [this.#active.providerId],
+        ...(this.#active.modelId ? { preferredModels: [this.#active.modelId] } : {}),
+      },
+      metadata: {
+        ...(request.metadata ?? {}),
+        adaptivePolicyTarget: this.#active.id,
+        ...(this.#approvedProposalId ? { adaptivePolicyProposal: this.#approvedProposalId } : {}),
+      },
+    };
+  }
+
+  public approve(proposal: EvolutionProposal): RoutingPolicySnapshot {
+    if (proposal.verdict !== 'promote_candidate') {
+      throw new Error(`Cannot approve evolution proposal with verdict ${proposal.verdict}`);
+    }
+    this.#previous = this.#active ?? proposal.baselineTarget;
+    this.#active = proposal.challengerTarget;
+    this.#approvedProposalId = proposal.id;
+    return this.snapshot();
+  }
+
+  public rollback(): RoutingPolicySnapshot {
+    const current = this.#active;
+    this.#active = this.#previous;
+    this.#previous = current;
+    this.#approvedProposalId = undefined;
+    return this.snapshot();
+  }
+
+  public snapshot(): RoutingPolicySnapshot {
+    return {
+      ...(this.#active ? { active: this.#active } : {}),
+      ...(this.#previous ? { previous: this.#previous } : {}),
+      ...(this.#approvedProposalId ? { approvedProposalId: this.#approvedProposalId } : {}),
     };
   }
 }
