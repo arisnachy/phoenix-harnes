@@ -233,6 +233,7 @@ export * from './agents.js';
 export * from './arena.js';
 export * from './bootstrap.js';
 export * from './experience.js';
+export * from './mcpBootstrap.js';
 export * from './memory.js';
 export * from './rebirth.js';
 export * from './scheduler.js';
