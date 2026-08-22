@@ -77,7 +77,8 @@ describe('PHOENIX Mission Graph', () => {
     });
     const rebuilt = new MissionGraph(replacement);
     expect(rebuilt.task('verify').definition.dependencies).toEqual(['path-b']);
-    expect(rebuilt.ready().map((task) => task.definition.id).sort()).toEqual(['path-a', 'path-b']);
+    expect(rebuilt.ready().map((task) => task.definition.id)).toEqual(['path-b']);
+    expect(() => rebuilt.task('path-a')).toThrow(/unknown task/i);
   });
 
   it('assigns each ready role to a model qualified for that role and excludes quarantined model keys', () => {
