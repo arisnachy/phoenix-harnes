@@ -12,3 +12,9 @@
       name: '@phoenix/dsh-bundle/model-router'
       config:
         rankings: []
+    - id: phoenix-agent-roi
+      name: '@phoenix/dsh-bundle/agent-roi'
+      config:
+        subagentToolNames:
+          - subagent
+        trivialMaxChars: 240
