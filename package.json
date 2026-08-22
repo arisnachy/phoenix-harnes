@@ -1,0 +1,20 @@
+{
+  "name": "phoenix-harness",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Universal, provider-agnostic adaptive AI harness.",
+  "type": "module",
+  "packageManager": "pnpm@10.15.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "test": "vitest run",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "verify": "pnpm build && pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

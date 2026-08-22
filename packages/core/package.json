@@ -1,0 +1,18 @@
+{
+  "name": "@phoenix/core",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@phoenix/contracts": "workspace:*",
+    "@phoenix/evolution": "workspace:*",
+    "@phoenix/ledger": "workspace:*",
+    "@phoenix/providers": "workspace:*",
+    "@phoenix/router": "workspace:*"
+  }
+}
