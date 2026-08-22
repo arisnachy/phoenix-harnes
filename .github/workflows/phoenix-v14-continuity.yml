@@ -1,0 +1,29 @@
+name: PHOENIX v14 continuity focal gate
+
+on:
+  pull_request:
+    branches:
+      - phoenix/cognition-v13
+
+permissions:
+  contents: read
+
+jobs:
+  continuity:
+    if: github.event.pull_request.head.ref == 'phoenix/continuity-v14'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install branch workspace for focal verification
+        run: pnpm install --no-frozen-lockfile
+      - name: Memory Genome and Mission Graph tests
+        run: pnpm exec vitest run packages/phoenix/continuity/tests/continuity.spec.ts
+      - name: Continuity package typecheck
+        run: pnpm exec tsc -b packages/phoenix/continuity
+      - name: Diff hygiene
+        run: git diff --check
