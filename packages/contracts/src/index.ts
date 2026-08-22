@@ -4,9 +4,11 @@ export type ProviderProtocol =
   | 'anthropic-messages'
   | 'gemini-native'
   | 'ollama-native'
+  | 'subscription-cli'
   | 'custom';
 
 export type Modality = 'text' | 'image' | 'audio' | 'video';
+export type BillingMode = 'free' | 'local' | 'subscription' | 'metered' | 'unknown';
 
 export interface ModelCapabilities {
   input: readonly Modality[];
@@ -21,6 +23,8 @@ export interface ModelCapabilities {
 
 export interface ModelEconomics {
   free?: boolean;
+  billingMode?: BillingMode;
+  quotaBucket?: string;
   inputPerMillionUsd?: number;
   outputPerMillionUsd?: number;
 }
@@ -78,7 +82,10 @@ export interface RequestRequirements {
 export interface RoutingPreferences {
   preferFree?: boolean;
   preferLocal?: boolean;
+  preferSubscription?: boolean;
   maxEstimatedCostUsd?: number;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
   excludedProviders?: readonly string[];
   preferredProviders?: readonly string[];
   excludedModels?: readonly string[];
@@ -99,9 +106,15 @@ export interface PhoenixResponse {
   content: string;
   toolCalls?: readonly PhoenixToolCall[];
   finishReason?: string;
+  providerSessionId?: string;
+  metadata?: Record<string, string | number | boolean>;
   usage?: {
     inputTokens?: number;
+    cachedInputTokens?: number;
+    cacheWriteInputTokens?: number;
     outputTokens?: number;
+    reasoningOutputTokens?: number;
+    estimatedCostUsd?: number;
   };
 }
 
