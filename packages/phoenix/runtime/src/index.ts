@@ -25,13 +25,21 @@ export * from './model-ladder.ts'
 export * from './task-role.ts'
 export type * from './persistence.ts'
 
+/** PHOENIX runtime policy knobs; all defaults preserve native DSH execution seams. */
 export interface PhoenixRuntimeConfig {
+  /** Enable evidence-ranked model selection for qualified candidates. */
   routing?: boolean
+  /** Permit bounded cross-provider failover after the native provider retry chain declines. */
   failover?: boolean
+  /** Deny trivial delegations whose model cost exceeds the expected deterministic-tool value. */
   agentRoi?: boolean
+  /** Persist local benchmark evidence and quarantine state between harness launches. */
   localEvolution?: boolean
+  /** Optional fail-closed ceiling for measured request-context tokens before a model step may enter. */
   hardContextTokens?: number
+  /** Maximum cross-provider retries PHOENIX may request for one agent step. */
   maxFailoversPerStep?: number
+  /** Optional local state file; defaults under the DSH home directory. */
   statePath?: string
 }
 
