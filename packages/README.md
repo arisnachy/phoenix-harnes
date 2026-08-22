@@ -2,11 +2,11 @@
 
 English | [中文](README.zh.md)
 
-Scopes: DSH `@deepseek-ai/dsh-*`, PHOENIX `@arisnachy/phoenix-*`; Cordis `Service` subclasses and function plugins contribute through `ctx.effect()`, `ctx.on()`, or `ctx.waterfall()`. Rules: [package](AGENTS.md), [root](../AGENTS.md#conventions).
+`@deepseek-ai/dsh-*`; PHOENIX `@arisnachy/phoenix-*`. Cordis plugins use `ctx.effect()`, `ctx.on()`, or `ctx.waterfall()`. Rules: [package](AGENTS.md), [root](../AGENTS.md#conventions).
 
 ## Hierarchy
 
-Groups hold `packages/<group>/<pkg>/`; names follow their owning scope. **Group READMEs own package/ctx-key maps.**
+Groups: `packages/<group>/<pkg>/`; names use owner scope. **Group READMEs own package/ctx-key maps.**
 
 | Group | Role | Release expectation |
 |---|---|---|
