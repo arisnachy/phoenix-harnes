@@ -1,0 +1,149 @@
+name: PHOENIX Birth Root Import
+
+on:
+  push:
+    branches:
+      - phoenix/birth-root-v11
+
+permissions:
+  contents: write
+
+jobs:
+  import-deepseek-root:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout PHOENIX birth branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: phoenix/birth-root-v11
+
+      - name: Import exact DeepSeek Harness snapshot as PHOENIX root
+        shell: bash
+        env:
+          DSH_SHA: b150a551b8d465e31e418e1b2eaf5e79bbb7d28e
+          DSH_REPO: https://github.com/deepseek-ai/deepseek-harness.git
+        run: |
+          set -euo pipefail
+          cp LICENSE /tmp/phoenix-agpl-license
+          if [[ -f SECURITY.md ]]; then cp SECURITY.md /tmp/phoenix-security-v10.md; fi
+
+          git clone --filter=blob:none "$DSH_REPO" /tmp/deepseek-harness
+          git -C /tmp/deepseek-harness checkout --detach "$DSH_SHA"
+          test "$(git -C /tmp/deepseek-harness rev-parse HEAD)" = "$DSH_SHA"
+
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          rsync -a --exclude='.git/' --exclude='.github/' /tmp/deepseek-harness/ ./
+
+          cp LICENSE LICENSE.deepseek-harness
+          cp /tmp/phoenix-agpl-license LICENSE
+          cp README.md README.deepseek-harness.md
+          mkdir -p docs/phoenix .github/workflows
+          if [[ -f /tmp/phoenix-security-v10.md ]]; then cp /tmp/phoenix-security-v10.md docs/phoenix/SECURITY-v10-legacy.md; fi
+
+          cat > PHOENIX_UPSTREAM.json <<'JSON'
+          {
+            "product": "PHOENIX",
+            "upstream": "https://github.com/deepseek-ai/deepseek-harness",
+            "upstreamCommit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e",
+            "upstreamVersion": "0.1.1-rc.2",
+            "importMode": "root-downstream",
+            "upstreamLicense": "MIT",
+            "phoenixModificationsLicense": "AGPL-3.0-only",
+            "legacyPhoenixBranch": "legacy/standalone-v10"
+          }
+          JSON
+
+          cat > README.md <<'MD'
+          # PHOENIX
+
+          **PHOENIX is an evolutive, provider-neutral AI engineering harness born from DeepSeek Harness and transformed as an independent downstream product.**
+
+          This repository intentionally keeps the recognizable DeepSeek Harness monorepo anatomy (`apps/`, `packages/`, `native/`, `scripts/`, `vendor/`, `website/`) because PHOENIX evolves that codebase rather than wrapping it beside another harness.
+
+          PHOENIX adds a capability-ranked model mesh, intelligent routing, cost/context governance, resilient mission execution, security membranes, local evidence-driven evolution, judge/critic separation, clean-room collective observations, and a Windows-first desktop distribution roadmap. These capabilities are integrated into native DeepSeek Harness extension seams rather than maintained as a competing second runtime.
+
+          ## Genealogy
+
+          PHOENIX root was imported from `deepseek-ai/deepseek-harness` commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e` (`dsh@0.1.1-rc.2`). See `PHOENIX_UPSTREAM.json` and `README.deepseek-harness.md` for the pristine upstream documentation preserved at birth.
+
+          ## Licensing
+
+          Original DeepSeek Harness material retains its MIT copyright/license notice in `LICENSE.deepseek-harness`. PHOENIX-specific modifications are distributed under `AGPL-3.0-only`; see the root `LICENSE` and `NOTICE`.
+
+          ## Birth principle
+
+          > DeepSeek Harness is the initial DNA. PHOENIX is the organism we evolve from it.
+
+          Historical standalone PHOENIX v1-v10 is preserved on branch `legacy/standalone-v10` as a migration quarry; it is not the new runtime body.
+          MD
+
+          cat > NOTICE <<'TXT'
+          PHOENIX
+
+          PHOENIX is an independent downstream work derived in part from DeepSeek Harness.
+          The imported DeepSeek Harness snapshot is identified in PHOENIX_UPSTREAM.json and retains the MIT notice in LICENSE.deepseek-harness.
+          PHOENIX-specific modifications are licensed under AGPL-3.0-only as stated in LICENSE.
+
+          DeepSeek and DeepSeek Harness names remain the property of their respective owners. PHOENIX is not represented here as an official DeepSeek product.
+          TXT
+
+          node <<'NODE'
+          const fs = require('fs')
+          const p = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+          p.name = '@phoenix-ai/phoenix-root'
+          p.description = 'PHOENIX evolutive AI engineering harness, downstream of DeepSeek Harness'
+          p.phoenix = {
+            upstream: 'deepseek-ai/deepseek-harness',
+            upstreamCommit: 'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e',
+            lineage: 'root-downstream'
+          }
+          fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n')
+          NODE
+
+          cat > .github/workflows/ci.yml <<'YAML'
+          name: PHOENIX Root CI
+
+          on:
+            pull_request:
+            push:
+              branches: [main]
+
+          permissions:
+            contents: read
+
+          jobs:
+            verify-root:
+              runs-on: ubuntu-22.04
+              timeout-minutes: 60
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-node@v4
+                  with:
+                    node-version: '22.20.0'
+                - run: corepack enable
+                - name: Verify PHOENIX genealogy
+                  run: |
+                    node -e "const p=require('./PHOENIX_UPSTREAM.json'); if(p.upstreamCommit!=='b150a551b8d465e31e418e1b2eaf5e79bbb7d28e'||p.importMode!=='root-downstream') process.exit(1)"
+                    test -d apps
+                    test -d packages
+                    test -d native
+                    test -d scripts
+                    test -d vendor
+                    test -f README.deepseek-harness.md
+                    test -f LICENSE.deepseek-harness
+                - name: Install upstream-derived workspace
+                  run: pnpm install --frozen-lockfile
+                - name: Build host contracts
+                  run: pnpm run build:lib:host
+                - name: Run upstream primary gate
+                  run: pnpm run check:ci
+          YAML
+
+          git add -A
+          git config user.name 'PHOENIX Birth Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git commit -m 'birth: PHOENIX rises from DeepSeek Harness root'
+          git push origin HEAD:phoenix/birth-root-v11
