@@ -42,7 +42,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Development
 
-Start with the [development guide](docs/development.md), [architecture documentation](docs/architecture.md), and the PHOENIX package group under [`packages/phoenix/`](packages/phoenix/).
+Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md). PHOENIX capabilities are integrated through staged, independently verified branches and pull requests so the stable downstream base stays auditable.
 
 For agents, follow [AGENTS.md](AGENTS.md).
 
