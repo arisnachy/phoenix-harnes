@@ -8,3 +8,7 @@
           - 'PHOENIX_UPSTREAM.json'
           - 'packages/security/'
           - 'upstream/deepseek-harness/'
+    - id: phoenix-model-router
+      name: '@phoenix/dsh-bundle/model-router'
+      config:
+        rankings: []
