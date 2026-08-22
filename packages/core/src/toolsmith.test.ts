@@ -100,7 +100,10 @@ describe('PHOENIX Toolsmith and adaptive missions', () => {
     const tools = new ToolRegistry();
     const name = await engine.bindToRegistry(tools, acquisition);
     const result = await tools.execute(name, { value: 9 }, { allowedRisks: ['read', 'write', 'network', 'exec'] });
-    expect(JSON.stringify(result)).toContain('"ok":true');
+    const blocks = result as Array<{ type?: string; text?: string }>;
+    const text = blocks.find((block) => block.type === 'text')?.text;
+    expect(text).toBeDefined();
+    expect(JSON.parse(text ?? '{}')).toMatchObject({ ok: true, input: { value: 9 } });
     await federation.close();
   });
 
