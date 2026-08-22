@@ -248,3 +248,4 @@ export * from '@phoenix/ledger';
 export * from '@phoenix/mcp';
 export * from '@phoenix/providers';
 export * from '@phoenix/router';
+export * from '@phoenix/security';
