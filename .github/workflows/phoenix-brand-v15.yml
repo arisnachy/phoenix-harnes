@@ -1,0 +1,40 @@
+name: PHOENIX Brand v15 gate
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  brand:
+    if: github.event.pull_request.head.ref == 'phoenix/brand-system-v15'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install reproducibly
+        run: pnpm install --frozen-lockfile
+      - name: Focused PHOENIX brand tests
+        run: pnpm exec vitest run packages/client/ui-brand-official/tests/browser-plugin.client.spec.tsx
+      - name: Client package contracts
+        run: pnpm run verify-client-packages
+      - name: Branding documentation contracts
+        run: |
+          pnpm run verify-translation-pairing
+          pnpm run verify-agent-note-format
+          pnpm run verify-export-jsdoc
+      - name: Canonical typecheck
+        run: pnpm run typecheck
+      - name: Build PHOENIX brand package
+        run: pnpm --filter @deepseek-ai/dsh-client-ui-brand-official bundle
+      - name: Web build
+        run: pnpm --filter @deepseek-ai/dsh-web-frontend build
+      - name: Diff hygiene
+        run: git diff --check
