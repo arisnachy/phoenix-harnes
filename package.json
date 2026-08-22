@@ -2,7 +2,7 @@
   "name": "phoenix-harness",
   "version": "0.0.1",
   "private": true,
-  "description": "Universal, provider-agnostic adaptive AI harness.",
+  "description": "PHOENIX: a provider-neutral, adaptive downstream evolution of DeepSeek Harness.",
   "type": "module",
   "packageManager": "pnpm@10.15.0",
   "engines": { "node": ">=22" },
@@ -10,7 +10,8 @@
     "build": "pnpm -r --if-present build",
     "test": "vitest run",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verify": "pnpm build && pnpm typecheck && pnpm test"
+    "verify:dsh-foundation": "node scripts/verify-dsh-foundation.mjs",
+    "verify": "pnpm verify:dsh-foundation && pnpm build && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
