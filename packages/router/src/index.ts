@@ -75,7 +75,9 @@ function scoreCandidate(
 }
 
 export function route(request: PhoenixRequest, input: RouterInput): RouteDecision {
-  const healthByProvider = new Map(input.health?.map((entry) => [entry.providerId, entry]));
+  const healthByProvider = new Map(
+    input.health?.map((entry) => [entry.providerId, entry] as const),
+  );
   const candidates: RouteCandidate[] = [];
   const rejected: Array<{ providerId: string; modelId: string; reason: string }> = [];
   const excluded = new Set(request.preferences?.excludedProviders ?? []);
