@@ -44,7 +44,8 @@ jobs:
                   if next_text != text:
                       path.write_text(next_text)
 
-          # Typert requires explicit annotations on public service properties.
+          # Typert requires explicit annotations on public service properties
+          # and on default-valued public parameters.
           runtime = Path('packages/phoenix/runtime/src/index.ts')
           code = runtime.read_text()
           code = code.replace(
@@ -55,6 +56,34 @@ jobs:
           if 'readonly ladder: ModelCapabilityLadder' not in code:
               raise SystemExit('PHOENIX runtime public ladder annotation missing')
           runtime.write_text(code)
+
+          ladder = Path('packages/phoenix/runtime/src/model-ladder.ts')
+          code = ladder.read_text()
+          code = code.replace(
+              '  snapshot(ref: ModelRef, now = Date.now()): ModelSnapshot | undefined {',
+              '  snapshot(ref: ModelRef, now: number = Date.now()): ModelSnapshot | undefined {',
+          )
+          code = code.replace(
+              '  all(now = Date.now()): ModelSnapshot[] {',
+              '  all(now: number = Date.now()): ModelSnapshot[] {',
+          )
+          code = code.replace(
+              '  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now = Date.now()): RankedModel[] {',
+              '  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now: number = Date.now()): RankedModel[] {',
+          )
+          # Normalize formatting left by the earlier authority-boundary repair.
+          code = code.replace(
+              "  private hasAuthorityEvidence(state: ModelState): boolean {\n  let weightedSamples = 0\n  for (const points of state.evidence.values()) {\n    for (const point of points) {\n      if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n    }\n  }\n  return weightedSamples >= 3\n}\n\nprivate dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {",
+              "  private hasAuthorityEvidence(state: ModelState): boolean {\n    let weightedSamples = 0\n    for (const points of state.evidence.values()) {\n      for (const point of points) {\n        if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n      }\n    }\n    return weightedSamples >= 3\n  }\n\n  private dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {",
+          )
+          required_ladder = [
+              'now: number = Date.now()',
+              'private hasAuthorityEvidence',
+              '  private dimensionSnapshot',
+          ]
+          if any(marker not in code for marker in required_ladder):
+              raise SystemExit('PHOENIX ladder public signature/format patch incomplete')
+          ladder.write_text(code)
 
           # Preserve all upstream release rules, but recognize exactly the
           # downstream PHOENIX package family as owned by this repository.
