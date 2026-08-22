@@ -45,6 +45,14 @@ function benchmark(id: string, score: number, successRate: number, latency: numb
     meanScore: score,
     successRate,
     p50LatencyMs: latency,
+    tokenEfficiency: {
+      knownUsageSamples: 0,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      freshInputTokens: 0,
+      outputTokens: 0,
+      estimatedCostUsd: 0,
+    },
   };
 }
 
