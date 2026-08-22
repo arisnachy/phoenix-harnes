@@ -5,8 +5,18 @@ import type {
   RequestRequirements,
   RoutingPreferences,
 } from '@phoenix/contracts';
+import {
+  buildContinuityCapsule,
+  checkContinuity,
+  continuityCapsuleMessage,
+  extractContinuityAnchors,
+  withoutContinuityCapsules,
+  type ContinuityCapsule,
+  type ContinuityCheck,
+} from './continuity.js';
 import type { SkillLibrary } from './experience.js';
 import type { LocalMemoryStore } from './memory.js';
+import type { ResourceGovernor, ResourceLease } from './resourceGovernor.js';
 import { estimateTokens } from './tokenEconomy.js';
 import type { ToolPolicy, ToolRegistry } from './tools.js';
 
@@ -42,6 +52,20 @@ export interface AgentRunnerOptions {
   skills?: SkillLibrary;
   skillTokenBudget?: number;
   historyTokenBudget?: number;
+  continuityTokenBudget?: number;
+  continuityMinimumScore?: number;
+  resourceGovernor?: ResourceGovernor;
+  estimatedAgentRamMb?: number;
+  agentLeaseMs?: number;
+}
+
+export interface GuardedCompactionResult {
+  messages: PhoenixMessage[];
+  compacted: boolean;
+  beforeTokens: number;
+  afterTokens: number;
+  capsule?: ContinuityCapsule;
+  continuity?: ContinuityCheck;
 }
 
 function renderToolResult(value: unknown): string {
@@ -55,6 +79,10 @@ function renderToolResult(value: unknown): string {
 
 function messageTokens(message: PhoenixMessage): number {
   return estimateTokens(message.content) + estimateTokens(JSON.stringify(message.toolCalls ?? [])) + 4;
+}
+
+function historyTokens(messages: readonly PhoenixMessage[]): number {
+  return messages.reduce((sum, message) => sum + messageTokens(message), 0);
 }
 
 function digestMessage(message: PhoenixMessage): string {
@@ -84,7 +112,7 @@ function clipMessage(message: PhoenixMessage, tokenBudget: number): PhoenixMessa
 
 export function compactAgentHistory(messages: readonly PhoenixMessage[], budgetTokens: number): PhoenixMessage[] {
   const budget = Math.max(256, budgetTokens);
-  const total = messages.reduce((sum, message) => sum + messageTokens(message), 0);
+  const total = historyTokens(messages);
   if (total <= budget) return messages.map((item) => ({ ...item }));
 
   const system = messages.filter((message) => message.role === 'system');
@@ -144,9 +172,50 @@ export function compactAgentHistory(messages: readonly PhoenixMessage[], budgetT
     }
   }
   result.push(...selected);
-
-  // The section budgets are disjoint, so the estimated total stays bounded aside from tiny estimator rounding.
   return result;
+}
+
+export function compactAgentHistoryGuarded(
+  messages: readonly PhoenixMessage[],
+  budgetTokens: number,
+  options: { continuityTokenBudget?: number; minimumScore?: number } = {},
+): GuardedCompactionResult {
+  const clean = withoutContinuityCapsules(messages);
+  const budget = Math.max(512, budgetTokens);
+  const beforeTokens = historyTokens(clean);
+  if (beforeTokens <= budget) {
+    return { messages: clean, compacted: false, beforeTokens, afterTokens: beforeTokens };
+  }
+
+  const capsuleBudget = Math.min(
+    Math.max(160, Math.floor(options.continuityTokenBudget ?? 600)),
+    Math.max(160, Math.floor(budget * 0.35)),
+  );
+  const expected = extractContinuityAnchors(clean);
+  const capsule = buildContinuityCapsule(clean, {
+    budgetTokens: capsuleBudget,
+    minimumScore: options.minimumScore ?? 0.72,
+    minimumRequiredScore: 1,
+  });
+  const continuity = checkContinuity(expected, capsule, {
+    minimumScore: options.minimumScore ?? 0.72,
+    minimumRequiredScore: 1,
+  });
+  if (!continuity.passed) {
+    throw new Error(`Continuity gate failed: score=${continuity.score.toFixed(3)} required=${continuity.requiredScore.toFixed(3)}`);
+  }
+
+  const baseBudget = Math.max(256, budget - capsule.estimatedTokens);
+  const compacted = compactAgentHistory(clean, baseBudget);
+  const capsuleMessage = continuityCapsuleMessage(capsule);
+  const primaryIndex = compacted.findIndex((message) => message.role === 'system');
+  const guarded = [...compacted];
+  guarded.splice(primaryIndex >= 0 ? primaryIndex + 1 : 0, 0, capsuleMessage);
+  const afterTokens = historyTokens(guarded);
+  if (afterTokens > budget + 8) {
+    throw new Error(`Continuity guarded compaction exceeded token budget: ${afterTokens} > ${budget}`);
+  }
+  return { messages: guarded, compacted: true, beforeTokens, afterTokens, capsule, continuity };
 }
 
 export class AgentRunner {
@@ -156,6 +225,24 @@ export class AgentRunner {
   ) {}
 
   public async run(agent: AgentDefinition, input: string, signal?: AbortSignal): Promise<AgentRunResult> {
+    let resourceLease: ResourceLease | undefined;
+    if (this.options.resourceGovernor) {
+      resourceLease = this.options.resourceGovernor.acquire({
+        kind: 'agent',
+        resourceId: agent.id,
+        estimatedRamMb: this.options.estimatedAgentRamMb ?? 512,
+        wallMs: this.options.agentLeaseMs ?? 10 * 60_000,
+        leaseMs: this.options.agentLeaseMs ?? 10 * 60_000,
+      });
+    }
+    try {
+      return await this.#runInternal(agent, input, signal);
+    } finally {
+      if (resourceLease) this.options.resourceGovernor?.release(resourceLease);
+    }
+  }
+
+  async #runInternal(agent: AgentDefinition, input: string, signal?: AbortSignal): Promise<AgentRunResult> {
     let messages: PhoenixMessage[] = [{ role: 'system', content: agent.instructions }];
     const namespace = agent.memoryNamespace ?? `agent:${agent.id}`;
     if (this.options.memory) {
@@ -183,17 +270,24 @@ export class AgentRunner {
     let pinnedModelId: string | undefined;
 
     for (let turn = 1; turn <= maxTurns; turn += 1) {
-      const compacted = compactAgentHistory(messages, historyBudget);
-      if (compacted.length !== messages.length || compacted.some((item, index) => item.content !== messages[index]?.content)) {
+      const guarded = compactAgentHistoryGuarded(messages, historyBudget, {
+        continuityTokenBudget: this.options.continuityTokenBudget ?? 600,
+        minimumScore: this.options.continuityMinimumScore ?? 0.72,
+      });
+      if (guarded.compacted) {
         historyCompactions += 1;
         this.runtime.ledger?.append('economy.history_compacted', {
           agentId: agent.id,
           turn,
-          beforeTokens: messages.reduce((sum, item) => sum + messageTokens(item), 0),
-          afterTokens: compacted.reduce((sum, item) => sum + messageTokens(item), 0),
+          beforeTokens: guarded.beforeTokens,
+          afterTokens: guarded.afterTokens,
+          continuityScore: guarded.continuity?.score ?? 1,
+          requiredContinuityScore: guarded.continuity?.requiredScore ?? 1,
+          continuityAnchors: guarded.capsule?.anchors.length ?? 0,
+          continuityFingerprint: guarded.capsule?.fingerprint ?? null,
         });
       }
-      messages = compacted;
+      messages = guarded.messages;
       const preferences: RoutingPreferences = {
         ...(agent.preferences ?? {}),
         ...(pinnedProviderId ? { preferredProviders: [pinnedProviderId] } : {}),
