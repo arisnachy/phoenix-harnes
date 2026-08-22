@@ -1,4 +1,5 @@
 const ladder = new Map()
+const failoverByAgent = new WeakMap()
 
 const ROLE_WEIGHTS = {
   coding: { coding: 0.55, debugging: 0.2, reasoning: 0.15, reliability: 0.1 },
@@ -9,6 +10,10 @@ const ROLE_WEIGHTS = {
   orchestration: { orchestration: 0.45, planning: 0.25, reasoning: 0.15, reliability: 0.15 },
   routine: { efficiency: 0.4, toolUse: 0.2, reliability: 0.2, reasoning: 0.2 },
 }
+
+const FAILOVER_CODES = new Set([
+  'RATE_LIMIT', 'SERVER', 'TRANSPORT', 'TIMEOUT', 'QUOTA_EXCEEDED', 'EMPTY_RESPONSE', 'OVERLOADED',
+])
 
 function key(provider, model) { return `${provider}\u0000${model}` }
 function clamp(n) { return Math.max(0, Math.min(100, Number(n) || 0)) }
@@ -66,6 +71,13 @@ function roleScore(entry, role) {
   return score * (0.7 + confidence * 0.3) - failurePenalty
 }
 
+function ranked(role, excludedProviders = new Set()) {
+  return [...ladder.values()]
+    .filter(item => item.status === 'qualified' && item.samples >= 3 && !excludedProviders.has(item.provider))
+    .map(item => ({ item, score: roleScore(item, role) }))
+    .sort((a, b) => b.score - a.score || a.item.provider.localeCompare(b.item.provider) || a.item.model.localeCompare(b.item.model))
+}
+
 async function refresh(ctx) {
   const providers = ctx.llm.listProviders().map(item => item.id ?? item.provider ?? item.name).filter(Boolean)
   await Promise.all(providers.map(async provider => {
@@ -96,11 +108,9 @@ export function apply(ctx, config = {}) {
   ctx.on('agent/request', async ({ agent }, next) => {
     const base = await next()
     const role = classifyPhoenixRole(lastUserText(agent))
-    const qualified = [...ladder.values()]
-      .filter(item => item.status === 'qualified' && item.samples >= 3)
-      .map(item => ({ item, score: roleScore(item, role) }))
-      .sort((a, b) => b.score - a.score || a.item.provider.localeCompare(b.item.provider) || a.item.model.localeCompare(b.item.model))
-    const winner = qualified[0]?.item
+    const failover = failoverByAgent.get(agent)
+    const excluded = failover?.excludedProviders ?? new Set()
+    const winner = ranked(role, excluded)[0]?.item
     if (!winner) return base
     return { ...base, provider: winner.provider, model: winner.model }
   })
@@ -109,6 +119,18 @@ export function apply(ctx, config = {}) {
     for (const item of ladder.values()) {
       if (item.provider === payload.provider && item.status === 'qualified') item.failures += 1
     }
-    return next()
+    if (!FAILOVER_CODES.has(String(payload.failure?.code ?? ''))) return next()
+    const role = classifyPhoenixRole(lastUserText(payload.agent))
+    const current = failoverByAgent.get(payload.agent) ?? { excludedProviders: new Set(), failovers: 0 }
+    current.excludedProviders.add(payload.provider)
+    current.failovers += 1
+    failoverByAgent.set(payload.agent, current)
+    const alternative = ranked(role, current.excludedProviders)[0]?.item
+    if (!alternative) return next()
+    return { kind: 'retry' }
+  })
+
+  ctx.on('agent/status', ({ agent, status }) => {
+    if (status === 'idle') failoverByAgent.delete(agent)
   })
 }
