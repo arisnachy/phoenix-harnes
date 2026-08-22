@@ -1,5 +1,7 @@
 # @arisnachy/phoenix-bundle
 
+[English](README.md) | 中文
+
 PHOENIX 是 DeepSeek Harness 的 profile bundle。它在标准 base profile 之后挂载 PHOENIX 自适应 runtime，以及官方 Codex 与 Claude Code 子代理桥接。
 
 该 bundle 不会因为模型来自 Codex、Claude Code 或任何新 provider 就自动授予指挥权。PHOENIX 根据可验证能力进行排名，新模型保持 provisional，并在 DSH 原生能力接缝周围执行本地策略、ROI 与安全门控。
