@@ -37,6 +37,26 @@ export class ToolRegistry {
     this.#tools.set(tool.name, tool);
   }
 
+  public upsert(tool: RuntimeTool): void {
+    this.#tools.set(tool.name, tool);
+  }
+
+  public unregister(name: string): boolean {
+    return this.#tools.delete(name);
+  }
+
+  public has(name: string): boolean {
+    return this.#tools.has(name);
+  }
+
+  public get(name: string): RuntimeTool | undefined {
+    return this.#tools.get(name);
+  }
+
+  public names(): readonly string[] {
+    return [...this.#tools.keys()].sort();
+  }
+
   public definitions(names?: readonly string[]): PhoenixTool[] {
     const allowed = names ? new Set(names) : undefined;
     return [...this.#tools.values()]

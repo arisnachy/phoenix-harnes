@@ -12,6 +12,7 @@
     "@phoenix/contracts": "workspace:*",
     "@phoenix/evolution": "workspace:*",
     "@phoenix/ledger": "workspace:*",
+    "@phoenix/mcp": "workspace:*",
     "@phoenix/providers": "workspace:*",
     "@phoenix/router": "workspace:*"
   }

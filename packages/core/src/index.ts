@@ -228,18 +228,22 @@ export class PhoenixRuntime {
   }
 }
 
+export * from './adaptiveMission.js';
 export * from './agents.js';
 export * from './arena.js';
 export * from './bootstrap.js';
 export * from './experience.js';
+export * from './mcpBootstrap.js';
 export * from './memory.js';
 export * from './rebirth.js';
 export * from './scheduler.js';
 export * from './singularity.js';
 export * from './tokenEconomy.js';
 export * from './tools.js';
+export * from './toolsmith.js';
 export * from '@phoenix/contracts';
 export * from '@phoenix/evolution';
 export * from '@phoenix/ledger';
+export * from '@phoenix/mcp';
 export * from '@phoenix/providers';
 export * from '@phoenix/router';

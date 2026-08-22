@@ -11,6 +11,10 @@ PHOENIX is a local-first, provider-agnostic runtime for resilient AI agents and 
 - **Universal OpenAI-compatible provider fabric** for gateways, hosted APIs, self-hosted servers and local engines.
 - **OrcaRouter free bootstrap** and **Ollama local discovery**.
 - **Subscription lanes** for locally installed/authenticated Codex CLI and Claude Code CLI; PHOENIX never copies their authentication material.
+- **MCP Federation** with lazy tool discovery/search, stdio + Streamable HTTP execution and bounded tool outputs.
+- **Codex + Claude Code MCP interoperability**: import `~/.codex/config.toml`, `.mcp.json`, `~/.claude.json`, and optionally expose `codex mcp-server` / `claude mcp serve` as federated servers.
+- **Toolsmith Forge**: search existing capabilities first; when a capability is missing, create a constrained ephemeral local MCP, discover it, probe it and promote only after verification.
+- **Adaptive Mission Runner**: if a capability or execution path fails, record the evidence, pivot to a materially different approach and acquire/forge different tools within bounded attempts.
 - **Universal provider manifest**: local/free/subscription/API providers coexist without editing core.
 - **Capability-aware routing** plus provider/model preferences, exclusions, fallback and circuit breaking.
 - **Token Governor** that classifies task complexity, applies budgets and chooses local/free/subscription/metered lanes.
@@ -26,6 +30,34 @@ PHOENIX is a local-first, provider-agnostic runtime for resilient AI agents and 
 - **Benchmark Arena** for quality, success, latency, fresh/cached input tokens, output tokens and reported cost.
 - **Singularity Lab + Adaptive Routing Policy** for evidence-gated promotion and rollback.
 - **Append-only hash-chained execution ledger** for auditable decisions.
+
+## Adaptive capability thesis
+
+PHOENIX treats a missing tool as a solvable capability gap, not automatically as mission failure:
+
+```text
+mission
+  ↓
+what capabilities are missing?
+  ↓
+lazy-search existing MCP federation
+  ├─ found → policy → use
+  └─ missing
+       ↓
+    constrained blueprint
+       ↓
+    ephemeral local MCP
+       ↓
+    discover + probe
+      ├─ fail → evidence → different tool/path
+      └─ pass → verified → bind
+  ↓
+execute
+  ├─ success
+  └─ fail → strategy pivot → new capabilities → retry
+```
+
+Generated v3 tools are deliberately constrained to fixed `http-json` or `command-json` wrappers. PHOENIX does not treat arbitrary generated code as trusted merely because a model wrote it.
 
 ## The efficiency thesis
 
@@ -53,7 +85,7 @@ next similar mission starts cheaper
 
 The Benchmark Arena does not call a configuration "better" merely because it is cheaper. `compareEfficiency()` requires quality/success to remain materially non-worse and fresh input-token consumption to be lower before `dominates=true`.
 
-See [`docs/EFFICIENCY_RUNTIME.md`](docs/EFFICIENCY_RUNTIME.md) and [`docs/SINGULARITY_RUNTIME.md`](docs/SINGULARITY_RUNTIME.md).
+See [`docs/TOOLSMITH_RUNTIME.md`](docs/TOOLSMITH_RUNTIME.md), [`docs/EFFICIENCY_RUNTIME.md`](docs/EFFICIENCY_RUNTIME.md) and [`docs/SINGULARITY_RUNTIME.md`](docs/SINGULARITY_RUNTIME.md).
 
 ## Provider manifest
 
@@ -90,7 +122,22 @@ The `codex-cli` lane launches the user's official local Codex CLI in `read-only`
 
 The `claude-code-cli` lane launches the user's authenticated Claude Code CLI with `--permission-mode plan`. PHOENIX captures the returned session/usage telemetry but retains execution authority in its own Tool Registry.
 
-## Bootstrap
+## MCP bootstrap
+
+```ts
+import {
+  McpFederation,
+  bootstrapMcpFederation,
+} from '@phoenix/core';
+
+const federation = new McpFederation();
+const report = await bootstrapMcpFederation(federation);
+console.log(report.servers);
+```
+
+By default PHOENIX looks for the user's Codex/Claude MCP configuration and registers the official Codex/Claude agent-server launchers. Imported servers start untrusted; discovery/import does not equal authority to execute writes or commands.
+
+## Provider bootstrap
 
 ```ts
 import {
@@ -157,7 +204,7 @@ pnpm run verify
 
 ## Status
 
-**Pre-alpha / evolutionary runtime.** PHOENIX is now explicitly instrumented to test whether its routing/context/experience strategies can match or exceed raw vendor-harness quality with lower fresh-token consumption. Global superiority is not assumed; it must be demonstrated on reproducible live workloads.
+**Pre-alpha / evolutionary runtime.** PHOENIX is instrumented to test whether its routing, context, experience and adaptive-capability strategies can match or exceed raw vendor-harness quality with lower fresh-token consumption. Global superiority is not assumed; it must be demonstrated on reproducible live workloads.
 
 ## License
 
