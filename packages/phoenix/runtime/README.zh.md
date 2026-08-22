@@ -1,6 +1,6 @@
 # PHOENIX Runtime
 
-`@deepseek-ai/dsh-phoenix-runtime` 是 DeepSeek Harness 树中的首个原生 PHOENIX 智能层。它复用 DSH 的 agent loop、LLM registry、token meter、tools pipeline、sandbox seam、durable sessions、compaction、jobs 与 subagents，而不是复制这些能力。
+`@arisnachy/phoenix-runtime` 是 DeepSeek Harness 树中的首个原生 PHOENIX 智能层。它复用 DSH 的 agent loop、LLM registry、token meter、tools pipeline、sandbox seam、durable sessions、compaction、jobs 与 subagents，而不是复制这些能力。
 
 ## 它增加什么
 
@@ -26,7 +26,7 @@ PHOENIX 不把 provider 名、模型名、流行度或 frontier 标签视作权�
 
 #### What the model sees
 
-模型不会直接看到新的强制提示文本。PHOENIX Runtime 默认不把策略状态暴露给模型，而是在现有 DSH request、tool 与 subagent 接缝周围执行策略。
+模型不会直接看到新的强制提示文本。策略服务在 harness 中以 `ctx.phoenix` 暴露，但 PHOENIX Runtime 默认不把策略状态暴露给模型，而是在现有 DSH request、tool 与 subagent 接缝周围执行策略。
 
 #### Token effect
 
