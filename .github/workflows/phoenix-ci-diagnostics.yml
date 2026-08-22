@@ -49,7 +49,7 @@ jobs:
       - name: Coverage / instrumented partitions
         env:
           DSH_COVERAGE_EXEMPT_HEAVY: '1'
-        run: pnpm run test:coverage:partitioned -- --testTimeout=30000 --expect.poll.timeout=30000
+        run: pnpm run test:coverage:partitioned
       - name: Coverage / exempt heavy suites
         run: >-
           pnpm exec vitest run
@@ -181,7 +181,7 @@ jobs:
         shell: pwsh
         env:
           DSH_COVERAGE_EXEMPT_HEAVY: '1'
-        run: pnpm run test:coverage:partitioned -- --testTimeout=30000 --expect.poll.timeout=30000
+        run: pnpm run test:coverage:partitioned
       - name: Windows / coverage exempt heavy suites
         shell: pwsh
         run: >-
