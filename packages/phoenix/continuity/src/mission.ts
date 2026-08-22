@@ -164,7 +164,9 @@ export function startMissionTask(
 ): PhoenixMissionRecord {
   return updateTask(mission, taskId, task => {
     if (task.state !== 'ready') throw new PhoenixMissionError(`task '${taskId}' is not ready`)
-    return { ...task, state: 'running', attempts: task.attempts + 1, lastError: undefined }
+    const next: PhoenixMissionTaskRecord = { ...task, state: 'running', attempts: task.attempts + 1 }
+    delete next.lastError
+    return next
   }, now)
 }
 
@@ -184,12 +186,11 @@ export function succeedMissionTask(
 ): PhoenixMissionRecord {
   return updateTask(mission, taskId, task => {
     if (task.state !== 'running') throw new PhoenixMissionError(`task '${taskId}' is not running`)
-    return {
-      ...task,
-      state: 'succeeded',
-      lastError: undefined,
-      ...(outputFingerprint === undefined ? {} : { outputFingerprint: requireNonBlank('output fingerprint', outputFingerprint) }),
-    }
+    const next: PhoenixMissionTaskRecord = { ...task, state: 'succeeded' }
+    delete next.lastError
+    if (outputFingerprint === undefined) delete next.outputFingerprint
+    else next.outputFingerprint = requireNonBlank('output fingerprint', outputFingerprint)
+    return next
   }, now)
 }
 
@@ -253,10 +254,13 @@ export function pivotMissionTask(
   }
   const tasks: PhoenixMissionTaskRecord[] = []
   for (const task of mission.tasks) {
-    const dependencies = task.dependencies.map(dependency => dependency === request.taskId ? request.replacementId : dependency)
+    const rewired = task.dependencies.includes(request.taskId)
+    const dependencies = rewired
+      ? task.dependencies.map(dependency => dependency === request.taskId ? request.replacementId : dependency)
+      : task.dependencies
     tasks.push(task.id === request.taskId
       ? { ...task, state: 'blocked', replacedBy: request.replacementId }
-      : dependencies === task.dependencies ? task : { ...task, dependencies })
+      : rewired ? { ...task, dependencies } : task)
     if (task.id === request.taskId) tasks.push(replacement)
   }
   assertAcyclic(tasks)
