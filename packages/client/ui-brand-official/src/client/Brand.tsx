@@ -49,14 +49,14 @@ export function PhoenixBrandMark({ size, className }: PhoenixBrandMarkProps) {
 
 /**
  * Render the PHOENIX wordmark independently from the emblem.
- * @returns the responsive PHOENIX wordmark.
+ * @returns the PHOENIX wordmark sized for the existing sidebar name seat.
  */
 export function PhoenixBrandName() {
   return (
     <svg
       viewBox={PHOENIX_WORDMARK_VIEWBOX}
-      width="176"
-      height="28"
+      width="156"
+      height="24"
       role="img"
       aria-label="PHOENIX"
     >
