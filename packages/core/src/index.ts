@@ -241,6 +241,7 @@ export * from './singularity.js';
 export * from './tokenEconomy.js';
 export * from './tools.js';
 export * from './toolsmith.js';
+export * from '@phoenix/collective';
 export * from '@phoenix/contracts';
 export * from '@phoenix/evolution';
 export * from '@phoenix/ledger';
