@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply, inject } from '../src/client/index.ts'
-import { OfficialBrandMark, OfficialBrandName } from '../src/client/Brand.tsx'
+import { PhoenixBrandMark, PhoenixBrandName } from '../src/client/Brand.tsx'
 
 afterEach(() => {
   cleanup()
@@ -29,20 +29,19 @@ async function bench(declare = true) {
   return { ctx, slots, declareHoles, disposeHoles }
 }
 
-describe('official browser-brand plugin', () => {
+describe('PHOENIX browser-brand plugin', () => {
   it('declares only the slot service it uses', () => {
     expect(inject).toEqual(['slots'])
   })
 
-  it('leaves every slot empty outside the official build profile', async () => {
-    vi.stubEnv('DSH_CLIENT_BUILD_PROFILE', 'local')
+  it.each(['local', 'official'] as const)('fills every brand slot in the %s build profile', async profile => {
+    vi.stubEnv('DSH_CLIENT_BUILD_PROFILE', profile)
     const subject = await bench()
     await subject.ctx.plugin({ inject: [...inject], apply }).await()
-    for (const hole of HOLES) expect(subject.slots.entries(hole)).toHaveLength(0)
+    for (const hole of HOLES) expect(subject.slots.entries(hole)).toHaveLength(1)
   })
 
   it('fills declarations before or after apply and removes every occupant on teardown', async () => {
-    vi.stubEnv('DSH_CLIENT_BUILD_PROFILE', 'official')
     const before = await bench()
     const fiber = before.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
@@ -65,15 +64,18 @@ describe('official browser-brand plugin', () => {
     for (const hole of HOLES) expect(after.slots.entries(hole)).toHaveLength(1)
   })
 
-  it('renders the official name independently from both requested mark sizes', () => {
-    const name = render(<OfficialBrandName />)
-    expect(name.container.querySelector('svg')?.getAttribute('viewBox')).toBe('26 0 156 24')
+  it('renders the PHOENIX wordmark independently from responsive mark sizes', () => {
+    const name = render(<PhoenixBrandName />)
+    expect(name.getByRole('img', { name: 'PHOENIX' })).toBeTruthy()
+    expect(name.container.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 176 28')
+    expect(name.container.textContent).toContain('PHOENIX')
     name.unmount()
 
-    const mark = render(<OfficialBrandMark size={34} className="hero-mark" />)
+    const mark = render(<PhoenixBrandMark size={34} className="hero-mark" />)
+    expect(mark.container.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 64 64')
     expect(mark.container.querySelector('svg')?.getAttribute('width')).toBe('34')
     expect(mark.container.querySelector('svg')?.getAttribute('class')).toBe('hero-mark')
-    mark.rerender(<OfficialBrandMark size={24} />)
+    mark.rerender(<PhoenixBrandMark size={24} />)
     expect(mark.container.querySelector('svg')?.getAttribute('width')).toBe('24')
   })
 })

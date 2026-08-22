@@ -1,0 +1,4 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority.
+2026-08-22-phoenix-brand-system.md: acfeb1dd33a2af289e82ea23d1be4d5f9b4dec6e
+2026-08-22-phoenix-brand-system.zh.md: fc68c0ecdf3a4af82958eed861add8fbb17e48e0
