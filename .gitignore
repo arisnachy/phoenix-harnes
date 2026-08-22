@@ -9,3 +9,4 @@ coverage/
 .pnpm-store/
 .phoenix/
 phoenix.providers.json
+phoenix.evolution.json

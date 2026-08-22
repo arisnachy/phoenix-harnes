@@ -1,0 +1,19 @@
+{
+  "enabled": false,
+  "mode": "minimal",
+  "dailyBudget": {
+    "maxAiTokens": 200,
+    "maxCpuMs": 60000,
+    "maxNetworkBytes": 51200,
+    "maxSubscriptionCalls": 0
+  },
+  "privacy": {
+    "shareRawPrompts": false,
+    "shareSecrets": false,
+    "sharePrivateSource": false
+  },
+  "roles": {
+    "contribute": true,
+    "judge": true
+  }
+}
