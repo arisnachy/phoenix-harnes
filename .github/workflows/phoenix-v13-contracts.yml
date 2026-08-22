@@ -28,7 +28,7 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Enforce complete Repo Brain output byte bound
+      - name: Enforce complete Repo Brain output byte bound and public signatures
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -51,11 +51,20 @@ jobs:
           )
 
           query_anchor = """function queryTerms(query: string): string[] {\n  return uniqueBounded(words(query), 64)\n}\n"""
-          cap_function = """function queryTerms(query: string): string[] {\n  return uniqueBounded(words(query), 64)\n}\n\n/** Bound complete model-facing text by UTF-8 bytes without splitting a code point. */\nexport function capToolText(text: string, maxBytes: number): string {\n  assertPositiveInteger('maxOutputBytes', maxBytes)\n  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text\n  const normalSuffix = '\\n...[truncated]'\n  const suffix = Buffer.byteLength(normalSuffix, 'utf8') <= maxBytes ? normalSuffix : '.' .repeat(maxBytes)\n  const budget = maxBytes - Buffer.byteLength(suffix, 'utf8')\n  let prefix = ''\n  let used = 0\n  for (const character of text) {\n    const bytes = Buffer.byteLength(character, 'utf8')\n    if (used + bytes > budget) break\n    prefix += character\n    used += bytes\n  }\n  return prefix + suffix\n}\n"""
+          cap_function = """function queryTerms(query: string): string[] {\n  return uniqueBounded(words(query), 64)\n}\n\n/** Bound complete model-facing text by UTF-8 bytes without splitting a code point. */\nexport function capToolText(text: string, maxBytes: number): string {\n  assertPositiveInteger('maxOutputBytes', maxBytes)\n  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text\n  const normalSuffix = '\\n...[truncated]'\n  const suffix = Buffer.byteLength(normalSuffix, 'utf8') <= maxBytes ? normalSuffix : '.'.repeat(maxBytes)\n  const budget = maxBytes - Buffer.byteLength(suffix, 'utf8')\n  let prefix = ''\n  let used = 0\n  for (const character of text) {\n    const bytes = Buffer.byteLength(character, 'utf8')\n    if (used + bytes > budget) break\n    prefix += character\n    used += bytes\n  }\n  return prefix + suffix\n}\n"""
           if 'export function capToolText' not in code:
               if query_anchor not in code:
                   raise SystemExit('Repo Brain queryTerms anchor not found')
               code = code.replace(query_anchor, cap_function, 1)
+
+          code = code.replace(
+              '  async search(query: string, limit = this.config.defaultLimit): Promise<RepoBrainSearchHit[]> {',
+              '  async search(query: string, limit: number = this.config.defaultLimit): Promise<RepoBrainSearchHit[]> {',
+          )
+          code = code.replace(
+              '  async impact(path: string, depth = 2, limit = MAX_TOOL_LIMIT): Promise<RepoBrainImpactHit[]> {',
+              '  async impact(path: string, depth: number = 2, limit: number = MAX_TOOL_LIMIT): Promise<RepoBrainImpactHit[]> {',
+          )
 
           code = code.replace(
               '    defaultLimit: z.number().default(DEFAULT_LIMIT),\n',
@@ -94,8 +103,14 @@ jobs:
               "          return bounded(`Repo Brain stats: files=${stats.files}, symbols=${stats.symbols}, edges=${stats.edges}, indexed=${String(stats.indexed)}.`)",
           )
 
-          if "const bounded = (text: string)" not in code or 'maxOutputBytes: z.number()' not in code:
-              raise SystemExit('Repo Brain output-bound patch incomplete')
+          required = [
+              "const bounded = (text: string)",
+              'maxOutputBytes: z.number()',
+              'limit: number = this.config.defaultLimit',
+              'depth: number = 2, limit: number = MAX_TOOL_LIMIT',
+          ]
+          if any(marker not in code for marker in required):
+              raise SystemExit('Repo Brain contract patch incomplete')
           path.write_text(code)
           PY
 
