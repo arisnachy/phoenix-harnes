@@ -73,16 +73,27 @@ export interface ToolsmithGenerationRuntime {
 function parseObject(text: string): Record<string, unknown> {
   const trimmed = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const parsed = JSON.parse(trimmed) as unknown;
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Expected JSON object');
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Expected JSON object');
+  }
   return parsed as Record<string, unknown>;
 }
 
 function stringArray(value: unknown): string[] | undefined {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined;
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : undefined;
 }
 
 function parseRisk(value: unknown): McpRisk {
   return value === 'write' || value === 'network' || value === 'exec' ? value : 'read';
+}
+
+function stringMap(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 export class PhoenixToolsmithPlanner implements ToolsmithPlanner {
@@ -106,6 +117,7 @@ export class PhoenixToolsmithPlanner implements ToolsmithPlanner {
       preferences: { preferLocal: true, preferFree: true, preferSubscription: true },
       metadata: { purpose: 'toolsmith-identify-needs', cacheable: 'true' },
     });
+
     const root = parseObject(response.content);
     const needs = Array.isArray(root.needs) ? root.needs : [];
     return needs.flatMap((raw, index): CapabilityNeed[] => {
@@ -113,12 +125,14 @@ export class PhoenixToolsmithPlanner implements ToolsmithPlanner {
       const item = raw as Record<string, unknown>;
       const query = typeof item.query === 'string' ? item.query.trim() : '';
       if (!query) return [];
+      const acceptableRiskValues = stringArray(item.acceptableRisks);
+      const acceptableRisks = acceptableRiskValues?.map(parseRisk);
       return [{
         id: typeof item.id === 'string' && item.id.trim() ? item.id : `need-${index + 1}`,
         query,
         reason: typeof item.reason === 'string' ? item.reason : query,
         required: item.required !== false,
-        ...(stringArray(item.acceptableRisks) ? { acceptableRisks: stringArray(item.acceptableRisks)?.map(parseRisk) } : {}),
+        ...(acceptableRisks?.length ? { acceptableRisks } : {}),
         ...(item.testInput && typeof item.testInput === 'object' && !Array.isArray(item.testInput)
           ? { testInput: item.testInput as Record<string, unknown> }
           : {}),
@@ -147,27 +161,38 @@ export class PhoenixToolsmithPlanner implements ToolsmithPlanner {
             '{"id":"...","toolName":"...","description":"...","inputSchema":{"type":"object"},"risk":"read|write|network|exec","implementation":{"kind":"http-json|command-json","url":"https://...","method":"GET|POST","headersEnv":{"Authorization":"TOKEN_ENV"},"command":"binary","args":[]},"probeInput":{},"rationale":"..."}',
           ].join('\n'),
         },
-        {
-          role: 'user',
-          content: JSON.stringify({ mission, need, failures: failures.slice(-4) }),
-        },
+        { role: 'user', content: JSON.stringify({ mission, need, failures: failures.slice(-4) }) },
       ],
       requirements: { json: true, reasoning: true },
       preferences: { preferLocal: true, preferFree: true, preferSubscription: true },
       metadata: { purpose: 'toolsmith-blueprint' },
     });
+
     const root = parseObject(response.content);
     const implementationRaw = root.implementation;
     if (!implementationRaw || typeof implementationRaw !== 'object' || Array.isArray(implementationRaw)) {
       throw new Error('Toolsmith blueprint missing implementation');
     }
     const implementation = implementationRaw as Record<string, unknown>;
-    const kind = implementation.kind === 'command-json' ? 'command-json' : 'http-json';
-    const toolName = typeof root.toolName === 'string' ? root.toolName.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
+    const kind: ForgeImplementationKind = implementation.kind === 'command-json' ? 'command-json' : 'http-json';
+    const toolName = typeof root.toolName === 'string'
+      ? root.toolName.replace(/[^a-zA-Z0-9_-]/g, '_')
+      : '';
     if (!toolName) throw new Error('Toolsmith blueprint missing toolName');
+
     const inputSchema = root.inputSchema && typeof root.inputSchema === 'object' && !Array.isArray(root.inputSchema)
       ? root.inputSchema as Record<string, unknown>
       : { type: 'object', additionalProperties: true };
+    const headersEnv = stringMap(implementation.headersEnv);
+    const args = stringArray(implementation.args);
+    const method = implementation.method === 'GET'
+      || implementation.method === 'POST'
+      || implementation.method === 'PUT'
+      || implementation.method === 'PATCH'
+      || implementation.method === 'DELETE'
+      ? implementation.method
+      : undefined;
+
     const blueprint: ToolBlueprint = {
       id: typeof root.id === 'string' && root.id.trim() ? root.id : randomUUID(),
       toolName,
@@ -177,14 +202,10 @@ export class PhoenixToolsmithPlanner implements ToolsmithPlanner {
       implementation: {
         kind,
         ...(typeof implementation.url === 'string' ? { url: implementation.url } : {}),
-        ...(implementation.method === 'GET' || implementation.method === 'POST' || implementation.method === 'PUT' || implementation.method === 'PATCH' || implementation.method === 'DELETE'
-          ? { method: implementation.method }
-          : {}),
-        ...(implementation.headersEnv && typeof implementation.headersEnv === 'object' && !Array.isArray(implementation.headersEnv)
-          ? { headersEnv: Object.fromEntries(Object.entries(implementation.headersEnv as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) }
-          : {}),
+        ...(method ? { method } : {}),
+        ...(headersEnv ? { headersEnv } : {}),
         ...(typeof implementation.command === 'string' ? { command: implementation.command } : {}),
-        ...(stringArray(implementation.args) ? { args: stringArray(implementation.args) } : {}),
+        ...(args ? { args } : {}),
       },
       ...(root.probeInput && typeof root.probeInput === 'object' && !Array.isArray(root.probeInput)
         ? { probeInput: root.probeInput as Record<string, unknown> }
@@ -197,19 +218,26 @@ export class PhoenixToolsmithPlanner implements ToolsmithPlanner {
 }
 
 function validateBlueprint(blueprint: ToolBlueprint): void {
-  if (!/^[a-zA-Z0-9_-]{1,80}$/.test(blueprint.toolName)) throw new Error('Invalid forged tool name');
+  if (!/^[a-zA-Z0-9_-]{1,80}$/.test(blueprint.toolName)) {
+    throw new Error('Invalid forged tool name');
+  }
   if (blueprint.implementation.kind === 'http-json') {
     if (!blueprint.implementation.url) throw new Error('http-json blueprint requires url');
     const url = new URL(blueprint.implementation.url);
     if (url.protocol !== 'https:' && !['localhost', '127.0.0.1', '::1'].includes(url.hostname)) {
       throw new Error('Forged HTTP tools require HTTPS except loopback development endpoints');
     }
-  } else {
-    const command = blueprint.implementation.command?.trim();
-    if (!command) throw new Error('command-json blueprint requires command');
-    if (/\s|[;&|`$<>]/.test(command)) throw new Error('Forged command must be a single executable path/name without shell syntax');
-    for (const arg of blueprint.implementation.args ?? []) {
-      if (/[;&|`<>]/.test(arg)) throw new Error('Forged command args may not contain shell control syntax');
+    return;
+  }
+
+  const command = blueprint.implementation.command?.trim();
+  if (!command) throw new Error('command-json blueprint requires command');
+  if (/\s|[;&|`$<>]/.test(command)) {
+    throw new Error('Forged command must be a single executable path/name without shell syntax');
+  }
+  for (const arg of blueprint.implementation.args ?? []) {
+    if (/[;&|`<>]/.test(arg)) {
+      throw new Error('Forged command args may not contain shell control syntax');
     }
   }
 }
@@ -276,7 +304,10 @@ async function execute(input) {
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', reject);
     child.on('close', (code) => {
-      if (code !== 0) return reject(new Error('Command exit ' + code + ': ' + stderr.slice(-1000)));
+      if (code !== 0) {
+        reject(new Error('Command exit ' + code + ': ' + stderr.slice(-1000)));
+        return;
+      }
       const trimmed = stdout.trim();
       try { resolve(JSON.parse(trimmed)); } catch { resolve(trimmed); }
     });
@@ -297,7 +328,7 @@ for await (const line of rl) {
         serverInfo: { name: 'phoenix-forged-${blueprint.toolName}', version: '0.0.1' },
       });
     } else if (request.method === 'notifications/initialized') {
-      // no response for notifications
+      continue;
     } else if (request.method === 'ping') {
       ok(id, {});
     } else if (request.method === 'tools/list') {
@@ -307,9 +338,15 @@ for await (const line of rl) {
         inputSchema: blueprint.inputSchema,
       }] });
     } else if (request.method === 'tools/call') {
-      if (request.params?.name !== blueprint.toolName) return fail(id, -32601, 'Unknown tool');
+      if (request.params?.name !== blueprint.toolName) {
+        fail(id, -32601, 'Unknown tool');
+        continue;
+      }
       const value = await execute(request.params?.arguments || {});
-      ok(id, { content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }], isError: false });
+      ok(id, {
+        content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+        isError: false,
+      });
     } else {
       fail(id, -32601, 'Method not found');
     }
@@ -336,14 +373,14 @@ export class McpForge {
     const manifestPath = join(directory, 'forge.json');
     await writeFile(serverPath, generatedServerSource(blueprint), 'utf8');
     await chmod(serverPath, 0o700).catch(() => undefined);
-    const persisted = {
+    await writeFile(manifestPath, `${JSON.stringify({
       version: 1,
       status: 'ephemeral',
       createdAt: new Date().toISOString(),
       blueprint,
       provenance: { source: 'phoenix-toolsmith', autoPromoted: false },
-    };
-    await writeFile(manifestPath, `${JSON.stringify(persisted, null, 2)}\n`, 'utf8');
+    }, null, 2)}\n`, 'utf8');
+
     return {
       id,
       directory,
@@ -365,7 +402,11 @@ export class McpForge {
 
   public async promote(artifact: ForgedArtifact): Promise<void> {
     const raw = JSON.parse(await readFile(artifact.manifestPath, 'utf8')) as Record<string, unknown>;
-    await writeFile(artifact.manifestPath, `${JSON.stringify({ ...raw, status: 'verified', verifiedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8');
+    await writeFile(artifact.manifestPath, `${JSON.stringify({
+      ...raw,
+      status: 'verified',
+      verifiedAt: new Date().toISOString(),
+    }, null, 2)}\n`, 'utf8');
   }
 }
 
@@ -411,21 +452,46 @@ export class ToolsmithEngine {
     if (reusable && reusable.score >= this.#reuseScoreThreshold) {
       const server = this.#federation.server(reusable.tool.serverId);
       if (!server) throw new Error(`MCP server disappeared: ${reusable.tool.serverId}`);
-      this.#ledger?.append('toolsmith.reused', { needId: need.id, serverId: server.id, tool: reusable.tool.name, score: reusable.score });
-      return { status: 'reused', descriptor: reusable.tool, server, attempts: 0, failures };
+      this.#ledger?.append('toolsmith.reused', {
+        needId: need.id,
+        serverId: server.id,
+        tool: reusable.tool.name,
+        score: reusable.score,
+      });
+      return {
+        status: 'reused',
+        descriptor: reusable.tool,
+        server,
+        attempts: 0,
+        failures,
+      };
     }
-    failures.push({ attempt: 0, stage: 'search', reason: 'No acceptable existing MCP tool matched capability need' });
+    failures.push({
+      attempt: 0,
+      stage: 'search',
+      reason: 'No acceptable existing MCP tool matched capability need',
+    });
 
     for (let attempt = 1; attempt <= this.#maxForgeAttempts; attempt += 1) {
       let blueprint: ToolBlueprint;
       try {
         blueprint = await this.#planner.proposeBlueprint(mission, need, failures);
       } catch (error) {
-        failures.push({ attempt, stage: 'blueprint', reason: error instanceof Error ? error.message : String(error) });
+        failures.push({
+          attempt,
+          stage: 'blueprint',
+          reason: error instanceof Error ? error.message : String(error),
+        });
         continue;
       }
+
       if (need.acceptableRisks?.length && !need.acceptableRisks.includes(blueprint.risk)) {
-        failures.push({ attempt, stage: 'blueprint', blueprintId: blueprint.id, reason: `Blueprint risk ${blueprint.risk} is outside acceptable risks` });
+        failures.push({
+          attempt,
+          stage: 'blueprint',
+          blueprintId: blueprint.id,
+          reason: `Blueprint risk ${blueprint.risk} is outside acceptable risks`,
+        });
         continue;
       }
 
@@ -433,7 +499,12 @@ export class ToolsmithEngine {
       try {
         artifact = await this.#forge.materialize(blueprint);
       } catch (error) {
-        failures.push({ attempt, stage: 'forge', blueprintId: blueprint.id, reason: error instanceof Error ? error.message : String(error) });
+        failures.push({
+          attempt,
+          stage: 'forge',
+          blueprintId: blueprint.id,
+          reason: error instanceof Error ? error.message : String(error),
+        });
         continue;
       }
       this.#federation.upsert(artifact.spec);
@@ -444,7 +515,12 @@ export class ToolsmithEngine {
         descriptor = report.tools.find((tool) => tool.name === blueprint.toolName);
         if (!descriptor) throw new Error('Forged MCP did not expose expected tool');
       } catch (error) {
-        failures.push({ attempt, stage: 'discover', blueprintId: blueprint.id, reason: error instanceof Error ? error.message : String(error) });
+        failures.push({
+          attempt,
+          stage: 'discover',
+          blueprintId: blueprint.id,
+          reason: error instanceof Error ? error.message : String(error),
+        });
         await this.#federation.disconnect(artifact.spec.id);
         continue;
       }
@@ -458,7 +534,12 @@ export class ToolsmithEngine {
           });
           if (result.isError) throw new Error('Forged MCP probe returned isError=true');
         } catch (error) {
-          failures.push({ attempt, stage: 'probe', blueprintId: blueprint.id, reason: error instanceof Error ? error.message : String(error) });
+          failures.push({
+            attempt,
+            stage: 'probe',
+            blueprintId: blueprint.id,
+            reason: error instanceof Error ? error.message : String(error),
+          });
           await this.#federation.disconnect(artifact.spec.id);
           continue;
         }
@@ -473,7 +554,13 @@ export class ToolsmithEngine {
         risk: descriptor.risk,
         failures,
       });
-      return { status: 'forged', descriptor, server: artifact.spec, attempts: attempt, failures };
+      return {
+        status: 'forged',
+        descriptor,
+        server: artifact.spec,
+        attempts: attempt,
+        failures,
+      };
     }
 
     this.#ledger?.append('toolsmith.exhausted', { needId: need.id, failures });
@@ -494,7 +581,9 @@ export class ToolsmithEngine {
           input,
           this.#callPolicy,
         );
-        if (result.isError) throw new Error(`MCP tool ${acquisition.descriptor.name} returned an error`);
+        if (result.isError) {
+          throw new Error(`MCP tool ${acquisition.descriptor.name} returned an error`);
+        }
         return result.content;
       },
     });
@@ -502,7 +591,6 @@ export class ToolsmithEngine {
   }
 
   #acceptable(hit: McpSearchHit, need: CapabilityNeed): boolean {
-    if (need.acceptableRisks?.length && !need.acceptableRisks.includes(hit.tool.risk)) return false;
-    return true;
+    return !need.acceptableRisks?.length || need.acceptableRisks.includes(hit.tool.risk);
   }
 }
