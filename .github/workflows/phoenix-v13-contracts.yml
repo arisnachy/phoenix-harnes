@@ -28,13 +28,13 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Enforce complete Repo Brain output byte bound and public signatures
+      - name: Enforce PHOENIX native public contracts
         run: |
           python - <<'PY'
           from pathlib import Path
+
           path = Path('packages/phoenix/repo-brain/src/index.ts')
           code = path.read_text()
-
           code = code.replace(
               'const DEFAULT_LIMIT = 12\nconst MAX_TOOL_LIMIT = 50',
               'const DEFAULT_LIMIT = 12\nconst DEFAULT_MAX_OUTPUT_BYTES = 65_536\nconst MAX_TOOL_LIMIT = 50',
@@ -65,7 +65,6 @@ jobs:
               '  async impact(path: string, depth = 2, limit = MAX_TOOL_LIMIT): Promise<RepoBrainImpactHit[]> {',
               '  async impact(path: string, depth: number = 2, limit: number = MAX_TOOL_LIMIT): Promise<RepoBrainImpactHit[]> {',
           )
-
           code = code.replace(
               '    defaultLimit: z.number().default(DEFAULT_LIMIT),\n',
               '    defaultLimit: z.number().default(DEFAULT_LIMIT),\n    maxOutputBytes: z.number().default(DEFAULT_MAX_OUTPUT_BYTES),\n',
@@ -102,7 +101,6 @@ jobs:
               "          return { text: `Repo Brain stats: files=${stats.files}, symbols=${stats.symbols}, edges=${stats.edges}, indexed=${String(stats.indexed)}.` }",
               "          return bounded(`Repo Brain stats: files=${stats.files}, symbols=${stats.symbols}, edges=${stats.edges}, indexed=${String(stats.indexed)}.`)",
           )
-
           required = [
               "const bounded = (text: string)",
               'maxOutputBytes: z.number()',
@@ -112,6 +110,17 @@ jobs:
           if any(marker not in code for marker in required):
               raise SystemExit('Repo Brain contract patch incomplete')
           path.write_text(code)
+
+          runtime = Path('packages/phoenix/runtime/src/index.ts')
+          runtime_code = runtime.read_text()
+          runtime_code = runtime_code.replace(
+              '  readonly ladder = new ModelCapabilityLadder()\n',
+              '  readonly ladder: ModelCapabilityLadder = new ModelCapabilityLadder()\n',
+              1,
+          )
+          if 'readonly ladder: ModelCapabilityLadder' not in runtime_code:
+              raise SystemExit('PHOENIX runtime public ladder annotation patch incomplete')
+          runtime.write_text(runtime_code)
           PY
 
       - name: Synchronize workspace lockfile
