@@ -1,5 +1,7 @@
 # PHOENIX Runtime
 
+English | [中文](README.zh.md)
+
 `@arisnachy/phoenix-runtime` is the first native PHOENIX intelligence layer inside the DeepSeek Harness tree. It deliberately reuses the DSH agent loop, LLM registry, token meter, tools pipeline, sandbox seams, durable sessions, compaction, jobs, and subagents instead of cloning them.
 
 ## What it adds
