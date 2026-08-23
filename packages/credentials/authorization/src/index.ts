@@ -32,12 +32,14 @@ import { HarnessError } from '@deepseek-ai/dsh-llm'
 
 import type {
   AuthorizationEntry, AuthorizationMethod, AuthorizationNotice, AuthorizationOutcome, AuthorizationPrompt,
-  AuthorizationSettlement,
+  AuthorizationSettlement, AuthorizationTelemetry,
 } from './types.ts'
 
 export type {
-  AuthorizationEntry, AuthorizationMethod, AuthorizationNotice, AuthorizationOutcome, AuthorizationPrompt,
-  AuthorizationPromptOption, AuthorizationSettlement, AuthorizationStatus,
+  AuthorizationAccountTelemetry, AuthorizationCreditsTelemetry, AuthorizationEntry, AuthorizationMethod,
+  AuthorizationNotice, AuthorizationOutcome, AuthorizationPrompt, AuthorizationPromptOption,
+  AuthorizationRateLimitWindow, AuthorizationSettlement, AuthorizationStatus, AuthorizationTelemetry,
+  AuthorizationUsageTelemetry,
 } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -127,6 +129,11 @@ export interface AuthorizationFlow {
    * cannot be begun, and the type says so at the one place flows are written.
    */
   readonly methods: readonly [AuthorizationMethod, ...AuthorizationMethod[]]
+  /**
+   * Optional secret-free live account telemetry. The authorization seam never
+   * invents or widens this data; the fixed type is the exfiltration boundary.
+   */
+  inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>
   /**
    * Run one attempt to obtain and commit the credential.
    * @param session - the chosen method, the cancellation signal, and the interaction callbacks.
@@ -233,6 +240,19 @@ export class AuthorizationService extends Service {
   describe(key: CredentialKey): AuthorizationEntry | undefined {
     const flow = this.flows.get(key)
     return flow === undefined ? undefined : this.entry(flow)
+  }
+
+  /**
+   * Read one flow's explicitly sanitized live telemetry, when it offers any.
+   * This method never reads the credential record itself and never returns an
+   * owner-defined opaque payload.
+   */
+  inspect(key: CredentialKey, signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined> {
+    const flow = this.flows.get(key)
+    if (flow === undefined) {
+      return Promise.reject(new AuthorizationError(`no authorization flow is registered for "${key}"`, 'NO_FLOW'))
+    }
+    return flow.inspect?.(signal) ?? Promise.resolve(undefined)
   }
 
   /** The public view of one registered flow. */
