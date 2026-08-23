@@ -90,7 +90,7 @@ export const PWSH_PROMPT_SETUP =
   "function prompt { [Console]::Write([char]27 + ']133;D;' + [int]$LASTEXITCODE + [char]7); '" + CONTROLLED_PROMPT + "' }"
 
 function controlledPromptCompleted(text: string): boolean {
-  return text.replace(/(?:\r\n|\n)$/, '').endsWith(CONTROLLED_PROMPT)
+  return text.split(/\r?\n/).some(line => line === CONTROLLED_PROMPT)
 }
 
 function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutionPolicy): string[] {
@@ -141,8 +141,9 @@ async function startupSession(
       viewport = result.viewport
       const scrollback = session.read({ offset: 0, count: 20 }).text
       // Exact-probe readiness can report `stdin_read` before PowerShell has
-      // rendered the prompt. Require the retained tail itself: the echoed
-      // function source ends in `}`, so it cannot satisfy this condition.
+      // rendered the prompt. Require a complete retained prompt line: the
+      // echoed function source contains the text inside a longer line and
+      // cannot satisfy this condition, while PTY output after the prompt is OK.
       if (controlledPromptCompleted(viewport)
         || controlledPromptCompleted(scrollback)) break
     }
