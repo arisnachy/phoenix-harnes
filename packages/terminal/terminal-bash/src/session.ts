@@ -207,16 +207,22 @@ export class LocalPtySession implements TerminalBackendSession {
    * @returns Resolves after startup readiness; rejects on exit or readiness timeout.
    */
   async initialize(signal?: AbortSignal): Promise<void> {
-    this.initializing = true
     try {
-      const operation = this.startSend({ text: '', submit: false, ...signal !== undefined ? { signal } : {} })
-      const result = await operation.done
+      const result = await this.startupSend({ text: '', submit: false, ...signal !== undefined ? { signal } : {} })
       if (result.waitReason === 'session_exit') throw new Error('PTY shell exited during startup')
       if (result.waitReason === 'timeout') throw new Error('PTY shell did not reach readiness before startup timeout')
       this.motd = result.viewport
     } catch (error: unknown) {
       signal?.throwIfAborted()
       throw error
+    }
+  }
+
+  /** Run one bootstrap send without allowing heuristic exact-probe readiness. */
+  async startupSend(request: TerminalSendRequest): Promise<TerminalSendResult> {
+    this.initializing = true
+    try {
+      return await this.startSend(request).done
     } finally {
       this.initializing = false
     }
@@ -452,7 +458,7 @@ export class LocalPtySession implements TerminalBackendSession {
       const startupHasOutput = !this.initializing || this.scrollback.snapshot().text.length > 0
       const acceptsStdinWait = startupHasOutput && foreground !== undefined
         && operation.acceptsStdinWait(foreground.processGroupId, foreground.inputWaiting)
-      if (elapsed >= this.config.exactProbeAfterMs && acceptsStdinWait) {
+      if (!this.initializing && elapsed >= this.config.exactProbeAfterMs && acceptsStdinWait) {
         this.settleActive('stdin_read')
         return
       }

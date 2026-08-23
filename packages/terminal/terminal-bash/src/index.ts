@@ -130,12 +130,11 @@ async function startupSession(
     let viewport = ''
     for (;;) {
       const first = viewport.length === 0
-      const operation = session.startSend({
+      const result = await session.startupSend({
         text: first ? ENCODING_PREAMBLE + PWSH_PROMPT_SETUP : '',
         submit: first,
         ...signal !== undefined ? { signal } : {},
       })
-      const result = await operation.done
       if (result.waitReason === 'session_exit') throw new Error('PTY shell exited during startup')
       if (result.waitReason === 'timeout') throw new Error('PTY shell did not reach readiness before startup timeout')
       viewport = result.viewport
@@ -144,7 +143,8 @@ async function startupSession(
       // rendered the prompt. Require a complete retained prompt line: the
       // echoed function source contains the text inside a longer line and
       // cannot satisfy this condition, while PTY output after the prompt is OK.
-      if (controlledPromptCompleted(viewport)
+      if (result.waitReason === 'stdin_read'
+        || controlledPromptCompleted(viewport)
         || controlledPromptCompleted(scrollback)) break
     }
     session.motd = viewport.replace(/(?:\r\n|\r|\n)$/, '')

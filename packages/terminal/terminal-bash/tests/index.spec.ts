@@ -350,15 +350,11 @@ describe('BashTerminalBackend startup rollback', () => {
     let sent: TerminalSendRequest | undefined
     const session = {
       motd: '',
-      startSend: (request: TerminalSendRequest) => {
+      startupSend: async (request: TerminalSendRequest) => {
         sent = request
         return {
-          done: Promise.resolve({
-            viewport: 'dsh> ', waitReason: 'stdin_read' as const,
-            sessionStatus: { kind: 'running' as const }, truncated: false,
-          }),
-          readOutput: () => ({ delta: '', truncated: false }),
-          cancel: () => false,
+          viewport: 'dsh> ', waitReason: 'stdin_read' as const,
+          sessionStatus: { kind: 'running' as const }, truncated: false,
         }
       },
       read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
@@ -386,17 +382,13 @@ describe('BashTerminalBackend startup rollback', () => {
     const sends: TerminalSendRequest[] = []
     const session = {
       motd: '',
-      startSend: (request: TerminalSendRequest) => {
+      startupSend: async (request: TerminalSendRequest) => {
         sends.push(request)
         const second = sends.length > 1
         return {
-          done: Promise.resolve({
-            viewport: second ? 'dsh> \r' : "function prompt { 'dsh> ' }\n",
-            waitReason: second ? 'inferred_idle' as const : 'stdin_read' as const,
-            sessionStatus: { kind: 'running' as const }, truncated: false,
-          }),
-          readOutput: () => ({ delta: '', truncated: false }),
-          cancel: () => false,
+          viewport: second ? 'dsh> \r' : "function prompt { 'dsh> ' }\n",
+          waitReason: second ? 'stdin_read' as const : 'inferred_idle' as const,
+          sessionStatus: { kind: 'running' as const }, truncated: false,
         }
       },
       read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
@@ -418,13 +410,9 @@ describe('BashTerminalBackend startup rollback', () => {
     await ctx.plugin(EmptySandbox)
     await ctx.plugin(SandboxPolicyService, { mode: 'danger-full-access', workspaceRoot: '/workspace' })
     const sessionFor = (waitReason: TerminalWaitReason): LocalPtySession => ({
-      startSend: () => ({
-        done: Promise.resolve({
-          viewport: 'no-prompt', waitReason,
-          sessionStatus: { kind: 'running' as const }, truncated: false,
-        }),
-        readOutput: () => ({ delta: '', truncated: false }),
-        cancel: () => false,
+      startupSend: async () => ({
+        viewport: 'no-prompt', waitReason,
+        sessionStatus: { kind: 'running' as const }, truncated: false,
       }),
       read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
       close: () => Promise.resolve(),
@@ -442,15 +430,11 @@ describe('BashTerminalBackend startup rollback', () => {
     const sends: TerminalSendRequest[] = []
     const session = {
       motd: '',
-      startSend: (request: TerminalSendRequest) => {
+      startupSend: async (request: TerminalSendRequest) => {
         sends.push(request)
         return {
-          done: Promise.resolve({
-            viewport: 'dsh> ', waitReason: 'stdin_read' as const,
-            sessionStatus: { kind: 'running' as const }, truncated: false,
-          }),
-          readOutput: () => ({ delta: '', truncated: false }),
-          cancel: () => false,
+          viewport: 'dsh> ', waitReason: 'stdin_read' as const,
+          sessionStatus: { kind: 'running' as const }, truncated: false,
         }
       },
       read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),

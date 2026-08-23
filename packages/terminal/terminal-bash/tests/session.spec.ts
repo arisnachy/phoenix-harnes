@@ -780,6 +780,25 @@ describe('LocalPtySession readiness and output', () => {
     await timedOut
   })
 
+  it('does not exact-probe settle a bootstrap echo before the prompt marker', async () => {
+    vi.useFakeTimers()
+    const inspector = new FakeInspector()
+    inspector.waiting = true
+    const terminal = new FakeTerminal(inspector)
+    const session = new LocalPtySession(terminal, config())
+    let settled = false
+    const startup = session.startupSend({ text: "function prompt { 'dsh> ' }", submit: true })
+      .then((result) => { settled = true; return result })
+
+    terminal.emitData("function prompt { 'dsh> ' }\r\n")
+    await vi.advanceTimersByTimeAsync(30)
+    expect(settled).toBe(false)
+
+    terminal.emitData('\x1b]133;D;0\x07dsh> ')
+    await vi.advanceTimersByTimeAsync(10)
+    await expect(startup).resolves.toMatchObject({ waitReason: 'stdin_read' })
+  })
+
   it('preserves the caller abort reason when startup cannot resolve a foreground group', async () => {
     const terminal = new FakeTerminal()
     const inspector = new FakeInspector()
