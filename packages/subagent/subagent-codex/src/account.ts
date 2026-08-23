@@ -118,21 +118,24 @@ export function codexAccountTelemetry(snapshot: CodexAccountSnapshot): Authoriza
   const rawCredits = maybeObject(limits?.credits)
   const hasCredits = rawCredits?.hasCredits
   const unlimited = rawCredits?.unlimited
+  const creditBalance = optionalString(rawCredits?.balance)
   const credits = typeof hasCredits === 'boolean' && typeof unlimited === 'boolean'
     ? {
       hasCredits,
       unlimited,
-      ...optionalString(rawCredits.balance) === undefined ? {} : { balance: optionalString(rawCredits.balance) as string },
+      ...creditBalance === undefined ? {} : { balance: creditBalance },
     }
     : undefined
   const usage = usageTelemetry(snapshot.usage)
 
+  const email = optionalString(account.email)
+  const plan = optionalString(account.planType)
   return {
     kind: 'account',
     provider: 'Codex',
     accountType,
-    ...optionalString(account.email) === undefined ? {} : { email: optionalString(account.email) as string },
-    ...optionalString(account.planType) === undefined ? {} : { plan: optionalString(account.planType) as string },
+    ...email === undefined ? {} : { email },
+    ...plan === undefined ? {} : { plan },
     ...primaryLimit === undefined ? {} : { primaryLimit },
     ...secondaryLimit === undefined ? {} : { secondaryLimit },
     ...credits === undefined ? {} : { credits },
