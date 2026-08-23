@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   policy:
-    if: startsWith(github.head_ref, 'phoenix/evolution')
+    if: github.base_ref == 'phoenix/evolution-inbox' || startsWith(github.head_ref, 'phoenix/evolution')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
           if-no-files-found: error
 
   auth-regression:
-    if: startsWith(github.head_ref, 'phoenix/evolution')
+    if: github.base_ref == 'phoenix/evolution-inbox' || startsWith(github.head_ref, 'phoenix/evolution')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
