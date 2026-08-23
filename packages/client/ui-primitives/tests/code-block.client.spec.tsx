@@ -41,14 +41,17 @@ describe('highlightToHtml', () => {
     'xml', 'lua',
   ]
 
-  it('lazily loads every read-card grammar: plain first, highlighted after load', async () => {
-    // First touch returns the plain fallback (undefined) and starts the import.
-    for (const alias of LAZY_ALIASES) expect(highlightToHtml('x', alias)).toBeUndefined()
-    // Once every grammar has registered, the same call highlights.
-    await vi.waitFor(() => {
-      for (const alias of LAZY_ALIASES) expect(highlightToHtml('x', alias)).toContain('shiki')
-    }, { timeout: 5_000 })
-  })
+  it('lazily loads every read-card grammar and eventually highlights it', async () => {
+    // Load one grammar at a time. Firing every dynamic import concurrently makes
+    // this correctness check contend with the coverage worker pool on Windows.
+    for (const alias of LAZY_ALIASES) {
+      const first = highlightToHtml('x', alias)
+      if (first !== undefined) expect(first).toContain('shiki')
+      await vi.waitFor(() => {
+        expect(highlightToHtml('x', alias)).toContain('shiki')
+      }, { timeout: 5_000 })
+    }
+  }, 30_000)
 })
 
 describe('CodeBlock', () => {

@@ -27,6 +27,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.PRIMARY_NODE_VERSION }}
@@ -45,13 +47,15 @@ jobs:
     env:
       DSH_COVERAGE_MAX_WORKERS: '2'
       DSH_COVERAGE_PARTITIONS: '2'
-      DSH_GATE_CONCURRENCY: '2'
+      DSH_GATE_CONCURRENCY: '1'
       DSH_COVERAGE_TEST_TIMEOUT_MS: '30000'
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.PRIMARY_NODE_VERSION }}
@@ -87,6 +91,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.PRIMARY_NODE_VERSION }}
@@ -122,6 +128,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
@@ -166,6 +174,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.PRIMARY_NODE_VERSION }}
@@ -189,9 +199,9 @@ jobs:
     timeout-minutes: 120
     env:
       DSH_COVERAGE_MAX_WORKERS: '2'
-      DSH_COVERAGE_PARTITIONS: '4'
+      DSH_COVERAGE_PARTITIONS: '2'
       DSH_COVERAGE_TEST_TIMEOUT_MS: '30000'
-      DSH_GATE_CONCURRENCY: '2'
+      DSH_GATE_CONCURRENCY: '1'
       DSH_PUBLINT_CONCURRENCY: '2'
     steps:
       - uses: actions/checkout@v6
@@ -203,6 +213,8 @@ jobs:
           reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock"
           /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
       - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-js
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.PRIMARY_NODE_VERSION }}
