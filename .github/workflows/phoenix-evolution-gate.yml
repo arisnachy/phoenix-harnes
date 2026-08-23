@@ -1,0 +1,70 @@
+name: PHOENIX Evolution Gate
+
+on:
+  pull_request:
+    branches: [main, phoenix/evolution-inbox]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: phoenix-evolution-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    if: startsWith(github.head_ref, 'phoenix/evolution')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch comparison base
+        run: git fetch origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+      - name: Identity, authority and rollback gate
+        env:
+          PHOENIX_GATE_BASE: origin/${{ github.base_ref }}
+          PHOENIX_GATE_HEAD: HEAD
+        run: node scripts/phoenix-evolution-gate.mjs
+      - name: Preserve gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-evolution-gate
+          path: .phoenix/evolution/gate-report.json
+          if-no-files-found: error
+
+  auth-regression:
+    if: startsWith(github.head_ref, 'phoenix/evolution')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify Codex/ChatGPT auth separation
+        run: pnpm exec vitest run packages/llm/llm-pi-ai/tests/login.spec.ts
+      - name: Verify PHOENIX runtime layers
+        run: pnpm exec vitest run packages/phoenix/runtime packages/phoenix/ai-bus packages/phoenix/repo-brain packages/phoenix/continuity packages/bundle/phoenix
+      - name: Typecheck contracts
+        run: pnpm run typecheck
+
+  promotion-boundary:
+    if: github.base_ref == 'main' && startsWith(github.head_ref, 'phoenix/evolution')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce reviewed inbox as the only evolution source for main
+        shell: bash
+        run: |
+          if [[ "${{ github.head_ref }}" != "phoenix/evolution-inbox" ]]; then
+            echo "Evolution candidates must enter phoenix/evolution-inbox first."
+            exit 1
+          fi
+          echo "Reviewed inbox may be proposed to main; automatic main merge is forbidden by policy."
