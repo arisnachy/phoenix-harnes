@@ -28,13 +28,18 @@ jobs:
       - name: Refresh inbox with stable main
         shell: bash
         run: |
-          git fetch origin main
+          set -euo pipefail
+          git fetch origin main "${INBOX_BRANCH}:${INBOX_BRANCH}" || true
           git config user.name "phoenix-evolution-bot"
           git config user.email "phoenix-evolution-bot@users.noreply.github.com"
           git merge --no-edit origin/main
+          if [[ "$(git rev-list --count "origin/${INBOX_BRANCH}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]]; then
+            git push origin "HEAD:${INBOX_BRANCH}"
+          fi
       - name: Observe official upstream heads
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p .phoenix/evolution
           deepseek=$(git ls-remote https://github.com/deepseek-ai/deepseek-harness.git refs/heads/main | cut -f1)
           codex=$(git ls-remote https://github.com/openai/codex.git refs/heads/main | cut -f1)
@@ -46,7 +51,6 @@ jobs:
           cat > .phoenix/evolution/observed-sources.json <<EOF
           {
             "schemaVersion": 1,
-            "observedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "deepseekHarness": { "ref": "main", "sha": "$deepseek", "intake": "merge-candidate" },
             "openaiCodex": { "ref": "main", "sha": "$codex", "intake": "observe-and-adapt" },
             "anthropicClaudeCode": { "ref": "main", "sha": "$claude", "intake": "observe-and-adapt" }
@@ -55,13 +59,14 @@ jobs:
       - name: Commit observations only when source heads changed
         shell: bash
         run: |
-          if git diff --quiet -- .phoenix/evolution/observed-sources.json && git diff --cached --quiet; then
-            echo "No upstream observation change."
+          set -euo pipefail
+          if git diff --quiet -- .phoenix/evolution/observed-sources.json; then
+            echo "No upstream source-head change."
             exit 0
           fi
           git add .phoenix/evolution/observed-sources.json
           git commit -m "chore(evolution): observe upstream capability heads"
-          git push origin HEAD:${INBOX_BRANCH}
+          git push origin "HEAD:${INBOX_BRANCH}"
 
   deepseek-source-candidate:
     needs: observe-contracts
@@ -77,6 +82,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           git config user.name "phoenix-evolution-bot"
           git config user.email "phoenix-evolution-bot@users.noreply.github.com"
           git remote add deepseek https://github.com/deepseek-ai/deepseek-harness.git
@@ -121,6 +127,7 @@ jobs:
           BRANCH: ${{ steps.merge.outputs.branch }}
           SHA: ${{ steps.merge.outputs.sha }}
         run: |
+          set -euo pipefail
           existing=$(gh pr list --state open --head "$BRANCH" --base "$INBOX_BRANCH" --json number --jq '.[0].number // empty')
           if [[ -z "$existing" ]]; then
             gh pr create \
