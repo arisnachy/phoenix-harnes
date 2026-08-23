@@ -1,0 +1,71 @@
+name: PHOENIX Evolution Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+      - phoenix/evolution-inbox
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: phoenix-evolution-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    if: startsWith(github.head_ref, 'phoenix/evolution')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch comparison base
+        run: git fetch origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+      - name: Identity, authority and rollback gate
+        env:
+          PHOENIX_GATE_BASE: origin/${{ github.base_ref }}
+          PHOENIX_GATE_HEAD: HEAD
+        run: node scripts/phoenix-evolution-gate.mjs
+      - name: Preserve gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-evolution-gate
+          path: .phoenix/evolution/gate-report.json
+          if-no-files-found: error
+
+  auth-regression:
+    if: startsWith(github.head_ref, 'phoenix/evolution')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install locked workspace
+        run: pnpm install --frozen-lockfile
+      - name: Verify Codex/ChatGPT auth separation
+        run: pnpm exec vitest run packages/llm/llm-pi-ai/tests/login.spec.ts
+      - name: Typecheck contracts
+        run: pnpm run typecheck
+
+  promotion-boundary:
+    if: github.base_ref == 'main' && startsWith(github.head_ref, 'phoenix/evolution')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce stable-channel promotion path
+        shell: bash
+        run: |
+          if [[ "${{ github.head_ref }}" != "phoenix/evolution-inbox" ]]; then
+            echo "Evolution candidates must enter phoenix/evolution-inbox first; only the reviewed inbox may be promoted to main."
+            exit 1
+          fi
+          echo "Promotion source is the reviewed evolution inbox. Automatic merge remains disabled by policy."
