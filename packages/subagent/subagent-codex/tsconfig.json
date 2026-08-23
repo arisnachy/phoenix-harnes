@@ -21,6 +21,12 @@
       "path": "../../core/agent"
     },
     {
+      "path": "../../credentials/authorization"
+    },
+    {
+      "path": "../../credentials/credentials"
+    },
+    {
       "path": "../../llm/llm"
     },
     {
