@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -68,6 +68,11 @@ function agent(ctx: Context, cwd: string): Agent {
 
 function text(result: { content: { type: string; text?: string }[] }): string {
   return result.content.filter(block => block.type === 'text').map(block => block.text).join('')
+}
+
+async function expectSameDirectory(actual: string, expected: string): Promise<void> {
+  const [actualStat, expectedStat] = await Promise.all([stat(actual), stat(expected)])
+  expect({ dev: actualStat.dev, ino: actualStat.ino }).toEqual({ dev: expectedStat.dev, ino: expectedStat.ino })
 }
 
 describe.skipIf(!hasPwsh)('persistent pwsh through a real cordis.yml Loader composition', () => {
@@ -139,9 +144,9 @@ describe.skipIf(!hasPwsh)('persistent pwsh through a real cordis.yml Loader comp
     expect(context.tools.schemas().map(schema => schema.name)).toEqual(['pwsh'])
     await execute('state', '$env:KEEP = "loader"; New-Item -ItemType Directory -Force -Path nested | Out-Null; Set-Location nested')
     const observed = text(await execute('observe', 'Write-Output "cwd=$PWD keep=$env:KEEP"'))
-    // PowerShell expands a Windows 8.3 temp path (for example RUNNER~1) to its
-    // canonical long form, so compare against the same canonical root.
-    expect(observed).toContain(`cwd=${join(await realpath(root), 'nested')} keep=loader`)
+    const observedState = /^cwd=(.+) keep=loader$/m.exec(observed)
+    expect(observedState).not.toBeNull()
+    await expectSameDirectory(observedState![1]!, join(root, 'nested'))
     expect(observed).not.toContain('DSH_PERSISTENT_PWSH')
 
     const multiline = text(await execute(
@@ -164,6 +169,6 @@ describe.skipIf(!hasPwsh)('persistent pwsh through a real cordis.yml Loader comp
 
     const exited = text(await execute('exit', 'exit'))
     expect(exited).toContain('next pwsh call starts from the workspace')
-    expect(text(await execute('after-exit', 'Write-Output "$PWD"'))).toBe(root)
+    await expectSameDirectory(text(await execute('after-exit', 'Write-Output "$PWD"')), root)
   }, 60_000)
 })
