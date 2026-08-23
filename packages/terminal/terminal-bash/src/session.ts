@@ -299,7 +299,7 @@ export class LocalPtySession implements TerminalBackendSession {
         this.clearActive()
         return
       }
-      if (this.active === operation && !this.closing) {
+      if (this.ownsActive(operation)) {
         this.pollingReady = operation
         this.schedulePoll(operation)
       }
@@ -472,9 +472,12 @@ export class LocalPtySession implements TerminalBackendSession {
       if (this.active === operation && !this.closing && this.interrupting !== operation) this.failActive(error)
     } finally {
       this.polling = false
-      const active = this.active
-      if (active !== undefined && this.pollingReady === active) this.schedulePoll(active)
+      if (this.pollingReady !== undefined) this.schedulePoll(this.pollingReady)
     }
+  }
+
+  private ownsActive(operation: LocalSendOperation): boolean {
+    return this.active === operation && !this.closing
   }
 
   private settleActive(waitReason: TerminalWaitReason, retainOwnership = false): void {
