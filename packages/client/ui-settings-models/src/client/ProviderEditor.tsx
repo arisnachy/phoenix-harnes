@@ -6,6 +6,9 @@
  * has none. The pi-ai profile records that derivation as `apiKeyEnv` only when
  * a key is entered; a blank key materializes a reference-free profile for
  * provider-native authentication);
+ * a provider whose deployment registers an account flow renders an inline
+ * sign-in above the key field, and an account-only flow (no api-key method)
+ * replaces the key field with it;
  * the collapsed 自定义设置 area carries the per-family extras (`baseURL` for
  * both families, DeepSeek's id/name/context-window model catalog, and the
  * display name and wire protocol of a pi-ai route the adapter does not ship —
@@ -28,6 +31,7 @@ import {
   DeepSeekModelsEditor, modelDrafts, validateDeepSeekModels,
 } from './DeepSeekModelsEditor.tsx'
 import { apiKeyFailure } from './apiKey.ts'
+import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
 import { EditorFooter } from './EditorFooter.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
 import { deriveKeyRef, messageOf, protocolChoices } from './store.ts'
@@ -64,7 +68,7 @@ export interface ProviderEditorProps {
   /** Path from the section root to this provider's profile. */
   settingsPath: readonly string[]
   /** Wire faces for writes and for interrogating a provider endpoint. */
-  api: Pick<IApiClient, 'settings' | 'credentials' | 'llm'>
+  api: Pick<IApiClient, 'settings' | 'credentials' | 'llm'> & Partial<Pick<IApiClient, 'authorization'>>
   /** Section copy. */
   t: (key: keyof typeof en) => string
   /** Disable writes (read-only settings provider). */
@@ -73,6 +77,23 @@ export interface ProviderEditorProps {
   credentialOnly?: boolean
   /** Require a newly entered credential before this editor can submit. */
   credentialRequired?: boolean
+  /**
+   * The provider's account sign-in flow, when the deployment registers one for
+   * it. Rendered above the key field; a flow that offers no api-key method is
+   * account-only, so the key field steps aside for the sign-in buttons.
+   */
+  oauth?: {
+    /** The registered flow's credential key (`llm-pi-ai/<provider>`). */
+    key: string
+    /** The flow label — the account name the host registered. */
+    label: string
+    /** Offered methods in registration order (`oauth`, sometimes `api-key`). */
+    methods: ReadonlyArray<{ id: string; label: string }>
+    /** Whether a stored grant already authenticates this route. */
+    connected: boolean
+  } | undefined
+  /** Called after a sign-in attempt ends authorized (page refresh hook). */
+  onAuthorized?: (() => void) | undefined
   /** Give the credential field initial focus when this editor mounts. */
   autoFocusCredential?: boolean
   /** Override the dismiss action copy. */
@@ -165,12 +186,23 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     () => schema.getPath(namespace.user, settingsPath),
   )
   const [expectedRevision, setExpectedRevision] = useState(() => namespace.revision)
+  // Bumped when a sign-in attempt ends authorized: the stored grant may change
+  // what `credentials.describe` reports for this reference, so the hint re-asks.
+  const [authRefresh, setAuthRefresh] = useState(0)
   const root = useMemo(() => schema.rehydrate(namespace.schema), [namespace.schema, schema])
   const node = useMemo(() => schema.nodeAtPath(root, settingsPath), [root, schema, settingsPath])
   const fallback = schema.getPath(namespace.value, settingsPath)
   const disabled = props.readOnly || busy
   const layout = layoutOf(namespace.ns)
   const keyRef = refFor(schema, namespace, settingsPath, props.provider)
+  const oauth = props.oauth
+  /** An account-only flow replaces the key field with its sign-in buttons. */
+  const oauthOnly = oauth !== undefined && !oauth.methods.some(method => method.id === 'api-key')
+  const { attempt, answer, setAnswer, failure: authFailure, begin, submitAnswer, cancel } =
+    useAuthorizationAttempt(api.authorization, () => {
+      setAuthRefresh(current => current + 1)
+      props.onAuthorized?.()
+    })
   // The same schema read the create card makes, so the choices offered here
   // and there cannot drift apart: both come from the adapter's own `Config`.
   // Only the pi-ai layout has a per-route protocol for the read to find, and
@@ -195,7 +227,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       () => undefined,
     )
     return () => { stale = true }
-  }, [api.credentials, keyRef])
+  }, [api.credentials, keyRef, authRefresh])
 
   const stringAt = (source: unknown, key: string): string | undefined => {
     const value = schema.getPath(source, [key])
@@ -368,25 +400,71 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       },
       onReset: () => { setDraft(current => schema.deletePath(current, ['models'])) },
     }
+    const signInDisabled = disabled || attempt?.status === 'pending'
     return (
       <>
-        <div className={styles['field']}>
-          <span className={styles['fieldLabel']}>{t('keyInput')}</span>
-          <input
-            className={styles['input']}
-            type="password"
-            autoComplete="off"
-            value={keyDraft}
-            placeholder={keyPlaceholder}
-            aria-label={t('keyInput')}
-            aria-invalid={shownKeyFailure !== undefined}
-            required={props.credentialRequired === true}
-            autoFocus={props.autoFocusCredential === true}
-            disabled={disabled || keyLocked}
-            onChange={(event) => { setKeyDraft(event.target.value) }}
-          />
-          {shownKeyFailure === undefined ? null : <p className={styles['error']}>{t(shownKeyFailure)}</p>}
-        </div>
+        {/* The provider's account flow, when the deployment registers one:
+            an inline sign-in that never routes an OAuth grant through the
+            API-key input. An account-only flow (no api-key method) is the
+            whole credential story, so the key field below steps aside. */}
+        {oauth === undefined ? null : (
+          <div className={styles['field']}>
+            <span className={styles['fieldLabel']}>{t('accountSignIn')}</span>
+            {oauth.connected && attempt?.status !== 'pending'
+              ? <p role="status" className={styles['connectedChip']}>{t('accountSignedIn')}</p>
+              : null}
+            <div className={styles['authorizationActions']}>
+              {oauth.methods.map(method => (
+                <button
+                  key={method.id}
+                  type="button"
+                  className={styles['secondaryButton']}
+                  disabled={signInDisabled}
+                  onClick={() => { begin(oauth.key, method.id) }}
+                >
+                  {attempt?.status === 'pending'
+                    ? t('signingIn')
+                    : method.id === 'oauth' ? `${t('signInWith')} ${oauth.label}` : method.label}
+                </button>
+              ))}
+            </div>
+            <AuthorizationAttemptProgress
+              attempt={attempt}
+              answer={answer}
+              setAnswer={setAnswer}
+              submitAnswer={submitAnswer}
+              cancel={cancel}
+              t={t}
+            />
+            {authFailure === undefined ? null : <p className={styles['error']}>{authFailure}</p>}
+          </div>
+        )}
+        {oauthOnly ? null : (
+          <div className={styles['field']}>
+            <span className={styles['fieldLabel']}>{t('keyInput')}</span>
+            <input
+              className={styles['input']}
+              type="password"
+              autoComplete="off"
+              value={keyDraft}
+              placeholder={keyPlaceholder}
+              aria-label={t('keyInput')}
+              aria-invalid={shownKeyFailure !== undefined}
+              required={props.credentialRequired === true}
+              autoFocus={props.autoFocusCredential === true}
+              disabled={disabled || keyLocked}
+              onChange={(event) => { setKeyDraft(event.target.value) }}
+            />
+            {keyLocked && keyState?.configured === true
+              ? (
+                // A reference the launch environment owns is not a dead end:
+                // name it and say what a blank Apply does with it.
+                <p className={styles['advancedHint']}>{t('keyEnvHint').replace('{ref}', keyRef)}</p>
+              )
+              : null}
+            {shownKeyFailure === undefined ? null : <p className={styles['error']}>{t(shownKeyFailure)}</p>}
+          </div>
+        )}
         {props.credentialOnly === true ? null : <details className={styles['customized']}>
           <summary className={styles['customizedSummary']}>{t('customized')}</summary>
           <div className={styles['customizedBody']}>
@@ -507,7 +585,9 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         submitDisabled={disabled || layout === 'unknown'
           || (props.credentialOnly !== true && modelFailure !== undefined)
           || shownKeyFailure !== undefined
-          || (props.credentialRequired === true && keyValue.length === 0)}
+          // An account-only flow has no key field to satisfy: the blank-key
+          // apply (ambient authentication) is exactly the intended submit.
+          || (props.credentialRequired === true && oauthOnly !== true && keyValue.length === 0)}
         submitLabel={props.submitLabel ?? 'apply'}
         submitBusyLabel={props.submitBusyLabel ?? 'applying'}
         {...props.cancelLabel === undefined ? {} : { cancelLabel: props.cancelLabel }}

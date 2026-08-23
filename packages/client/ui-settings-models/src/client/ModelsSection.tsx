@@ -12,7 +12,7 @@
  * re-renders from pushed invalidations or the post-apply reload.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, IconPlusOutline16, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -22,6 +22,7 @@ import { deriveKeyRef, messageOf, protocolChoices, providerUsable } from './stor
 import type { ModelsSettingsStore, ProviderRow } from './store.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor, type ProviderEditorProps } from './ProviderEditor.tsx'
+import { AuthorizationPanel } from './AuthorizationPanel.tsx'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 
@@ -34,7 +35,7 @@ export interface ModelsSectionInjected {
     snapshot: ModelsSettingsStore['store']
   }
   /** Wire faces the editor writes through. */
-  api: Pick<IApiClient, 'settings' | 'credentials' | 'llm'>
+  api: Pick<IApiClient, 'settings' | 'credentials' | 'llm'> & Partial<Pick<IApiClient, 'authorization'>>
   /** Settings schema and immutable path callbacks. */
   schema: SettingsSchemaOperations
   /** Section copy. */
@@ -70,9 +71,18 @@ interface EditorTarget extends ProviderIdentity {
 /** Values that vary around the shared provider-editor rendering. */
 interface ProviderEditorRenderProps extends Pick<
   ProviderEditorProps,
-  'namespace' | 'schema' | 'api' | 't' | 'readOnly' | 'onClose'
+  'namespace' | 'schema' | 'api' | 't' | 'readOnly' | 'onClose' | 'oauth' | 'onAuthorized'
 > {
   target: EditorTarget
+}
+
+/** One registered account flow as `authorization.list` reports it. */
+interface AccountFlow {
+  key: string
+  label: string
+  methods: ReadonlyArray<{ id: string; label: string }>
+  /** The record already stored behind the flow (`grant` = signed in). */
+  stored?: { kind: string }
 }
 
 /** Render an editor for either the setup posture or an expanded provider row. */
@@ -195,6 +205,45 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   const [savedTarget, setSavedTarget] = useState<ProviderIdentity | undefined>(undefined)
   const [declaring, setDeclaring] = useState(false)
   const [dismissedSetup, setDismissedSetup] = useState<ReadonlySet<string>>(() => new Set())
+  // Registered account flows, keyed by the provider id after the scope slash
+  // (`llm-pi-ai/openai-codex` → `openai-codex`): the same join the cards use.
+  const [accountFlows, setAccountFlows] = useState<ReadonlyMap<string, AccountFlow>>(() => new Map())
+  const [flowNonce, setFlowNonce] = useState(0)
+
+  useEffect(() => {
+    if (api.authorization === undefined) return
+    let stale = false
+    void api.authorization.list({}).then((response) => {
+      if (stale || !response.result.ok) return
+      setAccountFlows(new Map(response.result.value.entries.map(entry => [
+        entry.key.slice(entry.key.indexOf('/') + 1),
+        entry,
+      ])))
+    }, () => undefined)
+    return () => { stale = true }
+  }, [api.authorization, flowNonce])
+
+  /** After a sign-in ends authorized: refresh stored-flow state and the page. */
+  const refreshAccounts = (): void => {
+    setFlowNonce(current => current + 1)
+    void controller.load()
+  }
+
+  /**
+   * The provider's account flow, when this deployment registers one. A flow
+   * whose stored record is a grant is already signed in — that is what lets a
+   * card show connected state without ever seeing a credential value.
+   */
+  const accountFlowFor = (provider: string): ProviderEditorProps['oauth'] => {
+    if (api.authorization === undefined) return undefined
+    const flow = accountFlows.get(provider)
+    return flow === undefined ? undefined : {
+      key: flow.key,
+      label: flow.label,
+      methods: [...flow.methods],
+      connected: flow.stored?.kind === 'grant',
+    }
+  }
 
   const announceSaved = (target: ProviderIdentity): void => {
     // Announced only once the refreshed directory is in the snapshot the
@@ -285,6 +334,15 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
     <div className={styles['section']}>
       <h2 className={styles['title']}>{t('title')}</h2>
       <p className={styles['intro']}>{t('intro')}</p>
+      {api.authorization === undefined
+        ? null
+        : (
+          <AuthorizationPanel
+            api={api.authorization}
+            t={t}
+            onAuthorized={refreshAccounts}
+          />
+        )}
       {!state.writable && state.status === 'ready' ? <p className={styles['notice']}>{t('readOnly')}</p> : null}
       {savedIdentity === undefined
         ? null
@@ -311,6 +369,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   api,
                   t,
                   readOnly: !state.writable,
+                  oauth: accountFlowFor(target.provider),
+                  onAuthorized: refreshAccounts,
                   onClose: (changed) => { closeSetup(changed, target) },
                 })}
               </li>
@@ -396,6 +456,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   api,
                   t,
                   readOnly: !state.writable,
+                  oauth: accountFlowFor(target.provider),
+                  onAuthorized: refreshAccounts,
                   onClose: (changed) => { closeEditor(changed, target) },
                 })
                 : null}
@@ -436,6 +498,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                 api={api}
                 t={t}
                 readOnly={!state.writable}
+                oauth={accountFlowFor(addTarget.provider)}
+                onAuthorized={refreshAccounts}
                 onClose={(changed) => { closeEditor(changed, addTarget) }}
               />
             </div>

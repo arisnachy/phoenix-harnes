@@ -76,6 +76,13 @@ function scriptedFace(options: {
   discover?: ReturnType<typeof vi.fn>
   mutate?: ReturnType<typeof vi.fn>
   set?: ReturnType<typeof vi.fn>
+  /** What `credentials.describe` answers for every ref (default: unconfigured). */
+  credentialState?: { configured: boolean; source?: string; writable: boolean }
+  /** Registered account flows; absent means the deployment mounts none. */
+  authorization?: {
+    entries: unknown[]
+    begin?: ReturnType<typeof vi.fn>
+  }
 } = {}) {
   const providers = options.providers ?? {
     openai: { apiKeyEnv: 'OPENAI_API_KEY', baseURL: 'https://proxy.example/v1' },
@@ -107,11 +114,27 @@ function scriptedFace(options: {
     },
     credentials: {
       describe: vi.fn((payload: { refs: string[] }) => Promise.resolve(ok({
-        credentials: Object.fromEntries(payload.refs.map(ref => [ref, { configured: false, writable: true }])),
+        credentials: Object.fromEntries(payload.refs.map(ref => [
+          ref,
+          options.credentialState ?? { configured: false, writable: true },
+        ])),
       }))),
       set,
       unset: vi.fn(),
     },
+    ...(options.authorization === undefined ? {} : {
+      authorization: {
+        list: vi.fn(() => Promise.resolve(ok({ entries: options.authorization!.entries } as never))),
+        begin: options.authorization.begin
+          ?? vi.fn(() => Promise.resolve(ok({ attemptId: 'attempt-1', status: 'pending' } as never))),
+        status: vi.fn(() => Promise.resolve(ok({
+          attemptId: 'attempt-1', key: 'llm-pi-ai/openai-codex', method: 'oauth',
+          status: 'pending', notices: [], nextSeq: 0,
+        } as never))),
+        answer: vi.fn(() => Promise.resolve(ok({ accepted: true } as never))),
+        cancel: vi.fn(() => Promise.resolve(ok({ cancelled: true } as never))),
+      },
+    }),
   }
   return { face, discover, mutate, set, namespace }
 }
@@ -627,6 +650,31 @@ describe('endpoint interrogation', () => {
     fireEvent.click(within_(dialog, en.fetchSelectAll))
     expect(boxes.map(box => box.checked)).toEqual([true, true, true])
     expect(within_(dialog, en.fetchDeselectAll)).toBeTruthy()
+  })
+
+  it('restores every advertised OpenRouter model without discarding tuned rows', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok({
+      models: [
+        { id: 'kept', name: 'Provider name', maxTokens: 4096 },
+        { id: 'restored', name: 'Restored', contextWindow: 131_072 },
+      ],
+    })))
+    const { mutate } = await mountSection({
+      discover,
+      providers: { openrouter: { models: [{ id: 'kept', name: 'My tuned name', maxTokens: 8192 }] } },
+    })
+    openEditor('openrouter')
+
+    fireEvent.click(screen.getByText(en.restoreCatalog))
+    await screen.findByDisplayValue('restored')
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([
+      { id: 'kept', name: 'My tuned name', maxTokens: 8192 },
+      { id: 'restored', name: 'Restored', contextWindow: 131_072 },
+    ])
+    expect(firstProbe(discover)).toEqual({ settingsNs: 'llm-pi-ai', provider: 'openrouter' })
   })
 })
 
@@ -1415,5 +1463,69 @@ describe('API key field', () => {
     await waitFor(() => { expect(mutate).toHaveBeenCalledOnce() })
     await waitFor(() => { expect(load).toHaveBeenCalledOnce() })
     expect(screen.queryByText(en.customTitle)).toBeNull()
+  })
+})
+
+describe('provider account sign-in', () => {
+  const codexFlow = {
+    key: 'llm-pi-ai/openai-codex',
+    label: 'ChatGPT (Codex)',
+    methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
+    inFlight: false,
+  }
+
+  it('steps the key field aside for an account-only flow and signs in from the card', async () => {
+    const begin = vi.fn(() => Promise.resolve(ok({ attemptId: 'attempt-1', status: 'pending' } as never)))
+    await mountSection({
+      providers: { 'openai-codex': {} },
+      authorization: { entries: [{ ...codexFlow, stored: { kind: 'grant' } }], begin },
+    })
+    openEditor('openai-codex')
+
+    // Account-only: the OAuth grant never routes through an API-key input.
+    expect(screen.queryByLabelText(en.keyInput)).toBeNull()
+    // The stored grant is visible as state, never as a value.
+    expect(screen.getByText(en.accountSignedIn)).toBeTruthy()
+
+    // The row name repeats in the editor header, so address the row by its
+    // Edit action instead of its text.
+    const edit = screen.getByRole('button', { name: en.editProvider.replace('{provider}', 'openai-codex') })
+    const row = edit.closest('li')
+    if (row === null) throw new Error('no row for openai-codex')
+    fireEvent.click(within_(row, `${en.signInWith} ChatGPT (Codex)`))
+
+    await waitFor(() => { expect(begin).toHaveBeenCalledWith({ key: 'llm-pi-ai/openai-codex', method: 'oauth' }) })
+    expect(screen.getAllByText(en.signingIn).length).toBeGreaterThan(0)
+  })
+
+  it('keeps the key field when the flow also offers an api-key method', async () => {
+    await mountSection({
+      providers: { 'openai-codex': {} },
+      authorization: {
+        entries: [{
+          ...codexFlow,
+          methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }, { id: 'api-key', label: 'API key' }],
+        }],
+      },
+    })
+    openEditor('openai-codex')
+
+    expect(screen.getByLabelText(en.keyInput)).toBeTruthy()
+    // No stored record yet, so no signed-in chip either.
+    expect(screen.queryByText(en.accountSignedIn)).toBeNull()
+  })
+
+  it('explains a launch-environment reference instead of leaving a dead disabled input', async () => {
+    await mountSection({
+      credentialState: { configured: true, source: 'env', writable: false },
+    })
+    openEditor('openai')
+
+    const input = screen.getByLabelText(en.keyInput)
+    if (!(input instanceof HTMLInputElement)) throw new Error('key field is not an input')
+    // The describe answer lands a microtask after mount; the lock (and the
+    // hint with it) appears once it does.
+    await waitFor(() => { expect(input.disabled).toBe(true) })
+    expect(screen.getByText(en.keyEnvHint.replace('{ref}', deriveKeyRef('openai')))).toBeTruthy()
   })
 })

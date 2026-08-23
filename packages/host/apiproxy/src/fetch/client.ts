@@ -62,6 +62,10 @@ import {
 } from '../api/credentials.schema.ts'
 import { llmDiscoverModelsValueSchema, llmModelsValueSchema, llmProvidersValueSchema } from '../api/llm.schema.ts'
 import {
+  authorizationAnswerValueSchema, authorizationBeginValueSchema, authorizationCancelValueSchema,
+  authorizationListValueSchema, authorizationStatusValueSchema,
+} from '../api/authorization.schema.ts'
+import {
   subagentHistoryValueSchema,
   subagentInterruptValueSchema,
   subagentListValueSchema,
@@ -161,6 +165,13 @@ export interface IApiClient {
     models(payload: RequestPayload<'llm.models'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.models'>>>
     discoverModels(payload: RequestPayload<'llm.discoverModels'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.discoverModels'>>>
   }
+  authorization: {
+    list(payload: RequestPayload<'authorization.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'authorization.list'>>>
+    begin(payload: RequestPayload<'authorization.begin'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'authorization.begin'>>>
+    status(payload: RequestPayload<'authorization.status'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'authorization.status'>>>
+    answer(payload: RequestPayload<'authorization.answer'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'authorization.answer'>>>
+    cancel(payload: RequestPayload<'authorization.cancel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'authorization.cancel'>>>
+  }
   /** client-response passthrough (rpcId is a backfill of the server-request's id — never minted here). */
   respond(message: ClientResponse, signal?: AbortSignal): Promise<RpcReceipt>
 }
@@ -222,6 +233,11 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'llm.providers': llmProvidersValueSchema,
   'llm.models': llmModelsValueSchema,
   'llm.discoverModels': llmDiscoverModelsValueSchema,
+  'authorization.list': authorizationListValueSchema,
+  'authorization.begin': authorizationBeginValueSchema,
+  'authorization.status': authorizationStatusValueSchema,
+  'authorization.answer': authorizationAnswerValueSchema,
+  'authorization.cancel': authorizationCancelValueSchema,
 }
 
 /** Default timeout for bounded unary calls (rpc-compare 2026-07-19: a hung host must not leave callers pending forever). */
@@ -498,6 +514,14 @@ export abstract class AbstractApiClient implements IApiClient {
     providers: (payload, signal) => this.callUnary('llm.providers', payload, signal),
     models: (payload, signal) => this.callUnary('llm.models', payload, signal),
     discoverModels: (payload, signal) => this.callUnary('llm.discoverModels', payload, signal),
+  }
+
+  readonly authorization: IApiClient['authorization'] = {
+    list: (payload, signal) => this.callUnary('authorization.list', payload, signal),
+    begin: (payload, signal) => this.callUnary('authorization.begin', payload, signal, 'caller-signal-only'),
+    status: (payload, signal) => this.callUnary('authorization.status', payload, signal),
+    answer: (payload, signal) => this.callUnary('authorization.answer', payload, signal),
+    cancel: (payload, signal) => this.callUnary('authorization.cancel', payload, signal),
   }
 
   readonly events: IApiClient['events'] = {

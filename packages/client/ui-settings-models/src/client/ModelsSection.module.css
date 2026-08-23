@@ -16,6 +16,46 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.authorizationPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+}
+
+.authorizationTitle {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.authorizationActions,
+.authorizationPrompt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.authorizationPrompt label {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.authorizationPrompt input,
+.authorizationPrompt select {
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+}
+
 .title {
   margin: 0;
   font-size: 16px;
@@ -111,6 +151,14 @@
 
 .credentialDotConfigured {
   background: var(--dsw-alias-state-success-primary);
+}
+
+/* The "signed in" line on a provider card's account section: same success
+   accent as the configured dot, as text. */
+.connectedChip {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-state-success-primary);
 }
 
 .credentialDotMissing {

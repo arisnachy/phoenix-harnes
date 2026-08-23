@@ -160,7 +160,7 @@ function adopt(candidate: DiscoveredModelView): ModelDraft {
  */
 export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   const { models, onChange, probe, api, t, disabled } = props
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<'fetch' | 'restore' | undefined>(undefined)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [candidates, setCandidates] = useState<readonly DiscoveredModelView[] | undefined>(undefined)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
@@ -227,26 +227,32 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
     }))
   }
 
+  const requestModels = async (): Promise<readonly DiscoveredModelView[] | undefined> => {
+    const response = await api.llm.discoverModels({
+      settingsNs: probe.settingsNs,
+      ...probe.provider === undefined ? {} : { provider: probe.provider },
+      ...probe.baseURL === undefined || probe.baseURL.length === 0 ? {} : { baseURL: probe.baseURL },
+      ...probe.api === undefined ? {} : { api: probe.api },
+      ...probe.apiKey === undefined ? {} : { apiKey: probe.apiKey },
+    })
+    if (!response.result.ok) {
+      setFailure(response.result.error.message)
+      return undefined
+    }
+    const found = response.result.value.models
+    if (found.length === 0) {
+      setFailure(t('fetchEmpty'))
+      return undefined
+    }
+    return found
+  }
+
   const fetchModels = async (): Promise<void> => {
-    setBusy(true)
+    setBusy('fetch')
     setFailure(undefined)
     try {
-      const response = await api.llm.discoverModels({
-        settingsNs: probe.settingsNs,
-        ...probe.provider === undefined ? {} : { provider: probe.provider },
-        ...probe.baseURL === undefined || probe.baseURL.length === 0 ? {} : { baseURL: probe.baseURL },
-        ...probe.api === undefined ? {} : { api: probe.api },
-        ...probe.apiKey === undefined ? {} : { apiKey: probe.apiKey },
-      })
-      if (!response.result.ok) {
-        setFailure(response.result.error.message)
-        return
-      }
-      const found = response.result.value.models
-      if (found.length === 0) {
-        setFailure(t('fetchEmpty'))
-        return
-      }
+      const found = await requestModels()
+      if (found === undefined) return
       // Everything already configured starts unchecked, so adopting a
       // selection never silently rewrites a capacity the user corrected.
       const known = new Set(models.map(model => textOf(model, 'id')))
@@ -257,7 +263,26 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
       // would stay busy with nothing shown.
       setFailure(messageOf(error))
     } finally {
-      setBusy(false)
+      setBusy(undefined)
+    }
+  }
+
+  /** Restore every model currently advertised while preserving tuned rows. */
+  const restoreCatalog = async (): Promise<void> => {
+    setBusy('restore')
+    setFailure(undefined)
+    try {
+      const found = await requestModels()
+      if (found === undefined) return
+      const byId = new Map(models.map(model => [textOf(model, 'id'), model]))
+      for (const candidate of found) {
+        byId.set(candidate.id, byId.get(candidate.id) ?? adopt(candidate))
+      }
+      onChange([...byId.values()])
+    } catch (error) {
+      setFailure(messageOf(error))
+    } finally {
+      setBusy(undefined)
     }
   }
 
@@ -333,13 +358,24 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
         <button
           type="button"
           className={styles['linkButton']}
-          disabled={disabled || busy || !askable || props.probeBlocked !== undefined}
+          disabled={disabled || busy !== undefined || !askable || props.probeBlocked !== undefined}
           title={props.probeBlocked !== undefined
             ? t(props.probeBlocked)
             : askable ? undefined : t('fetchNeedsBaseUrl')}
           onClick={() => { void fetchModels() }}
         >
-          {busy ? t('fetching') : t('fetchModels')}
+          {busy === 'fetch' ? t('fetching') : t('fetchModels')}
+        </button>
+        <button
+          type="button"
+          className={styles['linkButton']}
+          disabled={disabled || busy !== undefined || !askable || props.probeBlocked !== undefined}
+          title={props.probeBlocked !== undefined
+            ? t(props.probeBlocked)
+            : askable ? undefined : t('fetchNeedsBaseUrl')}
+          onClick={() => { void restoreCatalog() }}
+        >
+          {busy === 'restore' ? t('restoringCatalog') : t('restoreCatalog')}
         </button>
       </div>
       {models.length === 0 ? <p className={styles['modelEmpty']}>{t('modelsEmpty')}</p> : null}
