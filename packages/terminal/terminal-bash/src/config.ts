@@ -1,6 +1,7 @@
 /** Validated configuration for the local PTY backend. */
 
 import z from '@deepseek-ai/schemastery'
+import { resolveBashPath } from '@deepseek-ai/dsh-bash-local'
 import { resolvePwshPath } from '@deepseek-ai/dsh-pwsh-local'
 
 /** One supported interactive shell dialect. */
@@ -73,7 +74,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     shellDialect,
     shellPath: config.shellPath !== undefined && config.shellPath.length > 0
       ? config.shellPath
-      : (shellDialect === 'pwsh' ? resolvePwshPath() : DEFAULT_BASH_SHELL),
+      : (shellDialect === 'pwsh' ? resolvePwshPath() : resolveBashPath()),
     shellArgs: config.shellArgs !== undefined && config.shellArgs.length > 0
       ? config.shellArgs
       : (shellDialect === 'pwsh' ? DEFAULT_PWSH_ARGS : DEFAULT_BASH_ARGS),

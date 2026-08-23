@@ -21,9 +21,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   LOCALE_PREFERENCE_FIELD, LOCALE_SETTINGS_NAMESPACE, type LocaleId, type LocaleSettings,
 } from '../locale-settings.ts'
-import { en, zh, type CommonKey } from '../locales/index.ts'
+import { en, es, zh, type CommonKey } from '../locales/index.ts'
 import {
-  en as settingsEn, zh as settingsZh, type SettingsLocaleKey,
+  en as settingsEn, es as settingsEs, zh as settingsZh, type SettingsLocaleKey,
 } from '../locales/settings.ts'
 import type { LanguageRowInjected } from './LanguageRow.tsx'
 import { LanguageRow } from './LanguageRow.tsx'
@@ -107,6 +107,7 @@ export const SETTINGS_NS = 'settings.locale'
 const LOCALES: readonly LocaleDefinition[] = Object.freeze([
   { id: 'zh', label: '中文' },
   { id: 'en', label: 'English' },
+  { id: 'es', label: 'Español' },
 ])
 
 /**
@@ -117,7 +118,7 @@ const LOCALES: readonly LocaleDefinition[] = Object.freeze([
  * behavior. `zh` alone leaves the script ambiguous, so the shipped Chinese
  * copy names the variant it actually is.
  */
-const DOCUMENT_LANGUAGE: Record<LocaleId, string> = { zh: 'zh-CN', en: 'en' }
+const DOCUMENT_LANGUAGE: Record<LocaleId, string> = { zh: 'zh-CN', en: 'en', es: 'es' }
 
 /**
  * Point `<html lang>` at the active locale. Called on every locale change,
@@ -204,7 +205,7 @@ export class LocaleRuntime {
    * locale, because the active value may be a provisional browser-derived or
    * fallback resolution that nothing has stored yet. Picking the language
    * already on screen is still an explicit choice, and it must survive a
-   * different browser sharing the same DSH home. Only the render notification
+   * different browser sharing the same PHOENIX home. Only the render notification
    * is conditional: republishing an unchanged locale would churn every
    * subscriber for nothing.
    * @param id - a registered locale id; unknown ids throw.
@@ -241,7 +242,10 @@ export class LocaleRuntime {
    * @param dicts - complete dictionaries keyed by locale id.
    * @returns disposer removing every locale registered by this call (idempotent).
    */
-  register<N extends keyof LocaleNamespaceMap & string>(ns: N, dicts: Record<LocaleId, LocaleDictOf<N>>): () => void
+  register<N extends keyof LocaleNamespaceMap & string>(
+    ns: N,
+    dicts: Record<'zh' | 'en', LocaleDictOf<N>> & Partial<Record<Exclude<LocaleId, 'zh' | 'en'>, LocaleDictOf<N>>>,
+  ): () => void
   /**
    * Single-locale untyped form for namespaces outside the merge table
    * (dynamic composition, tests).
@@ -392,8 +396,8 @@ export const inject = ['slots', 'connection', 'remote', 'settingsScope']
 export function apply(ctx: ClientContext): void {
   const host = ctx.settingsScope.bind<LocaleSettings>({ namespace: LOCALE_SETTINGS_NAMESPACE })
   const locale = new LocaleRuntime(ctx, host)
-  locale.register(COMMON_NS, { zh, en })
-  locale.register(SETTINGS_NS, { zh: settingsZh, en: settingsEn })
+  locale.register(COMMON_NS, { zh, en, es })
+  locale.register(SETTINGS_NS, { zh: settingsZh, en: settingsEn, es: settingsEs })
   ctx.provide('locale', locale)
   // The service IS the LocaleFace (bind + getSnapshot/subscribe): install it
   // so the render machinery can synthesize the `t` standard seat.

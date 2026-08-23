@@ -16,6 +16,7 @@ import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellProcessRead, S
 import type { SubprocessCollect, SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { installSettingsSection } from '@deepseek-ai/dsh-settings'
 import { clampTimeout, deadline, MAX_TIMER_DELAY_MS, timeoutOf } from '@deepseek-ai/dsh-timeout'
+import { resolveBashPath } from './resolve.ts'
 
 /**
  * Model-friendly environment overrides: disable colors, pagers, and
@@ -51,10 +52,14 @@ export interface Config {
   maxSpillBytes?: number
   /** Grace period for kill escalation and inherited pipes; at most `MAX_TIMER_DELAY_MS`. */
   graceMs?: number
+  /** Explicit bash executable; Windows otherwise prefers a native Git Bash installation. */
+  bashPath?: string
 }
 
-/** The shape after schemastery applied the defaults (cwd has none). */
-type ResolvedConfig = Required<Omit<Config, 'cwd'>> & Pick<Config, 'cwd'>
+/** The shape after schemastery applied the defaults (cwd/bashPath have none). */
+type ResolvedConfig = Required<Omit<Config, 'cwd' | 'bashPath'>> & Pick<Config, 'cwd' | 'bashPath'>
+
+export { candidateBashPaths, resolveBashPath } from './resolve.ts'
 
 /** Project a settled collect-mode reader into the final CollectedOutput shape. */
 function finalOutput(reader: SubprocessOutputReader): CollectedOutput {
@@ -109,14 +114,23 @@ export class LocalBashExecutor extends ShellExecutor {
     maxOutputBytes: z.number().default(64_000),
     maxSpillBytes: z.number().default(DEFAULT_MAX_SPILL_BYTES),
     graceMs: z.number().default(DEFAULT_GRACE_MS),
+    bashPath: z.string(),
   })
 
   /** The currently authoritative config: the settings section, or the composition entry. */
   private source: () => ResolvedConfig
 
+  private declaredBashPath: string | undefined
+  private resolvedBashPath: string
+
   /** Validated config (schemastery applied the defaults before construction). */
   get config(): ResolvedConfig {
     return this.source()
+  }
+
+  /** The native bash executable used by foreground and background commands. */
+  get bashPath(): string {
+    return this.resolvedBashPath
   }
 
   constructor(ctx: Context, config: Config) {
@@ -125,14 +139,19 @@ export class LocalBashExecutor extends ShellExecutor {
     const entry = config as ResolvedConfig
     assertServiceableBashConfig(entry)
     this.source = () => entry
+    this.declaredBashPath = entry.bashPath
+    this.resolvedBashPath = resolveBashPath(entry.bashPath)
     installSettingsSection(ctx, SHELL_SETTINGS_NAMESPACE, LocalBashExecutor.Config, entry, {
       validate: assertServiceableBashConfig,
       setSource: (current) => {
         this.source = current as () => ResolvedConfig
       },
-      // Every field is read through the getter at each command, so nothing
-      // derived from the source needs rebuilding when the document changes.
-      onChange: () => {},
+      onChange: () => {
+        const declared = this.source().bashPath
+        if (declared === this.declaredBashPath) return
+        this.declaredBashPath = declared
+        this.resolvedBashPath = resolveBashPath(declared)
+      },
     })
   }
 
@@ -209,7 +228,7 @@ export class LocalBashExecutor extends ShellExecutor {
   }
 
   async run(spec: ShellExecSpec): Promise<ShellRunResult> {
-    return this.runArgv(spec, ['bash', '-c', spec.command])
+    return this.runArgv(spec, [this.bashPath, '-c', spec.command])
   }
 
   /**
@@ -240,7 +259,7 @@ export class LocalBashExecutor extends ShellExecutor {
   }
 
   start(spec: ShellExecSpec): ShellProcess {
-    return this.startArgv(spec, ['bash', '-c', spec.command])
+    return this.startArgv(spec, [this.bashPath, '-c', spec.command])
   }
 
   /**

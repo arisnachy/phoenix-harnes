@@ -139,7 +139,7 @@ export interface LoaderSmokeOptions {
   readonly tsconfigPath: string
   /** Boot from source via tsx (`src`) or built lib via plain Node (`lib`); defaults to the environment's mode. */
   readonly mode?: ExampleMode
-  /** Environment overrides layered over the parent and isolated DSH homes. */
+  /** Environment overrides layered over the parent and isolated PHOENIX homes. */
   readonly env?: Readonly<NodeJS.ProcessEnv>
   /** Process deadline override for harness tests. */
   readonly processTimeoutMs?: number

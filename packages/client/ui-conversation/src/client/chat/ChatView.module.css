@@ -76,6 +76,7 @@
   flex: none;
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   height: 26px;
   font: var(--dsw-font-s-strong-14);
   white-space: nowrap;
@@ -94,6 +95,65 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: dsh-turn-status-shimmer 1.8s linear infinite;
+}
+
+.phoenixActivity {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  filter: drop-shadow(0 0 3px rgb(245 158 11 / 72%));
+  animation: phoenix-fire-pulse 900ms ease-in-out infinite alternate;
+}
+
+.phoenixActivity::before {
+  position: absolute;
+  z-index: -1;
+  width: 118%;
+  height: 118%;
+  border-radius: 50% 50% 45% 55%;
+  background: radial-gradient(circle at 50% 70%, #fff3b0 0 18%, #ff9d00 38%, #ef3b13 62%, transparent 72%);
+  content: '';
+  opacity: 0.68;
+  transform: rotate(45deg) scale(0.82);
+  animation: phoenix-flame 620ms ease-in-out infinite alternate;
+}
+
+.phoenixCompletion {
+  align-self: flex-start;
+  height: 30px;
+  animation: phoenix-complete 1.6s ease-out both;
+}
+
+@keyframes phoenix-fire-pulse {
+  to {
+    filter: drop-shadow(0 0 8px rgb(249 115 22 / 95%));
+    transform: scale(1.06);
+  }
+}
+
+@keyframes phoenix-flame {
+  to {
+    opacity: 0.92;
+    transform: rotate(45deg) scale(1.04);
+  }
+}
+
+@keyframes phoenix-complete {
+  0% {
+    opacity: 0;
+    transform: scale(0.45) rotate(-12deg);
+  }
+
+  32% {
+    opacity: 1;
+    transform: scale(1.22) rotate(3deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1) rotate(0);
+  }
 }
 
 .turnStatusClock {
@@ -115,6 +175,12 @@
   .turnStatus {
     background-position: 0 0;
     background-size: 100% 100%;
+    animation: none;
+  }
+
+  .phoenixActivity,
+  .phoenixActivity::before,
+  .phoenixCompletion {
     animation: none;
   }
 }

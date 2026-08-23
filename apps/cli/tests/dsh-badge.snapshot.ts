@@ -7,23 +7,27 @@ const defaultConfigPath = fileURLToPath(new URL('./fixtures/dsh-badge/default.co
 const tsconfigPath = fileURLToPath(new URL('../../../tsconfig.json', import.meta.url))
 const badgeAssetsPath = fileURLToPath(new URL('../../../packages/skill/skill-badge/assets/', import.meta.url))
 
-describe('dsh badge assembled snapshot', () => {
+describe('PHOENIX badge assembled snapshot', () => {
   it('advertises and loads the opt-in bundled skill through the shipped app', async () => {
     const disabled = await runLoaderSmoke({
-      label: 'disabled dsh badge skill snapshot',
+      label: 'disabled PHOENIX badge skill snapshot',
       tempDirPrefix: 'headless-snapshot-dsh-badge-disabled-',
       binScript,
       libBinScript: binScript,
       configPath: defaultConfigPath,
       tsconfigPath,
+      // This is a shipped-app snapshot: exercise the built package exports
+      // through native Node instead of charging a cold TSX compile to it.
+      mode: 'lib',
     })
     const enabled = await runLoaderSmoke({
-      label: 'dsh badge skill snapshot',
+      label: 'PHOENIX badge skill snapshot',
       tempDirPrefix: 'headless-snapshot-dsh-badge-',
       binScript,
       libBinScript: binScript,
       configPath,
       tsconfigPath,
+      mode: 'lib',
     })
     const disabledSnapshot = JSON.parse(disabled.stdout) as unknown
     const enabledSnapshot = JSON.parse(
@@ -58,7 +62,7 @@ describe('dsh badge assembled snapshot', () => {
       A skill is a reusable set of task-specific instructions. The following skills are available in this session:
 
       <available_skills>
-      - \`dsh-badge\`: Add the official “powered by dsh” badge to documents, pull requests, merge requests, and other content produced with DeepSeek Harness. Use whenever creating a pull request or merge request. Also use when the user asks for a dsh badge, powered-by-dsh attribution, or a reusable dsh badge asset or snippet.
+      - \`dsh-badge\`: Add the official “powered by PHOENIX” badge to documents, pull requests, merge requests, and other PHOENIX content. Use whenever creating a pull request or merge request. Also use when the user asks for a PHOENIX badge, PHOENIX attribution, or a reusable PHOENIX badge asset or snippet.
       </available_skills>
 
       If the user names a skill, or the task clearly matches a skill's description, call the \`skill\` tool with the exact skill name before taking task actions. Load all applicable skills, then follow their full instructions. This catalog contains summaries only; do not infer or follow a skill's instructions until it has been loaded.
@@ -72,33 +76,33 @@ describe('dsh badge assembled snapshot', () => {
             {
               "text": "<skill_content name="dsh-badge">
       <skill_resources>
-      Base directory for this skill: {{badgeAssetsPath}}
+      Base directory for this skill: C:\\Users\\arisn\\OneDrive\\Documentos\\ChatGPT\\Fenix\\packages\\skill\\skill-badge\\assets\\
       Resolve relative paths mentioned by this skill against the base directory before using them. Load referenced resources only as needed.
       </skill_resources>
 
       <skill_instructions>
-      # dsh Badge
+      # PHOENIX Badge
 
-      Add the official “powered by dsh” badge without recreating or restyling it.
+      Add the official “powered by PHOENIX” badge without recreating or restyling it.
 
       ## Assets
 
       - Local PNG: [\`dsh-badge.png\`](dsh-badge.png), 726×120 source image; render at 121×20
-      - Shields.io image URL: \`https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white\`
-      - Project URL: \`https://github.com/deepseek-ai/deepseek-harness\`
+      - Shields.io image URL: \`https://img.shields.io/badge/powered_by-PHOENIX-F59E0B?style=flat-square\`
+      - Project URL: \`https://github.com/arisnachy/phoenix-harnes\`
 
       ## Markdown
 
       Use this linked badge in Markdown:
 
       \`\`\`markdown
-      [![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+      [![](https://img.shields.io/badge/powered_by-PHOENIX-F59E0B?style=flat-square)](https://github.com/arisnachy/phoenix-harnes)
       \`\`\`
 
       If attribution should not be linked, use:
 
       \`\`\`markdown
-      ![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)
+      ![](https://img.shields.io/badge/powered_by-PHOENIX-F59E0B?style=flat-square)
       \`\`\`
 
       ## Usage rules
@@ -116,28 +120,28 @@ describe('dsh badge assembled snapshot', () => {
           ],
           "isError": false,
           "value": {
-            "content": "# dsh Badge
+            "content": "# PHOENIX Badge
 
-      Add the official “powered by dsh” badge without recreating or restyling it.
+      Add the official “powered by PHOENIX” badge without recreating or restyling it.
 
       ## Assets
 
       - Local PNG: [\`dsh-badge.png\`](dsh-badge.png), 726×120 source image; render at 121×20
-      - Shields.io image URL: \`https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white\`
-      - Project URL: \`https://github.com/deepseek-ai/deepseek-harness\`
+      - Shields.io image URL: \`https://img.shields.io/badge/powered_by-PHOENIX-F59E0B?style=flat-square\`
+      - Project URL: \`https://github.com/arisnachy/phoenix-harnes\`
 
       ## Markdown
 
       Use this linked badge in Markdown:
 
       \`\`\`markdown
-      [![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+      [![](https://img.shields.io/badge/powered_by-PHOENIX-F59E0B?style=flat-square)](https://github.com/arisnachy/phoenix-harnes)
       \`\`\`
 
       If attribution should not be linked, use:
 
       \`\`\`markdown
-      ![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)
+      ![](https://img.shields.io/badge/powered_by-PHOENIX-F59E0B?style=flat-square)
       \`\`\`
 
       ## Usage rules
@@ -152,12 +156,12 @@ describe('dsh badge assembled snapshot', () => {
             "provider": "dsh-badge",
             "resourceBase": {
               "kind": "directory",
-              "path": "{{badgeAssetsPath}}",
+              "path": "C:\\Users\\arisn\\OneDrive\\Documentos\\ChatGPT\\Fenix\\packages\\skill\\skill-badge\\assets\\",
             },
           },
         },
         "summary": {
-          "description": "Add the official “powered by dsh” badge to documents, pull requests, merge requests, and other content produced with DeepSeek Harness. Use whenever creating a pull request or merge request. Also use when the user asks for a dsh badge, powered-by-dsh attribution, or a reusable dsh badge asset or snippet.",
+          "description": "Add the official “powered by PHOENIX” badge to documents, pull requests, merge requests, and other PHOENIX content. Use whenever creating a pull request or merge request. Also use when the user asks for a PHOENIX badge, PHOENIX attribution, or a reusable PHOENIX badge asset or snippet.",
           "invocation": {
             "modelInvocable": true,
             "userInvocable": true,
@@ -166,7 +170,7 @@ describe('dsh badge assembled snapshot', () => {
           "provider": "dsh-badge",
           "resourceBase": {
             "kind": "directory",
-            "path": "{{badgeAssetsPath}}",
+            "path": "C:\\Users\\arisn\\OneDrive\\Documentos\\ChatGPT\\Fenix\\packages\\skill\\skill-badge\\assets\\",
           },
           "source": "bundled",
         },

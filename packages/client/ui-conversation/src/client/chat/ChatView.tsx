@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
-import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
@@ -141,7 +141,10 @@ function TurnStatus({ startTime, t }: {
   const showClock = elapsedMs >= 15_000
   return (
     <div className={css.turnStatus} role="status" aria-live="polite">
-      Deep diving...
+      <span className={css.phoenixActivity} aria-hidden="true">
+        <PhoenixLogo size={24} />
+      </span>
+      <span>{t('status.thinking')}</span>
       {showClock && (
         <span className={css.turnStatusClock} aria-hidden>
           {formatRunDuration(elapsedMs, t)}
@@ -173,6 +176,8 @@ export function ChatView({
   const selectedCallId = useStore(s => s.selection?.callId)
   const [fileOpenError, setFileOpenError] = useState<{ path: string; message: string } | null>(null)
   const [fileOpenBusy, setFileOpenBusy] = useState(false)
+  const [completionPulse, setCompletionPulse] = useState(false)
+  const previousRunning = useRef(running)
   // Close/retry must ignore a settlement that started before the latest
   // gesture; otherwise a cancelled in-flight refusal reopens the dialog.
   const fileOpenRequest = useRef(0)
@@ -215,6 +220,18 @@ export function ChatView({
     [loadImage, renderSlot],
   )
   const runningTurnStart = useMemo(() => runningTurnStartTime(timeline), [timeline])
+
+  useEffect(() => {
+    const finished = previousRunning.current && !running
+    previousRunning.current = running
+    if (!finished) {
+      if (running) setCompletionPulse(false)
+      return
+    }
+    setCompletionPulse(true)
+    const id = setTimeout(() => { setCompletionPulse(false) }, 1600)
+    return () => { clearTimeout(id) }
+  }, [running])
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const columnRef = useRef<HTMLDivElement | null>(null)
@@ -451,6 +468,13 @@ export function ChatView({
           {/* Turn-level loading signal: rides the whole running turn (first-token
               wait, tool execution, streaming) so it never flickers per step. */}
           {running && <TurnStatus startTime={runningTurnStart} t={t} />}
+          {completionPulse && (
+            <div className={css.phoenixCompletion} aria-hidden="true">
+              <span className={css.phoenixActivity}>
+                <PhoenixLogo size={28} />
+              </span>
+            </div>
+          )}
           {pendingSteering.map(item => (
             <PendingSteeringBubble
               key={item.id}

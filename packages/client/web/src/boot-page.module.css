@@ -30,6 +30,18 @@
   gap: 16px;
 }
 
+.emblem {
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  filter: grayscale(1) brightness(0.18) contrast(1.8);
+  animation: phoenixAwaken 1.6s ease-in-out infinite alternate;
+}
+
+:global(body[data-ds-dark-theme]) .emblem {
+  filter: grayscale(1) brightness(4) contrast(1.4);
+}
+
 .wordmark {
   font-size: 16px;
   line-height: 24px;
@@ -68,6 +80,18 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes phoenixAwaken {
+  from { opacity: 0.68; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emblem,
+  .spinner {
+    animation: none;
+  }
 }
 
 .failed {

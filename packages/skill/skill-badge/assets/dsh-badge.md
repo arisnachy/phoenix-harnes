@@ -1,25 +1,25 @@
-# dsh Badge
+# PHOENIX Badge
 
-Add the official “powered by dsh” badge without recreating or restyling it.
+Add the official “powered by PHOENIX” badge without recreating or restyling it.
 
 ## Assets
 
 - Local PNG: [`dsh-badge.png`](dsh-badge.png), 726×120 source image; render at 121×20
-- Shields.io image URL: `https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white`
-- Project URL: `https://github.com/deepseek-ai/deepseek-harness`
+- Shields.io image URL: `https://img.shields.io/badge/powered_by-PHOENIX-F59E0B?style=flat-square`
+- Project URL: `https://github.com/arisnachy/phoenix-harnes`
 
 ## Markdown
 
 Use this linked badge in Markdown:
 
 ```markdown
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+[![](https://img.shields.io/badge/powered_by-PHOENIX-F59E0B?style=flat-square)](https://github.com/arisnachy/phoenix-harnes)
 ```
 
 If attribution should not be linked, use:
 
 ```markdown
-![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)
+![](https://img.shields.io/badge/powered_by-PHOENIX-F59E0B?style=flat-square)
 ```
 
 ## Usage rules

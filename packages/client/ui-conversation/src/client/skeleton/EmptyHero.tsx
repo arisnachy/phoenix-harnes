@@ -7,7 +7,7 @@
 import { useId } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import {
-  FishLogo, IconChevronDownOutline14, IconFolderClose16, IconFolderOpen16,
+  IconChevronDownOutline14, IconFolderClose16, IconFolderOpen16, PhoenixLogo,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { workspaceTitleOf } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps } from '../contract/slots.ts'
@@ -122,7 +122,7 @@ export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
           {/* figma 34:10412: fish 34×25 leading the headline, gap 10. */}
           <span className={css.fishHitbox}>
             {renderSlot('conversation.hero.brand.mark', { size: 34, className: css.fish }, {
-              fallback: <FishLogo size={34} className={css.fish} />,
+              fallback: <PhoenixLogo size={34} {...(css.fish === undefined ? {} : { className: css.fish })} />,
             })}
           </span>
           <span className={css.headlineText}>{t('hero.headline')}</span>

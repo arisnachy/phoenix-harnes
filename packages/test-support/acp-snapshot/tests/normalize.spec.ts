@@ -419,6 +419,27 @@ describe('normalizeSessionLog', () => {
 })
 
 describe('normalizeSessionSnapshot', () => {
+  it('normalizes Windows cwd values nested inside serialized tool arguments', () => {
+    const windowsCtx = { sessionIds: [], cwd: 'C:\\Users\\tester\\snapshot' }
+    const raw = [
+      JSON.stringify({ type: 'session', version: 0, cwd: windowsCtx.cwd }),
+      JSON.stringify({ type: 'tool/call', data: { arguments: JSON.stringify({ path: `${windowsCtx.cwd}\\note.txt` }) } }),
+    ].join('\n') + '\n'
+    expect(normalizeSessionSnapshot(raw, windowsCtx)).toContain(
+      String.raw`"arguments":"{\"path\":\"{{cwd}}/note.txt\"}"`,
+    )
+  })
+
+  it('normalizes a JSON-quoted Windows cwd embedded in prompt text', () => {
+    const windowsCtx = { sessionIds: [], cwd: String.raw`C:\Users\tester\snapshot` }
+    const quoted = JSON.stringify(windowsCtx.cwd)
+    const raw = [
+      JSON.stringify({ type: 'session', version: 0, cwd: windowsCtx.cwd }),
+      JSON.stringify({ type: 'user/message', data: { text: `workspace: ${quoted}` } }),
+    ].join('\n') + '\n'
+    expect(normalizeSessionSnapshot(raw, windowsCtx)).toContain('workspace: \\"{{cwd}}\\"')
+  })
+
   it('normalizes, scrubs, and projects each parsed body record', () => {
     const raw = [
       JSON.stringify({ type: 'session', version: 0, createdAt: 123, cwd: ctx.cwd }),

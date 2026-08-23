@@ -1,22 +1,31 @@
-import { BrandWordmark, FishLogo } from '@deepseek-ai/dsh-client-ui-primitives'
+import { PhoenixLogo } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 
-type OfficialBrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerProps
+type PhoenixBrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerProps
 
 /**
- * Render the official mark with the presentation requested by its host surface.
+ * Render the PHOENIX mark with the presentation requested by its host surface.
  * @param props - Host-supplied mark presentation.
- * @returns the official whale mark.
+ * @returns the PHOENIX emblem.
  */
-export function OfficialBrandMark({ size, className }: OfficialBrandMarkProps) {
-  return <FishLogo size={size} className={className} />
+export function PhoenixBrandMark({ size, className }: PhoenixBrandMarkProps) {
+  return <PhoenixLogo size={size} {...(className === undefined ? {} : { className })} />
 }
 
 /**
- * Render the official name artwork without its independently slotted mark.
- * @returns the official name wordmark.
+ * Render the PHOENIX name artwork without its independently slotted mark.
+ * @returns the PHOENIX name wordmark.
  */
-export function OfficialBrandName() {
-  return <BrandWordmark includeMark={false} />
+export function PhoenixBrandName() {
+  return (
+    <img
+      src="/phoenix-wordmark.png"
+      width="156"
+      height="52"
+      alt="PHOENIX"
+      draggable={false}
+      style={{ display: 'block', width: 156, height: 52, objectFit: 'contain' }}
+    />
+  )
 }

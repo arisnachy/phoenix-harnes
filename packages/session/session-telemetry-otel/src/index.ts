@@ -1,5 +1,5 @@
 /**
- * OpenTelemetry Service Provider for the DeepSeek Harness telemetry capability.
+ * OpenTelemetry Service Provider for the PHOENIX telemetry capability.
  *
  * Composes the OTel JS SDK as-is — a `LoggerProvider` with a
  * `BatchLogRecordProcessor` and an OTLP/HTTP log exporter — and maps each
@@ -85,7 +85,7 @@ function sharingStatusFor(mode: SessionTelemetryMode): SessionTelemetrySharingSt
 
 /**
  * Plugin configuration: one sharing policy, two verbatim SDK option objects,
- * and one DSH-owned shutdown bound. Uploading modes validate their endpoint
+ * and one PHOENIX-owned shutdown bound. Uploading modes validate their endpoint
  * and shutdown deadline at plugin load; `DISABLED` reads neither.
  */
 export interface Config {

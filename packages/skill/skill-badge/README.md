@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Optional bundled skill provider that contributes `dsh-badge` to `ctx.skills`. The skill supplies the official “powered by dsh” Markdown snippets and the packaged PNG for systems that cannot import a remote image reliably.
+Optional bundled skill provider that contributes the compatibility-named `dsh-badge` to `ctx.skills`. The skill supplies the official “powered by PHOENIX” Markdown snippets and the packaged PHOENIX PNG for systems that cannot import a remote image reliably.
 
 Mount the plugin to enable the provider. It has no configuration. The shipped CLI composition includes the plugin as `disabled: true`; users must explicitly enable its `skill-badge` row before the skill enters a catalog.
 

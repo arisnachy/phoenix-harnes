@@ -209,12 +209,34 @@ function contextOfContents(contents: readonly string[]): NormalizeContext {
   }
 }
 
+function hydrateFixtureValue(value: unknown, cwd: string): unknown {
+  if (typeof value === 'string') {
+    if (!value.includes('{{cwd}}')) return value
+    try {
+      const nested = JSON.parse(value) as unknown
+      if (nested !== null && typeof nested === 'object') return JSON.stringify(hydrateFixtureValue(nested, cwd))
+    } catch {
+      // Ordinary prose/path string rather than a nested JSON document.
+    }
+    return value.replaceAll('{{cwd}}', cwd)
+  }
+  if (Array.isArray(value)) return value.map(entry => hydrateFixtureValue(entry, cwd))
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, hydrateFixtureValue(entry, cwd)]))
+  }
+  return value
+}
+
 async function hydrateReplayFixtures(scenario: SdkScenario, cwd: string): Promise<string[]> {
   const root = join(cwd, '.replay-fixtures')
   await mkdir(root, { recursive: true })
   return Promise.all(fixtureFiles(scenario).map(async (source) => {
     const destination = join(root, basename(source))
-    await writeFile(destination, (await readFile(source, 'utf8')).replaceAll('{{cwd}}', cwd))
+    const content = await readFile(source, 'utf8')
+    const hydrated = content.trimEnd().split('\n').map((line) => {
+      return JSON.stringify(hydrateFixtureValue(JSON.parse(line) as unknown, cwd))
+    }).join('\n')
+    await writeFile(destination, `${hydrated}\n`)
     return destination
   }))
 }

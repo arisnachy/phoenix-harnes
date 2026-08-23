@@ -66,18 +66,27 @@ describe('minimal agent preset', () => {
     const stateDir = join(scaffold.workspaceCwd, 'persistent-state')
     await mkdir(stateDir)
     const signal = new AbortController().signal
+    const shellTool = process.platform === 'win32' ? 'pwsh' : 'bash'
     await scaffold.ctx.tools.execute({
       signal,
       callId: CallId('minimal-bash-state-setup'),
-      name: 'bash',
-      arguments: { command: `cd ${JSON.stringify(stateDir)} && export DSH_MINIMAL_STATE=PERSISTED` },
+      name: shellTool,
+      arguments: {
+        command: process.platform === 'win32'
+          ? `Set-Location -LiteralPath ${JSON.stringify(stateDir)}; $env:DSH_MINIMAL_STATE = 'PERSISTED'`
+          : `cd ${JSON.stringify(stateDir)} && export DSH_MINIMAL_STATE=PERSISTED`,
+      },
       agent: agentHandle.agent,
     })
-    const bash = await scaffold.ctx.tools.execute({
+    const shell = await scaffold.ctx.tools.execute({
       signal,
       callId: CallId('minimal-bash-state-read'),
-      name: 'bash',
-      arguments: { command: 'printf \'%s:%s\n\' "$DSH_MINIMAL_STATE" "$PWD"' },
+      name: shellTool,
+      arguments: {
+        command: process.platform === 'win32'
+          ? 'Write-Output "$env:DSH_MINIMAL_STATE`:$((Get-Location).Path)"'
+          : 'printf \'%s:%s\n\' "$DSH_MINIMAL_STATE" "$PWD"',
+      },
       agent: agentHandle.agent,
     })
     const seedPath = join(scaffold.workspaceCwd, 'preset-smoke.txt')
@@ -90,17 +99,18 @@ describe('minimal agent preset', () => {
       agent: agentHandle.agent,
     })
 
-    const text = (result: typeof bash): string => result.content
+    const text = (result: typeof shell): string => result.content
       .filter(block => block.type === 'text')
       .map(block => block.text)
       .join('')
       .replaceAll(scaffold.workspaceCwd, '{{cwd}}')
+      .replaceAll('\\', '/')
       .trimEnd()
 
     expect({
       prompt: requestHeader.system,
-      tools: requestHeader.tools?.map(tool => tool.name),
-      bash: text(bash),
+      tools: requestHeader.tools?.map(tool => tool.name === 'pwsh' ? 'bash' : tool.name),
+      bash: text(shell),
       editor: text(editor),
     }).toMatchInlineSnapshot(`
       {

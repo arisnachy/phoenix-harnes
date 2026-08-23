@@ -157,7 +157,7 @@ describe('LocaleRuntime', () => {
     expect(host.set).toHaveBeenLastCalledWith('preference', 'en')
   })
 
-  it('persists an explicit pick of the provisional locale, so a shared DSH home agrees', () => {
+  it('persists an explicit pick of the provisional locale, so a shared PHOENIX home agrees', () => {
     // A browser naming no shipped language opens at FALLBACK_LOCALE with
     // nothing stored. Choosing that same language in the menu must become
     // durable, or a Chinese browser sharing the home still opens Chinese.
@@ -272,11 +272,12 @@ describe('LocaleRuntime', () => {
     expect(svc.bind('ns2')('onlyZh')).toBe('onlyZh')
   })
 
-  it('exposes the two shipped locales with self-described labels', () => {
+  it('exposes the shipped locales with self-described labels', () => {
     const { svc } = make()
     expect(svc.getLocale().locales).toEqual([
       { id: 'zh', label: '中文' },
       { id: 'en', label: 'English' },
+      { id: 'es', label: 'Español' },
     ])
   })
 })

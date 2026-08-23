@@ -10,6 +10,7 @@ const PLAN_NEXT_ACTION_EN = 'describe your task to generate plan'
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'status.thinking': 'PHOENIX 正在思考…',
   'view.chat': '对话',
   'hint.plan': PLAN_NEXT_ACTION_ZH,
   'hint.goal': '输入目标，智能体将持续执行',
@@ -71,7 +72,7 @@ export const zh = {
   'access.confirm.acknowledge': '我已了解风险，并愿意继续',
   'access.confirm.cancel': '取消',
   'access.confirm.enable': '启用 Full access',
-  'hero.headline': '探索未至之境',
+  'hero.headline': 'PHOENIX',
   'hero.preview': '预览版',
   'hero.chooseWorkspace': '选择工作区',
   'session.hierarchy': '会话层级',
@@ -187,6 +188,7 @@ export type ConversationKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'status.thinking': 'PHOENIX thinking…',
   'view.chat': 'Chat',
   'hint.plan': PLAN_NEXT_ACTION_EN,
   'hint.goal': 'describe the objective for a long-running task',
@@ -248,7 +250,7 @@ export const en = {
   'access.confirm.acknowledge': 'I understand the risks and want to continue',
   'access.confirm.cancel': 'Cancel',
   'access.confirm.enable': 'Enable Full access',
-  'hero.headline': 'Into the Unknown',
+  'hero.headline': 'PHOENIX',
   'hero.preview': 'Preview',
   'hero.chooseWorkspace': 'Choose workspace',
   'session.hierarchy': 'Session hierarchy',
@@ -357,4 +359,37 @@ export const en = {
   'json.truncated': '… truncated, {total} characters total',
   'clock.md': '{m}/{d}',
   'clock.ymd': '{y}-{m}-{d}',
+} satisfies Record<ConversationKey, string>
+
+/** Spanish dictionary. Untranslated specialist copy temporarily inherits the
+ * complete English dictionary while the primary conversation path is native. */
+export const es = {
+  ...en,
+  'status.thinking': 'PHOENIX está pensando…',
+  'view.chat': 'Chat',
+  'hint.plan': 'describe tu tarea para generar un plan',
+  'hint.goal': 'escribe un objetivo y el agente seguirá trabajando',
+  'placeholder.plan': 'describe tu tarea para generar un plan',
+  'placeholder.default': 'Escribe un mensaje al agente',
+  'placeholder.unavailable': 'Sesión no disponible',
+  'placeholder.hero': 'Describe lo que quieres crear',
+  'placeholder.workspace': 'Elige un espacio de trabajo para comenzar',
+  'input.commands': 'Comandos',
+  'input.stop': 'Detener generación',
+  'input.send': 'Enviar mensaje',
+  'message.stopped': 'Detenido',
+  'message.turnError': 'Este turno falló',
+  'message.ranFor': 'Ejecutado durante {duration}',
+  'command.running': 'Ejecutando…',
+  'command.failed': 'El comando falló',
+  'command.done': 'Completado',
+  'approval.waiting': 'Esperando aprobación',
+  'approval.reject': 'Rechazar',
+  'approval.allowOnce': 'Permitir una vez',
+  'terminal.running': 'Ejecutando',
+  'terminal.failed': 'Falló',
+  'terminal.done': 'Listo',
+  'terminal.noOutput': 'Sin salida',
+  'duration.seconds': '{seconds}s',
+  'duration.minutes': '{minutes}m {seconds}s',
 } satisfies Record<ConversationKey, string>

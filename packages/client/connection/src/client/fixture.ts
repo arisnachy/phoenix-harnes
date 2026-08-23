@@ -253,11 +253,11 @@ const READ_SAMPLE_TEXT = READ_SAMPLE_SOURCE.map((text, index) => `${READ_SAMPLE_
  * search view minus its wire discriminants.
  */
 const WEB_SEARCH_RESULT: Omit<Extract<ToolResultView, { card: 'web'; kind: 'search' }>, 'card' | 'kind'> = {
-  answer: 'DeepSeek Harness is a plugin-based agent harness on vendored Cordis where **every capability is a plugin**.',
+  answer: 'PHOENIX is a plugin-based agent harness on vendored Cordis where **every capability is a plugin**.',
   sources: [
     {
       url: 'https://github.com/deepseek-ai/deepseek-harness',
-      title: 'DeepSeek Harness — plugin-based agent harness',
+      title: 'PHOENIX — plugin-based agent harness',
       snippet: 'Everything is a plugin: session, tools, agent-loop, and LLM adapters all mount on the same Cordis context.',
       publishedAt: '2026-07-01',
     },

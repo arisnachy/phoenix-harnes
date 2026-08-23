@@ -1726,6 +1726,27 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   }
 
   /**
+   * Collect the authorization IDs needed by search without constructing the
+   * full session.list projection. A search hit already proves the session has
+   * message content, so cold blankness probes and artifact stats add no
+   * authorization fact and turn a large corpus into thousands of serial
+   * summary batches on Windows.
+   */
+  async function listVisibleSessionIds(signal?: AbortSignal): Promise<Set<SessionId>> {
+    signal?.throwIfAborted()
+    const ids = new Set(ctx.sessions.list().map(session => session.id))
+    const persistence = ctx.get('sessionPersistence')
+    if (persistence === undefined) return ids
+    const cold = await persistence.list(signal)
+    signal?.throwIfAborted()
+    for (const meta of cold) {
+      if (meta.cwd !== undefined) ids.add(meta.id)
+    }
+    signal?.throwIfAborted()
+    return ids
+  }
+
+  /**
    * Resolve the goal service THIS agent runs.
    *
    * The service is per session: an agent preset mounts it behind an `isolate`
@@ -1961,10 +1982,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         }
         try {
-          const visible = await listVisibleSessionSummaries(signal)
+          const visibleIds = await listVisibleSessionIds(signal)
           if (isAborted(signal)) return cancelled()
-          if (visible.length === 0) return ok(request, { items: [], hasMore: false })
-          const visibleIds = new Set(visible.map(item => item.sessionId))
+          if (visibleIds.size === 0) return ok(request, { items: [], hasMore: false })
           const authorized: SessionSearchItem[] = []
           const acceptedIds = new Set<SessionId>()
           const seenCursors = new Set<SessionSearchCursor>()

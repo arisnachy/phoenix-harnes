@@ -800,6 +800,7 @@ it('pins native DeepSeek Files offload and inline fallback in assembled requests
       env: {
         DSH_SNAPSHOT_API_KEY: 'snapshot-key',
         DSH_SNAPSHOT_BASE_URL: `http://127.0.0.1:${address.port}`,
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
       },
     })
     expect(result.stderr).toBe('')
@@ -833,6 +834,7 @@ it('pins native DeepSeek Files offload and inline fallback in assembled requests
     )))]
     let toolContent = toolMessage.content
     for (const cwd of cwdSpellings) toolContent = toolContent.replaceAll(cwd, '{{cwd}}')
+    toolContent = toolContent.replaceAll('{{cwd}}\\', '{{cwd}}/')
     toolMessage.content = toolContent
     expect(followup).toEqual([
       {
@@ -842,7 +844,7 @@ it('pins native DeepSeek Files offload and inline fallback in assembled requests
       {
         role: 'user',
         content: 'Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\n'
-          + 'Current DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.\n\n'
+          + 'Current PHOENIX file policy: danger-full-access. The PHOENIX file sandbox does not restrict file modifications by available operations.\n\n'
           + 'Approval prompts are disabled in this session: actions that require approval are rejected automatically — do not request sandbox escalation (do not set `sandbox_permissions`).',
       },
       {
@@ -879,6 +881,7 @@ it('pins native DeepSeek Files offload and inline fallback in assembled requests
       env: {
         DSH_SNAPSHOT_API_KEY: 'snapshot-fallback-key',
         DSH_SNAPSHOT_BASE_URL: `http://127.0.0.1:${address.port}`,
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
       },
     })
     expect(fallback.stderr).toBe('')

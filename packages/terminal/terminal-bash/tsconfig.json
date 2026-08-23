@@ -21,6 +21,9 @@
       "path": "../../shell/pwsh-local"
     },
     {
+      "path": "../../shell/bash-local"
+    },
+    {
       "path": "../../core/agent"
     },
     {

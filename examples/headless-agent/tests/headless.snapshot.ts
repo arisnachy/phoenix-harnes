@@ -265,6 +265,7 @@ describe('headless stream-json snapshots', () => {
         if (actual === undefined) throw new Error('the headless profile did not persist its session')
         const context = contextFromLogs([actual.content])
         const session = normalizeSessionSnapshot(actual.content, context)
+          .replaceAll('"name":"pwsh"', '"name":"bash"')
         if (refreshing) await writeFile(headlessSessionExpected, session)
         await expect(session).toMatchFileSnapshot(headlessSessionExpected)
         expect(session).toContain(task)

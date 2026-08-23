@@ -15,7 +15,7 @@ describe('dsh-skill-badge', () => {
 
     expect(await ctx.skills.list()).toEqual([{
       name: 'dsh-badge',
-      description: 'Add the official “powered by dsh” badge to documents, pull requests, merge requests, and other content produced with DeepSeek Harness. Use whenever creating a pull request or merge request. Also use when the user asks for a dsh badge, powered-by-dsh attribution, or a reusable dsh badge asset or snippet.',
+      description: 'Add the official “powered by PHOENIX” badge to documents, pull requests, merge requests, and other PHOENIX content. Use whenever creating a pull request or merge request. Also use when the user asks for a PHOENIX badge, PHOENIX attribution, or a reusable PHOENIX badge asset or snippet.',
       invocation: { modelInvocable: true, userInvocable: true },
       provider: 'dsh-badge',
       source: 'bundled',
@@ -34,7 +34,7 @@ describe('dsh-skill-badge', () => {
     expect(image.readUInt32BE(16)).toBe(726)
     expect(image.readUInt32BE(20)).toBe(120)
     expect(createHash('sha256').update(image).digest('hex')).toBe(
-      'f2c4f5ec9cbe847c0c763545c4d839efa8485bc74203733d0a0e8259f233c653',
+      '6ec80cb10f21af04c3d2fe2ac7838c38f171a7945fa7409b9572fb9a31192fb4',
     )
   })
 })

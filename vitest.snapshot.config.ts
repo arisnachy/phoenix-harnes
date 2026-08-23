@@ -3,7 +3,11 @@ import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
 import { standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
 
-const DEFAULT_SNAPSHOT_MAX_CONCURRENCY = 5
+// Snapshot files launch complete application subprocesses. Five concurrent
+// cold boots saturate Windows process/IO startup and make otherwise-green
+// 2–26 second probes hit their 30 second child deadline. Keep every scenario
+// and deadline intact, but serialize the Windows lane by default.
+const DEFAULT_SNAPSHOT_MAX_CONCURRENCY = process.platform === 'win32' ? 1 : 5
 
 function positiveIntFromEnv(name: string, fallback: number): number {
   const raw = process.env[name]

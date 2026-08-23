@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-自引用 Cordis 工具集：五个面向模型的工具，操作当前 DSH 进程中的实时运行时。注册表、vm 沙箱与浏览器广播属于 [`@deepseek-ai/dsh-cordis-host-runner`](../cordis-host-runner/README.zh.md)（`ctx.dynamic`），本工具集注入它——只装这些工具而不装 runner 的组合永远不会激活它们。沙箱语义、动态包生命周期与组合及既定决策详见[工具集 Agent Note](../../../.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.zh.md)。
+自引用 Cordis 工具集：五个面向模型的工具，操作当前 PHOENIX 进程中的实时运行时。注册表、vm 沙箱与浏览器广播属于 [`@deepseek-ai/dsh-cordis-host-runner`](../cordis-host-runner/README.zh.md)（`ctx.dynamic`），本工具集注入它——只装这些工具而不装 runner 的组合永远不会激活它们。沙箱语义、动态包生命周期与组合及既定决策详见[工具集 Agent Note](../../../.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.zh.md)。
 
 ## 功能
 
@@ -16,7 +16,7 @@
 
 面向模型的确切 schema 见[生成的工具目录](../../../docs/tool-catalog.zh.md)。
 
-动态包只存在于共享 DSH 进程内存中。它可跨后续轮次保持活跃，也可能影响同一进程中的其他会话，但会在 `cordis_stop`／`cordis_undefine`、工具集卸载或 DSH 重启后消失。它不会创建插件文件、安装任何包、修改 `cordis.yml` 或个人／项目配置、跨重启存续，也不能自动转为正式插件。若要保留实验结果，应让 agent（智能体）通过常规开发流程实现普通的本地、项目或仓库插件。每个动词都以会话为界：一个包只在定义它的那个会话里可见、可控。
+动态包只存在于共享 PHOENIX 进程内存中。它可跨后续轮次保持活跃，也可能影响同一进程中的其他会话，但会在 `cordis_stop`／`cordis_undefine`、工具集卸载或 PHOENIX 重启后消失。它不会创建插件文件、安装任何包、修改 `cordis.yml` 或个人／项目配置、跨重启存续，也不能自动转为正式插件。若要保留实验结果，应让 agent（智能体）通过常规开发流程实现普通的本地、项目或仓库插件。每个动词都以会话为界：一个包只在定义它的那个会话里可见、可控。
 
 ## 信任立场
 

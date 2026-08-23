@@ -40,6 +40,10 @@ const LISTABLE_PROTOCOLS: ReadonlySet<string> = new Set([
   'openai-responses',
 ])
 
+/** OpenRouter changes its public catalog continuously; use its live listing
+ * instead of freezing the model picker to the version bundled with pi-ai. */
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
+
 /**
  * Endpoint replies larger than this are refused. The endpoint is whatever URL
  * the user typed, so the ceiling holds on the bytes actually read rather than
@@ -196,9 +200,13 @@ export async function discoverModels(
   request: LlmModelDiscoveryRequest,
   storedApiKey?: () => Promise<string | undefined>,
 ): Promise<readonly LlmDiscoveredModel[]> {
+  const baseURL = request.baseURL
+    ?? (request.provider === 'openrouter' ? OPENROUTER_BASE_URL : undefined)
   // A catalog route already has its answer, and a better one: the installed
   // entries carry context windows and output caps no listing endpoint reports.
-  if (request.provider !== undefined) {
+  // OpenRouter is the exception: its fast-moving public directory is newer
+  // than any dependency snapshot and users may still add any returned ID.
+  if (request.provider !== undefined && request.provider !== 'openrouter') {
     const installed = catalogModels(request.provider)
     if (installed.size > 0) {
       return [...installed.values()].map(model => ({
@@ -209,7 +217,7 @@ export async function discoverModels(
       }))
     }
   }
-  if (request.baseURL === undefined || request.baseURL.length === 0) {
+  if (baseURL === undefined || baseURL.length === 0) {
     throw new LlmError(
       `pi-ai ships no catalog for provider "${request.provider ?? ''}", so its models can only come from its`
       + " endpoint; set a baseURL, or enter this provider's models by hand",
@@ -229,7 +237,7 @@ export async function discoverModels(
       'DISCOVERY_UNSUPPORTED',
     )
   }
-  const url = listingUrl(request.baseURL)
+  const url = listingUrl(baseURL)
   // A key typed into the form wins: it is the one the user is testing, and it
   // may be the replacement for exactly the stored key that is failing. The
   // stored one is only asked for here, past the catalog short-circuit and the

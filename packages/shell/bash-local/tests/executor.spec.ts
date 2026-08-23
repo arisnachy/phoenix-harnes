@@ -1,14 +1,38 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
+import { candidateBashPaths, LocalBashExecutor, resolveBashPath } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import type { ShellProcess } from '@deepseek-ai/dsh-shell'
 
 const spillDir = mkdtempSync(join(tmpdir(), 'dsh-bash-exec-spec-'))
+const windows = process.platform === 'win32'
+
+function normalizeBashPath(value: string): string {
+  return value.replace(/^\/([a-z])\//i, '$1:/').replaceAll('\\', '/').toLowerCase()
+}
+
+describe('native bash resolution', () => {
+  it('honors an explicit executable and preserves the POSIX default', () => {
+    expect(resolveBashPath('/custom/bash', {}, 'win32')).toBe('/custom/bash')
+    expect(resolveBashPath(undefined, {}, 'linux')).toBe('/bin/bash')
+  })
+
+  it('prefers a real Git Bash install and never falls through to the WSL alias', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-git-bash-'))
+    const executable = join(root, 'Git', 'bin', 'bash.exe')
+    mkdirSync(join(root, 'Git', 'bin'), { recursive: true })
+    writeFileSync(executable, '')
+    const env = { ProgramW6432: root, ProgramFiles: join(root, 'other') }
+    expect(candidateBashPaths(env)[0]).toBe(executable)
+    expect(resolveBashPath(undefined, env, 'win32')).toBe(executable)
+    expect(() => resolveBashPath(undefined, { ProgramFiles: join(root, 'missing') }, 'win32'))
+      .toThrow('requires Git Bash')
+  })
+})
 
 async function setup(config: ConstructorParameters<typeof LocalBashExecutor>[1] = {}) {
   const ctx = new Context()
@@ -50,13 +74,13 @@ describe('LocalBashExecutor.run', () => {
     const fromConfig = await bash.run(bash.resolve({ command: 'pwd' }))
     expect(fromConfig.stdout.text.trim()).toMatch(/\/tmp$/)
     const fromCall = await bash.run(bash.resolve({ command: 'pwd', workdir: '/' }))
-    expect(fromCall.stdout.text.trim()).toBe('/')
+    expect(fromCall.stdout.text.trim()).toBe(windows ? '/c' : '/')
   })
 
   it('defaults cwd to process.cwd()', async () => {
     const { bash } = await setup()
     const result = await bash.run(bash.resolve({ command: 'pwd' }))
-    expect(result.stdout.text.trim()).toBe(process.cwd())
+    expect(normalizeBashPath(result.stdout.text.trim())).toBe(normalizeBashPath(process.cwd()))
   })
 
   it('caps per-call timeouts at maxTimeoutMs', async () => {
@@ -123,7 +147,12 @@ describe('LocalBashExecutor.run', () => {
     // and here nothing the executor owns did.
     const { bash } = await setup({ timeoutMs: 60_000 })
     const result = await bash.run(bash.resolve({ command: 'kill -TERM $$' }))
-    expect(result.signal).toBe('SIGTERM')
+    if (windows) {
+      expect(result.signal).toBeNull()
+      expect(result.exitCode).not.toBe(0)
+    } else {
+      expect(result.signal).toBe('SIGTERM')
+    }
     expect(result.timedOut).toBe(false)
     expect(result.aborted).toBe(false)
   })
@@ -244,7 +273,7 @@ describe('LocalBashExecutor.start (background process handles)', () => {
     expect(proc.kill()).toBe(true)
     await proc.done
     expect(proc.status).toBe('killed')
-    expect(proc.signal).toBe('SIGTERM')
+    expect(proc.signal).toBe(windows ? null : 'SIGTERM')
     expect(proc.kill()).toBe(false)
   })
 
@@ -266,7 +295,7 @@ describe('LocalBashExecutor.start (background process handles)', () => {
     proc.kill()
     await proc.done
     expect(proc.status).toBe('killed')
-    expect(proc.signal).toBe('SIGKILL')
+    expect(proc.signal).toBe(windows ? null : 'SIGKILL')
   })
 
   it('a spec.signal abort settles the handle as killed, not completed', async () => {
@@ -276,16 +305,17 @@ describe('LocalBashExecutor.start (background process handles)', () => {
     controller.abort()
     await proc.done
     expect(proc.status).toBe('killed')
-    expect(proc.signal).toBe('SIGTERM')
+    expect(proc.signal).toBe(windows ? null : 'SIGTERM')
   })
 
   it('a self-signal exit settles the handle as killed, not completed', async () => {
     const { bash } = await setup()
     const proc = bash.start(bash.resolve({ command: 'kill -TERM $$' }))
     await proc.done
-    expect(proc.status).toBe('killed')
-    expect(proc.exitCode).toBeNull()
-    expect(proc.signal).toBe('SIGTERM')
+    expect(proc.status).toBe(windows ? 'completed' : 'killed')
+    if (windows) expect(proc.exitCode).not.toBe(0)
+    else expect(proc.exitCode).toBeNull()
+    expect(proc.signal).toBe(windows ? null : 'SIGTERM')
   })
 
   it('a background spawn failure settles as killed with the error readable on stderr', async () => {
@@ -317,13 +347,14 @@ describe('process lifecycle ownership (the subprocess service, not the executor)
     // registrations-outlive-producer-fibers contract.
     await executorFiber.dispose()
     expect(proc.status).toBe('running')
-    expect(() => process.kill(pid, 0)).not.toThrow()
+    // Git Bash reports its POSIX-emulation PID, not the Windows process id.
+    if (!windows) expect(() => process.kill(pid, 0)).not.toThrow()
 
     // Service disposal kills the group and AWAITS its exit (no orphans).
     await managerFiber.dispose()
-    expect(() => process.kill(pid, 0)).toThrow()
+    if (!windows) expect(() => process.kill(pid, 0)).toThrow()
     await proc.done
-    expect(proc.status).toBe('killed')
+    expect(proc.status).toBe(windows ? 'completed' : 'killed')
   })
 
   it('service disposal escalates to SIGKILL for TERM-trapping children and settles handles', async () => {
@@ -343,7 +374,7 @@ describe('process lifecycle ownership (the subprocess service, not the executor)
     // A settled process was untouched; the live one died by escalation.
     expect(finished.status).toBe('completed')
     await trapping.done
-    expect(trapping.status).toBe('killed')
-    expect(trapping.signal).toBe('SIGKILL')
+    expect(trapping.status).toBe(windows ? 'completed' : 'killed')
+    expect(trapping.signal).toBe(windows ? null : 'SIGKILL')
   })
 })

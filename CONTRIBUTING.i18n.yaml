@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write CONTRIBUTING.md
 CONTRIBUTING.md: 0e3609f3c772fa8f9b07738da512bba7def98941
-CONTRIBUTING.zh.md: 50926d21b4595dbd851a88e406d3c81c7ce6572a
+CONTRIBUTING.zh.md: 5e34555ef946146730fa3f3140938afb28dc5a1c

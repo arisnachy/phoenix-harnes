@@ -73,6 +73,22 @@ async function harness(): Promise<Context> {
 }
 
 describe('catalog-route model discovery', () => {
+  it('refreshes OpenRouter from its live directory so newly published IDs are available', async () => {
+    const requests: string[] = []
+    vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+      requests.push(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
+      return new Response(JSON.stringify({
+        data: [{ id: 'stealth/ox-alpha', name: 'Ox Alpha', context_length: 1_050_000 }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+
+    const ctx = await harness()
+    const models = await ctx.llm.discoverModels('llm-pi-ai', { provider: 'openrouter', apiKey: 'test-key' })
+
+    expect(requests).toEqual(['https://openrouter.ai/api/v1/models'])
+    expect(models).toEqual([{ id: 'stealth/ox-alpha', name: 'Ox Alpha', contextWindow: 1_050_000 }])
+  })
+
   it('answers from the installed registry, with capacities and no network call', async () => {
     const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'from-the-endpoint' }] }) })
     const ctx = await harness()

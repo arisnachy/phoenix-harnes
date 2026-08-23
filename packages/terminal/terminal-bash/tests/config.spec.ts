@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Config } from '@deepseek-ai/dsh-terminal-bash/src/config.ts'
 import { resolveConfig, validateConfig } from '@deepseek-ai/dsh-terminal-bash/src/config.ts'
+import { resolveBashPath } from '@deepseek-ai/dsh-bash-local'
 
 function config(overrides: Partial<Config> = {}): Config {
   return {
@@ -35,7 +36,7 @@ describe('terminal-bash dialect resolution', () => {
   it('defaults bash argv to the interactive profile-free form', () => {
     const { shellPath, shellArgs, shellDialect } = resolveConfig({ backendType: 'shell', rows: 24, cols: 80 })
     expect(shellDialect).toBe('bash')
-    expect(shellPath).toBe('/bin/bash')
+    expect(shellPath).toBe(resolveBashPath())
     expect(shellArgs).toEqual(['--noprofile', '--norc', '-i'])
   })
 
@@ -61,7 +62,7 @@ describe('terminal-bash dialect resolution', () => {
     const resolved = resolveConfig({
       backendType: 'shell', shellDialect: 'bash', shellPath: '', shellArgs: [], rows: 24, cols: 80,
     })
-    expect(resolved.shellPath).toBe('/bin/bash')
+    expect(resolved.shellPath).toBe(resolveBashPath())
     expect(resolved.shellArgs).toEqual(['--noprofile', '--norc', '-i'])
   })
 

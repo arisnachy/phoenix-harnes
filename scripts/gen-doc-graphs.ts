@@ -727,7 +727,7 @@ const APP_EXAMPLES = [
   {
     id: 'dsh_base',
     rel: 'apps/cli/composition.md',
-    title: 'DSH Base Composition',
+    title: 'PHOENIX Base Composition',
     label: 'packages/bundle/base/cordis.patch.yml',
     config: 'packages/bundle/base/cordis.patch.yml',
     summary: 'The dsh-base bundle patch every profile applies first; mode bundles (dsh-web-app, dsh-headless) and the user\'s profile layer patch over it.',

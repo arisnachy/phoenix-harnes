@@ -375,7 +375,7 @@ describe('dsh-agent-spine-demo bundle', () => {
       const firstRequestText = adapter.requests[0]?.messages.map(messageText).join('\n')
       expect(firstRequestText).toContain('hi')
       expect(firstRequestText).toContain('bundled project rule')
-      expect(adapter.requests[0]?.system).toContain('You are an AI agent powered by DeepSeek Harness.')
+      expect(adapter.requests[0]?.system).toContain('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.')
       expect(adapter.requests[0]?.system).not.toContain('bundled project rule')
       await handle.dispose()
       await ctx.fiber.dispose()
@@ -614,7 +614,7 @@ describe('dsh-agent-spine-demo bundle', () => {
     await ctx.fiber.dispose()
   })
 
-  it('rejects conflicting global and nested DSH home directories', () => {
+  it('rejects conflicting global and nested PHOENIX home directories', () => {
     expect(() => {
       agentCore.apply(new Context(), {
         dshHome: '/global-dsh-home',

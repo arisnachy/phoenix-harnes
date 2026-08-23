@@ -98,10 +98,13 @@ export interface NormalizeOptions {
 function cwdSpellings(ctx: NormalizeContext): string[] {
   const spellings = [...new Set([ctx.cwd, ...ctx.cwdAliases ?? []])]
     .filter(spelling => spelling.length > 0)
+  const jsonEscapedWindowsSpellings = spellings
+    .filter(spelling => spelling.includes('\\'))
+    .map(spelling => spelling.replaceAll('\\', '\\\\'))
   const macAliases = spellings
     .filter(spelling => spelling.startsWith('/') && !spelling.startsWith('/private/'))
     .map(spelling => `/private${spelling}`)
-  return [...new Set([...spellings, ...macAliases])]
+  return [...new Set([...spellings, ...jsonEscapedWindowsSpellings, ...macAliases])]
     .sort((left, right) => right.length - left.length)
 }
 
@@ -184,6 +187,18 @@ function scrubString(value: string, ctx: NormalizeContext, cwdPathMode: CwdPathM
 /** Recursively scrub a parsed JSON value (strings replaced; structure kept). */
 function scrubValue(value: unknown, ctx: NormalizeContext, cwdPathMode: CwdPathMode, key?: string): unknown {
   if (typeof value === 'string') {
+    const trimmed = value.trim()
+    const containsEscapedCwd = cwdSpellings(ctx).some(spelling =>
+      value.includes(JSON.stringify(spelling).slice(1, -1)))
+    if (containsEscapedCwd
+      && ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']')))) {
+      try {
+        const nested = JSON.parse(value) as unknown
+        return JSON.stringify(scrubValue(nested, ctx, cwdPathMode))
+      } catch {
+        // Model/tool prose can resemble JSON without being a complete JSON value.
+      }
+    }
     const scrubbed = scrubString(value, ctx, cwdPathMode)
     return cwdPathMode === 'canonical' && key === 'path' ? scrubbed.replaceAll('\\', '/') : scrubbed
   }

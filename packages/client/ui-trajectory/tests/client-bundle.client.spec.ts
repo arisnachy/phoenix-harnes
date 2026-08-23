@@ -9,7 +9,12 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import * as Runtime from '@deepseek-ai/dsh-client-runtime/client'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import * as Primitives from '@deepseek-ai/dsh-client-ui-primitives'
+import * as React from 'react'
+import * as ReactDOM from 'react-dom'
+import * as ReactJSXRuntime from 'react/jsx-runtime'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   ConversationEventRegistry, ConversationViewRegistry, SlotRegistry,
@@ -47,11 +52,11 @@ describe('tsdown client artifact', () => {
     new Function(code!)()
     expect(handoff).toBeDefined()
     const modules = new Map<string, unknown>([
-      ['react', await import('react')],
-      ['react/jsx-runtime', await import('react/jsx-runtime')],
-      ['react-dom', await import('react-dom')],
-      ['@deepseek-ai/dsh-client-runtime/client', await import('@deepseek-ai/dsh-client-runtime/client')],
-      ['@deepseek-ai/dsh-client-ui-primitives', await import('@deepseek-ai/dsh-client-ui-primitives')],
+      ['react', React],
+      ['react/jsx-runtime', ReactJSXRuntime],
+      ['react-dom', ReactDOM],
+      ['@deepseek-ai/dsh-client-runtime/client', Runtime],
+      ['@deepseek-ai/dsh-client-ui-primitives', Primitives],
     ])
     const exports = handoff!.factory((spec) => {
       if (!modules.has(spec)) throw new Error(`unexpected require: ${spec}`)

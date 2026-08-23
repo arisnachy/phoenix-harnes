@@ -108,7 +108,7 @@ function reusable(record: DeepSeekUploadRecord, now: number, refreshMarginMs: nu
   return record.expiresAt - now > refreshMarginMs
 }
 
-/** Atomic local index shared by every DeepSeek session in this DSH home. */
+/** Atomic local index shared by every DeepSeek session in this PHOENIX home. */
 export class DeepSeekUploadIndex {
   /** Absolute owner-private JSON index path. */
   readonly path: string

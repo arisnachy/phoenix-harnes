@@ -18,7 +18,7 @@ afterEach(() => {
 })
 
 describe('dsh path helpers', () => {
-  it('owns the shared default DSH home directory name', () => {
+  it('owns the shared default PHOENIX home directory name', () => {
     expect(DSH_HOME_DIR_NAME).toBe('.dsh')
     expect(DEFAULT_DSH_HOME_DISPLAY).toBe('~/.dsh')
     expect(defaultDshHome()).toBe(join(homedir(), '.dsh'))

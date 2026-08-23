@@ -59,7 +59,7 @@ export interface Config {
   toolOrder?: string[]
   /** Tool-registry config — its presentation `mode` (forwarded through agent-spine-demo; see dsh-tools). */
   tools?: ToolsConfig
-  /** DeepSeek Harness home directory exposed to bash and used for local skill discovery. */
+  /** PHOENIX home directory exposed to bash and used for local skill discovery. */
   dshHome?: string
   /** Fallback session-title limits forwarded through agent-spine-demo. */
   sessionTitle?: NonNullable<agentCore.Config['sessionTitle']>
@@ -247,7 +247,7 @@ export interface Config {
   toolOrder?: SystemPromptConfig['toolOrder']
   /** The tool registry's config — its presentation `mode` (see dsh-tools' `Config`). */
   tools?: ToolsConfig
-  /** DeepSeek Harness home directory shared by shell context and local skill discovery. */
+  /** PHOENIX home directory shared by shell context and local skill discovery. */
   dshHome?: string
   /** Deterministic fallback and accepted-title limits; omission uses the bundle's example policy. */
   sessionTitle?: SessionTitleConfig
@@ -371,10 +371,12 @@ export interface Config {
   maxSpillBytes?: number
   /** Grace period for kill escalation and inherited pipes; at most `MAX_TIMER_DELAY_MS`. */
   graceMs?: number
+  /** Explicit bash executable; Windows otherwise prefers a native Git Bash installation. */
+  bashPath?: string
 }
 ```
 
-来源：[`packages/shell/bash-local/src/index.ts:41`](../packages/shell/bash-local/src/index.ts)
+来源：[`packages/shell/bash-local/src/index.ts:42`](../packages/shell/bash-local/src/index.ts)
 
 <a id="deepseek-aidsh-bash-sandbox"></a>
 
@@ -1872,7 +1874,7 @@ export interface Config {
 ```ts config-catalog
 /**
  * Plugin configuration: one sharing policy, two verbatim SDK option objects,
- * and one DSH-owned shutdown bound. Uploading modes validate their endpoint
+ * and one PHOENIX-owned shutdown bound. Uploading modes validate their endpoint
  * and shutdown deadline at plugin load; `DISABLED` reads neither.
  */
 export interface Config {
@@ -1986,7 +1988,7 @@ export interface Config {
 ```ts config-catalog
 /** Plugin config (all optional — the built-in facts resolve without defaults). */
 export interface Config {
-  /** DeepSeek Harness home directory exposed as `DSH_HOME`; defaults to `$DSH_HOME` or `~/.dsh`. */
+  /** PHOENIX home directory exposed as `DSH_HOME`; defaults to `$DSH_HOME` or `~/.dsh`. */
   dshHome?: string
 }
 ```
@@ -2020,7 +2022,7 @@ export interface Config {
   providerName?: string
   /** Whether project and user roots are included around custom roots. */
   includeDefaultRoots?: boolean
-  /** DeepSeek Harness config root. Defaults to `$DSH_HOME` or `~/.dsh`. */
+  /** PHOENIX config root. Defaults to `$DSH_HOME` or `~/.dsh`. */
   dshHome?: string
   /** Shared agent config root. Defaults to `$DSH_AGENTS_HOME` or `~/.agents`. */
   agentsHome?: string
@@ -2392,7 +2394,7 @@ export interface Config {
 ```ts config-catalog
 /** Plugin config: the deployment-authored fragment of the system prompt (see {@link Config.persona} for its contract). */
 export interface Config {
-  /** Include the fixed DeepSeek Harness identity before the deployment persona (default true). */
+  /** Include the fixed PHOENIX identity before the deployment persona (default true). */
   includeHarnessIdentity?: boolean
   /** Include dynamic runtime-context snapshots in model history (default true). */
   includeRuntimeContext?: boolean
@@ -2460,7 +2462,7 @@ export interface Config {
 export type ShellDialect = 'bash' | 'pwsh'
 ```
 
-来源：[`packages/terminal/terminal-bash/src/config.ts:10`](../packages/terminal/terminal-bash/src/config.ts)
+来源：[`packages/terminal/terminal-bash/src/config.ts:11`](../packages/terminal/terminal-bash/src/config.ts)
 
 <a id="deepseek-aidsh-time-context"></a>
 

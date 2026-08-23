@@ -264,7 +264,7 @@ describe('cwd resolution', () => {
 
   it('resolves a relative config cwd against the launch directory at load', async () => {
     // The child process AND its announced ACP session cwd must both get the
-    // ABSOLUTE form — DSH's own ACP server rejects a relative session cwd, and
+    // ABSOLUTE form — PHOENIX's own ACP server rejects a relative session cwd, and
     // deferring resolution to spawn would hide the launch-dir dependency.
     const relative = 'packages/subagent/subagent-acp'
     const absolute = resolve(relative)
