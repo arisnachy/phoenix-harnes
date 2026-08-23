@@ -86,6 +86,7 @@ type StubMode =
   | 'end-on-abort'
   | 'idle-then-normal'
   | 'idle-prompt-then-normal'
+  | 'stdin-prompt-then-normal'
   | 'large'
   | 'nonzero'
   | 'torn-status'
@@ -170,6 +171,11 @@ class StubTerminalSession implements TerminalBackendSession {
       this.pendingText = request.text
       return this.operation(Promise.resolve(this.result(this.motd, 'inferred_idle')))
     }
+    if (this.mode === 'stdin-prompt-then-normal') {
+      this.mode = 'normal'
+      this.pendingText = request.text
+      return this.operation(Promise.resolve(this.result(this.motd, 'stdin_read')))
+    }
     if (this.mode === 'prompt-after-idle') {
       if (request.text.length > 0) {
         const start = START_PATTERN.exec(request.text)?.[0]
@@ -179,13 +185,13 @@ class StubTerminalSession implements TerminalBackendSession {
       }
       const output = `pwsh: syntax error\n${this.motd}`
       this.scrollback += output
-      return this.operation(Promise.resolve(this.result(output, 'stdin_read')))
+      return this.operation(Promise.resolve(this.result(output, 'stdin_read')), output)
     }
     if (this.mode === 'prompt-only' || this.mode === 'prompt-crlf') {
       const newline = this.mode === 'prompt-crlf' ? '\r\n' : '\n'
       const output = `pwsh: syntax error${newline}${this.motd}${newline}`
       this.scrollback += output
-      return this.operation(Promise.resolve(this.result(output, 'stdin_read')))
+      return this.operation(Promise.resolve(this.result(output, 'stdin_read')), output)
     }
     const sent = request.text.length > 0 ? request.text : this.pendingText
     this.pendingText = ''
@@ -418,6 +424,9 @@ describe('tool-pwsh-persistent', () => {
 
     session.mode = 'idle-prompt-then-normal'
     expect(text(await call(ctx, owner, 'stale prompt then complete'))).toContain('hello from')
+
+    session.mode = 'stdin-prompt-then-normal'
+    expect(text(await call(ctx, owner, 'premature stdin prompt then complete'))).toContain('hello from')
 
     session.mode = 'incremental-fallback'
     session.scrollback = ''

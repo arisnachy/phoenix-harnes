@@ -379,6 +379,7 @@ async function executeCommand(
       throw error
     }
     const incremental = operation.readOutput()
+    const observedFreshOutput = incremental.delta.length > 0
     fallback = incremental.delta.length > 0 ? fallback + incremental.delta : result.viewport
     fallbackTruncated ||= incremental.truncated || result.truncated
     const latest = ctx.terminals.read(owner, id, { offset: 0, count: SCROLLBACK_PAGE_LINES })
@@ -411,12 +412,13 @@ async function executeCommand(
       )
     }
     // A send can settle before the PTY has consumed the write, leaving the
-    // previous prompt at the viewport tail. Do not treat that stale prompt as
-    // this command's completion until its private START marker was observed.
+    // previous prompt at the viewport tail. Require either the private START
+    // marker or fresh operation output (the syntax-error fallback) before
+    // treating a prompt as this command's completion.
     if (promptCompleted(result)
-      && (result.waitReason === 'stdin_read'
-        || latest.text.includes(marker.start)
-        || fallback.includes(marker.start))) {
+      && (latest.text.includes(marker.start)
+        || fallback.includes(marker.start)
+        || (result.waitReason === 'stdin_read' && observedFreshOutput))) {
       const snapshot = retainedScrollback(ctx, owner, id, latest)
       return renderCaptured(
         partialOutput(snapshot, marker, wrapped, fallback, fallbackTruncated),
