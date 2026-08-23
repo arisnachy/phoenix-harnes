@@ -1,0 +1,307 @@
+/**
+ * Native Codex account plane over the official app-server protocol.
+ *
+ * PHOENIX never parses or stores ChatGPT access/refresh tokens. Codex owns its
+ * managed ChatGPT login, persistence and refresh lifecycle; the harness stores
+ * only a secret-free credential marker so its generic authorization surface can
+ * represent that the product-native account has been authorized.
+ */
+
+import type { Context } from '@deepseek-ai/cordis'
+import type { AuthorizationSession } from '@deepseek-ai/dsh-authorization'
+import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
+import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
+import { codexAppServerArgv } from './run.ts'
+
+export const CODEX_ACCOUNT_KEY = credentialKey('subagent-codex', 'account')
+
+export interface CodexAccountBridgeConfig {
+  readonly env: Readonly<Record<string, string>>
+  readonly disposeGraceMs: number
+}
+
+export interface CodexAccountSnapshot {
+  readonly account: unknown
+  readonly requiresOpenaiAuth: boolean
+  readonly rateLimits?: unknown
+  readonly usage?: unknown
+}
+
+type JsonObject = Record<string, unknown>
+
+function object(value: unknown, label: string): JsonObject {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`subagent-codex account: invalid ${label}`)
+  }
+  return value as JsonObject
+}
+
+function string(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`subagent-codex account: invalid ${label}`)
+  }
+  return value
+}
+
+function boolean(value: unknown, label: string): boolean {
+  if (typeof value !== 'boolean') throw new Error(`subagent-codex account: invalid ${label}`)
+  return value
+}
+
+function abortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new Error(`subagent-codex account: operation aborted: ${String(signal.reason)}`)
+}
+
+class CodexAccountConnection {
+  private readonly transport: JsonRpcLineTransport
+  private readonly queuedNotifications: Array<{ method: string; params: JsonObject }> = []
+  private readonly notificationWaiters = new Set<{
+    method: string
+    predicate: (params: JsonObject) => boolean
+    resolve: (params: JsonObject) => void
+  }>()
+  private closed = false
+
+  constructor(
+    private readonly child: SubprocessHandle,
+    private readonly disposeGraceMs: number,
+  ) {
+    if (child.stdout === undefined || child.stdin === undefined) {
+      throw new Error('subagent-codex account: app-server did not expose protocol pipes')
+    }
+    this.transport = new JsonRpcLineTransport(child.stdout, child.stdin)
+    this.transport.onNotification((method, params) => {
+      for (const waiter of this.notificationWaiters) {
+        if (waiter.method === method && waiter.predicate(params)) {
+          this.notificationWaiters.delete(waiter)
+          waiter.resolve(params)
+          return
+        }
+      }
+      this.queuedNotifications.push({ method, params })
+      if (this.queuedNotifications.length > 64) this.queuedNotifications.shift()
+    })
+  }
+
+  async initialize(signal: AbortSignal): Promise<void> {
+    this.transport.start()
+    object(await this.transport.request('initialize', {
+      clientInfo: {
+        name: 'phoenix_codex_account',
+        title: 'PHOENIX',
+        version: '0.0.1',
+      },
+      capabilities: {
+        experimentalApi: false,
+        requestAttestation: false,
+      },
+    }, signal), 'initialize response')
+    this.transport.notify('initialized')
+    await this.transport.flush()
+  }
+
+  request(method: string, params: object, signal?: AbortSignal): Promise<unknown> {
+    return this.transport.request(method, params, signal)
+  }
+
+  waitNotification(
+    method: string,
+    predicate: (params: JsonObject) => boolean,
+    signal: AbortSignal,
+  ): Promise<JsonObject> {
+    const index = this.queuedNotifications.findIndex(item => item.method === method && predicate(item.params))
+    if (index >= 0) {
+      const [hit] = this.queuedNotifications.splice(index, 1)
+      return Promise.resolve((hit as { params: JsonObject }).params)
+    }
+    if (signal.aborted) return Promise.reject(abortError(signal))
+    return new Promise<JsonObject>((resolve, reject) => {
+      const waiter = { method, predicate, resolve: (params: JsonObject) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(params)
+      } }
+      const onAbort = (): void => {
+        this.notificationWaiters.delete(waiter)
+        reject(abortError(signal))
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      this.notificationWaiters.add(waiter)
+    })
+  }
+
+  processEnded(): Promise<never> {
+    return this.child.done.then<never>(
+      outcome => Promise.reject(new Error(
+        `subagent-codex account: app-server exited before the operation completed (code=${String(outcome.exitCode)}, signal=${String(outcome.signal)})`,
+      )),
+      error => Promise.reject(error instanceof Error ? error : new Error(String(error))),
+    )
+  }
+
+  async close(): Promise<void> {
+    if (this.closed) return
+    this.closed = true
+    this.transport.close()
+    try {
+      this.child.stdin?.end()
+    } catch {
+      // A concurrently closed protocol pipe does not change tree ownership.
+    }
+    this.child.terminate()
+    const exited = await this.child.waitForExit(AbortSignal.timeout(Math.ceil(this.disposeGraceMs + 1_000)))
+    if (!exited) throw new Error('subagent-codex account: app-server process tree did not terminate')
+    await this.child.done.catch(() => {})
+  }
+}
+
+async function openConnection(
+  ctx: Context,
+  config: CodexAccountBridgeConfig,
+  signal: AbortSignal,
+): Promise<CodexAccountConnection> {
+  const child = ctx.subprocess.spawn({
+    argv: codexAppServerArgv(),
+    cwd: process.cwd(),
+    stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' },
+    graceMs: config.disposeGraceMs,
+    signal,
+    env: { ...config.env },
+  })
+  const connection = new CodexAccountConnection(child, config.disposeGraceMs)
+  try {
+    await Promise.race([connection.initialize(signal), connection.processEnded()])
+    return connection
+  } catch (error) {
+    await connection.close().catch(() => {})
+    throw error
+  }
+}
+
+async function readAccount(
+  connection: CodexAccountConnection,
+  signal: AbortSignal,
+): Promise<{ account: unknown; requiresOpenaiAuth: boolean }> {
+  const response = object(await Promise.race([
+    connection.request('account/read', { refreshToken: false }, signal),
+    connection.processEnded(),
+  ]), 'account/read response')
+  return {
+    account: response.account,
+    requiresOpenaiAuth: boolean(response.requiresOpenaiAuth, 'account/read requiresOpenaiAuth'),
+  }
+}
+
+/** Read the native Codex account plus rate-limit/token-activity snapshots. */
+export async function readCodexAccountSnapshot(
+  ctx: Context,
+  config: CodexAccountBridgeConfig,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<CodexAccountSnapshot> {
+  const connection = await openConnection(ctx, config, signal)
+  try {
+    const account = await readAccount(connection, signal)
+    if (account.account === null || account.account === undefined) return account
+    const accountObject = object(account.account, 'account')
+    if (accountObject.type !== 'chatgpt') return account
+
+    const [rateLimits, usage] = await Promise.all([
+      Promise.race([
+        connection.request('account/rateLimits/read', {}, signal),
+        connection.processEnded(),
+      ]),
+      Promise.race([
+        connection.request('account/usage/read', {}, signal),
+        connection.processEnded(),
+      ]),
+    ])
+    return { ...account, rateLimits, usage }
+  } finally {
+    await connection.close()
+  }
+}
+
+async function commitManagedAccountMarker(ctx: Context): Promise<void> {
+  await ctx.credentials.modifyRecord(CODEX_ACCOUNT_KEY, async () => ({ kind: 'api-key' }))
+}
+
+/** Run Codex-managed browser login and commit only a secret-free harness marker. */
+async function loginManagedChatGpt(
+  ctx: Context,
+  config: CodexAccountBridgeConfig,
+  session: AuthorizationSession,
+): Promise<void> {
+  const connection = await openConnection(ctx, config, session.signal)
+  let loginId: string | undefined
+  const cancelLogin = (): void => {
+    if (loginId === undefined) return
+    void connection.request('account/login/cancel', { loginId }).catch(() => {})
+  }
+  session.signal.addEventListener('abort', cancelLogin, { once: true })
+  try {
+    const existing = await readAccount(connection, session.signal)
+    if (existing.account !== null && existing.account !== undefined) {
+      const account = object(existing.account, 'account')
+      if (account.type === 'chatgpt') {
+        await commitManagedAccountMarker(ctx)
+        session.notify({ message: 'Codex is already connected to ChatGPT; PHOENIX will reuse that managed session.' })
+        return
+      }
+    }
+
+    const started = object(await Promise.race([
+      connection.request('account/login/start', {
+        type: 'chatgpt',
+        useHostedLoginSuccessPage: true,
+        appBrand: 'codex',
+      }, session.signal),
+      connection.processEnded(),
+    ]), 'account/login/start response')
+    if (started.type !== 'chatgpt') throw new Error('subagent-codex account: Codex did not start a ChatGPT login')
+    loginId = string(started.loginId, 'account/login/start loginId')
+    const authUrl = string(started.authUrl, 'account/login/start authUrl')
+    session.notify({
+      message: 'Continue with the official Codex / ChatGPT sign-in. PHOENIX never receives your password or OAuth tokens.',
+      url: authUrl,
+    })
+
+    const completed = await Promise.race([
+      connection.waitNotification(
+        'account/login/completed',
+        params => params.loginId === loginId,
+        session.signal,
+      ),
+      connection.processEnded(),
+    ])
+    if (completed.success !== true) {
+      throw new Error(`subagent-codex account: ChatGPT login failed${typeof completed.error === 'string' ? `: ${completed.error}` : ''}`)
+    }
+
+    const verified = await readAccount(connection, session.signal)
+    const account = object(verified.account, 'verified ChatGPT account')
+    if (account.type !== 'chatgpt') throw new Error('subagent-codex account: login completed without a ChatGPT account')
+    await commitManagedAccountMarker(ctx)
+    const plan = typeof account.planType === 'string' ? ` (${account.planType})` : ''
+    session.notify({ message: `ChatGPT connected through native Codex authentication${plan}.` })
+  } finally {
+    session.signal.removeEventListener('abort', cancelLogin)
+    await connection.close()
+  }
+}
+
+/** Register the native Codex account authorization flow. */
+export function registerCodexAccountFlow(
+  ctx: Context,
+  config: CodexAccountBridgeConfig,
+): () => void {
+  return ctx.authorization.registerFlow({
+    key: CODEX_ACCOUNT_KEY,
+    label: 'ChatGPT / Codex',
+    methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
+    async run(session) {
+      await loginManagedChatGpt(ctx, config, session)
+    },
+  })
+}
