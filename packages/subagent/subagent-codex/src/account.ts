@@ -8,7 +8,12 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { AuthorizationSession } from '@deepseek-ai/dsh-authorization'
+import type {
+  AuthorizationRateLimitWindow,
+  AuthorizationSession,
+  AuthorizationTelemetry,
+  AuthorizationUsageTelemetry,
+} from '@deepseek-ai/dsh-authorization'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
@@ -37,6 +42,12 @@ function object(value: unknown, label: string): JsonObject {
   return value as JsonObject
 }
 
+function maybeObject(value: unknown): JsonObject | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as JsonObject
+    : undefined
+}
+
 function string(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`subagent-codex account: invalid ${label}`)
@@ -47,6 +58,86 @@ function string(value: unknown, label: string): string {
 function boolean(value: unknown, label: string): boolean {
   if (typeof value !== 'boolean') throw new Error(`subagent-codex account: invalid ${label}`)
   return value
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function limitWindow(value: unknown): AuthorizationRateLimitWindow | undefined {
+  const source = maybeObject(value)
+  if (source === undefined) return undefined
+  const usedPercent = optionalNumber(source.usedPercent)
+  if (usedPercent === undefined || usedPercent < 0 || usedPercent > 100) return undefined
+  const windowDurationMins = optionalNumber(source.windowDurationMins)
+  const resetsAt = optionalNumber(source.resetsAt)
+  return {
+    usedPercent,
+    ...windowDurationMins === undefined ? {} : { windowDurationMins },
+    ...resetsAt === undefined ? {} : { resetsAt },
+  }
+}
+
+function usageTelemetry(value: unknown): AuthorizationUsageTelemetry | undefined {
+  const response = maybeObject(value)
+  const summary = maybeObject(response?.summary)
+  if (summary === undefined) return undefined
+  const lifetimeTokens = optionalNumber(summary.lifetimeTokens)
+  const peakDailyTokens = optionalNumber(summary.peakDailyTokens)
+  const longestRunningTurnSec = optionalNumber(summary.longestRunningTurnSec)
+  const currentStreakDays = optionalNumber(summary.currentStreakDays)
+  const longestStreakDays = optionalNumber(summary.longestStreakDays)
+  const telemetry: AuthorizationUsageTelemetry = {
+    ...lifetimeTokens === undefined ? {} : { lifetimeTokens },
+    ...peakDailyTokens === undefined ? {} : { peakDailyTokens },
+    ...longestRunningTurnSec === undefined ? {} : { longestRunningTurnSec },
+    ...currentStreakDays === undefined ? {} : { currentStreakDays },
+    ...longestStreakDays === undefined ? {} : { longestStreakDays },
+  }
+  return Object.keys(telemetry).length === 0 ? undefined : telemetry
+}
+
+/**
+ * Convert Codex account responses into the fixed public authorization schema.
+ * Unknown provider fields are discarded rather than copied through.
+ */
+export function codexAccountTelemetry(snapshot: CodexAccountSnapshot): AuthorizationTelemetry | undefined {
+  const account = maybeObject(snapshot.account)
+  if (account === undefined) return undefined
+  const accountType = optionalString(account.type)
+  if (accountType === undefined) return undefined
+
+  const rateResponse = maybeObject(snapshot.rateLimits)
+  const limits = maybeObject(rateResponse?.rateLimits)
+  const primaryLimit = limitWindow(limits?.primary)
+  const secondaryLimit = limitWindow(limits?.secondary)
+  const rawCredits = maybeObject(limits?.credits)
+  const hasCredits = rawCredits?.hasCredits
+  const unlimited = rawCredits?.unlimited
+  const credits = typeof hasCredits === 'boolean' && typeof unlimited === 'boolean'
+    ? {
+      hasCredits,
+      unlimited,
+      ...optionalString(rawCredits.balance) === undefined ? {} : { balance: optionalString(rawCredits.balance) as string },
+    }
+    : undefined
+  const usage = usageTelemetry(snapshot.usage)
+
+  return {
+    kind: 'account',
+    provider: 'Codex',
+    accountType,
+    ...optionalString(account.email) === undefined ? {} : { email: optionalString(account.email) as string },
+    ...optionalString(account.planType) === undefined ? {} : { plan: optionalString(account.planType) as string },
+    ...primaryLimit === undefined ? {} : { primaryLimit },
+    ...secondaryLimit === undefined ? {} : { secondaryLimit },
+    ...credits === undefined ? {} : { credits },
+    ...usage === undefined ? {} : { usage },
+  }
 }
 
 function abortError(signal: AbortSignal): Error {
@@ -300,6 +391,10 @@ export function registerCodexAccountFlow(
     key: CODEX_ACCOUNT_KEY,
     label: 'ChatGPT / Codex',
     methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
+    async inspect(signal) {
+      const snapshot = await readCodexAccountSnapshot(ctx, config, signal)
+      return codexAccountTelemetry(snapshot)
+    },
     async run(session) {
       await loginManagedChatGpt(ctx, config, session)
     },
