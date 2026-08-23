@@ -1,4 +1,4 @@
-name: PHOENIX Temporary Lockfile Refresh
+name: PHOENIX Temporary Integration Refresh
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: phoenix-lockfile-refresh
+  group: phoenix-integration-refresh
   cancel-in-progress: true
 
 jobs:
@@ -19,24 +19,93 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: phoenix/evolution-current-v16
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           run_install: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Wire sanitized authorization telemetry into the existing catalog
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('packages/host/apiproxy/src/api-proxy.ts')
+          text = path.read_text()
+          old = '''        const entries = await Promise.all(authorization.list().map(async (entry) => {
+            let stored: { kind: 'api-key' | 'grant' } | undefined
+            if (credentials !== undefined) {
+              try {
+                const info = await credentials.describeRecord(parseCredentialKey(String(entry.key)))
+                if (info.configured && info.kind !== undefined) stored = { kind: info.kind }
+              } catch {
+                // The key did not address a record this deployment stores; leave stored off.
+              }
+            }
+            return {
+              key: String(entry.key),
+              label: entry.label,
+              methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
+              inFlight: entry.inFlight,
+              ...stored === undefined ? {} : { stored },
+            }
+          }))'''
+          new = '''        const entries = await Promise.all(authorization.list().map(async (entry) => {
+            let stored: { kind: 'api-key' | 'grant' } | undefined
+            if (credentials !== undefined) {
+              try {
+                const info = await credentials.describeRecord(parseCredentialKey(String(entry.key)))
+                if (info.configured && info.kind !== undefined) stored = { kind: info.kind }
+              } catch {
+                // The key did not address a record this deployment stores; leave stored off.
+              }
+            }
+            // Live account telemetry is optional and deliberately inspected
+            // only for a flow whose marker is already stored. Providers return
+            // a fixed, secret-free schema; timeout/failure degrades to no
+            // telemetry instead of making Settings or sign-in unavailable.
+            let telemetry
+            if (stored !== undefined) {
+              try {
+                telemetry = await authorization.inspect(entry.key, AbortSignal.timeout(5_000))
+              } catch {
+                telemetry = undefined
+              }
+            }
+            return {
+              key: String(entry.key),
+              label: entry.label,
+              methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
+              inFlight: entry.inFlight,
+              ...stored === undefined ? {} : { stored },
+              ...telemetry === undefined ? {} : { telemetry },
+            }
+          }))'''
+          if old not in text:
+              if new in text:
+                  print('api-proxy telemetry wire already applied')
+              else:
+                  raise SystemExit('expected authorization.list block was not found; refusing fuzzy patch')
+          else:
+              path.write_text(text.replace(old, new, 1))
+              print('api-proxy telemetry wire applied')
+          PY
+
       - name: Regenerate only lockfile metadata
         run: pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
-      - name: Commit synchronized lockfile
+
+      - name: Commit integration refresh if needed
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- pnpm-lock.yaml; then
-            echo "Lockfile already synchronized."
+          if git diff --quiet -- pnpm-lock.yaml packages/host/apiproxy/src/api-proxy.ts; then
+            echo "Integration already synchronized."
             exit 0
           fi
           git config user.name "phoenix-evolution-bot"
           git config user.email "phoenix-evolution-bot@users.noreply.github.com"
-          git add pnpm-lock.yaml
-          git commit -m "fix(lockfile): synchronize native Codex account bridge"
+          git add pnpm-lock.yaml packages/host/apiproxy/src/api-proxy.ts
+          git commit -m "fix(integration): wire Codex telemetry and synchronize lockfile"
           git push origin HEAD:phoenix/evolution-current-v16
