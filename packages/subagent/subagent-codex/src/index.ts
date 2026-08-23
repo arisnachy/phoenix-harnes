@@ -26,6 +26,10 @@ import {
   type CodexPermissionMode,
   type CodexRunSpec,
 } from './run.ts'
+import { registerCodexAccountFlow } from './account.ts'
+
+export { CODEX_ACCOUNT_KEY, readCodexAccountSnapshot } from './account.ts'
+export type { CodexAccountBridgeConfig, CodexAccountSnapshot } from './account.ts'
 
 export const name = 'subagent-codex'
 export const inject = ['subagents', 'subprocess']
@@ -106,9 +110,10 @@ class CodexProvider implements SubagentProvider {
 }
 
 /**
- * Register one Profile-named Codex provider.
- * @param ctx - context carrying shared subagent and subprocess services.
- * @param config - registry name, permission mode, child environment, and disposal grace.
+ * Register one Profile-named Codex provider plus its optional native account
+ * flow. The account integration is mounted only when the composition also
+ * exposes authorization + credential seams; headless compositions keep the
+ * subagent provider without gaining a login surface.
  */
 export function apply(ctx: Context, config: Config): void {
   const resolved: ResolvedConfig = {
@@ -132,4 +137,11 @@ export function apply(ctx: Context, config: Config): void {
     ctx,
     resolved,
   ))
+
+  ctx.inject(['authorization', 'credentials'], (authorized) => {
+    registerCodexAccountFlow(authorized, {
+      env: resolved.env,
+      disposeGraceMs: resolved.disposeGraceMs,
+    })
+  })
 }
