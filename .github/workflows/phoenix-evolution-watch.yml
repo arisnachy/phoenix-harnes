@@ -29,11 +29,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin main "${INBOX_BRANCH}:${INBOX_BRANCH}" || true
+          git fetch origin main "+refs/heads/${INBOX_BRANCH}:refs/remotes/origin/${INBOX_BRANCH}"
           git config user.name "phoenix-evolution-bot"
           git config user.email "phoenix-evolution-bot@users.noreply.github.com"
           git merge --no-edit origin/main
-          if [[ "$(git rev-list --count "origin/${INBOX_BRANCH}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]]; then
+          if [[ "$(git rev-list --count "origin/${INBOX_BRANCH}..HEAD")" -gt 0 ]]; then
             git push origin "HEAD:${INBOX_BRANCH}"
           fi
       - name: Observe official upstream heads
