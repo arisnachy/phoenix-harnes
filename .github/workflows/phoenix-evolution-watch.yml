@@ -1,0 +1,131 @@
+name: PHOENIX Evolution Watch
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: phoenix-evolution-watch
+  cancel-in-progress: false
+
+env:
+  INBOX_BRANCH: phoenix/evolution-inbox
+
+jobs:
+  observe-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phoenix/evolution-inbox
+          fetch-depth: 0
+      - name: Refresh inbox with stable main
+        shell: bash
+        run: |
+          git fetch origin main
+          git config user.name "phoenix-evolution-bot"
+          git config user.email "phoenix-evolution-bot@users.noreply.github.com"
+          git merge --no-edit origin/main
+      - name: Observe official upstream heads
+        shell: bash
+        run: |
+          mkdir -p .phoenix/evolution
+          deepseek=$(git ls-remote https://github.com/deepseek-ai/deepseek-harness.git refs/heads/main | cut -f1)
+          codex=$(git ls-remote https://github.com/openai/codex.git refs/heads/main | cut -f1)
+          claude=$(git ls-remote https://github.com/anthropics/claude-code.git refs/heads/main | cut -f1)
+          if [[ -z "$deepseek" || -z "$codex" || -z "$claude" ]]; then
+            echo "One or more upstream refs could not be resolved; refusing to publish a partial observation."
+            exit 1
+          fi
+          cat > .phoenix/evolution/observed-sources.json <<EOF
+          {
+            "schemaVersion": 1,
+            "observedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "deepseekHarness": { "ref": "main", "sha": "$deepseek", "intake": "merge-candidate" },
+            "openaiCodex": { "ref": "main", "sha": "$codex", "intake": "observe-and-adapt" },
+            "anthropicClaudeCode": { "ref": "main", "sha": "$claude", "intake": "observe-and-adapt" }
+          }
+          EOF
+      - name: Commit observations only when source heads changed
+        shell: bash
+        run: |
+          if git diff --quiet -- .phoenix/evolution/observed-sources.json && git diff --cached --quiet; then
+            echo "No upstream observation change."
+            exit 0
+          fi
+          git add .phoenix/evolution/observed-sources.json
+          git commit -m "chore(evolution): observe upstream capability heads"
+          git push origin HEAD:${INBOX_BRANCH}
+
+  deepseek-source-candidate:
+    needs: observe-contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phoenix/evolution-inbox
+          fetch-depth: 0
+      - name: Prepare DeepSeek merge candidate
+        id: merge
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "phoenix-evolution-bot"
+          git config user.email "phoenix-evolution-bot@users.noreply.github.com"
+          git remote add deepseek https://github.com/deepseek-ai/deepseek-harness.git
+          git fetch deepseek main
+          sha=$(git rev-parse deepseek/main)
+          short=${sha:0:12}
+          branch="phoenix/evolution-deepseek-${short}"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+          if git merge-base --is-ancestor deepseek/main HEAD; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git checkout -b "$branch"
+          set +e
+          git merge --no-ff --no-edit deepseek/main
+          status=$?
+          set -e
+          if [[ $status -ne 0 ]]; then
+            conflicts=$(git diff --name-only --diff-filter=U | sed 's/^/- /')
+            git merge --abort || true
+            echo "needed=conflict" >> "$GITHUB_OUTPUT"
+            marker="deepseek-${short}"
+            existing=$(gh issue list --state open --search "$marker in:title" --json number --jq '.[0].number // empty')
+            if [[ -z "$existing" ]]; then
+              gh issue create \
+                --title "[Evolution] ${marker} requires conflict review" \
+                --body "PHOENIX refused to auto-resolve an upstream DeepSeek merge conflict. Conflicted paths:\n\n${conflicts}\n\nNo change was applied to main. Resolve this as a reviewed evolution candidate."
+            fi
+            exit 0
+          fi
+
+          echo "needed=true" >> "$GITHUB_OUTPUT"
+          git push --set-upstream origin "$branch"
+      - name: Open quarantine PR into evolution inbox
+        if: steps.merge.outputs.needed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.merge.outputs.branch }}
+          SHA: ${{ steps.merge.outputs.sha }}
+        run: |
+          existing=$(gh pr list --state open --head "$BRANCH" --base "$INBOX_BRANCH" --json number --jq '.[0].number // empty')
+          if [[ -z "$existing" ]]; then
+            gh pr create \
+              --base "$INBOX_BRANCH" \
+              --head "$BRANCH" \
+              --title "chore(evolution): DeepSeek upstream ${SHA:0:12}" \
+              --body "Automated source candidate for DeepSeek Harness ${SHA}. This PR targets the PHOENIX evolution inbox, never main. It must pass PHOENIX identity/security/regression gates and human review before any later promotion. Conflicts are never auto-resolved."
+          fi
