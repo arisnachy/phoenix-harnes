@@ -9,6 +9,8 @@ import type {
 } from '@deepseek-ai/dsh-authorization/types'
 import type { RpcRequest, RpcResponse } from './rpc.ts'
 
+export type { AuthorizationTelemetry } from '@deepseek-ai/dsh-authorization/types'
+
 /** A prompt with its signal removed before it crosses the wire. */
 export type AuthorizationPromptView = {
   kind: 'text' | 'secret'
@@ -41,6 +43,8 @@ export interface AuthorizationEntryView {
   inFlight: boolean
   /** The credential record behind the flow, when one is stored. */
   stored?: AuthorizationStoredView
+  /** Provider-owned, explicitly sanitized plan/quota/usage information. */
+  telemetry?: AuthorizationTelemetry
 }
 
 /** Wire-safe projection of one offered authorization method. */
@@ -71,18 +75,11 @@ export interface AuthorizationAttemptView {
 
 /** Authorization domain methods. */
 export interface AuthorizationApi {
-  /** List registered flows without credential values. */
-  list(request: RpcRequest<{}>): Promise<RpcResponse<{ entries: AuthorizationEntryView[] }>>
-
   /**
-   * Read one flow's explicitly sanitized account telemetry. The telemetry type
-   * has no arbitrary payload field, so provider-owned token/session objects
-   * cannot cross this boundary accidentally.
+   * List registered flows without credential values. Connected flows may add
+   * their fixed-schema sanitized telemetry; inspection failure simply omits it.
    */
-  inspect(
-    request: RpcRequest<{ key: string }>,
-    signal?: AbortSignal,
-  ): Promise<RpcResponse<{ telemetry?: AuthorizationTelemetry }>>
+  list(request: RpcRequest<{}>): Promise<RpcResponse<{ entries: AuthorizationEntryView[] }>>
 
   /** Start a background attempt and return before the flow asks its first question. */
   begin(
@@ -100,7 +97,7 @@ export interface AuthorizationApi {
     request: RpcRequest<{ attemptId: string; promptId: string; value: string }>,
   ): Promise<RpcResponse<{ accepted: true }>>
 
-  /** Request cancellation of an attempt. */
+  /** Request cancellation of an opaque authorization attempt. */
   cancel(
     request: RpcRequest<{ attemptId: string }>,
   ): Promise<RpcResponse<{ cancelled: true }>>
