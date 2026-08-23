@@ -354,6 +354,69 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.headers[0]?.authorization).toBe('')
   })
 
+  it('serves a Codex route over OpenAI Responses when the credential is a platform key', async () => {
+    const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'expected mock failure' } }) }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: { 'openai-codex': { apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url } },
+    })
+
+    const result = await assemble(ctx, { provider: 'openai-codex', model: 'gpt-5.4', messages: [] })
+
+    // The Codex wire dies on a platform key before any HTTP request, so
+    // reaching the mock at the Responses path proves the reroute happened.
+    expect(result.finish.kind).toBe('error')
+    expect(server.paths).toEqual(['/responses'])
+    expect(server.headers[0]?.authorization).toBe('Bearer test-key')
+    expect(server.headers[0]?.['chatgpt-account-id']).toBeUndefined()
+  })
+
+  it('keeps the Codex wire for a ChatGPT access JWT credential', async () => {
+    const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'expected mock failure' } }) }])
+    const payload = Buffer
+      .from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acc_test' } }))
+      .toString('base64')
+    vi.stubEnv('PI_CODEX_JWT', `eyJhbGciOiJub25lIn0.${payload}.sig`)
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: { 'openai-codex': { apiKeyEnv: 'PI_CODEX_JWT', baseURL: server.url } },
+    })
+
+    const result = await assemble(ctx, { provider: 'openai-codex', model: 'gpt-5.4', messages: [] })
+
+    expect(result.finish.kind).toBe('error')
+    // The dialect probe may register twice (streaming upgrade then its SSE
+    // fallback); every hit must stay on the Codex wire with its account id.
+    expect(server.paths.length).toBeGreaterThan(0)
+    expect(server.paths.every(path => path === '/codex/responses')).toBe(true)
+    expect(server.headers.some(headers => headers['chatgpt-account-id'] === 'acc_test')).toBe(true)
+  })
+
+  it('fails a claimless JWT on the Codex route before any request with sign-in guidance', async () => {
+    const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'never reached' } }) }])
+    // The JWT shape passes the platform-key fallback but carries no
+    // chatgpt_account_id claim, so pi-ai's wire would die opaquely; the
+    // adapter must say what the route needs instead.
+    const payload = Buffer.from(JSON.stringify({ sub: 'user-1' })).toString('base64')
+    vi.stubEnv('PI_CODEX_JWT_NOCLAIM', `eyJhbGciOiJub25lIn0.${payload}.sig`)
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: { 'openai-codex': { apiKeyEnv: 'PI_CODEX_JWT_NOCLAIM', baseURL: server.url } },
+    })
+
+    const result = await assemble(ctx, { provider: 'openai-codex', model: 'gpt-5.4', messages: [] })
+
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: { code: 'AUTH' },
+    })
+    expect(result.finish.kind === 'error' && result.finish.failure.message.includes('ChatGPT Codex sign-in')).toBe(true)
+    expect(server.paths).toEqual([])
+  })
+
   it.each([
     [401, 'AUTH'],
     [400, 'INVALID_REQUEST'],

@@ -786,6 +786,10 @@ describe('mapStopReason / mapUsage', () => {
   it('maps routable HTTP-ish error messages to stable codes', () => {
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 401: bad key' })))
       .toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: 'Failed to extract accountId from token',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 429: rate limit' })))
       .toMatchObject({ kind: 'error', failure: { code: 'RATE_LIMIT' } })
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 429: insufficient_quota' })))
