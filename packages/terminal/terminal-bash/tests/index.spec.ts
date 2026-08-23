@@ -391,7 +391,7 @@ describe('BashTerminalBackend startup rollback', () => {
         const second = sends.length > 1
         return {
           done: Promise.resolve({
-            viewport: second ? 'dsh> \r\n' : "function prompt { 'dsh> ' }\n",
+            viewport: second ? 'dsh> \r' : "function prompt { 'dsh> ' }\n",
             waitReason: second ? 'inferred_idle' as const : 'stdin_read' as const,
             sessionStatus: { kind: 'running' as const }, truncated: false,
           }),

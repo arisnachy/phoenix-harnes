@@ -90,7 +90,7 @@ export const PWSH_PROMPT_SETUP =
   "function prompt { [Console]::Write([char]27 + ']133;D;' + [int]$LASTEXITCODE + [char]7); '" + CONTROLLED_PROMPT + "' }"
 
 function controlledPromptCompleted(text: string): boolean {
-  return text.split(/\r?\n/).some(line => line === CONTROLLED_PROMPT)
+  return text.split(/\r\n|\r|\n/).some(line => line === CONTROLLED_PROMPT)
 }
 
 function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutionPolicy): string[] {
@@ -147,7 +147,7 @@ async function startupSession(
       if (controlledPromptCompleted(viewport)
         || controlledPromptCompleted(scrollback)) break
     }
-    session.motd = viewport.replace(/(?:\r\n|\n)$/, '')
+    session.motd = viewport.replace(/(?:\r\n|\r|\n)$/, '')
   }
   if (signal === undefined) {
     await start()
