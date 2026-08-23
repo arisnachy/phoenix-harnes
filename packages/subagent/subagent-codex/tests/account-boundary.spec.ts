@@ -7,17 +7,17 @@ const accountSource = readFileSync(
   'utf8',
 )
 const piAiLoginSource = readFileSync(
-  fileURLToPath(new URL('../../llm-pi-ai/src/login.ts', import.meta.url)),
+  fileURLToPath(new URL('../../../llm/llm-pi-ai/src/login.ts', import.meta.url)),
   'utf8',
 )
 
 describe('native Codex managed-account boundary', () => {
   it('uses the official Codex account RPCs for login and account telemetry', () => {
-    expect(accountSource).toContain("account/login/start")
+    expect(accountSource).toContain('account/login/start')
     expect(accountSource).toContain("type: 'chatgpt'")
-    expect(accountSource).toContain("account/read")
-    expect(accountSource).toContain("account/rateLimits/read")
-    expect(accountSource).toContain("account/usage/read")
+    expect(accountSource).toContain('account/read')
+    expect(accountSource).toContain('account/rateLimits/read')
+    expect(accountSource).toContain('account/usage/read')
   })
 
   it('does not parse, copy, or persist ChatGPT OAuth token internals', () => {
@@ -29,7 +29,7 @@ describe('native Codex managed-account boundary', () => {
   })
 
   it('keeps openai-codex out of the generic pi-ai OAuth owner', () => {
-    expect(piAiLoginSource).toContain("NATIVE_CODEX_PROVIDER_ID = 'openai-codex'")
-    expect(piAiLoginSource).toContain('providerId === NATIVE_CODEX_PROVIDER_ID')
+    expect(piAiLoginSource).toContain("NATIVE_SESSION_AUTH_PROVIDERS = new Set<string>(['openai-codex'])")
+    expect(piAiLoginSource).toContain('!NATIVE_SESSION_AUTH_PROVIDERS.has(providerId)')
   })
 })
