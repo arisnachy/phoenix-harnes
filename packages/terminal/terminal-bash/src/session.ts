@@ -218,7 +218,11 @@ export class LocalPtySession implements TerminalBackendSession {
     }
   }
 
-  /** Run one bootstrap send without allowing heuristic exact-probe readiness. */
+  /**
+   * Run one bootstrap send without allowing heuristic exact-probe readiness.
+   * @param request - terminal send request used for bootstrap readiness detection.
+   * @returns Resolves with the terminal send result once bootstrap readiness settles.
+   */
   async startupSend(request: TerminalSendRequest): Promise<TerminalSendResult> {
     this.initializing = true
     try {
