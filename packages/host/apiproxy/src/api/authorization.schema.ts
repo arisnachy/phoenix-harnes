@@ -3,19 +3,51 @@
 import { z } from 'zod'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
-import type { AuthorizationAttemptView, AuthorizationPromptView, AuthorizationNoticeView } from './authorization.ts'
+import type {
+  AuthorizationAttemptView, AuthorizationPromptView, AuthorizationNoticeView, AuthorizationTelemetry,
+} from './authorization.ts'
 
 const authorizationKeySchema = z.string().regex(/^[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/)
 const attemptIdSchema = z.uuid()
 const promptIdSchema = z.uuid()
 
 const authorizationMethodSchema = z.object({ id: z.string().min(1), label: z.string().min(1) })
+const rateLimitWindowSchema = z.object({
+  usedPercent: z.number().min(0).max(100),
+  windowDurationMins: z.number().nonnegative().optional(),
+  resetsAt: z.number().nonnegative().optional(),
+})
+const creditsTelemetrySchema = z.object({
+  hasCredits: z.boolean(),
+  unlimited: z.boolean(),
+  balance: z.string().optional(),
+})
+const usageTelemetrySchema = z.object({
+  lifetimeTokens: z.number().nonnegative().optional(),
+  peakDailyTokens: z.number().nonnegative().optional(),
+  longestRunningTurnSec: z.number().nonnegative().optional(),
+  currentStreakDays: z.number().nonnegative().optional(),
+  longestStreakDays: z.number().nonnegative().optional(),
+})
+const authorizationTelemetrySchema = z.object({
+  kind: z.literal('account'),
+  provider: z.string().min(1),
+  accountType: z.string().optional(),
+  email: z.string().optional(),
+  plan: z.string().optional(),
+  primaryLimit: rateLimitWindowSchema.optional(),
+  secondaryLimit: rateLimitWindowSchema.optional(),
+  credits: creditsTelemetrySchema.optional(),
+  usage: usageTelemetrySchema.optional(),
+}) satisfies z.ZodType<Wire<AuthorizationTelemetry>>
+
 const authorizationEntrySchema = z.object({
   key: authorizationKeySchema,
   label: z.string().min(1),
   methods: z.array(authorizationMethodSchema).min(1),
   inFlight: z.boolean(),
   stored: z.object({ kind: z.union([z.literal('api-key'), z.literal('grant')]) }).optional(),
+  telemetry: authorizationTelemetrySchema.optional(),
 })
 
 const authorizationNoticeSchema = z.object({
