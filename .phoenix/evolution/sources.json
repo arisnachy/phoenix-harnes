@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "stableBranch": "main",
+  "inboxBranch": "phoenix/evolution-inbox",
+  "policy": {
+    "directMainWrites": false,
+    "automaticMainMerge": false,
+    "requireHumanPromotion": true,
+    "requireIdentityGate": true,
+    "requireSecurityGate": true,
+    "requireRegressionGate": true,
+    "requireRollbackPlan": true
+  },
+  "sources": [
+    {
+      "id": "deepseek-harness",
+      "kind": "source-upstream",
+      "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
+      "ref": "main",
+      "intake": "merge-candidate",
+      "promotion": "tested-pr-only"
+    },
+    {
+      "id": "openai-codex",
+      "kind": "capability-contract",
+      "repository": "https://github.com/openai/codex.git",
+      "ref": "main",
+      "intake": "observe-and-adapt",
+      "promotion": "adapter-conformance-only",
+      "notes": "Never copy private/session tokens or depend on undocumented token claims. ChatGPT/Codex subscription auth must stay Codex-managed through the official Codex CLI/app-server login contract. OpenAI API keys remain a separate provider path."
+    },
+    {
+      "id": "anthropic-claude-code",
+      "kind": "capability-contract",
+      "repository": "https://github.com/anthropics/claude-code.git",
+      "ref": "main",
+      "intake": "observe-and-adapt",
+      "promotion": "adapter-conformance-only"
+    }
+  ]
+}
