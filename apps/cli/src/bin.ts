@@ -28,7 +28,11 @@ const invocation = parseDshArgs(process.argv.slice(2), readVersion())
 
 switch (invocation.mode) {
   case 'profile': {
-    const { runProfile } = await import('./profile-boot.ts')
+    const [{ runProfile }, { startPhoenixUpdateWatcher }] = await Promise.all([
+      import('./profile-boot.ts'),
+      import('./phoenix-update-watch.ts'),
+    ])
+    startPhoenixUpdateWatcher()
     await runProfile({
       environment: loadLayeredEnv('dsh'),
       profile: invocation.profile,
