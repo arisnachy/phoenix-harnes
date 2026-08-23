@@ -140,12 +140,10 @@ async function startupSession(
       if (result.waitReason === 'timeout') throw new Error('PTY shell did not reach readiness before startup timeout')
       viewport = result.viewport
       const scrollback = session.read({ offset: 0, count: 20 }).text
-      // `stdin_read` is emitted only after LocalPtySession observes the OSC 133
-      // prompt marker, its exact text, and shell foreground ownership. For
-      // simpler backends, a prompt at the retained tail is the fallback. The
-      // echoed function source alone satisfies neither condition.
-      if (result.waitReason === 'stdin_read'
-        || controlledPromptCompleted(viewport)
+      // Exact-probe readiness can report `stdin_read` before PowerShell has
+      // rendered the prompt. Require the retained tail itself: the echoed
+      // function source ends in `}`, so it cannot satisfy this condition.
+      if (controlledPromptCompleted(viewport)
         || controlledPromptCompleted(scrollback)) break
     }
     session.motd = viewport.replace(/(?:\r\n|\n)$/, '')
