@@ -89,6 +89,10 @@ function childEnvironment(spec: TerminalBackendSpawnSpec, dialect: ShellDialect)
 export const PWSH_PROMPT_SETUP =
   "function prompt { [Console]::Write([char]27 + ']133;D;' + [int]$LASTEXITCODE + [char]7); '" + CONTROLLED_PROMPT + "' }"
 
+function controlledPromptCompleted(text: string): boolean {
+  return text.endsWith(CONTROLLED_PROMPT) || text.endsWith(`${CONTROLLED_PROMPT}\n`)
+}
+
 function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutionPolicy): string[] {
   const argv = [config.shellPath, ...config.shellArgs]
   if (policy.mode === 'danger-full-access') return argv
@@ -139,7 +143,7 @@ async function startupSession(
       // The submitted function source itself contains the prompt text. An
       // echoed command is not readiness: only a prompt at the retained tail
       // proves PowerShell finished evaluating the bootstrap.
-      if (viewport.endsWith(CONTROLLED_PROMPT) || scrollback.endsWith(CONTROLLED_PROMPT)) break
+      if (controlledPromptCompleted(viewport) || controlledPromptCompleted(scrollback)) break
     }
     session.motd = viewport
   }
