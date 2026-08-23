@@ -70,8 +70,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Verify Codex auth boundary
-        run: pnpm exec vitest run packages/llm/llm-pi-ai/tests/login.spec.ts
+      - name: Verify generic and native Codex auth boundaries
+        run: >-
+          pnpm exec vitest run
+          packages/llm/llm-pi-ai/tests/login.spec.ts
+          packages/subagent/subagent-codex/tests/account-boundary.spec.ts
       - name: Typecheck contracts
         run: pnpm run typecheck
 
