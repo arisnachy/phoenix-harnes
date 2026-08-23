@@ -391,7 +391,7 @@ describe('BashTerminalBackend startup rollback', () => {
         const second = sends.length > 1
         return {
           done: Promise.resolve({
-            viewport: second ? 'dsh> ' : 'PowerShell 7.6.4\n',
+            viewport: second ? 'dsh> ' : "function prompt { 'dsh> ' }\n",
             waitReason: 'inferred_idle' as const,
             sessionStatus: { kind: 'running' as const }, truncated: false,
           }),

@@ -85,6 +85,7 @@ type StubMode =
   | 'wait-for-abort'
   | 'end-on-abort'
   | 'idle-then-normal'
+  | 'idle-prompt-then-normal'
   | 'large'
   | 'nonzero'
   | 'torn-status'
@@ -92,6 +93,8 @@ type StubMode =
   | 'end-only'
   | 'init-exit'
   | 'init-timeout'
+  | 'init-echo-then-ready'
+  | 'init-ready'
   | 'spawn-error'
   | 'send-error'
   | 'prompt-after-idle'
@@ -131,6 +134,14 @@ class StubTerminalSession implements TerminalBackendSession {
       if (this.mode === 'init-timeout') {
         return this.operation(Promise.resolve(this.result('', 'timeout')))
       }
+      if (this.mode === 'init-echo-then-ready') {
+        this.mode = 'init-ready'
+        return this.operation(Promise.resolve(this.result("function prompt { '__DSH_PERSISTENT_PWSH_PROMPT__ ' }", 'inferred_idle')))
+      }
+      return this.operation(Promise.resolve(this.result(this.motd, 'stdin_read')))
+    }
+    if (this.mode === 'init-ready' && request.text.length === 0) {
+      this.mode = 'normal'
       return this.operation(Promise.resolve(this.result(this.motd, 'stdin_read')))
     }
     if (this.mode === 'send-error') throw new Error('stub send failed')
@@ -153,6 +164,11 @@ class StubTerminalSession implements TerminalBackendSession {
       this.mode = 'normal'
       this.pendingText = request.text
       return this.operation(Promise.resolve(this.result('', 'inferred_idle')))
+    }
+    if (this.mode === 'idle-prompt-then-normal') {
+      this.mode = 'normal'
+      this.pendingText = request.text
+      return this.operation(Promise.resolve(this.result(this.motd, 'inferred_idle')))
     }
     if (this.mode === 'prompt-after-idle') {
       if (request.text.length > 0) {
@@ -400,6 +416,9 @@ describe('tool-pwsh-persistent', () => {
     session.mode = 'idle-then-normal'
     expect(text(await call(ctx, owner, 'silent then complete'))).toContain('hello from')
 
+    session.mode = 'idle-prompt-then-normal'
+    expect(text(await call(ctx, owner, 'stale prompt then complete'))).toContain('hello from')
+
     session.mode = 'incremental-fallback'
     session.scrollback = ''
     expect(text(await call(ctx, owner, 'incremental fallback'))).toBe('increment')
@@ -561,6 +580,12 @@ describe('tool-pwsh-persistent', () => {
       expect(stub.sessions[0]?.closed).toContain('persistent pwsh initialization failed')
     },
   )
+
+  it('waits past an echoed prompt definition before sending the first command', async () => {
+    const { ctx, owner, stub } = await setup({ backendType: 'stub' }, 'init-echo-then-ready')
+    expect(text(await call(ctx, owner, 'pwd'))).toBe('hello from stub')
+    expect(stub.sessions[0]?.sends).toBe(3)
+  })
 
   it('clears a failed spawn without trying to close an unpublished shell', async () => {
     const { ctx, owner, stub } = await setup({ backendType: 'stub' }, 'spawn-error')

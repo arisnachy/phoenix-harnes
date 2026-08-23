@@ -136,7 +136,10 @@ async function startupSession(
       if (result.waitReason === 'timeout') throw new Error('PTY shell did not reach readiness before startup timeout')
       viewport = result.viewport
       const scrollback = session.read({ offset: 0, count: 20 }).text
-      if (viewport.includes(CONTROLLED_PROMPT) || scrollback.includes(CONTROLLED_PROMPT)) break
+      // The submitted function source itself contains the prompt text. An
+      // echoed command is not readiness: only a prompt at the retained tail
+      // proves PowerShell finished evaluating the bootstrap.
+      if (viewport.endsWith(CONTROLLED_PROMPT) || scrollback.endsWith(CONTROLLED_PROMPT)) break
     }
     session.motd = viewport
   }
