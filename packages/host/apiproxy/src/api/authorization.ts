@@ -4,7 +4,9 @@
  * renders notices and answers prompts over separate requests.
  */
 
-import type { AuthorizationNotice, AuthorizationPromptOption } from '@deepseek-ai/dsh-authorization/types'
+import type {
+  AuthorizationNotice, AuthorizationPromptOption, AuthorizationTelemetry,
+} from '@deepseek-ai/dsh-authorization/types'
 import type { RpcRequest, RpcResponse } from './rpc.ts'
 
 /** A prompt with its signal removed before it crosses the wire. */
@@ -71,6 +73,16 @@ export interface AuthorizationAttemptView {
 export interface AuthorizationApi {
   /** List registered flows without credential values. */
   list(request: RpcRequest<{}>): Promise<RpcResponse<{ entries: AuthorizationEntryView[] }>>
+
+  /**
+   * Read one flow's explicitly sanitized account telemetry. The telemetry type
+   * has no arbitrary payload field, so provider-owned token/session objects
+   * cannot cross this boundary accidentally.
+   */
+  inspect(
+    request: RpcRequest<{ key: string }>,
+    signal?: AbortSignal,
+  ): Promise<RpcResponse<{ telemetry?: AuthorizationTelemetry }>>
 
   /** Start a background attempt and return before the flow asks its first question. */
   begin(
