@@ -6,9 +6,9 @@
 
 ## 配置模型
 
-打开**设置 → 模型**，输入 [DeepSeek API 密钥](https://platform.deepseek.com/)并保存。模型路由会立即可用，不需要重启服务器。
+打开**设置 → 模型 → OpenRouter**，输入 [OpenRouter API 密钥](https://openrouter.ai/settings/keys)并保存。PHOENIX 默认选择 `openrouter/free`，模型路由会立即可用，不需要重启服务器。
 
-[模型配置指南](./providers.zh.md)介绍其他提供方和自定义 OpenAI 兼容端点。
+[模型配置指南](./providers.zh.md)介绍模型选择、其他提供方和自定义 OpenAI 兼容端点。
 
 ## 选择工作区
 

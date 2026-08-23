@@ -39,6 +39,15 @@ describe('dsh-base bundle', () => {
     expect(rows.filter(row => row.id === 'subagent-claude-code')).toHaveLength(0)
     expect(manifest.dependencies).not.toHaveProperty('@deepseek-ai/dsh-subagent-codex')
     expect(manifest.dependencies).not.toHaveProperty('@deepseek-ai/dsh-subagent-claude-code')
+    expect(rows.find(row => row.id === 'agent-default-model')?.config).toEqual({
+      provider: 'openrouter',
+      model: 'openrouter/free',
+    })
+    expect(rows.find(row => row.id === 'llm-pi-ai')?.config).toEqual({
+      providers: {
+        openrouter: { apiKeyEnv: 'OPENROUTER_API_KEY' },
+      },
+    })
   })
 
   it('gates each shell stack by platform with a symmetric disabled expression', () => {

@@ -22,15 +22,24 @@ Some internal package and CLI identifiers are intentionally retained for compati
 
 Install Node.js and pnpm, then:
 
-```sh
+```powershell
 git clone https://github.com/arisnachy/phoenix-harnes.git
 cd phoenix-harnes
 pnpm install
 pnpm run build
-pnpm dsh web
+pnpm run phoenix
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm dsh web` starts the local PHOENIX Web UI. The `dsh` command is currently retained as an internal compatibility surface; a PHOENIX-specific CLI name is not claimed until it actually exists.
+`pnpm run build` prepares the repository artifacts. `pnpm run phoenix` starts the local PHOENIX Web UI on Windows, macOS, or Linux. The `dsh` command remains an internal compatibility surface.
+
+### Configure OpenRouter on Windows
+
+PHOENIX starts with the `openrouter/free` model route selected. Create an [OpenRouter API key](https://openrouter.ai/settings/keys), then choose either setup path:
+
+- In the PHOENIX Web UI, open **Settings → Models → OpenRouter**, paste the key, and save. The key is written to the local PHOENIX credential store and is not committed to Git.
+- For one PowerShell session, set `$env:OPENROUTER_API_KEY = 'your-key'` before running `pnpm run phoenix`. In CMD, use `set OPENROUTER_API_KEY=your-key`.
+
+Use the model selector in the composer to switch from `openrouter/free` to any configured OpenRouter model. Free models are intended for testing and remain subject to OpenRouter availability and rate limits.
 
 ## Community and support
 

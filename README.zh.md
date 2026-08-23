@@ -22,15 +22,24 @@ PHOENIX 正在积极开发。仓库展示、Web UI、PWA 元数据、浏览器�
 
 安装 Node.js 与 pnpm，然后执行：
 
-```sh
+```powershell
 git clone https://github.com/arisnachy/phoenix-harnes.git
 cd phoenix-harnes
 pnpm install
 pnpm run build
-pnpm dsh web
+pnpm run phoenix
 ```
 
-`pnpm run build` 会准备仓库产物。`pnpm dsh web` 启动本地 PHOENIX Web UI。`dsh` 命令目前仅作为内部兼容接口保留；在真正存在 PHOENIX 专属 CLI 之前，项目不会虚构一个名称。
+`pnpm run build` 会准备仓库产物。`pnpm run phoenix` 可在 Windows、macOS 或 Linux 上启动本地 PHOENIX Web UI。`dsh` 命令继续作为内部兼容接口保留。
+
+### 在 Windows 上配置 OpenRouter
+
+PHOENIX 默认选择 `openrouter/free` 模型路由。创建一个 [OpenRouter API 密钥](https://openrouter.ai/settings/keys)，然后选择以下任一方式：
+
+- 在 PHOENIX Web UI 中打开**设置 → 模型 → OpenRouter**，粘贴密钥并保存。密钥写入 PHOENIX 的本地凭据存储，不会提交到 Git。
+- 仅对当前 PowerShell 会话设置 `$env:OPENROUTER_API_KEY = 'your-key'`，然后运行 `pnpm run phoenix`。在 CMD 中使用 `set OPENROUTER_API_KEY=your-key`。
+
+可通过输入框中的模型选择器，从 `openrouter/free` 切换到任意已配置的 OpenRouter 模型。免费模型适合测试，但仍受 OpenRouter 的可用性与速率限制约束。
 
 ## 社区与支持
 

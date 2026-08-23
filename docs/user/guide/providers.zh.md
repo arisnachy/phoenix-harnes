@@ -4,6 +4,12 @@
 
 本指南假定你已按照[根 README](../../../README.zh.md#run)启动 Web UI。模型变更会在下一次请求时生效，不需要重启服务器。
 
+## 配置 OpenRouter
+
+PHOENIX 默认启用 OpenRouter 目录路由，并为新会话选择 `openrouter/free`。打开**设置 → 模型 → OpenRouter**，输入 [OpenRouter API 密钥](https://openrouter.ai/settings/keys)并保存。同一路由也会读取进程环境中的 `OPENROUTER_API_KEY`。
+
+已安装目录会提供端点、协议和可用模型。使用输入框中的模型选择器可改用其他 OpenRouter 模型。`openrouter/free` 不消耗推理积分，但其可用性与速率限制由 OpenRouter 控制。
+
 ## 配置 DeepSeek
 
 打开**设置 → 模型**。DeepSeek 卡片提供一个 API 密钥字段；输入密钥并保存。

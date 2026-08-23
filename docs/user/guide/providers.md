@@ -4,6 +4,12 @@ English | [中文](providers.zh.md)
 
 This guide assumes you started the Web UI through the [root README](../../../README.md#run). Model changes take effect on the next request without restarting the server.
 
+## Configure OpenRouter
+
+PHOENIX ships with the OpenRouter catalog route enabled and selects `openrouter/free` for new sessions. Open **Settings → Models → OpenRouter**, enter an [OpenRouter API key](https://openrouter.ai/settings/keys), and save it. The same route also accepts `OPENROUTER_API_KEY` from the process environment.
+
+The installed catalog supplies the endpoint, protocol, and available models. Use the composer model selector to choose another OpenRouter model. The `openrouter/free` route costs no inference credits, but its availability and rate limits are controlled by OpenRouter.
+
 ## Configure DeepSeek
 
 Open **Settings → Models**. The DeepSeek card exposes one API-key field; enter the key and save it.

@@ -400,6 +400,15 @@ describe('hand-declared providers', () => {
 })
 
 describe('catalog routes with per-model configuration', () => {
+  it('activates the OpenRouter catalog and its free router from a credential reference alone', () => {
+    const resolved = resolveProfiles({
+      openrouter: { apiKeyEnv: 'OPENROUTER_API_KEY' },
+    }).get('openrouter')
+
+    expect(resolved?.apiKeyEnv).toBe('OPENROUTER_API_KEY')
+    expect(resolved?.piProvider.getModels().some(model => model.id === 'openrouter/free')).toBe(true)
+  })
+
   it('serves the installed catalog untouched when the profile lists no models', async () => {
     const server = await mockServer([])
     const ctx = await harness({ providers: { deepseek: { baseURL: server.url } } })
