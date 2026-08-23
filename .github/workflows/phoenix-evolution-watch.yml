@@ -1,0 +1,95 @@
+name: PHOENIX Evolution Watch
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: phoenix-evolution-watch
+  cancel-in-progress: false
+
+env:
+  INBOX_BRANCH: phoenix/evolution-inbox
+
+jobs:
+  observe-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phoenix/evolution-inbox
+          fetch-depth: 0
+      - name: Refresh inbox with stable main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main "+refs/heads/${INBOX_BRANCH}:refs/remotes/origin/${INBOX_BRANCH}"
+          git config user.name "phoenix-evolution-bot"
+          git config user.email "phoenix-evolution-bot@users.noreply.github.com"
+          git merge --no-edit origin/main
+          if [[ "$(git rev-list --count "origin/${INBOX_BRANCH}..HEAD")" -gt 0 ]]; then
+            git push origin "HEAD:${INBOX_BRANCH}"
+          fi
+      - name: Observe official upstream heads
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .phoenix/evolution
+          deepseek=$(git ls-remote https://github.com/deepseek-ai/deepseek-harness.git refs/heads/main | cut -f1)
+          codex=$(git ls-remote https://github.com/openai/codex.git refs/heads/main | cut -f1)
+          claude=$(git ls-remote https://github.com/anthropics/claude-code.git refs/heads/main | cut -f1)
+          [[ -n "$deepseek" && -n "$codex" && -n "$claude" ]] || { echo "Upstream observation incomplete; fail closed."; exit 1; }
+          cat > .phoenix/evolution/observed-sources.json <<EOF
+          {
+            "schemaVersion": 1,
+            "deepseekHarness": { "ref": "main", "sha": "$deepseek", "intake": "merge-candidate" },
+            "openaiCodex": { "ref": "main", "sha": "$codex", "intake": "observe-and-adapt" },
+            "anthropicClaudeCode": { "ref": "main", "sha": "$claude", "intake": "observe-and-adapt" }
+          }
+          EOF
+      - name: Publish observation only when source heads changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- .phoenix/evolution/observed-sources.json; then exit 0; fi
+          git add .phoenix/evolution/observed-sources.json
+          git commit -m "chore(evolution): observe upstream capability heads"
+          git push origin "HEAD:${INBOX_BRANCH}"
+
+  deepseek-source-candidate:
+    needs: observe-contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phoenix/evolution-inbox
+          fetch-depth: 0
+      - name: Create source candidate or conflict issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "phoenix-evolution-bot"
+          git config user.email "phoenix-evolution-bot@users.noreply.github.com"
+          git remote add deepseek https://github.com/deepseek-ai/deepseek-harness.git
+          git fetch deepseek main
+          sha=$(git rev-parse deepseek/main); short=${sha:0:12}; branch="phoenix/evolution-deepseek-${short}"
+          if git merge-base --is-ancestor deepseek/main HEAD; then exit 0; fi
+          git checkout -b "$branch"
+          if ! git merge --no-ff --no-edit deepseek/main; then
+            conflicts=$(git diff --name-only --diff-filter=U | sed 's/^/- /'); git merge --abort || true
+            marker="deepseek-${short}"
+            existing=$(gh issue list --state open --search "$marker in:title" --json number --jq '.[0].number // empty')
+            [[ -n "$existing" ]] || gh issue create --title "[Evolution] ${marker} requires conflict review" --body "PHOENIX refused to auto-resolve this DeepSeek conflict. Paths:\n\n${conflicts}\n\nNo change reached main."
+            exit 0
+          fi
+          git push --set-upstream origin "$branch"
+          existing=$(gh pr list --state open --head "$branch" --base "$INBOX_BRANCH" --json number --jq '.[0].number // empty')
+          [[ -n "$existing" ]] || gh pr create --base "$INBOX_BRANCH" --head "$branch" --title "chore(evolution): DeepSeek upstream ${short}" --body "Quarantined DeepSeek source candidate. Never targets main directly; conflicts are never auto-resolved."
