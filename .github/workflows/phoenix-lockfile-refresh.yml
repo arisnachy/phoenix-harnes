@@ -1,0 +1,42 @@
+name: PHOENIX Temporary Lockfile Refresh
+
+on:
+  push:
+    branches: [phoenix/evolution-current-v16]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phoenix-lockfile-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phoenix/evolution-current-v16
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Regenerate only lockfile metadata
+        run: pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
+      - name: Commit synchronized lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "Lockfile already synchronized."
+            exit 0
+          fi
+          git config user.name "phoenix-evolution-bot"
+          git config user.email "phoenix-evolution-bot@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "fix(lockfile): synchronize native Codex account bridge"
+          git push origin HEAD:phoenix/evolution-current-v16
