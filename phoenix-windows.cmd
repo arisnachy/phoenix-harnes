@@ -15,6 +15,17 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem PHOENIX stable-channel updater. Network/check failures never prevent the
+rem last-known-good build from starting; exit code 12 means live install AND
+rem rollback failed, so continuing would no longer be safe.
+if exist "scripts\phoenix-auto-update.mjs" (
+  node scripts\phoenix-auto-update.mjs --startup
+  if errorlevel 12 (
+    echo PHOENIX update recovery failed. Review .git\phoenix-update-state.json before continuing.
+    exit /b 12
+  )
+)
+
 if not exist "node_modules\.pnpm" (
   echo Preparing PHOENIX dependencies...
   call corepack pnpm install || exit /b 1
