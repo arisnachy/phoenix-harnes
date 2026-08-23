@@ -42,16 +42,22 @@ describe('highlightToHtml', () => {
   ]
 
   it('lazily loads every read-card grammar and eventually highlights it', async () => {
+    // Other suites share the production singleton and may preload a grammar
+    // before this test reaches its loader. Re-evaluate the module so this test
+    // deterministically exercises every dynamic-import thunk itself.
     // Load one grammar at a time. Firing every dynamic import concurrently makes
     // this correctness check contend with the coverage worker pool on Windows.
+    // Re-isolate per alias too: some grammars embed another grammar, and a
+    // shared highlighter would then skip that second grammar's own loader.
     for (const alias of LAZY_ALIASES) {
-      const first = highlightToHtml('x', alias)
-      if (first !== undefined) expect(first).toContain('shiki')
+      vi.resetModules()
+      const { highlightToHtml: isolatedHighlightToHtml } = await import('../src/markdown/highlight.ts')
+      expect(isolatedHighlightToHtml('x', alias)).toBeUndefined()
       await vi.waitFor(() => {
-        expect(highlightToHtml('x', alias)).toContain('shiki')
+        expect(isolatedHighlightToHtml('x', alias)).toContain('shiki')
       }, { timeout: 5_000 })
     }
-  }, 30_000)
+  }, 60_000)
 })
 
 describe('CodeBlock', () => {

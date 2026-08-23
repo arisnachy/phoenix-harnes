@@ -357,6 +357,11 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     // for the block to settle so the mid snapshot does not race its transient
     // visually-hidden Running label while the question keeps the turn open.
     await page.locator('[data-variant="think"][data-state="ok"]').first().waitFor({ timeout: 10_000 })
+    // Usage arrives on the same replay response but its projection publishes
+    // independently. Pin the post-usage state instead of racing between a
+    // stats-free local capture and a stats-bearing hosted-runner capture.
+    await page.getByText(/Cache hit 0%.*Input 10 tok · Output 10 tok/)
+      .waitFor({ state: 'attached', timeout: 10_000 })
     const mid = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(STEER_ALL_MID, mid, MODE)
 

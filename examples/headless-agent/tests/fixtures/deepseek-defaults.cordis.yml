@@ -8,7 +8,11 @@
           baseURL: !!js process.env.DSH_SNAPSHOT_BASE_URL
           thinking: enabled
           reasoningEffort: low
-          streamIdleTimeoutMs: 150
+          # Keep this comfortably above scheduler stalls in the parallel
+          # snapshot job. The mock still emits three delayed SSE comments, so
+          # the adapter's keep-alive parsing remains exercised without turning
+          # hosted-runner contention into a transport retry.
+          streamIdleTimeoutMs: 2000
       - id: agent-spine
         config:
           agents:
