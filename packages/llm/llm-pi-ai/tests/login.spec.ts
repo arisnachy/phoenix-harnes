@@ -11,21 +11,18 @@ import type { AuthEvent, AuthInteraction, AuthPrompt, AuthType, Credential } fro
 
 const login = vi.hoisted(() => vi.fn())
 
-// The whole of what this module does with pi-ai is run one provider's login
-// against a collection built with the harness store, so the collection is the
-// boundary worth observing; a real login would open a browser.
 vi.mock('@earendil-works/pi-ai', async importOriginal => ({
   ...await importOriginal<typeof import('@earendil-works/pi-ai')>(),
   createModels: () => ({ setProvider: () => {}, login }),
 }))
 
 const { credentialStoreFrom, authContextFrom, recordKeyFor } = await import('../src/auth.ts')
-const { registerPiAiFlows } = await import('../src/login.ts')
+const { registerPiAiFlows, usesPiAiLogin } = await import('../src/login.ts')
 
 const CODEX = recordKeyFor('openai-codex')
+const ANTHROPIC = recordKeyFor('anthropic')
 const dirs: string[] = []
 
-/** A context with the record store, the seam, and every pi-ai login flow. */
 async function harness(): Promise<Context> {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-pi-login-'))
   dirs.push(dir)
@@ -36,25 +33,17 @@ async function harness(): Promise<Context> {
   return ctx
 }
 
-/** An interaction recording everything a flow says, answering every question. */
-function surface(answer = 'typed'): AuthorizationInteraction & {
-  notices: AuthorizationNotice[]
-  prompts: AuthorizationPrompt[]
-} {
+function surface(answer = 'typed'): AuthorizationInteraction & { notices: AuthorizationNotice[]; prompts: AuthorizationPrompt[] } {
   const notices: AuthorizationNotice[] = []
   const prompts: AuthorizationPrompt[] = []
   return {
     notices,
     prompts,
-    notify: (notice) => { notices.push(notice) },
-    prompt: (prompt) => {
-      prompts.push(prompt)
-      return Promise.resolve(answer)
-    },
+    notify: notice => { notices.push(notice) },
+    prompt: prompt => { prompts.push(prompt); return Promise.resolve(answer) },
   }
 }
 
-/** Drive one attempt, letting the mocked login talk back through `converse`. */
 async function attempt(
   ctx: Context,
   converse: (interaction: AuthInteraction) => Promise<void>,
@@ -68,7 +57,7 @@ async function attempt(
     return granted
   })
   await expect(ctx.authorization.begin({
-    key: request.key ?? CODEX,
+    key: request.key ?? ANTHROPIC,
     interaction: ui,
     ...request.method === undefined ? {} : { method: request.method },
   })).resolves.toEqual({ status: 'authorized' })
@@ -81,41 +70,36 @@ afterEach(async () => {
 })
 
 describe('pi-ai login flows', () => {
-  it('offers one flow per installed provider, with the methods that provider ships', async () => {
+  it('keeps Codex subscription auth on the native Codex bridge', async () => {
     const ctx = await harness()
     const offered = ctx.authorization.list()
+    expect(usesPiAiLogin('openai-codex')).toBe(false)
+    expect(usesPiAiLogin('anthropic')).toBe(true)
+    expect(offered.find(entry => entry.key === CODEX)).toBeUndefined()
+  })
 
-    // The OAuth-only provider is exactly the case this exists for: nothing
-    // else could ever configure it.
-    expect(offered.find(entry => entry.key === CODEX)?.methods)
-      .toEqual([{ id: 'oauth', label: expect.stringContaining('ChatGPT') as string }])
-    // A provider offering both keeps both, the subscription login first.
-    expect(offered.find(entry => entry.key === recordKeyFor('anthropic'))?.methods.map(one => one.id))
+  it('offers pi-ai flows for providers whose credentials pi-ai owns', async () => {
+    const ctx = await harness()
+    const offered = ctx.authorization.list()
+    expect(offered.find(entry => entry.key === ANTHROPIC)?.methods.map(one => one.id))
       .toEqual(['oauth', 'api-key'])
-    // A key-only provider still gets a flow, because pi-ai collects the key
-    // through its own prompt rather than leaving it to the settings form.
     expect(offered.find(entry => entry.key === recordKeyFor('deepseek'))?.methods.map(one => one.id))
       .toEqual(['api-key'])
   })
 
   it('runs the pi-ai auth type the chosen method names', async () => {
     const ctx = await harness()
-
     await attempt(ctx, () => Promise.resolve())
-    expect(login).toHaveBeenLastCalledWith('openai-codex', 'oauth', expect.anything())
-
-    await attempt(ctx, () => Promise.resolve(), { key: recordKeyFor('anthropic'), method: 'api-key' })
+    expect(login).toHaveBeenLastCalledWith('anthropic', 'oauth', expect.anything())
+    await attempt(ctx, () => Promise.resolve(), { key: ANTHROPIC, method: 'api-key' })
     expect(login).toHaveBeenLastCalledWith('anthropic', 'api_key', expect.anything())
   })
 
   it('commits what the login produced, where the adapter reads it back', async () => {
     const ctx = await harness()
-
     await attempt(ctx, () => Promise.resolve())
-
-    await expect(ctx.credentials.readRecord(CODEX)).resolves.toEqual({
-      kind: 'grant',
-      payload: { type: 'oauth', access: 'at', refresh: 'rt', expires: 1 },
+    await expect(ctx.credentials.readRecord(ANTHROPIC)).resolves.toEqual({
+      kind: 'grant', payload: { type: 'oauth', access: 'at', refresh: 'rt', expires: 1 },
     })
   })
 
@@ -128,26 +112,18 @@ describe('pi-ai login flows', () => {
       { type: 'auth_url', url: 'https://auth.example/plain' },
       { type: 'device_code', userCode: 'WXYZ-1234', verificationUri: 'https://device.example' },
       { type: 'progress', message: 'Exchanging the code' },
-      // pi-ai's event union is open; an unrecognised member must still show
-      // the human that something is happening.
       { type: 'quantum-handshake' } as unknown as AuthEvent,
     ]
-
-    const ui = await attempt(ctx, (interaction) => {
+    const ui = await attempt(ctx, interaction => {
       for (const event of events) interaction.notify(event)
       return Promise.resolve()
     })
-
     expect(ui.notices).toEqual([
       { message: 'Read this first', url: 'https://help.example' },
       { message: 'Nothing to open' },
       { message: 'Approve in the tab', url: 'https://auth.example/start' },
       { message: 'Open this page to continue signing in.', url: 'https://auth.example/plain' },
-      {
-        message: 'Enter this code on the verification page to finish signing in.',
-        url: 'https://device.example',
-        code: 'WXYZ-1234',
-      },
+      { message: 'Enter this code on the verification page to finish signing in.', url: 'https://device.example', code: 'WXYZ-1234' },
       { message: 'Exchanging the code' },
       { message: 'Signing in…' },
     ])
@@ -161,14 +137,11 @@ describe('pi-ai login flows', () => {
       { type: 'secret', message: 'Paste the key' },
       { type: 'secret', message: 'Paste the token', placeholder: 'sk-…' },
       { type: 'select', message: 'Which account?', options: [{ id: 'a', label: 'Work' }] },
-      // The manual-code question a browser callback can win the race against.
       { type: 'manual_code', message: 'Paste the code', signal: withdraw.signal },
     ]
-
-    const ui = await attempt(ctx, async (interaction) => {
+    const ui = await attempt(ctx, async interaction => {
       for (const prompt of prompts) await interaction.prompt(prompt)
     })
-
     expect(ui.prompts).toEqual([
       { kind: 'text', message: 'Your workspace', placeholder: 'acme' },
       { kind: 'secret', message: 'Paste the key' },
@@ -187,11 +160,8 @@ describe('pi-ai login flows', () => {
       controller.abort()
       return new Promise(() => {})
     })
-
     await expect(ctx.authorization.begin({
-      key: CODEX,
-      interaction: surface(),
-      signal: controller.signal,
+      key: ANTHROPIC, interaction: surface(), signal: controller.signal,
     })).resolves.toEqual({ status: 'cancelled' })
     expect(seen?.aborted).toBe(true)
   })
