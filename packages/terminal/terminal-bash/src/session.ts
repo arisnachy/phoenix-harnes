@@ -299,8 +299,6 @@ export class LocalPtySession implements TerminalBackendSession {
         this.clearActive()
         return
       }
-      // Closing can race the awaited provider write even though static analysis sees only local assignments.
-      // oxlint-disable-next-line typescript/no-unnecessary-condition -- awaited provider writes can close the session.
       if (this.active === operation && !this.closing) {
         this.pollingReady = operation
         this.schedulePoll(operation)
@@ -475,8 +473,6 @@ export class LocalPtySession implements TerminalBackendSession {
     } finally {
       this.polling = false
       const active = this.active
-      // Awaited provider inspection can clear or replace the active send despite static analysis.
-      // oxlint-disable-next-line typescript/no-unnecessary-condition -- awaited inspection can replace the active send.
       if (active !== undefined && this.pollingReady === active) this.schedulePoll(active)
     }
   }
