@@ -1290,6 +1290,19 @@ describe('hand-declared providers', () => {
 })
 
 describe('API key field', () => {
+  it('stores an OpenRouter key from the Models page under its credential reference', async () => {
+    const { mutate, set } = await mountSection({
+      providers: { openrouter: { apiKeyEnv: 'OPENROUTER_API_KEY' } },
+    })
+    openEditor('openrouter')
+
+    fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: 'sk-or-v1-test' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(set).toHaveBeenCalledWith({ ref: 'OPENROUTER_API_KEY', value: 'sk-or-v1-test' }) })
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
   it('submits with a blank key field without writing a credential', async () => {
     const { mutate, set } = await mountSection()
     openEditor('openai')

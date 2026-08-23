@@ -20,26 +20,25 @@ Some internal package and CLI identifiers are intentionally retained for compati
 
 ### Run from source
 
-Install Node.js and pnpm, then:
+Install Node.js 22.19 or newer, then:
 
 ```powershell
 git clone https://github.com/arisnachy/phoenix-harnes.git
 cd phoenix-harnes
-pnpm install
-pnpm run build
-pnpm run phoenix
+.\phoenix-windows.cmd
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm run phoenix` starts the local PHOENIX Web UI on Windows, macOS, or Linux. The `dsh` command remains an internal compatibility surface.
+`phoenix-windows.cmd` changes to its own repository directory, uses the Corepack copy included with Node.js to prepare dependencies, builds PHOENIX when needed, and starts the local Web UI. A global `pnpm` installation is not required.
 
 ### Configure OpenRouter on Windows
 
-PHOENIX starts with the `openrouter/free` model route selected. Create an [OpenRouter API key](https://openrouter.ai/settings/keys), then choose either setup path:
+PHOENIX starts with the `openrouter/free` model route selected. Create an [OpenRouter API key](https://openrouter.ai/settings/keys), then configure it inside PHOENIX:
 
-- In the PHOENIX Web UI, open **Settings → Models → OpenRouter**, paste the key, and save. The key is written to the local PHOENIX credential store and is not committed to Git.
-- For one PowerShell session, set `$env:OPENROUTER_API_KEY = 'your-key'` before running `pnpm run phoenix`. In CMD, use `set OPENROUTER_API_KEY=your-key`.
+1. Open **Settings → Models → OpenRouter**.
+2. Paste the key and save it. The key is written to the local PHOENIX credential store and is not committed to Git.
+3. Use the model selector in the composer to switch from `openrouter/free` to another OpenRouter model.
 
-Use the model selector in the composer to switch from `openrouter/free` to any configured OpenRouter model. Free models are intended for testing and remain subject to OpenRouter availability and rate limits.
+The provider, key, endpoint, model catalog, and active model are managed from the Web UI. Free models are intended for testing and remain subject to OpenRouter availability and rate limits.
 
 ## Community and support
 

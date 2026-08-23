@@ -6,9 +6,9 @@
 
 ## 配置 OpenRouter
 
-PHOENIX 默认启用 OpenRouter 目录路由，并为新会话选择 `openrouter/free`。打开**设置 → 模型 → OpenRouter**，输入 [OpenRouter API 密钥](https://openrouter.ai/settings/keys)并保存。同一路由也会读取进程环境中的 `OPENROUTER_API_KEY`。
+PHOENIX 默认启用 OpenRouter 目录路由，并为新会话选择 `openrouter/free`。打开**设置 → 模型 → OpenRouter**，输入 [OpenRouter API 密钥](https://openrouter.ai/settings/keys)，并将其保存到本地凭据存储。
 
-已安装目录会提供端点、协议和可用模型。使用输入框中的模型选择器可改用其他 OpenRouter 模型。`openrouter/free` 不消耗推理积分，但其可用性与速率限制由 OpenRouter 控制。
+模型页面负责管理提供方密钥、端点和模型目录。使用输入框中的模型选择器可选择当前 OpenRouter 模型。`openrouter/free` 不消耗推理积分，但其可用性与速率限制由 OpenRouter 控制。
 
 ## 配置 DeepSeek
 
