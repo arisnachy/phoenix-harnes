@@ -307,23 +307,18 @@ function persistentShells(ctx: Context, config: ResolvedConfig): PersistentShell
             live.delete(owner)
           }, 'tool-pwsh-persistent owner cache cleanup')
         }
-        let first = true
-        for (;;) {
-          const setup = ctx.terminals.startSend(owner, spawned.sessionId, {
-            text: first ? PWSH_PROMPT_SETUP : '',
-            submit: first,
-            signal: combinedSignal,
-          })
-          first = false
-          const result = await setup.done
-          if (result.sessionStatus.kind === 'exited' || result.waitReason === 'timeout') {
-            throw new Error('persistent pwsh shell did not accept initialization')
-          }
-          // The function source contains the prompt literal and can be echoed
-          // before PowerShell evaluates it. Only its terminal tail proves the
-          // shell is ready for the first model command.
-          if (promptCompleted(result)) break
-          await pause()
+        // Queue the prompt definition before the first model command. PTY
+        // writes are ordered, so the command cannot overtake this line; waiting
+        // for a rendered prompt here adds an idle polling operation that can
+        // outlive pwsh on hosted POSIX terminals.
+        const setup = ctx.terminals.startSend(owner, spawned.sessionId, {
+          text: PWSH_PROMPT_SETUP,
+          submit: true,
+          signal: combinedSignal,
+        })
+        const result = await setup.done
+        if (result.sessionStatus.kind === 'exited' || result.waitReason === 'timeout') {
+          throw new Error('persistent pwsh shell did not accept initialization')
         }
         return spawned.sessionId
       } catch (error: unknown) {

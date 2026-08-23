@@ -581,10 +581,10 @@ describe('tool-pwsh-persistent', () => {
     },
   )
 
-  it('waits past an echoed prompt definition before sending the first command', async () => {
+  it('queues the first command after an echoed prompt definition', async () => {
     const { ctx, owner, stub } = await setup({ backendType: 'stub' }, 'init-echo-then-ready')
     expect(text(await call(ctx, owner, 'pwd'))).toBe('hello from stub')
-    expect(stub.sessions[0]?.sends).toBe(3)
+    expect(stub.sessions[0]?.sends).toBe(2)
   })
 
   it('clears a failed spawn without trying to close an unpublished shell', async () => {
