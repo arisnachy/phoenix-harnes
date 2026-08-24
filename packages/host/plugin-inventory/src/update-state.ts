@@ -64,16 +64,26 @@ export function parsePhoenixUpdateSnapshot(value: unknown): PhoenixUpdateSnapsho
   if (typeof status !== 'string' || !STATUSES.has(status as PhoenixUpdateStatus)) {
     return { status: 'error', detail: 'PHOENIX update state has an unknown status.' }
   }
+
+  const phase = textField(record, 'phase')
+  const current = commitField(record, 'current')
+  const target = commitField(record, 'target')
+  const previous = commitField(record, 'previous')
+  const failedTarget = commitField(record, 'failedTarget')
+  const channelPublishedAt = textField(record, 'channelPublishedAt')
+  const detail = textField(record, 'detail')
+  const at = textField(record, 'at')
+
   return {
     status: status as PhoenixUpdateStatus,
-    ...(textField(record, 'phase') === undefined ? {} : { phase: textField(record, 'phase') }),
-    ...(commitField(record, 'current') === undefined ? {} : { current: commitField(record, 'current') }),
-    ...(commitField(record, 'target') === undefined ? {} : { target: commitField(record, 'target') }),
-    ...(commitField(record, 'previous') === undefined ? {} : { previous: commitField(record, 'previous') }),
-    ...(commitField(record, 'failedTarget') === undefined ? {} : { failedTarget: commitField(record, 'failedTarget') }),
-    ...(textField(record, 'channelPublishedAt') === undefined ? {} : { channelPublishedAt: textField(record, 'channelPublishedAt') }),
-    ...(textField(record, 'detail') === undefined ? {} : { detail: textField(record, 'detail') }),
-    ...(textField(record, 'at') === undefined ? {} : { at: textField(record, 'at') }),
+    ...(phase === undefined ? {} : { phase }),
+    ...(current === undefined ? {} : { current }),
+    ...(target === undefined ? {} : { target }),
+    ...(previous === undefined ? {} : { previous }),
+    ...(failedTarget === undefined ? {} : { failedTarget }),
+    ...(channelPublishedAt === undefined ? {} : { channelPublishedAt }),
+    ...(detail === undefined ? {} : { detail }),
+    ...(at === undefined ? {} : { at }),
   }
 }
 
