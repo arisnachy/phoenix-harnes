@@ -26,13 +26,21 @@
 }
 
 .action:focus-visible {
-  outline: 2px solid var(--dsw-alias-interactive-primary);
+  outline: 2px solid currentColor;
   outline-offset: -2px;
 }
 
 .action:disabled {
   cursor: default;
   opacity: 0.78;
+}
+
+.rail {
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  justify-content: center;
+  margin-bottom: 8px;
 }
 
 .glyph,
@@ -78,13 +86,4 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
   line-height: 16px;
-}
-
-:global(.dsh-sidebar-collapsed) .action,
-:global(.dsh-sidebar-collapsed) .status {
-  width: 36px;
-  min-height: 36px;
-  padding: 0;
-  justify-content: center;
-  margin-bottom: 8px;
 }
