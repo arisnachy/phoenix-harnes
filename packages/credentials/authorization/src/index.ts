@@ -246,6 +246,9 @@ export class AuthorizationService extends Service {
    * Read one flow's explicitly sanitized live telemetry, when it offers any.
    * This method never reads the credential record itself and never returns an
    * owner-defined opaque payload.
+   * @param key - credential record whose registered flow should be inspected.
+   * @param signal - optional cancellation signal for the live telemetry read.
+   * @returns sanitized telemetry from the flow, or undefined when it exposes none.
    */
   inspect(key: CredentialKey, signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined> {
     const flow = this.flows.get(key)

@@ -484,6 +484,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   AuthorizationSession: 'credentials.md',
   AuthorizationSettlement: 'credentials.md',
   AuthorizationStatus: 'credentials.md',
+  AuthorizationTelemetry: 'credentials.md',
   CredentialRef: 'credentials.md',
   CredentialKey: 'credentials.md',
   CredentialInfo: 'credentials.md',

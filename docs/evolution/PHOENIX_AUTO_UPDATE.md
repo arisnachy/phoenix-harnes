@@ -1,5 +1,7 @@
 # PHOENIX Stable Auto-Update
 
+English | [中文](PHOENIX_AUTO_UPDATE.zh.md)
+
 PHOENIX source installations use a reviewed stable channel instead of blindly pulling every GitHub branch.
 
 ## Release path

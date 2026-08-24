@@ -19,13 +19,16 @@ import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import { codexAppServerArgv } from './run.ts'
 
+/** Credential marker for the Codex-managed ChatGPT account session. */
 export const CODEX_ACCOUNT_KEY = credentialKey('subagent-codex', 'account')
 
+/** Runtime configuration required to open and dispose the native Codex account bridge. */
 export interface CodexAccountBridgeConfig {
   readonly env: Readonly<Record<string, string>>
   readonly disposeGraceMs: number
 }
 
+/** Secret-free account, rate-limit, and usage snapshot returned by the Codex app-server. */
 export interface CodexAccountSnapshot {
   readonly account: unknown
   readonly requiresOpenaiAuth: boolean
@@ -104,6 +107,8 @@ function usageTelemetry(value: unknown): AuthorizationUsageTelemetry | undefined
 /**
  * Convert Codex account responses into the fixed public authorization schema.
  * Unknown provider fields are discarded rather than copied through.
+ * @param snapshot - native Codex account snapshot to sanitize.
+ * @returns the fixed public telemetry projection, or undefined when no supported account is present.
  */
 export function codexAccountTelemetry(snapshot: CodexAccountSnapshot): AuthorizationTelemetry | undefined {
   const account = maybeObject(snapshot.account)
@@ -288,7 +293,13 @@ async function readAccount(
   }
 }
 
-/** Read the native Codex account plus rate-limit/token-activity snapshots. */
+/**
+ * Read the native Codex account plus rate-limit/token-activity snapshots.
+ * @param ctx - Cordis context used to spawn the Codex app-server.
+ * @param config - environment and disposal policy for the native bridge.
+ * @param signal - optional cancellation signal for the account read.
+ * @returns the current secret-free Codex account snapshot.
+ */
 export async function readCodexAccountSnapshot(
   ctx: Context,
   config: CodexAccountBridgeConfig,
@@ -385,7 +396,12 @@ async function loginManagedChatGpt(
   }
 }
 
-/** Register the native Codex account authorization flow. */
+/**
+ * Register the native Codex account authorization flow.
+ * @param ctx - Cordis context that owns authorization and subprocess services.
+ * @param config - environment and disposal policy for the native bridge.
+ * @returns disposer that unregisters the Codex account flow.
+ */
 export function registerCodexAccountFlow(
   ctx: Context,
   config: CodexAccountBridgeConfig,

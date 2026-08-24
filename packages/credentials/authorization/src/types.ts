@@ -124,6 +124,7 @@ export interface AuthorizationAccountTelemetry {
   usage?: AuthorizationUsageTelemetry
 }
 
+/** Fixed, secret-free telemetry schema exposed by an authorization flow. */
 export type AuthorizationTelemetry = AuthorizationAccountTelemetry
 
 /** A registered flow as a surface sees it: what it authorizes and whether it is busy. */

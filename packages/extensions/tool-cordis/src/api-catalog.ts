@@ -488,6 +488,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the entry, or undefined when no flow claims that key.',
       },
       {
+        signature: 'inspect(key: CredentialKey, signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>',
+        description: 'Read one flow\'s explicitly sanitized live telemetry, when it offers any. This method never reads the credential record itself and never returns an owner-defined opaque payload.',
+        parameters: [{ name: 'key', description: 'credential record whose registered flow should be inspected.' }, { name: 'signal', description: 'optional cancellation signal for the live telemetry read.' }],
+        returns: 'sanitized telemetry from the flow, or undefined when it exposes none.',
+      },
+      {
         signature: 'cancel(key: CredentialKey): void',
         description: 'Withdraw the attempt running for a key, if any. Separate from the request\'s own signal because a request/response transport answers a Cancel button on a second call, with no handle on the first one\'s signal.',
         parameters: [{ name: 'key', description: 'the credential record whose attempt should stop.' }],
@@ -2987,12 +2993,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AttachmentId = Branded<\'AttachmentId\'>;',
   },
   {
+    name: 'AuthorizationAccountTelemetry',
+    declaration: 'export interface AuthorizationAccountTelemetry {\n    kind: \'account\';\n    provider: string;\n    accountType?: string;\n    email?: string;\n    plan?: string;\n    primaryLimit?: AuthorizationRateLimitWindow;\n    secondaryLimit?: AuthorizationRateLimitWindow;\n    credits?: AuthorizationCreditsTelemetry;\n    usage?: AuthorizationUsageTelemetry;\n}',
+  },
+  {
+    name: 'AuthorizationCreditsTelemetry',
+    declaration: 'export interface AuthorizationCreditsTelemetry {\n    hasCredits: boolean;\n    unlimited: boolean;\n    balance?: string;\n}',
+  },
+  {
     name: 'AuthorizationEntry',
     declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n}',
   },
   {
     name: 'AuthorizationFlow',
-    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    run(session: AuthorizationSession): Promise<void>;\n}',
+    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>;\n    run(session: AuthorizationSession): Promise<void>;\n}',
   },
   {
     name: 'AuthorizationInteraction',
@@ -3019,6 +3033,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AuthorizationPromptOption {\n    id: string;\n    label: string;\n    description?: string;\n}',
   },
   {
+    name: 'AuthorizationRateLimitWindow',
+    declaration: 'export interface AuthorizationRateLimitWindow {\n    usedPercent: number;\n    windowDurationMins?: number;\n    resetsAt?: number;\n}',
+  },
+  {
     name: 'AuthorizationRequest',
     declaration: 'export interface AuthorizationRequest {\n    key: CredentialKey;\n    method?: string;\n    interaction: AuthorizationInteraction;\n    signal?: AbortSignal;\n}',
   },
@@ -3033,6 +3051,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AuthorizationStatus',
     declaration: 'export type AuthorizationStatus = \'authorized\' | \'cancelled\';',
+  },
+  {
+    name: 'AuthorizationTelemetry',
+    declaration: 'export type AuthorizationTelemetry = AuthorizationAccountTelemetry;',
+  },
+  {
+    name: 'AuthorizationUsageTelemetry',
+    declaration: 'export interface AuthorizationUsageTelemetry {\n    lifetimeTokens?: number;\n    peakDailyTokens?: number;\n    longestRunningTurnSec?: number;\n    currentStreakDays?: number;\n    longestStreakDays?: number;\n}',
   },
   {
     name: 'BackendRegistry',

@@ -1,5 +1,7 @@
 # PHOENIX Evolution v16
 
+English | [中文](PHOENIX_EVOLUTION_V16.zh.md)
+
 PHOENIX is the product. DeepSeek Harness is the upstream foundation; Codex and Claude Code are capability references/native bridges. Upstream changes may improve PHOENIX but may not replace its identity, silently widen authority, overwrite user data, or bypass review.
 
 ## Channels
