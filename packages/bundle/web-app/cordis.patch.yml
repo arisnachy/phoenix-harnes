@@ -251,6 +251,10 @@
     - id: ui-subagent
       name: '@deepseek-ai/dsh-client-ui-subagent'
 
+    # KIRA teams dock: the always-visible overlay board of deployed subagents.
+    - id: ui-kira-teams
+      name: '@deepseek-ai/dsh-client-ui-kira-teams'
+
     - id: ui-reference
       name: '@deepseek-ai/dsh-client-ui-reference'
 
