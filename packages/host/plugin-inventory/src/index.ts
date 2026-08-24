@@ -2,11 +2,11 @@
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { homedir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context, FiberState } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
-import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from 'zod'
 import type {
@@ -91,6 +91,19 @@ function repositoryRoot(): string {
   return dirname(manifestPath)
 }
 
+/** Mirror @deepseek-ai/dsh-home-paths resolution without adding a package edge. */
+function phoenixHome(): string {
+  const configured = process.env.DSH_HOME
+  const selected = configured !== undefined && configured.trim().length > 0
+    ? configured
+    : join(homedir(), '.dsh')
+  if (selected === '~') return homedir()
+  if (selected.startsWith('~/') || selected.startsWith('~\\')) {
+    return resolve(join(homedir(), selected.slice(2)))
+  }
+  return resolve(selected)
+}
+
 function gitValue(root: string, args: string[]): string | undefined {
   const result = spawnSync('git', args, {
     cwd: root,
@@ -110,7 +123,9 @@ function runtimeVersion(root: string): string {
 function updateView(root: string): PhoenixUpdateView {
   const gitDir = gitValue(root, ['rev-parse', '--git-dir'])
   if (gitDir === undefined) return { phase: 'idle' }
-  const statePath = resolve(root, gitDir, 'phoenix-update-state.json')
+  const statePath = isAbsoluteGitPath(gitDir)
+    ? resolve(gitDir, 'phoenix-update-state.json')
+    : resolve(root, gitDir, 'phoenix-update-state.json')
   if (!existsSync(statePath)) return { phase: 'idle' }
   const value = readJson(statePath)
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return { phase: 'idle' }
@@ -132,6 +147,10 @@ function updateView(root: string): PhoenixUpdateView {
   }
 }
 
+function isAbsoluteGitPath(path: string): boolean {
+  return /^([A-Za-z]:[\\/]|\/)/u.test(path)
+}
+
 function runtimeView(): PhoenixRuntimeView {
   const root = repositoryRoot()
   return {
@@ -144,7 +163,7 @@ function runtimeView(): PhoenixRuntimeView {
 }
 
 function codexInventory(): CodexArsenalInventory | null {
-  const path = dshHomePath('codex', 'arsenal.json')
+  const path = join(phoenixHome(), 'codex', 'arsenal.json')
   if (!existsSync(path)) return null
   const value = readJson(path)
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
