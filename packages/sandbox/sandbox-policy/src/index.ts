@@ -43,15 +43,9 @@ function resolveWorkspaceRoot(path: string): string {
   return resolvePath(canonicalPath(path))
 }
 
-/** Normalize only for containment comparison; Windows path identity is case-insensitive. */
-function comparisonPath(path: string): string {
-  const resolved = resolveWorkspaceRoot(path)
-  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
-}
-
-/** Whether `candidate` is the same location as `root` or lies beneath it. */
+/** Whether `candidate` is the same canonical location as `root` or lies beneath it. */
 function isPathUnder(root: string, candidate: string): boolean {
-  const relation = relative(comparisonPath(root), comparisonPath(candidate))
+  const relation = relative(resolveWorkspaceRoot(root), resolveWorkspaceRoot(candidate))
   return relation === ''
     || (relation !== '..' && !relation.startsWith(`..${sep}`) && !isAbsolute(relation))
 }
@@ -125,11 +119,8 @@ export interface SandboxPolicyRequest {
  * mode log and immutable cwd travel together to every enforcing capability.
  */
 export class SandboxPolicyService extends Service {
-  // Inline schema call: the config catalog walks `static Config` statically.
   static Config: z<Config> = z.object({
     mode: z.union(['read-only', 'workspace-write', 'danger-full-access'] as const).default('read-only'),
-    // No schema default: process.cwd() is resolved in the constructor so the
-    // stored root is always absolute regardless of how it was supplied.
     workspaceRoot: z.string(),
   })
 
@@ -146,9 +137,6 @@ export class SandboxPolicyService extends Service {
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'sandboxPolicy')
-    // schemastery (static Config) already filled `mode`; the cast records that
-    // runtime fact. `workspaceRoot` has NO schema default, so its fallback to
-    // the process cwd is real branching, resolved absolute either way.
     this.defaultMode = config.mode as SandboxMode
     this.workspaceRoot = resolveWorkspaceRoot(config.workspaceRoot ?? process.cwd())
 
@@ -216,9 +204,6 @@ export class SandboxPolicyService extends Service {
       return { mode: 'workspace-write', workspaceRoot: this.phoenixEvolutionRoot, ...sessionId }
     }
 
-    // HARDNESS never lets a model-controlled capability bypass the filesystem
-    // fence completely. Broad access remains useful, but is scoped to the
-    // session workspace instead of the whole machine/runtime.
     const mode = requestedMode === 'danger-full-access' ? 'workspace-write' : requestedMode
     return { mode, workspaceRoot: requestedRoot, ...sessionId }
   }
