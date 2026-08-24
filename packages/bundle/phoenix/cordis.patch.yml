@@ -1,13 +1,8 @@
 # PHOENIX HARDNESS product overlay. Loaded after the selected profile and before
-# user-supplied Codex MCP patches. It moves generic web_search onto the harness-
-# owned SearXNG service without removing optional commercial providers.
+# user-supplied Codex MCP patches. Generic web_search belongs to the harness and
+# uses the built-in keyless SearXNG provider regardless of which LLM is active.
 
 - id: web
   config:
     searchProvider: searxng
-
-- insert:
-    - id: web-search-searxng
-      name: '@deepseek-ai/dsh-web-search-searxng'
-      config:
-        baseURL: !!js process.env.PHOENIX_SEARXNG_URL ?? 'http://127.0.0.1:8888'
+    searxngBaseURL: !!js process.env.PHOENIX_SEARXNG_URL ?? 'http://127.0.0.1:8888'
