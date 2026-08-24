@@ -112,7 +112,17 @@ export function UpdateFooterAction({
     let active = true
     const read = async (): Promise<void> => {
       if (!active) return
-      await refresh()
+      try {
+        const next = await readUpdateState()
+        if (active) setSnapshot(next)
+      } catch (error) {
+        if (active) {
+          setSnapshot({
+            status: 'error',
+            detail: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
     }
     void read()
     const timer = window.setInterval(() => { void read() }, UPDATE_STATE_POLL_MS)
@@ -120,7 +130,7 @@ export function UpdateFooterAction({
       active = false
       window.clearInterval(timer)
     }
-  }, [refresh])
+  }, [readUpdateState])
 
   const labelKey = updateLabelKey(snapshot)
   if (labelKey === undefined) return null
@@ -129,6 +139,7 @@ export function UpdateFooterAction({
   const busy = requesting || isBusy(snapshot)
   const label = t(labelKey)
   const actionLabel = ready ? t('updateRestart') : label
+  const className = `${ready ? css.action : css.status}${wide ? '' : ` ${css.rail}`}`
 
   const onRestart = async (): Promise<void> => {
     if (!ready || requesting) return
@@ -167,7 +178,7 @@ export function UpdateFooterAction({
       <Tooltip label={actionLabel} delayMs={500} disabled={wide}>
         <button
           type="button"
-          className={css.action}
+          className={className}
           aria-label={actionLabel}
           disabled={requesting}
           onClick={() => { void onRestart() }}
@@ -180,7 +191,7 @@ export function UpdateFooterAction({
 
   return (
     <Tooltip label={label} delayMs={500} disabled={wide}>
-      <div className={css.status} role="status" aria-live="polite" aria-label={label}>
+      <div className={className} role="status" aria-live="polite" aria-label={label}>
         {content}
       </div>
     </Tooltip>
