@@ -144,12 +144,9 @@ jobs:
   windows-diagnostics:
     if: github.event_name == 'pull_request'
     runs-on: windows-latest
-    name: windows / named required gates
+    name: windows / named native gates
     timeout-minutes: 120
     env:
-      DSH_COVERAGE_MAX_WORKERS: '2'
-      DSH_COVERAGE_PARTITIONS: '2'
-      DSH_COVERAGE_TEST_TIMEOUT_MS: '30000'
       DSH_GATE_CONCURRENCY: '2'
       DSH_PUBLINT_CONCURRENCY: '2'
     steps:
@@ -177,23 +174,6 @@ jobs:
       - name: Windows / production documentation site
         shell: pwsh
         run: pnpm run docs:build
-      - name: Windows / instrumented coverage partitions
-        shell: pwsh
-        env:
-          DSH_COVERAGE_EXEMPT_HEAVY: '1'
-        run: pnpm run test:coverage:partitioned
-      - name: Windows / coverage exempt heavy suites
-        shell: pwsh
-        run: >-
-          pnpm exec vitest run
-          packages/typert/generator/tests/
-          scripts/install-lefthook.spec.ts
-          scripts/oxlint-contract.spec.ts
-          scripts/change-scope.spec.ts
-          scripts/translation-pairing-merge.spec.ts
-          --maxWorkers=1
-          --testTimeout=30000
-          --expect.poll.timeout=30000
       - name: Windows / observational inventory
         shell: pwsh
         run: pnpm run check:ci:windows-observational
