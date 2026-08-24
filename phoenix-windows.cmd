@@ -50,5 +50,16 @@ if not exist "apps\cli\lib\bin.js" (
   call %PHOENIX_PNPM% run build || exit /b 1
 )
 
+rem HARDNESS self-protection is a launcher fact, not a model instruction. The
+rem live checkout and PHOENIX data home become non-writable to model-controlled
+rem file/shell capabilities. A detached sibling worktree is the writable place
+rem for self-evolution. Failure to create it leaves self-modification read-only.
+if not "%PHOENIX_HARDNESS_SELF_PROTECT%"=="0" (
+  set "PHOENIX_RUNTIME_ROOT=%CD%"
+  if exist "scripts\phoenix-evolution-worktree.mjs" (
+    for /f "usebackq delims=" %%P in (`node scripts\phoenix-evolution-worktree.mjs`) do set "PHOENIX_EVOLUTION_ROOT=%%P"
+  )
+)
+
 call %PHOENIX_PNPM% run phoenix -- %*
 exit /b %errorlevel%
