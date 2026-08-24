@@ -33,6 +33,20 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Apply precise source and translation repairs
         run: python .github/scripts/phoenix-static-autofix.py
+      - name: Classify authorization telemetry documentation type
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/gen-cordis-catalog.ts')
+          text = p.read_text()
+          anchor = "  AuthorizationStatus: 'credentials.md',\n"
+          entry = "  AuthorizationTelemetry: 'credentials.md',\n"
+          if entry not in text:
+              if anchor not in text:
+                  raise SystemExit('AuthorizationStatus LINK_MAP anchor missing')
+              p.write_text(text.replace(anchor, anchor + entry, 1))
+          PY
       - name: Refresh lockfile
         run: pnpm install --lockfile-only
       - name: Record repaired bilingual pairs
