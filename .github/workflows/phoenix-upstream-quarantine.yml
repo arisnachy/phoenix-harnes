@@ -1,0 +1,111 @@
+name: PHOENIX upstream quarantine
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 1'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: phoenix-upstream-quarantine
+  cancel-in-progress: false
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  deepseek-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Fetch the public upstream
+        run: |
+          git remote add deepseek-upstream https://github.com/deepseek-ai/deepseek-harness.git
+          git fetch --no-tags deepseek-upstream main
+
+      - name: Stop when this upstream SHA already has a candidate
+        id: candidate
+        shell: bash
+        run: |
+          upstream_sha="$(git rev-parse deepseek-upstream/main)"
+          short_sha="${upstream_sha:0:12}"
+          branch="quarantine/deepseek-${short_sha}"
+          echo "upstream_sha=$upstream_sha" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.candidate.outputs.exists == 'false'
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        if: steps.candidate.outputs.exists == 'false'
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Merge only into a quarantine candidate
+        if: steps.candidate.outputs.exists == 'false'
+        run: |
+          git config user.name phoenix-upstream-bot
+          git config user.email phoenix-upstream-bot@users.noreply.github.com
+          git switch -c "${{ steps.candidate.outputs.branch }}"
+          git merge --no-edit --no-ff deepseek-upstream/main
+
+      - name: Protect PHOENIX product identity
+        if: steps.candidate.outputs.exists == 'false'
+        shell: bash
+        run: |
+          forbidden='DSH Local Build|Into the Unknown|Deep diving'
+          if rg -n "$forbidden" packages/client packages/bundle apps; then
+            echo 'Upstream candidate reintroduced a retired product identity.' >&2
+            exit 1
+          fi
+          rg -n 'PHOENIX' packages/client/web packages/client/ui-brand-official >/dev/null
+
+      - name: Install and run the static acceptance gate
+        if: steps.candidate.outputs.exists == 'false'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run check:ci:static
+
+      - name: Publish candidate branch
+        if: steps.candidate.outputs.exists == 'false'
+        run: git push --set-upstream origin "${{ steps.candidate.outputs.branch }}"
+
+      - name: Open the KIRA review pull request
+        if: steps.candidate.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "${{ steps.candidate.outputs.branch }}" \
+            --title "quarantine: review DeepSeek upstream ${{ steps.candidate.outputs.upstream_sha }}" \
+            --body-file - <<'EOF'
+          Automated PHOENIX quarantine candidate.
+
+          This pull request must not auto-merge. KIRA review must confirm:
+
+          - PHOENIX identity remains intact.
+          - Security and secret boundaries remain intact.
+          - Windows CI is green.
+          - Snapshots and coverage are green.
+          - A rollback SHA is recorded.
+
+          Codex and Claude Code are integrations, not source-code upstreams;
+          their supported SDK/CLI updates must arrive through separately reviewed
+          dependency pull requests.
+          EOF

@@ -1,6 +1,8 @@
 CLAUDE.local.md
 .env
 node_modules/
+.phoenix-managed-install
+.phoenix-gates.lock
 lib/
 *.tsbuildinfo
 pnpm-debug.log
@@ -26,6 +28,7 @@ tmp/
 .idea
 mise.toml
 dist-exe/
+/dist/
 python/sdk-runtime/src/deepseek_harness_runtime/runtime/dsh-jsonrpc-agent-*
 python/sdk-runtime/src/deepseek_harness_runtime/runtime/node/
 python/**/__pycache__/
@@ -39,3 +42,38 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+# Local KIRA runtime state and captured evidence are private to each
+# installation. Reusable mission, architecture, roster, and lab templates
+# under .kira remain versionable.
+.kira/audits/
+.kira/state.md
+.kira/evidence.md
+.kira/failures.md
+.kira/memory/
+.kira/labs/phoenix-self/
+.kira/audit-*.md
+.kira/promotion-review-*.md
+.kira/evolution-status.md
+.kira/forja.md
+# TypeScript project-reference artifacts emitted beside sources by some Windows
+# toolchain combinations. Source files in these packages remain tracked.
+packages/core/agent/src/*.js
+packages/core/agent/src/*.js.map
+packages/core/agent/src/*.d.ts
+packages/core/agent/src/*.d.ts.map
+packages/core/scope/src/*.js
+packages/core/scope/src/*.js.map
+packages/core/scope/src/*.d.ts
+packages/core/scope/src/*.d.ts.map
+packages/core/session/src/*.js
+packages/core/session/src/*.js.map
+packages/core/session/src/*.d.ts
+packages/core/session/src/*.d.ts.map
+packages/core/system-prompt/src/*.js
+packages/core/system-prompt/src/*.js.map
+packages/core/system-prompt/src/*.d.ts
+packages/core/system-prompt/src/*.d.ts.map
+packages/typert/protocol/src/*.js
+packages/typert/protocol/src/*.js.map
+packages/typert/protocol/src/*.d.ts
+packages/typert/protocol/src/*.d.ts.map

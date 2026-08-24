@@ -1,0 +1,41 @@
+.row {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.heading { font-size: 14px; line-height: 22px; font-weight: 500; }
+.description, .hint, .privacy, .notice, .error { margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.unsaved { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.body { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.label { font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-primary); }
+.input, .textarea, .inputInvalid { box-sizing: border-box; width: 100%; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; }
+.input { height: 34px; padding: 0 10px; }
+.textarea { min-height: 76px; padding: 8px 10px; resize: vertical; }
+.inputInvalid { height: 34px; padding: 0 10px; border-color: var(--dsw-alias-label-error); }
+.input:focus-visible, .textarea:focus-visible, .inputInvalid:focus-visible { outline: none; border-color: var(--dsw-alias-brand-primary); }
+.input:disabled, .textarea:disabled, .inputInvalid:disabled { color: var(--dsw-alias-label-tertiary); cursor: default; }
+.error { color: var(--dsw-alias-label-error); }
+.consent { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; }
+.consent legend { padding: 0 4px; font-size: 13px; color: var(--dsw-alias-label-primary); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.primary, .secondary, .danger { padding: 7px 11px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
+.primary { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
+.danger { margin-left: auto; color: var(--dsw-alias-label-error); }
+.primary:disabled, .secondary:disabled, .danger:disabled { opacity: .5; cursor: default; }

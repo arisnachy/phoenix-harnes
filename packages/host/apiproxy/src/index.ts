@@ -59,6 +59,21 @@ export interface Config {
    * @default 1024
    */
   coldBlankProbeMaxBytes?: number
+  /**
+   * Borrowed eyes: transcribe incoming chat images through a vision-capable
+   * side route when the active session model is text-only. Disabled unless
+   * `enabled` is set; without an explicit `provider`/`model` pair, discovery
+   * picks the first registered catalog entry declaring image input. The
+   * literal `false` pins the fallback off over layered settings.
+   */
+  visionFallback?: {
+    /** Engage transcription instead of refusing prompts with images on text-only routes. */
+    enabled?: boolean
+    /** Explicit vision provider; requires `model`. */
+    provider?: string
+    /** Explicit vision model id; requires `provider`. */
+    model?: string
+  } | false
 }
 
 /**
@@ -77,6 +92,13 @@ export class ApiProxyService extends Service implements ApiProxy {
     sessionExportCompressionLevel: z.number().step(1).min(0).max(9)
       .default(DEFAULT_SESSION_LOG_COMPRESSION_LEVEL) as z<SessionLogCompressionLevel>,
     coldBlankProbeMaxBytes: z.natural().default(DEFAULT_COLD_BLANK_PROBE_MAX_BYTES),
+    // `false` pins the fallback off; the union keeps the key absent (instead
+    // of schemastery's eager `{}`) while unset.
+    visionFallback: z.union([z.const(false), z.object({
+      enabled: z.boolean(),
+      provider: z.string(),
+      model: z.string(),
+    })]),
   })
 
   readonly sessions: ApiProxy['sessions']
@@ -107,6 +129,8 @@ export class ApiProxyService extends Service implements ApiProxy {
       ...(config.coldBlankProbeMaxBytes === undefined
         ? {}
         : { coldBlankProbeMaxBytes: config.coldBlankProbeMaxBytes }),
+      // Truthiness excludes both `undefined` and the `false` off-pin.
+      ...(config.visionFallback ? { visionFallback: config.visionFallback } : {}),
     })
     this.sessions = api.sessions
     this.subagents = api.subagents

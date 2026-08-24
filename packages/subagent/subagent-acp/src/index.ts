@@ -45,6 +45,8 @@ export interface Config {
    * `allow_once` or `allow_always` option). No prompt is surfaced to a human.
    */
   permission: PermissionPolicy
+  /** Required safety opt-in when `permission` is `allow`; otherwise activation fails closed. */
+  allowUnattendedPermissions?: boolean
   /**
    * Extra environment variables for the child process — e.g. the child
    * harness's own `DEEPSEEK_API_KEY`. Forwarded on top of a credential-scrubbed
@@ -69,6 +71,7 @@ export const Config: z<Config> = z.object({
   args: z.array(z.string()).default([]),
   cwd: z.string(),
   permission: z.union(['allow', 'reject'] as const).default('reject'),
+  allowUnattendedPermissions: z.boolean().default(false),
   env: z.dict(z.string()).default({}),
   disposeEofGraceMs: z.number().default(DEFAULT_DISPOSE_EOF_GRACE_MS),
   disposeGraceMs: z.number().default(DEFAULT_DISPOSE_GRACE_MS),
@@ -175,6 +178,9 @@ export function apply(ctx: Context, config: Config): void {
   const resolved = config as ResolvedConfig
   assertPositiveFinite('disposeEofGraceMs', resolved.disposeEofGraceMs)
   assertPositiveFinite('disposeGraceMs', resolved.disposeGraceMs)
+  if (resolved.permission === 'allow' && !resolved.allowUnattendedPermissions) {
+    throw new Error('subagent-acp: permission=allow requires allowUnattendedPermissions=true; default is fail-closed reject')
+  }
   // `path.resolve('')` is the process cwd — an empty string would silently
   // reintroduce the launch-directory fallback this resolution removed.
   if (resolved.cwd === '') {

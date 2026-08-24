@@ -18,6 +18,20 @@ PHOENIX 正在积极开发。仓库展示、Web UI、PWA 元数据、浏览器�
 
 ## Run
 
+### Windows 单行安装
+
+打开 PowerShell 并执行：
+
+```powershell
+irm https://raw.githubusercontent.com/arisnachy/phoenix-harnes/main/install-phoenix.ps1 | iex
+```
+
+该引导程序会通过 `winget` 安装缺失的 Node.js/Git，克隆或快进专用 PHOENIX 安装目录，执行不可变依赖安装与构建，并创建 **PHOENIX HARDNESS** 开始菜单快捷方式。受管安装会在启动时检查 `origin/main`，并且只在工作区干净时应用快进更新；设置 `PHOENIX_AUTO_UPDATE=0` 可以禁用该检查。本地修改会被保留而不是覆盖。此脚本不是已签名的 MSIX；在配置项目证书之前，代码签名仍是发布 gate。
+
+### VS Code 与 Cursor
+
+使用 `pnpm --dir apps/vscode run package:vsix` 构建可安装扩展，然后在**扩展 → 从 VSIX 安装**中安装 `dist/phoenix-hardness-vscode.vsix`。其 Explorer 面板可以启动本地 PHOENIX 运行时并打开 Web UI，而且不会读取模型凭据。
+
 ### Run from source
 
 安装 Node.js 22.19 或更高版本，然后执行：
@@ -30,6 +44,14 @@ cd phoenix-harnes
 
 `phoenix-windows.cmd` 会自动进入自身所在的仓库目录，使用 Node.js 内置的 Corepack 准备依赖，在需要时构建 PHOENIX，并启动本地 Web UI。不需要全局安装 `pnpm`。
 
+### 稳定自动更新
+
+PHOENIX 源码安装遵循仓库的稳定更新通道。新的 `main` commit 只有在当前 `main` 的 CI 成功后才会发布给客户端。运行中的安装会检测新的稳定 commit，并默认在活跃的 PHOENIX session 关闭后安装；Windows 也会在下一次启动前检查稳定通道。
+
+自动安装要求官方 `origin`、`main` branch、干净的 worktree、fast-forward history、成功的隔离 preflight build，以及 recovery checkpoint。实时更新失败时会 rollback 到之前的已知良好 commit。Development branches 和本地修改过的 checkout 永远不会被自动覆盖，而且 updater 永远不会修改 PHOENIX 用户数据、credentials、sessions、memories 或 projects。
+
+设置 `PHOENIX_UPDATE_MODE=notify` 可只接收通知而不安装，设置 `PHOENIX_UPDATE_MODE=off` 可禁用检查。完整的 release、recovery 与 trust contract 参见 [PHOENIX 稳定自动更新](docs/evolution/PHOENIX_AUTO_UPDATE.zh.md)。
+
 ### 在 Windows 上配置 OpenRouter
 
 PHOENIX 默认选择 `openrouter/free` 模型路由。创建一个 [OpenRouter API 密钥](https://openrouter.ai/settings/keys)，然后在 PHOENIX 内完成配置：
@@ -39,6 +61,12 @@ PHOENIX 默认选择 `openrouter/free` 模型路由。创建一个 [OpenRouter A
 3. 使用输入框中的模型选择器，从 `openrouter/free` 切换到其他 OpenRouter 模型。
 
 提供方、密钥、端点、模型目录和当前模型都通过 Web UI 管理。免费模型适合测试，但仍受 OpenRouter 的可用性与速率限制约束。
+
+### 连接 ChatGPT / Codex
+
+PHOENIX 将 OpenAI API-key 身份验证与 ChatGPT subscription 身份验证严格分开。原生 Codex bridge 使用官方 Codex app-server 管理的 ChatGPT login，因此 OAuth persistence 与 token refresh 由 Codex 自己负责。PHOENIX 不会索取 ChatGPT password，也不会解析、复制或持久化 ChatGPT OAuth tokens。
+
+挂载原生 Codex bridge 后，**设置 → 模型 → 账户连接**会提供 **ChatGPT / Codex** 登录。同一个原生 account plane 可以读取当前 ChatGPT plan、Codex rate-limit windows、reset times 与 account token-activity data，而无需通过通用 `pi-ai` OAuth adapter 路由 subscription。
 
 ## 社区与支持
 
@@ -51,6 +79,8 @@ PHOENIX 的反馈、缺陷、设计讨论和支持请使用本仓库的 [Issues]
 ## 开发
 
 请先阅读[开发指南](docs/development.zh.md)与[架构文档](docs/architecture.zh.md)。PHOENIX 能力会通过分阶段、独立验证的 branch 与 pull request 集成，使稳定基础始终保持可审计。
+
+Windows 安装、IDE 打包、原生 sandbox 边界与 continuity 状态参见 [Windows 上的 PHOENIX](docs/phoenix-windows.zh.md)。
 
 面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
 

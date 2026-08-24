@@ -2,7 +2,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentOptions } from '@deepseek-ai/dsh-agent'
 import { TeamTaskId } from '@deepseek-ai/dsh-experimental-agent-team'
 import type { TeamMemberView } from '@deepseek-ai/dsh-experimental-agent-team'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -19,16 +19,25 @@ export interface Config {
   readonly freshProvider?: string
   /** Continuable-subagent provider used for completed-prefix fork teammates. */
   readonly forkProvider?: string
+  /** Named provider/model routes the Lead may assign; empty means inheritance only. */
+  readonly modelProfiles?: Record<string, AgentOptions>
 }
 
 /** Loader schema for the opt-in Team tool plugin. */
 export const Config: z<Config> = z.object({
   freshProvider: z.string().default('spawn'),
   forkProvider: z.string().default('fork'),
+  modelProfiles: z.dict(z.object({
+    provider: z.string().required(),
+    model: z.string().required(),
+    maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
+  })).default({}),
 })
 
 /** Model-facing collaboration guidance shared by Lead and teammates. */
 const POLICY = `Agent Teams is available in this session, but create teammates only when the user explicitly asks to use Agent Teams or teammates.
+
+Model profiles are deployment-configured provider/model routes, not OpenAI-specific roles. A fresh JUDGE is cognitively independent only when its reported modelProvider or model differs from the Lead; when they match or are unknown, report operational independence only and record the correlated-model limitation. Never claim an independent review merely because the teammate has a different name.
 
 The Team Lead and all teammates share the same working directory and filesystem. Edits are immediately visible to every member. Split write work into disjoint scopes, record expected write scopes on shared tasks, and use task dependencies when work must be ordered. Write-scope overlap is advisory, not a lock.
 
@@ -56,6 +65,7 @@ const MEMBER_VIEW_SCHEMA = {
     provider: { type: 'string' },
     context: { type: 'string', enum: ['fresh', 'fork'] },
     model: { type: 'string' },
+    modelProvider: { type: 'string' },
     diagnostics: { type: 'array', required: true, items: { type: 'string' } },
   },
 } as const
@@ -182,17 +192,29 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           enum: ['fresh', 'fork'],
           description: 'fresh starts without Lead history; fork inherits completed Lead turns. Defaults to fresh.',
         },
+        ...Object.keys(config.modelProfiles).length === 0 ? {} : {
+          model_profile: {
+            type: 'string' as const,
+            enum: Object.keys(config.modelProfiles),
+            description: 'Deployment-configured LLM route. Omit to inherit the Lead route.',
+          },
+        },
       },
       output: jsonOutput(SPAWN_VALUE_SCHEMA),
       async execute(args, exec) {
         const agent = callingAgent(exec.agent, 'spawn_teammate')
         const context = args.context ?? 'fresh'
+        const profileName = 'model_profile' in args && typeof args.model_profile === 'string'
+          ? args.model_profile
+          : undefined
+        const agentOptions = profileName === undefined ? undefined : config.modelProfiles[profileName]
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: args.name,
           description: args.description,
           prompt: [{ type: 'text', text: args.prompt }],
           context,
           provider: context === 'fork' ? config.forkProvider : config.freshProvider,
+          ...agentOptions === undefined ? {} : { agentOptions },
           signal: exec.signal,
         })
       },
@@ -399,6 +421,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   const resolved: Required<Config> = {
     freshProvider: config.freshProvider ?? 'spawn',
     forkProvider: config.forkProvider ?? 'fork',
+    modelProfiles: config.modelProfiles ?? {},
   }
   const installed = new Map<Agent, () => void>()
   const maybeInstall = (agent: Agent): void => {

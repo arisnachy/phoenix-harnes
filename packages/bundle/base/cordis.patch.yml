@@ -78,12 +78,24 @@
     - id: settings
       name: '@deepseek-ai/dsh-settings-file'
 
+    # Private local profile. Every value is excluded from model context until
+    # the user opts in for that individual field in General settings.
+    - id: user-profile
+      name: '@deepseek-ai/dsh-user-profile'
+
     # Credential sources: inherited environment over the managed
     # `$DSH_HOME/.credentials.yaml`, with project and user `.env` fallbacks.
     # Adapters resolve references per request; the Models page writes only the
     # managed document, which is never materialized into the process environment.
     - id: credentials
       name: '@deepseek-ai/dsh-credentials-local'
+
+    # Interactive provider sign-in (for example ChatGPT/Codex OAuth) is a
+    # separate capability from API-key storage. The authorization service owns
+    # the human conversation while each provider owns its protocol and writes
+    # the resulting credential through the credential store above.
+    - id: authorization
+      name: '@deepseek-ai/dsh-authorization'
 
     # The pi-ai multi-provider adapter starts with PHOENIX's OpenRouter route.
     # Its key resolves per request from the credential store or the inherited
@@ -191,7 +203,9 @@
     - id: approval
       name: '@deepseek-ai/dsh-user-approval'
       config:
-        policy: !!js "(process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'"
+        # Full access removes the file fence, but never removes the user's
+        # approval boundary. PHOENIX must still justify destructive actions.
+        policy: ask
 
     - id: permission
       name: '@deepseek-ai/dsh-permission-presets'
@@ -205,7 +219,7 @@
             approval: ask
           danger-full-access:
             sandbox: danger-full-access
-            approval: never
+            approval: ask
 
     - id: shell-env
       name: '@deepseek-ai/dsh-shell-env'
@@ -286,6 +300,15 @@
 
     - id: compaction-basic
       name: '@deepseek-ai/dsh-compaction-basic'
+      # Economy guard: compact earlier, retain a smaller recent window, and do
+      # not spend extra model calls retrying compaction. This is deliberately
+      # conservative; quality is measured in phoenix-self before tightening it.
+      config:
+        thresholdRatio: 0.72
+        retainRatio: 0.10
+        maxTokens: 4096
+        compactionRetries: 0
+        maxOverflowRetries: 0
 
     # Human `/compact`: one useful reduction below the automatic threshold. Backend
     # independent, so it follows whichever compaction service this leaf mounts.
@@ -319,6 +342,8 @@
         provider: spawn
         toolName: subagent
         backgroundMode: continuable
+        # One generation by default; descendants require an explicit overlay.
+        maxDepth: 1
 
     # Fork stays one-shot: a continuable child's `report` tool and prompt
     # section precede the inherited history a fork exists to reuse; one-shot
@@ -330,6 +355,8 @@
         provider: fork
         toolName: subagent_fork
         backgroundMode: one-shot
+        # Keep forked work one generation deep unless an overlay opts in.
+        maxDepth: 1
 
     # Optional direct-child return channel; absent from roots and one-shot agents.
     - id: tool-subagent-report
@@ -339,6 +366,10 @@
       name: '@deepseek-ai/dsh-workflow-worker-thread'
       config:
         provider: spawn
+        # Explicit workflows remain available, but the default deployment cannot
+        # fan out hundreds of agents or consume all cores without an overlay.
+        maxConcurrentAgents: 1
+        maxTotalAgents: 4
 
     - id: tool-workflow
       name: '@deepseek-ai/dsh-tool-workflow'
@@ -396,23 +427,20 @@
         thresholds: [3, 5, 8]
         argumentsPreviewChars: 500
 
-    # Every mode enables the stable model-facing web_search tool. DeepSeek search
-    # resolves the same DEEPSEEK_API_KEY credential the Models page manages for
-    # chat, at each search; its Messages endpoint is separate from the
-    # chat-completions endpoint, so it takes its own base-URL override. Fetch stays
-    # disabled and no fetch provider is mounted: that provider defers SSRF
-    # protection and the model would choose the request target. Search is a full
-    # auxiliary model request with server-side retrieval, so this shipped DeepSeek
-    # route gets 60s while the provider-neutral tool default remains 30s.
+    # Every mode enables the stable model-facing web_search tool. OpenRouter
+    # search resolves the same OPENROUTER_API_KEY managed by Settings -> Models
+    # and uses the provider's current server-tool contract. Fetch stays disabled
+    # because a model-chosen URL needs a separate SSRF policy. Search is a full
+    # auxiliary model request, so the shipped route gets a 60s budget.
     - id: web
       name: '@deepseek-ai/dsh-web'
       config:
-        searchProvider: deepseek-official
+        searchProvider: openrouter
 
-    - id: web-search-deepseek
-      name: '@deepseek-ai/dsh-web-search-deepseek'
+    - id: web-search-openrouter
+      name: '@deepseek-ai/dsh-web-search-openrouter'
       config:
-        apiKeyEnv: DEEPSEEK_API_KEY
+        apiKeyEnv: OPENROUTER_API_KEY
 
     - id: tool-web
       name: '@deepseek-ai/dsh-tool-web'
@@ -432,7 +460,20 @@
     - id: system-prompt
       name: '@deepseek-ai/dsh-system-prompt'
       config:
-        persona: ''
+        persona: |
+          You are PHOENIX, a warm, persistent, and safety-governed agent harness.
+          Reply in the language of the user's latest message unless the user
+          explicitly requests another language. Keep user-visible progress and
+          reasoning summaries in that language; never reveal hidden chain of
+          thought. Address the user by name only after they have supplied it,
+          and use emoji sparingly when it suits their tone.
+
+          Pursue the requested outcome with bounded retries and specialist
+          subagents when useful. Before a destructive or high-impact action,
+          confirm that it is necessary, identify the exact target, prefer a
+          recoverable operation, and keep a rollback path. New tools and learned
+          workflows must be isolated, tested, reviewable, and explicitly
+          promoted before they can alter the trusted runtime.
 
     # Agents created at startup. The base stays empty; raw overlays may create
     # agents, while Web creates sessions on client request.

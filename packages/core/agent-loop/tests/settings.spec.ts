@@ -39,7 +39,7 @@ async function boot(): Promise<{ ctx: Context; settingsFiber: Fiber; loopFiber: 
   await ctx.plugin(AgentRegistry)
   const settingsFiber = ctx.plugin(MemorySettings)
   await settingsFiber.await()
-  const loopFiber = ctx.plugin(AgentLoop, { agents: [], maxParallelToolCalls: 4 })
+  const loopFiber = ctx.plugin(AgentLoop, { agents: [], maxParallelToolCalls: 4, maxStepsPerTurn: 12 })
   await loopFiber.await()
   return { ctx, settingsFiber, loopFiber }
 }
@@ -49,9 +49,13 @@ describe('agent-loop settings section', () => {
     const bench = await boot()
     expect(bench.ctx.agentLoop.config.maxParallelToolCalls).toBe(4)
 
-    await bench.ctx.settings.update(AGENT_LOOP_SETTINGS_NAMESPACE, { maxParallelToolCalls: 1 })
+    await bench.ctx.settings.update(AGENT_LOOP_SETTINGS_NAMESPACE, {
+      maxParallelToolCalls: 1,
+      maxStepsPerTurn: 8,
+    })
 
     expect(bench.ctx.agentLoop.config.maxParallelToolCalls).toBe(1)
+    expect(bench.ctx.agentLoop.config.maxStepsPerTurn).toBe(8)
     await bench.ctx.fiber.dispose()
   })
 
@@ -65,12 +69,24 @@ describe('agent-loop settings section', () => {
     await bench.ctx.fiber.dispose()
   })
 
+  it('refuses a non-positive turn-step budget at the write', async () => {
+    const bench = await boot()
+
+    await expect(bench.ctx.settings.update(AGENT_LOOP_SETTINGS_NAMESPACE, {
+      maxParallelToolCalls: 4,
+      maxStepsPerTurn: 0,
+    })).rejects.toThrow()
+
+    expect(bench.ctx.agentLoop.config.maxStepsPerTurn).toBe(12)
+    await bench.ctx.fiber.dispose()
+  })
+
   it('never offers the composed agents array to the settings document', async () => {
     const bench = await boot()
 
     const descriptor = bench.ctx.settings.describe().find(row => String(row.ns) === 'agent-loop')
 
-    expect(Object.keys(descriptor?.value as object)).toEqual(['maxParallelToolCalls'])
+    expect(Object.keys(descriptor?.value as object)).toEqual(['maxParallelToolCalls', 'maxStepsPerTurn'])
     await bench.ctx.fiber.dispose()
   })
 

@@ -181,6 +181,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Plugins register namespace schemas and resolve layered values; providers store the raw document. The LLM adapters register their entry config as the composition base under the user section; the web gateway serves redacted layered descriptors and writes the user layer.',
   },
   {
+    key: 'userProfile',
+    pkg: 'user-profile',
+    title: 'Consented local user profile',
+    mode: 'core',
+    consumers: ['system-prompt', 'apiproxy'],
+    note: 'Stores user-entered profile fields locally, exposes redacted settings views, and contributes only explicitly consented values to model context.',
+  },
+  {
     key: 'credentials',
     pkg: 'credentials',
     title: 'Credential seam',

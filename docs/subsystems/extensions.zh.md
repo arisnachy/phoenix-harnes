@@ -96,7 +96,8 @@ async undefine(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCo
 
 /**
  * Start or update one Package for a model tool call. An unauthorized Client
- * Package waits for approval; Plugin-wide authorization covers later versions.
+ * Package waits for approval; when configured, host-only Packages also wait
+ * for approval. Plugin-wide authorization covers later versions.
  * @param agent - Agent whose Session must own the Plugin.
  * @param pluginId - Stable Plugin identity to activate.
  * @param packageId - Immutable Package version to activate.

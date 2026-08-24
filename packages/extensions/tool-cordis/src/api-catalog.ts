@@ -488,6 +488,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the entry, or undefined when no flow claims that key.',
       },
       {
+        signature: 'inspect(key: CredentialKey, signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>',
+        description: 'Read one flow\'s explicitly sanitized live telemetry, when it offers any. This method never reads the credential record itself and never returns an owner-defined opaque payload.',
+        parameters: [{ name: 'key', description: 'credential record whose registered flow should be inspected.' }, { name: 'signal', description: 'optional cancellation signal for the live telemetry read.' }],
+        returns: 'sanitized telemetry from the flow, or undefined when it exposes none.',
+      },
+      {
         signature: 'cancel(key: CredentialKey): void',
         description: 'Withdraw the attempt running for a key, if any. Separate from the request\'s own signal because a request/response transport answers a Cancel button on a second call, with no handle on the first one\'s signal.',
         parameters: [{ name: 'key', description: 'the credential record whose attempt should stop.' }],
@@ -2200,6 +2206,43 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'userProfile',
+    summary: 'Owns the local profile settings section and the consent-filtered prompt context.',
+    description: 'Owns the local profile settings section and the consent-filtered prompt context. The service exposes no telemetry or logging path; profile data reaches a model only through an explicit per-field consent flag.',
+    methods: [
+      {
+        signature: 'get(): UserProfileView',
+        description: 'Return a detached local view; no derived age is persisted.',
+        parameters: [],
+        returns: 'a detached local view of profile values, consent, and presence metadata.',
+      },
+      {
+        signature: 'async update(patch: UserProfileUpdate): Promise<UserProfileView>',
+        description: 'Merge and persist a validated partial update.',
+        parameters: [{ name: 'patch', description: 'changed fields; null clears an optional field.' }],
+        returns: 'the accepted detached view.',
+      },
+      {
+        signature: 'async clear(): Promise<UserProfileView>',
+        description: 'Clear every user-owned profile field and reset consent to false.',
+        parameters: [],
+        returns: 'the cleared detached view.',
+      },
+      {
+        signature: 'getRedacted(): UserProfileRedacted',
+        description: 'Return presence-only metadata and consent flags, without profile values.',
+        parameters: [],
+        returns: 'metadata that reports field presence and current consent flags.',
+      },
+      {
+        signature: 'getConsented(): UserProfileConsented',
+        description: 'Return only fields whose current consent flag is true.',
+        parameters: [],
+        returns: 'a detached projection safe to include in model context.',
+      },
+    ],
+  },
+  {
     key: 'userQuestions',
     summary: '`ctx.userQuestions`: one active UI provider plus an `ask()` API.',
     description: '`ctx.userQuestions`: one active UI provider plus an `ask()` API.',
@@ -2863,7 +2906,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentOptions',
-    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    maxTokens?: number;\n}',
+    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    maxTokens?: number;\n    reasoningEffort?: ReasoningEffortId;\n}',
   },
   {
     name: 'AgentPreset',
@@ -2950,12 +2993,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AttachmentId = Branded<\'AttachmentId\'>;',
   },
   {
+    name: 'AuthorizationAccountTelemetry',
+    declaration: 'export interface AuthorizationAccountTelemetry {\n    kind: \'account\';\n    provider: string;\n    accountType?: string;\n    email?: string;\n    plan?: string;\n    primaryLimit?: AuthorizationRateLimitWindow;\n    secondaryLimit?: AuthorizationRateLimitWindow;\n    credits?: AuthorizationCreditsTelemetry;\n    usage?: AuthorizationUsageTelemetry;\n}',
+  },
+  {
+    name: 'AuthorizationCreditsTelemetry',
+    declaration: 'export interface AuthorizationCreditsTelemetry {\n    hasCredits: boolean;\n    unlimited: boolean;\n    balance?: string;\n}',
+  },
+  {
     name: 'AuthorizationEntry',
     declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n}',
   },
   {
     name: 'AuthorizationFlow',
-    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    run(session: AuthorizationSession): Promise<void>;\n}',
+    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>;\n    run(session: AuthorizationSession): Promise<void>;\n}',
   },
   {
     name: 'AuthorizationInteraction',
@@ -2982,6 +3033,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AuthorizationPromptOption {\n    id: string;\n    label: string;\n    description?: string;\n}',
   },
   {
+    name: 'AuthorizationRateLimitWindow',
+    declaration: 'export interface AuthorizationRateLimitWindow {\n    usedPercent: number;\n    windowDurationMins?: number;\n    resetsAt?: number;\n}',
+  },
+  {
     name: 'AuthorizationRequest',
     declaration: 'export interface AuthorizationRequest {\n    key: CredentialKey;\n    method?: string;\n    interaction: AuthorizationInteraction;\n    signal?: AbortSignal;\n}',
   },
@@ -2996,6 +3051,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AuthorizationStatus',
     declaration: 'export type AuthorizationStatus = \'authorized\' | \'cancelled\';',
+  },
+  {
+    name: 'AuthorizationTelemetry',
+    declaration: 'export type AuthorizationTelemetry = AuthorizationAccountTelemetry;',
+  },
+  {
+    name: 'AuthorizationUsageTelemetry',
+    declaration: 'export interface AuthorizationUsageTelemetry {\n    lifetimeTokens?: number;\n    peakDailyTokens?: number;\n    longestRunningTurnSec?: number;\n    currentStreakDays?: number;\n    longestStreakDays?: number;\n}',
   },
   {
     name: 'BackendRegistry',
@@ -4423,7 +4486,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SpawnTeammateRequest',
-    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly agentOptions?: AgentOptions;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SpawnTeammateResult',
@@ -4619,7 +4682,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TeamMemberView',
-    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly model?: string;\n    readonly diagnostics: string[];\n}',
+    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly modelProvider?: string;\n    readonly model?: string;\n    readonly diagnostics: string[];\n}',
   },
   {
     name: 'TeamMessageId',
@@ -4932,6 +4995,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UserMessage',
     declaration: 'export interface UserMessage extends Message {\n    readonly role: \'user\';\n}',
+  },
+  {
+    name: 'UserProfileConsented',
+    declaration: 'export interface UserProfileConsented {\n    preferredName?: string;\n    age?: number;\n    gender?: string;\n    pronouns?: string;\n    tone?: string;\n    family?: UserProfileFamilyMember[];\n}',
+  },
+  {
+    name: 'UserProfileRedacted',
+    declaration: 'export interface UserProfileRedacted {\n    hasPreferredName: boolean;\n    hasDateOfBirth: boolean;\n    hasGender: boolean;\n    hasPronouns: boolean;\n    hasTone: boolean;\n    familyCount: number;\n    consent: UserProfileConsent;\n}',
+  },
+  {
+    name: 'UserProfileUpdate',
+    declaration: 'export interface UserProfileUpdate {\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
+  },
+  {
+    name: 'UserProfileView',
+    declaration: 'export interface UserProfileView {\n    profile: UserProfileSettings;\n    redacted: UserProfileRedacted;\n    consented: UserProfileConsented;\n}',
   },
   {
     name: 'UserQuestionProvider',

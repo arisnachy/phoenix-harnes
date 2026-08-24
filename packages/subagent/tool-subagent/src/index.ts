@@ -12,7 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { AgentOptions } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
 import { assertSubagentMaxDepth, settleRun } from '@deepseek-ai/dsh-subagent'
 import type { SubagentProvider, SubagentResult, SubagentRun } from '@deepseek-ai/dsh-subagent'
@@ -24,6 +24,12 @@ export const inject = ['tools', 'subagents', 'systemPrompt']
 
 /** Prompt order after bounded delegation policy and before child reporting. */
 const SUBAGENT_SECTION_ORDER = 116.5
+
+/** Loader-facing child options before branded runtime identifiers are materialized. */
+type ConfiguredAgentOptions = Omit<AgentOptions, 'reasoningEffort'> & {
+  /** Explicit adapter reasoning level for child requests. */
+  reasoningEffort?: string
+}
 
 /** Config: which registered provider this tool delegates to, plus child defaults. */
 export interface Config {
@@ -46,10 +52,23 @@ export interface Config {
    * Follow-up adapters remain independently optional.
    */
   backgroundMode?: 'one-shot' | 'continuable'
+  /** Allow sibling calls to run in parallel; disable for serial token-gated delegation. */
+  allowParallel?: boolean
   /**
    * Agent options applied to every child; omitted fields use child-loop defaults.
    */
-  agentOptions?: AgentOptions
+  agentOptions?: ConfiguredAgentOptions
+  /** Conditional child route; it applies only when the parent uses `whenProvider`. */
+  childRoute?: {
+    /** Parent provider that activates this route. */
+    whenProvider: string
+    /** Provider used for the child request. */
+    provider: string
+    /** Model id used for the child request. */
+    model: string
+    /** Explicit adapter reasoning level for the child request. */
+    reasoningEffort?: string
+  }
   /**
    * Per-child persona that shadows `deployment:persona`. Requires the
    * provider's `persona` capability; omission preserves the deployment persona.
@@ -83,12 +102,22 @@ export const Config: z<Config> = z.object({
   toolName: z.string().default('subagent'),
   enableRunInBackground: z.boolean().default(true),
   backgroundMode: z.union(['one-shot', 'continuable'] as const).default('one-shot'),
+  allowParallel: z.boolean().default(true),
   // Prevent Schemastery from materializing omitted agentOptions as `{}`.
   agentOptions: z.object({
     provider: z.string(),
     model: z.string(),
     maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
-  }).default(undefined as unknown as { provider: string; model: string; maxTokens: number }),
+    reasoningEffort: z.string(),
+  }).default(undefined as unknown as { provider: string; model: string; maxTokens: number; reasoningEffort: string }),
+  /* jscpd:ignore-start -- provider-neutral route schemas intentionally share one wire contract */
+  childRoute: z.object({
+    whenProvider: z.string().required(),
+    provider: z.string().required(),
+    model: z.string().required(),
+    reasoningEffort: z.string(),
+  }).default(undefined as unknown as { whenProvider: string; provider: string; model: string; reasoningEffort: string }),
+  /* jscpd:ignore-end */
   persona: z.string(),
   // Preserve omission; Schemastery's `{ allow: [] }` default would deny every tool.
   toolFilter: z.object({
@@ -221,26 +250,25 @@ function providerWording(inheritsConversation: boolean): { description: string; 
   if (inheritsConversation) {
     return {
       description:
-        'Delegate a task to a subagent that inherits this conversation: a child agent seeded with all '
-        + 'completed turns so far (it does not see the current in-flight turn). Use this when the subtask '
-        + 'builds on this conversation\'s context — a follow-up analysis, '
-        + 'a review, a continuation — without consuming this conversation\'s context for the work itself. '
-        + 'You receive its result, not its intermediate steps.',
+        'Orquestar una tarea con un subagente que hereda esta conversación: recibe los turnos '
+        + 'completados hasta ahora, pero no el turno actual en curso. Úsalo cuando la tarea dependa del '
+        + 'contexto existente y pueda ejecutarse de forma independiente. Recibes su resultado, no sus '
+        + 'pensamientos internos.',
       promptDescription:
-        'The task for the subagent. It already sees this conversation\'s completed turns, so build on them '
-        + 'freely and state only what is new.',
+        'Describe la tarea concreta para el subagente. Ya conoce los turnos completados; indica solo lo '
+        + 'nuevo que debe investigar, construir o verificar y responde en español.',
     }
   }
   return {
     description:
-      'Delegate a self-contained task to a subagent (a separate agent that works in its own context) '
-      + 'to offload focused, independent work — research, a scoped '
-      + 'implementation, an analysis — so it does not consume this conversation\'s context. The subagent '
-      + 'returns its result, not its intermediate steps. Give it a '
-      + 'complete, standalone prompt: it does not see this conversation.',
+      'Orquestar una tarea independiente con un subagente en contexto limpio '
+      + 'para descargar investigación, implementación o verificación acotada. '
+      + 'No consume el contexto de esta conversación; el subagente '
+      + 'devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. '
+      + 'No recibe esta conversación, así que escribe todo lo necesario en español.',
     promptDescription:
-      'The complete, self-contained task for the subagent. It does not share this '
-      + 'conversation\'s context, so include everything it needs.',
+      'Describe en español la tarea autónoma del subagente, con archivos relevantes, límites y evidencia esperada. '
+      + 'Devuelve solo el resultado verificable.',
   }
 }
 
@@ -366,15 +394,15 @@ export function apply(ctx: Context, config: Config): void {
         render: (_args, value) => [{
           type: 'text',
           text: value.kind === 'background'
-            ? `started background subagent job ${value.jobId}`
+            ? `Orquestación: tarea en segundo plano iniciada (${value.jobId})`
             : value.kind === 'continuable'
-              ? `started subagent ${value.subagentId}`
+              ? `Orquestación: subagente iniciado (${value.subagentId})`
               : outputValueText(value.output),
         }],
       },
       // Children never mutate the parent session; the one parent-owned write
       // (tasks.start) is a synchronous commutative insertion.
-      isConcurrencySafe: () => true,
+      isConcurrencySafe: () => config.allowParallel !== false,
       async execute(args, exec) {
         const parent = exec.agent
         if (!parent) {
@@ -383,11 +411,32 @@ export function apply(ctx: Context, config: Config): void {
         }
 
         const maxDepth = typeof config.maxDepth === 'number' ? config.maxDepth : undefined
+        const childRoute = config.childRoute !== undefined && parent.options.provider === config.childRoute.whenProvider
+          ? config.childRoute
+          : undefined
+        const configuredAgentOptions = childRoute === undefined
+          ? config.agentOptions
+          : {
+            ...config.agentOptions,
+            provider: childRoute.provider,
+            model: childRoute.model,
+            ...childRoute.reasoningEffort === undefined
+              ? {}
+              : { reasoningEffort: ReasoningEffortId(childRoute.reasoningEffort) },
+          }
+        let routedAgentOptions: AgentOptions | undefined
+        if (configuredAgentOptions !== undefined) {
+          const { reasoningEffort, ...baseOptions } = configuredAgentOptions
+          routedAgentOptions = {
+            ...baseOptions,
+            ...reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
+          }
+        }
         const request = {
           label: args.description,
           prompt: [{ type: 'text', text: args.prompt }] as ContentBlock[],
           parent,
-          ...config.agentOptions !== undefined ? { agentOptions: config.agentOptions } : {},
+          ...routedAgentOptions !== undefined ? { agentOptions: routedAgentOptions } : {},
           ...config.persona !== undefined ? { persona: config.persona } : {},
           ...config.toolFilter !== undefined ? { toolFilter: config.toolFilter } : {},
           ...maxDepth !== undefined ? { maxDepth } : {},
@@ -470,7 +519,7 @@ export function apply(ctx: Context, config: Config): void {
       order: SUBAGENT_SECTION_ORDER,
       text: context => disposeTool === undefined || ctx.tools.get(toolName, context.scope) === undefined
         ? ''
-        : `Use ${toolName} in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Set \`run_in_background: false\` only when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message.`,
+        : `Usa ${toolName} para orquestar tareas independientes. No delegues recursivamente ni dupliques exploraciones. Mantén el alcance y responde en español; al finalizar, integra el resultado con evidencia.`,
     })
   }
 }

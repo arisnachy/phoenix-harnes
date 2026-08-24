@@ -3,15 +3,15 @@
  * enforces time and size limits, classifies and decodes text, and leaves presentation to
  * `@deepseek-ai/dsh-tool-web`. Requests carry no browser cookies or ambient credentials.
  *
- * Private-network and SSRF protection is not implemented; do not enable this provider where
- * it can reach sensitive internal targets.
+ * Private and reserved targets are blocked after URL validation and DNS resolution. A deployment
+ * requiring protection against a hostile DNS-rebinding environment should still use an egress proxy.
  * @module @deepseek-ai/dsh-web-fetch-http/provider
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { WebFetchBody, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@deepseek-ai/dsh-web'
 import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
-import { classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
+import { assertPublicFetchTarget, classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
 
 /** Resolved provider limits (the plugin's schemastery Config supplies defaults). */
 export interface HttpFetchLimits {
@@ -27,6 +27,8 @@ export interface HttpFetchLimits {
   maxRedirects: number
   /** `User-Agent` header sent on every request. */
   userAgent: string
+  /** Test-only escape hatch for an explicitly local fixture server. */
+  allowPrivateNetworks: boolean
 }
 
 /** Stable id this provider registers under. */
@@ -58,6 +60,7 @@ export class HttpFetchProvider implements WebFetchProvider {
     let redirectsFollowed = 0
 
     for (;;) {
+      if (!this.limits.allowPrivateNetworks) await assertPublicFetchTarget(currentUrl)
       const response = await this.requestOnce(currentUrl, signal)
 
       if (isRedirectStatus(response.status)) {

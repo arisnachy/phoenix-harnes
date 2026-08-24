@@ -186,8 +186,8 @@ export class PermissionPresetService extends Service {
         name: 'workspace-write', description: 'Write inside the workspace and permitted temporary directories; wider retries require approval.',
       },
       'danger-full-access': {
-        sandbox: 'danger-full-access', approval: 'never',
-        name: 'danger-full-access', description: 'Full file access without approval prompts.',
+        sandbox: 'danger-full-access', approval: 'ask',
+        name: 'danger-full-access', description: 'Full file access with explicit approval for consequential actions.',
       },
     }),
     defaultPreset: z.string(),
@@ -389,7 +389,7 @@ export class PermissionPresetService extends Service {
    * @param name - the preset to switch to; unknown names throw.
    */
   set(session: Session, name: string): void {
-    this.apply(session, name, (policy) =>{  setApprovalPolicy(session, policy) })
+    this.apply(session, name, (policy) => { setApprovalPolicy(session, policy) })
   }
 
   /** Apply one preset with the caller-selected live or initialization policy writer. */

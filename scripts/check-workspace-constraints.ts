@@ -48,6 +48,9 @@ const repositoryUrl = 'git+https://github.com/deepseek-harness/deepseek-harness.
  * their trusted publishing against the repository that runs the workflow.
  */
 const publishedRepositoryUrl = 'git+https://github.com/deepseek-ai/deepseek-harness.git'
+/** PHOENIX fork source home; fork-owned release members may link here. */
+const phoenixRepositoryUrl = 'git+https://github.com/arisnachy/phoenix-harnes.git'
+const publishedRepositoryUrls = new Set([publishedRepositoryUrl, phoenixRepositoryUrl])
 /** Private packages that participate in workspace checks but not releases. */
 const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 /** npm namespace reserved for private experimental packages. */
@@ -61,6 +64,7 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   // The Web build emits sourcemaps for browser debugging; publishing them is
   // what the payload policy forbids, so the bundle ships without them.
   '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],
+  '@deepseek-ai/dsh-vscode': ['extension.cjs', 'README.md', 'CHANGELOG.md', 'LICENSE'],
 }
 
 /** The subset of package.json fields this constraint check cares about. */
@@ -293,9 +297,9 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
       errors.push(`${label}: release member must set publishConfig.access to "public"`)
     }
     if (manifest.repository?.type !== 'git'
-      || manifest.repository.url !== publishedRepositoryUrl
+      || !publishedRepositoryUrls.has(manifest.repository.url ?? '')
       || manifest.repository.directory !== dir) {
-      errors.push(`${label}: release member repository must use ${publishedRepositoryUrl} with directory ${dir}`)
+      errors.push(`${label}: release member repository must use an approved source repository with directory ${dir}`)
     }
   } else if (!experimentalPackageDirectory.test(dir) && manifest.private !== true) {
     errors.push(`${label}: package.json must set "private": true`)

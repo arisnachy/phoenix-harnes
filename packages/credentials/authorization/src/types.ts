@@ -78,6 +78,55 @@ export interface AuthorizationOutcome {
   status: AuthorizationStatus
 }
 
+/** One provider-reported quota window. Percentages are 0..100. */
+export interface AuthorizationRateLimitWindow {
+  usedPercent: number
+  /** Duration of the provider window when it exposes one. */
+  windowDurationMins?: number
+  /** Unix timestamp in seconds when the window resets. */
+  resetsAt?: number
+}
+
+/** Public credit facts. No credential or billing instrument is represented. */
+export interface AuthorizationCreditsTelemetry {
+  hasCredits: boolean
+  unlimited: boolean
+  /** Provider-formatted non-secret balance, when supplied. */
+  balance?: string
+}
+
+/** Secret-free token-activity summary suitable for an account card. */
+export interface AuthorizationUsageTelemetry {
+  lifetimeTokens?: number
+  peakDailyTokens?: number
+  longestRunningTurnSec?: number
+  currentStreakDays?: number
+  longestStreakDays?: number
+}
+
+/**
+ * Sanitized optional account telemetry a flow may expose after authentication.
+ * This contract deliberately has no arbitrary JSON escape hatch: adding a new
+ * field requires code review, preventing an upstream token/session object from
+ * accidentally crossing into the browser.
+ */
+export interface AuthorizationAccountTelemetry {
+  kind: 'account'
+  /** Product/provider that owns the native account session. */
+  provider: string
+  /** Provider account family, for example `chatgpt` or `apiKey`. */
+  accountType?: string
+  email?: string
+  plan?: string
+  primaryLimit?: AuthorizationRateLimitWindow
+  secondaryLimit?: AuthorizationRateLimitWindow
+  credits?: AuthorizationCreditsTelemetry
+  usage?: AuthorizationUsageTelemetry
+}
+
+/** Fixed, secret-free telemetry schema exposed by an authorization flow. */
+export type AuthorizationTelemetry = AuthorizationAccountTelemetry
+
 /** A registered flow as a surface sees it: what it authorizes and whether it is busy. */
 export interface AuthorizationEntry {
   /** The credential record this flow writes. */

@@ -12,6 +12,14 @@ updates:
       timezone: "Asia/Shanghai"
     cooldown:
       default-days: 30
+    groups:
+      codex-runtime-quarantine:
+        patterns:
+          - "@openai/codex"
+      claude-runtime-quarantine:
+        patterns:
+          - "@anthropic-ai/claude-agent-sdk"
+          - "@anthropic-ai/sdk"
     labels:
       - "kind/dependency"
       - "area/infra"

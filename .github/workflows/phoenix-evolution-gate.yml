@@ -1,0 +1,91 @@
+name: PHOENIX Evolution Gate
+
+on:
+  pull_request:
+    branches: [main, phoenix/evolution-inbox]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: phoenix-evolution-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    if: github.base_ref == 'phoenix/evolution-inbox' || startsWith(github.head_ref, 'phoenix/evolution')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: git fetch origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+      - name: Identity, authority and rollback gate
+        env:
+          PHOENIX_GATE_BASE: origin/${{ github.base_ref }}
+          PHOENIX_GATE_HEAD: HEAD
+        run: node scripts/phoenix-evolution-gate.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-evolution-gate
+          path: .phoenix/evolution/gate-report.json
+          if-no-files-found: error
+
+  update-channel-contract:
+    if: github.base_ref == 'phoenix/evolution-inbox' || startsWith(github.head_ref, 'phoenix/evolution')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Parse updater
+        run: node --check scripts/phoenix-auto-update.mjs
+      - name: Verify stable manifest identity and fail-closed parser
+        run: node scripts/phoenix-auto-update.mjs --self-test
+      - name: Verify updater never owns user data
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq 'rmSync\([^\n]*(DSH_HOME|\.credentials|sessions)|reset --hard[^\n]*(DSH_HOME|sessions)' scripts/phoenix-auto-update.mjs; then
+            echo "Updater appears to mutate user-data paths." >&2
+            exit 1
+          fi
+          grep -q 'refs/phoenix/recovery/last-good' scripts/phoenix-auto-update.mjs
+          grep -q 'worktree.*add.*--detach' scripts/phoenix-auto-update.mjs
+          grep -q 'merge.*--ff-only' scripts/phoenix-auto-update.mjs
+          grep -q 'rollbackOnFailure' .github/workflows/phoenix-stable-update-channel.yml
+
+  auth-regression:
+    if: github.base_ref == 'phoenix/evolution-inbox' || startsWith(github.head_ref, 'phoenix/evolution')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { run_install: false }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify generic and native Codex auth boundaries
+        run: >-
+          pnpm exec vitest run
+          packages/llm/llm-pi-ai/tests/login.spec.ts
+          packages/subagent/subagent-codex/tests/account-boundary.spec.ts
+      - name: Typecheck contracts
+        run: pnpm run typecheck
+
+  promotion-boundary:
+    if: github.base_ref == 'main' && startsWith(github.head_ref, 'phoenix/evolution')
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          if [[ "${{ github.head_ref }}" != "phoenix/evolution-inbox" ]]; then
+            echo "Evolution candidates must enter phoenix/evolution-inbox first."
+            exit 1
+          fi
+          echo "Only the reviewed inbox may be proposed to main; automatic main merge is forbidden."

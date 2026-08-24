@@ -180,6 +180,14 @@ describe('gate graph validation', () => {
     }
   })
 
+  it('bounds both local coverage lanes when no worker override is configured', () => {
+    const gates = withEnv('DSH_COVERAGE_MAX_WORKERS', undefined, () =>
+      withPnpmEntrypoint(() => gatesForMode('ci-coverage')))
+
+    expect(gates.find(subject => subject.id === 'coverage')?.args).toContain('--maxWorkers=1')
+    expect(gates.find(subject => subject.id === 'coverage-exempt-heavy')?.args).toContain('--maxWorkers=1')
+  })
+
   it('rejects an invalid coverage timeout before starting a gate', () => {
     expect(() => withEnv('DSH_COVERAGE_TEST_TIMEOUT_MS', '0', () =>
       withPnpmEntrypoint(() => gatesForMode('ci-windows-complete'))))

@@ -15,8 +15,8 @@ import { HostToWorkerType, WorkerToHostType } from '../src/protocol.ts'
 import { SessionId } from '@deepseek-ai/dsh-session'
 
 /** A minimal parent stand-in: the engine only threads it through to the provider. */
-function fakeParent(): Agent {
-  return { id: SessionId('workflow-parent'), options: {} } as unknown as Agent
+function fakeParent(options: Agent['options'] = {}): Agent {
+  return { id: SessionId('workflow-parent'), options } as unknown as Agent
 }
 
 // Allow cold worker startup on contended CI runners.
@@ -176,6 +176,32 @@ async function run(ctx: Context, parent: Agent, source: { script: string; meta: 
 }
 
 describe('dsh-workflow-worker-thread', () => {
+  it('routes OpenAI workflow children to Luna high and preserves the cap', async () => {
+    const { ctx, provider } = await setup({
+      config: {
+        maxConcurrentAgents: 2,
+        maxTotalAgents: 2,
+        childRoute: {
+          whenProvider: 'openai-codex',
+          provider: 'openai-codex',
+          model: 'gpt-5.6-luna',
+          reasoningEffort: 'high',
+        },
+      },
+    })
+    const result = await run(
+      ctx,
+      fakeParent({ provider: 'openai-codex', model: 'gpt-5.4' }),
+      scripted("return await agent('review the focused change')"),
+    )
+    expect(result.stopReason).toBe('completed')
+    expect(provider.runs[0]?.request.agentOptions).toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-5.6-luna',
+      reasoningEffort: 'high',
+    })
+  })
+
   describe('script execution over a real worker thread', () => {
     it('runs a script end-to-end: agent() text results, phases, log, args, return value, events', async () => {
       const { ctx, parent, provider } = await setup({ reply: (_request, index) => text(`answer-${index}`) })
@@ -550,7 +576,6 @@ describe('dsh-workflow-worker-thread', () => {
           // The rejection VALUE's own coercion throws: a warn built with bare
           // String(error) would itself throw, skipping the ChildDisposed ack
           // and wedging the script's finally until the grace/terminate path.
-          // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error rejection IS the scenario under test
           dispose: () => Promise.reject({ toString: () => { throw new Error('coercion trap') } }),
         }),
       }

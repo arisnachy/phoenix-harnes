@@ -38,6 +38,7 @@ agent（智能体）的唯一具体实现插件和循环驱动器。其包内部
 ```ts
 interface Config {
   maxParallelToolCalls?: number // default 10; 1 is serial
+  maxStepsPerTurn?: number      // default 64; continue explicitly in a new turn
   agents: Array<{
     id: string                 // required
     provider?: string
@@ -49,7 +50,7 @@ interface Config {
 }
 ```
 
-通过配置创建的 agent 会自动启动。模型调用同时需要 `provider` 和 `model`；`agent/request` 可以在分发前补齐缺失的这一对值。可选的正数 `maxTokens` 会为每次对话请求提供初始输出上限，并记录在请求 header 中。`maxParallelToolCalls` 限制每个 agent 针对并行安全调用使用的滚动池，默认值为 `10`；它同时也是 `agent-loop` Settings 段的全部内容，因此叠加在该条目之上的用户层无需重启即可限制下一组工具调用，而非正整数的值会在写入时被拒绝，而不是到那一组时才失败。`agents` 刻意不在该段中——它在服务启动时被消费一次，所以存储的改动只会看起来生效。`cwd` 仅应用于全新会话，而 `resumeSessionId` 保留持久化元数据。通过配置创建的 agent 使用部署 persona；编程式 setup 可以按 agent 遮蔽它。该插件为每个 agent 提供 `provider`、`model` 和 `cwd` 提示词变量；harness 身份与部署 persona 属于 `dsh-system-prompt`。
+通过配置创建的 agent 会自动启动。模型调用同时需要 `provider` 和 `model`；`agent/request` 可以在分发前补齐缺失的这一对值。可选的正数 `maxTokens` 会为每次对话请求提供初始输出上限，并记录在请求 header 中。`maxParallelToolCalls` 限制每个 agent 针对并行安全调用使用的滚动池，默认值为 `10`。`maxStepsPerTurn` 默认值为 `64`，会在第 65 步之前停止失控的模型／工具循环；用户可以在新轮次中显式继续。两个控制项都可通过 `agent-loop` Settings 段热重载，非正整数会在写入时被拒绝。`agents` 刻意不在该段中——它在服务启动时被消费一次，所以存储的改动只会看起来生效。`cwd` 仅应用于全新会话，而 `resumeSessionId` 保留持久化元数据。通过配置创建的 agent 使用部署 persona；编程式 setup 可以按 agent 遮蔽它。该插件为每个 agent 提供 `provider`、`model` 和 `cwd` 提示词变量；harness 身份与部署 persona 属于 `dsh-system-prompt`。
 
 ### 包内部具体驱动器
 
@@ -131,4 +132,4 @@ interface Config {
 - **分类是一元的**：安全性取决于比较同级调用或资源的调用必须保持独占（参见[设计原理](../../../.agents/notes/implemented/feature/2026-07-10-parallel-tool-call-execution.zh.md)）。
 - **配置 label 默认对应新会话**：省略 `sessionId` 时，每次启动都会创建新的 `${id}-session-<uuid>`；如需确切的恢复或创建行为，必须显式提供稳定的 `sessionId`，而 `resumeSessionId` 要求已有持久化历史。
 - **配置 agent 没有逐 agent persona 字段或 setup 钩子**：它们使用部署 persona；只有编程式 `ctx.agents.create()` / `resume()` 工厂选项支持带作用域的 persona／工具组合。
-- **没有内置轮次预算**：工具调用或 steering 会让当前轮次继续；限制失控轮次的策略必须从既有生命周期扩展点（如 `agent/turn-stopping`）执行取消。
+- **长自主轮次需要继续确认**：达到 `maxStepsPerTurn` 次模型／工具迭代（默认 `64`）后，轮次会以可见错误结束，用户必须显式继续。经审查确实需要更多步骤的工作负载可以调高该设置。

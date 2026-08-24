@@ -18,6 +18,7 @@ import {
   parseCoveragePartitionCount,
 } from './coverage-partitions.ts'
 import { pnpmInvocation } from './pnpm-invocation.ts'
+import { acquireWorktreeGateLock } from './worktree-gate-lock.ts'
 
 /** A named aggregate exposed by the gate runner. */
 export type Mode =
@@ -88,7 +89,16 @@ type ResultObserver = (result: GateResult) => void
 
 const root = resolve(import.meta.dirname, '..')
 if (import.meta.main) {
-  process.exitCode = await main(process.argv.slice(2))
+  const args = process.argv.slice(2)
+  const mode = parseMode(args[0])
+  const lock = process.env.DSH_GATE_LOCK_DISABLED === '1'
+    ? undefined
+    : await acquireWorktreeGateLock(root, mode)
+  try {
+    process.exitCode = await main(args)
+  } finally {
+    await lock?.release()
+  }
 }
 
 async function main(args: string[]): Promise<number> {
@@ -269,6 +279,7 @@ function ciSharedStaticGates(): Gate[] {
     pnpmScript('constraints', 'constraints'),
     pnpmScript('dsh-package-licenses', 'verify-dsh-package-licenses', { label: 'DSH package licenses' }),
     pnpmScript('package-invariants', 'verify-package-invariants', { label: 'package invariants' }),
+    pnpmScript('phoenix-branding', 'verify-phoenix-branding', { label: 'PHOENIX branding' }),
     pnpmScript('cordis-config', 'verify-cordis-config', { label: 'Cordis config' }),
     pnpmScript('optional-dependency-imports', 'verify-optional-dependency-imports', {
       label: 'optional dependency imports',
@@ -538,8 +549,12 @@ function lintGate(options: { needs?: string[] } = {}): Gate {
 // those defaults. Explicit fixture timeouts remain authoritative.
 function coverageWorkerArgs(): { instrumented: string[]; exempt: string[] } {
   const [flag] = positiveIntArg('DSH_COVERAGE_MAX_WORKERS', '--maxWorkers')
-  if (flag === undefined) return { instrumented: [], exempt: [] }
-  const total = Number.parseInt(flag.split('=')[1] ?? '', 10)
+  // Coverage instruments a very large workspace and several tests spawn
+  // compilers or subprocesses. An unbounded local invocation can create one
+  // fork per CPU in each parallel lane, starving Windows I/O until ordinary
+  // 5s assertions fail. Match CI's conservative default unless the caller
+  // explicitly supplies a larger measured budget.
+  const total = flag === undefined ? 2 : Number.parseInt(flag.split('=')[1] ?? '', 10)
   const exempt = Math.max(1, Math.floor(total / 3))
   const instrumented = Math.max(1, total - exempt)
   return {

@@ -1,0 +1,120 @@
+name: PHOENIX Stable Update Channel
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phoenix-stable-update-channel
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve green main commit
+        id: target
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            target="${GITHUB_SHA}"
+          else
+            target="$WORKFLOW_SHA"
+          fi
+          if [[ ! "$target" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid target SHA: $target" >&2
+            exit 1
+          fi
+          echo "sha=$target" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refuse stale or non-main publication
+        id: freshness
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          main_sha="$(git rev-parse origin/main)"
+          if [[ "$TARGET_SHA" != "$main_sha" ]]; then
+            echo "Target $TARGET_SHA is not current main $main_sha; a newer main build must become green first."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git cat-file -e "$TARGET_SHA^{commit}"
+          git merge-base --is-ancestor "$TARGET_SHA" origin/main
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify updater contract
+        if: steps.freshness.outputs.publish == 'true'
+        run: node scripts/phoenix-auto-update.mjs --self-test
+
+      - name: Publish stable manifest
+        if: steps.freshness.outputs.publish == 'true'
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin phoenix/update-channel --quiet
+          channel_dir="$(mktemp -d)"
+          cleanup() {
+            git worktree remove --force "$channel_dir" >/dev/null 2>&1 || true
+            rm -rf "$channel_dir"
+          }
+          trap cleanup EXIT
+          git worktree add --detach "$channel_dir" origin/phoenix/update-channel
+          mkdir -p "$channel_dir/.phoenix/channel"
+          PUBLISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat > "$channel_dir/.phoenix/channel/stable.json" <<JSON
+          {
+            "schema": 1,
+            "product": "PHOENIX",
+            "channel": "stable",
+            "sourceBranch": "main",
+            "sourceCommit": "$TARGET_SHA",
+            "publishedAt": "$PUBLISHED_AT",
+            "minimumNode": "22.19.0",
+            "policy": {
+              "installMode": "auto",
+              "requireCleanWorktree": true,
+              "requireFastForward": true,
+              "preflightBuild": true,
+              "rollbackOnFailure": true
+            }
+          }
+          JSON
+          cd "$channel_dir"
+          if git diff --quiet -- .phoenix/channel/stable.json; then
+            echo "Stable channel already points to $TARGET_SHA"
+            exit 0
+          fi
+          git config user.name "phoenix-update-bot"
+          git config user.email "phoenix-update-bot@users.noreply.github.com"
+          git add .phoenix/channel/stable.json
+          git commit -m "chore(update): publish stable $TARGET_SHA"
+          git push origin HEAD:phoenix/update-channel
+
+      - name: Stable channel summary
+        if: steps.freshness.outputs.publish == 'true'
+        run: |
+          echo "### PHOENIX stable update published" >> "$GITHUB_STEP_SUMMARY"
+          echo "- commit: \`${{ steps.target.outputs.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- channel: \`phoenix/update-channel\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- clients: auto-update after local preflight and recovery checkpoint" >> "$GITHUB_STEP_SUMMARY"

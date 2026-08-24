@@ -36,6 +36,17 @@ export interface Config {
   maxConcurrentAgents?: number
   /** Total `agent()` calls one run may start — the runaway-loop backstop (default 1000). */
   maxTotalAgents?: number
+  /** Conditional model route for child agents when the parent uses a provider. */
+  childRoute?: {
+    /** Parent provider that activates this route. */
+    whenProvider: string
+    /** Provider used for child agents. */
+    provider: string
+    /** Model id used for child agents. */
+    model: string
+    /** Explicit adapter reasoning level for child agents. */
+    reasoningEffort?: string
+  }
   /** Items accepted by a single `parallel()`/`pipeline()` call (default 4096). */
   maxItemsPerCall?: number
   /** vm timeout for the script's initial synchronous slice, inside the worker (default 5000 ms). */
@@ -116,6 +127,14 @@ class WorkerThreadWorkflowEngine extends WorkflowEngine {
     provider: z.string().default('spawn'),
     maxConcurrentAgents: z.natural().default(0),
     maxTotalAgents: z.natural().min(1).default(1000),
+    /* jscpd:ignore-start -- provider-neutral route schemas intentionally share one wire contract */
+    childRoute: z.object({
+      whenProvider: z.string().required(),
+      provider: z.string().required(),
+      model: z.string().required(),
+      reasoningEffort: z.string(),
+    }).default(undefined as unknown as { whenProvider: string; provider: string; model: string; reasoningEffort: string }),
+    /* jscpd:ignore-end */
     maxItemsPerCall: z.natural().min(1).default(4096),
     syncTimeoutMs: z.natural().min(1).default(5000),
     disposeGraceMs: z.natural().default(5000),
@@ -177,6 +196,7 @@ class WorkerThreadWorkflowEngine extends WorkflowEngine {
       request.parent,
       init,
       subagentProvider,
+      this.config.childRoute,
       this.config.disposeGraceMs,
       {
         phase: (title) => { this.emitWorkflowEvent('workflow/phase', info, title) },

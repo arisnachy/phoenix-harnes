@@ -146,6 +146,8 @@ export interface Config {
    * omission defaults to {@link DEFAULT_MAX_PARALLEL_TOOL_CALLS}.
    */
   maxParallelToolCalls?: number
+  /** Maximum model/tool iterations in one turn; omission defaults to 64. */
+  maxStepsPerTurn?: number
   /** Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
     /** Stable config label used in logs and as the fresh combined-id prefix. */
@@ -162,7 +164,7 @@ export interface Config {
 
 Depends on: [`AgentOptions`](subsystems/core.md) · [`SessionId`](subsystems/core.md)
 
-Source: [`packages/core/agent-loop/src/index.ts:255`](../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts:266`](../packages/core/agent-loop/src/index.ts)
 
 <a id="deepseek-aidsh-agent-presets"></a>
 
@@ -235,6 +237,8 @@ export interface Config {
   agents?: AgentLoopConfig['agents']
   /** Agent-loop concurrency cap; `1` is serial. */
   maxParallelToolCalls?: AgentLoopConfig['maxParallelToolCalls']
+  /** Maximum model/tool steps in one turn before explicit continuation is required. */
+  maxStepsPerTurn?: AgentLoopConfig['maxStepsPerTurn']
   /** Whether the system prompt includes the fixed Harness identity (default true). */
   includeHarnessIdentity?: SystemPromptConfig['includeHarnessIdentity']
   /** Whether model history includes dynamic runtime-context snapshots (default true). */
@@ -552,6 +556,8 @@ Requires: `tools`
 export interface Config {
   /** Maximum synchronous VM evaluation time in milliseconds. */
   vmTimeoutMs?: number
+  /** Require an explicit approval event before host-only dynamic code runs. */
+  requireHostApproval?: boolean
 }
 ```
 
@@ -617,7 +623,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/agent-team/src/types.ts:125`](../packages/experimental/agent-team/src/types.ts)
+Source: [`packages/experimental/agent-team/src/types.ts:128`](../packages/experimental/agent-team/src/types.ts)
 
 <a id="deepseek-aidsh-experimental-tool-agent-team"></a>
 
@@ -632,8 +638,12 @@ export interface Config {
   readonly freshProvider?: string
   /** Continuable-subagent provider used for completed-prefix fork teammates. */
   readonly forkProvider?: string
+  /** Named provider/model routes the Lead may assign; empty means inheritance only. */
+  readonly modelProfiles?: Record<string, AgentOptions>
 }
 ```
+
+Depends on: [`AgentOptions`](subsystems/core.md)
 
 Source: [`packages/experimental/tool-agent-team/src/index.ts:17`](../packages/experimental/tool-agent-team/src/index.ts)
 
@@ -822,6 +832,21 @@ export interface Config {
    * @default 1024
    */
   coldBlankProbeMaxBytes?: number
+  /**
+   * Borrowed eyes: transcribe incoming chat images through a vision-capable
+   * side route when the active session model is text-only. Disabled unless
+   * `enabled` is set; without an explicit `provider`/`model` pair, discovery
+   * picks the first registered catalog entry declaring image input. The
+   * literal `false` pins the fallback off over layered settings.
+   */
+  visionFallback?: {
+    /** Engage transcription instead of refusing prompts with images on text-only routes. */
+    enabled?: boolean
+    /** Explicit vision provider; requires `model`. */
+    provider?: string
+    /** Explicit vision model id; requires `provider`. */
+    model?: string
+  } | false
 }
 ```
 
@@ -960,7 +985,7 @@ export interface Config {
   fileRefreshMarginSeconds?: number
   /** Oldest harness-owned files deleted before one quota-recovery upload retry (default 100). */
   fileQuotaCleanupBatch?: number
-  /** Provider-owned model-request retry policy; omission uses normal mode with five retries. */
+  /** Provider-owned model-request retry policy; omission uses normal mode with two retries. */
   retryPolicy?: RetryPolicyConfig
 }
 
@@ -1095,7 +1120,7 @@ export interface PiAiProviderProfile {
   requestImagePixelBudget?: number
   /** Raw encoded-byte cap for each deterministic inline request version. */
   requestImageMaxBytes?: number
-  /** Provider-owned model-request retry policy; omission uses normal mode with five retries. */
+  /** Provider-owned model-request retry policy; omission uses normal mode with two retries. */
   retryPolicy?: RetryPolicyConfig
 }
 
@@ -2196,6 +2221,8 @@ export interface Config {
    * `allow_once` or `allow_always` option). No prompt is surfaced to a human.
    */
   permission: PermissionPolicy
+  /** Required safety opt-in when `permission` is `allow`; otherwise activation fails closed. */
+  allowUnattendedPermissions?: boolean
   /**
    * Extra environment variables for the child process — e.g. the child
    * harness's own `DEEPSEEK_API_KEY`. Forwarded on top of a credential-scrubbed
@@ -2282,7 +2309,7 @@ export type CodexPermissionMode =
   | 'dangerously-bypass-approvals-and-sandbox'
 ```
 
-Source: [`packages/subagent/subagent-codex/src/index.ts:36`](../packages/subagent/subagent-codex/src/index.ts)
+Source: [`packages/subagent/subagent-codex/src/index.ts:40`](../packages/subagent/subagent-codex/src/index.ts)
 
 <a id="deepseek-aidsh-subagent-dsh-sdk"></a>
 
@@ -2812,10 +2839,23 @@ export interface Config {
    * Follow-up adapters remain independently optional.
    */
   backgroundMode?: 'one-shot' | 'continuable'
+  /** Allow sibling calls to run in parallel; disable for serial token-gated delegation. */
+  allowParallel?: boolean
   /**
    * Agent options applied to every child; omitted fields use child-loop defaults.
    */
-  agentOptions?: AgentOptions
+  agentOptions?: ConfiguredAgentOptions
+  /** Conditional child route; it applies only when the parent uses `whenProvider`. */
+  childRoute?: {
+    /** Parent provider that activates this route. */
+    whenProvider: string
+    /** Provider used for the child request. */
+    provider: string
+    /** Model id used for the child request. */
+    model: string
+    /** Explicit adapter reasoning level for the child request. */
+    reasoningEffort?: string
+  }
   /**
    * Per-child persona that shadows `deployment:persona`. Requires the
    * provider's `persona` capability; omission preserves the deployment persona.
@@ -2843,11 +2883,17 @@ export interface Config {
    */
   maxDepth?: number | 'provider-managed'
 }
+
+/** Loader-facing child options before branded runtime identifiers are materialized. */
+type ConfiguredAgentOptions = Omit<AgentOptions, 'reasoningEffort'> & {
+  /** Explicit adapter reasoning level for child requests. */
+  reasoningEffort?: string
+}
 ```
 
 Depends on: [`AgentOptions`](subsystems/core.md)
 
-Source: [`packages/subagent/tool-subagent/src/index.ts:29`](../packages/subagent/tool-subagent/src/index.ts)
+Source: [`packages/subagent/tool-subagent/src/index.ts:35`](../packages/subagent/tool-subagent/src/index.ts)
 
 <a id="deepseek-aidsh-tool-subagent-report"></a>
 
@@ -3109,6 +3155,8 @@ export interface Config {
   maxRedirects?: number
   /** `User-Agent` header sent on every request. */
   userAgent?: string
+  /** Only for isolated local fixtures; never enable for untrusted requests. */
+  allowPrivateNetworks?: boolean
 }
 ```
 
@@ -3166,6 +3214,28 @@ export interface Config {
 
 Source: [`packages/web/web-search-exa/src/index.ts:38`](../packages/web/web-search-exa/src/index.ts)
 
+<a id="deepseek-aidsh-web-search-openrouter"></a>
+
+## `@deepseek-ai/dsh-web-search-openrouter`
+
+Requires: `web`
+
+```ts config-catalog
+/** User-editable OpenRouter search settings. */
+export interface Config {
+  /** Literal key for controlled deployments; prefer apiKeyEnv. */
+  apiKey?: string
+  /** Credential reference shared with the OpenRouter model provider. */
+  apiKeyEnv?: string
+  /** OpenRouter API base. */
+  baseURL?: string
+  /** Model that receives the server-tool request. */
+  model?: string
+}
+```
+
+Source: [`packages/web/web-search-openrouter/src/index.ts:38`](../packages/web/web-search-openrouter/src/index.ts)
+
 <a id="deepseek-aidsh-web-search-perplexity"></a>
 
 ## `@deepseek-ai/dsh-web-search-perplexity`
@@ -3205,6 +3275,17 @@ export interface Config {
   maxConcurrentAgents?: number
   /** Total `agent()` calls one run may start — the runaway-loop backstop (default 1000). */
   maxTotalAgents?: number
+  /** Conditional model route for child agents when the parent uses a provider. */
+  childRoute?: {
+    /** Parent provider that activates this route. */
+    whenProvider: string
+    /** Provider used for child agents. */
+    provider: string
+    /** Model id used for child agents. */
+    model: string
+    /** Explicit adapter reasoning level for child agents. */
+    reasoningEffort?: string
+  }
   /** Items accepted by a single `parallel()`/`pipeline()` call (default 4096). */
   maxItemsPerCall?: number
   /** vm timeout for the script's initial synchronous slice, inside the worker (default 5000 ms). */
@@ -3243,6 +3324,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-goal` ([`packages/client/ui-goal/src/index.ts`](../packages/client/ui-goal/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-input-trigger` ([`packages/client/ui-input-trigger/src/index.ts`](../packages/client/ui-input-trigger/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-jobs` ([`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-kira-teams` ([`packages/client/ui-kira-teams/src/index.ts`](../packages/client/ui-kira-teams/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-layout` ([`packages/client/ui-layout/src/index.ts`](../packages/client/ui-layout/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-message-feedback` ([`packages/client/ui-message-feedback/src/index.ts`](../packages/client/ui-message-feedback/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-model-selection` ([`packages/client/ui-model-selection/src/index.ts`](../packages/client/ui-model-selection/src/index.ts))
@@ -3255,6 +3337,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-settings-models` ([`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-plugin-inventory` ([`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-plugins` ([`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-settings-profile` ([`packages/client/ui-settings-profile/src/index.ts`](../packages/client/ui-settings-profile/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar` ([`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-skill` ([`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-subagent` ([`packages/client/ui-subagent/src/index.ts`](../packages/client/ui-subagent/src/index.ts))
@@ -3292,6 +3375,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-tool-call-timeout-policy` — requires `tools` ([`packages/guard/timeout-policy/src/index.ts`](../packages/guard/timeout-policy/src/index.ts))
 - `@deepseek-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
 - `@deepseek-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
+- `@deepseek-ai/dsh-user-profile` — requires `settings` · `systemPrompt` ([`packages/profile/user-profile/src/index.ts`](../packages/profile/user-profile/src/index.ts))
 - `@deepseek-ai/dsh-user-questions` ([`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts))
 - `@deepseek-ai/dsh-workspace` — requires `storageDomain` · `sessionPersistence` ([`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts))
 
@@ -3327,6 +3411,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-atomic-write` ([`packages/util/atomic-write/src/index.ts`](../packages/util/atomic-write/src/index.ts))
 - `@deepseek-ai/dsh-base` ([`packages/bundle/base/src/index.ts`](../packages/bundle/base/src/index.ts))
 - `@deepseek-ai/dsh-brand` ([`packages/util/brand/src/index.ts`](../packages/util/brand/src/index.ts))
+- `@deepseek-ai/dsh-chrome-connector` ([`packages/mcp/chrome-connector/src/index.ts`](../packages/mcp/chrome-connector/src/index.ts))
 - `@deepseek-ai/dsh-client-test-runtime` ([`packages/test-support/client-runtime/src/index.ts`](../packages/test-support/client-runtime/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-primitives` ([`packages/client/ui-primitives/src/index.ts`](../packages/client/ui-primitives/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-slots` ([`packages/client/ui-slots/src/index.ts`](../packages/client/ui-slots/src/index.ts))

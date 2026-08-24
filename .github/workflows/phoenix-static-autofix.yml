@@ -1,0 +1,97 @@
+name: PHOENIX Static Autofix
+
+on:
+  push:
+    branches:
+      - phoenix/evolution-current-v16
+    paths:
+      - .github/workflows/phoenix-static-autofix.yml
+      - .github/scripts/phoenix-static-autofix.py
+  pull_request:
+    branches:
+      - phoenix/evolution-inbox
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    if: ${{ github.event_name == 'pull_request' || !contains(github.event.head_commit.message, '[phoenix-autofix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: phoenix/evolution-current-v16
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Apply precise source and translation repairs
+        run: python .github/scripts/phoenix-static-autofix.py
+      - name: Classify authorization telemetry documentation type
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/gen-cordis-catalog.ts')
+          text = p.read_text()
+          anchor = "  AuthorizationStatus: 'credentials.md',\n"
+          entry = "  AuthorizationTelemetry: 'credentials.md',\n"
+          if entry not in text:
+              if anchor not in text:
+                  raise SystemExit('AuthorizationStatus LINK_MAP anchor missing')
+              p.write_text(text.replace(anchor, anchor + entry, 1))
+          PY
+      - name: Refresh lockfile
+        run: pnpm install --lockfile-only
+      - name: Record repaired bilingual pairs
+        shell: bash
+        run: |
+          pnpm run verify-translation-pairing --write \
+            docs/evolution/PHOENIX_AUTO_UPDATE.md \
+            docs/evolution/PHOENIX_EVOLUTION_V16.md \
+            docs/evolution/ROLLBACK.md \
+            README.md
+      - name: Verify repaired source contracts
+        shell: bash
+        run: |
+          pnpm run constraints
+          pnpm run verify-cordis-config
+          pnpm run verify-export-jsdoc
+      - name: Refresh generated contracts
+        shell: bash
+        run: |
+          pnpm run gen-cordis-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-config-catalog
+          pnpm run gen-module-graph
+      - name: Verify generated contracts
+        shell: bash
+        run: |
+          pnpm run verify-cordis-catalog
+          pnpm run verify-doc-graphs
+          pnpm run verify-config-catalog
+          pnpm run verify-module-graph
+          git diff --check
+      - name: Show generated documentation delta
+        shell: bash
+        run: |
+          git diff -- docs/config-catalog.md docs/module-graph.md docs/generated docs/subsystems || true
+      - name: Commit repairs
+        shell: bash
+        run: |
+          git status --short
+          if git diff --quiet && git diff --cached --quiet; then
+            echo 'No changes required.'
+            exit 0
+          fi
+          git config user.name 'PHOENIX CI Autofix'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(ci): repair static contracts [phoenix-autofix]'
+          git push origin HEAD:phoenix/evolution-current-v16

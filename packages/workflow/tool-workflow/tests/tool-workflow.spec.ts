@@ -119,7 +119,7 @@ describe('dsh-tool-workflow', () => {
     if (result.isError) throw new Error('expected workflow success')
     expect(result.value).toEqual({ runId: 'run-1', agentsStarted: 7, result: { findings: [1, 2] } })
     const rendered = (result.content[0] as { text: string }).text
-    expect(rendered).toContain('workflow "audit" completed (7 agents)')
+    expect(rendered).toContain('ORQUESTACIÓN "audit" completada (7 subagentes)')
     expect(rendered).toContain('"findings"')
     expect(engine.disposed).toBe(1)
   })
@@ -275,7 +275,7 @@ describe('dsh-tool-workflow', () => {
     engine.settle({ value: null, stopReason: 'error', error: 'script threw: boom', agentsStarted: 2 })
     const result = await pending
     expect(result.isError).toBe(true)
-    expect((result.content[0] as { text: string }).text).toContain('workflow run failed: script threw: boom')
+    expect((result.content[0] as { text: string }).text).toContain('la orquestación falló: script threw: boom')
     expect(engine.disposed).toBe(1)
   })
 
@@ -286,12 +286,12 @@ describe('dsh-tool-workflow', () => {
     engine.settle({ value: null, stopReason: 'cancelled', error: 'user', agentsStarted: 0 })
     const result = await pending
     expect(result.isError).toBe(true)
-    expect((result.content[0] as { text: string }).text).toContain('workflow run was cancelled (user)')
+    expect((result.content[0] as { text: string }).text).toContain('la orquestación fue cancelada (user)')
 
     const bare = execute(ctx, { script: SCRIPT, meta: META }, { agent: parent })
     await vi.waitFor(() => { expect(engine.requests.length).toBe(2) })
     engine.settle({ value: null, stopReason: 'cancelled', agentsStarted: 0 })
-    expect(((await bare).content[0] as { text: string }).text.trim().endsWith('cancelled')).toBe(true)
+    expect(((await bare).content[0] as { text: string }).text.trim().endsWith('cancelada')).toBe(true)
   })
 
   it('an error result without a message renders the unknown-error fallback', async () => {
@@ -299,7 +299,7 @@ describe('dsh-tool-workflow', () => {
     const pending = execute(ctx, { script: SCRIPT, meta: META }, { agent: parent })
     await vi.waitFor(() => { expect(engine.requests.length).toBe(1) })
     engine.settle({ value: null, stopReason: 'error', agentsStarted: 0 })
-    expect(((await pending).content[0] as { text: string }).text).toContain('unknown error')
+    expect(((await pending).content[0] as { text: string }).text).toContain('error desconocido')
   })
 
   it('cancels the run when exec.signal aborts MID-FLIGHT (the abort bridge)', async () => {
@@ -389,7 +389,7 @@ describe('dsh-tool-workflow', () => {
     const { ctx } = await setup()
     const tool = ctx.tools.get('workflow')!
     const view = tool.presentCall!({ script: SCRIPT, meta: META })
-    expect(view).toMatchObject({ card: 'generic', title: 'workflow: audit', rawInput: SCRIPT })
+    expect(view).toMatchObject({ card: 'generic', title: 'orquestación: audit', rawInput: SCRIPT })
   })
 
   it('presentResult keeps the generic card; presentation is pure and replay-safe on malformed args', async () => {
@@ -441,7 +441,7 @@ describe('dsh-tool-workflow', () => {
       controller.abort('user abort')
       const result = await pending
       expect(result.isError).toBe(true)
-      expect((result.content[0] as { text: string }).text).toContain('cancelled')
+      expect((result.content[0] as { text: string }).text).toContain('cancelada')
     })
   })
 })

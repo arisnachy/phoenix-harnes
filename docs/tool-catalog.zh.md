@@ -1509,7 +1509,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `subagent`
 
-将一项自包含任务委派给 subagent（在自身上下文中工作的独立 agent），用它卸载聚焦且独立的工作，例如研究、限定范围的实现或分析，以免消耗当前对话的上下文。subagent 会返回结果，但不会返回中间步骤。请提供完整、独立的提示词，因为它看不到当前对话。此调用默认等待结果。设置 `run_in_background: true` 可返回 job id；使用 `job_output` 收集结果，使用 `job_kill` 停止任务。
+在干净上下文中编排独立任务，用 subagent 分担研究、限定范围的实现或验证。它不会消耗当前对话的上下文；subagent 返回最终结果而不是中间步骤。请提供带有范围、限制和证据要求的完整提示词；它看不到当前对话，因此要把所需信息写在提示词中。此调用默认等待结果。设置 `run_in_background: true` 可返回 job id；使用 `job_output` 收集结果，使用 `job_kill` 停止任务。
 
 ```json
 {
@@ -1521,7 +1521,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
     },
     "prompt": {
       "type": "string",
-      "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs."
+      "description": "Describe en español la tarea autónoma del subagente, con archivos relevantes, límites y evidencia esperada. Devuelve solo el resultado verificable."
     },
     "run_in_background": {
       "type": "boolean",
@@ -2087,20 +2087,20 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
 
 ### `workflow`
 
-运行用于大规模编排 subagent 的 JavaScript 工作流脚本。当工作会分散到许多相互独立的部分时，请使用此工具，例如审查大量文件、执行迁移、开展多角度研究或对发现进行对抗式验证；此时应将编排写成脚本，而不是逐轮委派。
+执行 JavaScript 脚本，以受控方式编排 subagent。只有在存在真正独立的部分时才使用它，例如按文件审查、迁移、多角度研究或对抗式验证，并且脚本编排确实能带来价值。
 
-工作流的身份通过 `meta` 参数以 JSON 形式传入：必填的 `name`（简短 kebab-case）和 `description` 字符串，以及可选的 `whenToUse` 字符串和 `phases` 数组（`{title, detail?, provider?, model?}`）。`script` 参数只能是纯 JavaScript **函数体**，不能是 TypeScript，也不能包含 `export const meta` 语句；meta 是参数而非代码。脚本支持顶层 await；请以 `return <value>` 结尾，该值必须可以 JSON 序列化，并作为此工具的结果。
+编排身份通过 JSON 格式的 `meta` 参数传入：必须包含 `name` 和 `description`，还可包含 `whenToUse` 和 `phases`。`script` 只能是纯 JavaScript（不是 TypeScript，也不能包含 `export const meta`）；它支持顶层 `await`，必须以 `return <value>` 结尾，并且返回值必须可序列化为 JSON。
 
 脚本函数体提供以下钩子：
 
-- `agent(prompt, opts?): Promise<any>`：运行一个 subagent 直至完成。不提供 `opts.schema` 时，解析为子级最终文本；提供 `opts.schema` 时，它必须是以对象为根、且**只能**使用 type/properties/required/additionalProperties/items/enum/const/oneOf 的 JSON Schema，不支持 pattern/format/数值边界，此时解析为通过校验的对象。子级失败时解析为 `null`，可使用 `.filter(Boolean)` 过滤。其他选项包括 `label`（显示名称）、`phase`（进度组），以及相互独立的 `provider`／`model` LLM（大语言模型）目标覆盖项，两者可单独提供。其他任何选项（`effort`／`isolation`／`agentType`）都会明确报错。
-- `pipeline(items, ...stages): Promise<any[]>`：让每个条目分别经过各阶段，阶段之间**没有**屏障；多阶段工作优先使用它。每个阶段接收 `(prev, item, index)`。普通的阶段异常会将该**条目**变为 `null`，并跳过它的剩余阶段。
-- `parallel(thunks): Promise<any[]>`：并发运行零参数函数并等待**全部**完成。它会形成屏障，仅当某个阶段确实需要汇总全部先前结果时使用。抛出异常的 thunk 解析为 `null`。
-- `phase(title)`：开始一个进度阶段；`log(message)`：说明进度；`args`：工具调用的 `args` 输入，原样提供。
+- `agent(prompt, opts?): Promise<any>`：运行一个 subagent 直至完成。不提供 `opts.schema` 时返回子级最终文本；提供时要求对象根 JSON Schema，并且只能使用 type/properties/required/additionalProperties/items/enum/const/oneOf，不支持 pattern/format 或数值边界；此时返回通过校验的对象。子级失败返回 `null`，可用 `.filter(Boolean)` 过滤。其他选项包括 `label`、`phase`，以及可独立覆盖的 `provider`/`model`；任何其他选项（`effort`/`isolation`/`agentType`）都会明确报错。
+- `pipeline(items, ...stages): Promise<any[]>`：独立处理每个条目的所有阶段，阶段之间没有屏障（多阶段工作优先使用它）。每个阶段接收 `(prev, item, index)`；普通阶段抛错会将该条目变为 `null` 并跳过剩余阶段。
+- `parallel(thunks): Promise<any[]>`：并发运行零参数函数并等待全部完成（形成屏障；仅当某阶段确实需要所有先前结果时使用）。抛错的 thunk 返回 `null`。
+- `phase(title)`：开始进度阶段；`log(message)`：记录进度；`args`：原样提供工具调用的 `args` 输入。
 
-如果误用钩子（参数错误、未知选项、不受支持的 schema、触发上限），抛出的错误**总会**终止脚本，绝不会退化为单个条目的 `null`。
+误用函数（参数错误、未知选项、不支持的 schema 或触发上限）会抛出错误并始终终止脚本，不会退化为单个条目的 `null`。
 
-约束：并发上限和 agent 总数上限均会生效；不提供文件系统、网络、定时器或 Node.js API。具体工作由 agent 完成，脚本只负责编排。该运行在前台执行：整个脚本完成后，调用才会返回。
+约束：并发和 agent 总数上限会生效；不提供文件系统、网络、定时器或 Node.js API。agent 负责实际工作，脚本只负责编排。运行在前台执行，整个脚本完成后调用才会返回。
 
 ```json
 {

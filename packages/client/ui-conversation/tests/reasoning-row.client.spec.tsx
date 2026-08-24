@@ -40,7 +40,7 @@ const t = makeTranslate(zh, commonZh)
 const renderMessageImages: AssistantMarkdownProps['renderMessageImages'] = () => null
 
 describe('ReasoningRow', () => {
-  it('follows the latest streaming line, scrolls to its end, then restores the settled first line', () => {
+  it('auto-opens while streaming, keeps a manual collapse, and auto-collapses on settle', () => {
     const view = render(
       <AssistantMarkdown
         t={t}
@@ -49,12 +49,16 @@ describe('ReasoningRow', () => {
         renderMessageImages={renderMessageImages}
       />,
     )
-    expect(view.getByText('运行中')).toBeTruthy()
-    const summary = view.getByText('Newest reasoning tokens')
-    Object.defineProperties(summary, {
-      scrollWidth: { configurable: true, value: 300 },
-      clientWidth: { configurable: true, value: 100 },
-    })
+    const row = view.getByRole('button')
+    // Streaming phase starts expanded but exposes only a localized status.
+    expect(row.getAttribute('aria-expanded')).toBe('true')
+    expect(view.container.querySelector('[class*="thinkBody"]')?.textContent).toContain(zh['reasoning.body'])
+    expect(view.container.textContent).not.toContain('Newest reasoning tokens')
+
+    // A manual collapse wins for the rest of the phase.
+    fireEvent.click(view.getByText(zh['reasoning.title']))
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+    expect(view.getByText(zh['reasoning.running'])).toBeTruthy()
 
     view.rerender(
       <AssistantMarkdown
@@ -64,13 +68,8 @@ describe('ReasoningRow', () => {
         renderMessageImages={renderMessageImages}
       />,
     )
-    expect(summary.scrollLeft).toBe(0)
-    flushAnimationFrames(2)
-    expect(summary.scrollLeft).toBe(0)
-    flushAnimationFrames(1)
-    expect(summary.scrollLeft).toBe(200)
-    expect(summary.getAttribute('data-follow-end')).toBe('true')
 
+    // Settling auto-collapses and keeps the localized status.
     view.rerender(
       <AssistantMarkdown
         t={t}
@@ -80,10 +79,10 @@ describe('ReasoningRow', () => {
       />,
     )
     flushAnimationFrames(3)
-    expect(view.getByText('Inspect the session')).toBeTruthy()
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+    expect(view.getByText(zh['reasoning.hidden'])).toBeTruthy()
+    expect(view.container.textContent).not.toContain('Newest reasoning tokens keep arriving')
     expect(view.queryByText('运行中')).toBeNull()
-    expect(summary.scrollLeft).toBe(0)
-    expect(summary.hasAttribute('data-follow-end')).toBe(false)
   })
 
   it('expands from either Think or the reasoning summary', () => {
@@ -97,15 +96,15 @@ describe('ReasoningRow', () => {
     )
     const row = view.getByRole('button')
 
-    fireEvent.click(view.getByText('Inspect the session'))
+    fireEvent.click(view.getByText(zh['reasoning.hidden']))
     expect(row.getAttribute('aria-expanded')).toBe('true')
-    expect(view.getByText(/Check persistence/)).toBeTruthy()
+    expect(view.getByText(zh['reasoning.body'])).toBeTruthy()
 
-    fireEvent.click(view.getByText('Think'))
+    fireEvent.click(view.getByText(zh['reasoning.title']))
     expect(row.getAttribute('aria-expanded')).toBe('false')
   })
 
-  it('expanded Think drops the inline summary and renders plain prose, no IN card', () => {
+  it('expanded Razonamiento drops the inline summary and renders localized status, no IN card', () => {
     const view = render(
       <AssistantMarkdown
         t={t}
@@ -114,8 +113,8 @@ describe('ReasoningRow', () => {
         renderMessageImages={renderMessageImages}
       />,
     )
-    fireEvent.click(view.getByText('Think'))
-    expect(view.getAllByText(/Inspect the session/)).toHaveLength(1)
+    fireEvent.click(view.getByText(zh['reasoning.title']))
+    expect(view.getAllByText(zh['reasoning.body'])).toHaveLength(1)
     expect(view.queryByText('IN')).toBeNull()
     expect(view.container.querySelector('[class*="ioCard"]')).toBeNull()
     expect(view.container.querySelector('[class*="thinkBody"]')).not.toBeNull()

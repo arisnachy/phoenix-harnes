@@ -251,6 +251,47 @@ describe('request stability across the loop', () => {
     expect(headers.map(event => event.data.header.adapterDefaults)).toEqual([undefined, undefined])
   })
 
+  it('preserves an explicit reasoningEffort across a provider switch', async () => {
+    const reasoning = {
+      efforts: [
+        { id: ReasoningEffortId('medium'), name: 'Medium' },
+        { id: ReasoningEffortId('high'), name: 'High' },
+        { id: ReasoningEffortId('max'), name: 'Max' },
+      ],
+      defaultEffort: ReasoningEffortId('medium'),
+    }
+    const deepseek = new MockAdapter([textResponse('deepseek')], reasoning)
+    const other = new MockAdapter([textResponse('other')], reasoning)
+    const ctx = await harnessRoutes([
+      ['deepseek', deepseek],
+      ['other', other],
+    ])
+    const agent = ctx.agentLoop.create(SessionId('explicit-reasoning-switch'), {
+      provider: 'deepseek',
+      model: 'deepseek-model',
+      reasoningEffort: ReasoningEffortId('high'),
+    })
+    ctx.on('agent/request', async ({ turn }, next) => {
+      const config = await next()
+      return turn === 2
+        ? { ...config, provider: 'other', model: 'other-model' }
+        : config
+    })
+
+    send(agent, 'first')
+    await waitForIdle(ctx, agent)
+    send(agent, 'second')
+    await waitForIdle(ctx, agent)
+
+    expect(deepseek.requests[0]?.reasoningEffort).toBe(ReasoningEffortId('high'))
+    expect(other.requests[0]?.reasoningEffort).toBe(ReasoningEffortId('high'))
+    const headers = agent.session.events.filter(event => event.type === 'request/header')
+    expect(headers.map(event => event.data.header.config.reasoningEffort)).toEqual([
+      ReasoningEffortId('high'),
+      ReasoningEffortId('high'),
+    ])
+  })
+
   it('keeps exact-model resolution, request logging, and dispatch on one adapter registration', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)

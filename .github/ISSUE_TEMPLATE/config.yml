@@ -1,2 +1,8 @@
 blank_issues_enabled: false
-contact_links: []
+contact_links:
+  - name: PHOENIX support and questions
+    url: https://github.com/arisnachy/phoenix-harnes/discussions
+    about: Ask usage questions and discuss designs with the community.
+  - name: Private security report
+    url: https://github.com/arisnachy/phoenix-harnes/security/advisories/new
+    about: Report vulnerabilities privately; do not disclose secrets in an issue.

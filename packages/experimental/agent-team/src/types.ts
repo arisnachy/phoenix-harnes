@@ -3,6 +3,7 @@
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { AgentOptions } from '@deepseek-ai/dsh-agent'
 
 /** Identifies the implicit team rooted at one top-level Session. */
 export type TeamId = Branded<'TeamId'>
@@ -63,6 +64,8 @@ export interface TeamMemberView {
   readonly description?: string
   readonly provider?: string
   readonly context?: 'fresh' | 'fork'
+  /** LLM provider route, distinct from the subagent transport provider. */
+  readonly modelProvider?: string
   readonly model?: string
   readonly diagnostics: string[]
 }
@@ -142,6 +145,8 @@ export interface SpawnTeammateRequest {
   readonly prompt: ContentBlock[]
   readonly context: 'fresh' | 'fork'
   readonly provider: string
+  /** Optional provider-neutral LLM route selected by the Team tool policy. */
+  readonly agentOptions?: AgentOptions
   readonly signal: AbortSignal
 }
 

@@ -4,8 +4,12 @@
  * renders notices and answers prompts over separate requests.
  */
 
-import type { AuthorizationNotice, AuthorizationPromptOption } from '@deepseek-ai/dsh-authorization/types'
+import type {
+  AuthorizationNotice, AuthorizationPromptOption, AuthorizationTelemetry,
+} from '@deepseek-ai/dsh-authorization/types'
 import type { RpcRequest, RpcResponse } from './rpc.ts'
+
+export type { AuthorizationTelemetry } from '@deepseek-ai/dsh-authorization/types'
 
 /** A prompt with its signal removed before it crosses the wire. */
 export type AuthorizationPromptView = {
@@ -39,6 +43,8 @@ export interface AuthorizationEntryView {
   inFlight: boolean
   /** The credential record behind the flow, when one is stored. */
   stored?: AuthorizationStoredView
+  /** Provider-owned, explicitly sanitized plan/quota/usage information. */
+  telemetry?: AuthorizationTelemetry
 }
 
 /** Wire-safe projection of one offered authorization method. */
@@ -69,7 +75,10 @@ export interface AuthorizationAttemptView {
 
 /** Authorization domain methods. */
 export interface AuthorizationApi {
-  /** List registered flows without credential values. */
+  /**
+   * List registered flows without credential values. Connected flows may add
+   * their fixed-schema sanitized telemetry; inspection failure simply omits it.
+   */
   list(request: RpcRequest<{}>): Promise<RpcResponse<{ entries: AuthorizationEntryView[] }>>
 
   /** Start a background attempt and return before the flow asks its first question. */
@@ -88,7 +97,7 @@ export interface AuthorizationApi {
     request: RpcRequest<{ attemptId: string; promptId: string; value: string }>,
   ): Promise<RpcResponse<{ accepted: true }>>
 
-  /** Request cancellation of an attempt. */
+  /** Request cancellation of an opaque authorization attempt. */
   cancel(
     request: RpcRequest<{ attemptId: string }>,
   ): Promise<RpcResponse<{ cancelled: true }>>

@@ -254,6 +254,43 @@ async mutate(ns: SettingsNamespace, ops: readonly SettingsPathOp[], expectedRevi
 
 Source: [`packages/settings/settings/src/index.ts`](../../packages/settings/settings/src/index.ts)
 
+<a id="ctxuserprofile--userprofileservice"></a>
+
+### `ctx.userProfile` — `UserProfileService`
+
+Owns the local profile settings section and the consent-filtered prompt context. The service exposes no telemetry or logging path; profile data reaches a model only through an explicit per-field consent flag.
+
+```ts cordis-catalog
+/** Return a detached local view; no derived age is persisted.
+ * @returns a detached local view of profile values, consent, and presence metadata.
+ */
+get(): UserProfileView
+
+/**
+ * Merge and persist a validated partial update.
+ * @param patch - changed fields; null clears an optional field.
+ * @returns the accepted detached view.
+ */
+async update(patch: UserProfileUpdate): Promise<UserProfileView>
+
+/** Clear every user-owned profile field and reset consent to false.
+ * @returns the cleared detached view.
+ */
+async clear(): Promise<UserProfileView>
+
+/** Return presence-only metadata and consent flags, without profile values.
+ * @returns metadata that reports field presence and current consent flags.
+ */
+getRedacted(): UserProfileRedacted
+
+/** Return only fields whose current consent flag is true.
+ * @returns a detached projection safe to include in model context.
+ */
+getConsented(): UserProfileConsented
+```
+
+Source: [`packages/profile/user-profile/src/index.ts`](../../packages/profile/user-profile/src/index.ts)
+
 <a id="settings-events"></a>
 
 ### `settings/*` events

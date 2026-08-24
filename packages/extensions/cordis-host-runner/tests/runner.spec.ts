@@ -95,6 +95,16 @@ describe('dynamic runner definitions', () => {
     ])
   })
 
+  it('requires approval before host-only code runs when the safety gate is enabled', async () => {
+    const { runner, gateway } = await setup({ requireHostApproval: true })
+    const definition = define(runner, { sessionId: AGENT_A.id, name: 'guarded', purpose: 'approval', host: HOST_CODE })
+
+    await expect(runner.run(AGENT_A, definition.pluginId, definition.packageId, 'run'))
+      .resolves.toMatchObject({ ok: true, status: 'awaiting-approval' })
+    expect(gateway.events).toContainEqual(['cordis/request-run', expect.objectContaining({ requiresApproval: true })])
+    expect(running(runner, AGENT_A)).toEqual([{ id: definition.pluginId, running: false }])
+  })
+
   it('records a definition without running it, and mints ids that are never reused', async () => {
     const { runner } = await setup()
 

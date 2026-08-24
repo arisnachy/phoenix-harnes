@@ -50,6 +50,7 @@ async function setup(mockEnv: SetupEnv = {}, permission: 'allow' | 'reject' = 'r
     command: process.execPath,
     args: [mockServer],
     permission,
+    allowUnattendedPermissions: permission === 'allow',
     env: mockEnv,
   })
   return ctx
@@ -733,6 +734,20 @@ describe('dsh-subagent-acp', () => {
         .rejects.toThrow(new RegExp(`subagent-acp: dispose(?:Eof)?GraceMs must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`))
       await ctx.fiber.dispose()
     }
+  })
+
+  it('rejects unattended permission approval unless explicitly opted in', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SubagentRuntime)
+    await ctx.plugin(LocalSubprocessRuntime)
+    await expect(ctx.plugin(acp, {
+      providerName: 'acp',
+      command: process.execPath,
+      args: [mockServer],
+      permission: 'allow',
+      env: {},
+    })).rejects.toThrow('permission=allow requires allowUnattendedPermissions=true')
+    await ctx.fiber.dispose()
   })
 
   it('rejects a startup failure via the provider load path', async () => {

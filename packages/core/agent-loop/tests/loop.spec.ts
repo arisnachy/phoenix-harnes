@@ -13,14 +13,17 @@ function driverDone(agent: Agent): Promise<void> {
   return (agent as Agent & { done: Promise<void> }).done
 }
 
-async function harness(adapter: MockAdapter, persona = '') {
+async function harness(adapter: MockAdapter, persona = '', maxStepsPerTurn?: number) {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt, { persona })
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
-  await ctx.plugin(AgentLoop, { agents: [] })
+  await ctx.plugin(AgentLoop, {
+    agents: [],
+    ...maxStepsPerTurn === undefined ? {} : { maxStepsPerTurn },
+  })
   ctx.llm.registerAdapter(['mock'], adapter)
   return ctx
 }
@@ -230,6 +233,43 @@ describe('agent loop', () => {
     const types = agent.session.events.map(e => e.type)
     expect(types).toContain('tool/call')
     expect(types).toContain('tool/result')
+  })
+
+  it('bounds a runaway tool loop and allows an explicit next-turn continuation', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'echo', { text: 'one' }),
+      toolCallResponse('c2', 'echo', { text: 'two' }),
+      textResponse('continued safely'),
+    ])
+    const ctx = await harness(adapter, '', 2)
+    ctx.tools.register(defineContentToolFixture({
+      name: 'echo',
+      description: 'echo back',
+      parameters: { text: { type: 'string' } },
+      async execute(args) {
+        return [{ type: 'text', text: String(args.text) }]
+      },
+    }))
+    const agent = ctx.agentLoop.create(SessionId('bounded-turn'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'keep using the tool')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(2)
+    const bounded = agent.session.events.findLast(event => event.type === 'turn/end')
+    expect(bounded?.type === 'turn/end' && bounded.data.reason).toMatchObject({
+      kind: 'error',
+      error: {
+        code: 'UNKNOWN',
+        message: expect.stringContaining('reached maxStepsPerTurn (2)'),
+      },
+    })
+
+    send(agent, 'continue now')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests).toHaveLength(3)
+    const completed = agent.session.events.findLast(event => event.type === 'turn/end')
+    expect(completed?.type === 'turn/end' && completed.data.reason).toEqual({ kind: 'completed' })
   })
 
   it('renders harness identity, then the persona, then tool guidance — with {{variables}} resolved', async () => {

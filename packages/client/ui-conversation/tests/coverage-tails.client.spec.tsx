@@ -22,7 +22,7 @@ describe('tails', () => {
     expect(() => { nodeApply(new Context()) }).not.toThrow()
   })
 
-  it('AssistantMarkdown renders reasoning as a Think row and unknown blocks as JSON fallback', () => {
+  it('AssistantMarkdown renders localized safe reasoning status and unknown blocks as JSON fallback', () => {
     const view = render(
       <AssistantMarkdown
         t={t}
@@ -35,8 +35,9 @@ describe('tails', () => {
         renderMessageImages={renderMessageImages}
       />,
     )
-    expect(view.getByText('Think')).toBeTruthy()
-    expect(view.getByText('thinking hard')).toBeTruthy()
+    expect(view.getByText(zh['reasoning.title'])).toBeTruthy()
+    expect(view.getByText(zh['reasoning.hidden'])).toBeTruthy()
+    expect(view.queryByText('thinking hard')).toBeNull()
     expect(view.getByText(/未知内容块/)).toBeTruthy()
     const stopped = render(
       <AssistantMarkdown

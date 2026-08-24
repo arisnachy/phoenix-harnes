@@ -8,7 +8,7 @@ import type { ReactNode } from 'react'
 import type {
   ModelRetryNode, TurnErrorNode, UserMessageNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import { JsonBlock, MessageText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { JsonBlock, MarkdownText, MessageText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
 import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
 import { CompactionItem } from './CompactionItem.tsx'
@@ -174,6 +174,12 @@ function projectUserText(text: string, sessionLabels: readonly string[]): ReactN
     if (label.length <= 1) continue
     ranges.push({ start: tokenStart, end: tokenStart + label.length, label, kind: 'plain' })
   }
+  // Reference-free messages render as formatted Markdown (same renderer as
+  // assistant text; raw HTML and unsafe protocols stay disabled), so the user
+  // sees their **bold**, lists, and code blocks instead of the raw source.
+  // Bubbles that DO carry reference chips keep the exact plain-segment flow:
+  // per-segment block rendering would break chip inline geometry.
+  if (ranges.length === 0) return <MarkdownText text={text} />
   ranges.sort((a, b) => a.start - b.start
     || (a.kind === b.kind ? b.end - a.end : a.kind === 'session' ? -1 : 1))
   const parts: ReactNode[] = []
