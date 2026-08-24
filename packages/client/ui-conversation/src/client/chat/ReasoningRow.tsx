@@ -25,7 +25,15 @@ function latestLine(text: string): string {
  * @returns the reasoning disclosure.
  */
 export function ReasoningRow({ text, running, t }: { text: string; running: boolean; t: ChatViewSlotProps['t'] }) {
-  const [expanded, setExpanded] = useState(false)
+  // Auto choreography: the block opens while it streams and collapses when the
+  // phase ends; a manual toggle wins until the next streaming transition.
+  const [expanded, setExpanded] = useState(running)
+  const prevRunningRef = useRef(running)
+  useEffect(() => {
+    if (prevRunningRef.current === running) return
+    prevRunningRef.current = running
+    setExpanded(running)
+  }, [running])
   const summaryRef = useRef<HTMLSpanElement>(null)
   const summary = running ? latestLine(text) : firstLine(text)
   const scheduleSummaryScroll = useThrottledVisualUpdate(() => {

@@ -40,7 +40,7 @@ const t = makeTranslate(zh, commonZh)
 const renderMessageImages: AssistantMarkdownProps['renderMessageImages'] = () => null
 
 describe('ReasoningRow', () => {
-  it('follows the latest streaming line, scrolls to its end, then restores the settled first line', () => {
+  it('auto-opens while streaming, keeps a manual collapse, and auto-collapses on settle', () => {
     const view = render(
       <AssistantMarkdown
         t={t}
@@ -49,7 +49,14 @@ describe('ReasoningRow', () => {
         renderMessageImages={renderMessageImages}
       />,
     )
-    expect(view.getByText('运行中')).toBeTruthy()
+    const row = view.getByRole('button')
+    // Streaming phase starts expanded with the full body visible.
+    expect(row.getAttribute('aria-expanded')).toBe('true')
+    expect(view.container.querySelector('[class*="thinkBody"]')?.textContent).toContain('Newest reasoning tokens')
+
+    // A manual collapse wins for the rest of the phase and restores the follower.
+    fireEvent.click(view.getByText('Think'))
+    expect(row.getAttribute('aria-expanded')).toBe('false')
     const summary = view.getByText('Newest reasoning tokens')
     Object.defineProperties(summary, {
       scrollWidth: { configurable: true, value: 300 },
@@ -64,13 +71,13 @@ describe('ReasoningRow', () => {
         renderMessageImages={renderMessageImages}
       />,
     )
-    expect(summary.scrollLeft).toBe(0)
     flushAnimationFrames(2)
     expect(summary.scrollLeft).toBe(0)
     flushAnimationFrames(1)
     expect(summary.scrollLeft).toBe(200)
     expect(summary.getAttribute('data-follow-end')).toBe('true')
 
+    // Settling auto-collapses and restores the settled first line.
     view.rerender(
       <AssistantMarkdown
         t={t}
@@ -80,6 +87,7 @@ describe('ReasoningRow', () => {
       />,
     )
     flushAnimationFrames(3)
+    expect(row.getAttribute('aria-expanded')).toBe('false')
     expect(view.getByText('Inspect the session')).toBeTruthy()
     expect(view.queryByText('运行中')).toBeNull()
     expect(summary.scrollLeft).toBe(0)
