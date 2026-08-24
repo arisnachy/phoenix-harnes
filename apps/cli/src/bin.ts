@@ -46,11 +46,18 @@ switch (invocation.mode) {
     ])
     startPhoenixUpdateWatcher()
 
+    const patches = [...invocation.patches]
+
+    // Product-owned HARDNESS capabilities are an overlay, not model-provider
+    // features. This keeps universal web_search and future PHOENIX runtime
+    // facilities present regardless of which LLM is selected underneath.
+    const productPatch = fileURLToPath(new URL('../../../packages/bundle/phoenix/cordis.patch.yml', import.meta.url))
+    if (existsSync(productPatch) && !patches.includes(productPatch)) patches.push(productPatch)
+
     // `dsh codex-plugin enable <name>` builds this patch entirely from public
     // plugin metadata and environment-variable references. Loading it here
     // makes enabled Codex MCP servers native PHOENIX tools on the next boot,
     // while PHOENIX_CODEX_PLUGINS=off provides a fail-safe bypass.
-    const patches = [...invocation.patches]
     const codexPatch = dshHomePath('codex', 'enabled.patch.yml')
     if ((process.env.PHOENIX_CODEX_PLUGINS ?? 'on').trim().toLowerCase() !== 'off'
       && existsSync(codexPatch) && !patches.includes(codexPatch)) {
