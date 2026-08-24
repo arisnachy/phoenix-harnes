@@ -27,7 +27,7 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import { ReactLoopAgent } from './agent.ts'
-import { DEFAULT_MAX_PARALLEL_TOOL_CALLS } from './constants.ts'
+import { DEFAULT_MAX_PARALLEL_TOOL_CALLS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
 
 /** Fiber states that cannot own or serve a new lifecycle. */
 const INACTIVE_STATES: ReadonlySet<FiberState> = new Set([
@@ -121,7 +121,6 @@ async function raceAbortCall<T>(
   try {
     return await raceAbort(pending, signal, id)
   } catch (error: unknown) {
-    // oxlint-disable-next-line typescript/no-unnecessary-condition -- the signal can abort while the operation is awaited.
     if (signal.aborted && releaseAbandoned !== undefined) {
       void pending.then(releaseAbandoned, () => undefined)
     }
@@ -136,6 +135,15 @@ function resolveMaxParallelToolCalls(value: number | undefined): number {
     throw new Error('maxParallelToolCalls must be a positive integer')
   }
   return maxParallelToolCalls
+}
+
+/** Resolve the runaway-turn boundary at the owning config boundary. */
+function resolveMaxStepsPerTurn(value: number | undefined): number {
+  const maxStepsPerTurn = value ?? DEFAULT_MAX_STEPS_PER_TURN
+  if (!Number.isInteger(maxStepsPerTurn) || maxStepsPerTurn < 1) {
+    throw new Error('maxStepsPerTurn must be a positive integer')
+  }
+  return maxStepsPerTurn
 }
 
 /** Reject an output-token cap that cannot be represented exactly on the request wire. */
@@ -184,7 +192,7 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-export { DEFAULT_MAX_PARALLEL_TOOL_CALLS }
+export { DEFAULT_MAX_PARALLEL_TOOL_CALLS, DEFAULT_MAX_STEPS_PER_TURN }
 
 /**
  * One launcher-selected session identity for a configured agent. `resume`
@@ -244,11 +252,14 @@ export const AGENT_LOOP_SETTINGS_NAMESPACE = settingsNamespace('agent-loop')
 export interface AgentLoopSettings {
   /** Maximum parallel-safe calls in flight per agent step. */
   maxParallelToolCalls: number
+  /** Maximum model/tool iterations before the user must continue in a new turn. */
+  maxStepsPerTurn: number
 }
 
 /** Schema of the agent-loop settings section. */
 export const AGENT_LOOP_SETTINGS_SCHEMA: z<AgentLoopSettings> = z.object({
   maxParallelToolCalls: z.number().step(1).min(1).default(DEFAULT_MAX_PARALLEL_TOOL_CALLS),
+  maxStepsPerTurn: z.number().step(1).min(1).default(DEFAULT_MAX_STEPS_PER_TURN),
 })
 
 /** Agent-loop plugin configuration. */
@@ -258,6 +269,8 @@ export interface Config {
    * omission defaults to {@link DEFAULT_MAX_PARALLEL_TOOL_CALLS}.
    */
   maxParallelToolCalls?: number
+  /** Maximum model/tool iterations in one turn; omission defaults to 64. */
+  maxStepsPerTurn?: number
   /** Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
     /** Stable config label used in logs and as the fresh combined-id prefix. */
@@ -272,7 +285,7 @@ export interface Config {
 }
 
 /** Agent-loop configuration after defaults and load-time validation. */
-type ResolvedConfig = Config & { maxParallelToolCalls: number }
+type ResolvedConfig = Config & { maxParallelToolCalls: number; maxStepsPerTurn: number }
 
 /** Reject self-contained identity conflicts before any configured agent starts. */
 function validateConfiguredAgents(agents: Config['agents']): void {
@@ -299,12 +312,14 @@ export class AgentLoop extends Service implements AgentFactory {
   /** Runtime schema for declarative agents. */
   static Config = z.object({
     maxParallelToolCalls: z.number().step(1).min(1).default(DEFAULT_MAX_PARALLEL_TOOL_CALLS),
+    maxStepsPerTurn: z.number().step(1).min(1).default(DEFAULT_MAX_STEPS_PER_TURN),
     agents: z.array(z.object({
       id: z.string().required(),
       sessionId: z.string().min(1),
       provider: z.string(),
       model: z.string(),
       maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
+      reasoningEffort: z.string(),
       cwd: z.string(),
       resumeSessionId: z.string(),
     })).default([]),
@@ -320,6 +335,7 @@ export class AgentLoop extends Service implements AgentFactory {
     super(ctx, 'agentLoop')
     const entry: AgentLoopSettings = {
       maxParallelToolCalls: resolveMaxParallelToolCalls(config.maxParallelToolCalls),
+      maxStepsPerTurn: resolveMaxStepsPerTurn(config.maxStepsPerTurn),
     }
     let source: () => AgentLoopSettings = () => entry
     this.config = {
@@ -331,12 +347,18 @@ export class AgentLoop extends Service implements AgentFactory {
       get maxParallelToolCalls() {
         return source().maxParallelToolCalls
       },
+      get maxStepsPerTurn() {
+        return source().maxStepsPerTurn
+      },
     }
     installSettingsSection(ctx, AGENT_LOOP_SETTINGS_NAMESPACE, AGENT_LOOP_SETTINGS_SCHEMA, entry, {
       // The schema admits any integer above zero; `resolveMaxParallelToolCalls`
       // owns the whole rule, so refusing here keeps the running scheduler on
       // its last good cap instead of failing at the next tool group.
-      validate: value => void resolveMaxParallelToolCalls(value.maxParallelToolCalls),
+      validate: (value) => {
+        resolveMaxParallelToolCalls(value.maxParallelToolCalls)
+        resolveMaxStepsPerTurn(value.maxStepsPerTurn)
+      },
       setSource: (current) => {
         source = current
       },
@@ -546,7 +568,13 @@ export class AgentLoop extends Service implements AgentFactory {
       throw abort.signal.reason instanceof Error ? abort.signal.reason : new Error(String(abort.signal.reason))
     }
     try {
-      const agent = machine = new ReactLoopAgent(loopCtx, id, options, session)
+      const agent = machine = new ReactLoopAgent(
+        loopCtx,
+        id,
+        options,
+        session,
+        () => this.config.maxStepsPerTurn,
+      )
       machineReady.resolve()
       assertLive()
 

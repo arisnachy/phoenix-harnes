@@ -777,7 +777,11 @@ export type SessionForkErrorCode =
 
 /** Typed error for session fork rejections. */
 export class SessionForkError extends Error {
-  constructor(message: string, public readonly code: SessionForkErrorCode) {
+  constructor(
+    message: string,
+    /** Stable machine-readable reason for the fork rejection. */
+    public readonly code: SessionForkErrorCode,
+  ) {
     super(message)
     this.name = 'SessionForkError'
   }
@@ -1029,7 +1033,6 @@ export class SessionStore extends Service {
       } catch (error: unknown) {
         // Preserve the listener's exact rejection value; flush is a caller-owned
         // failure boundary, and Cordis listeners may throw arbitrary values.
-        // oxlint-disable-next-line typescript/prefer-promise-reject-errors
         return Promise.reject(error)
       }
     }))

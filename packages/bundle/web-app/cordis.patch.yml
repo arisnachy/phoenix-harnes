@@ -107,6 +107,9 @@
 
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'
+      config:
+        # Dynamic host code requires a human approval event in the web app.
+        requireHostApproval: true
 
     # Ordinary provider for the parsed Web flags. Its plugin-level injection
     # waits for cmdlineArgs; no launcher metadata or special row kind is needed.
@@ -199,6 +202,9 @@
 
     - id: ui-settings-general
       name: '@deepseek-ai/dsh-client-ui-settings-general'
+
+    - id: ui-settings-profile
+      name: '@deepseek-ai/dsh-client-ui-settings-profile'
 
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'

@@ -116,6 +116,15 @@ const PRIVILEGED_METHODS = new Set([
   'credentials.set',
   'credentials.unset',
   'llm.discoverModels',
+  // Authorization starts browser-visible OAuth flows and carries prompt
+  // answers (including secrets) into the host credential store. Keep every
+  // method loopback-only until the deployment has an authenticated remote
+  // session layer.
+  'authorization.list',
+  'authorization.begin',
+  'authorization.status',
+  'authorization.answer',
+  'authorization.cancel',
 ])
 
 /**

@@ -41,7 +41,11 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
-async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legacyControl = false) {
+async function setup(
+  script: ConstructorParameters<typeof MockAdapter>[0],
+  legacyControl = false,
+  config: toolTeam.Config = {},
+) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
   const storageRoot = mkdtempSync(join(tmpdir(), 'dsh-tool-team-'))
@@ -53,7 +57,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legac
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
   await ctx.plugin(TeamService)
-  const fiber = await ctx.plugin(toolTeam)
+  const fiber = await ctx.plugin(toolTeam, config)
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
   const lead = ctx.agentLoop.create(SessionId('tool-team-lead'), { provider: 'mock', model: 'mock' })
@@ -122,6 +126,7 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('Bash, formatters, code generators, and scripts are not fully protected')
     expect(leadPrompt).toContain('Task readiness never starts an owner')
     expect(leadPrompt).toContain('returns noProgress immediately')
+    expect(leadPrompt).toContain('cognitively independent only when its reported modelProvider or model differs')
     expect(leadPrompt).toContain('Your Team role is lead')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
@@ -144,6 +149,29 @@ describe('dsh-tool-team', () => {
     expect(text(denied)).toContain('only the Team Lead')
     await execute(ctx, lead, 'interrupt_agent', { target: 'tool-worker' })
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
+  })
+
+  it('routes teammates through provider-neutral model profiles', async () => {
+    const { ctx, lead } = await setup(['hang'], false, {
+      modelProfiles: {
+        judge: { provider: 'mock', model: 'independent-judge', maxTokens: 8192 },
+      },
+    })
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'judge',
+      description: 'independent acceptance review',
+      prompt: 'review the evidence',
+      model_profile: 'judge',
+    })
+    expect(spawned.isError).toBe(false)
+    const child = await waitRunning(ctx, spawnedChildId(spawned))
+    expect(child.options).toMatchObject({ provider: 'mock', model: 'independent-judge', maxTokens: 8192 })
+    const rosterMember: unknown = JSON.parse(text(spawned))
+    expect(rosterMember).toMatchObject({ member: {
+      modelProvider: 'mock',
+      model: 'independent-judge',
+    } })
+    await execute(ctx, lead, 'interrupt_agent', { target: 'judge' })
   })
 
   it('returns actionable no-progress output and renders structured wait cancellation', async () => {

@@ -781,20 +781,20 @@ describe('ChatView', () => {
     expect(h.forkAt).not.toHaveBeenCalled()
   })
 
-  it('renders assistant Markdown across history, streaming, final, and interrupted states while user text stays literal', () => {
+  it('renders Markdown across history, streaming, final, and interrupted states for assistant and reference-free user messages alike', () => {
     const markdown = '# Rendered\n\n- **one**\n- `two`'
     const h = makeHarness({ nodes: [user(1, markdown), assistant(2, markdown)] })
     const view = render(<h.ChatView {...h.props} />)
-    expect(view.container.querySelectorAll('h1')).toHaveLength(1)
-    const literal = view.getByText((_content, element) => (
-      element?.tagName === 'DIV' && element.childElementCount === 0 && element.textContent === markdown
-    ))
-    expect(literal.querySelector('h1')).toBeNull()
+    // Both bubbles format: the user message renders the same GFM document as
+    // the assistant instead of staying literal raw source.
+    expect(view.container.querySelectorAll('h1')).toHaveLength(2)
+    // No bubble keeps the unparsed source around as a bare literal div.
+    expect(view.container.textContent).not.toContain('- **one**')
 
     act(() => {
       h.set({ partial: { turn: 2, step: 1, blocks: [{ kind: 'text', text: markdown }] } })
     })
-    expect(view.container.querySelectorAll('h1')).toHaveLength(2)
+    expect(view.container.querySelectorAll('h1')).toHaveLength(3)
     expect(view.container.querySelector('[data-streaming="true"] h1')?.textContent).toBe('Rendered')
 
     act(() => {
@@ -803,7 +803,7 @@ describe('ChatView', () => {
         partial: null,
       })
     })
-    expect(view.container.querySelectorAll('h1')).toHaveLength(2)
+    expect(view.container.querySelectorAll('h1')).toHaveLength(3)
     expect(view.container.querySelector('[data-streaming="true"]')).toBeNull()
 
     act(() => {
@@ -816,7 +816,7 @@ describe('ChatView', () => {
       })
     })
     expect(view.getByText('已停止')).toBeTruthy()
-    expect(view.container.querySelectorAll('h1')).toHaveLength(2)
+    expect(view.container.querySelectorAll('h1')).toHaveLength(3)
   })
 
   it('streaming partial frames update the tail without replacing a sibling Tool row', () => {

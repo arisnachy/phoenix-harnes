@@ -1,0 +1,19 @@
+# Conector Chrome/Edge opt-in. Requiere lanzar el navegador con CDP explícito.
+# Chrome: chrome.exe --remote-debugging-port=9222 --user-data-dir=<perfil-aislado>
+# Edge: msedge.exe --remote-debugging-port=9223 --user-data-dir=<perfil-aislado>
+- insert:
+    - id: browser-connector
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: browser
+        transport: stdio
+        command: node
+        args:
+          - --import
+          - tsx/esm
+          - packages/mcp/chrome-connector/src/server.ts
+        cwd: !!js process.cwd()
+        env:
+          PHOENIX_BROWSER_CDP_URL: !!js process.env.PHOENIX_BROWSER_CDP_URL || ''
+          PHOENIX_BROWSER_ALLOW_ACTIONS: 'false'
+        failOnStartupError: false

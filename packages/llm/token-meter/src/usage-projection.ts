@@ -118,10 +118,20 @@ type ContextPressureState = z.infer<typeof contextPressureStateSchema>
  */
 export const tokenUsageProjectionDefinition = {
   key: 'tokenUsage',
-  stateVersion: 1,
+  stateVersion: 2,
   stateSchema: tokenUsageStateSchema,
   init: () => ({ totals: zeroBuckets(), last: null }),
   apply: (state, event) => {
+    // Compaction is a separate provider call and therefore has no matching
+    // assistant chunk/message pair. Count its reported usage exactly once,
+    // while leaving context pressure anchored to conversation requests.
+    if (event.type === 'compaction/summary' && event.data.usage !== undefined) {
+      return {
+        totals: addReplacing(state.totals, undefined, bucketsFrom(event.data.usage)),
+        last: null,
+      }
+    }
+
     let turn: number
     let step: number
     let usage: TokenUsage

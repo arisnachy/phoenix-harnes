@@ -284,6 +284,7 @@ export class TeamRoster {
         request: {
           prompt: request.prompt,
           parent: root,
+          ...request.agentOptions === undefined ? {} : { agentOptions: request.agentOptions },
         },
         signal,
       })
@@ -441,6 +442,7 @@ export class TeamRoster {
       description: member.description,
       provider: member.provider,
       context: member.context,
+      ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
       ...live?.options.model === undefined ? {} : { model: live.options.model },
       diagnostics: [],
     }

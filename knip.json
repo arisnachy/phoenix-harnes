@@ -26,6 +26,7 @@
       "entry": [
         "scripts/**/*.mjs",
         "scripts/**/*.cjs",
+        "scripts/**/*.snapshot.ts",
         "scripts/types/client-build-environment/index.d.ts"
       ],
       "ignoreUnresolved": [
@@ -137,6 +138,12 @@
         "src/**/*.ts",
         "src/**/*.tsx",
         "tests/**/*.tsx"
+      ]
+    },
+    "packages/client/ui-settings-profile": {
+      "project": [
+        "src/**/*.ts",
+        "src/**/*.tsx"
       ]
     },
     "packages/client/ui-directory-picker-browse": {

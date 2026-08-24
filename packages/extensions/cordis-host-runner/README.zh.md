@@ -38,8 +38,9 @@ vm 沙箱隔离全局变量，但不是安全边界：Node 全局变量不存在
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `vmTimeoutMs` | `5000` | host 半在 vm 中同步执行的那部分被中止求值前可运行的毫秒数 |
+| `requireHostApproval` | `true` | host-only 动态代码运行前必须有明确的 approval event；仅可信本地测试 harness 可设为 false |
 
-就这一个字段：一次 run 请求等的是人，所以这趟往返本身没有任何截止期限。
+浏览器半始终等待 approval。安全默认值下，host-only 代码也会等待；直接的用户面板操作仍然可用。
 
 ## 导出形状
 

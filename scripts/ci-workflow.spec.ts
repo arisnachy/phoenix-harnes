@@ -8,8 +8,27 @@ const runnerPrivatePnpmDestination = '${{ runner.temp }}/setup-pnpm'
 const nativeWindowsPnpmDestination = '${{ runner.temp }}/setup-pnpm-js'
 
 describe('CI workflow', () => {
+  it('guards pull requests and exact main pushes with Windows typecheck and build', () => {
+    const workflow = loadWorkflow('.github/workflows/phoenix-main-guard.yml')
+    if (!isRecord(workflow.on) || !isRecord(workflow.jobs) || !isRecord(workflow.jobs['compiled-main'])) {
+      throw new TypeError('PHOENIX main guard must define triggers and compiled-main')
+    }
+    expect(Object.keys(workflow.on).sort()).toEqual(['pull_request', 'push', 'workflow_dispatch'])
+    expect(workflow.on.pull_request).toMatchObject({ branches: ['main'] })
+    expect(workflow.on.push).toMatchObject({ branches: ['main'] })
+    const job = workflow.jobs['compiled-main']
+    expect(job['runs-on']).toBe('windows-latest')
+    if (!Array.isArray(job.steps)) throw new TypeError('compiled-main must define steps')
+    const commands = job.steps
+      .filter((step): step is Record<string, unknown> & { run: string } => isRecord(step) && typeof step.run === 'string')
+      .map(step => step.run)
+    expect(commands).toContain('pnpm run typecheck')
+    expect(commands).toContain('pnpm run build')
+    expect(commands).toContain('pnpm run check:ci:windows-blocking')
+  })
+
   it('isolates every pnpm action setup destination per runner', () => {
-    const files = ['.github/workflows/ci.yml', '.github/workflows/ci-master.yml']
+    const files = ['.github/workflows/ci.yml', '.github/workflows/ci-master.yml', '.github/workflows/phoenix-main-guard.yml']
     const setups: Array<{ jobName: string; step: unknown }> = []
     for (const file of files) {
       const workflow: unknown = yaml.load(readFileSync(resolve(root, file), 'utf8'))
@@ -95,9 +114,9 @@ describe('CI workflow', () => {
     expect(serialWindows['runs-on']).toEqual(['self-hosted', 'dsh-win-ci', 'windows'])
     expect(serialWindows.name).toBe('serial / windows (self-hosted standby)')
 
-    // Aggregate: Wine `windows` required, native `windows-native` excluded.
+    // Aggregate: both emulated and real-kernel Windows lanes are blocking.
     expect(aggregate.needs).toContain('windows')
-    expect(aggregate.needs).not.toContain('windows-native')
+    expect(aggregate.needs).toContain('windows-native')
     expect(aggregate.needs).not.toContain('serial-windows')
 
     // Required Linux workers and the aggregate stay on standard hosted pools.

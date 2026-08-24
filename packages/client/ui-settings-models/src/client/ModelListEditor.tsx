@@ -355,28 +355,23 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
             </button>
           )
           : null}
-        <button
-          type="button"
-          className={styles['linkButton']}
-          disabled={disabled || busy !== undefined || !askable || props.probeBlocked !== undefined}
-          title={props.probeBlocked !== undefined
-            ? t(props.probeBlocked)
-            : askable ? undefined : t('fetchNeedsBaseUrl')}
-          onClick={() => { void fetchModels() }}
-        >
-          {busy === 'fetch' ? t('fetching') : t('fetchModels')}
-        </button>
-        <button
-          type="button"
-          className={styles['linkButton']}
-          disabled={disabled || busy !== undefined || !askable || props.probeBlocked !== undefined}
-          title={props.probeBlocked !== undefined
-            ? t(props.probeBlocked)
-            : askable ? undefined : t('fetchNeedsBaseUrl')}
-          onClick={() => { void restoreCatalog() }}
-        >
-          {busy === 'restore' ? t('restoringCatalog') : t('restoreCatalog')}
-        </button>
+        {([
+          { kind: 'fetch', run: fetchModels, active: 'fetching', idle: 'fetchModels' },
+          { kind: 'restore', run: restoreCatalog, active: 'restoringCatalog', idle: 'restoreCatalog' },
+        ] as const).map(action => (
+          <button
+            key={action.kind}
+            type="button"
+            className={styles['linkButton']}
+            disabled={disabled || busy !== undefined || !askable || props.probeBlocked !== undefined}
+            title={props.probeBlocked !== undefined
+              ? t(props.probeBlocked)
+              : askable ? undefined : t('fetchNeedsBaseUrl')}
+            onClick={() => { void action.run() }}
+          >
+            {busy === action.kind ? t(action.active) : t(action.idle)}
+          </button>
+        ))}
       </div>
       {models.length === 0 ? <p className={styles['modelEmpty']}>{t('modelsEmpty')}</p> : null}
       {models.map((model, index) => (

@@ -785,7 +785,7 @@ function planViewOf(log: readonly SessionEvent[]): { active: boolean; pending: b
 /** Fixture preset table (the host PermissionPresetService defaults). */
 const PERMISSION_PRESETS: Record<string, { sandbox: string; approval: string; description: string }> = {
   'workspace-write': { sandbox: 'workspace-write', approval: 'ask', description: 'Write inside the workspace and permitted temporary directories; wider retries require approval.' },
-  'danger-full-access': { sandbox: 'danger-full-access', approval: 'never', description: 'Full file access without approval prompts.' },
+  'danger-full-access': { sandbox: 'danger-full-access', approval: 'ask', description: 'Full file access with explicit approval for consequential actions.' },
 }
 
 /** Host permissions-unit parallel: fold the three knob events, derive the select over the fixture defaults. */
@@ -3056,6 +3056,29 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         models: fixtureModelGroups().flatMap(group => group.models.map(model => ({ id: model.id, name: model.name }))),
       }),
     },
+    authorization: {
+      list: request => ok(request, { entries: [] }),
+      begin: request => err(request, {
+        code: 'internal',
+        message: 'Account authorization is unavailable in fixture mode',
+        details: {},
+      }),
+      status: request => err(request, {
+        code: 'internal',
+        message: 'Account authorization is unavailable in fixture mode',
+        details: {},
+      }),
+      answer: request => err(request, {
+        code: 'internal',
+        message: 'Account authorization is unavailable in fixture mode',
+        details: {},
+      }),
+      cancel: request => err(request, {
+        code: 'internal',
+        message: 'Account authorization is unavailable in fixture mode',
+        details: {},
+      }),
+    },
     respond(message: ClientResponse): Promise<RpcReceipt> {
       // Same routing discipline as the host: rpcId first, then the payload's
       // audit correlation; a settled or unknown id is not-pending.
@@ -3227,6 +3250,11 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'llm.providers': return this.api.llm.providers(request)
       case 'llm.models': return this.api.llm.models(request)
       case 'llm.discoverModels': return this.api.llm.discoverModels(request, signal)
+      case 'authorization.list': return this.api.authorization.list(request)
+      case 'authorization.begin': return this.api.authorization.begin(request, signal)
+      case 'authorization.status': return this.api.authorization.status(request)
+      case 'authorization.answer': return this.api.authorization.answer(request)
+      case 'authorization.cancel': return this.api.authorization.cancel(request)
     }
   }
 

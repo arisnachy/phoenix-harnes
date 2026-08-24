@@ -19,6 +19,7 @@ export const zh = {
   'team.aria': '当前会话的 KIRA 团队',
 } as const
 
+/** Keys shared by every KIRA teams locale dictionary. */
 export type KiraTeamsKey = keyof typeof zh
 
 /** English dictionary, key-identical to the Chinese source of truth. */

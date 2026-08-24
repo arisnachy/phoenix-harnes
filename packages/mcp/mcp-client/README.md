@@ -24,12 +24,18 @@ One plugin instance per MCP server in `cordis.yml`:
   config:
     serverName: web
     transport: streamable-http
-    url: http://localhost:3000/mcp
+    url: https://mcp.example.com/mcp
     headers:
       Authorization: !!js '`Bearer ${process.env.MCP_TOKEN}`'
 ```
 
 The model sees `mcp__github__create_issue`, `mcp__web__search`, … — the same server-qualified shape Claude Code and Codex use. HMR hot-swaps: editing the entry triggers disconnect + reconnect without process restart; an unchanged `serverName` reproduces identical tool names.
+
+## Transport security
+
+- Remote `streamable-http` endpoints must use `https:` and must not embed credentials in the URL.
+- Plain `http:` is accepted only for explicit loopback fixtures (`localhost`, `127.0.0.1`, or `::1`).
+- Stdio servers remain opt-in and should use a pinned command, arguments, working directory, and least-privilege environment.
 
 ## Config
 

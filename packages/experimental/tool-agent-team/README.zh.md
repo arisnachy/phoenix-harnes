@@ -12,9 +12,14 @@
   config:
     freshProvider: spawn
     forkProvider: fork
+    modelProfiles:
+      fast: { provider: openrouter, model: openrouter/free }
+      judge: { provider: anthropic, model: claude-sonnet-4 }
 ```
 
-`freshProvider` 与 `forkProvider` 选择已注册的 continuable-subagent provider。固定模型策略仅在用户明确要求 Agent Teams 或 teammate 时创建 teammate。
+`freshProvider` 与 `forkProvider` 选择已注册的 continuable-subagent transport。`modelProfiles` 是可选 LLM 路由 allowlist；配置后，`spawn_teammate.model_profile` 选择一条路由，省略时继承 Lead 路由。provider id 与 model id 是普通 harness 配置路由，不是 OpenAI 专属角色名称。
+
+Team 策略只有在 JUDGE 报告的 `modelProvider` 或 `model` 与 Lead 不同时，才称其具备认知独立性。同一路由上的 fresh child 仅具备运行独立性，仍有相关性，必须明确报告。
 
 ## 工具与权限
 
@@ -46,4 +51,4 @@ Team 插件 generation、配置、member role／name 与 schema 不变时，前�
 
 - **提示词策略只负责协调，不负责 confinement**：它无法阻止 Bash 或外部进程写入重叠文件。
 - **不会自主创建 Team**：除非用户明确要求 delegation，普通任务不会触发组队。
-- **没有 Web 控制功能**：浏览器 roster 与任务板呈现不属于该 runtime 包。
+- **没有 Web 控制功能**：浏览器 roster、model profile 编辑与任务板呈现不属于该 runtime 包。

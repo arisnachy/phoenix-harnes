@@ -1165,6 +1165,22 @@ describe('createTransport', () => {
     expect(transport).toHaveProperty('close')
   })
 
+  it.each([
+    'http://mcp.example.com/mcp',
+    'ftp://mcp.example.com/mcp',
+    'https://user:pass@mcp.example.com/mcp',
+  ])('rejects unsafe remote MCP endpoint %s', (url) => {
+    const config: Config = {
+      transport: 'streamable-http',
+      serverName: 'srv',
+      url,
+      headers: {},
+      toolCallTimeoutMs: 60_000,
+      failOnStartupError: false,
+    }
+    expect(() => createTransport(config)).toThrow(/MCP endpoint|https|credentials/)
+  })
+
   it('scrubs sensitive env vars and forwards the rest', () => {
     const original = { ...process.env }
     try {

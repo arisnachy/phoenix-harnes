@@ -18,6 +18,20 @@ Some internal package and CLI identifiers are intentionally retained for compati
 
 ## Run
 
+### One-line Windows install
+
+Open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/arisnachy/phoenix-harnes/main/install-phoenix.ps1 | iex
+```
+
+The bootstrap installs missing Node.js/Git through `winget`, clones or fast-forwards the dedicated PHOENIX installation, performs an immutable dependency install and build, and creates a **PHOENIX HARDNESS** Start menu shortcut. Managed installations check `origin/main` at launch and apply only clean fast-forward updates; set `PHOENIX_AUTO_UPDATE=0` to disable that check. Local changes are preserved instead of overwritten. The script is not a signed MSIX; code signing remains a release gate until a project certificate is configured.
+
+### VS Code and Cursor
+
+Build the installable extension with `pnpm --dir apps/vscode run package:vsix`, then install `dist/phoenix-hardness-vscode.vsix` from **Extensions → Install from VSIX**. Its Explorer panel starts the local PHOENIX runtime and opens the Web UI without reading model credentials.
+
 ### Run from source
 
 Install Node.js 22.19 or newer, then:
@@ -51,6 +65,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Development
 
 Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md). PHOENIX capabilities are integrated through staged, independently verified branches and pull requests so the stable base stays auditable.
+
+Windows installation, IDE packaging, native sandbox boundaries, and continuity status are documented in [PHOENIX on Windows](docs/phoenix-windows.md).
 
 For agents, follow [AGENTS.md](AGENTS.md).
 

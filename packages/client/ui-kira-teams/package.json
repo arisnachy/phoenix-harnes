@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-kira-teams",
   "description": "Frame-overlay KIRA teams dock: always-visible deployed subagents for the current lineage",
-  "version": "0.1.0",
+  "version": "0.1.1-rc.2",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

@@ -278,6 +278,17 @@ export class FakeApiClient implements IApiClient {
     discoverModels: payload => this.record('llm.discoverModels', payload, Promise.resolve(ok({ models: [] }))),
   }
 
+  readonly authorization: IApiClient['authorization'] = {
+    list: payload => this.record('authorization.list', payload, Promise.resolve(ok({ entries: [] }))),
+    begin: payload => this.record('authorization.begin', payload, Promise.resolve(ok({ attemptId: 'fake-attempt', status: 'pending' as const }))),
+    status: payload => this.record('authorization.status', payload, Promise.resolve(ok({
+      attemptId: 'fake-attempt', key: 'fake', method: 'oauth', status: 'failed' as const,
+      notices: [], nextSeq: 0, error: 'Fixture authorization is unavailable',
+    }))),
+    answer: payload => this.record('authorization.answer', payload, Promise.resolve(ok({ accepted: true as const }))),
+    cancel: payload => this.record('authorization.cancel', payload, Promise.resolve(ok({ cancelled: true as const }))),
+  }
+
   /** When true, streams never fire onOpen (misbehaving-carrier material for the handshake timeout guard). */
   suppressStreamOpen = false
 

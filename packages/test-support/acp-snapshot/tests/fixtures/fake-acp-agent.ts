@@ -47,6 +47,8 @@ interface Behavior {
   prompt?: 'respond' | 'error' | 'hang-until-cancel'
   /** Persist the scripted logs while handling cancellation, before stdin EOF. */
   persistLogsOnCancel?: boolean
+  /** Persist scripted logs before a normal prompt response. */
+  persistLogsOnPrompt?: boolean
   /** Before responding to a prompt, send a `session/request_permission` request and echo its outcome as a chunk. */
   permissionProbe?: boolean
   /** Echo the `DSH_SNAPSHOT_*` env the harness set as a chunk (spec-side env-plumbing assertions). */
@@ -175,6 +177,7 @@ async function handlePrompt(id: number | string): Promise<void> {
     })
     chunk(`permission:${JSON.stringify((result as { outcome?: unknown } | undefined)?.outcome ?? null)}`)
   }
+  if (behavior.persistLogsOnPrompt === true) writeLogs()
   switch (behavior.prompt ?? 'respond') {
     case 'respond':
       respond(id, { stopReason: 'end_turn' })

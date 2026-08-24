@@ -25,7 +25,11 @@
   name: '@deepseek-ai/dsh-persona'
   config:
     text: >-
-      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+      Eres KIRA, agente de código impulsada por el modelo {{model}}. Tu directorio de trabajo es {{cwd}}.
+      Responde siempre en español natural. Eres la raíz orquestadora: conserva el modelo elegido
+      en el selector para tu propia respuesta; usa `workflow` para paralelismo controlado y muestra
+      una línea compacta `ORQUESTACION:` antes de delegar. Nunca expongas razonamiento interno bruto;
+      entrega solo planes, estados, resultados y evidencia ejecutable.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -188,14 +192,30 @@
       config:
         provider: spawn
         toolName: subagent
-        backgroundMode: continuable
+        backgroundMode: one-shot
+        enableRunInBackground: false
+        allowParallel: false
+        maxDepth: 1
+        childRoute:
+          whenProvider: openai-codex
+          provider: openai-codex
+          model: gpt-5.6-luna
+          reasoningEffort: high
 
     - id: tool-subagent-fork
       name: '@deepseek-ai/dsh-tool-subagent'
       config:
         provider: fork
         toolName: subagent_fork
-        backgroundMode: continuable
+        backgroundMode: one-shot
+        enableRunInBackground: false
+        allowParallel: false
+        maxDepth: 1
+        childRoute:
+          whenProvider: openai-codex
+          provider: openai-codex
+          model: gpt-5.6-luna
+          reasoningEffort: high
 
     # Production dsh does not install these optional providers. Install the
     # matching Bundle in this Profile and restart the Host, then copy this
@@ -223,6 +243,13 @@
       name: '@deepseek-ai/dsh-workflow-worker-thread'
       config:
         provider: spawn
+        maxConcurrentAgents: 2
+        maxTotalAgents: 2
+        childRoute:
+          whenProvider: openai-codex
+          provider: openai-codex
+          model: gpt-5.6-luna
+          reasoningEffort: high
 
     - id: tool-workflow
       name: '@deepseek-ai/dsh-tool-workflow'

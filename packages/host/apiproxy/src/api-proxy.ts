@@ -52,6 +52,13 @@ import {
   type SessionLogExportReady,
   type SessionLogCompressionLevel,
 } from './session-export.ts'
+// Borrowed eyes: transcribe chat images for text-only routes instead of refusing them.
+import {
+  VisionFallbackError,
+  describePromptImagesWithFallback,
+  resolveVisionFallbackRoute,
+  type VisionFallbackConfig,
+} from './vision-fallback.ts'
 import type { SessionRawArtifact } from '@deepseek-ai/dsh-session-persistence'
 import {
   SESSION_SEARCH_RESULT_LIMIT,
@@ -610,6 +617,14 @@ export interface ApiProxyDefaults {
    * falls back to platform detection ({@link canOpenNativePath}).
    */
   canOpenPath?: () => boolean
+  /**
+   * Borrowed eyes: transcribe incoming chat images through a vision-capable
+   * side route when the active model declares text-only input, instead of
+   * refusing the prompt outright. Absent (or `enabled` unset) preserves the
+   * refusal; without an explicit route override, discovery picks the first
+   * registered catalog entry declaring image input.
+   */
+  visionFallback?: VisionFallbackConfig
 }
 
 /** The tool/call payload fields the presenter path reads. */
@@ -2586,24 +2601,43 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ...(canonicalTimeZone === undefined ? {} : { clientTimeZone: canonicalTimeZone }),
         }
         const hasImage = content.some(part => part.type === 'image')
+        // Borrowed-eyes output: durable blocks with every image already
+        // transcribed, produced only when the active route is text-only and a
+        // fallback route answered. Undefined keeps the plain admission path.
+        let described: ContentBlock[] | undefined
         const admit = async (): Promise<RpcResponse<{ accepted: true }>> => {
           try {
             if (hasImage) {
               const current = selectionFor(agent).current
               const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
               if (modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')) {
-                return err(request, {
-                  code: 'attachment-error',
-                  message: `Model "${current.model}" does not support image input.`,
-                  details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
-                })
+                const route = await resolveVisionFallbackRoute(ctx, current, defaults.visionFallback ?? {})
+                if (route === undefined) {
+                  return err(request, {
+                    code: 'attachment-error',
+                    message: `Model "${current.model}" does not support image input.`,
+                    details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
+                  })
+                }
+                described = await describePromptImagesWithFallback(
+                  ctx,
+                  route,
+                  await durablePromptContent(ctx, content),
+                )
               }
             }
-            const durable = await durablePromptContent(ctx, content)
+            const durable = described ?? await durablePromptContent(ctx, content)
             const message: UserMessage = createUserMessage({ content: durable, source })
             if (mode === 'steer') agent.steer(message)
             else agent.followup(message)
           } catch (error: unknown) {
+            if (error instanceof VisionFallbackError) {
+              return err(request, {
+                code: 'attachment-error',
+                message: error.message,
+                details: { reason: 'VISION_FALLBACK_FAILED' },
+              })
+            }
             if (error instanceof AttachmentError) {
               return err(request, {
                 code: 'attachment-error',

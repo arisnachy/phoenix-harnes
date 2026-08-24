@@ -50,8 +50,10 @@ const WAIT_POLL_INTERVAL_MS = 10
  * behind the same marker.
  * `promptAndWaitForAgentMessage` arms an exact text-chunk waiter before sending
  * the prompt, then keeps the application live until that later update arrives.
- * `waitForTurnStart` waits for an open durable turn, optionally at or beyond a
- * specified turn number. `waitForTurnEnd` holds the subprocess open until the
+ * `waitForTurnStart` waits for an open durable turn. When `minimumTurn` is
+ * supplied it instead accepts durable evidence that the requested turn began,
+ * even if that fast turn already closed before the next filesystem poll.
+ * `waitForTurnEnd` holds the subprocess open until the
  * selected session's latest complete raw-JSONL turn boundary is `turn/end`.
  * `waitForGoalPhase` waits for the latest durable goal snapshot to reach one phase.
  * `waitForInboxMessage` waits for inserted inbox text containing a scenario marker.
@@ -225,6 +227,12 @@ export function snapshotSpillRoot(
  * @returns The captured stdout/stderr, session id, generated cwd, and harvested logs.
  */
 export async function runScenario(input: InputScript, opts: RunOptions): Promise<RunResult> {
+  const trace = (message: string): void => {
+    if (process.env.DSH_SNAPSHOT_DIAGNOSTICS === '1') {
+      process.stderr.write(`[acp-snapshot] ${basename(dirname(opts.fixtureFile))}: ${message}\n`)
+    }
+  }
+  trace('creating temporary roots')
   const cwd = await mkdtemp(join(opts.workspaceParent ?? tmpdir(), 'acp-snap-cwd-'))
   const cwdAliases = [...new Set([realpathSync(cwd), realpathSync.native(cwd)])]
   const sessionsRoot = await mkdtemp(join(tmpdir(), 'acp-snap-sessions-'))
@@ -295,9 +303,11 @@ export async function runScenario(input: InputScript, opts: RunOptions): Promise
     })
     const active = launched
     await active.spawned
+    trace(`spawned pid ${active.child.pid ?? 'unknown'}`)
     const { client } = active
 
     for (const step of input.steps) {
+      trace(`starting ${step.op}`)
       await runStep(
         client,
         step,
@@ -313,6 +323,7 @@ export async function runScenario(input: InputScript, opts: RunOptions): Promise
         (id, timeoutMs) => waitForPersistedTitleAfterTurnEnd(sessionsRoot, id, timeoutMs),
         (id, type, timeoutMs) => waitForPersistedEventAfterTurnEnd(sessionsRoot, id, type, timeoutMs),
       )
+      trace(`finished ${step.op}`)
       // A permission exchange happens while a step's request is in flight, so
       // by the time the step settles any script bug it exposed is captured —
       // fail the run HERE, as a harness error, rather than hoping the agent's
@@ -321,7 +332,9 @@ export async function runScenario(input: InputScript, opts: RunOptions): Promise
     }
     // Done driving: close stdin so the server disposes gracefully (flushing
     // persistence) and exits. Then await exit so the harvested log is complete.
+    trace('starting graceful close')
     await active.close()
+    trace('finished graceful close')
     // Harvest EVERY persisted log (parent + any subagent children) while the
     // generated dirs still exist, ordered primary-first.
     sessionLogs = await harvestSessionLogs(sessionsRoot)
@@ -533,9 +546,13 @@ async function waitForPersistedTurnStart(
   let invalidRecord: { error: unknown } | undefined
   await vi.waitFor(async () => {
     const log = (await harvestSessionLogs(root)).find(candidate => candidate.id === sessionId)
-    let openTurn: number | undefined
+    let observedTurn: number | undefined
     try {
-      openTurn = log === undefined ? undefined : latestOpenTurn(log.content)
+      observedTurn = log === undefined
+        ? undefined
+        : minimumTurn === undefined
+          ? latestOpenTurn(log.content)
+          : latestStartedTurn(log.content)
     } catch (error) {
       // A malformed persisted record is a scenario bug, not a not-yet state:
       // vi.waitFor retries every callback throw, so capture the validation
@@ -543,7 +560,7 @@ async function waitForPersistedTurnStart(
       invalidRecord = { error }
       return
     }
-    if (openTurn === undefined || (minimumTurn !== undefined && openTurn < minimumTurn)) {
+    if (observedTurn === undefined || (minimumTurn !== undefined && observedTurn < minimumTurn)) {
       const detail = minimumTurn === undefined ? 'turn/start' : `turn/start at or beyond turn ${minimumTurn}`
       throw new Error(`snapshot-harness: session "${sessionId}" did not persist ${detail} within ${timeoutMs}ms`)
     }
@@ -728,6 +745,19 @@ function latestOpenTurn(content: string): number | undefined {
   const complete = content.slice(0, content.lastIndexOf('\n') + 1)
   const start = complete.lastIndexOf('\n{"type":"turn/start",')
   if (start <= complete.lastIndexOf('\n{"type":"turn/end",')) return undefined
+  return parseTurnStartAt(complete, start)
+}
+
+/** Return the latest durable turn number whether that turn is open or closed. */
+function latestStartedTurn(content: string): number | undefined {
+  const complete = content.slice(0, content.lastIndexOf('\n') + 1)
+  const start = complete.lastIndexOf('\n{"type":"turn/start",')
+  if (start < 0) return undefined
+  return parseTurnStartAt(complete, start)
+}
+
+/** Parse and validate one complete turn/start boundary at a known offset. */
+function parseTurnStartAt(complete: string, start: number): number {
   const end = complete.indexOf('\n', start + 1)
   const record = JSON.parse(complete.slice(start + 1, end)) as { data?: { turn?: unknown } | null }
   const turn = record.data?.turn
