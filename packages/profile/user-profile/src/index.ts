@@ -88,7 +88,10 @@ export class UserProfileService extends Service {
 
   /** Clear every user-owned profile field and reset consent/personalization. */
   async clear(): Promise<UserProfileView> {
-    await this.scope.replace({})
+    await this.scope.replace({
+      personalizationEnabled: true,
+      consent: { ...DEFAULT_USER_PROFILE_CONSENT },
+    })
     return this.view()
   }
 
