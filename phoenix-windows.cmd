@@ -3,10 +3,6 @@ setlocal
 
 cd /d "%~dp0"
 
-if exist ".phoenix-managed-install" if not "%PHOENIX_AUTO_UPDATE%"=="0" (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0update-phoenix.ps1" || exit /b 1
-)
-
 where node >nul 2>nul
 if errorlevel 1 (
   echo PHOENIX requires Node.js 22.19 or newer. Install Node.js, then run this file again.
@@ -21,9 +17,9 @@ if errorlevel 1 (
   set "PHOENIX_PNPM=corepack pnpm"
 )
 
-rem PHOENIX stable-channel updater. Network/check failures never prevent the
-rem last-known-good build from starting; exit code 12 means live install AND
-rem rollback failed, so continuing would no longer be safe.
+rem PHOENIX stable-channel updater. Startup only announces an available update;
+rem the detached watcher performs visible preflight, automatic restart, install,
+rem rollback, and relaunch after the graphical client is available.
 if exist "scripts\phoenix-auto-update.mjs" (
   node scripts\phoenix-auto-update.mjs --startup
   if errorlevel 12 (
@@ -40,6 +36,12 @@ if not exist "node_modules\.pnpm" (
 if not exist "apps\cli\lib\bin.js" (
   echo Building PHOENIX for the first run...
   call %PHOENIX_PNPM% run build || exit /b 1
+)
+
+rem Best-effort local, keyless web search. Docker is optional for the harness;
+rem when unavailable only web_search fails closed while PHOENIX keeps running.
+if exist "scripts\phoenix-searxng.mjs" (
+  node scripts\phoenix-searxng.mjs --ensure
 )
 
 call %PHOENIX_PNPM% run phoenix -- %*
