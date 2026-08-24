@@ -6,13 +6,17 @@ import type { UserProfileConsent, UserProfileFamilyMember, UserProfileRowState, 
 /** Settings namespace join key; it intentionally does not import the Host package. */
 export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile'
 
-const FIELDS = ['preferredName', 'dateOfBirth', 'gender', 'pronouns', 'tone'] as const
+const FIELDS = [
+  'fullName', 'preferredName', 'dateOfBirth', 'sex', 'gender', 'pronouns',
+  'formOfAddress', 'profession', 'locale', 'timezone', 'responsePreferences', 'tone',
+] as const
 type TextField = typeof FIELDS[number]
 type ConsentField = keyof UserProfileConsent
 
 /** Actions injected into the row component. */
 export interface UserProfileRowActions {
   edit: (field: TextField | 'family', text: string) => void
+  setPersonalization: (value: boolean) => void
   setConsent: (field: ConsentField, value: boolean) => void
   save: () => void
   discard: () => void
@@ -25,26 +29,46 @@ export interface UserProfileRowFace extends UserProfileRowActions {
 }
 
 interface Draft {
+  personalizationEnabled: boolean
+  fullName: string
   preferredName: string
   dateOfBirth: string
+  sex: string
   gender: string
   pronouns: string
+  formOfAddress: string
+  profession: string
+  locale: string
+  timezone: string
+  responsePreferences: string
   tone: string
   family: string
   consent: UserProfileConsent
 }
 
 const EMPTY_CONSENT: UserProfileConsent = {
+  fullName: false,
   preferredName: false,
   dateOfBirth: false,
+  sex: false,
   gender: false,
   pronouns: false,
+  formOfAddress: false,
+  profession: false,
+  locale: false,
+  timezone: false,
+  responsePreferences: false,
   tone: false,
   family: false,
 }
 
 function emptyDraft(): Draft {
-  return { preferredName: '', dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '', consent: { ...EMPTY_CONSENT } }
+  return {
+    personalizationEnabled: true,
+    fullName: '', preferredName: '', dateOfBirth: '', sex: '', gender: '', pronouns: '',
+    formOfAddress: '', profession: '', locale: '', timezone: '', responsePreferences: '', tone: '',
+    family: '', consent: { ...EMPTY_CONSENT },
+  }
 }
 
 function textValue(value: unknown): string {
@@ -54,10 +78,18 @@ function textValue(value: unknown): string {
 function toDraft(value: UserProfileSettings | undefined): Draft {
   if (value === undefined) return emptyDraft()
   return {
+    personalizationEnabled: value.personalizationEnabled ?? true,
+    fullName: textValue(value.fullName),
     preferredName: textValue(value.preferredName),
     dateOfBirth: textValue(value.dateOfBirth),
+    sex: textValue(value.sex),
     gender: textValue(value.gender),
     pronouns: textValue(value.pronouns),
+    formOfAddress: textValue(value.formOfAddress),
+    profession: textValue(value.profession),
+    locale: textValue(value.locale),
+    timezone: textValue(value.timezone),
+    responsePreferences: textValue(value.responsePreferences),
     tone: textValue(value.tone),
     family: value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '',
     consent: { ...EMPTY_CONSENT, ...value.consent },
@@ -84,7 +116,6 @@ function fieldState(text: string, invalid = false) {
 
 /** Form controller that keeps drafts local until the explicit Save action. */
 export class UserProfileForm {
-  /** Reactive row state projected from the local draft and settings snapshot. */
   readonly store: SnapshotStore<UserProfileRowState>
   private draft = emptyDraft()
   private source: UserProfileSettings | undefined
@@ -93,7 +124,6 @@ export class UserProfileForm {
   private disposed = false
   private readonly unsubscribe: () => void
 
-  /** @param scope - settings scope bound to the private profile namespace. */
   constructor(private readonly scope: SettingsScope<UserProfileSettings>) {
     this.store = createSnapshotStore(this.project())
     this.unsubscribe = scope.subscribe(() => {
@@ -109,13 +139,11 @@ export class UserProfileForm {
     this.publish()
   }
 
-  /** Return the row's injected face and actions.
-   * @returns callbacks and reactive state used by the settings row.
-   */
   inject(): UserProfileRowFace {
     return {
       hooks: { userProfile: this.store },
       edit: (field, text) => { this.edit(field, text) },
+      setPersonalization: value => { this.setPersonalization(value) },
       setConsent: (field, value) => { this.setConsent(field, value) },
       save: () => { void this.save() },
       discard: () => { this.discard() },
@@ -123,9 +151,6 @@ export class UserProfileForm {
     }
   }
 
-  /** Dispose the form and remove its settings subscription.
-   * @returns nothing after the scope listener is removed.
-   */
   dispose(): void {
     this.disposed = true
     this.unsubscribe()
@@ -133,6 +158,12 @@ export class UserProfileForm {
 
   private edit(field: TextField | 'family', text: string): void {
     this.draft[field] = text
+    this.failed = false
+    this.publish()
+  }
+
+  private setPersonalization(value: boolean): void {
+    this.draft.personalizationEnabled = value
     this.failed = false
     this.publish()
   }
@@ -156,18 +187,15 @@ export class UserProfileForm {
     this.failed = false
     this.publish()
     let ok = true
-    for (const field of [...FIELDS, 'family' as const, 'consent' as const]) {
+    for (const field of ['personalizationEnabled' as const, ...FIELDS, 'family' as const, 'consent' as const]) {
       try {
         await this.scope.unset(field)
       } catch {
         ok = false
       }
     }
-    const next = this.scope.getSnapshot().value
-    if (next !== undefined) {
-      this.source = next
-      this.draft = toDraft(next)
-    }
+    this.source = this.scope.getSnapshot().value
+    this.draft = toDraft(this.source)
     this.failed = !ok
     this.saving = false
     this.publish()
@@ -181,13 +209,26 @@ export class UserProfileForm {
     this.publish()
     let ok = true
     const values: Record<string, unknown> = {
+      personalizationEnabled: this.draft.personalizationEnabled,
+      fullName: this.draft.fullName.trim(),
       preferredName: this.draft.preferredName.trim(),
       dateOfBirth: this.draft.dateOfBirth.trim(),
+      sex: this.draft.sex.trim(),
       gender: this.draft.gender.trim(),
       pronouns: this.draft.pronouns.trim(),
+      formOfAddress: this.draft.formOfAddress.trim(),
+      profession: this.draft.profession.trim(),
+      locale: this.draft.locale.trim(),
+      timezone: this.draft.timezone.trim(),
+      responsePreferences: this.draft.responsePreferences.trim(),
       tone: this.draft.tone.trim(),
       family: parseFamily(this.draft.family),
       consent: this.draft.consent,
+    }
+    try {
+      await this.scope.set('personalizationEnabled', values.personalizationEnabled)
+    } catch {
+      ok = false
     }
     for (const field of FIELDS) {
       try {
@@ -217,24 +258,28 @@ export class UserProfileForm {
   }
 
   private invalid(): boolean {
-    return this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())
+    return (this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim()))
       || (this.draft.family.trim() !== '' && parseFamily(this.draft.family) === undefined)
   }
 
   private invalidAgainst(value: UserProfileSettings): boolean {
-    return this.draft.dateOfBirth.trim() !== textValue(value.dateOfBirth)
-      || this.draft.family.trim() !== (value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '')
+    const current = toDraft(value)
+    return this.draft.personalizationEnabled !== current.personalizationEnabled
+      || FIELDS.some(field => this.draft[field].trim() !== current[field].trim())
+      || this.draft.family.trim() !== current.family.trim()
   }
 
   private isDirty(): boolean {
     if (this.source === undefined) return false
     const next = toDraft(this.source)
-    return FIELDS.some(field => this.draft[field].trim() !== next[field].trim())
+    return this.draft.personalizationEnabled !== next.personalizationEnabled
+      || FIELDS.some(field => this.draft[field].trim() !== next[field].trim())
       || this.draft.family.trim() !== next.family.trim()
       || (Object.keys(EMPTY_CONSENT) as ConsentField[]).some(field => this.draft.consent[field] !== next.consent[field])
   }
 
   private project(): UserProfileRowState {
+    const invalidDate = this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())
     return {
       available: this.scope.getSnapshot().status === 'ready',
       writable: this.scope.getSnapshot().writable,
@@ -242,10 +287,18 @@ export class UserProfileForm {
       invalid: this.invalid(),
       saving: this.saving,
       failed: this.failed,
+      personalizationEnabled: this.draft.personalizationEnabled,
+      fullName: fieldState(this.draft.fullName),
       preferredName: fieldState(this.draft.preferredName),
-      dateOfBirth: fieldState(this.draft.dateOfBirth, this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())),
+      dateOfBirth: fieldState(this.draft.dateOfBirth, invalidDate),
+      sex: fieldState(this.draft.sex),
       gender: fieldState(this.draft.gender),
       pronouns: fieldState(this.draft.pronouns),
+      formOfAddress: fieldState(this.draft.formOfAddress),
+      profession: fieldState(this.draft.profession),
+      locale: fieldState(this.draft.locale),
+      timezone: fieldState(this.draft.timezone),
+      responsePreferences: fieldState(this.draft.responsePreferences),
       tone: fieldState(this.draft.tone),
       family: fieldState(this.draft.family, this.draft.family.trim() !== '' && parseFamily(this.draft.family) === undefined),
       consent: { ...this.draft.consent },
