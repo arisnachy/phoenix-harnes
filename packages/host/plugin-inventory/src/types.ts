@@ -26,3 +26,40 @@ export interface PluginInventoryEntry {
 export interface PluginInventorySnapshot {
   readonly entries: readonly PluginInventoryEntry[]
 }
+
+/** Stable updater lifecycle states projected to trusted Web clients. */
+export type PhoenixUpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'current'
+  | 'available'
+  | 'preparing'
+  | 'ready'
+  | 'restarting'
+  | 'applying'
+  | 'rolling-back'
+  | 'updated'
+  | 'rolled-back'
+  | 'paused'
+  | 'error'
+  | 'rollback-failed'
+  | 'off'
+
+/** Sanitized updater state read from the repository-owned Git directory. */
+export interface PhoenixUpdateSnapshot {
+  readonly status: PhoenixUpdateStatus
+  readonly phase?: string
+  readonly current?: string
+  readonly target?: string
+  readonly previous?: string
+  readonly failedTarget?: string
+  readonly channelPublishedAt?: string
+  readonly detail?: string
+  readonly at?: string
+}
+
+/** Result of asking the live Host to restart into a prepared update. */
+export interface PhoenixUpdateRestartReceipt {
+  readonly accepted: boolean
+  readonly status: PhoenixUpdateStatus
+}
