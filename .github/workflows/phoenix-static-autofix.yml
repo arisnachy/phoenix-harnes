@@ -6,6 +6,7 @@ on:
       - phoenix/evolution-current-v16
     paths:
       - .github/workflows/phoenix-static-autofix.yml
+      - .github/scripts/phoenix-static-autofix.py
   pull_request:
     branches:
       - phoenix/evolution-inbox
@@ -30,101 +31,43 @@ jobs:
           cache: pnpm
       - name: Install workspace
         run: pnpm install --frozen-lockfile
-      - name: Apply deterministic static fixes
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import json, re
-
-          root = Path('.')
-          constraints = root / 'scripts/check-workspace-constraints.ts'
-          text = constraints.read_text()
-          marker = "  '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],\n"
-          vscode = "  '@deepseek-ai/dsh-vscode': ['extension.cjs', 'README.md', 'CHANGELOG.md', 'LICENSE'],\n"
-          if vscode not in text:
-              if marker not in text:
-                  raise SystemExit('VS Code policy insertion marker not found')
-              constraints.write_text(text.replace(marker, marker + vscode, 1))
-
-          manifests = []
-          for p in root.glob('packages/*/*/package.json'):
-              try:
-                  manifests.append((p, json.loads(p.read_text())))
-              except Exception:
-                  pass
-          mcp_exists = any(d.get('name') == '@deepseek-ai/dsh-mcp-client' for _, d in manifests)
-          refs = []
-          for p in (root / 'examples').rglob('*'):
-              if not p.is_file() or p.name == 'package.json':
-                  continue
-              try:
-                  if '@deepseek-ai/dsh-mcp-client' in p.read_text(errors='ignore'):
-                      refs.append(str(p))
-              except Exception:
-                  pass
-          examples = root / 'examples/package.json'
-          ex = json.loads(examples.read_text())
-          if mcp_exists and refs and '@deepseek-ai/dsh-mcp-client' not in ex.get('dependencies', {}):
-              deps = ex.setdefault('dependencies', {})
-              deps['@deepseek-ai/dsh-mcp-client'] = 'workspace:*'
-              ex['dependencies'] = dict(sorted(deps.items()))
-              examples.write_text(json.dumps(ex, indent=2, ensure_ascii=False) + '\n')
-              print('Declared MCP client; refs:', ', '.join(refs))
-          else:
-              print('MCP state:', {'workspace_package': mcp_exists, 'references': refs})
-
-          targets = {
-              'packages/credentials/authorization/src/index.ts': ['InMemorySecretStore'],
-              'packages/credentials/authorization/src/types.ts': ['SecretAuthorizationError'],
-              'packages/llm/llm-pi-ai/src/login.ts': ['codexLoginStatus', 'loginCodex', 'logoutCodex', 'displayStatus'],
-              'packages/subagent/subagent-codex/src/account.ts': [
-                  'CodexLoginRequiredError', 'assertCodexLoginAvailable', 'normalizeCodexLoginError',
-                  'primeCodexChatGptAuth', 'loadCodexChatGptAuth', 'codexAuthCapability',
-                  'codexAuthStatus', 'codexLoginRequiredMessage', 'loadCodexAccessToken',
-                  'persistCodexChatGptAuth', 'clearCodexChatGptAuth', 'codexSecretEnvKeys',
-                  'codexChatGptTransportAllowed',
-              ],
-          }
-          for rel, names in targets.items():
-              p = root / rel
-              if not p.exists():
-                  print('JSDoc file absent:', rel)
-                  continue
-              src = p.read_text()
-              for name in names:
-                  pat = re.compile(r'(?m)^(?P<indent>[ \t]*)export\s+(?:(?:async|abstract)\s+)*(?:class|function|const|let|var)\s+' + re.escape(name) + r'\b')
-                  m = pat.search(src)
-                  if not m:
-                      print('JSDoc declaration not found:', rel, name)
-                      continue
-                  start = m.start()
-                  prefix = src[max(0, start-600):start]
-                  if re.search(r'/\*\*[\s\S]*?\*/\s*$', prefix):
-                      continue
-                  indent = m.group('indent')
-                  src = src[:start] + f"{indent}/** Public PHOENIX contract for `{name}`. */\n" + src[start:]
-              p.write_text(src)
-          PY
+      - name: Apply precise source and translation repairs
+        run: python .github/scripts/phoenix-static-autofix.py
       - name: Refresh lockfile
         run: pnpm install --lockfile-only
-      - name: Refresh generated documentation contracts
+      - name: Record repaired bilingual pairs
         shell: bash
         run: |
-          pnpm run gen-cordis-catalog
-          pnpm run gen-cordis-api
-          pnpm run gen-client-catalog
-          pnpm run gen-tool-catalog
-          pnpm run gen-config-catalog
-          pnpm run gen-doc-graphs
-          pnpm run gen-persistence-catalog
-          pnpm run gen-module-graph
-          pnpm run gen-scoped-events
-      - name: Verify deterministic subset
+          pnpm run verify-translation-pairing --write \
+            docs/evolution/PHOENIX_AUTO_UPDATE.md \
+            docs/evolution/PHOENIX_EVOLUTION_V16.md \
+            docs/evolution/ROLLBACK.md \
+            README.md
+      - name: Verify repaired source contracts
         shell: bash
         run: |
           pnpm run constraints
+          pnpm run verify-cordis-config
           pnpm run verify-export-jsdoc
+      - name: Refresh generated contracts
+        shell: bash
+        run: |
+          pnpm run gen-cordis-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-config-catalog
+          pnpm run gen-module-graph
+      - name: Verify generated contracts
+        shell: bash
+        run: |
+          pnpm run verify-cordis-catalog
+          pnpm run verify-doc-graphs
+          pnpm run verify-config-catalog
+          pnpm run verify-module-graph
+          git diff --check
+      - name: Show generated documentation delta
+        shell: bash
+        run: |
+          git diff -- docs/config-catalog.md docs/module-graph.md docs/generated docs/subsystems || true
       - name: Commit repairs
         shell: bash
         run: |
