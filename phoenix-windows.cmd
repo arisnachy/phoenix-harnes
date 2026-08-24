@@ -3,10 +3,6 @@ setlocal
 
 cd /d "%~dp0"
 
-if exist ".phoenix-managed-install" if not "%PHOENIX_AUTO_UPDATE%"=="0" (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0update-phoenix.ps1" || exit /b 1
-)
-
 where node >nul 2>nul
 if errorlevel 1 (
   echo PHOENIX requires Node.js 22.19 or newer. Install Node.js, then run this file again.
@@ -21,14 +17,26 @@ if errorlevel 1 (
   set "PHOENIX_PNPM=corepack pnpm"
 )
 
-rem PHOENIX stable-channel updater. Network/check failures never prevent the
-rem last-known-good build from starting; exit code 12 means live install AND
-rem rollback failed, so continuing would no longer be safe.
-if exist "scripts\phoenix-auto-update.mjs" (
-  node scripts\phoenix-auto-update.mjs --startup
-  if errorlevel 12 (
-    echo PHOENIX update recovery failed. Review .git\phoenix-update-state.json before continuing.
-    exit /b 12
+rem Managed installations follow ONLY the promoted stable channel. This path
+rem can safely realign a legacy install that was accidentally advanced to
+rem origin/main. Development checkouts keep the non-downgrading updater below.
+if exist ".phoenix-managed-install" (
+  if not "%PHOENIX_AUTO_UPDATE%"=="0" if exist "scripts\phoenix-managed-update.mjs" (
+    node scripts\phoenix-managed-update.mjs --startup
+    if errorlevel 12 (
+      echo PHOENIX stable recovery failed. Review .git\phoenix-update-state.json before continuing.
+      exit /b 12
+    )
+  )
+) else (
+  rem Source/development checkouts may move forward to a promoted stable commit,
+  rem but the standard updater never downgrades a checkout that is ahead.
+  if exist "scripts\phoenix-auto-update.mjs" (
+    node scripts\phoenix-auto-update.mjs --startup
+    if errorlevel 12 (
+      echo PHOENIX update recovery failed. Review .git\phoenix-update-state.json before continuing.
+      exit /b 12
+    )
   )
 )
 
