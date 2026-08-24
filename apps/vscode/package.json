@@ -1,0 +1,57 @@
+{
+  "name": "phoenix-hardness-vscode",
+  "displayName": "PHOENIX HARDNESS",
+  "description": "Launch and open the local PHOENIX AI harness from VS Code or Cursor.",
+  "version": "0.1.0",
+  "publishConfig": { "access": "public" },
+  "publisher": "phoenix-harness",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
+    "directory": "apps/vscode"
+  },
+  "engines": { "vscode": "^1.96.0" },
+  "categories": ["Machine Learning", "Other"],
+  "keywords": ["phoenix", "ai", "agent", "codex", "claude", "openrouter"],
+  "activationEvents": [
+    "onCommand:phoenix.start",
+    "onCommand:phoenix.open",
+    "onCommand:phoenix.install",
+    "onView:phoenix.control"
+  ],
+  "main": "extension.cjs",
+  "files": ["extension.cjs", "README.md", "CHANGELOG.md", "LICENSE"],
+  "scripts": {
+    "package:vsix": "pnpm dlx @vscode/vsce@3.6.2 package --no-dependencies --out ../../dist/phoenix-hardness-vscode.vsix"
+  },
+  "contributes": {
+    "commands": [
+      { "command": "phoenix.start", "title": "PHOENIX: Start local harness", "icon": "$(debug-start)" },
+      { "command": "phoenix.open", "title": "PHOENIX: Open interface", "icon": "$(link-external)" },
+      { "command": "phoenix.install", "title": "PHOENIX: Install or update", "icon": "$(cloud-download)" }
+    ],
+    "views": {
+      "explorer": [
+        { "id": "phoenix.control", "name": "PHOENIX HARDNESS", "when": "true" }
+      ]
+    },
+    "configuration": {
+      "title": "PHOENIX HARDNESS",
+      "properties": {
+        "phoenix.installPath": {
+          "type": "string",
+          "default": "",
+          "description": "PHOENIX checkout or dedicated installation directory. Empty uses the Windows installer default."
+        },
+        "phoenix.port": {
+          "type": "number",
+          "default": 3080,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Local PHOENIX Web UI port."
+        }
+      }
+    }
+  }
+}

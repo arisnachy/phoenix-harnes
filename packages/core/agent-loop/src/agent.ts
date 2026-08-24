@@ -34,6 +34,7 @@ import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import type { Context } from '@deepseek-ai/cordis'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
+import { DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -82,6 +83,7 @@ export class ReactLoopAgent implements Agent {
     public readonly id: SessionId,
     public readonly options: AgentOptions,
     public readonly session: Session,
+    private readonly maxStepsPerTurn: () => number = () => DEFAULT_MAX_STEPS_PER_TURN,
   ) {
     this.dispatch = agentEvents(loopCtx, this)
     this.inbox = new Inbox(session, {
@@ -263,6 +265,12 @@ export class ReactLoopAgent implements Agent {
       while (true) {
         signal.throwIfAborted()
         const step = phase.step + 1
+        const maxStepsPerTurn = this.maxStepsPerTurn()
+        if (step > maxStepsPerTurn) {
+          throw new Error(
+            `agent "${this.id}": turn ${turn} reached maxStepsPerTurn (${maxStepsPerTurn}); send a new prompt to continue`,
+          )
+        }
         const decision = await this.preStep(target, { turn, step })
         if (decision.kind === 'reject') {
           turnEnds = { kind: 'blocked' }
@@ -438,11 +446,12 @@ export class ReactLoopAgent implements Agent {
     const persistedHeader = session.requestHeader()
     const persistedConfig = persistedHeader?.config
     const route = { provider: this.options.provider ?? '', model: this.options.model ?? '' }
-    const reasoningEffort = persistedConfig?.provider === route.provider
-      && persistedConfig.model === route.model
-      && persistedHeader?.adapterDefaults?.reasoningEffort !== true
-      ? persistedConfig.reasoningEffort
-      : undefined
+    const reasoningEffort = this.options.reasoningEffort
+      ?? (persistedConfig?.provider === route.provider
+        && persistedConfig.model === route.model
+        && persistedHeader?.adapterDefaults?.reasoningEffort !== true
+        ? persistedConfig.reasoningEffort
+        : undefined)
     const maxTokens = this.options.maxTokens
     const seedConfig = deepFreeze(structuredClone(
       this.requestHeaderLogged

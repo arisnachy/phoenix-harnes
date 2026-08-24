@@ -6,7 +6,7 @@ Thank you for your interest in contributing to PHOENIX!
 
 We deeply believe in the power of open source communities, and that belief has shaped this project from the very beginning.
 
-PHOENIX is still at an early stage and under active development. We are sorry that we cannot accept external pull requests at the moment. However, contributing code to this repository is far from the only way to help. There are many other ways to get involved:
+PHOENIX is still at an early stage and under active development. External pull requests are welcome when they are focused, tested on their affected platforms, preserve PHOENIX identity, and keep provider or upstream attribution accurate. Open an issue or discussion before a large architectural change so maintainers can confirm scope.
 
 - Identify and report issues or bugs in this repository's GitHub Discussions:
   - Upvote discussions that you would like to bring to the team's attention. We are a very small team and may not be able to reply to every post, but we monitor them and consider them when allocating resources.
@@ -20,4 +20,4 @@ PHOENIX is designed to be deeply customizable. We do not believe that packages i
 
 We have already seen exciting projects emerge from the community, and we hope to see the ecosystem continue to grow in its own directions.
 
-Into the unknown.
+Every contribution must pass the repository gates documented in `docs/development.md`. Security reports belong in the private channel described by `SECURITY.md`, not in a public issue.

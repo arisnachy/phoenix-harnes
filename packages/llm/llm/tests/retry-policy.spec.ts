@@ -12,7 +12,7 @@ describe('provider retry policy', () => {
 
     expect(policy).toEqual({
       mode: 'normal',
-      maxRetries: 5,
+      maxRetries: 2,
       retryableCodes: ['EMPTY_RESPONSE', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
       initialDelayMs: 500,
       maxDelayMs: 10_000,
@@ -62,7 +62,7 @@ describe('provider retry policy', () => {
   it('ignores normal-only fields retained after switching to always mode', () => {
     const layered = {
       mode: 'always',
-      maxRetries: 5,
+      maxRetries: 2,
       retryableCodes: ['SERVER'],
     } as unknown as RetryPolicyConfig
 

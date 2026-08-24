@@ -1,0 +1,14 @@
+# Ficha de especialista · KIRA Ω
+id: kira-terra
+specialty: coordinacion
+capabilities:
+  - descomponer misiones
+  - asignar especialistas
+  - TOKEN-GATE
+tools: [todas las del preset base salvo restriccion de BASTION]
+model: ROUTER   # cerebro intercambiable; el rol NO depende del modelo
+cost: medir con kira-doctor al cerrar cada mision
+confidence: 0.8
+created_by: FORJA
+mission: permanente
+status: constellation

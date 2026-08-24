@@ -98,7 +98,9 @@ export async function setup(config?: Config): Promise<Harness> {
   for (const name of ['cordis/request-run-resolved', 'cordis/dynamic-package', 'cordis/dynamic-retract'] as const) {
     ctx.on(name, (payload: unknown) => { gateway.events.push([name, payload]) })
   }
-  await ctx.plugin(DynamicCordisRunnerService, config)
+  // Existing unit fixtures call host-only runs directly; production defaults
+  // remain fail-closed and require a human approval event.
+  await ctx.plugin(DynamicCordisRunnerService, { requireHostApproval: false, ...config })
   const runner = ctx.dynamicCordisRunner
   return { ctx, runner, gateway }
 }

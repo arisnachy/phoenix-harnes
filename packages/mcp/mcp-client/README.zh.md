@@ -24,12 +24,18 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
   config:
     serverName: web
     transport: streamable-http
-    url: http://localhost:3000/mcp
+    url: https://mcp.example.com/mcp
     headers:
       Authorization: !!js '`Bearer ${process.env.MCP_TOKEN}`'
 ```
 
 模型会看到 `mcp__github__create_issue`、`mcp__web__search` 等工具，这与 Claude Code 和 Codex 使用的服务器限定形状相同。HMR（热模块替换）支持热替换：编辑配置项会触发断开 + 重新连接，无需重启进程；`serverName` 不变时会生成完全相同的工具名称。
+
+## 传输安全
+
+- 远程 `streamable-http` 端点必须使用 `https:`，URL 中不得嵌入凭据。
+- 明文 `http:` 只接受明确的 loopback fixture（`localhost`、`127.0.0.1` 或 `::1`）。
+- stdio 服务器仍为 opt-in，应使用固定版本的命令、参数、工作目录和最小权限环境。
 
 ## 配置
 

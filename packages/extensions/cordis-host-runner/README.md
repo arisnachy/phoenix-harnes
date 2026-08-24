@@ -36,8 +36,9 @@ The vm sandbox isolates globals but is not a security boundary: Node globals are
 | Field | Default | Meaning |
 |---|---|---|
 | `vmTimeoutMs` | `5000` | Milliseconds the synchronous portion of a host half may run in the vm before evaluation is aborted |
+| `requireHostApproval` | `true` | Require an explicit approval event before host-only dynamic code runs; set false only for a trusted local test harness |
 
-One field is all there is: a run request waits for a person, so the round trip has no deadline of its own.
+A browser half always waits for approval. With the secure default, host-only code does too; direct user-panel activation remains available.
 
 ## Export shape
 

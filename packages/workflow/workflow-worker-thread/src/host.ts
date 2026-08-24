@@ -12,7 +12,7 @@ import type { WorkerOptions } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { assertNever } from '@deepseek-ai/dsh-llm'
+import { assertNever, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
 import type SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentRun } from '@deepseek-ai/dsh-subagent'
@@ -137,6 +137,12 @@ export class WorkerRun implements WorkflowRun {
     private readonly parent: Agent,
     init: WorkerInit,
     private readonly provider: string,
+    private readonly childRoute: {
+      whenProvider: string
+      provider: string
+      model: string
+      reasoningEffort?: string
+    } | undefined,
     private readonly disposeGraceMs: number,
     private readonly observer: ExecutionObserver,
     signal: AbortSignal | undefined,
@@ -349,19 +355,26 @@ export class WorkerRun implements WorkflowRun {
   private async startChild(callId: number, request: ChildStartRequest): Promise<void> {
     let run: SubagentRun
     try {
+      const routed = this.childRoute !== undefined && this.parent.options.provider === this.childRoute.whenProvider
+        ? {
+          provider: this.childRoute.provider,
+          model: this.childRoute.model,
+          ...this.childRoute.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: ReasoningEffortId(this.childRoute.reasoningEffort) },
+        }
+        : {}
+      const requested = {
+        ...routed,
+        ...request.provider !== undefined ? { provider: request.provider } : {},
+        ...request.model !== undefined ? { model: request.model } : {},
+      }
       run = await this.subagents.start(this.provider, {
         prompt: [{ type: 'text', text: request.prompt }],
         parent: this.parent,
         signal: this.controller.signal,
         ...request.schema !== undefined ? { outputSchema: request.schema } : {},
-        ...request.provider !== undefined || request.model !== undefined
-          ? {
-            agentOptions: {
-              ...request.provider !== undefined ? { provider: request.provider } : {},
-              ...request.model !== undefined ? { model: request.model } : {},
-            },
-          }
-          : {},
+        ...Object.keys(requested).length > 0 ? { agentOptions: requested } : {},
       })
     } catch (error: unknown) {
       const failure = this.childAdmissionFailure()

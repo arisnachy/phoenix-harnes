@@ -93,6 +93,19 @@ function appendSummaryMeter(ctx: Context, session: Session, start: number, end: 
   })
 }
 
+function appendSummaryUsage(session: Session, usage: TokenUsage): void {
+  session.append('compaction/summary', {
+    compactionId: CompactionId('token-usage-billing-summary'),
+    summary: [{ type: 'text', text: 'summary' }],
+    shadowedRange: { start: 1, end: 1 },
+    shadowedSeqs: [1],
+    shadowedTokenCount: 1,
+    provider: 'mock',
+    model: 'mock',
+    usage,
+  })
+}
+
 describe('tokenUsage session projection', () => {
   it('serves zero buckets for an empty log', async () => {
     const { ctx, session } = await harness()
@@ -182,6 +195,29 @@ describe('tokenUsage session projection', () => {
       outputTokens: 15,
       cacheReadTokens: 2,
       cacheWriteTokens: 4,
+    })
+  })
+
+  it('includes compaction calls without double-counting the next assistant step', async () => {
+    const { ctx, session } = await harness()
+    startStep(session, 1, 1)
+    const first = usageChunk(session, { inputTokens: 10, outputTokens: 3 }, 1, 1)
+    finalUsage(session, { inputTokens: 10, outputTokens: 3 }, 1, 1, [first])
+    appendSummaryUsage(session, {
+      inputTokens: 20,
+      outputTokens: 4,
+      cacheReadTokens: 5,
+      cacheWriteTokens: 2,
+    })
+    startStep(session, 2, 1)
+    const second = usageChunk(session, { inputTokens: 7, outputTokens: 2 }, 2, 1)
+    finalUsage(session, { inputTokens: 7, outputTokens: 2 }, 2, 1, [second])
+
+    expect(projected(ctx, session)).toEqual({
+      uncachedInputTokens: 37,
+      outputTokens: 9,
+      cacheReadTokens: 5,
+      cacheWriteTokens: 2,
     })
   })
 

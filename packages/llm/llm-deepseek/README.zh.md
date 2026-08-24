@@ -30,7 +30,7 @@ harness LLM（大语言模型）seam 的 DeepSeek chat-completions 适配器：�
     fileExpiresAfterSeconds: 604800   # uploaded image lifetime; 1 hour to 30 days
     fileRefreshMarginSeconds: 3600    # replace ids with less lifetime remaining
     fileQuotaCleanupBatch: 100        # oldest harness-owned files deleted before one quota retry
-    retryPolicy:             # optional; omission uses normal mode with five retries
+    retryPolicy:             # optional; omission uses normal mode with two retries
       mode: always           # normal | always
       backoff:
         initialDelayMs: 500
@@ -50,7 +50,7 @@ harness LLM（大语言模型）seam 的 DeepSeek chat-completions 适配器：�
         contextWindow: 512000
 ```
 
-该插件注册唯一提供方路由 `deepseek-official`，并一同注册解析后的 `retryPolicy`；省略时会解析为 normal 模式并重试五次。请求使用 `provider: deepseek-official` 选择该路由；其 `model` 会作为协议 `model` 字符串原样传递，因此更改 DeepSeek 模型不需要生命周期时注册。省略 `models` 会公布 `deepseek-v4-flash`、`deepseek-v4-pro` 与支持图片输入的 `deepseek-v4-flash-vision-exp`，三者的上下文窗口均为 1,000,000 token；显式列表会替换这些默认值，`models: []` 则不公布任何模型。Catalog 配置项通过 `ctx.llm.listModels('deepseek-official')` 公开给 ACP（Agent Client Protocol）编辑器和 Web 选择器等客户端，但仍只提供建议：未列出模型 id 仍原样传递，并按纯文本路由处理。省略配置项 name 默认为其 id，省略 `inputModalities` 则表示仅支持 `text`。
+该插件注册唯一提供方路由 `deepseek-official`，并一同注册解析后的 `retryPolicy`；省略时会解析为 normal 模式并重试两次。请求使用 `provider: deepseek-official` 选择该路由；其 `model` 会作为协议 `model` 字符串原样传递，因此更改 DeepSeek 模型不需要生命周期时注册。省略 `models` 会公布 `deepseek-v4-flash`、`deepseek-v4-pro` 与支持图片输入的 `deepseek-v4-flash-vision-exp`，三者的上下文窗口均为 1,000,000 token；显式列表会替换这些默认值，`models: []` 则不公布任何模型。Catalog 配置项通过 `ctx.llm.listModels('deepseek-official')` 公开给 ACP（Agent Client Protocol）编辑器和 Web 选择器等客户端，但仍只提供建议：未列出模型 id 仍原样传递，并按纯文本路由处理。省略配置项 name 默认为其 id，省略 `inputModalities` 则表示仅支持 `text`。
 
 支持图片的 catalog 配置项声明 `inputModalities: [text, image]`，并可设置 `imagePixelBudget`、`imageMaxBytes` 或 `imageDetail: low`。普通默认值为总像素 640,000、编码字节 1MiB；low detail 的默认总像素为 512×512。附件存储按 `min(1, sqrt(pixelBudget / (width * height)))` 缩放，并向预算内取整，确保总像素不超过硬上限。因此 2048×1024 规范化附件会得到约 1130×565 的请求版本，而不会被强制变成正方形。请求编码按需执行：低色数图片先尝试 PNG，只有不带 alpha 通道时才使用 palette，再尝试质量 85 和 80 的 WebP；其他透明图片依次尝试质量 85 和 80 的 WebP；其他非透明图片依次尝试质量 85 和 80 的 JPEG。两个质量档均超过 1MiB 时才缩小尺寸。同一 `variantId` 的并发生成共享一次变换。调用方可以单独取消等待，不会中断其他等待方；没有等待方时才会停止变换。适配器通常通过 `POST /files` 上传确切的派生请求字节，再发送 `{type: "file", file_id}` 块。File ID 解析失败或超时后，适配器会用相同请求版本的 base64 data URL 重新组装整个 chat 请求；同一请求不会混用 file ID 和内联图片。每张保留图片前都有稳定文本，写明完整附件 ID 和实际请求尺寸。User、工具结果、agent loop、压缩和直接 `ctx.llm.stream` 请求都使用该投影。纯文本路由会收到稳定的附件占位文本，持久历史继续保留图片引用。
 

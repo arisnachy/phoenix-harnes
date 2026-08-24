@@ -135,19 +135,19 @@ function createWorkflowRecorder(ctx: Context): WorkflowRecorder {
  * model-facing spec: the meta block, the hooks and their exact semantics, and
  * the supported schema subset.
  */
-const DESCRIPTION = `Run a JavaScript workflow script that orchestrates subagents at scale. Use this for work that fans out across many independent pieces — an audit over many files, a migration, multi-angle research, adversarial verification of findings — where you write the orchestration as a script instead of delegating turn by turn.
+const DESCRIPTION = `Ejecuta un script JavaScript para orquestar subagentes de forma controlada. Úsalo cuando existan piezas independientes reales —auditoría por archivos, migración, investigación con varios ángulos o verificación adversarial— y la coordinación como script aporte valor.
 
-The workflow's identity rides the \`meta\` parameter as JSON: required \`name\` (short kebab-case) and \`description\` strings, optional \`whenToUse\` string and \`phases\` array (\`{title, detail?, provider?, model?}\`). The \`script\` parameter is the plain JavaScript body ONLY (NOT TypeScript, and NO \`export const meta\` statement — meta is a parameter, not code), running with top-level await; end with \`return <value>\` — the value must be JSON-serializable and is this tool's result.
+La identidad de la orquestación viaja en \`meta\` como JSON: exige \`name\` y \`description\`, y admite \`whenToUse\` y \`phases\`. \`script\` es únicamente JavaScript plano (no TypeScript ni \`export const meta\`); usa \`await\` de nivel superior y termina con \`return <value>\`. El valor debe ser serializable como JSON.
 
-Script-body hooks:
-- \`agent(prompt, opts?): Promise<any>\` — run one subagent to completion. Without \`opts.schema\` it resolves to the child's final text; with \`opts.schema\` (an object-rooted JSON Schema using ONLY type/properties/required/additionalProperties/items/enum/const/oneOf — no pattern/format/numeric bounds) it resolves to the validated object. Resolves \`null\` when the child fails (filter with \`.filter(Boolean)\`). Other opts: \`label\` (display), \`phase\` (progress group), and independent \`provider\`/\`model\` LLM target overrides (either may be provided alone). Anything else (\`effort\`/\`isolation\`/\`agentType\`) is rejected loudly.
-- \`pipeline(items, ...stages): Promise<any[]>\` — run each item through the stages independently with NO barrier between stages (prefer this for multi-stage work). Each stage receives \`(prev, item, index)\`. An ordinary stage throw drops that ITEM to \`null\` and skips its remaining stages.
-- \`parallel(thunks): Promise<any[]>\` — run zero-argument functions concurrently and await ALL of them (a barrier; use only when a stage genuinely needs every prior result together). A throwing thunk resolves to \`null\`.
-- \`phase(title)\` — start a progress phase; \`log(message)\` — narrate progress; \`args\` — the tool call's \`args\` input, verbatim.
+Funciones disponibles en el script:
+- \`agent(prompt, opts?): Promise<any>\` — ejecuta un subagente hasta completar. Sin \`opts.schema\` devuelve el texto final del hijo; con \`opts.schema\` (un esquema JSON raíz de objeto que solo usa type/properties/required/additionalProperties/items/enum/const/oneOf, sin pattern/format ni límites numéricos) devuelve el objeto validado. Devuelve \`null\` si falla el hijo (filtra con \`.filter(Boolean)\`). Otras opciones: \`label\` (etiqueta), \`phase\` (grupo de progreso) y sobrescrituras independientes de \`provider\`/\`model\`; cualquier otra opción (\`effort\`/\`isolation\`/\`agentType\`) se rechaza explícitamente.
+- \`pipeline(items, ...stages): Promise<any[]>\` — procesa cada elemento en todas las etapas de forma independiente y SIN barrera entre etapas (preferible para trabajos de varias etapas). Cada etapa recibe \`(prev, item, index)\`. si una etapa lanza un error, ese ELEMENTO pasa a \`null\` y se omiten sus etapas restantes.
+- \`parallel(thunks): Promise<any[]>\` — ejecuta funciones sin argumentos en paralelo y espera a TODAS (una barrera; úsala solo cuando una etapa necesite realmente todos los resultados previos). Si una función falla, devuelve \`null\`.
+- \`phase(title)\` — inicia una fase de progreso; \`log(message)\` — narra el progreso; \`args\` — recibe literalmente los argumentos de la llamada.
 
-Misused hooks (bad arguments, unknown options, unsupported schemas, tripped caps) throw errors that ALWAYS kill the script — they never dissolve into a per-item \`null\`.
+Las funciones mal usadas (argumentos inválidos, opciones desconocidas, esquemas no compatibles o límites superados) lanzan errores que SIEMPRE detienen el script; nunca se convierten en \`null\` por elemento.
 
-Constraints: concurrency and total-agent caps apply; no filesystem, network, timers, or Node.js APIs are provided — the agents do the work, the script only coordinates them. The run executes in the foreground: this call returns when the whole script finishes.`
+Límites: se aplican topes de concurrencia y de agentes totales; no hay acceso a sistema de archivos, red, temporizadores ni APIs de Node.js. Los agentes hacen el trabajo y el script solo coordina. La ejecución es en primer plano y esta llamada termina cuando concluye el script.`
 
 type WorkflowCallArgs = {
   script: string
@@ -164,7 +164,7 @@ type WorkflowCallArgs = {
 function presentWorkflowCall(args: WorkflowCallArgs): ToolCallView {
   return {
     card: 'generic',
-    title: `workflow: ${args.meta.name}`,
+    title: `orquestación: ${args.meta.name}`,
     rawInput: args.script,
   }
 }
@@ -182,12 +182,12 @@ function stopReasonError(result: WorkflowResult): string | undefined {
     case 'completed':
       return undefined
     case 'cancelled':
-      return `workflow run was cancelled${result.error !== undefined ? ` (${result.error})` : ''}`
+      return `la orquestación fue cancelada${result.error !== undefined ? ` (${result.error})` : ''}`
     case 'error':
-      return `workflow run failed: ${result.error ?? 'unknown error'}`
+      return `la orquestación falló: ${result.error ?? 'error desconocido'}`
     /* v8 ignore start -- defensive: WorkflowStopReason is a closed union, exhaustive by construction; a future variant fails here loudly */
     default:
-      return `workflow run ended abnormally (${String(result.stopReason satisfies never)})`
+      return `la orquestación terminó de forma anómala (${String(result.stopReason satisfies never)})`
     /* v8 ignore stop */
   }
 }
@@ -199,7 +199,7 @@ function renderResult(name: string, agentsStarted: number, value: JsonValue, max
   const clipped = rendered.length > maxChars
     ? `${rendered.slice(0, maxChars)}\n… [truncated: ${rendered.length - maxChars} more characters]`
     : rendered
-  return `workflow "${name}" completed (${agentsStarted} agent${agentsStarted === 1 ? '' : 's'}).\nReturn value:\n${clipped}`
+  return `ORQUESTACIÓN "${name}" completada (${agentsStarted} ${agentsStarted === 1 ? 'subagente' : 'subagentes'}).\nRESULTADO:\n${clipped}`
 }
 
 export function apply(ctx: Context, config: Config): void {
@@ -212,7 +212,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.section({
     name: `tool:${toolName}`,
     order: 115,
-    text: `Use the ${toolName} tool ONLY when the user explicitly asks for a workflow or for large multi-agent orchestration: you write a JavaScript script (the tool description documents the exact format) that fans work out across many subagents with phases and structured results. For one or two delegations, prefer plain subagent calls.`,
+    text: `Usa ${toolName} SOLO cuando la persona pida explícitamente un workflow o una orquestación grande: escribe un script JavaScript con fases y resultados estructurados. Respeta el límite de 2 subagentes concurrentes y 2 totales. Para una o dos delegaciones, usa llamadas directas seriales. Antes de delegar muestra ORQUESTACION; después resume RESULTADO y EVIDENCIA en español.`,
   })
   ctx.tools.register(defineTool({
     name: toolName,

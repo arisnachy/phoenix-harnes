@@ -501,7 +501,7 @@
     },
     {
       "name": "subagent",
-      "description": "Delegate a self-contained task to a subagent (a separate agent that works in its own context) to offload focused, independent work — research, a scoped implementation, an analysis — so it does not consume this conversation's context. The subagent returns its result, not its intermediate steps. Give it a complete, standalone prompt: it does not see this conversation. This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result.",
+      "description": "Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -511,7 +511,7 @@
           },
           "prompt": {
             "type": "string",
-            "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs."
+            "description": "Describe en español la tarea autónoma del subagente, con archivos relevantes, límites y evidencia esperada. Devuelve solo el resultado verificable."
           },
           "run_in_background": {
             "type": "boolean",
@@ -526,7 +526,7 @@
     },
     {
       "name": "subagent_fork",
-      "description": "Delegate a task to a subagent that inherits this conversation: a child agent seeded with all completed turns so far (it does not see the current in-flight turn). Use this when the subtask builds on this conversation's context — a follow-up analysis, a review, a continuation — without consuming this conversation's context for the work itself. You receive its result, not its intermediate steps. This call waits for the subagent and returns its result.",
+      "description": "Orquestar una tarea con un subagente que hereda esta conversación: recibe los turnos completados hasta ahora, pero no el turno actual en curso. Úsalo cuando la tarea dependa del contexto existente y pueda ejecutarse de forma independiente. Recibes su resultado, no sus pensamientos internos. This call waits for the subagent and returns its result.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -536,7 +536,7 @@
           },
           "prompt": {
             "type": "string",
-            "description": "The task for the subagent. It already sees this conversation's completed turns, so build on them freely and state only what is new."
+            "description": "Describe la tarea concreta para el subagente. Ya conoce los turnos completados; indica solo lo nuevo que debe investigar, construir o verificar y responde en español."
           }
         },
         "required": [
@@ -631,7 +631,7 @@
     },
     {
       "name": "workflow",
-      "description": "Run a JavaScript workflow script that orchestrates subagents at scale. Use this for work that fans out across many independent pieces — an audit over many files, a migration, multi-angle research, adversarial verification of findings — where you write the orchestration as a script instead of delegating turn by turn.\n\nThe workflow's identity rides the `meta` parameter as JSON: required `name` (short kebab-case) and `description` strings, optional `whenToUse` string and `phases` array (`{title, detail?, provider?, model?}`). The `script` parameter is the plain JavaScript body ONLY (NOT TypeScript, and NO `export const meta` statement — meta is a parameter, not code), running with top-level await; end with `return <value>` — the value must be JSON-serializable and is this tool's result.\n\nScript-body hooks:\n- `agent(prompt, opts?): Promise<any>` — run one subagent to completion. Without `opts.schema` it resolves to the child's final text; with `opts.schema` (an object-rooted JSON Schema using ONLY type/properties/required/additionalProperties/items/enum/const/oneOf — no pattern/format/numeric bounds) it resolves to the validated object. Resolves `null` when the child fails (filter with `.filter(Boolean)`). Other opts: `label` (display), `phase` (progress group), and independent `provider`/`model` LLM target overrides (either may be provided alone). Anything else (`effort`/`isolation`/`agentType`) is rejected loudly.\n- `pipeline(items, ...stages): Promise<any[]>` — run each item through the stages independently with NO barrier between stages (prefer this for multi-stage work). Each stage receives `(prev, item, index)`. An ordinary stage throw drops that ITEM to `null` and skips its remaining stages.\n- `parallel(thunks): Promise<any[]>` — run zero-argument functions concurrently and await ALL of them (a barrier; use only when a stage genuinely needs every prior result together). A throwing thunk resolves to `null`.\n- `phase(title)` — start a progress phase; `log(message)` — narrate progress; `args` — the tool call's `args` input, verbatim.\n\nMisused hooks (bad arguments, unknown options, unsupported schemas, tripped caps) throw errors that ALWAYS kill the script — they never dissolve into a per-item `null`.\n\nConstraints: concurrency and total-agent caps apply; no filesystem, network, timers, or Node.js APIs are provided — the agents do the work, the script only coordinates them. The run executes in the foreground: this call returns when the whole script finishes.",
+      "description": "Ejecuta un script JavaScript para orquestar subagentes de forma controlada. Úsalo cuando existan piezas independientes reales —auditoría por archivos, migración, investigación con varios ángulos o verificación adversarial— y la coordinación como script aporte valor.\n\nLa identidad de la orquestación viaja en `meta` como JSON: exige `name` y `description`, y admite `whenToUse` y `phases`. `script` es únicamente JavaScript plano (no TypeScript ni `export const meta`); usa `await` de nivel superior y termina con `return <value>`. El valor debe ser serializable como JSON.\n\nFunciones disponibles en el script:\n- `agent(prompt, opts?): Promise<any>` — ejecuta un subagente hasta completar. Sin `opts.schema` devuelve el texto final del hijo; con `opts.schema` (un esquema JSON raíz de objeto que solo usa type/properties/required/additionalProperties/items/enum/const/oneOf, sin pattern/format ni límites numéricos) devuelve el objeto validado. Devuelve `null` si falla el hijo (filtra con `.filter(Boolean)`). Otras opciones: `label` (etiqueta), `phase` (grupo de progreso) y sobrescrituras independientes de `provider`/`model`; cualquier otra opción (`effort`/`isolation`/`agentType`) se rechaza explícitamente.\n- `pipeline(items, ...stages): Promise<any[]>` — procesa cada elemento en todas las etapas de forma independiente y SIN barrera entre etapas (preferible para trabajos de varias etapas). Cada etapa recibe `(prev, item, index)`. si una etapa lanza un error, ese ELEMENTO pasa a `null` y se omiten sus etapas restantes.\n- `parallel(thunks): Promise<any[]>` — ejecuta funciones sin argumentos en paralelo y espera a TODAS (una barrera; úsala solo cuando una etapa necesite realmente todos los resultados previos). Si una función falla, devuelve `null`.\n- `phase(title)` — inicia una fase de progreso; `log(message)` — narra el progreso; `args` — recibe literalmente los argumentos de la llamada.\n\nLas funciones mal usadas (argumentos inválidos, opciones desconocidas, esquemas no compatibles o límites superados) lanzan errores que SIEMPRE detienen el script; nunca se convierten en `null` por elemento.\n\nLímites: se aplican topes de concurrencia y de agentes totales; no hay acceso a sistema de archivos, red, temporizadores ni APIs de Node.js. Los agentes hacen el trabajo y el script solo coordina. La ejecución es en primer plano y esta llamada termina cuando concluye el script.",
       "parameters": {
         "type": "object",
         "properties": {

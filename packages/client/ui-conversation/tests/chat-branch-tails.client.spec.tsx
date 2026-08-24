@@ -664,7 +664,10 @@ describe('MessageItem arms', () => {
       } as never}
       />,
     )
-    fireEvent.click(view.getByRole('button', { name: /^上下文注入\s*@deepseek-ai\/dsh-system-prompt$/ }))
+    // Internal package producers mask as system-internal; hover keeps the raw name.
+    fireEvent.click(view.getByRole('button', { name: /^上下文注入\s*系统内部组件$/ }))
+    expect(view.container.querySelector('[data-context-source]')?.getAttribute('title'))
+      .toBe('@deepseek-ai/dsh-system-prompt')
     const rows = [...view.container.querySelectorAll('[data-context-sections] div')].map(node => node.textContent)
     expect(rows).toEqual(['sandbox:policyworkspace-write', 'workspace/repo'])
   })
@@ -1010,7 +1013,7 @@ describe('useCalendarDay boundary refresh', () => {
 })
 
 describe('small branch tails', () => {
-  it('AssistantMarkdown single-line reasoning summary skips the newline cut', () => {
+  it('AssistantMarkdown hides single-line internal reasoning behind localized status', () => {
     const view = render(
       <AssistantMarkdown
         t={t}
@@ -1019,7 +1022,8 @@ describe('small branch tails', () => {
         renderMessageImages={renderMessageImages}
       />,
     )
-    expect(view.getByText('one-liner')).toBeTruthy()
+    expect(view.getByText(zh['reasoning.hidden'])).toBeTruthy()
+    expect(view.queryByText('one-liner')).toBeNull()
   })
 
   it('StatsLine omits the cache-hit segment when no input accounting exists at all', () => {

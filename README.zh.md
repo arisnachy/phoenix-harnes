@@ -18,6 +18,20 @@ PHOENIX 正在积极开发。仓库展示、Web UI、PWA 元数据、浏览器�
 
 ## Run
 
+### Windows 单行安装
+
+打开 PowerShell 并执行：
+
+```powershell
+irm https://raw.githubusercontent.com/arisnachy/phoenix-harnes/main/install-phoenix.ps1 | iex
+```
+
+该引导程序会通过 `winget` 安装缺失的 Node.js/Git，克隆或快进专用 PHOENIX 安装目录，执行不可变依赖安装与构建，并创建 **PHOENIX HARDNESS** 开始菜单快捷方式。受管安装会在启动时检查 `origin/main`，并且只在工作区干净时应用快进更新；设置 `PHOENIX_AUTO_UPDATE=0` 可以禁用该检查。本地修改会被保留而不是覆盖。此脚本不是已签名的 MSIX；在配置项目证书之前，代码签名仍是发布 gate。
+
+### VS Code 与 Cursor
+
+使用 `pnpm --dir apps/vscode run package:vsix` 构建可安装扩展，然后在**扩展 → 从 VSIX 安装**中安装 `dist/phoenix-hardness-vscode.vsix`。其 Explorer 面板可以启动本地 PHOENIX 运行时并打开 Web UI，而且不会读取模型凭据。
+
 ### Run from source
 
 安装 Node.js 22.19 或更高版本，然后执行：
@@ -51,6 +65,8 @@ PHOENIX 的反馈、缺陷、设计讨论和支持请使用本仓库的 [Issues]
 ## 开发
 
 请先阅读[开发指南](docs/development.zh.md)与[架构文档](docs/architecture.zh.md)。PHOENIX 能力会通过分阶段、独立验证的 branch 与 pull request 集成，使稳定基础始终保持可审计。
+
+Windows 安装、IDE 打包、原生 sandbox 边界与 continuity 状态参见 [Windows 上的 PHOENIX](docs/phoenix-windows.zh.md)。
 
 面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
 

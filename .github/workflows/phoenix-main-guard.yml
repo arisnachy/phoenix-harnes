@@ -1,0 +1,48 @@
+name: PHOENIX main guard
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phoenix-main-guard-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compiled-main:
+    name: main exact SHA / typecheck and build
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      DSH_GATE_CONCURRENCY: '1'
+      DSH_PUBLINT_CONCURRENCY: '2'
+      DSH_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+      - name: Prove host and client contracts
+        shell: pwsh
+        run: pnpm run typecheck
+      - name: Build the exact main SHA
+        shell: pwsh
+        run: pnpm run build
+      - name: Verify native Windows inventory
+        shell: pwsh
+        run: pnpm run check:ci:windows-blocking

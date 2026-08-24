@@ -27,6 +27,7 @@
  */
 
 import { createModels, getSupportedThinkingLevels } from '@earendil-works/pi-ai'
+import { openAIResponsesApi } from '@earendil-works/pi-ai/api/openai-responses.lazy'
 import type {
   Api,
   AuthContext,
@@ -58,6 +59,7 @@ import type {
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
+import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
 import { toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 
@@ -338,6 +340,32 @@ export class PiAiAdapter extends LlmAdapter {
       options.reasoningEffort ?? profile.reasoning,
     )
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
+    // One credential-shape repair: pi-ai's ChatGPT Codex backend authenticates
+    // only with its OAuth access JWT (`Failed to extract accountId from
+    // token` otherwise), so a resolved platform key serves the same model id
+    // over the standard OpenAI Responses protocol instead of dying inside wire
+    // code. An explicitly configured route endpoint stays honored.
+    const platformKeyFallback = apiKey !== undefined
+      && !isChatGptAccessJwt(apiKey)
+      && model.api === 'openai-codex-responses'
+    // The other half of the same repair: a credential that has the JWT shape
+    // but no ChatGPT account claim passes the fallback check above and still
+    // dies inside pi-ai's wire before any request (`Failed to extract
+    // accountId from token`). Failing here says what the route needs instead.
+    if (!platformKeyFallback && apiKey !== undefined
+      && model.api === 'openai-codex-responses'
+      && !isChatGptAccountJwt(apiKey)) {
+      throw new LlmError(
+        `pi-ai: provider "${options.provider}" needs a ChatGPT Codex sign-in — the Codex backend derives`
+        + ' the account from the token\'s chatgpt_account_id claim and this credential has none.'
+        + ' Sign in on the OpenAI Codex card (Models page); a platform sk-… key serves these models'
+        + ' through the OpenAI Responses protocol only when it is stored as that card\'s API key',
+        'AUTH',
+      )
+    }
+    const wireModel = platformKeyFallback
+      ? codexPlatformFallbackModel(model, profile.baseURL)
+      : model
 
     const consumer = new AbortController()
     const upstream = options.signal === undefined
@@ -364,7 +392,7 @@ export class PiAiAdapter extends LlmAdapter {
           maxPixels: profile.requestImagePixelBudget,
           maxBytes: profile.requestImageMaxBytes,
         })
-      const events = snapshot.models.streamSimple(model, context, {
+      const streamOptions: SimpleStreamOptions = {
         ...profileOptions(profile, reasoning, apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
@@ -373,7 +401,13 @@ export class PiAiAdapter extends LlmAdapter {
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
         headers: requestHeaders(profile.headers),
-      })
+      }
+      const events = platformKeyFallback
+        // The collection dispatches the codex route to the Codex wire no
+        // matter what a model object says, so the fallback calls the platform
+        // Responses implementation directly.
+        ? openAIResponsesApi().streamSimple(wireModel, context, streamOptions)
+        : snapshot.models.streamSimple(model, context, streamOptions)
       const iterator = toStreamChunks(events, model.contextWindow)[Symbol.asyncIterator]()
       let exhausted = false
       try {
@@ -403,6 +437,19 @@ export class PiAiAdapter extends LlmAdapter {
       }
       if (options.signal?.aborted) {
         throw new LlmError('pi-ai request aborted by caller', 'ABORTED', { cause: error })
+      }
+      // Defensive twin of the pre-flight above: a credential that reaches
+      // pi-ai's own resolution and still lacks the account claim dies there
+      // with an opaque wire error; translate it once, at the seam.
+      const message = error instanceof Error ? error.message : String(error)
+      if (message.includes('Failed to extract accountId from token')) {
+        throw new LlmError(
+          `pi-ai: provider "${options.provider}" needs a ChatGPT Codex sign-in — its backend could not`
+          + ' find a ChatGPT account in the credential that reached it. Sign in on the OpenAI Codex'
+          + ' card (Models page) and retry',
+          'AUTH',
+          { cause: error },
+        )
       }
       throw error
     } finally {

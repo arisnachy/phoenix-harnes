@@ -163,6 +163,8 @@ interface AgentOptions {
   model?: string
   /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number
+  /** Explicit adapter reasoning level for this Agent's requests. */
+  reasoningEffort?: ReasoningEffortId
 }
 ```
 

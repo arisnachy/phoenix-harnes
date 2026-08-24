@@ -12,9 +12,14 @@ Scoped model-facing adapter for [`ctx.agentTeams`](../agent-team/README.md). It 
   config:
     freshProvider: spawn
     forkProvider: fork
+    modelProfiles:
+      fast: { provider: openrouter, model: openrouter/free }
+      judge: { provider: anthropic, model: claude-sonnet-4 }
 ```
 
-`freshProvider` and `forkProvider` select registered continuable-subagent providers. The fixed model policy creates teammates only when the user explicitly asks for Agent Teams or teammates.
+`freshProvider` and `forkProvider` select registered continuable-subagent transports. `modelProfiles` is an optional allowlist of LLM routes; when present, `spawn_teammate.model_profile` selects one route, while omission inherits the Lead route. Provider ids and model ids are ordinary configured harness routes, not OpenAI-specific role names.
+
+The Team policy calls a JUDGE cognitively independent only when its reported `modelProvider` or `model` differs from the Lead. A fresh child on the same route is operationally independent but remains correlated and must be reported as such.
 
 ## Tools and authority
 
@@ -46,4 +51,4 @@ Prefix-stable while the Team plugin generation, configuration, member role/name,
 
 - **Prompt policy is coordination, not confinement** — it cannot stop Bash or external processes from writing overlapping files.
 - **No autonomous team creation** — ordinary tasks do not trigger delegation unless the user explicitly requests it.
-- **No Web controls** — browser roster and task-board presentation is outside this runtime package.
+- **No Web controls** — browser roster, model-profile editing, and task-board presentation are outside this runtime package.

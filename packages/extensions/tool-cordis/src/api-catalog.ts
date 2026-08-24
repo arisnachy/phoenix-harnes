@@ -2200,6 +2200,43 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'userProfile',
+    summary: 'Owns the local profile settings section and the consent-filtered prompt context.',
+    description: 'Owns the local profile settings section and the consent-filtered prompt context. The service exposes no telemetry or logging path; profile data reaches a model only through an explicit per-field consent flag.',
+    methods: [
+      {
+        signature: 'get(): UserProfileView',
+        description: 'Return a detached local view; no derived age is persisted.',
+        parameters: [],
+        returns: 'a detached local view of profile values, consent, and presence metadata.',
+      },
+      {
+        signature: 'async update(patch: UserProfileUpdate): Promise<UserProfileView>',
+        description: 'Merge and persist a validated partial update.',
+        parameters: [{ name: 'patch', description: 'changed fields; null clears an optional field.' }],
+        returns: 'the accepted detached view.',
+      },
+      {
+        signature: 'async clear(): Promise<UserProfileView>',
+        description: 'Clear every user-owned profile field and reset consent to false.',
+        parameters: [],
+        returns: 'the cleared detached view.',
+      },
+      {
+        signature: 'getRedacted(): UserProfileRedacted',
+        description: 'Return presence-only metadata and consent flags, without profile values.',
+        parameters: [],
+        returns: 'metadata that reports field presence and current consent flags.',
+      },
+      {
+        signature: 'getConsented(): UserProfileConsented',
+        description: 'Return only fields whose current consent flag is true.',
+        parameters: [],
+        returns: 'a detached projection safe to include in model context.',
+      },
+    ],
+  },
+  {
     key: 'userQuestions',
     summary: '`ctx.userQuestions`: one active UI provider plus an `ask()` API.',
     description: '`ctx.userQuestions`: one active UI provider plus an `ask()` API.',
@@ -2863,7 +2900,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentOptions',
-    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    maxTokens?: number;\n}',
+    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    maxTokens?: number;\n    reasoningEffort?: ReasoningEffortId;\n}',
   },
   {
     name: 'AgentPreset',
@@ -4423,7 +4460,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SpawnTeammateRequest',
-    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly agentOptions?: AgentOptions;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SpawnTeammateResult',
@@ -4619,7 +4656,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TeamMemberView',
-    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly model?: string;\n    readonly diagnostics: string[];\n}',
+    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly modelProvider?: string;\n    readonly model?: string;\n    readonly diagnostics: string[];\n}',
   },
   {
     name: 'TeamMessageId',
@@ -4932,6 +4969,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UserMessage',
     declaration: 'export interface UserMessage extends Message {\n    readonly role: \'user\';\n}',
+  },
+  {
+    name: 'UserProfileConsented',
+    declaration: 'export interface UserProfileConsented {\n    preferredName?: string;\n    age?: number;\n    gender?: string;\n    pronouns?: string;\n    tone?: string;\n    family?: UserProfileFamilyMember[];\n}',
+  },
+  {
+    name: 'UserProfileRedacted',
+    declaration: 'export interface UserProfileRedacted {\n    hasPreferredName: boolean;\n    hasDateOfBirth: boolean;\n    hasGender: boolean;\n    hasPronouns: boolean;\n    hasTone: boolean;\n    familyCount: number;\n    consent: UserProfileConsent;\n}',
+  },
+  {
+    name: 'UserProfileUpdate',
+    declaration: 'export interface UserProfileUpdate {\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
+  },
+  {
+    name: 'UserProfileView',
+    declaration: 'export interface UserProfileView {\n    profile: UserProfileSettings;\n    redacted: UserProfileRedacted;\n    consented: UserProfileConsented;\n}',
   },
   {
     name: 'UserQuestionProvider',

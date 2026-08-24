@@ -20,12 +20,32 @@
   /* 525px cap inside the 736 column; percentage keeps narrow windows sane. */
   max-width: 100%;
   background: var(--dsw-specific-bubble);
+  /* The Markdown code fence below can scroll inside this elevated bubble;
+     bind its inherited scrollbar pair to the matching l2 elevation. */
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
   border-radius: 22px;
   /* 44px single-line bubble: 24 line + 10 vertical padding each side. */
   padding: 10px 16px;
   font-size: 16px;
   line-height: 24px;
   color: var(--dsw-alias-label-primary);
+}
+/* Formatted user messages: the shared MarkdownText document lives inside the
+   narrower right-aligned bubble — keep long tokens wrapping and fences
+   scrolling instead of stretching the bubble past its cap. */
+.bubble :global(.markdown) {
+  overflow-wrap: anywhere;
+}
+.bubble :global(.markdown) pre {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.bubble :global(.markdown) > :first-child {
+  margin-top: 0;
+}
+.bubble :global(.markdown) > :last-child {
+  margin-bottom: 0;
 }
 
 .referenceSummary {

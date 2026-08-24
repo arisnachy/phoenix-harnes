@@ -45,7 +45,7 @@ export class BootPage {
     this.root.dataset.dshBoot = ''
     this.card = div(css.card)
     this.emblem = phoenixEmblem(css.emblem)
-    this.wordmark = div(css.wordmark, 'PHOENIX HARNESS')
+    this.wordmark = div(css.wordmark, 'PHOENIX HARDNESS')
     this.spinner = div(css.spinner)
     this.spinner.dataset.dshBootSpinner = ''
     this.hint = div(css.hint, 'Loading plugins…')

@@ -148,6 +148,16 @@ describe('dsh-tool-subagent', () => {
     })).toEqual({ kind: 'parallel' })
   })
 
+  it('serializes direct delegation when allowParallel is false', async () => {
+    const ctx = await setup({ provider: 'mock', allowParallel: false })
+    expect(ctx.tools.executionMode({
+      signal: testToolSignal,
+      callId: CallId('subagent-serial'),
+      name: 'subagent',
+      arguments: { description: 'do work', prompt: 'Reply OK' },
+    })).toEqual({ kind: 'exclusive' })
+  })
+
   it('overlaps sibling foreground delegations dispatched concurrently', async () => {
     // Two children each block until both have started: hidden serialization
     // in the tool body, registry pipeline, or provider start path would
@@ -276,6 +286,46 @@ describe('dsh-tool-subagent', () => {
     expect(seen?.agentOptions).toEqual({ model: 'child-model' })
   })
 
+  it('routes OpenAI children to Luna high without changing a non-OpenAI parent route', async () => {
+    let seen: { agentOptions?: { provider?: string; model?: string; reasoningEffort?: string } } | undefined
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(SubagentRuntime)
+    ctx.subagents.registerProvider({
+      name: 'capture-route',
+      capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
+      inheritsParentContext: false,
+      start: async (request) => {
+        seen = request
+        return {
+          id: SessionId('capture-route-child'),
+          localAgent: undefined,
+          result: Promise.resolve({ output: [{ type: 'text', text: 'ok' }], stopReason: 'completed' as const }),
+          dispose: async () => {},
+        }
+      },
+    })
+    await ctx.plugin(tool, {
+      provider: 'capture-route',
+      childRoute: {
+        whenProvider: 'openai-codex',
+        provider: 'openai-codex',
+        model: 'gpt-5.6-luna',
+        reasoningEffort: 'high',
+      },
+      maxDepth: 'provider-managed',
+    })
+
+    const openAiParent = { ...fakeAgent(), options: { provider: 'openai-codex', model: 'gpt-5.4' } } as Agent
+    await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: openAiParent })
+    expect(seen?.agentOptions).toEqual({ provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'high' })
+
+    const otherParent = { ...fakeAgent('other-parent'), options: { provider: 'openrouter', model: 'ox-alpha' } } as Agent
+    await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: otherParent })
+    expect(seen?.agentOptions).toBeUndefined()
+  })
+
   it('defaults toolName and omits agentOptions when apply() is called directly (schema bypass)', async () => {
     // `ctx.plugin` validates+defaults config first (toolName→'subagent', the
     // agentOptions object→{}), so the runtime `?? 'subagent'` fallback and the
@@ -356,7 +406,7 @@ describe('dsh-tool-subagent', () => {
     await ctx.plugin(SubagentRuntime)
     const backend = await mock.mountScriptedProvider(ctx, { name: 'mock' }) // fresh conversation (descriptor: false)
     await ctx.plugin(tool, { provider: 'mock' })
-    expect(ctx.tools.schemas().find(s => s.name === 'subagent')!.description).toContain('does not see this conversation')
+    expect(ctx.tools.schemas().find(s => s.name === 'subagent')!.description).toContain('No recibe esta conversación')
 
     // Backend unloads (HMR shape): the tool must not outlive its provider.
     await backend.dispose()
@@ -365,7 +415,7 @@ describe('dsh-tool-subagent', () => {
     // Backend reloads with a DIFFERENT conversation-history descriptor: the wording is re-derived
     // from the fresh provider, not served stale from the first mount.
     await mock.mountScriptedProvider(ctx, { name: 'mock', inheritsParentContext: true })
-    expect(ctx.tools.schemas().find(s => s.name === 'subagent')!.description).toContain('inherits this conversation')
+    expect(ctx.tools.schemas().find(s => s.name === 'subagent')!.description).toContain('hereda esta conversación')
   })
 
   it('the tool PLUGIN fiber owns its lifecycle listeners: disposal unmounts, and a disposed fiber never zombie-mounts', async () => {
@@ -415,7 +465,7 @@ describe('dsh-tool-subagent', () => {
     // unregistering (removed-event with another name) must not touch the tool.
     const other = await mock.mountScriptedProvider(ctx, { name: 'other', inheritsParentContext: true })
     expect(ctx.tools.schemas().filter(s => s.name === 'subagent')).toHaveLength(1)
-    expect(ctx.tools.schemas().find(s => s.name === 'subagent')!.description).toContain('does not see this conversation')
+    expect(ctx.tools.schemas().find(s => s.name === 'subagent')!.description).toContain('No recibe esta conversación')
     await other.dispose()
     expect(ctx.tools.schemas().some(s => s.name === 'subagent')).toBe(true)
   })
@@ -423,18 +473,18 @@ describe('dsh-tool-subagent', () => {
   it('derives spawn-shaped wording from a fresh-conversation provider (default mock)', async () => {
     const ctx = await setup({ provider: 'mock' })
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')!
-    expect(schema.description).toContain('does not see this conversation')
+    expect(schema.description).toContain('No recibe esta conversación')
     const props = (schema.parameters as { properties: Record<string, { description: string }> }).properties
-    expect(props['prompt']!.description).toContain('include everything it needs')
+    expect(props['prompt']!.description).toContain('Describe en español la tarea autónoma')
   })
 
   it('derives inherited-context wording from a seeded-conversation provider', async () => {
     const ctx = await setup({ provider: 'mock', toolName: 'subagent' }, { inheritsParentContext: true })
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')!
-    expect(schema.description).toContain('inherits this conversation')
-    expect(schema.description).not.toContain('does not see this conversation')
+    expect(schema.description).toContain('hereda esta conversación')
+    expect(schema.description).not.toContain('No recibe esta conversación')
     const props = (schema.parameters as { properties: Record<string, { description: string }> }).properties
-    expect(props['prompt']!.description).toContain('completed turns')
+    expect(props['prompt']!.description).toContain('turnos completados')
   })
 
   it('disposes the run on the success path (no leaked child)', async () => {
@@ -834,7 +884,7 @@ describe('dsh-tool-subagent background mode', () => {
       agent: parent,
     })
 
-    expect(text(started)).toBe('started background subagent job subagent-1')
+    expect(text(started)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-1)')
     expect(prepareCalls).toBe(0)
   })
 
@@ -846,7 +896,7 @@ describe('dsh-tool-subagent background mode', () => {
     expect(start.isError).toBe(false)
     if (start.isError) throw new Error('expected background subagent success')
     expect(start.value).toEqual({ kind: 'background', jobId: 'subagent-1' })
-    expect(text(start)).toBe('started background subagent job subagent-1')
+    expect(text(start)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-1)')
 
     const collected = await ctx.tools.execute({
       signal: testToolSignal,
@@ -883,7 +933,7 @@ describe('dsh-tool-subagent background mode', () => {
       arguments: { description: 'd', prompt: 'p', run_in_background: true },
       agent: parent,
     })
-    expect(text(started)).toBe('started background subagent job subagent-1')
+    expect(text(started)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-1)')
 
     const output = await ctx.tools.execute({
       signal: testToolSignal,
@@ -937,7 +987,7 @@ describe('dsh-tool-subagent background mode', () => {
       arguments: { description: 'broken', prompt: 'p', run_in_background: true },
       agent: parent,
     })
-    expect(text(started)).toBe('started background subagent job subagent-1')
+    expect(text(started)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-1)')
     const output = await ctx.tools.execute({
       signal: testToolSignal,
       callId: CallId('broken-output'),
@@ -1058,8 +1108,8 @@ describe('dsh-tool-subagent background mode', () => {
 
     const startOne = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h1'), name: 'subagent_hang', arguments: { description: 'one', prompt: 'p', run_in_background: true }, agent: parent })
     const startTwo = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h2'), name: 'subagent_hang', arguments: { description: 'two', prompt: 'p', run_in_background: true }, agent: parent })
-    expect(text(startOne)).toBe('started background subagent job subagent-1')
-    expect(text(startTwo)).toBe('started background subagent job subagent-2')
+    expect(text(startOne)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-1)')
+    expect(text(startTwo)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-2)')
 
     const withReason = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('k1'), name: 'job_kill', arguments: { job_id: 'subagent-1', reason: 'superseded' }, agent: parent })
     const withoutReason = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('k2'), name: 'job_kill', arguments: { job_id: 'subagent-2' }, agent: parent })
@@ -1125,8 +1175,8 @@ describe('dsh-tool-subagent continuable background mode', () => {
     expect(properties.run_in_background?.description).toContain('Defaults to true')
     const assembly = await ctx.systemPrompt.assemble(assembleContextFor(parent))
     const guidance = assembly.sections.find(section => section.name === 'tool:subagent')
-    expect(guidance?.text).toContain('Use subagent in the background by default')
-    expect(guidance?.text).toContain('runtime sends you a notice containing its outcome')
+    expect(guidance?.text).toContain('Usa subagent para orquestar')
+    expect(guidance?.text).toContain('integra el resultado con evidencia')
 
     const started = await callSubagent(
       ctx,
@@ -1134,7 +1184,7 @@ describe('dsh-tool-subagent continuable background mode', () => {
       { agent: parent },
     )
     expect(started.isError).toBe(false)
-    const match = /^started subagent (\S+)$/.exec(text(started))
+    const match = /^Orquestación: subagente iniciado \(([^)]+)\)$/.exec(text(started))
     expect(match).not.toBeNull()
     const [, childId] = match!
     // No Task was created for the continuable child.

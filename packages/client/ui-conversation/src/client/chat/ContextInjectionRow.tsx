@@ -18,14 +18,19 @@ export interface ContextInjectionRowProps {
   t: ChatViewSlotProps['t']
 }
 
+/** Producer labels naming an internal package (`@scope/name`) present as system-internal. */
+const INTERNAL_PRODUCER = /^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._/-]*$/i
+
 /**
  * Render logged context with the Tool calls disclosure chrome from Figma.
  *
  * The header names the role the context plays and, beside it, the producer the
  * durable source identifies, so a reader can tell an injected skill catalog
  * from a workspace instruction file or a recalled session without expanding.
- * The expanded body follows the producer-declared form; an absent or unknown
- * form renders the opaque body.
+ * Internal package producers keep their identity out of the header — they show
+ * the localized system-internal label with the raw name on hover — while the
+ * expanded body follows the producer-declared form; an absent or unknown form
+ * renders the opaque body.
  * @param props - Durable content, its projected producer role/name and form, and the locale seat.
  * @returns A collapsed context row with a bounded, form-specific body.
  */
@@ -34,6 +39,8 @@ export function ContextInjectionRow({ content, source, provenance, form, t }: Co
   // Resolved rather than declared: a form whose fields are unreadable renders
   // the opaque body, and the marker must say what the row actually shows.
   const { rendered, summary, body } = contextBody(form, { content, source, t })
+  const masked = provenance.label !== null && INTERNAL_PRODUCER.test(provenance.label)
+  const producerLabel = masked ? t('message.contextInternal') : provenance.label
 
   return (
     <DisclosureRow
@@ -49,7 +56,7 @@ export function ContextInjectionRow({ content, source, provenance, form, t }: Co
            name shape. A source that names no producer drops the dot with it. */
         <>
           <span className={css.sep} aria-hidden />
-          <span className={css.source} data-context-source>{provenance.label}</span>
+          <span className={css.source} data-context-source title={provenance.label ?? undefined}>{producerLabel}</span>
           {summary !== null && (
             <>
               <span className={css.sep} aria-hidden />

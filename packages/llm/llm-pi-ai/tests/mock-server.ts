@@ -39,6 +39,11 @@ export async function mockServer(script: {
   let closedResponses = 0
   const responseClosed = Promise.withResolvers<undefined>()
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
+    // A provider wire that probes WebSocket streaming first (pi-ai's Codex
+    // dialect) gets its handshake destroyed, which is the same "no websocket
+    // here" signal the real internet gives and drives its documented SSE
+    // fallback instead of leaving the probe's socket open.
+    server.on('upgrade', (_upgradeRequest: IncomingMessage, socket) => { socket.destroy() })
     response.on('close', () => {
       closedResponses += 1
       responseClosed.resolve(undefined)
@@ -47,7 +52,17 @@ export async function mockServer(script: {
     request.on('data', (chunk: Buffer) => { body += chunk.toString('utf8') })
     request.on('end', () => {
       paths.push(request.url ?? '')
-      requests.push(body.length === 0 ? undefined : JSON.parse(body))
+      let parsed: unknown
+      if (body.length === 0) parsed = undefined
+      else {
+        try {
+          parsed = JSON.parse(body)
+        } catch {
+          // A pre-fallback probe (masked WebSocket frames) is not worth a run.
+          parsed = { binaryProbeBytes: Buffer.byteLength(body) }
+        }
+      }
+      requests.push(parsed)
       headers.push(request.headers)
       const behavior = script.shift() ?? { status: 500, body: 'script exhausted' }
       if (behavior.status !== undefined && behavior.status !== 200) {

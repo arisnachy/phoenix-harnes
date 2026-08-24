@@ -88,6 +88,8 @@ declare module '@deepseek-ai/cordis' {
 export interface Config {
   /** Maximum synchronous VM evaluation time in milliseconds. */
   vmTimeoutMs?: number
+  /** Require an explicit approval event before host-only dynamic code runs. */
+  requireHostApproval?: boolean
 }
 
 type ResolvedConfig = Required<Config>
@@ -126,6 +128,7 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
 
   static Config: z<Config> = z.object({
     vmTimeoutMs: z.number().min(1).default(5000),
+    requireHostApproval: z.boolean().default(true),
   })
 
   private readonly rootCtx: Context
@@ -237,7 +240,8 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
 
   /**
    * Start or update one Package for a model tool call. An unauthorized Client
-   * Package waits for approval; Plugin-wide authorization covers later versions.
+   * Package waits for approval; when configured, host-only Packages also wait
+   * for approval. Plugin-wide authorization covers later versions.
    * @param agent - Agent whose Session must own the Plugin.
    * @param pluginId - Stable Plugin identity to activate.
    * @param packageId - Immutable Package version to activate.
@@ -267,7 +271,7 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
     const attempt = this.createAttempt(plan)
     plan.plugin.nextPackageId = packageId
     plan.plugin.latestRun = attempt
-    if (plan.definition.clientCode === undefined) {
+    if (plan.definition.clientCode === undefined && !this.resolved.requireHostApproval) {
       const started = await this.activate(plan, undefined, false, attempt)
       if (started.ok) return this.runResponse(plan.plugin, started)
       this.failAttempt(plan.plugin, attempt, 'host-load', started)

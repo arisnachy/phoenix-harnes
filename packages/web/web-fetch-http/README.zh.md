@@ -21,6 +21,7 @@
 - 把调用方的中止信号（`WEB_ABORTED`）传播到网络请求与流式读取。
 - 只跟随**同源**重定向；跨源重定向以 `WEB_REDIRECT_BLOCKED` 失败，要求发起新的工具调用（沿用 Claude Code 的 WebFetch 模式）。
 - 发送显式的产品 `User-Agent`，绝不伪装成浏览器。
+- 在每次请求前解析主机名，并以 `WEB_BLOCKED_URL` 阻止 loopback、私有、link-local、multicast、保留和文档网络。
 - 不受支持的内容类型（例如二进制）以 `WEB_UNSUPPORTED_CONTENT_TYPE` 拒绝。
 
 ## 配置
@@ -33,6 +34,7 @@
 | `timeoutMs` | `30_000` | Node 定时器范围内的抓取超时：直接 `ctx.web.fetch()` 调用方的资源兜底，而非面向模型的工具调用预算（后者属于 `dsh-tool-call-timeout-policy`）。 |
 | `maxRedirects` | `5` | 同源重定向最大跳数（`0` 表示完全不跟随）。 |
 | `userAgent` | `deepseek-harness/…` | `User-Agent` 标头。 |
+| `allowPrivateNetworks` | `false` | 仅用于隔离的本地 fixture；不要为不受信任的请求启用。 |
 
 数值限制会在插件构造时验证：除 `maxRedirects` 外，每个上限都必须是正的有限数；`maxRedirects` 必须是非负整数。无效值会抛出异常，不会静默构造限制荒谬的提供方。
 
@@ -46,6 +48,6 @@
 
 ## 已知限制与暂缓事项
 
-- **SSRF／私有网络防护暂缓**：不会阻止私有、loopback、link-local、multicast 或其他非公开目标，也不进行 DNS 解析后验证或逐跳重新验证（见 [web 能力 seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.zh.md)）。在此功能落地前，该提供方是 SSRF 原语；能够访问敏感内部网络目标的部署**禁止启用它**。
+- **DNS rebinding 防护仍不完整**：每次请求前 DNS 解析后会阻止私有和保留地址，但恶意解析器仍可能在检查与建立 socket 之间改变结果。面向不受信任网络的部署仍应使用出口代理或网络 allowlist。
 - **只解码文本内容**：包括 html/xhtml 与 `text/*` 加 JSON/XML 家族；缺少 `Content-Type` 或任何二进制类型都会抛出 `WEB_UNSUPPORTED_CONTENT_TYPE`，可提取文本的 PDF 解码属于明确的暂缓工作。
 - **charset 只来自 `Content-Type` 标头**（默认为 UTF-8）：HTML `<meta charset>` 声明会被忽略；声明但无法识别的 charset 标签会抛出异常，而非回退。

@@ -23,6 +23,22 @@ function buildChildEnv(extra: Record<string, string>): Record<string, string> {
 }
 
 /**
+ * Remote MCP endpoints must use TLS. Plain HTTP is accepted only for a local
+ * loopback endpoint used by an explicitly local server; credentials in the URL
+ * are never accepted.
+ */
+function validateHttpEndpoint(raw: string): URL {
+  let url: URL
+  try { url = new URL(raw) } catch (error: unknown) { throw new Error(`mcp-client: invalid HTTP endpoint URL: ${raw}`, { cause: error }) }
+  if (url.username || url.password) throw new Error('mcp-client: credentials in MCP endpoint URLs are not allowed')
+  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1' || url.hostname === '[::1]'
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
+    throw new Error('mcp-client: streamable-http endpoints must use https, except loopback http fixtures')
+  }
+  return url
+}
+
+/**
  * Create an MCP transport from the resolved plugin config.
  *
  * @param config - Resolved plugin config discriminated on `transport`.
@@ -43,7 +59,7 @@ export function createTransport(config: Config): Transport {
       // mismatch with the Transport interface); the SDK constructed the
       // object, so the cast records only that widening.
       return new StreamableHTTPClientTransport(
-        new URL(config.url),
+        validateHttpEndpoint(config.url),
         { requestInit: { headers: config.headers } },
       ) as Transport
   }

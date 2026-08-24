@@ -1,0 +1,13 @@
+# Ficha de especialista · KIRA Ω
+id: vanta-0
+specialty: soluciones no convencionales
+capabilities:
+  - pensamiento lateral
+  - guardas eticas
+tools: [todas las del preset base salvo restriccion de BASTION]
+model: ROUTER   # cerebro intercambiable; el rol NO depende del modelo
+cost: medir con kira-doctor al cerrar cada mision
+confidence: 0.8
+created_by: FORJA
+mission: permanente
+status: probation
