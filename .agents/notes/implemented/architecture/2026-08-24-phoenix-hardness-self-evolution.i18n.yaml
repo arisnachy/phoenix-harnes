@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-24-phoenix-hardness-self-evolution.md
+2026-08-24-phoenix-hardness-self-evolution.md: 63131e2e412bcd0a411b4d18f85cb81726ca240e
+2026-08-24-phoenix-hardness-self-evolution.zh.md: 2d0d609ce79a3ab3f4cb07beddeb5dc0d32a26eb
