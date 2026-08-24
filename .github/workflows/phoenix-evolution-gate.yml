@@ -18,7 +18,7 @@ jobs:
     if: github.base_ref == 'phoenix/evolution-inbox' || startsWith(github.head_ref, 'phoenix/evolution')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - run: git fetch origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
       - name: Identity, authority and rollback gate
@@ -37,7 +37,7 @@ jobs:
     if: github.base_ref == 'phoenix/evolution-inbox' || startsWith(github.head_ref, 'phoenix/evolution')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -62,7 +62,7 @@ jobs:
     if: github.base_ref == 'phoenix/evolution-inbox' || startsWith(github.head_ref, 'phoenix/evolution')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
         with: { run_install: false }
       - uses: actions/setup-node@v4
