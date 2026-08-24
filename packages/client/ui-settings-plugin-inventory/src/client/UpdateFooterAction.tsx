@@ -142,7 +142,7 @@ export function UpdateFooterAction({
   const className = `${ready ? css.action : css.status}${wide ? '' : ` ${css.rail}`}`
 
   const onRestart = async (): Promise<void> => {
-    if (!ready || requesting) return
+    if (requesting) return
     setRequesting(true)
     try {
       const receipt = await restartForUpdate()
