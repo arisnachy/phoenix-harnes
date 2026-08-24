@@ -11,6 +11,7 @@ import type { UserProfileSettings } from '@deepseek-ai/dsh-user-profile'
 
 function profile(overrides: Partial<UserProfileSettings> = {}): UserProfileSettings {
   return {
+    personalizationEnabled: true,
     consent: { ...DEFAULT_USER_PROFILE_CONSENT },
     ...overrides,
   }
@@ -42,6 +43,34 @@ describe('user profile validation and projection helpers', () => {
     expect(next.consent.preferredName).toBe(true)
     expect(current.preferredName).toBe('Ari')
     expect(current.consent.preferredName).toBe(false)
+  })
+
+  it('keeps sex, gender, pronouns, and form of address independent', () => {
+    const next = mergeUserProfile(profile(), {
+      sex: 'male',
+      gender: 'man',
+      pronouns: 'he/him',
+      formOfAddress: 'Dr.',
+      consent: { sex: true, pronouns: true, gender: false, formOfAddress: true },
+    })
+
+    expect(next.sex).toBe('male')
+    expect(next.gender).toBe('man')
+    expect(next.pronouns).toBe('he/him')
+    expect(next.formOfAddress).toBe('Dr.')
+    expect(next.consent.sex).toBe(true)
+    expect(next.consent.gender).toBe(false)
+  })
+
+  it('preserves per-field consent when personalization is disabled', () => {
+    const next = mergeUserProfile(profile({ preferredName: 'Aris' }), {
+      personalizationEnabled: false,
+      consent: { preferredName: true },
+    })
+
+    expect(next.personalizationEnabled).toBe(false)
+    expect(next.preferredName).toBe('Aris')
+    expect(next.consent.preferredName).toBe(true)
   })
 
   it('clears optional values through null updates', () => {
