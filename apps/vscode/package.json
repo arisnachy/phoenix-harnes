@@ -1,8 +1,8 @@
 {
-  "name": "phoenix-hardness-vscode",
+  "name": "@deepseek-ai/dsh-vscode",
   "displayName": "PHOENIX HARDNESS",
   "description": "Launch and open the local PHOENIX AI harness from VS Code or Cursor.",
-  "version": "0.1.0",
+  "version": "0.1.1-rc.2",
   "publishConfig": { "access": "public" },
   "publisher": "phoenix-harness",
   "license": "MIT",
