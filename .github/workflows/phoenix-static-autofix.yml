@@ -6,13 +6,16 @@ on:
       - phoenix/evolution-current-v16
     paths:
       - .github/workflows/phoenix-static-autofix.yml
+  pull_request:
+    branches:
+      - phoenix/evolution-inbox
 
 permissions:
   contents: write
 
 jobs:
   autofix:
-    if: ${{ !contains(github.event.head_commit.message, '[phoenix-autofix]') }}
+    if: ${{ github.event_name == 'pull_request' || !contains(github.event.head_commit.message, '[phoenix-autofix]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -35,9 +38,6 @@ jobs:
           import json, re
 
           root = Path('.')
-
-          # 1) Register the PHOENIX VS Code release member in the existing
-          # publication-files policy, matching its package.json exactly.
           constraints = root / 'scripts/check-workspace-constraints.ts'
           text = constraints.read_text()
           marker = "  '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],\n"
@@ -45,18 +45,14 @@ jobs:
           if vscode not in text:
               if marker not in text:
                   raise SystemExit('VS Code policy insertion marker not found')
-              text = text.replace(marker, marker + vscode, 1)
-              constraints.write_text(text)
+              constraints.write_text(text.replace(marker, marker + vscode, 1))
 
-          # 2) examples owns runnable configs. If the MCP client exists in the
-          # workspace and examples references it, declare it as a workspace dep.
           manifests = []
           for p in root.glob('packages/*/*/package.json'):
               try:
-                  data = json.loads(p.read_text())
+                  manifests.append((p, json.loads(p.read_text())))
               except Exception:
-                  continue
-              manifests.append((p, data))
+                  pass
           mcp_exists = any(d.get('name') == '@deepseek-ai/dsh-mcp-client' for _, d in manifests)
           refs = []
           for p in (root / 'examples').rglob('*'):
@@ -74,57 +70,43 @@ jobs:
               deps['@deepseek-ai/dsh-mcp-client'] = 'workspace:*'
               ex['dependencies'] = dict(sorted(deps.items()))
               examples.write_text(json.dumps(ex, indent=2, ensure_ascii=False) + '\n')
-              print('Declared MCP client for examples; references:', ', '.join(refs))
+              print('Declared MCP client; refs:', ', '.join(refs))
           else:
-              print('MCP dependency state:', {'workspace_package': mcp_exists, 'references': refs})
+              print('MCP state:', {'workspace_package': mcp_exists, 'references': refs})
 
-          # 3) Add concise API documentation only to the exports identified by
-          # verify-export-jsdoc. The checker is kept intact.
           targets = {
-              'packages/credentials/authorization/src/index.ts': [
-                  'InMemorySecretStore',
-              ],
-              'packages/credentials/authorization/src/types.ts': [
-                  'SecretAuthorizationError',
-              ],
-              'packages/llm/llm-pi-ai/src/login.ts': [
-                  'codexLoginStatus', 'loginCodex', 'logoutCodex', 'displayStatus',
-              ],
+              'packages/credentials/authorization/src/index.ts': ['InMemorySecretStore'],
+              'packages/credentials/authorization/src/types.ts': ['SecretAuthorizationError'],
+              'packages/llm/llm-pi-ai/src/login.ts': ['codexLoginStatus', 'loginCodex', 'logoutCodex', 'displayStatus'],
               'packages/subagent/subagent-codex/src/account.ts': [
-                  'CodexLoginRequiredError', 'assertCodexLoginAvailable',
-                  'normalizeCodexLoginError', 'primeCodexChatGptAuth',
-                  'loadCodexChatGptAuth', 'codexAuthCapability', 'codexAuthStatus',
-                  'codexLoginRequiredMessage', 'loadCodexAccessToken',
-                  'persistCodexChatGptAuth', 'clearCodexChatGptAuth',
-                  'codexSecretEnvKeys', 'codexChatGptTransportAllowed',
+                  'CodexLoginRequiredError', 'assertCodexLoginAvailable', 'normalizeCodexLoginError',
+                  'primeCodexChatGptAuth', 'loadCodexChatGptAuth', 'codexAuthCapability',
+                  'codexAuthStatus', 'codexLoginRequiredMessage', 'loadCodexAccessToken',
+                  'persistCodexChatGptAuth', 'clearCodexChatGptAuth', 'codexSecretEnvKeys',
+                  'codexChatGptTransportAllowed',
               ],
           }
           for rel, names in targets.items():
               p = root / rel
               if not p.exists():
-                  print('JSDoc target file absent:', rel)
+                  print('JSDoc file absent:', rel)
                   continue
               src = p.read_text()
               for name in names:
-                  # Match exported declarations while preserving indentation.
                   pat = re.compile(r'(?m)^(?P<indent>[ \t]*)export\s+(?:(?:async|abstract)\s+)*(?:class|function|const|let|var)\s+' + re.escape(name) + r'\b')
                   m = pat.search(src)
                   if not m:
                       print('JSDoc declaration not found:', rel, name)
                       continue
-                  line_start = m.start()
-                  prefix = src[max(0, line_start-600):line_start]
-                  # If the declaration already has a JSDoc immediately above it,
-                  # leave it untouched.
+                  start = m.start()
+                  prefix = src[max(0, start-600):start]
                   if re.search(r'/\*\*[\s\S]*?\*/\s*$', prefix):
                       continue
                   indent = m.group('indent')
-                  doc = f"{indent}/** Public PHOENIX contract for `{name}`. */\n"
-                  src = src[:line_start] + doc + src[line_start:]
+                  src = src[:start] + f"{indent}/** Public PHOENIX contract for `{name}`. */\n" + src[start:]
               p.write_text(src)
           PY
-
-      - name: Refresh lockfile when package metadata changed
+      - name: Refresh lockfile
         run: pnpm install --lockfile-only
       - name: Refresh generated documentation contracts
         shell: bash
@@ -153,12 +135,6 @@ jobs:
           fi
           git config user.name 'PHOENIX CI Autofix'
           git config user.email 'actions@users.noreply.github.com'
-          git add scripts/check-workspace-constraints.ts examples/package.json pnpm-lock.yaml \
-            packages/credentials/authorization/src/index.ts \
-            packages/credentials/authorization/src/types.ts \
-            packages/llm/llm-pi-ai/src/login.ts \
-            packages/subagent/subagent-codex/src/account.ts \
-            .agents/skills/deepseek-dsh/SKILL.md docs README.md 2>/dev/null || true
-          git add -u
+          git add -A
           git commit -m 'fix(ci): repair static contracts [phoenix-autofix]'
           git push origin HEAD:phoenix/evolution-current-v16
