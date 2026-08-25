@@ -1,27 +1,31 @@
 .action,
 .status {
   width: 100%;
-  min-height: 44px;
+  min-height: 36px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  margin-bottom: 4px;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 3px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 10px;
   color: var(--dsw-alias-label-primary);
   background: transparent;
   font: inherit;
   text-align: left;
 }
 
+.status {
+  color: var(--dsw-alias-label-secondary);
+}
+
 .action {
   cursor: pointer;
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .action:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
   border-color: var(--dsw-alias-border-l2);
 }
 
@@ -32,26 +36,32 @@
 
 .action:disabled {
   cursor: default;
-  opacity: 0.78;
+  opacity: 0.72;
 }
 
 .rail {
-  width: 36px;
-  min-height: 36px;
+  width: 34px;
+  min-height: 34px;
   padding: 0;
   justify-content: center;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  border-radius: 9px;
 }
 
 .glyph,
 .spinner {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--dsw-alias-label-secondary);
+}
+
+.action .glyph,
+.action .spinner {
+  color: var(--dsw-alias-label-primary);
 }
 
 .spinner {
@@ -66,24 +76,29 @@
   min-width: 0;
   display: flex;
   flex: 1;
-  flex-direction: column;
-  gap: 1px;
+  align-items: center;
+  gap: 8px;
 }
 
 .title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   line-height: 18px;
 }
 
 .detail {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  flex: none;
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+  font-size: 10.5px;
+  font-weight: 600;
   line-height: 16px;
+  white-space: nowrap;
 }
