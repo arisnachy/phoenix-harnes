@@ -25,7 +25,7 @@ const PROCESS_EVENTS = ['SIGTERM', 'SIGINT', 'unhandledRejection'] as const
 type Listener = (...args: any[]) => void
 interface ListenerSnapshot { readonly listeners: ReadonlyMap<string, ReadonlySet<Listener>> }
 
-export interface PatchRollback {
+interface PatchRollback {
   readonly activePath: string
   readonly rejectedPath: string
 }
@@ -80,7 +80,7 @@ export function promotePatchGeneration(patchPaths: readonly string[]): void {
  * candidate is moved, not copied, so recovery does not create another copy of
  * potentially sensitive configuration material.
  */
-export function rollbackChangedPatches(patchPaths: readonly string[]): PatchRollback[] {
+function rollbackChangedPatches(patchPaths: readonly string[]): PatchRollback[] {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const rollbacks: PatchRollback[] = []
   for (const patchPath of new Set(patchPaths)) {
@@ -101,7 +101,7 @@ export function rollbackChangedPatches(patchPaths: readonly string[]): PatchRoll
 }
 
 /** Restore the candidate when the known-good retry also fails. */
-export function restoreRejectedPatches(rollbacks: readonly PatchRollback[]): void {
+function restoreRejectedPatches(rollbacks: readonly PatchRollback[]): void {
   for (const { activePath, rejectedPath } of [...rollbacks].reverse()) {
     if (!existsSync(rejectedPath)) continue
     if (existsSync(activePath)) unlinkSync(activePath)
