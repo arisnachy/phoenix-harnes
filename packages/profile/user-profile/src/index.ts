@@ -26,10 +26,19 @@ declare module '@deepseek-ai/cordis' {
 /** Render only explicitly consented profile fields for the dynamic context snapshot. */
 function renderConsentedProfile(profile: UserProfileConsented): string {
   const lines: string[] = []
+  if (profile.fullName !== undefined) lines.push(`Full name: ${profile.fullName}`)
   if (profile.preferredName !== undefined) lines.push(`Preferred name: ${profile.preferredName}`)
   if (profile.age !== undefined) lines.push(`Age: ${String(profile.age)}`)
   if (profile.gender !== undefined) lines.push(`Gender: ${profile.gender}`)
   if (profile.pronouns !== undefined) lines.push(`Pronouns: ${profile.pronouns}`)
+  if (profile.profession !== undefined) lines.push(`Profession / role: ${profile.profession}`)
+  if (profile.organization !== undefined) lines.push(`Organization: ${profile.organization}`)
+  if (profile.academicBackground !== undefined) lines.push(`Academic background: ${profile.academicBackground}`)
+  if (profile.country !== undefined) lines.push(`Country: ${profile.country}`)
+  if (profile.preferredLanguage !== undefined) lines.push(`Preferred language: ${profile.preferredLanguage}`)
+  if (profile.timezone !== undefined) lines.push(`Timezone: ${profile.timezone}`)
+  if (profile.technicalLevel !== undefined) lines.push(`Technical level: ${profile.technicalLevel}`)
+  if (profile.responsePreferences !== undefined) lines.push(`Response preferences: ${profile.responsePreferences}`)
   if (profile.tone !== undefined) lines.push(`Preferred tone: ${profile.tone}`)
   if (profile.family !== undefined && profile.family.length > 0) {
     lines.push(`Family: ${profile.family.map(member => member.name === undefined
@@ -93,16 +102,7 @@ export class UserProfileService extends Service {
    * @returns metadata that reports field presence and current consent flags.
    */
   getRedacted(): UserProfileRedacted {
-    const profile = this.scope.get()
-    return {
-      hasPreferredName: profile.preferredName !== undefined,
-      hasDateOfBirth: profile.dateOfBirth !== undefined,
-      hasGender: profile.gender !== undefined,
-      hasPronouns: profile.pronouns !== undefined,
-      hasTone: profile.tone !== undefined,
-      familyCount: profile.family?.length ?? 0,
-      consent: { ...profile.consent },
-    }
+    return this.redacted(this.scope.get())
   }
 
   /** Return only fields whose current consent flag is true.
@@ -111,28 +111,50 @@ export class UserProfileService extends Service {
   getConsented(): UserProfileConsented {
     const profile = this.scope.get()
     const consented: UserProfileConsented = {}
+    if (profile.consent.fullName && profile.fullName !== undefined) consented.fullName = profile.fullName
     if (profile.consent.preferredName && profile.preferredName !== undefined) consented.preferredName = profile.preferredName
     if (profile.consent.dateOfBirth && profile.dateOfBirth !== undefined) consented.age = deriveAge(profile.dateOfBirth)
     if (profile.consent.gender && profile.gender !== undefined) consented.gender = profile.gender
     if (profile.consent.pronouns && profile.pronouns !== undefined) consented.pronouns = profile.pronouns
+    if (profile.consent.profession && profile.profession !== undefined) consented.profession = profile.profession
+    if (profile.consent.organization && profile.organization !== undefined) consented.organization = profile.organization
+    if (profile.consent.academicBackground && profile.academicBackground !== undefined) consented.academicBackground = profile.academicBackground
+    if (profile.consent.country && profile.country !== undefined) consented.country = profile.country
+    if (profile.consent.preferredLanguage && profile.preferredLanguage !== undefined) consented.preferredLanguage = profile.preferredLanguage
+    if (profile.consent.timezone && profile.timezone !== undefined) consented.timezone = profile.timezone
+    if (profile.consent.technicalLevel && profile.technicalLevel !== undefined) consented.technicalLevel = profile.technicalLevel
+    if (profile.consent.responsePreferences && profile.responsePreferences !== undefined) consented.responsePreferences = profile.responsePreferences
     if (profile.consent.tone && profile.tone !== undefined) consented.tone = profile.tone
     if (profile.consent.family && profile.family !== undefined) consented.family = structuredClone(profile.family)
     return consented
+  }
+
+  private redacted(profile: UserProfileSettings): UserProfileRedacted {
+    return {
+      hasFullName: profile.fullName !== undefined,
+      hasPreferredName: profile.preferredName !== undefined,
+      hasDateOfBirth: profile.dateOfBirth !== undefined,
+      hasGender: profile.gender !== undefined,
+      hasPronouns: profile.pronouns !== undefined,
+      hasProfession: profile.profession !== undefined,
+      hasOrganization: profile.organization !== undefined,
+      hasAcademicBackground: profile.academicBackground !== undefined,
+      hasCountry: profile.country !== undefined,
+      hasPreferredLanguage: profile.preferredLanguage !== undefined,
+      hasTimezone: profile.timezone !== undefined,
+      hasTechnicalLevel: profile.technicalLevel !== undefined,
+      hasResponsePreferences: profile.responsePreferences !== undefined,
+      hasTone: profile.tone !== undefined,
+      familyCount: profile.family?.length ?? 0,
+      consent: { ...profile.consent },
+    }
   }
 
   private view(): UserProfileView {
     const profile = structuredClone(this.scope.get())
     return {
       profile,
-      redacted: {
-        hasPreferredName: profile.preferredName !== undefined,
-        hasDateOfBirth: profile.dateOfBirth !== undefined,
-        hasGender: profile.gender !== undefined,
-        hasPronouns: profile.pronouns !== undefined,
-        hasTone: profile.tone !== undefined,
-        familyCount: profile.family?.length ?? 0,
-        consent: { ...profile.consent },
-      },
+      redacted: this.redacted(profile),
       consented: this.getConsented(),
     }
   }
