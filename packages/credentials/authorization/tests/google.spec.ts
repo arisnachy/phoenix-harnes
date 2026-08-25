@@ -47,7 +47,6 @@ afterEach(() => {
 describe('Google OAuth broker configuration', () => {
   it('requires explicit, unique scopes while allowing a discoverable unconfigured client', () => {
     expect(resolveGoogleSpec({ scopes: ['openid', 'email'] })).toEqual({
-      clientId: undefined,
       scopes: ['openid', 'email'],
     })
     expect(() => resolveGoogleSpec({ scopes: [] })).toThrow(/at least one OAuth scope/)
@@ -150,7 +149,7 @@ describe('Google OAuth broker authorization', () => {
     expect(JSON.stringify(result)).not.toContain('boundary-only-refresh-token')
   })
 
-  it('rejects caller credentials, OAuth endpoints, and scopes outside the grant before an API call', async () => {
+  it('rejects caller credentials and OAuth endpoints before credentials can cross a caller-controlled path', async () => {
     const ctx = await harness()
 
     await expect(ctx.googleApi.request({
@@ -162,6 +161,64 @@ describe('Google OAuth broker authorization', () => {
       url: 'https://www.googleapis.com/drive/v3/files',
       requiredScopes: [],
       headers: { Authorization: 'Bearer model-supplied-token' },
+    })).rejects.toMatchObject({ code: 'GOOGLE_HEADER_DENIED' })
+  })
+
+  it('denies an API operation whose required scope was never granted', async () => {
+    const ctx = await harness()
+    internals.now = () => 1_000_000
+    internals.openLoopback = async () => ({
+      redirectUri: 'http://127.0.0.1:49152/oauth2/callback',
+      code: Promise.resolve('code'),
+      close: () => Promise.resolve(),
+    })
+    internals.fetch = (async () => new Response(JSON.stringify({
+      access_token: 'access',
+      refresh_token: 'refresh',
+      expires_in: 3600,
+      token_type: 'Bearer',
+      scope: SCOPES.join(' '),
+    }), { status: 200 })) as typeof fetch
+
+    await ctx.authorization.begin({ key: GOOGLE_ACCOUNT_KEY, interaction: surface().interaction })
+
+    await expect(ctx.googleApi.request({
+      url: 'https://www.googleapis.com/drive/v3/files',
+      requiredScopes: ['https://www.googleapis.com/auth/drive'],
+    })).rejects.toMatchObject({ code: 'GOOGLE_SCOPE_DENIED' })
+  })
+
+  it('disconnects locally even when provider revocation fails', async () => {
+    const ctx = await harness()
+    internals.now = () => 1_000_000
+    internals.openLoopback = async () => ({
+      redirectUri: 'http://127.0.0.1:49152/oauth2/callback',
+      code: Promise.resolve('code'),
+      close: () => Promise.resolve(),
+    })
+    let calls = 0
+    internals.fetch = (async () => {
+      calls += 1
+      if (calls === 1) {
+        return new Response(JSON.stringify({
+          access_token: 'access',
+          refresh_token: 'refresh',
+          expires_in: 3600,
+          token_type: 'Bearer',
+          scope: SCOPES.join(' '),
+        }), { status: 200 })
+      }
+      throw new Error('provider unavailable')
+    }) as typeof fetch
+
+    await ctx.authorization.begin({ key: GOOGLE_ACCOUNT_KEY, interaction: surface().interaction })
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toEqual({ kind: 'api-key' })
+
+    await expect(ctx.googleApi.disconnect()).resolves.toEqual({ revoked: false })
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toBeUndefined()
+    await expect(ctx.googleApi.request({
+      url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages',
+      requiredScopes: ['https://www.googleapis.com/auth/gmail.modify'],
     })).rejects.toMatchObject({ code: 'GOOGLE_REAUTH_REQUIRED' })
   })
 })
