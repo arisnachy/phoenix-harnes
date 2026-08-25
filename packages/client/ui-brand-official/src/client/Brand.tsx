@@ -19,7 +19,7 @@ export function PhoenixBrandMark({ size, className }: PhoenixBrandMarkProps) {
  */
 export function PhoenixBrandName() {
   return (
-    <span style={{ position: 'relative', display: 'block', width: 156, height: 52 }}>
+    <span style={{ display: 'block', width: 156, height: 52 }}>
       <img
         src="/phoenix-wordmark.png"
         width="156"
@@ -28,25 +28,6 @@ export function PhoenixBrandName() {
         draggable={false}
         style={{ display: 'block', width: 156, height: 52, objectFit: 'contain' }}
       />
-      <span
-        data-phoenix-auto-update-canary="9"
-        style={{
-          position: 'absolute',
-          right: 2,
-          top: 2,
-          padding: '2px 5px',
-          borderRadius: 999,
-          background: '#9333ea',
-          color: '#fff',
-          fontSize: 8,
-          fontWeight: 800,
-          lineHeight: 1.2,
-          letterSpacing: '0.06em',
-          pointerEvents: 'none',
-        }}
-      >
-        AUTO TEST 9
-      </span>
     </span>
   )
 }
