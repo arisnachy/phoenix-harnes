@@ -26,19 +26,19 @@ export type UpdateFooterActionProps =
   & PropsLocale<'settings.pluginInventory'>
   & InjectFace<UpdateFooterActionInjected>
 
-/** Statuses that should not consume any sidebar space. */
-const HIDDEN_STATUSES: ReadonlySet<PhoenixUpdateSnapshot['status']> = new Set([
-  'idle', 'checking', 'current', 'updated', 'off',
-])
-
 /**
  * Select the localized user-facing updater copy for one durable state.
  * @param snapshot - current sanitized updater state.
  * @returns locale key, or undefined when the updater should stay invisible.
  */
 export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventoryLocaleKey | undefined {
-  if (HIDDEN_STATUSES.has(snapshot.status)) return undefined
   switch (snapshot.status) {
+    case 'idle':
+    case 'checking':
+    case 'current':
+    case 'updated':
+    case 'off':
+      return undefined
     case 'available': return 'updateAvailable'
     case 'preparing':
       switch (snapshot.phase) {
@@ -56,7 +56,7 @@ export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventory
     case 'paused': return 'updatePaused'
     case 'error':
     case 'rollback-failed': return 'updateError'
-    /* v8 ignore next 4 -- the hidden set and closed status union exhaust every other value. */
+    /* v8 ignore next 2 -- compile-time exhaustiveness guard for future statuses. */
     default: {
       const unreachable: never = snapshot.status
       return unreachable
