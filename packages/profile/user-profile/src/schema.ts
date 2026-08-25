@@ -228,7 +228,7 @@ function deriveAgeUnchecked(value: string, now: Date): number {
   return age
 }
 
-function validateText(value: string, field: string, maximum = USER_PROFILE_LIMITS.textCharacters): void {
+function validateText(value: string, field: string, maximum: number = USER_PROFILE_LIMITS.textCharacters): void {
   if (value.trim() === '') throw new TypeError(`user profile ${field} cannot be empty`)
   if (value.length > maximum) {
     throw new TypeError(`user profile ${field} exceeds ${String(maximum)} characters`)
