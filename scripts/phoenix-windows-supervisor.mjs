@@ -2,13 +2,13 @@
 /**
  * Windows process supervisor for the PHOENIX Web Host and stable updater.
  *
- * The updater must observe the lifetime of the actual Host process, not an
- * intermediate PowerShell/cmd.exe launcher. This supervisor owns that exact
- * PID relationship and starts one detached watcher bound to the Host PID.
+ * Preparation and activation have separate owners:
+ * - the watcher prepares and validates candidates while the Host stays alive;
+ * - an explicit restart request makes this supervisor stop the watcher,
+ *   activate the prepared candidate synchronously, then launch a fresh Host.
  *
- * The persistent updater worktree is updater-owned. A force-killed updater can
- * leave Git's worktree index.lock behind, so startup recovers that stale lock
- * before a new watcher is allowed to reuse the staging checkout.
+ * The supervisor therefore remains alive across an update restart. PowerShell
+ * must not regain control until activation either completed or failed visibly.
  */
 
 import { spawn, spawnSync } from 'node:child_process'
@@ -21,6 +21,8 @@ const root = resolve(process.cwd())
 const hostArgs = process.argv.slice(2)
 const updater = join(root, 'scripts', 'phoenix-auto-update.mjs')
 const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
+const activator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
+const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 
 function gitValue(cwd, args) {
   const result = spawnSync('git', args, {
@@ -69,31 +71,54 @@ function recoverStaleStagingIndexLock() {
   }
 }
 
-recoverStaleStagingIndexLock()
+function restartRequestPath() {
+  const gitDir = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-dir']))
+  return gitDir === undefined ? undefined : join(gitDir, RESTART_REQUEST_FILE)
+}
 
-const host = spawn(process.execPath, [
-  '--import', 'tsx/esm',
-  'apps/cli/src/bin.ts',
-  'web', '--',
-  ...hostArgs,
-], {
-  cwd: root,
-  stdio: 'inherit',
-  windowsHide: false,
-  env: process.env,
-})
+function restartRequested() {
+  const path = restartRequestPath()
+  return path !== undefined && existsSync(path)
+}
 
-host.once('error', (error) => {
-  console.error(`[PHOENIX] host launch failed: ${error.message}`)
-  process.exitCode = 1
-})
+const sleep = ms => new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 
-if (
-  process.env.PHOENIX_AUTO_UPDATE !== '0'
-  && existsSync(updater)
-  && existsSync(shim)
-  && host.pid !== undefined
-) {
+async function stopWatcher(watcher) {
+  if (watcher === undefined || watcher.exitCode !== null) return
+  const exited = new Promise(resolveExit => watcher.once('exit', resolveExit))
+  watcher.kill()
+  await Promise.race([exited, sleep(1500)])
+  if (watcher.exitCode === null && watcher.pid !== undefined) {
+    spawnSync('taskkill', ['/PID', String(watcher.pid), '/T', '/F'], {
+      cwd: root,
+      windowsHide: true,
+      stdio: 'ignore',
+    })
+    await Promise.race([exited, sleep(1500)])
+  }
+}
+
+function startHost() {
+  return spawn(process.execPath, [
+    '--import', 'tsx/esm',
+    'apps/cli/src/bin.ts',
+    'web', '--',
+    ...hostArgs,
+  ], {
+    cwd: root,
+    stdio: 'inherit',
+    windowsHide: false,
+    env: process.env,
+  })
+}
+
+function startWatcher() {
+  if (
+    process.env.PHOENIX_AUTO_UPDATE === '0'
+    || !existsSync(updater)
+    || !existsSync(shim)
+  ) return undefined
+
   const updateTemp = process.env.PHOENIX_UPDATE_TEMP?.trim()
   const watcherEnv = {
     ...process.env,
@@ -101,30 +126,77 @@ if (
       ? {}
       : { TEMP: updateTemp, TMP: updateTemp }),
   }
-  const watcher = spawn(process.execPath, [
+
+  // The watcher observes the supervisor PID, not the Host PID. The supervisor
+  // explicitly stops it before activation, so the watcher's legacy parent-exit
+  // installation path can never race the supervised activator.
+  return spawn(process.execPath, [
     shim,
     updater,
     '--watch',
-    '--parent-pid', String(host.pid),
+    '--parent-pid', String(process.pid),
   ], {
     cwd: root,
-    detached: true,
-    stdio: 'ignore',
+    detached: false,
+    stdio: 'inherit',
     windowsHide: true,
     env: watcherEnv,
   })
-  watcher.once('error', (error) => {
+}
+
+function activatePrepared() {
+  if (!existsSync(activator)) {
+    console.error('[PHOENIX UPDATE] supervised activator is missing; refusing restart.')
+    return 1
+  }
+  const result = spawnSync(process.execPath, [activator], {
+    cwd: root,
+    env: process.env,
+    stdio: 'inherit',
+    windowsHide: false,
+  })
+  if (result.error !== undefined) {
+    console.error(`[PHOENIX UPDATE] activator launch failed: ${result.error.message}`)
+    return 1
+  }
+  return result.status ?? 1
+}
+
+recoverStaleStagingIndexLock()
+
+let finalCode = 0
+while (true) {
+  const host = startHost()
+  host.once('error', (error) => {
+    console.error(`[PHOENIX] host launch failed: ${error.message}`)
+  })
+  const watcher = startWatcher()
+  watcher?.once('error', (error) => {
     console.error(`[PHOENIX UPDATE] watcher launch failed: ${error.message}`)
   })
-  watcher.unref()
+
+  const hostExit = await new Promise(resolveExit => {
+    host.once('exit', (code, signal) => resolveExit({ code, signal }))
+  })
+  const requested = restartRequested()
+
+  await stopWatcher(watcher)
+
+  if (!requested) {
+    finalCode = hostExit.code ?? (hostExit.signal === null ? 1 : 0)
+    break
+  }
+
+  console.error('[PHOENIX UPDATE] restart request received; activating prepared update under supervisor control...')
+  const activationCode = activatePrepared()
+  if (activationCode !== 0) {
+    console.error(`[PHOENIX UPDATE] supervised activation failed with exit code ${String(activationCode)}; PHOENIX will not relaunch automatically.`)
+    finalCode = activationCode
+    break
+  }
+
+  console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
+  // Continue the loop: the same supervisor starts a fresh Host and watcher.
 }
 
-const exit = await new Promise(resolveExit => {
-  host.once('exit', (code, signal) => resolveExit({ code, signal }))
-})
-
-if (exit.signal !== null) {
-  process.kill(process.pid, exit.signal)
-} else {
-  process.exitCode = exit.code ?? 1
-}
+process.exitCode = finalCode
