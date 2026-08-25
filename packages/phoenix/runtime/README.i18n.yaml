@@ -1,0 +1,5 @@
+version: 1
+source: README.md
+translations:
+  - locale: zh
+    path: README.zh.md

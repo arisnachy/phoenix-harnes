@@ -1,0 +1,37 @@
+name: PHOENIX Continuity v14 gate
+
+on:
+  push:
+    branches:
+      - phoenix/continuity-v14
+
+permissions:
+  contents: read
+
+jobs:
+  continuity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Synchronize lockfile in runner
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Install reproducibly from synchronized graph
+        run: pnpm install --frozen-lockfile
+      - name: Focused Continuity tests
+        run: pnpm exec vitest run packages/phoenix/continuity/tests/continuity.spec.ts
+      - name: Continuity TypeScript contract
+        run: pnpm exec tsc -p packages/phoenix/continuity/tsconfig.json --noEmit
+      - name: Native package contracts
+        run: |
+          pnpm run constraints
+          pnpm run verify-package-invariants
+          pnpm run verify-package-readme-model-experience
+          pnpm run verify-package-readme-limitations
+          pnpm run verify-export-jsdoc
+      - name: Diff hygiene
+        run: git diff --check

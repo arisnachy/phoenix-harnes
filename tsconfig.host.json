@@ -241,7 +241,6 @@
     { "path": "./packages/web/web-search-exa" },
     { "path": "./packages/web/web-search-perplexity" },
     { "path": "./packages/web/web-search-deepseek" },
-    { "path": "./packages/web/web-search-openrouter" },
     { "path": "./packages/web/web-fetch-http" },
     { "path": "./packages/web/tool-web" },
     { "path": "./packages/spill/spill" },
@@ -288,7 +287,6 @@
     { "path": "./packages/plan/plan-mode" },
     { "path": "./packages/preset/agent-presets" },
     { "path": "./packages/preset/persona" },
-    { "path": "./packages/profile/user-profile" },
     { "path": "./packages/guard/repeat-tool-reminder" },
     { "path": "./packages/extensions/cordis-host-runner" },
     { "path": "./packages/extensions/tool-cordis" },
@@ -296,7 +294,6 @@
     { "path": "./packages/hooks/hooks-claude-code" },
     { "path": "./packages/hooks/hooks-codex" },
     { "path": "./packages/mcp/mcp-client" },
-    { "path": "./packages/mcp/chrome-connector" },
     { "path": "./packages/host/apiproxy" },
     { "path": "./packages/host/directory-picker" },
     { "path": "./packages/host/directory-picker-auto" },
@@ -310,6 +307,10 @@
     { "path": "./packages/lsp/lsp" },
     { "path": "./packages/lsp/lsp-stdio" },
     { "path": "./packages/lsp/tool-lsp" },
+    { "path": "./packages/phoenix/runtime" },
+    { "path": "./packages/phoenix/ai-bus" },
+    { "path": "./packages/phoenix/repo-brain" },
+    { "path": "./packages/bundle/phoenix" },
     { "path": "./apps/cli" }
   ]
 }
