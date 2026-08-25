@@ -114,14 +114,13 @@ function CodexQuota({ authorization }: { authorization: AuthorizationClient | un
   if (quota === undefined) return null
   const primary = quota.primary
   const secondary = quota.secondary
-  const primaryName = primary === undefined ? undefined : primaryLabel(primary)
 
   return (
     <span className={css.quotaGroup} aria-hidden="true">
-      {primary === undefined || primaryName === undefined ? null : (
-        <span className={css.quotaChip} title={quotaTitle(primaryName, primary)}>
+      {primary === undefined ? null : (
+        <span className={css.quotaChip} title={quotaTitle(primaryLabel(primary), primary)}>
           <span className={css.quotaMeta}>
-            <span className={css.quotaLabel}>{primaryName}</span>
+            <span className={css.quotaLabel}>{primaryLabel(primary)}</span>
             <strong className={css.quotaValue}>{remaining(primary)}%</strong>
           </span>
           <span className={css.quotaTrack}>
