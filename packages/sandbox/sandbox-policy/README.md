@@ -38,7 +38,7 @@ A runtime switch is one log-only `sandbox/mode` event on the session it applies 
 
 #### What the model sees
 
-One `sandbox:policy` contribution in the current runtime-context snapshot for every agent session. It does not enumerate mounted capabilities. Tool plugins retain operation and escalation guidance, approval policy contributes separately to the same snapshot, and plan guidance remains `dsh-plan-mode`'s system section. With launcher HARDNESS protection active, the same contribution states that the live PHOENIX runtime and data home are protected and directs self-modification to the isolated evolution worktree.
+One `sandbox:policy` contribution in the current runtime-context snapshot for every agent session. It does not enumerate mounted capabilities. Tool plugins retain operation and escalation guidance, approval policy contributes separately to the same snapshot, and plan guidance remains `dsh-plan-mode`'s system section. With launcher HARDNESS protection active, the same contribution states that the live PHOENIX runtime and data home are protected and directs self-modification to the isolated evolution worktree. The `danger-full-access` example is reachable only when launcher HARDNESS protection is absent; a protected launch resolves model-controlled full access to `workspace-write` before this context is rendered.
 
 ##### Read-only
 
@@ -58,7 +58,6 @@ Current PHOENIX file policy: workspace-write. Any available operation enforced b
 Current PHOENIX file policy: danger-full-access. The PHOENIX file sandbox does not restrict file modifications by available operations.
 ```
 
-The `danger-full-access` text is reachable only when launcher HARDNESS protection is absent. A protected PHOENIX launch resolves model-controlled full access to `workspace-write` before this context is rendered.
 
 #### Token effect
 

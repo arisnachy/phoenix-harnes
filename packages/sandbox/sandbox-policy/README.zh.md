@@ -38,7 +38,7 @@
 
 #### 模型看到的内容
 
-每个 agent 会话的当前运行时上下文快照中都有一项 `sandbox:policy` 贡献。它不枚举已装载的能力。工具插件继续负责操作与升权引导，批准策略单独贡献给同一份快照，计划引导仍由 `dsh-plan-mode` 的系统段落管理。启动器 HARDNESS 保护启用时，同一贡献还会说明 PHOENIX runtime 与数据目录受保护，并把自我修改指向隔离演化 worktree。
+每个 agent 会话的当前运行时上下文快照中都有一项 `sandbox:policy` 贡献。它不枚举已装载的能力。工具插件继续负责操作与升权引导，批准策略单独贡献给同一份快照，计划引导仍由 `dsh-plan-mode` 的系统段落管理。启动器 HARDNESS 保护启用时，同一贡献还会说明 PHOENIX runtime 与数据目录受保护，并把自我修改指向隔离演化 worktree。只有在启动器 HARDNESS 保护未启用时，模型才会看到 `danger-full-access` 示例；受保护的启动会在渲染此上下文之前把模型控制的完全访问解析为 `workspace-write`。
 
 ##### 只读
 
@@ -58,7 +58,6 @@ Current PHOENIX file policy: workspace-write. Any available operation enforced b
 Current PHOENIX file policy: danger-full-access. The PHOENIX file sandbox does not restrict file modifications by available operations.
 ```
 
-只有在启动器 HARDNESS 保护未启用时，模型才会看到上述 `danger-full-access` 文本。受保护的 PHOENIX 启动会先把模型控制的完全访问解析为 `workspace-write`。
 
 #### Token 影响
 

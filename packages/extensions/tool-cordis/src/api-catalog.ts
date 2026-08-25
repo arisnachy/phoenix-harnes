@@ -1170,7 +1170,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. HARDNESS protection then clamps the result: the live runtime/data roots are never writable through model-controlled capabilities, and unconfined access becomes workspace-confined while protection is active.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
         returns: 'the fully resolved per-call mode and absolute workspace root.',
       },
@@ -4998,15 +4998,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'UserProfileConsented',
-    declaration: 'export interface UserProfileConsented {\n    preferredName?: string;\n    age?: number;\n    gender?: string;\n    pronouns?: string;\n    tone?: string;\n    family?: UserProfileFamilyMember[];\n}',
+    declaration: 'export interface UserProfileConsented {\n    fullName?: string;\n    preferredName?: string;\n    age?: number;\n    gender?: string;\n    pronouns?: string;\n    profession?: string;\n    organization?: string;\n    academicBackground?: string;\n    country?: string;\n    preferredLanguage?: string;\n    timezone?: string;\n    technicalLevel?: string;\n    responsePreferences?: string;\n    tone?: string;\n    family?: UserProfileFamilyMember[];\n}',
   },
   {
     name: 'UserProfileRedacted',
-    declaration: 'export interface UserProfileRedacted {\n    hasPreferredName: boolean;\n    hasDateOfBirth: boolean;\n    hasGender: boolean;\n    hasPronouns: boolean;\n    hasTone: boolean;\n    familyCount: number;\n    consent: UserProfileConsent;\n}',
+    declaration: 'export interface UserProfileRedacted {\n    hasFullName: boolean;\n    hasPreferredName: boolean;\n    hasDateOfBirth: boolean;\n    hasGender: boolean;\n    hasPronouns: boolean;\n    hasProfession: boolean;\n    hasOrganization: boolean;\n    hasAcademicBackground: boolean;\n    hasCountry: boolean;\n    hasPreferredLanguage: boolean;\n    hasTimezone: boolean;\n    hasTechnicalLevel: boolean;\n    hasResponsePreferences: boolean;\n    hasTone: boolean;\n    familyCount: number;\n    consent: UserProfileConsent;\n}',
   },
   {
     name: 'UserProfileUpdate',
-    declaration: 'export interface UserProfileUpdate {\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
+    declaration: 'export interface UserProfileUpdate {\n    fullName?: string | null;\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    profession?: string | null;\n    organization?: string | null;\n    academicBackground?: string | null;\n    country?: string | null;\n    preferredLanguage?: string | null;\n    timezone?: string | null;\n    technicalLevel?: string | null;\n    responsePreferences?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
   },
   {
     name: 'UserProfileView',

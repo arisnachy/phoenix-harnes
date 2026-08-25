@@ -14,6 +14,14 @@ Add a read-only migration planner that discovers tracked `package.json` files, i
 
 The first migration phase is therefore observational and safe on `main`. Later rename batches must use this inventory as their package-identity source and regenerate the lockfile and built artifacts as one coherent change.
 
+## Alternatives considered
+
+**Rename the complete namespace directly on `main`.** Rejected because manifests, imports, peer dependencies, generated Typert references, the lockfile, and built artifacts would move in one high-blast-radius operation with no inventory proving that the target identities are collision-free.
+
+**Keep the inherited namespace indefinitely.** Rejected because PHOENIX needs an owned package identity for a future coherent migration rather than permanent coupling to the upstream namespace.
+
+**Support both namespaces as standing aliases.** Rejected because a dual-scope runtime can hide incomplete migration work and let one process resolve mixed package identities. The migration should instead happen as a validated, coherent batch.
+
 ## Consequences
 
 `pnpm run phoenix:scope:plan` prints the complete legacy-to-PHOENIX package map. `pnpm run phoenix:scope:check` performs the collision and consistency checks without mutating the repository. The current runtime remains on `@deepseek-ai/*` until a validated rename batch is executed.
