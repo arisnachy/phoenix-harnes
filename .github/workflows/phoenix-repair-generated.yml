@@ -47,6 +47,8 @@ jobs:
           pnpm run verify-translation-pairing --write docs/config-catalog.md
           pnpm run verify-translation-pairing --write docs/event-producer-consumer.md
           pnpm run verify-translation-pairing --write docs/module-graph.md
+      - name: Remove one-shot helper scripts
+        run: rm scripts/phoenix-repair-generated-state.py scripts/phoenix-repair-generated-i18n.py
       - name: Verify repaired static gates
         run: |
           pnpm run verify-type-equiv
