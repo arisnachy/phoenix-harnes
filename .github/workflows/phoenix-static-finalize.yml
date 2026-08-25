@@ -34,8 +34,9 @@ jobs:
           python scripts/phoenix-finalize-static.py
           python scripts/phoenix-finalize-catalog.py
           python scripts/phoenix-finalize-graphs.py
-      - name: Remove one-shot repair machinery
-        run: git rm -f .github/workflows/phoenix-integrate-runtime-stack.yml .github/workflows/phoenix-static-finalize.yml scripts/phoenix-finalize-static.py scripts/phoenix-finalize-catalog.py scripts/phoenix-finalize-graphs.py
+          python scripts/phoenix-finalize-i18n.py pre
+      - name: Remove pre-generation repair machinery
+        run: git rm -f .github/workflows/phoenix-integrate-runtime-stack.yml scripts/phoenix-finalize-static.py scripts/phoenix-finalize-catalog.py scripts/phoenix-finalize-graphs.py
       - name: Regenerate derived documentation
         shell: bash
         run: |
@@ -44,6 +45,7 @@ jobs:
           pnpm run gen-config-catalog
           pnpm run gen-doc-graphs
           pnpm run gen-module-graph
+          python scripts/phoenix-finalize-i18n.py post
           while IFS= read -r path; do
             [[ "$path" == *.zh.md ]] && continue
             zh="${path%.md}.zh.md"
@@ -51,9 +53,10 @@ jobs:
               pnpm exec tsx scripts/verify-translation-pairing.ts --write "$path"
             fi
           done < <(git diff --name-only -- '*.md' | sort -u)
-          for path in docs/subsystems/phoenix.md packages/README.md packages/bundle/README.md packages/bundle/phoenix/README.md packages/phoenix/README.md packages/phoenix/ai-bus/README.md packages/phoenix/continuity/README.md packages/phoenix/repo-brain/README.md packages/phoenix/runtime/README.md; do
+          for path in docs/subsystems/phoenix.md docs/subsystems/README.md packages/README.md packages/bundle/README.md packages/bundle/phoenix/README.md packages/phoenix/README.md packages/phoenix/ai-bus/README.md packages/phoenix/continuity/README.md packages/phoenix/repo-brain/README.md packages/phoenix/runtime/README.md; do
             pnpm exec tsx scripts/verify-translation-pairing.ts --write "$path"
           done
+          git rm -f .github/workflows/phoenix-static-finalize.yml scripts/phoenix-finalize-i18n.py
           git diff --check
       - name: Verify static gates
         run: pnpm run check:ci:static
