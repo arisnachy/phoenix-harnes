@@ -217,6 +217,20 @@ function buildAndSmoke(root, label, onPhase = () => {}) {
   node(root, [builtBin, '--version'], { inherit: true })
 }
 
+function cleanupStagedWorktree(root, stage, added) {
+  if (added) {
+    const removal = git(root, ['worktree', 'remove', '--force', stage], { allowFailure: true })
+    if (!removal.ok) {
+      console.error(`[PHOENIX UPDATE] warning: staging worktree cleanup deferred; prepared update remains valid${removal.stderr.length > 0 ? `: ${removal.stderr}` : ''}`)
+    }
+  }
+  try {
+    rmSync(stage, { recursive: true, force: true })
+  } catch (error) {
+    console.error(`[PHOENIX UPDATE] warning: staging directory cleanup deferred; prepared update remains valid: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 function stageCandidate(root, inspection) {
   const target = inspection.target
   const facts = updateFacts(inspection)
@@ -233,8 +247,7 @@ function stageCandidate(root, inspection) {
     writeState(root, { status: 'ready', phase: 'ready', ...facts })
     console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} is prepared. Restart PHOENIX to activate it.`)
   } finally {
-    if (added) git(root, ['worktree', 'remove', '--force', stage], { allowFailure: true, inherit: true })
-    rmSync(stage, { recursive: true, force: true })
+    cleanupStagedWorktree(root, stage, added)
   }
 }
 
