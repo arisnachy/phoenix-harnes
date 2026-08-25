@@ -29,14 +29,14 @@ export function PhoenixBrandName() {
         style={{ display: 'block', width: 156, height: 52, objectFit: 'contain' }}
       />
       <span
-        data-phoenix-auto-update-canary="4"
+        data-phoenix-auto-update-canary="5"
         style={{
           position: 'absolute',
           right: 2,
           top: 2,
           padding: '2px 5px',
           borderRadius: 999,
-          background: '#0891b2',
+          background: '#ea580c',
           color: '#fff',
           fontSize: 8,
           fontWeight: 800,
@@ -45,7 +45,7 @@ export function PhoenixBrandName() {
           pointerEvents: 'none',
         }}
       >
-        AUTO TEST 4
+        AUTO TEST 5
       </span>
     </span>
   )
