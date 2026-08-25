@@ -1,8 +1,6 @@
 /**
- * ModelSelect's injected face. The target 'conversation.input.model' seat is
- * declared (children table) and typed by ui-conversation's composer-bar
- * entry; this package only contributes the single occupant, so no SlotMap
- * merge lives here.
+ * Model-selection injected faces. The target slots are declared by their
+ * owning UI packages; this package only contributes occupants.
  */
 import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
@@ -22,4 +20,10 @@ export interface ModelSelectInjected {
    * @returns whether the host accepted the selection.
    */
   select: (selection: ModelSelection) => Promise<boolean>
+}
+
+/** Injected current-session data for the sidebar context meter. */
+export interface ContextMeterInjected {
+  /** Shared model directory for the selected session; absent when no session is selected. */
+  directory: SnapshotStore<ModelDirectoryState> | undefined
 }
