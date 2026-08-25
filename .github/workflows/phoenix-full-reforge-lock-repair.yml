@@ -41,8 +41,8 @@ jobs:
           changed=$(git diff --numstat -- pnpm-lock.yaml | awk '{print $1+$2}')
           echo "Lockfile changed lines: ${changed}"
           if [ "${changed}" -gt 30 ]; then
-            echo "Refusing unexpectedly broad lockfile rewrite."
-            git diff --stat -- pnpm-lock.yaml
+            echo "Refusing unexpectedly broad lockfile rewrite; diagnostic diff follows."
+            git diff -- pnpm-lock.yaml
             exit 1
           fi
           git diff -- pnpm-lock.yaml | grep -q '@deepseek-ai/dsh-authorization'
