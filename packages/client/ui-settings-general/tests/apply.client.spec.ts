@@ -8,6 +8,7 @@ import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
+import type { TriggerContentInjected } from '../src/client/chrome.tsx'
 import { GeneralSection } from '../src/client/GeneralSection.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from '../src/client/SettingsDocumentAction.tsx'
@@ -46,13 +47,27 @@ async function bench(isLoopback = true) {
     rpcId: 'settings-open' as never,
     result: { ok: true as const, value: { opened: true as const } },
   }))
+  const authorizationList = vi.fn(() => Promise.resolve({
+    rpcId: 'authorization-list' as never,
+    result: { ok: true as const, value: { entries: [] } },
+  }))
   ctx.provide('connection', {
-    api: { settings: { describe: settingsDescribe, openDocument: settingsOpenDocument } },
+    api: {
+      settings: { describe: settingsDescribe, openDocument: settingsOpenDocument },
+      authorization: { list: authorizationList },
+    },
     isLoopback,
   } as never)
   new TestRemote(ctx)
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, settingsDescribe, settingsOpenDocument }
+  return {
+    ctx,
+    slots: ctx.get('slots') as SlotRegistry,
+    locale,
+    settingsDescribe,
+    settingsOpenDocument,
+    authorizationList,
+  }
 }
 
 /** Declare the shell's six child slots the way ui-settings' entry does. */
@@ -98,6 +113,9 @@ describe('ui-settings-general apply', () => {
     // The onboarding hole stays declared for feature-owned steps; this plugin
     // no longer seats one.
     expect(before.slots.entries('settings.onboarding')).toEqual([])
+    const trigger = before.slots.entries('settings.trigger')[0]!
+    const triggerInjected = (trigger.inject as unknown as () => TriggerContentInjected)()
+    expect(triggerInjected.authorization?.list).toBe(before.authorizationList)
     const action = before.slots.entries('settings.action')[0]!
     const actionInjected = (action.inject as unknown as () => SettingsDocumentActionInjected)()
     expect(actionInjected.controller.store.getSnapshot().status).toBe('idle')
