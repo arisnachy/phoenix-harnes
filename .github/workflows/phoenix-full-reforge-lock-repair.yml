@@ -29,7 +29,7 @@ jobs:
           cache: pnpm
       - name: Regenerate lockfile only
         run: pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
-      - name: Validate surgical lockfile repair
+      - name: Validate bounded lockfile repair
         shell: bash
         run: |
           set -euo pipefail
@@ -38,14 +38,21 @@ jobs:
             echo "Lockfile already synchronized."
             exit 0
           fi
-          changed=$(git diff --numstat -- pnpm-lock.yaml | awk '{print $1+$2}')
-          echo "Lockfile changed lines: ${changed}"
-          if [ "${changed}" -gt 30 ]; then
-            echo "Refusing unexpectedly broad lockfile rewrite; diagnostic diff follows."
-            git diff -- pnpm-lock.yaml
+          read -r added deleted < <(git diff --numstat -- pnpm-lock.yaml | awk '{print $1, $2}')
+          echo "Lockfile delta: +${added} -${deleted}"
+          if [ "${added}" -gt 220 ] || [ "${deleted}" -gt 5 ]; then
+            echo "Refusing lockfile rewrite outside audited bounds."
+            git diff --stat -- pnpm-lock.yaml
             exit 1
           fi
-          git diff -- pnpm-lock.yaml | grep -q '@deepseek-ai/dsh-authorization'
+          diff=$(git diff -- pnpm-lock.yaml)
+          grep -q '@deepseek-ai/dsh-authorization' <<<"${diff}"
+          grep -q 'packages/client/ui-kira-teams' <<<"${diff}"
+          grep -q 'packages/client/ui-settings-profile' <<<"${diff}"
+          grep -q 'packages/mcp/chrome-connector' <<<"${diff}"
+          grep -q 'packages/phoenix/continuity' <<<"${diff}"
+          grep -q 'packages/profile/user-profile' <<<"${diff}"
+          grep -q 'packages/web/web-search-openrouter' <<<"${diff}"
       - name: Commit exact repair
         shell: bash
         run: |
@@ -55,5 +62,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pnpm-lock.yaml
-          git commit -m "chore(lock): sync apiproxy authorization dependency"
+          git diff --cached --check
+          git commit -m "chore(lock): synchronize full-reforge workspace importers"
           git push origin HEAD:phoenix/full-reforge-20260824
