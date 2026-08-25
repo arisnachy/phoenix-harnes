@@ -1,7 +1,7 @@
 /** Run repository builds and bind client artifacts to their public environment. */
 
 import { spawnSync } from 'node:child_process'
-import { rmSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
@@ -15,6 +15,17 @@ import { pnpmInvocation } from './pnpm-invocation.ts'
 
 /** Build scope selected by callers such as the stable updater. */
 type BuildScope = 'full' | 'client'
+
+/** One generated Host Remote contract that must exist before client typecheck can resolve Remote exports. */
+const HOST_REMOTE_SENTINEL = resolve(
+  import.meta.dirname,
+  '..',
+  'packages',
+  'host',
+  'plugin-inventory',
+  'lib',
+  'typert.remote-client.d.ts',
+)
 
 /** Resolve pnpm even when the stable updater launches this script outside a pnpm lifecycle. */
 function buildPnpmInvocation(args: readonly string[], environment: NodeJS.ProcessEnv): { command: string; args: string[] } {
@@ -51,6 +62,19 @@ function buildScope(value: string | undefined): BuildScope {
   throw new Error(`build: --scope must be full or client; got ${JSON.stringify(value)}`)
 }
 
+/** Ensure generated Host Remote contracts exist before a client-only build. */
+function ensureClientHostPrerequisites(environment: NodeJS.ProcessEnv): void {
+  if (existsSync(HOST_REMOTE_SENTINEL)) {
+    console.log('build: reusing generated Host Remote prerequisites')
+    return
+  }
+  console.log('build: warming generated Host Remote prerequisites once')
+  runScript('build:lib:host', environment)
+  if (!existsSync(HOST_REMOTE_SENTINEL)) {
+    throw new Error('build: Host prerequisite warm-up did not produce plugin-inventory Remote contracts')
+  }
+}
+
 /** Run the full build or the safe client-only incremental build. */
 function main(): void {
   const { values } = parseArgs({
@@ -73,6 +97,7 @@ function main(): void {
   if (scope === 'full') {
     runScript('build:lib', buildEnvironment)
   } else {
+    ensureClientHostPrerequisites(buildEnvironment)
     runScript('build:lib:client', buildEnvironment)
   }
   runScript('build:web', buildEnvironment)
