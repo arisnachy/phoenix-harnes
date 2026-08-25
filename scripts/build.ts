@@ -16,9 +16,23 @@ import { pnpmInvocation } from './pnpm-invocation.ts'
 /** Build scope selected by callers such as the stable updater. */
 type BuildScope = 'full' | 'client'
 
-/** Run one package script through the package manager that invoked this build. */
+/** Resolve pnpm even when the stable updater launches this script outside a pnpm lifecycle. */
+function buildPnpmInvocation(args: readonly string[], environment: NodeJS.ProcessEnv): { command: string; args: string[] } {
+  if (environment.npm_execpath !== undefined && environment.npm_execpath !== '') {
+    return pnpmInvocation(args, environment)
+  }
+  if (process.platform === 'win32') {
+    return {
+      command: environment.ComSpec ?? process.env.ComSpec ?? 'cmd.exe',
+      args: ['/d', '/s', '/c', 'corepack.cmd', 'pnpm', ...args],
+    }
+  }
+  return { command: 'corepack', args: ['pnpm', ...args] }
+}
+
+/** Run one package script through the active pnpm lifecycle or the updater-safe Corepack fallback. */
 function runScript(script: string, environment: NodeJS.ProcessEnv): void {
-  const invocation = pnpmInvocation(['run', script], environment)
+  const invocation = buildPnpmInvocation(['run', script], environment)
   const result = spawnSync(invocation.command, invocation.args, {
     cwd: resolve(import.meta.dirname, '..'),
     env: environment,
