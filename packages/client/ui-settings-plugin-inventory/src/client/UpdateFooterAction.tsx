@@ -11,6 +11,9 @@ import css from './UpdateFooterAction.module.css'
 
 /** Poll cadence for the repository-local updater state while Web is open. */
 const UPDATE_STATE_POLL_MS = 1250
+/** Keep expected Host disconnects from being misreported as updater failures. */
+const RESTART_RECONNECT_GRACE_MS = 2 * 60 * 1000
+const RESTART_RECONNECT_GRACE_KEY = 'phoenix.update.restart-grace-until'
 
 /** Registration-side Remote face used by the sidebar updater action. */
 export interface UpdateFooterActionInjected {
@@ -25,6 +28,32 @@ export type UpdateFooterActionProps =
   SidebarFooterActionOwnerProps
   & PropsLocale<'settings.pluginInventory'>
   & InjectFace<UpdateFooterActionInjected>
+
+/** Whether this browser tab is inside an explicitly requested restart transition. */
+function restartReconnectGraceActive(): boolean {
+  if (typeof window === 'undefined') return false
+  const value = Number(window.sessionStorage.getItem(RESTART_RECONNECT_GRACE_KEY) ?? '')
+  if (!Number.isFinite(value) || value <= Date.now()) {
+    window.sessionStorage.removeItem(RESTART_RECONNECT_GRACE_KEY)
+    return false
+  }
+  return true
+}
+
+/** Remember an accepted restart across a short Host disconnect or client remount. */
+function armRestartReconnectGrace(): void {
+  if (typeof window === 'undefined') return
+  window.sessionStorage.setItem(
+    RESTART_RECONNECT_GRACE_KEY,
+    String(Date.now() + RESTART_RECONNECT_GRACE_MS),
+  )
+}
+
+/** Clear the expected-disconnect marker once durable state is readable again. */
+function clearRestartReconnectGrace(): void {
+  if (typeof window === 'undefined') return
+  window.sessionStorage.removeItem(RESTART_RECONNECT_GRACE_KEY)
+}
 
 /**
  * Select the localized user-facing updater copy for one durable state.
@@ -97,16 +126,30 @@ export function UpdateFooterAction({
   const [snapshot, setSnapshot] = useState<PhoenixUpdateSnapshot>({ status: 'idle' })
   const [requesting, setRequesting] = useState(false)
 
+  const acceptDurableSnapshot = useCallback((next: PhoenixUpdateSnapshot) => {
+    // A successful RPC proves the Host is reachable again. From this point the
+    // durable updater state, including a real error, is authoritative.
+    clearRestartReconnectGrace()
+    setSnapshot(next)
+  }, [])
+
+  const reportReadFailure = useCallback((error: unknown) => {
+    // The Host intentionally disappears during an accepted restart. Treat that
+    // transport gap as part of the restart instead of inventing an updater error.
+    if (restartReconnectGraceActive()) return
+    setSnapshot({
+      status: 'error',
+      detail: error instanceof Error ? error.message : String(error),
+    })
+  }, [])
+
   const refresh = useCallback(async () => {
     try {
-      setSnapshot(await readUpdateState())
+      acceptDurableSnapshot(await readUpdateState())
     } catch (error) {
-      setSnapshot({
-        status: 'error',
-        detail: error instanceof Error ? error.message : String(error),
-      })
+      reportReadFailure(error)
     }
-  }, [readUpdateState])
+  }, [acceptDurableSnapshot, readUpdateState, reportReadFailure])
 
   useEffect(() => {
     let active = true
@@ -114,14 +157,9 @@ export function UpdateFooterAction({
       if (!active) return
       try {
         const next = await readUpdateState()
-        if (active) setSnapshot(next)
+        if (active) acceptDurableSnapshot(next)
       } catch (error) {
-        if (active) {
-          setSnapshot({
-            status: 'error',
-            detail: error instanceof Error ? error.message : String(error),
-          })
-        }
+        if (active) reportReadFailure(error)
       }
     }
     void read()
@@ -130,7 +168,7 @@ export function UpdateFooterAction({
       active = false
       window.clearInterval(timer)
     }
-  }, [readUpdateState])
+  }, [acceptDurableSnapshot, readUpdateState, reportReadFailure])
 
   const labelKey = updateLabelKey(snapshot)
   if (labelKey === undefined) return null
@@ -147,15 +185,13 @@ export function UpdateFooterAction({
     try {
       const receipt = await restartForUpdate()
       if (receipt.accepted) {
+        armRestartReconnectGrace()
         setSnapshot({ ...snapshot, status: 'restarting', phase: 'restart' })
         return
       }
       await refresh()
     } catch (error) {
-      setSnapshot({
-        status: 'error',
-        detail: error instanceof Error ? error.message : String(error),
-      })
+      reportReadFailure(error)
     } finally {
       setRequesting(false)
     }
