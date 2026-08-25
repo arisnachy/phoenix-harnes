@@ -4,6 +4,7 @@
  */
 import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelDirectoryState } from './directory.ts'
 
 /** Injected business face of the composer model seat. */
@@ -24,6 +25,8 @@ export interface ModelSelectInjected {
 
 /** Injected current-session data for the sidebar context meter. */
 export interface ContextMeterInjected {
-  /** Shared model directory for the selected session; absent when no session is selected. */
-  directory: SnapshotStore<ModelDirectoryState> | undefined
+  hooks: {
+    /** Current session model-directory source, bound by the renderer as useDirectory. */
+    directory: HostObservable<ModelDirectoryState | undefined>
+  }
 }
