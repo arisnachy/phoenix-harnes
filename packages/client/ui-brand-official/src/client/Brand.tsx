@@ -19,35 +19,13 @@ export function PhoenixBrandMark({ size, className }: PhoenixBrandMarkProps) {
  */
 export function PhoenixBrandName() {
   return (
-    <>
-      <img
-        src="/phoenix-wordmark.png"
-        width="156"
-        height="52"
-        alt="PHOENIX"
-        draggable={false}
-        style={{ display: 'block', width: 156, height: 52, objectFit: 'contain' }}
-      />
-      <span
-        data-phoenix-main-sync-test="true"
-        title="PHOENIX main automatic-update verification marker"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          height: 16,
-          padding: '0 5px',
-          borderRadius: 999,
-          color: 'var(--dsw-alias-label-primary-inverted)',
-          background: 'var(--dsw-alias-label-primary)',
-          fontSize: 8,
-          fontWeight: 700,
-          lineHeight: '16px',
-          letterSpacing: '0.05em',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        MAIN TEST
-      </span>
-    </>
+    <img
+      src="/phoenix-wordmark.png"
+      width="156"
+      height="52"
+      alt="PHOENIX"
+      draggable={false}
+      style={{ display: 'block', width: 156, height: 52, objectFit: 'contain' }}
+    />
   )
 }
