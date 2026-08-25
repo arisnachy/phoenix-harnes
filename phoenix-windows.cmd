@@ -17,24 +17,15 @@ if errorlevel 1 (
   set "PHOENIX_PNPM=corepack pnpm"
 )
 
-rem Managed installations follow ONLY the promoted stable channel. This path
-rem can safely realign a legacy install that was accidentally advanced to
-rem origin/main. Development checkouts keep the non-downgrading updater below.
+rem Managed installations follow ONLY the promoted stable channel. Startup may
+rem repair a legacy managed checkout that is accidentally ahead of stable, but
+rem normal forward updates are prepared by the detached watcher after the Host
+rem starts so the Web UI can report progress and request restart explicitly.
 if exist ".phoenix-managed-install" (
   if not "%PHOENIX_AUTO_UPDATE%"=="0" if exist "scripts\phoenix-managed-update.mjs" (
     node scripts\phoenix-managed-update.mjs --startup
     if errorlevel 12 (
       echo PHOENIX stable recovery failed. Review .git\phoenix-update-state.json before continuing.
-      exit /b 12
-    )
-  )
-) else (
-  rem Source/development checkouts may move forward to a promoted stable commit,
-  rem but the standard updater never downgrades a checkout that is ahead.
-  if exist "scripts\phoenix-auto-update.mjs" (
-    node scripts\phoenix-auto-update.mjs --startup
-    if errorlevel 12 (
-      echo PHOENIX update recovery failed. Review .git\phoenix-update-state.json before continuing.
       exit /b 12
     )
   )
@@ -58,6 +49,17 @@ if not "%PHOENIX_HARDNESS_SELF_PROTECT%"=="0" (
   set "PHOENIX_RUNTIME_ROOT=%CD%"
   if exist "scripts\phoenix-evolution-worktree.mjs" (
     for /f "usebackq delims=" %%P in (`node scripts\phoenix-evolution-worktree.mjs`) do set "PHOENIX_EVOLUTION_ROOT=%%P"
+  )
+)
+
+rem Start the stable watcher outside the Host process. A tiny Node bootstrap is
+rem used only to discover this cmd.exe PID and spawn the watcher detached. The
+rem watcher can therefore survive the Host's explicit restart, activate the
+rem already-prepared target, roll back on failure, and relaunch PHOENIX.
+if not "%PHOENIX_AUTO_UPDATE%"=="0" if exist "scripts\phoenix-auto-update.mjs" (
+  for /f "usebackq delims=" %%P in (`node -p "process.ppid"`) do set "PHOENIX_LAUNCHER_PID=%%P"
+  if defined PHOENIX_LAUNCHER_PID (
+    node -e "const {spawn}=require('node:child_process');const child=spawn(process.execPath,['scripts/phoenix-auto-update.mjs','--watch','--parent-pid',process.argv[1]],{cwd:process.cwd(),detached:true,stdio:'ignore',windowsHide:true,env:process.env});child.unref()" "%PHOENIX_LAUNCHER_PID%" >nul 2>nul
   )
 )
 
