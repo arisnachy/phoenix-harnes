@@ -30,6 +30,45 @@ jobs:
         run: |
           git fetch origin phoenix/continuity-v14
           git checkout origin/phoenix/continuity-v14 -- packages/phoenix packages/bundle/phoenix
+      - name: Repair imported Repo Brain output-bound contract
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('packages/phoenix/repo-brain/src/index.ts')
+          text = p.read_text(encoding='utf-8')
+          marker = 'const MAX_IMPACT_DEPTH = 8\n'
+          implementation = r'''
+
+/** Bound UTF-8 tool text without ever splitting a Unicode code point. */
+export function capToolText(text: string, maxBytes: number): string {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    throw new Error('PHOENIX Repo Brain max output bytes must be a non-negative safe integer')
+  }
+  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text
+  if (maxBytes === 0) return ''
+
+  const suffix = '[truncated]'
+  const suffixBytes = Buffer.byteLength(suffix, 'utf8')
+  const bodyBudget = maxBytes >= suffixBytes ? maxBytes - suffixBytes : maxBytes
+  let body = ''
+  let used = 0
+  for (const character of text) {
+    const size = Buffer.byteLength(character, 'utf8')
+    if (used + size > bodyBudget) break
+    body += character
+    used += size
+  }
+  if (maxBytes < suffixBytes) return body
+  return `${body}${suffix}`
+}
+'''
+          if 'export function capToolText(' not in text:
+              if marker not in text:
+                  raise SystemExit('Repo Brain cap insertion marker missing')
+              text = text.replace(marker, marker + implementation, 1)
+          p.write_text(text, encoding='utf-8')
+          PY
       - name: Wire host project references
         shell: bash
         run: |
