@@ -24,7 +24,11 @@ rem updater remains an opt-in recovery path for a legacy checkout that must be
 rem realigned to the promoted stable commit.
 if exist ".phoenix-managed-install" if "%PHOENIX_STABLE_REPAIR%"=="1" (
   if not "%PHOENIX_AUTO_UPDATE%"=="0" if exist "scripts\phoenix-managed-update.mjs" (
-    node scripts\phoenix-managed-update.mjs --startup
+    if exist "scripts\phoenix-windows-command-shim.mjs" (
+      node scripts\phoenix-windows-command-shim.mjs scripts\phoenix-managed-update.mjs --startup
+    ) else (
+      node scripts\phoenix-managed-update.mjs --startup
+    )
     if errorlevel 12 (
       echo PHOENIX stable recovery failed. Review .git\phoenix-update-state.json before continuing.
       exit /b 12
@@ -53,14 +57,14 @@ if not "%PHOENIX_HARDNESS_SELF_PROTECT%"=="0" (
   )
 )
 
-rem Start the stable watcher outside the Host process. A tiny Node bootstrap is
-rem used only to discover this cmd.exe PID and spawn the watcher detached. The
-rem watcher can therefore survive the Host's explicit restart, activate the
+rem Start the stable watcher outside the Host process. The Windows shim routes
+rem .cmd package-manager shims through cmd.exe before loading the updater. The
+rem detached watcher can survive the Host's explicit restart, activate the
 rem already-prepared target, roll back on failure, and relaunch PHOENIX.
-if not "%PHOENIX_AUTO_UPDATE%"=="0" if exist "scripts\phoenix-auto-update.mjs" (
+if not "%PHOENIX_AUTO_UPDATE%"=="0" if exist "scripts\phoenix-auto-update.mjs" if exist "scripts\phoenix-windows-command-shim.mjs" (
   for /f "usebackq delims=" %%P in (`node -p "process.ppid"`) do set "PHOENIX_LAUNCHER_PID=%%P"
   if defined PHOENIX_LAUNCHER_PID (
-    node -e "const {spawn}=require('node:child_process');const child=spawn(process.execPath,['scripts/phoenix-auto-update.mjs','--watch','--parent-pid',process.argv[1]],{cwd:process.cwd(),detached:true,stdio:'ignore',windowsHide:true,env:process.env});child.unref()" "%PHOENIX_LAUNCHER_PID%" >nul 2>nul
+    node -e "const {spawn}=require('node:child_process');const child=spawn(process.execPath,['scripts/phoenix-windows-command-shim.mjs','scripts/phoenix-auto-update.mjs','--watch','--parent-pid',process.argv[1]],{cwd:process.cwd(),detached:true,stdio:'ignore',windowsHide:true,env:process.env});child.unref()" "%PHOENIX_LAUNCHER_PID%" >nul 2>nul
   )
 )
 
