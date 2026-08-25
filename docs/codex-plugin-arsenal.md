@@ -1,5 +1,7 @@
 # PHOENIX Codex plugin arsenal
 
+English | [中文](codex-plugin-arsenal.zh.md)
+
 PHOENIX can consume the official Codex plugin marketplace without vendoring the upstream plugin repository into this public source tree.
 
 ## What `sync` installs
