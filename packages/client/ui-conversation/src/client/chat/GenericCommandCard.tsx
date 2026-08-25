@@ -31,6 +31,7 @@ function structuredBody(text: string): { summary: string; body: string } | undef
   if (error.code !== undefined) lines.push(`Código: ${error.code}`)
   for (const field of error.fields) lines.push(`${field.label}: ${field.value}`)
   if (error.action !== undefined) lines.push(`Qué puedes hacer: ${error.action}`)
+  lines.push('', 'JSON original:', error.rawJson)
   return {
     summary: error.message ?? error.title,
     body: lines.join('\n'),
