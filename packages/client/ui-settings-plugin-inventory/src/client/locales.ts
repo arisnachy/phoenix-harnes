@@ -1,4 +1,4 @@
-/** Copy dictionaries for the plugin inventory Settings section. */
+/** Copy dictionaries for the plugin inventory Settings section and updater footer action. */
 
 /** Simplified Chinese dictionary and key source of truth. */
 export const zh = {
@@ -20,6 +20,19 @@ export const zh = {
   active: '已挂载',
   failed: '挂载失败',
   unloading: '卸载中',
+  updateAvailable: '有可用更新',
+  updateSource: '正在下载更新…',
+  updateDependencies: '正在准备更新…',
+  updateBuild: '正在构建更新…',
+  updateSmoke: '正在验证更新…',
+  updateReady: '更新已准备好',
+  updateRestart: '重启以完成更新',
+  updateRestarting: '正在重启以更新…',
+  updateApplying: '正在应用更新…',
+  updateRollingBack: '正在恢复稳定版本…',
+  updateRolledBack: '已恢复上一稳定版本',
+  updatePaused: '更新已暂停',
+  updateError: '更新失败',
 } satisfies Record<string, string>
 
 /** Plugin inventory locale key union. */
@@ -45,4 +58,52 @@ export const en = {
   active: 'Mounted',
   failed: 'Mount failed',
   unloading: 'Unloading',
+  updateAvailable: 'Update available',
+  updateSource: 'Downloading update…',
+  updateDependencies: 'Preparing update…',
+  updateBuild: 'Building update…',
+  updateSmoke: 'Verifying update…',
+  updateReady: 'Update ready',
+  updateRestart: 'Restart to complete update',
+  updateRestarting: 'Restarting to update…',
+  updateApplying: 'Applying update…',
+  updateRollingBack: 'Restoring stable version…',
+  updateRolledBack: 'Previous stable version restored',
+  updatePaused: 'Updates paused',
+  updateError: 'Update failed',
+} satisfies Record<PluginInventoryLocaleKey, string>
+
+/** Spanish dictionary checked against the same key set. */
+export const es = {
+  tab: 'Lista de plugins',
+  loading: 'Leyendo plugins…',
+  error: 'Los plugins no están disponibles temporalmente.',
+  retry: 'Reintentar',
+  search: 'Buscar plugins',
+  catalog: 'Lista de plugins',
+  empty: 'No hay plugins disponibles.',
+  emptySearch: 'No hay plugins que coincidan.',
+  enabledTag: 'Activado',
+  disabledTag: 'Desactivado',
+  configuration: 'Configuración',
+  cordis: 'Estado de Cordis',
+  unobserved: 'No montado',
+  pending: 'Esperando dependencias',
+  loadingPhase: 'Cargando',
+  active: 'Montado',
+  failed: 'Falló el montaje',
+  unloading: 'Descargando',
+  updateAvailable: 'Actualización disponible',
+  updateSource: 'Descargando actualización…',
+  updateDependencies: 'Preparando actualización…',
+  updateBuild: 'Compilando actualización…',
+  updateSmoke: 'Verificando actualización…',
+  updateReady: 'Actualización lista',
+  updateRestart: 'Reiniciar para completar la actualización',
+  updateRestarting: 'Reiniciando para actualizar…',
+  updateApplying: 'Aplicando actualización…',
+  updateRollingBack: 'Restaurando versión estable…',
+  updateRolledBack: 'Versión estable anterior restaurada',
+  updatePaused: 'Actualizaciones en pausa',
+  updateError: 'La actualización falló',
 } satisfies Record<PluginInventoryLocaleKey, string>

@@ -8,6 +8,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $repository = 'https://github.com/arisnachy/phoenix-harnes.git'
 $minimumNode = [Version]'22.19.0'
+$stableChannelBranch = 'phoenix/update-channel'
+$stableManifestPath = '.phoenix/channel/stable.json'
 
 function Refresh-ProcessPath {
   $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
@@ -29,6 +31,48 @@ function Require-Command([string]$Name, [string]$WingetId) {
   }
 }
 
+function Invoke-PhoenixPnpm([string[]]$Arguments) {
+  if (Get-Command corepack -ErrorAction SilentlyContinue) {
+    & corepack pnpm @Arguments
+  } else {
+    Write-Host 'Corepack is not bundled with this Node release; using pinned Corepack 0.34.6.'
+    & npm exec --yes corepack@0.34.6 pnpm -- @Arguments
+  }
+  if ($LASTEXITCODE -ne 0) {
+    throw "PHOENIX package command failed: pnpm $($Arguments -join ' ')"
+  }
+}
+
+function Get-PhoenixStableManifest {
+  & git fetch --quiet origin "refs/heads/$stableChannelBranch`:refs/remotes/origin/$stableChannelBranch"
+  if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the PHOENIX stable channel.' }
+  & git fetch --quiet origin 'refs/heads/main:refs/remotes/origin/main'
+  if ($LASTEXITCODE -ne 0) { throw 'Could not fetch PHOENIX main for stable-target verification.' }
+
+  $manifestSpec = "origin/$stableChannelBranch`:$stableManifestPath"
+  $raw = ((& git show $manifestSpec) | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) {
+    throw 'Could not read the PHOENIX stable manifest.'
+  }
+  $manifest = $raw | ConvertFrom-Json
+  if ($manifest.schema -ne 1 -or $manifest.product -ne 'PHOENIX' -or $manifest.channel -ne 'stable') {
+    throw 'PHOENIX stable manifest identity mismatch.'
+  }
+  if ($manifest.sourceBranch -ne 'main') {
+    throw 'PHOENIX stable manifest must nominate main.'
+  }
+  $target = [string]$manifest.sourceCommit
+  if ($target -notmatch '^[0-9a-fA-F]{40}$') {
+    throw 'PHOENIX stable manifest contains an invalid sourceCommit.'
+  }
+
+  & git cat-file -e "$target^{commit}" 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "PHOENIX stable target $target is unavailable." }
+  & git merge-base --is-ancestor $target origin/main
+  if ($LASTEXITCODE -ne 0) { throw "PHOENIX stable target $target is not reachable from origin/main." }
+  return $manifest
+}
+
 Require-Command git 'Git.Git'
 Require-Command node 'OpenJS.NodeJS.LTS'
 
@@ -38,45 +82,68 @@ if ($nodeVersion -lt $minimumNode) {
 }
 
 $resolvedInstallDirectory = [IO.Path]::GetFullPath($InstallDirectory)
-if (Test-Path $resolvedInstallDirectory) {
+$existingInstall = Test-Path $resolvedInstallDirectory
+if ($existingInstall) {
   if (-not (Test-Path (Join-Path $resolvedInstallDirectory '.git'))) {
     throw "Install directory exists but is not a PHOENIX Git checkout: $resolvedInstallDirectory"
   }
-  Push-Location $resolvedInstallDirectory
-  try {
-    if ((& git status --porcelain).Count -ne 0) {
-      throw 'The installed PHOENIX checkout has local changes; update stopped to preserve them.'
-    }
-    & git fetch origin main
-    if ($LASTEXITCODE -ne 0) { throw 'Could not fetch PHOENIX main.' }
-    & git switch main
-    if ($LASTEXITCODE -ne 0) { throw 'Could not switch the installed checkout to main.' }
-    & git merge --ff-only origin/main
-    if ($LASTEXITCODE -ne 0) { throw 'PHOENIX main could not be applied as a fast-forward update.' }
-  } finally {
-    Pop-Location
+  if (-not (Test-Path (Join-Path $resolvedInstallDirectory '.phoenix-managed-install'))) {
+    throw "Install directory is a Git checkout but is not marked as a managed PHOENIX installation: $resolvedInstallDirectory"
   }
 } else {
   $parent = Split-Path -Parent $resolvedInstallDirectory
   New-Item -ItemType Directory -Force -Path $parent | Out-Null
+  # main is only a transport/bootstrap checkout. Before dependencies are
+  # installed or PHOENIX is launched, the checkout is reset to the commit
+  # nominated by the independently fetched stable channel below.
   & git clone --branch main --single-branch $repository $resolvedInstallDirectory
   if ($LASTEXITCODE -ne 0) { throw 'Could not clone PHOENIX.' }
 }
 
 Push-Location $resolvedInstallDirectory
 try {
-  Set-Content -LiteralPath (Join-Path $resolvedInstallDirectory '.phoenix-managed-install') -Value "managed`n" -Encoding Ascii
-  if (Get-Command corepack -ErrorAction SilentlyContinue) {
-    & corepack pnpm install --frozen-lockfile
-    if ($LASTEXITCODE -ne 0) { throw 'PHOENIX dependency installation failed.' }
-    & corepack pnpm run build
-  } else {
-    Write-Host 'Corepack is not bundled with this Node release; using a pinned Corepack runner.'
-    & npm exec --yes corepack@0.34.6 pnpm -- install --frozen-lockfile
-    if ($LASTEXITCODE -ne 0) { throw 'PHOENIX dependency installation failed.' }
-    & npm exec --yes corepack@0.34.6 pnpm -- run build
+  if ((& git status --porcelain).Count -ne 0) {
+    throw 'The managed PHOENIX checkout has local changes; stable alignment stopped to preserve them.'
   }
-  if ($LASTEXITCODE -ne 0) { throw 'PHOENIX build failed; the launcher was not installed.' }
+
+  $previous = (& git rev-parse HEAD).Trim()
+  $manifest = Get-PhoenixStableManifest
+  $target = [string]$manifest.sourceCommit
+
+  if ($previous -ne $target) {
+    & git update-ref refs/phoenix/recovery/pre-install $previous
+    if ($LASTEXITCODE -ne 0) { throw 'Could not record the pre-install PHOENIX recovery ref.' }
+    Write-Host "Aligning PHOENIX to promoted stable $($target.Substring(0, 12))..."
+    & git reset --hard $target
+    if ($LASTEXITCODE -ne 0) { throw 'Could not align PHOENIX to the promoted stable commit.' }
+  }
+
+  Set-Content -LiteralPath (Join-Path $resolvedInstallDirectory '.phoenix-managed-install') -Value "managed`n" -Encoding Ascii
+
+  try {
+    Invoke-PhoenixPnpm @('install', '--frozen-lockfile')
+    Invoke-PhoenixPnpm @('run', 'build')
+    & node (Join-Path $resolvedInstallDirectory 'apps\cli\lib\bin.js') --version
+    if ($LASTEXITCODE -ne 0) { throw 'PHOENIX launcher smoke test failed.' }
+    & git update-ref refs/phoenix/recovery/last-good $target
+    if ($LASTEXITCODE -ne 0) { throw 'Could not record the PHOENIX last-good stable ref.' }
+
+    $gitDir = (& git rev-parse --git-dir).Trim()
+    if (-not [IO.Path]::IsPathRooted($gitDir)) { $gitDir = Join-Path $resolvedInstallDirectory $gitDir }
+    $state = [ordered]@{
+      status = 'installed-stable'
+      current = $target
+      channelPublishedAt = [string]$manifest.publishedAt
+      at = [DateTime]::UtcNow.ToString('o')
+    }
+    $state | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $gitDir 'phoenix-update-state.json') -Encoding UTF8
+  } catch {
+    if ($previous -ne $target) {
+      Write-Warning "Stable installation failed; restoring pre-install checkout $($previous.Substring(0, 12))."
+      & git reset --hard $previous | Out-Null
+    }
+    throw
+  }
 } finally {
   Pop-Location
 }
@@ -90,6 +157,6 @@ $shortcut.WorkingDirectory = $resolvedInstallDirectory
 $shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,14"
 $shortcut.Save()
 
-Write-Host "PHOENIX HARDNESS is installed at $resolvedInstallDirectory"
+Write-Host "PHOENIX HARDNESS stable is installed at $resolvedInstallDirectory"
 Write-Host "Start menu shortcut: $shortcutPath"
 if (-not $NoLaunch) { & (Join-Path $resolvedInstallDirectory 'phoenix-windows.cmd') }
