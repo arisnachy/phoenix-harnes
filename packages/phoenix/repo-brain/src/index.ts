@@ -18,6 +18,31 @@ const DEFAULT_MAX_TERMS_PER_FILE = 2_048
 const DEFAULT_LIMIT = 12
 const MAX_TOOL_LIMIT = 50
 const MAX_IMPACT_DEPTH = 8
+const MAX_TOOL_OUTPUT_BYTES = 16_384
+const TOOL_OUTPUT_TRUNCATION_SUFFIX = '[truncated]'
+
+/** Cap model-facing text by UTF-8 bytes without splitting a code point. */
+export function capToolText(text: string, maxBytes: number): string {
+  const budget = Number.isSafeInteger(maxBytes) && maxBytes > 0 ? maxBytes : 0
+  if (Buffer.byteLength(text, 'utf8') <= budget) return text
+
+  const truncateUtf8 = (value: string, byteBudget: number): string => {
+    let output = ''
+    let used = 0
+    for (const char of value) {
+      const bytes = Buffer.byteLength(char, 'utf8')
+      if (used + bytes > byteBudget) break
+      output += char
+      used += bytes
+    }
+    return output
+  }
+
+  const suffixBytes = Buffer.byteLength(TOOL_OUTPUT_TRUNCATION_SUFFIX, 'utf8')
+  if (suffixBytes > budget) return truncateUtf8(TOOL_OUTPUT_TRUNCATION_SUFFIX, budget)
+  const prefix = truncateUtf8(text, budget - suffixBytes)
+  return `${prefix}${TOOL_OUTPUT_TRUNCATION_SUFFIX}`
+}
 
 const SOURCE_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts',
@@ -438,22 +463,22 @@ export default class PhoenixRepoBrain extends Service {
           const query = typeof args.query === 'string' ? args.query.trim() : ''
           if (query.length === 0) throw new Error('repo_brain search requires query')
           const limit = typeof args.limit === 'number' ? Math.trunc(args.limit) : resolved.defaultLimit
-          return { text: formatSearch(await this.index.search(query, limit)) }
+          return { text: capToolText(formatSearch(await this.index.search(query, limit)), MAX_TOOL_OUTPUT_BYTES) }
         }
         if (action === 'impact') {
           const path = typeof args.path === 'string' ? args.path.trim() : ''
           if (path.length === 0) throw new Error('repo_brain impact requires path')
           const depth = typeof args.depth === 'number' ? Math.trunc(args.depth) : 2
           const limit = typeof args.limit === 'number' ? Math.trunc(args.limit) : resolved.defaultLimit
-          return { text: formatImpact(path, await this.index.impact(path, depth, limit)) }
+          return { text: capToolText(formatImpact(path, await this.index.impact(path, depth, limit)), MAX_TOOL_OUTPUT_BYTES) }
         }
         if (action === 'refresh') {
           const summary = await this.index.refresh()
-          return { text: `Repo Brain refreshed ${summary.files} files: reread=${summary.reread}, reused=${summary.reused}, removed=${summary.removed}, truncated=${String(summary.truncated)}.` }
+          return { text: capToolText(`Repo Brain refreshed ${summary.files} files: reread=${summary.reread}, reused=${summary.reused}, removed=${summary.removed}, truncated=${String(summary.truncated)}.`, MAX_TOOL_OUTPUT_BYTES) }
         }
         if (action === 'stats') {
           const stats = this.index.stats()
-          return { text: `Repo Brain stats: files=${stats.files}, symbols=${stats.symbols}, edges=${stats.edges}, indexed=${String(stats.indexed)}.` }
+          return { text: capToolText(`Repo Brain stats: files=${stats.files}, symbols=${stats.symbols}, edges=${stats.edges}, indexed=${String(stats.indexed)}.`, MAX_TOOL_OUTPUT_BYTES) }
         }
         throw new Error(`repo_brain unknown action "${String(action)}"`)
       },

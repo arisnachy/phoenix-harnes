@@ -71,4 +71,4 @@ The tool schema is stable across index refreshes. Tool-call results append new c
 - **Import graph scope** — v13 resolves relative JavaScript/TypeScript-family imports, including emitted `.js` specifiers that map back to TypeScript sources. Workspace aliases, package exports, Python imports, and other language dependency graphs are deferred.
 - **Process-local index** — the index is rebuilt after process restart; durable index persistence is deferred until a stable cache invalidation contract exists.
 - **Change fingerprint** — incremental reuse currently keys on file size and modification time, so filesystems with unusually coarse timestamps can theoretically miss an equal-size rewrite until another metadata change.
-- **Result byte ceiling** — item counts are bounded, but a separate byte-level cap for the complete rendered tool result is still required before this package should be treated as production-complete.
+- **Result byte ceiling** — complete model-facing tool text is capped at 16 KiB with UTF-8-safe truncation. This protects context growth, but unusually large result sets can end with `[truncated]`.

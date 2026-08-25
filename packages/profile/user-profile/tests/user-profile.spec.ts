@@ -122,12 +122,14 @@ describe('user profile validation and projection helpers', () => {
   it('merges values and consent without mutation while ignoring explicit undefined updates', () => {
     const current = populatedProfile()
     const original = structuredClone(current)
-    const next = mergeUserProfile(current, {
+    const patch: unknown = {
       fullName: 'Changed',
       preferredName: undefined,
       family: [{ relationship: 'friend' }],
       consent: { fullName: true },
-    })
+    }
+    validateUserProfileUpdate(patch)
+    const next = mergeUserProfile(current, patch)
 
     expect(next.fullName).toBe('Changed')
     expect(next.preferredName).toBe(original.preferredName)
