@@ -17,6 +17,8 @@ export interface StructuredErrorPresentation {
   readonly code?: string
   readonly fields: readonly StructuredErrorField[]
   readonly action?: string
+  /** Complete provider payload, preserved semantically and pretty-printed only for opt-in inspection. */
+  readonly rawJson: string
 }
 
 type JsonRecord = Record<string, unknown>
@@ -44,7 +46,8 @@ const LABELS: Readonly<Record<string, string>> = {
 }
 
 const PROSE_KEYS = new Set(['message', 'raw', 'detail', 'details', 'remedy_hint', 'hint', 'reason'])
-const OMITTED_KEYS = new Set(['message', 'remedy_hint'])
+// Verbose provider payloads belong in the opt-in raw JSON disclosure, not in the friendly summary.
+const OMITTED_KEYS = new Set(['message', 'remedy_hint', 'raw', 'previous_errors'])
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -57,6 +60,9 @@ function bounded(value: string): string {
 /** Translate only generic error prose, never identifiers, provider/model names, enum values, IDs or URLs. */
 export function translateGenericErrorProse(value: string): string {
   return value
+    .replace(/\bThis request requires more credits, or fewer max_tokens\b/giu, 'Esta solicitud requiere más créditos o un max_tokens menor')
+    .replace(/\bYou requested up to ([\d,]+) tokens, but can only afford ([\d,]+)\b/giu, 'Solicitaste hasta $1 tokens, pero el saldo disponible solo cubre aproximadamente $2')
+    .replace(/\bPrompt tokens limit exceeded:\s*([\d,]+)\s*>\s*([\d,]+)/giu, 'Límite de tokens del contexto superado: $1 > $2')
     .replace(/\bProvider returned error\b/giu, 'El proveedor devolvió un error')
     .replace(/\bis temporarily rate-limited upstream\b/giu, 'está temporalmente limitado por el proveedor upstream')
     .replace(/\btemporarily rate-limited\b/giu, 'temporalmente limitado')
@@ -72,6 +78,9 @@ export function translateGenericErrorProse(value: string): string {
     .replace(/\bforbidden\b/giu, 'acceso denegado')
     .replace(/\bnot found\b/giu, 'no encontrado')
     .replace(/\binternal server error\b/giu, 'error interno del servidor')
+    .replace(/\bAdd credits at\b/giu, 'Añade créditos en')
+    .replace(/\bor lower max_tokens \/ prompt size to fit your remaining balance\b/giu, 'o reduce max_tokens / el tamaño del contexto para ajustarte al saldo restante')
+    .replace(/\bTo increase, visit\b/giu, 'Para ampliarlo, visita')
     .replace(/\badd your own provider key\b/giu, 'añade tu propia clave del proveedor')
     .replace(/\bor route to another provider with provider routing\b/giu, 'o cambia a otro proveedor mediante provider routing')
 }
@@ -185,14 +194,29 @@ function parseEnvelope(input: string): { payload: unknown; prefixCode?: string }
 }
 
 function titleFor(code: string | undefined, provider: string | undefined): string {
-  if (code === '429') return 'Límite temporal de solicitudes'
+  if (code === '400') return 'Solicitud no válida'
   if (code === '401') return 'Autenticación requerida'
+  if (code === '402') return 'Créditos insuficientes'
   if (code === '403') return 'Acceso denegado'
   if (code === '404') return 'Recurso no encontrado'
   if (code === '408' || code === '504') return 'La solicitud tardó demasiado'
+  if (code === '413') return 'Solicitud demasiado grande'
+  if (code === '422') return 'La solicitud no pudo procesarse'
+  if (code === '429') return 'Límite temporal de solicitudes'
   if (code !== undefined && /^5\d\d$/u.test(code)) return 'Error temporal del servicio'
   if (provider !== undefined) return 'Error del proveedor'
   return 'Error de la solicitud'
+}
+
+function fallbackAction(code: string | undefined): string | undefined {
+  if (code === '402') return 'Reduce max_tokens o el tamaño del contexto, o cambia a una ruta gratuita compatible antes de usar crédito de pago.'
+  if (code === '429') return 'Reintenta de forma controlada y, si persiste, cambia a otra ruta compatible disponible.'
+  if (code === '401' || code === '403') return 'Revisa las credenciales y permisos de esta ruta antes de reintentar.'
+  if (code === '404') return 'Usa otro modelo o proveedor compatible configurado para esta capacidad.'
+  if (code === '408' || code === '504' || (code !== undefined && /^5\d\d$/u.test(code))) {
+    return 'Reintenta de forma controlada y usa failover si el proveedor continúa sin responder.'
+  }
+  return undefined
 }
 
 /**
@@ -218,9 +242,10 @@ export function formatStructuredError(
   const message = typeof messageValue === 'string'
     ? bounded(translateGenericErrorProse(messageValue))
     : undefined
-  const action = typeof actionValue === 'string'
+  const providerAction = typeof actionValue === 'string'
     ? bounded(translateGenericErrorProse(actionValue))
     : undefined
+  const action = providerAction ?? fallbackAction(code)
 
   const fields: StructuredErrorField[] = []
   flatten(envelope.payload, fields)
@@ -234,5 +259,6 @@ export function formatStructuredError(
     ...(code === undefined ? {} : { code }),
     fields: filtered,
     ...(action === undefined ? {} : { action }),
+    rawJson: JSON.stringify(envelope.payload, null, 2),
   }
 }
