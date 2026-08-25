@@ -31,26 +31,61 @@ describe('user profile validation and projection helpers', () => {
     expect(() => { validateDateOfBirth('1800-01-01', new Date('2026-01-01T00:00:00Z')) }).toThrow('age limit')
   })
 
-  it('merges consent and values without mutating the stored snapshot', () => {
+  it('merges expanded profile fields and consent without mutating the stored snapshot', () => {
     const current = profile({ preferredName: 'Ari' })
     const next = mergeUserProfile(current, {
+      fullName: 'Arisnachy Gomez Diaz',
       preferredName: 'Aris',
-      consent: { preferredName: true },
+      profession: 'Physician and professor',
+      country: 'Dominican Republic',
+      preferredLanguage: 'es',
+      timezone: 'America/Santo_Domingo',
+      technicalLevel: 'expert',
+      responsePreferences: 'Use rigorous, concise technical explanations.',
+      consent: {
+        preferredName: true,
+        profession: true,
+        preferredLanguage: true,
+        technicalLevel: true,
+      },
     })
 
+    expect(next.fullName).toBe('Arisnachy Gomez Diaz')
     expect(next.preferredName).toBe('Aris')
+    expect(next.profession).toBe('Physician and professor')
+    expect(next.country).toBe('Dominican Republic')
+    expect(next.timezone).toBe('America/Santo_Domingo')
     expect(next.consent.preferredName).toBe(true)
+    expect(next.consent.profession).toBe(true)
     expect(current.preferredName).toBe('Ari')
     expect(current.consent.preferredName).toBe(false)
   })
 
   it('clears optional values through null updates', () => {
-    const next = mergeUserProfile(profile({ preferredName: 'Aris' }), { preferredName: null })
+    const next = mergeUserProfile(profile({ preferredName: 'Aris', profession: 'Physician' }), {
+      preferredName: null,
+      profession: null,
+    })
     expect(next).not.toHaveProperty('preferredName')
+    expect(next).not.toHaveProperty('profession')
   })
 
-  it('rejects unknown consent keys and control characters', () => {
+  it('rejects unknown update and consent keys plus control characters', () => {
+    expect(() => { validateUserProfileUpdate({ secret: 'x' }) }).toThrow('unknown user profile update field')
     expect(() => { validateUserProfileUpdate({ consent: { secret: true } }) }).toThrow('unknown user profile consent field')
     expect(() => { validateUserProfile(profile({ preferredName: 'bad\nname' })) }).toThrow('control character')
+  })
+
+  it('keeps every expanded consent field opt-in by default', () => {
+    expect(Object.values(DEFAULT_USER_PROFILE_CONSENT).every(value => value === false)).toBe(true)
+    expect(DEFAULT_USER_PROFILE_CONSENT).toMatchObject({
+      fullName: false,
+      profession: false,
+      country: false,
+      preferredLanguage: false,
+      timezone: false,
+      technicalLevel: false,
+      responsePreferences: false,
+    })
   })
 })
