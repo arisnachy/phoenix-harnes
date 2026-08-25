@@ -1,15 +1,12 @@
 /**
- * Model selection plugin, browser half — TWO entries over ONE per-session
- * directory owned by ModelDirectoryResolver (`ctx.modelDirectories`). The /model popupSelect
- * contribution and the composer's named `conversation.input.model` seat both
- * load the session's provider-grouped advisory directory (`session.models`)
- * and submit through `session.selectModel` via the same directory instance,
- * so the host-reported current selection is the single fact both surfaces echo
- * — a switch made in either entry is what the other shows next. Failures
- * ride each entry's own retry surface (popup shell error/retry; seat menu
- * inline error) without forking the state. Addressed subagent sessions expose
- * neither entry because those Agent-bound RPCs would activate persisted
- * history outside the direct-parent continuation path.
+ * Model selection plugin, browser half — THREE surfaces over ONE per-session
+ * directory owned by ModelDirectoryResolver (`ctx.modelDirectories`). The /model popupSelect,
+ * composer's named `conversation.input.model` seat, and sidebar OpenAI context meter
+ * all derive their provider/model state from the same session directory. The two
+ * selection surfaces submit through `session.selectModel`; the footer additionally
+ * reads the framework-owned `contextPressure` projection for that same current session.
+ * Addressed subagent sessions expose neither selection entry because those Agent-bound
+ * RPCs would activate persisted history outside the direct-parent continuation path.
  */
 // Type-only: the carrier types, the forwarded Host-event face and the ctx.remote merge.
 import type { ModelSelection, SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
@@ -37,7 +34,7 @@ export type { ModelKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** The model selection surfaces' copy (/model popup + composer seat). */
+    /** The model selection surfaces' copy (/model popup + composer seat + context footer). */
     model: ModelKey
   }
 }
@@ -152,10 +149,16 @@ export function apply(ctx: ClientContext): void {
     }), 'ui-model-selection: /model contribution')
   })
 
-  // Entry 2: the composer's named model seat over the SAME directory.
+  // Entry 2 and 3 share the same directory service. The empty source is scoped
+  // to this plugin application, keeping its identity stable while no session is selected.
   ctx.inject(['slots', 'modelDirectories'], (scope: ClientContext) => {
     const models = scope.modelDirectories
     const sessions = scope.sessions
+    const emptyDirectory: ContextMeterInjected['hooks']['directory'] = {
+      getSnapshot: () => undefined,
+      subscribe: () => () => {},
+    }
+
     scope.slots.inject('conversation.input.model', () => scope.slots.register({
       name: 'conversation.input.model',
       locale: NS,
@@ -175,16 +178,17 @@ export function apply(ctx: ClientContext): void {
       },
     }, ModelSelect))
 
-    // Entry 3: the sidebar footer meter. session-maybe keeps the entry mounted
-    // while selection changes; both its directory and projection hook are
-    // rebound by the framework to the current session, so stale percentages
-    // cannot leak across sessions.
+    // session-maybe rebinds both the directory source and contextPressure hook
+    // to the current session. A session switch therefore cannot retain another
+    // session's model route or percentage.
     scope.slots.inject('sidebar.footer.action', () => scope.slots.register({
       name: 'sidebar.footer.action',
       id: 'openai-context-meter',
       locale: NS,
       inject: (sessionId): ContextMeterInjected => ({
-        directory: sessionId === undefined ? undefined : models.directoryFor(sessionId).store,
+        hooks: {
+          directory: sessionId === undefined ? emptyDirectory : models.directoryFor(sessionId).store,
+        },
       }),
     }, ContextMeter))
   })
