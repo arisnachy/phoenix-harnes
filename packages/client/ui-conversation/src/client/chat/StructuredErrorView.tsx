@@ -6,7 +6,7 @@ export interface StructuredErrorViewProps {
   readonly message: string
   readonly code?: string | number
   readonly compact?: boolean
-  readonly fallbackClassName?: string
+  readonly fallbackClassName?: string | undefined
 }
 
 /**
