@@ -1,0 +1,59 @@
+name: PHOENIX Full Reforge Lock Repair
+
+on:
+  push:
+    branches:
+      - phoenix/full-reforge-20260824
+
+permissions:
+  contents: write
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+
+jobs:
+  repair-lockfile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: phoenix/full-reforge-20260824
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+      - name: Regenerate lockfile only
+        run: pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
+      - name: Validate surgical lockfile repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check -- pnpm-lock.yaml
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "Lockfile already synchronized."
+            exit 0
+          fi
+          changed=$(git diff --numstat -- pnpm-lock.yaml | awk '{print $1+$2}')
+          echo "Lockfile changed lines: ${changed}"
+          if [ "${changed}" -gt 30 ]; then
+            echo "Refusing unexpectedly broad lockfile rewrite."
+            git diff --stat -- pnpm-lock.yaml
+            exit 1
+          fi
+          git diff -- pnpm-lock.yaml | grep -q '@deepseek-ai/dsh-authorization'
+      - name: Commit exact repair
+        shell: bash
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "chore(lock): sync apiproxy authorization dependency"
+          git push origin HEAD:phoenix/full-reforge-20260824
