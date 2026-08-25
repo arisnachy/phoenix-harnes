@@ -30,9 +30,11 @@ jobs:
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
       - name: Apply deterministic repairs
-        run: python scripts/phoenix-finalize-static.py
+        run: |
+          python scripts/phoenix-finalize-static.py
+          python scripts/phoenix-finalize-catalog.py
       - name: Remove one-shot repair machinery
-        run: git rm -f .github/workflows/phoenix-integrate-runtime-stack.yml .github/workflows/phoenix-static-finalize.yml scripts/phoenix-finalize-static.py
+        run: git rm -f .github/workflows/phoenix-integrate-runtime-stack.yml .github/workflows/phoenix-static-finalize.yml scripts/phoenix-finalize-static.py scripts/phoenix-finalize-catalog.py
       - name: Regenerate derived documentation
         shell: bash
         run: |
@@ -48,7 +50,7 @@ jobs:
               pnpm exec tsx scripts/verify-translation-pairing.ts --write "$path"
             fi
           done < <(git diff --name-only -- '*.md' | sort -u)
-          for path in packages/README.md packages/bundle/README.md packages/bundle/phoenix/README.md packages/phoenix/README.md packages/phoenix/ai-bus/README.md packages/phoenix/continuity/README.md packages/phoenix/repo-brain/README.md packages/phoenix/runtime/README.md; do
+          for path in docs/subsystems/phoenix.md packages/README.md packages/bundle/README.md packages/bundle/phoenix/README.md packages/phoenix/README.md packages/phoenix/ai-bus/README.md packages/phoenix/continuity/README.md packages/phoenix/repo-brain/README.md packages/phoenix/runtime/README.md; do
             pnpm exec tsx scripts/verify-translation-pairing.ts --write "$path"
           done
           git diff --check
