@@ -1,0 +1,295 @@
+name: PHOENIX v13 native contracts
+
+on:
+  pull_request:
+    branches:
+      - phoenix/genesis-v12
+
+permissions:
+  contents: write
+
+jobs:
+  contracts:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'phoenix/cognition-v13'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PHOENIX v13 head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Enforce PHOENIX native public contracts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = [
+              ('@deepseek-ai/dsh-phoenix-repo-brain', '@arisnachy/phoenix-repo-brain'),
+              ('@deepseek-ai/dsh-phoenix-ai-bus', '@arisnachy/phoenix-ai-bus'),
+              ('@deepseek-ai/dsh-phoenix-runtime', '@arisnachy/phoenix-runtime'),
+              ('@deepseek-ai/dsh-phoenix', '@arisnachy/phoenix-bundle'),
+          ]
+          roots = [Path('packages/phoenix'), Path('packages/bundle/phoenix')]
+          text_suffixes = {'.json', '.ts', '.md', '.yml', '.yaml'}
+          for root in roots:
+              for file in root.rglob('*'):
+                  if not file.is_file() or file.suffix not in text_suffixes:
+                      continue
+                  text = file.read_text()
+                  for old, new in replacements:
+                      text = text.replace(old, new)
+                  file.write_text(text)
+
+          for file in [
+              Path('packages/phoenix/runtime/src/invariant.ts'),
+              Path('packages/phoenix/ai-bus/src/invariant.ts'),
+              Path('packages/phoenix/repo-brain/src/invariant.ts'),
+              Path('packages/bundle/phoenix/src/invariant.ts'),
+          ]:
+              text = file.read_text()
+              if 'No runtime invariant:' not in text and 'const install: InvariantInstaller = () => {}' in text:
+                  text = text.replace(
+                      'const install: InvariantInstaller = () => {}',
+                      '// No runtime invariant: this package owns policy/read-only state; executable enforcement is owned by its DSH seams.\nconst install: InvariantInstaller = () => {}',
+                      1,
+                  )
+                  file.write_text(text)
+
+          # Repo Brain gets a complete UTF-8 output cap, explicit public signatures,
+          # and documented configuration so both Typert and config-catalog own it.
+          path = Path('packages/phoenix/repo-brain/src/index.ts')
+          code = path.read_text()
+          code = code.replace(
+              'const DEFAULT_LIMIT = 12\nconst MAX_TOOL_LIMIT = 50',
+              'const DEFAULT_LIMIT = 12\nconst DEFAULT_MAX_OUTPUT_BYTES = 65_536\nconst MAX_TOOL_LIMIT = 50',
+          )
+          old_config = """export interface RepoBrainConfig {
+            root?: string
+            maxFiles?: number
+            maxFileBytes?: number
+            maxTermsPerFile?: number
+            defaultLimit?: number
+          }
+          """
+          new_config = """/** PHOENIX repository-index bounds and root selection. */
+          export interface RepoBrainConfig {
+            /** Repository root to index; defaults to the harness working directory. */
+            root?: string
+            /** Maximum source/config/document files retained by one refresh. */
+            maxFiles?: number
+            /** Maximum bytes read from any one indexed file. */
+            maxFileBytes?: number
+            /** Maximum distinct lexical terms retained for one file. */
+            maxTermsPerFile?: number
+            /** Default number of search/impact rows returned before per-call overrides. */
+            defaultLimit?: number
+            /** Maximum UTF-8 bytes in the complete model-facing text of one repo_brain result. */
+            maxOutputBytes?: number
+          }
+          """
+          if 'maxOutputBytes?: number' not in code:
+              if old_config not in code:
+                  raise SystemExit('Repo Brain config block anchor not found')
+              code = code.replace(old_config, new_config, 1)
+          else:
+              # Earlier runs may already have added the field but not its prose.
+              code = code.replace('export interface RepoBrainConfig {', '/** PHOENIX repository-index bounds and root selection. */\nexport interface RepoBrainConfig {', 1)
+              field_docs = {
+                  '  root?: string': '  /** Repository root to index; defaults to the harness working directory. */\n  root?: string',
+                  '  maxFiles?: number': '  /** Maximum source/config/document files retained by one refresh. */\n  maxFiles?: number',
+                  '  maxFileBytes?: number': '  /** Maximum bytes read from any one indexed file. */\n  maxFileBytes?: number',
+                  '  maxTermsPerFile?: number': '  /** Maximum distinct lexical terms retained for one file. */\n  maxTermsPerFile?: number',
+                  '  defaultLimit?: number': '  /** Default number of search/impact rows returned before per-call overrides. */\n  defaultLimit?: number',
+                  '  maxOutputBytes?: number': '  /** Maximum UTF-8 bytes in the complete model-facing text of one repo_brain result. */\n  maxOutputBytes?: number',
+              }
+              for plain, documented in field_docs.items():
+                  if documented not in code:
+                      code = code.replace(plain, documented, 1)
+
+          code = code.replace('  defaultLimit: number\n}', '  defaultLimit: number\n  maxOutputBytes: number\n}', 1)
+          query_anchor = """function queryTerms(query: string): string[] {\n  return uniqueBounded(words(query), 64)\n}\n"""
+          cap_function = """function queryTerms(query: string): string[] {\n  return uniqueBounded(words(query), 64)\n}\n\n/** Bound complete model-facing text by UTF-8 bytes without splitting a code point. */\nexport function capToolText(text: string, maxBytes: number): string {\n  assertPositiveInteger('maxOutputBytes', maxBytes)\n  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text\n  const normalSuffix = '\\n...[truncated]'\n  const suffix = Buffer.byteLength(normalSuffix, 'utf8') <= maxBytes ? normalSuffix : '.'.repeat(maxBytes)\n  const budget = maxBytes - Buffer.byteLength(suffix, 'utf8')\n  let prefix = ''\n  let used = 0\n  for (const character of text) {\n    const bytes = Buffer.byteLength(character, 'utf8')\n    if (used + bytes > budget) break\n    prefix += character\n    used += bytes\n  }\n  return prefix + suffix\n}\n"""
+          if 'export function capToolText' not in code:
+              if query_anchor not in code:
+                  raise SystemExit('Repo Brain queryTerms anchor not found')
+              code = code.replace(query_anchor, cap_function, 1)
+          code = code.replace(
+              '  async search(query: string, limit = this.config.defaultLimit): Promise<RepoBrainSearchHit[]> {',
+              '  async search(query: string, limit: number = this.config.defaultLimit): Promise<RepoBrainSearchHit[]> {',
+          )
+          code = code.replace(
+              '  async impact(path: string, depth = 2, limit = MAX_TOOL_LIMIT): Promise<RepoBrainImpactHit[]> {',
+              '  async impact(path: string, depth: number = 2, limit: number = MAX_TOOL_LIMIT): Promise<RepoBrainImpactHit[]> {',
+          )
+          code = code.replace(
+              '    defaultLimit: z.number().default(DEFAULT_LIMIT),\n',
+              '    defaultLimit: z.number().default(DEFAULT_LIMIT),\n    maxOutputBytes: z.number().default(DEFAULT_MAX_OUTPUT_BYTES),\n', 1)
+          code = code.replace(
+              '      defaultLimit: config.defaultLimit ?? DEFAULT_LIMIT,\n',
+              '      defaultLimit: config.defaultLimit ?? DEFAULT_LIMIT,\n      maxOutputBytes: config.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,\n', 1)
+          code = code.replace(
+              "    assertPositiveInteger('defaultLimit', resolved.defaultLimit)\n",
+              "    assertPositiveInteger('defaultLimit', resolved.defaultLimit)\n    assertPositiveInteger('maxOutputBytes', resolved.maxOutputBytes)\n", 1)
+          code = code.replace(
+              '  readonly index: RepoBrainIndex\n',
+              '  /** Programmatic access to the same deterministic index used by the repo_brain tool. */\n  readonly index: RepoBrainIndex\n', 1)
+          code = code.replace(
+              '    this.index = new RepoBrainIndex(resolved)\n\n    ctx.systemPrompt.section({',
+              "    this.index = new RepoBrainIndex(resolved)\n    const bounded = (text: string) => ({ text: capToolText(text, resolved.maxOutputBytes) })\n\n    ctx.systemPrompt.section({", 1)
+          code = code.replace("          return { text: formatSearch(await this.index.search(query, limit)) }", "          return bounded(formatSearch(await this.index.search(query, limit)))")
+          code = code.replace("          return { text: formatImpact(path, await this.index.impact(path, depth, limit)) }", "          return bounded(formatImpact(path, await this.index.impact(path, depth, limit)))")
+          code = code.replace(
+              "          return { text: `Repo Brain refreshed ${summary.files} files: reread=${summary.reread}, reused=${summary.reused}, removed=${summary.removed}, truncated=${String(summary.truncated)}.` }",
+              "          return bounded(`Repo Brain refreshed ${summary.files} files: reread=${summary.reread}, reused=${summary.reused}, removed=${summary.removed}, truncated=${String(summary.truncated)}.`)")
+          code = code.replace(
+              "          return { text: `Repo Brain stats: files=${stats.files}, symbols=${stats.symbols}, edges=${stats.edges}, indexed=${String(stats.indexed)}.` }",
+              "          return bounded(`Repo Brain stats: files=${stats.files}, symbols=${stats.symbols}, edges=${stats.edges}, indexed=${String(stats.indexed)}.`)")
+          path.write_text(code)
+
+          runtime = Path('packages/phoenix/runtime/src/index.ts')
+          code = runtime.read_text().replace(
+              '  readonly ladder = new ModelCapabilityLadder()\n',
+              '  readonly ladder: ModelCapabilityLadder = new ModelCapabilityLadder()\n', 1)
+          if 'readonly ladder: ModelCapabilityLadder' not in code:
+              raise SystemExit('Runtime ladder annotation missing')
+          runtime.write_text(code)
+
+          ladder = Path('packages/phoenix/runtime/src/model-ladder.ts')
+          code = ladder.read_text()
+          code = code.replace('  snapshot(ref: ModelRef, now = Date.now()): ModelSnapshot | undefined {', '  snapshot(ref: ModelRef, now: number = Date.now()): ModelSnapshot | undefined {')
+          code = code.replace('  all(now = Date.now()): ModelSnapshot[] {', '  all(now: number = Date.now()): ModelSnapshot[] {')
+          code = code.replace('  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now = Date.now()): RankedModel[] {', '  rank(role: PhoenixRole, candidates?: readonly ModelRef[], now: number = Date.now()): RankedModel[] {')
+          code = code.replace(
+              "  private hasAuthorityEvidence(state: ModelState): boolean {\n  let weightedSamples = 0\n  for (const points of state.evidence.values()) {\n    for (const point of points) {\n      if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n    }\n  }\n  return weightedSamples >= 3\n}\n\nprivate dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {",
+              "  private hasAuthorityEvidence(state: ModelState): boolean {\n    let weightedSamples = 0\n    for (const points of state.evidence.values()) {\n      for (const point of points) {\n        if (point.source === 'benchmark' || point.source === 'operator') weightedSamples += point.weight\n      }\n    }\n    return weightedSamples >= 3\n  }\n\n  private dimensionSnapshot(points: EvidencePoint[] | undefined, now: number): DimensionSnapshot | undefined {")
+          ladder.write_text(code)
+
+          constraints = Path('scripts/check-workspace-constraints.ts')
+          text = constraints.read_text()
+          marker = "const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'\n"
+          addition = marker + """/** Downstream PHOENIX packages published from this repository, not DeepSeek's namespace. */
+          const phoenixPackageDirectory = /^(?:packages\\/phoenix\\/[^/]+|packages\\/bundle\\/phoenix)$/
+          const phoenixPackageNamePrefix = '@arisnachy/phoenix-'
+          const phoenixPublishedRepositoryUrl = 'git+https://github.com/arisnachy/phoenix-harnes.git'
+          """
+          if 'const phoenixPackageDirectory' not in text:
+              if marker not in text: raise SystemExit('constraints identity anchor missing')
+              text = text.replace(marker, addition, 1)
+          release_anchor = "  } else if (releaseMemberDirectory.test(dir)) {\n"
+          phoenix_branch = """  } else if (phoenixPackageDirectory.test(dir)) {
+            if (manifest.name?.startsWith(phoenixPackageNamePrefix) !== true) {
+              errors.push(`${label}: downstream PHOENIX package name must start with ${JSON.stringify(phoenixPackageNamePrefix)}`)
+            }
+            if (manifest.private === true) errors.push(`${label}: downstream PHOENIX package must not set \"private\": true`)
+            if (manifest.publishConfig?.access !== 'public') errors.push(`${label}: downstream PHOENIX package must set publishConfig.access to \"public\"`)
+            if (manifest.repository?.type !== 'git' || manifest.repository.url !== phoenixPublishedRepositoryUrl || manifest.repository.directory !== dir) {
+              errors.push(`${label}: downstream PHOENIX package repository must use ${phoenixPublishedRepositoryUrl} with directory ${dir}`)
+            }
+          } else if (releaseMemberDirectory.test(dir)) {
+          """
+          if 'downstream PHOENIX package repository must use' not in text:
+              if release_anchor not in text: raise SystemExit('constraints release anchor missing')
+              text = text.replace(release_anchor, phoenix_branch, 1)
+          shape_anchor = "  if (dir.startsWith('packages/') && manifest.name?.startsWith('@deepseek-ai/dsh-')) {\n"
+          shape_replacement = "  if (dir.startsWith('packages/') && (manifest.name?.startsWith('@deepseek-ai/dsh-') || phoenixPackageDirectory.test(dir))) {\n"
+          if shape_anchor in text: text = text.replace(shape_anchor, shape_replacement, 1)
+          elif shape_replacement not in text: raise SystemExit('constraints shape anchor missing')
+          constraints.write_text(text)
+
+          config = Path('tsconfig.base.json')
+          text = config.read_text()
+          anchor = '      "@deepseek-ai/dsh-*": [\n'
+          mappings = """      "@arisnachy/phoenix-bundle": ["./packages/bundle/phoenix/src"],
+                "@arisnachy/phoenix-bundle/invariant": ["./packages/bundle/phoenix/src/invariant.ts"],
+                "@arisnachy/phoenix-*": ["./packages/phoenix/*/src"],
+                "@arisnachy/phoenix-*/invariant": ["./packages/phoenix/*/src/invariant.ts"],
+          """
+          if '"@arisnachy/phoenix-*"' not in text:
+              if anchor not in text: raise SystemExit('tsconfig PHOENIX mapping anchor missing')
+              config.write_text(text.replace(anchor, mappings + anchor, 1))
+
+          # Curated Typert ownership for all v13 services and service-signature types.
+          catalog = Path('scripts/gen-cordis-catalog.ts')
+          text = catalog.read_text()
+          service_anchor = "  planMode: 'plan.md',\n"
+          service_rows = """  phoenix: 'core.md',
+            phoenixAiBus: 'llm-streaming.md',
+            phoenixRepoBrain: 'filesystem.md',
+          """
+          if "  phoenix: 'core.md',\n" not in text:
+              if service_anchor not in text: raise SystemExit('Typert SERVICE_PAGE anchor missing')
+              text = text.replace(service_anchor, service_anchor + service_rows, 1)
+          link_anchor = "  ModelSelection: 'core.md',\n"
+          type_rows = """  CapabilityEvidence: 'core.md',
+            ModelRef: 'core.md',
+            PhoenixRole: 'core.md',
+            RankedModel: 'core.md',
+            PhoenixComputeLane: 'llm-streaming.md',
+            PhoenixModelRef: 'llm-streaming.md',
+            PhoenixRouteSnapshot: 'llm-streaming.md',
+            RepoBrainIndex: 'filesystem.md',
+          """
+          if "  CapabilityEvidence: 'core.md',\n" not in text:
+              if link_anchor not in text: raise SystemExit('Typert LINK_MAP anchor missing')
+              text = text.replace(link_anchor, link_anchor + type_rows, 1)
+          catalog.write_text(text)
+
+          for root in roots:
+              for file in root.rglob('*'):
+                  if file.is_file() and file.suffix in text_suffixes:
+                      text = file.read_text()
+                      if any(old in text for old, _ in replacements):
+                          raise SystemExit(f'stale upstream PHOENIX identity in {file}')
+          PY
+
+      - name: Synchronize workspace lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Prove frozen install
+        run: pnpm install --frozen-lockfile
+      - name: Package constraints
+        run: pnpm run constraints
+      - name: Regenerate native catalogs
+        run: |
+          pnpm run gen-cordis-catalog
+          pnpm run gen-cordis-api
+          pnpm run gen-tool-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-module-graph
+      - name: Run PHOENIX focused suites
+        run: >-
+          pnpm exec vitest run
+          packages/phoenix/ai-bus/tests/ai-bus.spec.ts
+          packages/phoenix/repo-brain/tests/repo-brain.spec.ts
+          packages/phoenix/repo-brain/tests/output-cap.spec.ts
+          packages/phoenix/runtime/tests/model-ladder.spec.ts
+          packages/phoenix/runtime/tests/task-role.spec.ts
+          packages/bundle/phoenix/tests/phoenix.spec.ts
+      - name: Documentation contracts
+        run: pnpm run doc-sync
+      - name: Run native DSH static gate
+        run: pnpm run check:ci:static
+      - name: Build repository
+        run: pnpm run build
+      - name: Run hygiene gate
+        run: pnpm run hygiene
+      - name: Check patch hygiene
+        run: git diff --check
+      - name: Commit verified generated state
+        run: |
+          if git diff --quiet; then
+            echo 'No generated integration changes remain.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor(phoenix): finalize native v13 package contracts'
+          git push origin HEAD:${{ github.head_ref }}
