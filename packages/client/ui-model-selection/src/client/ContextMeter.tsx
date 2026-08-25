@@ -1,6 +1,5 @@
 /** Sidebar status for the selected OpenAI route's remaining request context. */
-import { useSyncExternalStore } from 'react'
-import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the sidebar footer SlotMap row into this program.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 // Type-only: installs the contextPressure projection key augmentation.
@@ -11,20 +10,16 @@ import css from './ContextMeter.module.css'
 
 type ContextMeterProps =
   Pick<PropsRuntime<'sidebar.footer.action'>, 'wide' | 'useProjection'>
-  & ContextMeterInjected
+  & InjectFace<ContextMeterInjected>
   & PropsLocale<'model'>
 
 /**
  * Render remaining OpenAI context for the current session.
- * @param props - footer geometry, current-session directory, projection hook, and locale seat.
+ * @param props - footer geometry, framework-bound current-session hooks, and locale seat.
  * @returns a compact meter, or null outside OpenAI routes/collapsed layout.
  */
-export function ContextMeter({ wide, directory, useProjection, t }: ContextMeterProps) {
-  const state = useSyncExternalStore(
-    listener => directory?.subscribe(listener) ?? (() => {}),
-    () => directory?.getSnapshot(),
-    () => directory?.getSnapshot(),
-  )
+export function ContextMeter({ wide, useDirectory, useProjection, t }: ContextMeterProps) {
+  const state = useDirectory(snapshot => snapshot)
   const pressure = useProjection('contextPressure')
   const provider = state?.current?.provider
 
