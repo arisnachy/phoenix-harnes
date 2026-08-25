@@ -77,7 +77,7 @@ function isCodex(entry: AuthorizationEntry): boolean {
   return entry.key === 'openai-codex' || entry.telemetry?.provider.toLowerCase().includes('codex') === true
 }
 
-function CodexQuota({ authorization }: { authorization?: AuthorizationClient }) {
+function CodexQuota({ authorization }: { authorization: AuthorizationClient | undefined }) {
   const [quota, setQuota] = useState<CodexQuotaSnapshot | undefined>()
 
   useEffect(() => {
