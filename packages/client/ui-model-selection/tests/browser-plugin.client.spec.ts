@@ -1,11 +1,9 @@
 /**
  * ui-model-selection browser half on a real cordis Context with fake command/slots/
  * connection faces and real session scopes: the plugin mounts ModelDirectoryResolver
- * as `models`, the /model contribution and the conversation.input.model
- * seat both register, and BOTH entries resolve the SAME per-session
- * directory through the service — a selection submitted through the seat's
- * inject face is the current the popup's next options pass marks active
- * (and the reverse), the one-shared-state contract of the dual entry.
+ * as `models`; /model, conversation.input.model, and the sidebar OpenAI context meter
+ * all register; the selection entries resolve the same per-session directory and the
+ * footer resolves that directory through its renderer-bound hook source.
  * Scope disposal drops the directory (HMR safety).
  */
 import { Context } from '@deepseek-ai/cordis'
@@ -16,7 +14,7 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import type { CommandContribution, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
-import type { ModelSelectInjected } from '../src/client/slots.ts'
+import type { ContextMeterInjected, ModelSelectInjected } from '../src/client/slots.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 
@@ -53,6 +51,12 @@ const GROUPS = [{
   ],
 }]
 
+type SlotRecord = {
+  id: string | undefined
+  inject: ((sessionId: SessionId | undefined) => unknown) | undefined
+  locale: string | undefined
+}
+
 /** Boot the plugin over fake faces + a stateful fake host (current moves on selectModel). */
 async function bench() {
   const ctx = new Context()
@@ -77,8 +81,6 @@ async function bench() {
       return Promise.resolve({ result: { ok: true as const, value: { selected: current } } })
     },
   } } })
-  // Whether the Host reports an adapter for the current route; the composer
-  // block follows this, never catalog membership.
   let routable = true
   const blocks = new Map<SessionId, { reason: string } | undefined>()
   ctx.provide('conversation', {
@@ -93,21 +95,20 @@ async function bench() {
       return () => { contribution = undefined }
     },
   })
-  const seats = new Map<string, {
-    inject: ((sessionId: SessionId) => ModelSelectInjected) | undefined
-    locale: string | undefined
-  }>()
+  const seats = new Map<string, SlotRecord>()
   ctx.provide('slots', {
     inject(_name: string, callback: () => () => void) { return callback() },
-    register(options: { name: string; locale?: string; inject?: (sessionId: SessionId) => ModelSelectInjected }) {
-      seats.set(options.name, { inject: options.inject, locale: options.locale })
+    register(options: {
+      name: string
+      id?: string
+      locale?: string
+      inject?: (sessionId: SessionId | undefined) => unknown
+    }) {
+      seats.set(options.name, { id: options.id, inject: options.inject, locale: options.locale })
       return () => { seats.delete(options.name) }
     },
   })
   const localeRuntime = new LocaleRuntime(ctx)
-  // This spec asserts the shipped Chinese copy. There is no jsdom `window` in
-  // this lane, so browser-language detection never runs and the locale comes
-  // from FALLBACK_LOCALE (en): state the asserted locale explicitly.
   localeRuntime.setLocale('zh')
   ctx.provide('locale', localeRuntime)
   const scopes = new Map<SessionId, Context>()
@@ -130,7 +131,12 @@ async function bench() {
   return {
     ctx, fiber, mint, calls,
     contribution: () => contribution!,
-    seat: () => seats.get('conversation.input.model')!,
+    seat: () => seats.get('conversation.input.model')! as SlotRecord & {
+      inject: (sessionId: SessionId) => ModelSelectInjected
+    },
+    footer: () => seats.get('sidebar.footer.action')! as SlotRecord & {
+      inject: (sessionId: SessionId | undefined) => ContextMeterInjected
+    },
     hostCurrent: () => current,
     setHostCurrent: (selection: ModelSelection) => { current = selection },
     address: (id: SessionId) => { addressed.add(id) },
@@ -141,14 +147,24 @@ async function bench() {
 
 const projection = (id: string) => ({ sessionId: sid(id) })
 
-describe('ui-model-selection dual entry', () => {
-  it('registers the /model contribution and the composer model seat', async () => {
+describe('ui-model-selection entries', () => {
+  it('registers the /model contribution, composer seat, and context footer', async () => {
     const b = await bench()
     expect(b.contribution().name).toBe('model')
     expect(b.contribution().ui.kind).toBe('popupSelect')
     expect(b.seat().inject).toBeTypeOf('function')
-    // Copy rides the standard locale seat.
     expect(b.seat().locale).toBe('model')
+    expect(b.footer().id).toBe('openai-context-meter')
+    expect(b.footer().locale).toBe('model')
+    expect(b.footer().inject).toBeTypeOf('function')
+  })
+
+  it('footer hook source follows the selected session and is empty without one', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const source = b.footer().inject(sid('s1')).hooks.directory
+    expect(source).toBe(b.ctx.modelDirectories.directoryFor(sid('s1')).store)
+    expect(b.footer().inject(undefined).hooks.directory.getSnapshot()).toBeUndefined()
   })
 
   it('popup options mark the host current active with the provider group in the detail', async () => {
@@ -163,8 +179,7 @@ describe('ui-model-selection dual entry', () => {
   it('a seat selection is the current the popup marks active next — one shared state', async () => {
     const b = await bench()
     b.mint('s1')
-    const seatFace = b.seat().inject!(sid('s1'))
-    // Switch through the SEAT entry.
+    const seatFace = b.seat().inject(sid('s1'))
     expect(await seatFace.select({
       provider: 'deepseek-official',
       model: 'deepseek-v4-pro',
@@ -180,7 +195,6 @@ describe('ui-model-selection dual entry', () => {
       model: 'deepseek-v4-pro',
       reasoningEffort: 'max',
     })
-    // The POPUP's next options pass reflects it without a seat-side reload.
     const options = await b.contribution().ui.options(projection('s1'), new AbortController().signal)
     expect(options.find((o: SelectOption) => o.label === 'DeepSeek-V4-Pro')).toMatchObject({ active: true })
   })
@@ -188,7 +202,7 @@ describe('ui-model-selection dual entry', () => {
   it('a popup selection lands on the seat store — the reverse direction of the same state', async () => {
     const b = await bench()
     b.mint('s1')
-    const seatFace = b.seat().inject!(sid('s1'))
+    const seatFace = b.seat().inject(sid('s1'))
     const options = await b.contribution().ui.options(projection('s1'), new AbortController().signal)
     const pro = options.find((o: SelectOption) => o.label === 'DeepSeek-V4-Pro')!
     await b.contribution().ui.onSelect(pro, projection('s1'))
@@ -199,23 +213,22 @@ describe('ui-model-selection dual entry', () => {
     })
   })
 
-  it('both entries share one directory instance per session, isolated across sessions', async () => {
+  it('selection entries share one directory instance per session, isolated across sessions', async () => {
     const b = await bench()
     b.mint('a')
     b.mint('b')
-    const faceA = b.seat().inject!(sid('a'))
-    const faceA2 = b.seat().inject!(sid('a'))
-    const faceB = b.seat().inject!(sid('b'))
+    const faceA = b.seat().inject(sid('a'))
+    const faceA2 = b.seat().inject(sid('a'))
+    const faceB = b.seat().inject(sid('b'))
     expect(faceA.directory).toBe(faceA2.directory)
     expect(faceA.directory).not.toBe(faceB.directory)
-    // The service face resolves the same instance the seat inject handed out.
     expect(b.ctx.modelDirectories.directoryFor(sid('a')).store).toBe(faceA.directory)
   })
 
   it('drops an unconsumed local selection and restores the Host target after reconnect', async () => {
     const b = await bench()
     b.mint('s1')
-    const face = b.seat().inject!(sid('s1'))
+    const face = b.seat().inject(sid('s1'))
     await face.select({ provider: 'deepseek-official', model: 'deepseek-v4-pro' })
     b.setHostCurrent({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
 
@@ -231,20 +244,18 @@ describe('ui-model-selection dual entry', () => {
   it('scope disposal drops the directory; a reborn scope gets a fresh one', async () => {
     const b = await bench()
     const first = b.mint('s1')
-    const face1 = b.seat().inject!(sid('s1'))
+    const face1 = b.seat().inject(sid('s1'))
     await first.fiber.dispose()
     b.mint('s1')
-    const face2 = b.seat().inject!(sid('s1'))
+    const face2 = b.seat().inject(sid('s1'))
     expect(face2.directory).not.toBe(face1.directory)
   })
 
   it('blocks the composer only once the Host reports the route unservable', async () => {
     const b = await bench()
     b.mint('s1')
-    const face = b.seat().inject!(sid('s1'))
+    const face = b.seat().inject(sid('s1'))
 
-    // Before the first load nothing is known. `null` is not `false`: a slow
-    // or unreachable Host must never lock a working composer.
     expect(b.blockOf('s1')).toBeUndefined()
     face.load()
     await Promise.resolve()
@@ -257,7 +268,6 @@ describe('ui-model-selection dual entry', () => {
     await Promise.resolve()
     expect(b.blockOf('s1')?.reason).toBe(zh['blocked.composer'])
 
-    // Recovering clears it without a reload of the surface.
     b.setRoutable(true)
     b.ctx.remote.$dispatch('settings/document-updated', ['llm-deepseek', 1])
     await Promise.resolve()
@@ -268,10 +278,7 @@ describe('ui-model-selection dual entry', () => {
   it('never blocks on catalog membership alone', async () => {
     const b = await bench()
     b.mint('s1')
-    const face = b.seat().inject!(sid('s1'))
-    // A model the route serves but no longer advertises: the seat prompts for
-    // a selection, the composer stays usable. Blocking here would break a
-    // supported configuration (a narrowed `models` list over a live route).
+    const face = b.seat().inject(sid('s1'))
     b.setHostCurrent({ provider: 'deepseek-official', model: 'unlisted' })
     face.load()
     await Promise.resolve()
@@ -285,7 +292,7 @@ describe('ui-model-selection dual entry', () => {
     const b = await bench()
     const scope = b.mint('s1')
     b.setRoutable(false)
-    const face = b.seat().inject!(sid('s1'))
+    const face = b.seat().inject(sid('s1'))
     face.load()
     await Promise.resolve()
     await Promise.resolve()
@@ -297,10 +304,10 @@ describe('ui-model-selection dual entry', () => {
 
   it('an unknown session fails loud at the seat inject', async () => {
     const b = await bench()
-    expect(() => b.seat().inject!(sid('ghost'))).toThrow(/resolved no scope/)
+    expect(() => b.seat().inject(sid('ghost'))).toThrow(/resolved no scope/)
   })
 
-  it('withholds both model entries from addressed subagent sessions without Agent-bound RPCs', async () => {
+  it('withholds both model selection entries from addressed subagent sessions without Agent-bound RPCs', async () => {
     const b = await bench()
     b.mint('child')
     b.address(sid('child'))
@@ -311,7 +318,7 @@ describe('ui-model-selection dual entry', () => {
       new AbortController().signal,
     )).rejects.toThrow(/unavailable for addressed subagent/)
 
-    const face = b.seat().inject!(sid('child'))
+    const face = b.seat().inject(sid('child'))
     expect(face.available).toBe(false)
     face.load()
     await expect(face.select({ provider: 'deepseek', model: 'deepseek-v4-pro' })).resolves.toBe(false)
