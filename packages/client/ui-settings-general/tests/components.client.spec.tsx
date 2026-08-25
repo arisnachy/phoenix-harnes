@@ -34,10 +34,79 @@ describe('chrome content', () => {
     expect(screen.getByText('Settings')).toBeTruthy()
   })
 
-  it('TriggerContent drops the label in the rail state', () => {
-    const { container } = render(<TriggerContent {...kit} wide={false} t={t} />)
+  it('renders real Codex five-hour and total remaining quotas beside Settings', async () => {
+    const list = vi.fn(() => Promise.resolve({
+      rpcId: 'authorization-list' as never,
+      result: {
+        ok: true as const,
+        value: {
+          entries: [{
+            key: 'openai-codex',
+            telemetry: {
+              kind: 'account' as const,
+              provider: 'Codex',
+              primaryLimit: { usedPercent: 21, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+              secondaryLimit: { usedPercent: 41, resetsAt: 1_800_100_000 },
+            },
+          }],
+        },
+      },
+    }))
+    const { container } = render(<TriggerContent
+      {...kit}
+      wide
+      t={t}
+      authorization={{ list } as never}
+    />)
+
+    expect(await screen.findByText('79%')).toBeTruthy()
+    expect(screen.getByText('59%')).toBeTruthy()
+    expect(screen.getByText('5 h')).toBeTruthy()
+    expect(screen.getByText('Total')).toBeTruthy()
+    expect(list).toHaveBeenCalledWith({})
+
+    const fills = container.querySelectorAll('[class*="quotaFill"]')
+    expect(fills).toHaveLength(2)
+    expect(fills[0]?.getAttribute('style')).toContain('width: 79%')
+    expect(fills[1]?.getAttribute('style')).toContain('width: 59%')
+    expect(screen.getByText('5 h').closest('[title]')?.getAttribute('title')).toContain('79% remaining')
+  })
+
+  it('does not paint account telemetry for a non-Codex provider', async () => {
+    const list = vi.fn(() => Promise.resolve({
+      rpcId: 'authorization-list-other' as never,
+      result: {
+        ok: true as const,
+        value: {
+          entries: [{
+            key: 'other-provider',
+            telemetry: {
+              kind: 'account' as const,
+              provider: 'Other',
+              primaryLimit: { usedPercent: 10, windowDurationMins: 300 },
+              secondaryLimit: { usedPercent: 20 },
+            },
+          }],
+        },
+      },
+    }))
+    render(<TriggerContent {...kit} wide t={t} authorization={{ list } as never} />)
+    await waitFor(() => { expect(list).toHaveBeenCalledOnce() })
+    expect(screen.queryByText('90%')).toBeNull()
+    expect(screen.queryByText('Total')).toBeNull()
+  })
+
+  it('TriggerContent drops the label and does not poll telemetry in the rail state', () => {
+    const list = vi.fn()
+    const { container } = render(<TriggerContent
+      {...kit}
+      wide={false}
+      t={t}
+      authorization={{ list } as never}
+    />)
     expect(container.querySelector('svg')).toBeTruthy()
     expect(screen.queryByText('Settings')).toBeNull()
+    expect(list).not.toHaveBeenCalled()
   })
 
   it('HeaderContent and CloseLabel render their translated text', () => {
