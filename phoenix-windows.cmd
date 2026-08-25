@@ -17,11 +17,12 @@ if errorlevel 1 (
   set "PHOENIX_PNPM=corepack pnpm"
 )
 
-rem Managed installations follow ONLY the promoted stable channel. Startup may
-rem repair a legacy managed checkout that is accidentally ahead of stable, but
-rem normal forward updates are prepared by the detached watcher after the Host
-rem starts so the Web UI can report progress and request restart explicitly.
-if exist ".phoenix-managed-install" (
+rem Normal stable updates are owned by the detached watcher below so PHOENIX
+rem can stay open, report real preparation phases in the Web UI, and ask for an
+rem explicit restart only after the candidate passed preflight. The managed
+rem updater remains an opt-in recovery path for a legacy checkout that must be
+rem realigned to the promoted stable commit.
+if exist ".phoenix-managed-install" if "%PHOENIX_STABLE_REPAIR%"=="1" (
   if not "%PHOENIX_AUTO_UPDATE%"=="0" if exist "scripts\phoenix-managed-update.mjs" (
     node scripts\phoenix-managed-update.mjs --startup
     if errorlevel 12 (
