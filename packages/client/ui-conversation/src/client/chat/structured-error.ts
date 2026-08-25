@@ -1,158 +1,258 @@
-export interface StructuredFailureView {
-  readonly structured: boolean
+/** Presentation-only normalization for structured errors shown in chat. */
+
+const MAX_INPUT_LENGTH = 64 * 1024
+const MAX_FIELDS = 24
+const MAX_DEPTH = 4
+const MAX_VALUE_LENGTH = 4_096
+
+export interface StructuredErrorField {
+  readonly label: string
+  readonly value: string
+  readonly technical: boolean
+}
+
+export interface StructuredErrorPresentation {
+  readonly title: string
+  readonly message?: string
   readonly code?: string
-  readonly provider?: string
-  readonly summary: string
-  readonly remedy?: string
-  readonly prettyJson?: string
+  readonly fields: readonly StructuredErrorField[]
+  readonly action?: string
+  /** Complete provider payload, preserved semantically and pretty-printed only for opt-in inspection. */
+  readonly rawJson: string
 }
 
 type JsonRecord = Record<string, unknown>
+
+const LABELS: Readonly<Record<string, string>> = {
+  code: 'Código',
+  status: 'Estado',
+  type: 'Tipo',
+  provider_name: 'Proveedor',
+  provider: 'Proveedor',
+  model: 'Modelo',
+  model_name: 'Modelo',
+  raw: 'Detalle',
+  detail: 'Detalle',
+  details: 'Detalles',
+  limit_source: 'Origen del límite',
+  is_byok: 'BYOK',
+  request_id: 'ID de solicitud',
+  trace_id: 'ID de traza',
+  error_id: 'ID de error',
+  retry_after: 'Reintentar después de',
+  retry_after_ms: 'Reintentar después de (ms)',
+  endpoint: 'Endpoint',
+  url: 'URL',
+}
+
+const PROSE_KEYS = new Set(['message', 'raw', 'detail', 'details', 'remedy_hint', 'hint', 'reason'])
+const OMITTED_KEYS = new Set(['message', 'remedy_hint', 'raw', 'previous_errors'])
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function asString(value: unknown): string | undefined {
-  if (typeof value === 'string' && value.trim() !== '') return value.trim()
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+function bounded(value: string): string {
+  return value.length <= MAX_VALUE_LENGTH ? value : `${value.slice(0, MAX_VALUE_LENGTH)}…`
+}
+
+/** Translate only generic error prose, never identifiers, provider/model names, enum values, IDs or URLs. */
+export function translateGenericErrorProse(value: string): string {
+  return value
+    .replace(/\bThis request requires more credits, or fewer max_tokens\b/giu, 'Esta solicitud requiere más créditos o un max_tokens menor')
+    .replace(/\bYou requested up to ([\d,]+) tokens, but can only afford ([\d,]+)\b/giu, 'Solicitaste hasta $1 tokens, pero el saldo disponible solo cubre aproximadamente $2')
+    .replace(/\bPrompt tokens limit exceeded:\s*([\d,]+)\s*>\s*([\d,]+)/giu, 'Límite de tokens del contexto superado: $1 > $2')
+    .replace(/\bProvider returned error\b/giu, 'El proveedor devolvió un error')
+    .replace(/\bis temporarily rate-limited upstream\b/giu, 'está temporalmente limitado por el proveedor upstream')
+    .replace(/\btemporarily rate-limited\b/giu, 'temporalmente limitado')
+    .replace(/\brate limit(?:ed)?\b/giu, 'límite de solicitudes')
+    .replace(/\bPlease retry shortly\b/giu, 'Reintenta en unos momentos')
+    .replace(/\bRetry shortly\b/giu, 'Reintenta en unos momentos')
+    .replace(/\btry again later\b/giu, 'inténtalo de nuevo más tarde')
+    .replace(/\btemporarily unavailable\b/giu, 'temporalmente no disponible')
+    .replace(/\bservice unavailable\b/giu, 'servicio no disponible')
+    .replace(/\brequest timed out\b/giu, 'la solicitud excedió el tiempo de espera')
+    .replace(/\btimeout\b/giu, 'tiempo de espera agotado')
+    .replace(/\bunauthorized\b/giu, 'no autorizado')
+    .replace(/\bforbidden\b/giu, 'acceso denegado')
+    .replace(/\bnot found\b/giu, 'no encontrado')
+    .replace(/\binternal server error\b/giu, 'error interno del servidor')
+    .replace(/\bAdd credits at\b/giu, 'Añade créditos en')
+    .replace(/\bor lower max_tokens \/ prompt size to fit your remaining balance\b/giu, 'o reduce max_tokens / el tamaño del contexto para ajustarte al saldo restante')
+    .replace(/\bTo increase, visit\b/giu, 'Para ampliarlo, visita')
+    .replace(/\badd your own provider key\b/giu, 'añade tu propia clave del proveedor')
+    .replace(/\bor route to another provider with provider routing\b/giu, 'o cambia a otro proveedor mediante provider routing')
+}
+
+function scalarText(value: unknown, prose: boolean): string | undefined {
+  if (typeof value === 'string') return bounded(prose ? translateGenericErrorProse(value) : value)
+  if (typeof value === 'number' || typeof value === 'bigint') return String(value)
+  if (typeof value === 'boolean') return value ? 'Sí' : 'No'
+  if (value === null) return '—'
   return undefined
 }
 
-function recordAt(record: JsonRecord, key: string): JsonRecord | undefined {
-  const value = record[key]
-  return isRecord(value) ? value : undefined
+function labelFor(key: string, path: readonly string[]): string {
+  const known = LABELS[key]
+  if (known !== undefined) return known
+  return path.length <= 1 ? key : path.join('.')
 }
 
-function jsonCandidate(raw: string): { status?: string; source: string; value: unknown } | undefined {
-  const trimmed = raw.trim()
-  const prefixed = /^(\d{3})\s*:\s*([\s\S]+)$/u.exec(trimmed)
-  const status = prefixed?.[1]
-  const source = (prefixed?.[2] ?? trimmed).trim()
+function flatten(
+  value: unknown,
+  fields: StructuredErrorField[],
+  path: string[] = [],
+  depth = 0,
+): void {
+  if (fields.length >= MAX_FIELDS || depth > MAX_DEPTH) return
 
-  try {
-    return { status, source, value: JSON.parse(source) as unknown }
-  } catch {
-    // Some adapters prepend a short textual label before the response body.
-    // Only accept a suffix when it is itself a complete JSON object/array.
-    const objectAt = source.indexOf('{')
-    const arrayAt = source.indexOf('[')
-    const starts = [objectAt, arrayAt].filter(index => index >= 0)
-    if (starts.length === 0) return undefined
-    const start = Math.min(...starts)
-    const suffix = source.slice(start).trim()
-    try {
-      return { status, source: suffix, value: JSON.parse(suffix) as unknown }
-    } catch {
-      return undefined
-    }
-  }
-}
-
-function primaryRecord(value: unknown): JsonRecord | undefined {
-  if (!isRecord(value)) return undefined
-  const nested = recordAt(value, 'error')
-  return nested ?? value
-}
-
-function metadataOf(root: JsonRecord, primary: JsonRecord): JsonRecord | undefined {
-  return recordAt(primary, 'metadata') ?? recordAt(root, 'metadata')
-}
-
-function humanSummary(code: string | undefined, providerMessage: string, metadata: JsonRecord | undefined): string {
-  const promptLimit = /prompt tokens limit exceeded:\s*([\d,]+)\s*>\s*([\d,]+)/iu.exec(providerMessage)
-  if (promptLimit !== null) {
-    return `El contexto enviado es demasiado grande: ${promptLimit[1]} tokens superan el límite disponible de ${promptLimit[2]}.`
-  }
-
-  const creditLimit = /requested up to\s*([\d,]+)\s*tokens,\s*but can only afford\s*([\d,]+)/iu.exec(providerMessage)
-  if (code === '402' && creditLimit !== null) {
-    return `Créditos insuficientes: se solicitaron hasta ${creditLimit[1]} tokens de salida, pero el saldo disponible alcanza aproximadamente para ${creditLimit[2]}.`
-  }
-
-  switch (code) {
-    case '400': return 'El proveedor rechazó la solicitud porque alguno de sus parámetros o datos no es válido.'
-    case '401': return 'La autenticación con el proveedor falló o las credenciales ya no son válidas.'
-    case '402': return 'No hay créditos suficientes en la ruta seleccionada para completar esta solicitud.'
-    case '403': return 'El proveedor rechazó el acceso a este modelo o recurso.'
-    case '404': return 'El modelo o recurso solicitado no está disponible en esta ruta.'
-    case '408': return 'La solicitud agotó el tiempo de espera antes de completarse.'
-    case '413': return 'La solicitud es demasiado grande para el límite aceptado por el proveedor.'
-    case '422': return 'El proveedor recibió la solicitud, pero no pudo procesarla con esos datos.'
-    case '429': return 'El proveedor está limitado temporalmente por tasa o capacidad. La solicitud puede reintentarse por otra ruta compatible.'
-    case '500':
-    case '502':
-    case '503':
-    case '504': return 'El proveedor tuvo un fallo temporal o no está disponible en este momento.'
-    default: {
-      const limitSource = asString(metadata?.limit_source)
-      if (limitSource?.includes('credits') === true) {
-        return 'La ruta seleccionada no dispone de crédito suficiente para completar la solicitud.'
+  if (Array.isArray(value)) {
+    if (value.every(entry => scalarText(entry, false) !== undefined)) {
+      const text = value.map(entry => scalarText(entry, false)).filter((entry): entry is string => entry !== undefined).join(' · ')
+      if (text !== '' && path.length > 0) {
+        const key = path.at(-1) ?? 'items'
+        fields.push({ label: labelFor(key, path), value: bounded(text), technical: true })
       }
-      return providerMessage
+      return
+    }
+    value.forEach((entry, index) => flatten(entry, fields, [...path, String(index + 1)], depth + 1))
+    return
+  }
+
+  if (!isRecord(value)) {
+    const key = path.at(-1)
+    const text = scalarText(value, key !== undefined && PROSE_KEYS.has(key))
+    if (key !== undefined && text !== undefined) {
+      fields.push({ label: labelFor(key, path), value: text, technical: !PROSE_KEYS.has(key) })
+    }
+    return
+  }
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (fields.length >= MAX_FIELDS) break
+    if (OMITTED_KEYS.has(key)) continue
+    if (key === 'metadata') {
+      flatten(entry, fields, path, depth + 1)
+      continue
+    }
+    if (isRecord(entry) || Array.isArray(entry)) {
+      flatten(entry, fields, [...path, key], depth + 1)
+      continue
+    }
+    const text = scalarText(entry, PROSE_KEYS.has(key))
+    if (text !== undefined) {
+      fields.push({
+        label: labelFor(key, [...path, key]),
+        value: text,
+        technical: !PROSE_KEYS.has(key),
+      })
     }
   }
 }
 
-function humanRemedy(code: string | undefined, providerMessage: string): string | undefined {
-  if (/prompt tokens limit exceeded/iu.test(providerMessage)) {
-    return 'PHOENIX debe compactar o reducir el contexto y volver a intentarlo sin perder el historial útil.'
+function findFirst(value: unknown, keys: ReadonlySet<string>, depth = 0): unknown {
+  if (depth > MAX_DEPTH) return undefined
+  if (isRecord(value)) {
+    for (const key of keys) {
+      if (value[key] !== undefined) return value[key]
+    }
+    for (const entry of Object.values(value)) {
+      const found = findFirst(entry, keys, depth + 1)
+      if (found !== undefined) return found
+    }
+  } else if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findFirst(entry, keys, depth + 1)
+      if (found !== undefined) return found
+    }
   }
-  switch (code) {
-    case '401':
-    case '403': return 'Revisa la autenticación o los permisos de esta ruta antes de reintentar.'
-    case '402': return 'Reduce max_tokens o el contexto; después intenta una ruta gratuita compatible antes de usar crédito de pago.'
-    case '404': return 'Cambia automáticamente a otro modelo o proveedor compatible configurado para esta capacidad.'
-    case '408':
-    case '429':
-    case '500':
-    case '502':
-    case '503':
-    case '504': return 'Reintenta con espera controlada y, si persiste, usa failover hacia otra ruta gratuita compatible.'
-    default: return undefined
-  }
+  return undefined
 }
 
-/**
- * Convert provider/adapter failures into a compact human view while preserving
- * the complete structured response for an opt-in technical disclosure.
- * Supports pure JSON and common `HTTP_STATUS: {json}` adapter messages.
- */
-export function parseStructuredFailure(raw: string, explicitCode?: string): StructuredFailureView {
-  const parsed = jsonCandidate(raw)
-  if (parsed === undefined) {
-    return {
-      structured: false,
-      summary: raw,
-      ...explicitCode === undefined ? {} : { code: explicitCode },
-    }
-  }
+function parseEnvelope(input: string): { payload: unknown; prefixCode?: string } | undefined {
+  const text = input.trim()
+  if (text === '' || text.length > MAX_INPUT_LENGTH) return undefined
 
-  const root = isRecord(parsed.value) ? parsed.value : undefined
-  const primary = primaryRecord(parsed.value)
-  if (root === undefined || primary === undefined) {
-    return {
-      structured: true,
-      summary: raw,
-      code: explicitCode ?? parsed.status,
-      prettyJson: JSON.stringify(parsed.value, null, 2),
-    }
+  const firstObject = text.indexOf('{')
+  const firstArray = text.indexOf('[')
+  const candidates = [firstObject, firstArray].filter(index => index >= 0)
+  if (candidates.length === 0) return undefined
+  const start = Math.min(...candidates)
+  const json = text.slice(start)
+  let payload: unknown
+  try {
+    payload = JSON.parse(json)
+  } catch {
+    return undefined
   }
+  if (!isRecord(payload) && !Array.isArray(payload)) return undefined
 
-  const metadata = metadataOf(root, primary)
-  const providerMessage = asString(primary.message) ?? asString(root.message) ?? raw
-  const code = explicitCode ?? parsed.status ?? asString(primary.code) ?? asString(root.code)
-  const provider = asString(metadata?.provider_name)
-    ?? asString(metadata?.provider)
-    ?? asString(primary.provider)
-    ?? asString(root.provider)
+  const prefix = text.slice(0, start)
+  const code = prefix.match(/(?:^|\D)([1-5]\d{2})(?:\D|$)/u)?.[1]
+  return { payload, ...(code === undefined ? {} : { prefixCode: code }) }
+}
+
+function titleFor(code: string | undefined, provider: string | undefined): string {
+  if (code === '400') return 'Solicitud no válida'
+  if (code === '401') return 'Autenticación requerida'
+  if (code === '402') return 'Créditos insuficientes'
+  if (code === '403') return 'Acceso denegado'
+  if (code === '404') return 'Recurso no encontrado'
+  if (code === '408' || code === '504') return 'La solicitud tardó demasiado'
+  if (code === '413') return 'Solicitud demasiado grande'
+  if (code === '422') return 'La solicitud no pudo procesarse'
+  if (code === '429') return 'Límite temporal de solicitudes'
+  if (code !== undefined && /^5\d\d$/u.test(code)) return 'Error temporal del servicio'
+  if (provider !== undefined) return 'Error del proveedor'
+  return 'Error de la solicitud'
+}
+
+function fallbackAction(code: string | undefined): string | undefined {
+  if (code === '402') return 'Reduce max_tokens o el tamaño del contexto, o cambia a una ruta gratuita compatible antes de usar crédito de pago.'
+  if (code === '429') return 'Reintenta de forma controlada y, si persiste, cambia a otra ruta compatible disponible.'
+  if (code === '401' || code === '403') return 'Revisa las credenciales y permisos de esta ruta antes de reintentar.'
+  if (code === '404') return 'Usa otro modelo o proveedor compatible configurado para esta capacidad.'
+  if (code === '408' || code === '504' || (code !== undefined && /^5\d\d$/u.test(code))) {
+    return 'Reintenta de forma controlada y usa failover si el proveedor continúa sin responder.'
+  }
+  return undefined
+}
+
+/** Convert a JSON-bearing error string into safe Spanish presentation data. */
+export function formatStructuredError(
+  input: string,
+  explicitCode?: string | number,
+): StructuredErrorPresentation | undefined {
+  const envelope = parseEnvelope(input)
+  if (envelope === undefined) return undefined
+
+  const messageValue = findFirst(envelope.payload, new Set(['message']))
+  const actionValue = findFirst(envelope.payload, new Set(['remedy_hint', 'hint']))
+  const providerValue = findFirst(envelope.payload, new Set(['provider_name', 'provider']))
+  const payloadCode = findFirst(envelope.payload, new Set(['code', 'status']))
+
+  const code = explicitCode === undefined
+    ? scalarText(payloadCode, false) ?? envelope.prefixCode
+    : String(explicitCode)
+  const provider = typeof providerValue === 'string' ? providerValue : undefined
+  const message = typeof messageValue === 'string'
+    ? bounded(translateGenericErrorProse(messageValue))
+    : undefined
+  const providerAction = typeof actionValue === 'string'
+    ? bounded(translateGenericErrorProse(actionValue))
+    : undefined
+  const action = providerAction ?? fallbackAction(code)
+
+  const fields: StructuredErrorField[] = []
+  flatten(envelope.payload, fields)
+  const filtered = fields.filter(field => !(field.label === 'Código' && field.value === code))
 
   return {
-    structured: true,
-    summary: humanSummary(code, providerMessage, metadata),
-    remedy: humanRemedy(code, providerMessage),
-    prettyJson: JSON.stringify(parsed.value, null, 2),
-    ...code === undefined ? {} : { code },
-    ...provider === undefined ? {} : { provider },
+    title: titleFor(code, provider),
+    ...(message === undefined ? {} : { message }),
+    ...(code === undefined ? {} : { code }),
+    fields: filtered,
+    ...(action === undefined ? {} : { action }),
+    rawJson: JSON.stringify(envelope.payload, null, 2),
   }
 }
