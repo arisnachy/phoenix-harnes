@@ -8,6 +8,7 @@ import { useState, type ReactNode } from 'react'
 import type { ChatViewSlotProps, CommandRowOwnerProps } from '../contract/slots.ts'
 import { DisclosureRow, IconApiOutline14, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import a11yCss from './accessibility.module.css'
+import { formatStructuredError } from './structured-error.ts'
 import css from './GenericCommandCard.module.css'
 
 type CommandRowState = 'running' | 'ok' | 'error'
@@ -22,6 +23,21 @@ function leadingFor(state: CommandRowState): ReactNode {
   return state === 'error' ? <StateDot state="error" /> : <IconApiOutline14 size={14} />
 }
 
+function structuredBody(text: string): { summary: string; body: string } | undefined {
+  const error = formatStructuredError(text)
+  if (error === undefined) return undefined
+  const lines = [error.title]
+  if (error.message !== undefined) lines.push(`Mensaje: ${error.message}`)
+  if (error.code !== undefined) lines.push(`Código: ${error.code}`)
+  for (const field of error.fields) lines.push(`${field.label}: ${field.value}`)
+  if (error.action !== undefined) lines.push(`Qué puedes hacer: ${error.action}`)
+  lines.push('', 'JSON original:', error.rawJson)
+  return {
+    summary: error.message ?? error.title,
+    body: lines.join('\n'),
+  }
+}
+
 /** Card props: the owner payload plus the render site's locale seat (plain prop). */
 export interface GenericCommandCardProps extends CommandRowOwnerProps {
   t: ChatViewSlotProps['t']
@@ -32,16 +48,17 @@ export interface GenericCommandCardProps extends CommandRowOwnerProps {
 export function GenericCommandCard({ node, t, runningSummary }: GenericCommandCardProps) {
   const [expanded, setExpanded] = useState(false)
   const text = node.outcome?.text
+  const state = stateOf(node.outcome)
+  const structured = state === 'error' && text !== undefined ? structuredBody(text) : undefined
   const summary = node.outcome === null
     ? runningSummary ?? t('command.running')
-    : text ?? (node.outcome.kind === 'error' ? t('command.failed') : t('command.done'))
+    : structured?.summary ?? text ?? (node.outcome.kind === 'error' ? t('command.failed') : t('command.done'))
   // Title is the bare command name: the row already reads `name · outcome`,
   // and the dispatched line's own `/` and arguments only restate what the
   // settlement text says (`permission · preset workspace-write`). A
   // cross-window node whose run page fell out of the window has no name.
   const title = node.name ?? t('command.title')
-  const state = stateOf(node.outcome)
-  const body = text !== undefined && text.includes('\n') ? text : null
+  const body = structured?.body ?? (text !== undefined && text.includes('\n') ? text : null)
   const open = expanded && body !== null
   return (
     <div className={css.root} data-variant="others" data-state={state}>
