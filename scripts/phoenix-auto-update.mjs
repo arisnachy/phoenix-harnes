@@ -69,8 +69,11 @@ function git(root, args, options = {}) {
 }
 
 function corepack(root, args, options = {}) {
-  const executable = process.platform === 'win32' ? 'corepack.cmd' : 'corepack'
-  return command(executable, args, { cwd: root, ...options })
+  if (process.platform === 'win32') {
+    const commandProcessor = process.env.ComSpec ?? 'cmd.exe'
+    return command(commandProcessor, ['/d', '/s', '/c', 'corepack.cmd', ...args], { cwd: root, ...options })
+  }
+  return command('corepack', args, { cwd: root, ...options })
 }
 
 function node(root, args, options = {}) {
@@ -376,7 +379,7 @@ function relaunchPhoenix(root) {
   let child
   if (process.platform === 'win32' && existsSync(launcher)) {
     const commandProcessor = process.env.ComSpec ?? 'cmd.exe'
-    child = spawn(commandProcessor, ['/d', '/s', '/c', `call "${launcher}"`], {
+    child = spawn(commandProcessor, ['/d', '/s', '/c', `call \"${launcher}\"`], {
       cwd: root,
       detached: true,
       stdio: 'ignore',
