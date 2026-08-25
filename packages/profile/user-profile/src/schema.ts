@@ -8,46 +8,104 @@ export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile' as const
 
 /** Default policy: no profile field is model-visible without an explicit opt-in. */
 export const DEFAULT_USER_PROFILE_CONSENT: UserProfileConsent = Object.freeze({
+  fullName: false,
   preferredName: false,
   dateOfBirth: false,
   gender: false,
   pronouns: false,
+  profession: false,
+  organization: false,
+  academicBackground: false,
+  country: false,
+  preferredLanguage: false,
+  timezone: false,
+  technicalLevel: false,
+  responsePreferences: false,
   tone: false,
   family: false,
 })
 
 /** Hard limits for locally stored profile data. */
 export const USER_PROFILE_LIMITS = Object.freeze({
-  textCharacters: 120,
+  textCharacters: 240,
+  longTextCharacters: 2_000,
   familyMembers: 20,
   maximumAge: 130,
 })
 
 /** Schemastery schema used by the settings provider and browser decoder. */
 export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
+  fullName: z.string().required(false),
   preferredName: z.string().required(false),
   dateOfBirth: z.string().required(false),
   gender: z.string().required(false),
   pronouns: z.string().required(false),
+  profession: z.string().required(false),
+  organization: z.string().required(false),
+  academicBackground: z.string().required(false),
+  country: z.string().required(false),
+  preferredLanguage: z.string().required(false),
+  timezone: z.string().required(false),
+  technicalLevel: z.string().required(false),
+  responsePreferences: z.string().required(false),
   tone: z.string().required(false),
   family: z.array(z.object({
     relationship: z.string(),
     name: z.string().required(false),
   })).required(false),
   consent: z.object({
+    fullName: z.boolean().default(false),
     preferredName: z.boolean().default(false),
     dateOfBirth: z.boolean().default(false),
     gender: z.boolean().default(false),
     pronouns: z.boolean().default(false),
+    profession: z.boolean().default(false),
+    organization: z.boolean().default(false),
+    academicBackground: z.boolean().default(false),
+    country: z.boolean().default(false),
+    preferredLanguage: z.boolean().default(false),
+    timezone: z.boolean().default(false),
+    technicalLevel: z.boolean().default(false),
+    responsePreferences: z.boolean().default(false),
     tone: z.boolean().default(false),
     family: z.boolean().default(false),
   }).default(DEFAULT_USER_PROFILE_CONSENT),
 })
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-const PROFILE_TEXT_FIELDS = ['preferredName', 'gender', 'pronouns', 'tone'] as const
-const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'dateOfBirth', 'family'] as const
-const CONSENT_FIELDS = ['preferredName', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'family'] as const
+const PROFILE_TEXT_FIELDS = [
+  'fullName',
+  'preferredName',
+  'gender',
+  'pronouns',
+  'profession',
+  'organization',
+  'country',
+  'preferredLanguage',
+  'timezone',
+  'technicalLevel',
+  'tone',
+] as const
+const PROFILE_LONG_TEXT_FIELDS = ['academicBackground', 'responsePreferences'] as const
+const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, ...PROFILE_LONG_TEXT_FIELDS, 'dateOfBirth', 'family'] as const
+const CONSENT_FIELDS = [
+  'fullName',
+  'preferredName',
+  'dateOfBirth',
+  'gender',
+  'pronouns',
+  'profession',
+  'organization',
+  'academicBackground',
+  'country',
+  'preferredLanguage',
+  'timezone',
+  'technicalLevel',
+  'responsePreferences',
+  'tone',
+  'family',
+] as const
+const UPDATE_KEYS = new Set<string>([...PROFILE_UPDATE_FIELDS, 'consent'])
 
 /** Validate cross-field and bounded profile constraints.
  * @param profile - complete profile settings to validate.
@@ -56,6 +114,10 @@ export function validateUserProfile(profile: UserProfileSettings): void {
   for (const field of PROFILE_TEXT_FIELDS) {
     const value = profile[field]
     if (value !== undefined) validateText(value, field)
+  }
+  for (const field of PROFILE_LONG_TEXT_FIELDS) {
+    const value = profile[field]
+    if (value !== undefined) validateText(value, field, USER_PROFILE_LIMITS.longTextCharacters)
   }
   if (profile.dateOfBirth !== undefined) validateDateOfBirth(profile.dateOfBirth)
   if (profile.family !== undefined) {
@@ -73,6 +135,9 @@ export function validateUserProfile(profile: UserProfileSettings): void {
  */
 export function validateUserProfileUpdate(patch: unknown): asserts patch is UserProfileUpdate {
   if (!isPlainObject(patch)) throw new TypeError('user profile update must be a plain object')
+  for (const key of Object.keys(patch)) {
+    if (!UPDATE_KEYS.has(key)) throw new TypeError(`unknown user profile update field "${key}"`)
+  }
   for (const field of PROFILE_UPDATE_FIELDS) {
     if (!Object.hasOwn(patch, field)) continue
     const value = patch[field]
@@ -106,10 +171,19 @@ export function mergeUserProfile(current: UserProfileSettings, patch: UserProfil
 
 function clearProfileField(profile: UserProfileSettings, field: typeof PROFILE_UPDATE_FIELDS[number]): void {
   switch (field) {
+    case 'fullName': delete profile.fullName; break
     case 'preferredName': delete profile.preferredName; break
     case 'dateOfBirth': delete profile.dateOfBirth; break
     case 'gender': delete profile.gender; break
     case 'pronouns': delete profile.pronouns; break
+    case 'profession': delete profile.profession; break
+    case 'organization': delete profile.organization; break
+    case 'academicBackground': delete profile.academicBackground; break
+    case 'country': delete profile.country; break
+    case 'preferredLanguage': delete profile.preferredLanguage; break
+    case 'timezone': delete profile.timezone; break
+    case 'technicalLevel': delete profile.technicalLevel; break
+    case 'responsePreferences': delete profile.responsePreferences; break
     case 'tone': delete profile.tone; break
     case 'family': delete profile.family; break
   }
@@ -154,10 +228,10 @@ function deriveAgeUnchecked(value: string, now: Date): number {
   return age
 }
 
-function validateText(value: string, field: string): void {
+function validateText(value: string, field: string, maximum = USER_PROFILE_LIMITS.textCharacters): void {
   if (value.trim() === '') throw new TypeError(`user profile ${field} cannot be empty`)
-  if (value.length > USER_PROFILE_LIMITS.textCharacters) {
-    throw new TypeError(`user profile ${field} exceeds ${String(USER_PROFILE_LIMITS.textCharacters)} characters`)
+  if (value.length > maximum) {
+    throw new TypeError(`user profile ${field} exceeds ${String(maximum)} characters`)
   }
   if ([...value].some(character => character.charCodeAt(0) < 0x20 || character === '\u007f')) {
     throw new TypeError(`user profile ${field} contains a control character`)
@@ -173,6 +247,9 @@ function validateConsent(value: UserProfileConsent): void {
   if (!isPlainObject(value)) throw new TypeError('user profile consent must be an object')
   for (const field of CONSENT_FIELDS) {
     if (typeof value[field] !== 'boolean') throw new TypeError(`user profile consent.${field} must be boolean`)
+  }
+  for (const field of Object.keys(value)) {
+    if (!(CONSENT_FIELDS as readonly string[]).includes(field)) throw new TypeError(`unknown user profile consent field "${field}"`)
   }
 }
 
