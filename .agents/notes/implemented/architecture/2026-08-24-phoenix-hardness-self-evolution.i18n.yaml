@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-24-phoenix-hardness-self-evolution.md
-2026-08-24-phoenix-hardness-self-evolution.md: db08ea3959029237166e7abd53b570024834871c
-2026-08-24-phoenix-hardness-self-evolution.zh.md: d9b2903303e3f0d19b34d48fc31fd98287376ddb
+2026-08-24-phoenix-hardness-self-evolution.md: 39232d05128926ac0587930e922cd8e96ca43228
+2026-08-24-phoenix-hardness-self-evolution.zh.md: 5c6cb0ff06027750d6f95452427f47ff7a5ce4da
