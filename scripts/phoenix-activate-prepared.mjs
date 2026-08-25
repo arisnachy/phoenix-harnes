@@ -189,6 +189,15 @@ function activate() {
 
   console.error(`[PHOENIX UPDATE] supervised activation (${prepared.mode}): ${current.slice(0, 12)} -> ${target.slice(0, 12)}`)
   git(root, ['diff', '--check', current, target])
+
+  // Prove a prepared client artifact set is internally consistent before main
+  // is mutated. Validation failures therefore stay cheap and require no rollback.
+  if (prepared.mode === 'client') {
+    writeState(root, { status: 'applying', phase: 'verify', current, target })
+    console.error('[PHOENIX UPDATE] verifying prepared client artifacts before touching live main...')
+    node(root, ['--import', 'tsx/esm', 'scripts/promote-client-artifacts.ts', '--from', stage, '--verify-only'], { inherit: true })
+  }
+
   git(root, ['update-ref', 'refs/phoenix/recovery/last-good', current])
 
   try {
