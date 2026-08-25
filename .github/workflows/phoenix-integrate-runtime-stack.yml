@@ -1,0 +1,110 @@
+name: PHOENIX integrate runtime stack
+
+on:
+  push:
+    branches:
+      - phoenix/full-reforge-20260824
+
+permissions:
+  contents: write
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  integrate:
+    if: contains(github.event.head_commit.message, '[integrate-runtime-stack]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+      - name: Import reviewed PHOENIX runtime stack
+        shell: bash
+        run: |
+          git fetch origin phoenix/continuity-v14
+          git checkout origin/phoenix/continuity-v14 -- packages/phoenix packages/bundle/phoenix
+      - name: Repair imported Repo Brain output-bound contract
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('packages/phoenix/repo-brain/src/index.ts')
+          text = p.read_text(encoding='utf-8')
+          marker = 'const MAX_IMPACT_DEPTH = 8\n'
+          implementation = r'''
+
+/** Bound UTF-8 tool text without ever splitting a Unicode code point. */
+export function capToolText(text: string, maxBytes: number): string {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    throw new Error('PHOENIX Repo Brain max output bytes must be a non-negative safe integer')
+  }
+  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text
+  if (maxBytes === 0) return ''
+
+  const suffix = '[truncated]'
+  const suffixBytes = Buffer.byteLength(suffix, 'utf8')
+  const bodyBudget = maxBytes >= suffixBytes ? maxBytes - suffixBytes : maxBytes
+  let body = ''
+  let used = 0
+  for (const character of text) {
+    const size = Buffer.byteLength(character, 'utf8')
+    if (used + size > bodyBudget) break
+    body += character
+    used += size
+  }
+  if (maxBytes < suffixBytes) return body
+  return `${body}${suffix}`
+}
+'''
+          if 'export function capToolText(' not in text:
+              if marker not in text:
+                  raise SystemExit('Repo Brain cap insertion marker missing')
+              text = text.replace(marker, marker + implementation, 1)
+          p.write_text(text, encoding='utf-8')
+          PY
+      - name: Wire host project references
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tsconfig.host.json')
+          text = p.read_text(encoding='utf-8')
+          marker = '    { "path": "./packages/lsp/tool-lsp" },\n'
+          refs = ''.join([
+            '    { "path": "./packages/phoenix/runtime" },\n',
+            '    { "path": "./packages/phoenix/ai-bus" },\n',
+            '    { "path": "./packages/phoenix/repo-brain" },\n',
+            '    { "path": "./packages/phoenix/continuity" },\n',
+            '    { "path": "./packages/bundle/phoenix" },\n',
+          ])
+          for ref in refs.splitlines(keepends=True):
+              text = text.replace(ref, '')
+          if marker not in text:
+              raise SystemExit('tsconfig.host.json insertion marker missing')
+          text = text.replace(marker, marker + refs, 1)
+          p.write_text(text, encoding='utf-8')
+          PY
+      - name: Refresh workspace lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Install integrated workspace
+        run: pnpm install --frozen-lockfile
+      - name: Verify imported PHOENIX stack
+        run: |
+          pnpm exec vitest run packages/phoenix/runtime/tests packages/phoenix/ai-bus/tests packages/phoenix/repo-brain/tests packages/phoenix/continuity/tests packages/bundle/phoenix/tests
+          pnpm exec tsc -b packages/phoenix/runtime packages/phoenix/ai-bus packages/phoenix/repo-brain packages/phoenix/continuity packages/bundle/phoenix --pretty false
+          pnpm run knip
+      - name: Commit integrated stack
+        shell: bash
+        run: |
+          git config user.name 'PHOENIX Runtime Integrator'
+          git config user.email 'actions@users.noreply.github.com'
+          git add packages/phoenix packages/bundle/phoenix tsconfig.host.json pnpm-lock.yaml
+          git commit -m 'feat(phoenix): integrate runtime, AI bus, repo brain and continuity'
+          git push origin HEAD:phoenix/full-reforge-20260824

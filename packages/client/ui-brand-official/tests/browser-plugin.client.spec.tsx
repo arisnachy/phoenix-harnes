@@ -69,6 +69,8 @@ describe('PHOENIX browser-brand plugin', () => {
     const name = render(<PhoenixBrandName />)
     const nameImage = name.getByRole('img', { name: 'PHOENIX' })
     expect(nameImage.getAttribute('src')).toBe('/phoenix-wordmark.png')
+    expect(name.container.textContent).not.toContain('AUTO TEST')
+    expect(name.container.querySelector('[data-phoenix-auto-update-canary]')).toBeNull()
     name.unmount()
 
     const mark = render(<PhoenixBrandMark size={34} className="hero-mark" />)

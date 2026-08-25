@@ -155,6 +155,7 @@
     { "path": "./packages/credentials/credentials" },
     { "path": "./packages/credentials/credentials-local" },
     { "path": "./packages/credentials/authorization" },
+    { "path": "./packages/profile/user-profile" },
     { "path": "./packages/session-query/tool-session-query" },
     { "path": "./packages/storage/storage" },
     { "path": "./packages/storage/storage-json" },
@@ -288,7 +289,6 @@
     { "path": "./packages/plan/plan-mode" },
     { "path": "./packages/preset/agent-presets" },
     { "path": "./packages/preset/persona" },
-    { "path": "./packages/profile/user-profile" },
     { "path": "./packages/guard/repeat-tool-reminder" },
     { "path": "./packages/extensions/cordis-host-runner" },
     { "path": "./packages/extensions/tool-cordis" },
@@ -310,6 +310,11 @@
     { "path": "./packages/lsp/lsp" },
     { "path": "./packages/lsp/lsp-stdio" },
     { "path": "./packages/lsp/tool-lsp" },
+    { "path": "./packages/phoenix/runtime" },
+    { "path": "./packages/phoenix/ai-bus" },
+    { "path": "./packages/phoenix/continuity" },
+    { "path": "./packages/phoenix/repo-brain" },
+    { "path": "./packages/bundle/phoenix" },
     { "path": "./apps/cli" }
   ]
 }

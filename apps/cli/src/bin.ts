@@ -40,9 +40,14 @@ const invocation = parseDshArgs(rawArgs, readVersion())
 
 switch (invocation.mode) {
   case 'profile': {
-    const [{ runProfile }, { startPhoenixUpdateWatcher }] = await Promise.all([
+    const [
+      { homePatchPath, prepareProfile, runProfile },
+      { startPhoenixUpdateWatcher },
+      { runWithColdPatchRecovery },
+    ] = await Promise.all([
       import('./profile-boot.ts'),
       import('./phoenix-update-watch.ts'),
+      import('./patch-recovery.ts'),
     ])
     startPhoenixUpdateWatcher()
 
@@ -57,12 +62,18 @@ switch (invocation.mode) {
       patches.push(codexPatch)
     }
 
-    await runProfile({
-      environment: loadLayeredEnv('dsh'),
-      profile: invocation.profile,
-      patchFiles: patches,
-      args: invocation.args,
-    })
+    // Only profile/home mutable layers participate in automatic rollback.
+    // Explicit --patch overlays remain caller-owned and fail loud.
+    const profilePatch = prepareProfile(invocation.profile, false).patchPath
+    await runWithColdPatchRecovery(
+      [profilePatch, homePatchPath()],
+      async () => runProfile({
+        environment: loadLayeredEnv('dsh'),
+        profile: invocation.profile,
+        patchFiles: patches,
+        args: invocation.args,
+      }),
+    )
     break
   }
   case 'plugin': {

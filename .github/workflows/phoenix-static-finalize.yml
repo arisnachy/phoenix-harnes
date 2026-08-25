@@ -1,0 +1,76 @@
+name: PHOENIX static finalizer
+
+on:
+  push:
+    branches:
+      - phoenix/full-reforge-20260824
+
+permissions:
+  contents: write
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  DSH_TELEMETRY_DISABLED: '1'
+  DSH_GATE_CONCURRENCY: '2'
+
+jobs:
+  finalize-static:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: phoenix/full-reforge-20260824
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Apply deterministic repairs
+        run: |
+          python scripts/phoenix-finalize-static.py
+          python scripts/phoenix-finalize-catalog.py
+          python scripts/phoenix-finalize-graphs.py
+          python scripts/phoenix-finalize-i18n.py pre
+      - name: Remove pre-generation repair machinery
+        run: git rm -f .github/workflows/phoenix-integrate-runtime-stack.yml scripts/phoenix-finalize-static.py scripts/phoenix-finalize-catalog.py scripts/phoenix-finalize-graphs.py
+      - name: Regenerate derived documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm run gen-cordis-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-module-graph
+          python scripts/phoenix-finalize-i18n.py post
+          while IFS= read -r path; do
+            [[ "$path" == *.zh.md ]] && continue
+            zh="${path%.md}.zh.md"
+            if [[ -f "$zh" ]]; then
+              pnpm exec tsx scripts/verify-translation-pairing.ts --write "$path"
+            fi
+          done < <(git diff --name-only -- '*.md' | sort -u)
+          for path in docs/subsystems/phoenix.md docs/subsystems/README.md packages/README.md packages/bundle/README.md packages/bundle/phoenix/README.md packages/phoenix/README.md packages/phoenix/ai-bus/README.md packages/phoenix/continuity/README.md packages/phoenix/repo-brain/README.md packages/phoenix/runtime/README.md; do
+            pnpm exec tsx scripts/verify-translation-pairing.ts --write "$path"
+          done
+          git rm -f .github/workflows/phoenix-static-finalize.yml scripts/phoenix-finalize-i18n.py
+          git diff --check
+      - name: Verify static gates
+        run: pnpm run check:ci:static
+      - name: Verify build and focused PHOENIX tests
+        run: |
+          pnpm run build
+          pnpm exec vitest run packages/phoenix/runtime/tests packages/phoenix/ai-bus/tests packages/phoenix/repo-brain/tests packages/phoenix/continuity/tests packages/bundle/phoenix/tests packages/profile/user-profile/tests/user-profile.spec.ts
+      - name: Commit verified finalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(phoenix): close full-reforge static contracts"
+          git push origin HEAD:phoenix/full-reforge-20260824
