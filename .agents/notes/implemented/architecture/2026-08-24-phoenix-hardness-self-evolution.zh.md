@@ -35,3 +35,7 @@ stable watcher 同样把准备与激活分开。当前 PHOENIX Host 保持可用
 模型可以进行破坏性或不完整修改，而不会损坏正在服务当前会话的 runtime；它可以把演化 worktree 中的构建或测试错误作为反馈继续修复。worktree 创建失败时，自我修改会降为只读，而不是获得实时 checkout 的写权限。HARDNESS 保护启动期间有意不允许模型进行不受约束的整机写入；广泛写权限仍限制在解析后的 workspace。
 
 stable 更新可以在当前 Host 仍可使用时完成耗时的 fetch、依赖、构建与 smoke 工作。侧栏显示这些真实阶段，并且只有准备成功后才提供 Restart。激活时仍会重新构建并验证实时 checkout，因此 `ready` 表示候选版本通过了隔离 preflight，而不是保证激活绝不会失败；任何激活失败都会通过 recovery 恢复之前的 checkout。提升与重启仍是明确边界，因此模型修改或刚出现的 `main` commit 都不会仅因为存在就进入实时运行。
+
+## Changed-path coverage
+
+更新状态组件及其可见样式共同由 `packages/client/ui-settings-plugin-inventory/src/client/UpdateFooterAction.tsx`、`packages/client/ui-settings-plugin-inventory/src/client/UpdateFooterAction.module.css` 和 `packages/client/ui-settings-plugin-inventory/src/client/index.ts` 实现。分离 watcher 与 Windows 启动交接由 `scripts/phoenix-auto-update.mjs` 和 `phoenix-windows.cmd` 实现。这些路径属于同一个架构决策，必须与受保护的 stable 更新流程一起演进。
