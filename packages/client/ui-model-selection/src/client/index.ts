@@ -17,13 +17,16 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { CommandUiContract, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
 // Type-only: pulls the ui-conversation SlotMap merge (the input.model seat).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+// Type-only: pulls the ui-sidebar SlotMap merge (the session-aware footer action seat).
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelDirectoryState } from './directory.ts'
 import { ModelDirectoryResolver } from './service.ts'
-import type { ModelSelectInjected } from './slots.ts'
+import type { ContextMeterInjected, ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
+import { ContextMeter } from './ContextMeter.tsx'
 import { en, zh, type ModelKey } from './locales.ts'
 
 export { ModelDirectory } from './directory.ts'
@@ -101,8 +104,7 @@ export const inject = ['commandUi', 'connection', 'locale', 'sessions', 'slots',
 
 /**
  * Client plugin body: mount ModelDirectoryResolver, register the `model` dictionaries,
- * then register the /model popup contribution and the composer model seat
- * over the service.
+ * then register the /model popup contribution, composer model seat, and OpenAI context footer.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -172,5 +174,17 @@ export function apply(ctx: ClientContext): void {
         }
       },
     }, ModelSelect))
+
+    // Entry 3: the sidebar footer meter. session-maybe keeps the entry mounted
+    // while selection changes; both its directory and projection hook are
+    // rebound by the framework to the current session, so stale percentages
+    // cannot leak across sessions.
+    scope.slots.inject('sidebar.footer.action', () => scope.slots.register({
+      name: 'sidebar.footer.action',
+      locale: NS,
+      inject: (sessionId): ContextMeterInjected => ({
+        directory: sessionId === undefined ? undefined : models.directoryFor(sessionId).store,
+      }),
+    }, ContextMeter))
   })
 }
