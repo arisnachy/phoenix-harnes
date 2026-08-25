@@ -76,7 +76,7 @@ function isBusy(snapshot: PhoenixUpdateSnapshot): boolean {
 function UpdateGlyph({ spinning }: { spinning: boolean }) {
   return (
     <span className={spinning ? css.spinner : css.glyph} aria-hidden="true">
-      <svg viewBox="0 0 20 20" width="18" height="18">
+      <svg viewBox="0 0 20 20" width="16" height="16">
         <path d="M15.6 5.3A7 7 0 1 0 16.8 12h-1.7a5.3 5.3 0 1 1-1-5.3L11.8 9H18V2.8l-2.4 2.5Z" fill="currentColor" />
       </svg>
     </span>
@@ -84,9 +84,9 @@ function UpdateGlyph({ spinning }: { spinning: boolean }) {
 }
 
 /**
- * Render the Codex-style stable-update status immediately above Settings.
+ * Render the compact stable-update status immediately above Settings.
  * @param props - sidebar geometry, locale seat and updater Remote callbacks.
- * @returns nothing while current, otherwise a progress row or restart action.
+ * @returns nothing while current, otherwise a compact progress row or restart action.
  */
 export function UpdateFooterAction({
   wide,
