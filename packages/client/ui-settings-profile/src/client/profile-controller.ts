@@ -6,7 +6,22 @@ import type { UserProfileConsent, UserProfileFamilyMember, UserProfileRowState, 
 /** Settings namespace join key; it intentionally does not import the Host package. */
 export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile'
 
-const FIELDS = ['preferredName', 'dateOfBirth', 'gender', 'pronouns', 'tone'] as const
+const FIELDS = [
+  'fullName',
+  'preferredName',
+  'dateOfBirth',
+  'gender',
+  'pronouns',
+  'profession',
+  'organization',
+  'academicBackground',
+  'country',
+  'preferredLanguage',
+  'timezone',
+  'technicalLevel',
+  'responsePreferences',
+  'tone',
+] as const
 type TextField = typeof FIELDS[number]
 type ConsentField = keyof UserProfileConsent
 
@@ -25,26 +40,48 @@ export interface UserProfileRowFace extends UserProfileRowActions {
 }
 
 interface Draft {
+  fullName: string
   preferredName: string
   dateOfBirth: string
   gender: string
   pronouns: string
+  profession: string
+  organization: string
+  academicBackground: string
+  country: string
+  preferredLanguage: string
+  timezone: string
+  technicalLevel: string
+  responsePreferences: string
   tone: string
   family: string
   consent: UserProfileConsent
 }
 
 const EMPTY_CONSENT: UserProfileConsent = {
+  fullName: false,
   preferredName: false,
   dateOfBirth: false,
   gender: false,
   pronouns: false,
+  profession: false,
+  organization: false,
+  academicBackground: false,
+  country: false,
+  preferredLanguage: false,
+  timezone: false,
+  technicalLevel: false,
+  responsePreferences: false,
   tone: false,
   family: false,
 }
 
 function emptyDraft(): Draft {
-  return { preferredName: '', dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '', consent: { ...EMPTY_CONSENT } }
+  return {
+    fullName: '', preferredName: '', dateOfBirth: '', gender: '', pronouns: '', profession: '', organization: '',
+    academicBackground: '', country: '', preferredLanguage: '', timezone: '', technicalLevel: '', responsePreferences: '',
+    tone: '', family: '', consent: { ...EMPTY_CONSENT },
+  }
 }
 
 function textValue(value: unknown): string {
@@ -54,10 +91,19 @@ function textValue(value: unknown): string {
 function toDraft(value: UserProfileSettings | undefined): Draft {
   if (value === undefined) return emptyDraft()
   return {
+    fullName: textValue(value.fullName),
     preferredName: textValue(value.preferredName),
     dateOfBirth: textValue(value.dateOfBirth),
     gender: textValue(value.gender),
     pronouns: textValue(value.pronouns),
+    profession: textValue(value.profession),
+    organization: textValue(value.organization),
+    academicBackground: textValue(value.academicBackground),
+    country: textValue(value.country),
+    preferredLanguage: textValue(value.preferredLanguage),
+    timezone: textValue(value.timezone),
+    technicalLevel: textValue(value.technicalLevel),
+    responsePreferences: textValue(value.responsePreferences),
     tone: textValue(value.tone),
     family: value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '',
     consent: { ...EMPTY_CONSENT, ...value.consent },
@@ -123,9 +169,7 @@ export class UserProfileForm {
     }
   }
 
-  /** Dispose the form and remove its settings subscription.
-   * @returns nothing after the scope listener is removed.
-   */
+  /** Dispose the form and remove its settings subscription. */
   dispose(): void {
     this.disposed = true
     this.unsubscribe()
@@ -181,11 +225,7 @@ export class UserProfileForm {
     this.publish()
     let ok = true
     const values: Record<string, unknown> = {
-      preferredName: this.draft.preferredName.trim(),
-      dateOfBirth: this.draft.dateOfBirth.trim(),
-      gender: this.draft.gender.trim(),
-      pronouns: this.draft.pronouns.trim(),
-      tone: this.draft.tone.trim(),
+      ...Object.fromEntries(FIELDS.map(field => [field, this.draft[field].trim()])),
       family: parseFamily(this.draft.family),
       consent: this.draft.consent,
     }
@@ -222,7 +262,7 @@ export class UserProfileForm {
   }
 
   private invalidAgainst(value: UserProfileSettings): boolean {
-    return this.draft.dateOfBirth.trim() !== textValue(value.dateOfBirth)
+    return FIELDS.some(field => this.draft[field].trim() !== textValue(value[field]))
       || this.draft.family.trim() !== (value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '')
   }
 
@@ -242,10 +282,19 @@ export class UserProfileForm {
       invalid: this.invalid(),
       saving: this.saving,
       failed: this.failed,
+      fullName: fieldState(this.draft.fullName),
       preferredName: fieldState(this.draft.preferredName),
       dateOfBirth: fieldState(this.draft.dateOfBirth, this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())),
       gender: fieldState(this.draft.gender),
       pronouns: fieldState(this.draft.pronouns),
+      profession: fieldState(this.draft.profession),
+      organization: fieldState(this.draft.organization),
+      academicBackground: fieldState(this.draft.academicBackground),
+      country: fieldState(this.draft.country),
+      preferredLanguage: fieldState(this.draft.preferredLanguage),
+      timezone: fieldState(this.draft.timezone),
+      technicalLevel: fieldState(this.draft.technicalLevel),
+      responsePreferences: fieldState(this.draft.responsePreferences),
       tone: fieldState(this.draft.tone),
       family: fieldState(this.draft.family, this.draft.family.trim() !== '' && parseFamily(this.draft.family) === undefined),
       consent: { ...this.draft.consent },
