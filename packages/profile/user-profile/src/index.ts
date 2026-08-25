@@ -6,13 +6,13 @@ import { settingsNamespace, type SettingsScope } from '@deepseek-ai/dsh-settings
 import {
   DEFAULT_USER_PROFILE_CONSENT, USER_PROFILE_SETTINGS_NAMESPACE, UserProfileSettingsSchema,
   deriveAge, mergeUserProfile, validateUserProfile, validateUserProfileUpdate,
-} from './schema.ts'
+} from './schema.js'
 import type {
   UserProfileConsented, UserProfileRedacted, UserProfileSettings, UserProfileUpdate, UserProfileView,
-} from './types.ts'
+} from './types.js'
 
-export * from './schema.ts'
-export type * from './types.ts'
+export * from './schema.js'
+export type * from './types.js'
 
 /** Branded Settings namespace used by the Host and Client settings scope. */
 export const USER_PROFILE_NAMESPACE = settingsNamespace(USER_PROFILE_SETTINGS_NAMESPACE)
