@@ -97,6 +97,27 @@
     - id: authorization
       name: '@deepseek-ai/dsh-authorization'
 
+    # Google Workspace authorization is host-owned: the Desktop OAuth client id
+    # is public application identity, while access/refresh tokens remain private
+    # to the broker and never enter the credential document or model/tool plane.
+    # Google installed apps do not support incremental authorization, so the
+    # capabilities shipped by this bundle are one explicit human consent set.
+    - id: authorization-google
+      name: '@deepseek-ai/dsh-authorization/google'
+      config:
+        clientId: !!js process.env.PHOENIX_GOOGLE_OAUTH_CLIENT_ID
+        scopes:
+          - openid
+          - email
+          - profile
+          - https://www.googleapis.com/auth/gmail.modify
+          - https://www.googleapis.com/auth/calendar
+          - https://www.googleapis.com/auth/drive
+          - https://www.googleapis.com/auth/documents
+          - https://www.googleapis.com/auth/spreadsheets
+          - https://www.googleapis.com/auth/presentations
+          - https://www.googleapis.com/auth/contacts
+
     # The pi-ai multi-provider adapter starts with PHOENIX's OpenRouter route.
     # Its key resolves per request from the credential store or the inherited
     # OPENROUTER_API_KEY environment variable; no secret is stored in this tree.
