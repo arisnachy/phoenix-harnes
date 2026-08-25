@@ -46,6 +46,7 @@ const LABELS: Readonly<Record<string, string>> = {
 }
 
 const PROSE_KEYS = new Set(['message', 'raw', 'detail', 'details', 'remedy_hint', 'hint', 'reason'])
+// Verbose provider payloads belong in the opt-in raw JSON disclosure, not in the friendly summary.
 const OMITTED_KEYS = new Set(['message', 'remedy_hint', 'raw', 'previous_errors'])
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -218,7 +219,10 @@ function fallbackAction(code: string | undefined): string | undefined {
   return undefined
 }
 
-/** Convert a JSON-bearing error string into safe Spanish presentation data. */
+/**
+ * Convert a JSON-bearing error string into safe Spanish presentation data.
+ * Arbitrary chat JSON is unaffected because callers use this only on error nodes.
+ */
 export function formatStructuredError(
   input: string,
   explicitCode?: string | number,
@@ -245,6 +249,8 @@ export function formatStructuredError(
 
   const fields: StructuredErrorField[] = []
   flatten(envelope.payload, fields)
+
+  // The top-level code is already promoted to the compact code seat.
   const filtered = fields.filter(field => !(field.label === 'Código' && field.value === code))
 
   return {

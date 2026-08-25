@@ -12,11 +12,16 @@ describe('structured error presentation', () => {
     expect(formatted?.message).toBe('El proveedor devolvió un error')
     expect(formatted?.fields).toContainEqual({ label: 'Proveedor', value: 'Stealth', technical: true })
     expect(formatted?.fields).toContainEqual({
-      label: 'Origen del límite', value: 'upstream_provider_shared_pool', technical: true,
+      label: 'Origen del límite',
+      value: 'upstream_provider_shared_pool',
+      technical: true,
     })
     expect(formatted?.fields.find(field => field.label === 'Detalle')).toBeUndefined()
     expect(formatted?.action).toContain('https://openrouter.ai/settings/integrations')
+    expect(formatted?.action).toContain('https://openrouter.ai/docs/features/provider-routing')
+    expect(formatted?.action).toContain('provider routing')
     expect(formatted?.rawJson).toContain('stealth/ox-alpha')
+    expect(formatted?.rawJson).toContain('"raw"')
   })
 
   it('humanizes the OpenRouter 402 credit error that previously flooded the chat', () => {
@@ -55,6 +60,7 @@ describe('structured error presentation', () => {
     expect(formatted?.fields).toContainEqual({ label: 'Tipo', value: 'gateway_error', technical: true })
     expect(formatted?.fields).toContainEqual({ label: 'ID de traza', value: 'tr_ABC123', technical: true })
     expect(formatted?.fields).toContainEqual({ label: 'error.vendor_blob.region', value: 'us-east-1', technical: true })
+    expect(formatted?.fields).toContainEqual({ label: 'error.vendor_blob.attempt', value: '3', technical: true })
     expect(formatted?.rawJson).toContain('"vendor_blob"')
   })
 

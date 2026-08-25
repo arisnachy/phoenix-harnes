@@ -14,6 +14,7 @@ import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'
+import { formatStructuredError } from './structured-error.ts'
 import css from './MessageItem.module.css'
 
 type UserImage = Extract<UserMessageNode['content'][number], { type: 'image' }>
@@ -44,6 +45,41 @@ function retrySeconds(milliseconds: number): number {
 interface RetryCountdown {
   deadline: number
   seconds: number
+}
+
+/** Render a parsed JSON error without exposing the provider payload as raw JSON. */
+function StructuredErrorView({ message, code, compact = false }: {
+  message: string
+  code?: string | number
+  compact?: boolean
+}): ReactNode {
+  const structured = formatStructuredError(message, code)
+  if (structured === undefined) return <span className={css.turnErrorMessage}>{message}</span>
+
+  return (
+    <div className={compact ? css.structuredErrorCompact : css.structuredError} data-structured-error>
+      <span className={css.structuredErrorHeading}>{structured.title}</span>
+      {structured.message !== undefined && (
+        <span className={css.structuredErrorMessage}>{structured.message}</span>
+      )}
+      {structured.fields.length > 0 && (
+        <dl className={css.structuredErrorFields}>
+          {structured.fields.map((field, index) => (
+            <div className={css.structuredErrorField} key={`${field.label}-${index}`}>
+              <dt>{field.label}</dt>
+              <dd className={field.technical ? css.structuredErrorTechnical : undefined}>{field.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {structured.action !== undefined && (
+        <div className={css.structuredErrorAction}>
+          <span>Qué puedes hacer</span>
+          <span>{structured.action}</span>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function ModelRetryItem({ node, active, t }: {
@@ -105,7 +141,7 @@ function ModelRetryItem({ node, active, t }: {
         </div>
         <div>
           <span className={css.retryDetailLabel}>{t('message.retry.failure')}</span>
-          {node.failure.message}
+          <StructuredErrorView message={node.failure.message} compact />
         </div>
       </div>
     </details>
@@ -117,14 +153,17 @@ function TurnErrorItem({ node, t }: {
   node: TurnErrorNode
   t: ChatViewSlotProps['t']
 }) {
+  const structured = formatStructuredError(node.message, node.code)
   return (
     <div className={css.turnErrorRow} role="status">
       <StateDot state="error" className={css.turnErrorDot} />
       <div className={css.turnErrorCopy}>
-        <span className={css.turnErrorTitle}>{t('message.turnError')}</span>
-        <span className={css.turnErrorMessage}>{node.message}</span>
+        {structured === undefined && <span className={css.turnErrorTitle}>{t('message.turnError')}</span>}
+        <StructuredErrorView message={node.message} {...node.code === undefined ? {} : { code: node.code }} />
       </div>
-      {node.code !== undefined && <code className={css.turnErrorCode}>{node.code}</code>}
+      {(structured?.code ?? node.code) !== undefined && (
+        <code className={css.turnErrorCode}>{structured?.code ?? node.code}</code>
+      )}
     </div>
   )
 }
