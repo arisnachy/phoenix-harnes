@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, globSync, mkdirSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, globSync, mkdirSync, rmSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
@@ -15,12 +15,16 @@ const CLIENT_ARTIFACT_PATTERNS = [
 function artifactPaths(root: string): string[] {
   return globSync([...CLIENT_ARTIFACT_PATTERNS], { cwd: root })
     .map(path => path.replaceAll('\\', '/'))
+    .filter(path => statSync(resolve(root, path)).isFile())
     .sort()
 }
 
 function main(): void {
   const { values } = parseArgs({
-    options: { from: { type: 'string' } },
+    options: {
+      from: { type: 'string' },
+      'verify-only': { type: 'boolean', default: false },
+    },
     allowPositionals: false,
   })
   if (values.from === undefined || values.from.trim() === '') {
@@ -37,6 +41,13 @@ function main(): void {
     throw new Error(
       `promote-client-artifacts: source artifact count ${String(sourceArtifacts.length)} differs from verified record ${String(sourceRecord.artifacts.fileCount)}`,
     )
+  }
+
+  if (values['verify-only']) {
+    console.log(
+      `PHOENIX updater: verified ${String(sourceRecord.artifacts.fileCount)} prepared client artifact(s), sha256 ${sourceRecord.artifacts.sha256.slice(0, 12)}...`,
+    )
+    return
   }
 
   rmSync(resolve(root, 'apps/web/dist'), { recursive: true, force: true })
