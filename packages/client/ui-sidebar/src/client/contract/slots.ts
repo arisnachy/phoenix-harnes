@@ -40,10 +40,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar.settings': { kind: 'single'; scope: 'root'; owner: SidebarSettingsOwnerProps }
     /**
-     * Optional actions beside Settings at the sidebar foot. Declared by this
-     * package's 'sidebar' entry; each action receives only the column state.
+     * Optional current-session actions above Settings at the sidebar foot.
+     * They remain mountable with no selected session through session-maybe.
      */
-    'sidebar.footer.action': { kind: 'list'; scope: 'root'; owner: SidebarFooterActionOwnerProps }
+    'sidebar.footer.action': { kind: 'list'; scope: 'session-maybe'; owner: SidebarFooterActionOwnerProps }
   }
 }
 
