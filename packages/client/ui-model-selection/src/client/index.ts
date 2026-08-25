@@ -181,6 +181,7 @@ export function apply(ctx: ClientContext): void {
     // cannot leak across sessions.
     scope.slots.inject('sidebar.footer.action', () => scope.slots.register({
       name: 'sidebar.footer.action',
+      id: 'openai-context-meter',
       locale: NS,
       inject: (sessionId): ContextMeterInjected => ({
         directory: sessionId === undefined ? undefined : models.directoryFor(sessionId).store,
