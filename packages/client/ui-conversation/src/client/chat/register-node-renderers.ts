@@ -3,9 +3,11 @@ import { NS } from '../locales.ts'
 import { AssistantNodeView } from './AssistantNodeView.tsx'
 import { CommandNodeView, ManualCompactionNodeView } from './CommandNodeView.tsx'
 import {
-  CompactionNodeView, ContextMessageNodeView, RetryNodeView, TurnErrorNodeView,
+  CompactionNodeView, ContextMessageNodeView,
   TurnMaxTokensNodeView, UnknownNodeView, UserMessageNodeView,
 } from './MessageItem.tsx'
+import { RetryNodeView } from './RetryNodeView.tsx'
+import { TurnErrorNodeView } from './TurnErrorNodeView.tsx'
 import { TurnTailNodeView } from './TurnTailNodeView.tsx'
 
 /**
