@@ -33,8 +33,9 @@ jobs:
         run: |
           python scripts/phoenix-finalize-static.py
           python scripts/phoenix-finalize-catalog.py
+          python scripts/phoenix-finalize-graphs.py
       - name: Remove one-shot repair machinery
-        run: git rm -f .github/workflows/phoenix-integrate-runtime-stack.yml .github/workflows/phoenix-static-finalize.yml scripts/phoenix-finalize-static.py scripts/phoenix-finalize-catalog.py
+        run: git rm -f .github/workflows/phoenix-integrate-runtime-stack.yml .github/workflows/phoenix-static-finalize.yml scripts/phoenix-finalize-static.py scripts/phoenix-finalize-catalog.py scripts/phoenix-finalize-graphs.py
       - name: Regenerate derived documentation
         shell: bash
         run: |
