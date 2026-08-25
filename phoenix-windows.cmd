@@ -25,11 +25,9 @@ if errorlevel 1 (
   set "PHOENIX_PNPM=corepack pnpm"
 )
 
-rem Normal stable updates are owned by the detached watcher below so PHOENIX
-rem can stay open, report real preparation phases in the Web UI, and ask for an
-rem explicit restart only after the candidate passed preflight. The managed
-rem updater remains an opt-in recovery path for a legacy checkout that must be
-rem realigned to the promoted stable commit.
+rem Normal stable updates are owned by the detached watcher started by the
+rem Windows supervisor below. The managed updater remains an opt-in recovery
+rem path for a legacy checkout that must be realigned to promoted stable.
 if exist ".phoenix-managed-install" if "%PHOENIX_STABLE_REPAIR%"=="1" (
   if not "%PHOENIX_AUTO_UPDATE%"=="0" if exist "scripts\phoenix-managed-update.mjs" (
     if exist "scripts\phoenix-windows-command-shim.mjs" (
@@ -65,22 +63,18 @@ if not "%PHOENIX_HARDNESS_SELF_PROTECT%"=="0" (
   )
 )
 
-rem Keep updater staging paths deliberately short on Windows. Deep workspace
-rem dependency trees can otherwise exceed legacy Win32 path limits during Git
-rem worktree cleanup even after a candidate has already passed preflight.
+rem Keep updater staging paths deliberately short on Windows. Only the updater
+rem watcher receives these roots; PHOENIX itself retains the user's normal TEMP.
 set "PHOENIX_UPDATE_TEMP=%USERPROFILE%\p"
 if not exist "%PHOENIX_UPDATE_TEMP%" mkdir "%PHOENIX_UPDATE_TEMP%" >nul 2>nul
 
-rem Start the stable watcher outside the Host process. The Windows shim routes
-rem .cmd package-manager shims through cmd.exe before loading the updater. Only
-rem the watcher receives the short TEMP/TMP roots; PHOENIX itself keeps the
-rem user's normal temp configuration.
-if not "%PHOENIX_AUTO_UPDATE%"=="0" if exist "scripts\phoenix-auto-update.mjs" if exist "scripts\phoenix-windows-command-shim.mjs" (
-  for /f "usebackq delims=" %%P in (`node -p "process.ppid"`) do set "PHOENIX_LAUNCHER_PID=%%P"
-  if defined PHOENIX_LAUNCHER_PID (
-    node -e "const {spawn}=require('node:child_process');const env={...process.env,TEMP:process.env.PHOENIX_UPDATE_TEMP,TMP:process.env.PHOENIX_UPDATE_TEMP};const child=spawn(process.execPath,['scripts/phoenix-windows-command-shim.mjs','scripts/phoenix-auto-update.mjs','--watch','--parent-pid',process.argv[1]],{cwd:process.cwd(),detached:true,stdio:'ignore',windowsHide:true,env});child.unref()" "%PHOENIX_LAUNCHER_PID%" >nul 2>nul
-  )
+rem The supervisor owns the exact Host PID and binds the updater watcher to that
+rem process. This avoids PowerShell/cmd.exe PID ambiguity during Restart.
+if exist "scripts\phoenix-windows-supervisor.mjs" (
+  node scripts\phoenix-windows-supervisor.mjs %*
+  exit /b %errorlevel%
 )
 
+rem Legacy fallback for checkouts that do not yet contain the supervisor.
 call %PHOENIX_PNPM% run phoenix -- %*
 exit /b %errorlevel%
