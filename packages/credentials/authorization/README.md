@@ -61,9 +61,19 @@ A notice is one-way and never carries a secret: a message, optionally the page t
 
 The vocabulary is deliberately smaller than any one provider's: it describes what a surface must render, so a surface that renders one flow renders all of them.
 
+## Google Workspace host broker
+
+`@deepseek-ai/dsh-authorization/google` is a protocol-owning Host Service layered beside the neutral seam. It registers one `Google Workspace` flow and uses Google's Desktop-app authorization-code flow with a random loopback listener, PKCE S256, and `state`. The configured `clientId` identifies the OAuth application; it is not a user secret. The shipped composition reads it from `PHOENIX_GOOGLE_OAUTH_CLIENT_ID`.
+
+The broker deliberately does **not** persist Google's access or refresh token through `ctx.credentials`. The local credential provider documents that its owner-only file permissions do not isolate data from model tool processes running as the same OS user, so persisting a Google grant there would weaken the security property this provider exists to enforce. After login the store receives only the secret-free `authorization-google/account` marker. Access and refresh tokens remain private fields of the Host Service and disappear on process exit; a restart therefore requires Google authorization again until PHOENIX has a credential backend that is inaccessible to same-UID tool processes.
+
+Callers use `ctx.googleApi.request({ url, requiredScopes, ... })`. The broker accepts HTTPS Google API destinations only, rejects OAuth-token endpoints and caller-supplied authorization/cookie headers, verifies every operation's required scopes against the actual grant, injects the Bearer token immediately before `fetch`, and returns status, media type, and body without forwarding credential-bearing response state. `disconnect()` clears the in-memory session and durable marker even when Google's best-effort revocation request fails.
+
+Google installed applications do not support incremental authorization, so the mounted provider requests its configured scope set in one human consent. Deployments should keep that list to the capabilities they actually enable and complete Google's OAuth verification requirements for sensitive or restricted scopes.
+
 ## Model Experience
 
-None, as authorization is a configuration-time conversation with a human and no flow, notice, or prompt reaches a model request.
+None, as authorization is a configuration-time conversation with a human and no flow, notice, prompt, OAuth token, or broker credential reaches a model request.
 
 #### KV Cache effect
 
@@ -72,5 +82,6 @@ No invalidation; no authorization state enters a request prefix.
 ## Known Limitations and Deferred Work
 
 - **No flow is resumable** — an attempt lives in the process that started it, so a browser reload during a login abandons it and the human starts over. Durable attempts need a store this seam does not have.
-- **Nothing revokes** — signing out is `ctx.credentials.deleteRecord(key)`, which forgets the local record without telling the issuer. A provider that needs a server-side revoke has no place to declare it yet.
+- **Google sessions are process-local by design** — the Google broker persists only a marker because the current local credential file is not a same-UID process boundary. A restart requires re-authorization until a stronger secret backend exists.
+- **There is no generic revoke operation on the authorization seam** — providers may own protocol-specific revocation, as the Google broker does, but `ctx.authorization` itself exposes no cross-provider sign-out method.
 - **A key with no flow is inert** — the seam reports what is registered, so a record left by an uninstalled plugin can be deleted but not re-authorized. Recognizing that orphan is the caller's join, as it is for [`listRecords()`](../credentials/README.md#surface).
