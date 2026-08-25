@@ -15,17 +15,29 @@ generated = en[en.index(marker) :]
 generated = re.sub(r"(?m)^Requires:", "需要：", generated)
 generated = re.sub(r"(?m)^Types:", "依赖：", generated)
 generated = re.sub(r"(?m)^Source:", "来源：", generated)
+for source, localized in (
+    ("subsystems/core.md", "subsystems/core.zh.md"),
+    ("subsystems/tools.md", "subsystems/tools.zh.md"),
+    ("subsystems/approval.md", "subsystems/approval.zh.md"),
+    ("subsystems/sandbox.md", "subsystems/sandbox.zh.md"),
+    ("subsystems/subagent.md", "subsystems/subagent.zh.md"),
+    (
+        "../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md",
+        "../.agents/notes/implemented/architecture/2026-06-13-capability-seams.zh.md",
+    ),
+):
+    generated = generated.replace(source, localized)
 zh_path.write_text(zh_prefix + generated, encoding="utf-8")
 
-# module-graph: graph bytes are language-neutral; preserve reviewed Chinese framing.
+# module-graph: everything from the Mermaid fence onward is generated, language-neutral data.
+# Keep the reviewed Chinese framing, then mirror the generated English graph and package matrix byte-for-byte.
 en = Path("docs/module-graph.md").read_text(encoding="utf-8")
 zh_path = Path("docs/module-graph.zh.md")
 zh = zh_path.read_text(encoding="utf-8")
-en_block = re.search(r"```mermaid\n.*?\n```", en, flags=re.S)
-zh_block = re.search(r"```mermaid\n.*?\n```", zh, flags=re.S)
-if en_block is None or zh_block is None:
-    raise SystemExit("module graph mermaid block missing")
-zh_path.write_text(zh[: zh_block.start()] + en_block.group(0) + zh[zh_block.end() :], encoding="utf-8")
+marker = "```mermaid\n"
+if marker not in en or marker not in zh:
+    raise SystemExit("module graph mermaid marker missing")
+zh_path.write_text(zh[: zh.index(marker)] + en[en.index(marker) :], encoding="utf-8")
 
 # event matrix: data rows are language-neutral; preserve Chinese headings and prose.
 en = Path("docs/event-producer-consumer.md").read_text(encoding="utf-8")
