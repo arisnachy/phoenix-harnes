@@ -24,7 +24,6 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
 
       - name: Merge current main without discarding either side
         shell: bash
