@@ -65,7 +65,10 @@ function remaining(limit: RateLimitWindow): number {
 export function CodexQuotaRemaining({
   wide, sessionId, authorization, directoryFor,
 }: CodexQuotaRemainingProps) {
-  const [selection, setSelection] = useState<{ sessionId: SessionId; provider?: string } | undefined>()
+  const [selection, setSelection] = useState<{
+    sessionId: SessionId
+    provider: string | undefined
+  } | undefined>()
   const [quota, setQuota] = useState<number | undefined>()
 
   useEffect(() => {
