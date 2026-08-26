@@ -160,6 +160,6 @@ export interface AuthorizationEntry {
   methods: readonly AuthorizationMethod[]
   /** Whether an attempt for this key is running right now. */
   inFlight: boolean
-  /** Whether the owner can revoke/logout this account through the same seam. */
-  disconnectable: boolean
+  /** Present only when the owner can revoke/logout this account through the same seam. */
+  disconnectable?: true
 }
