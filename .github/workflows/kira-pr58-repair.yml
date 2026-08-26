@@ -1,4 +1,4 @@
-name: KIRA PR58 repair
+name: KIRA PR58 finalizer
 
 on:
   push:
@@ -8,8 +8,8 @@ permissions:
   contents: write
 
 jobs:
-  repair:
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore(kira): apply PR58 deterministic repairs') }}
+  finalize:
+    if: ${{ !startsWith(github.event.head_commit.message, 'fix(release): close auth and SDK lifecycle gates') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -21,146 +21,22 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Apply deterministic source repairs
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace(path, old, new, count=1):
-              p = Path(path)
-              text = p.read_text()
-              if old not in text:
-                  raise SystemExit(f'missing expected pattern in {path}: {old[:90]!r}')
-              p.write_text(text.replace(old, new, count))
-
-          # Source-resolution contract for the Google broker submodule.
-          replace('tsconfig.base.json',
-            '      "@deepseek-ai/dsh-authorization/types": ["./packages/credentials/authorization/src/types.ts"],',
-            '      "@deepseek-ai/dsh-authorization/types": ["./packages/credentials/authorization/src/types.ts"],\n      "@deepseek-ai/dsh-authorization/google": ["./packages/credentials/authorization/src/google-broker.ts"],')
-
-          # Public API JSDoc completeness.
-          replace('packages/credentials/authorization/src/index.ts',
-            '   * cannot be disconnected by deleting storage behind its back.\n   */\n  async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {',
-            '   * cannot be disconnected by deleting storage behind its back.\n   * @param key - credential record whose provider session should be disconnected.\n   * @param signal - optional cancellation signal for provider teardown.\n   */\n  async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {')
-
-          replace('packages/credentials/authorization/src/google-broker.ts',
-            '/** Resolve broker configuration without inventing scopes or a deployment identity. */\nexport function resolveGoogleSpec(config: Config): ResolvedSpec {',
-            '/**\n * Resolve broker configuration without inventing scopes or a deployment identity.\n * @param config - configured OAuth client identity and requested suite scopes.\n * @returns validated broker configuration.\n */\nexport function resolveGoogleSpec(config: Config): ResolvedSpec {')
-          replace('packages/credentials/authorization/src/google-broker.ts',
-            '/** Secret-free telemetry exists only while this process owns a live grant. */\n  async inspect(): Promise<AuthorizationTelemetry | undefined> {',
-            '/**\n   * Secret-free telemetry exists only while this process owns a live grant.\n   * @returns sanitized account telemetry, or undefined without a live grant.\n   */\n  async inspect(): Promise<AuthorizationTelemetry | undefined> {')
-          replace('packages/credentials/authorization/src/google-broker.ts',
-            '/** Execute one request inside a fixed Google service boundary. */\n  async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {',
-            '/**\n   * Execute one request inside a fixed Google service boundary.\n   * @param request - allowlisted service, relative path, and request payload.\n   * @returns provider response data with no OAuth material.\n   */\n  async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {')
-          replace('packages/credentials/authorization/src/google-broker.ts',
-            '/** Clear the process grant and secret-free marker even when provider revocation fails. */\n  async disconnect(): Promise<{ revoked: boolean }> {',
-            '/**\n   * Clear the process grant and secret-free marker even when provider revocation fails.\n   * @returns whether Google confirmed token revocation.\n   */\n  async disconnect(): Promise<{ revoked: boolean }> {')
-
-          ep = Path('packages/guard/timeout-policy/src/exec-policy.ts')
-          text = ep.read_text()
-          text = text.replace("export type ExecPolicyDecision = 'allow' | 'prompt' | 'forbidden'", "/** Closed command-policy outcome ordered from permissive to strict. */\nexport type ExecPolicyDecision = 'allow' | 'prompt' | 'forbidden'")
-          text = text.replace('export type ExecPolicyPatternPart = string | readonly string[]', '/** One exact token or a closed set of token alternatives in a rule prefix. */\nexport type ExecPolicyPatternPart = string | readonly string[]')
-          text = text.replace('export interface ExecPolicyRule {', '/** Declarative lexical command-prefix rule with optional self-test examples. */\nexport interface ExecPolicyRule {')
-          text = text.replace('export interface ExecPolicyConfig {', '/** Exec-policy configuration mounted at the existing tool pre-execute boundary. */\nexport interface ExecPolicyConfig {')
-          text = text.replace('export interface CompiledExecPolicy {', '/** Validated, normalized policy used by runtime evaluation. */\nexport interface CompiledExecPolicy {')
-          text = text.replace('export interface ExecPolicyEvaluation {', '/** Strictest decision selected for one command, with optional rationale. */\nexport interface ExecPolicyEvaluation {')
-          text = text.replace('/** Compile and self-test an exec policy before it can affect live tools. */\nexport function compileExecPolicy', '/**\n * Compile and self-test an exec policy before it can affect live tools.\n * @param config - declarative command policy.\n * @returns validated runtime policy.\n */\nexport function compileExecPolicy')
-          text = text.replace('/** Evaluate one shell command without changing the surrounding policy chain. */\nexport function evaluateExecPolicy(', '/**\n * Evaluate one shell command without changing the surrounding policy chain.\n * @param command - raw shell command supplied to a governed tool.\n * @param policy - previously compiled policy.\n * @returns the strictest matching decision, or undefined to inherit later policy.\n */\nexport function evaluateExecPolicy(')
-          ep.write_text(text)
-
-          se = Path('packages/client/ui-conversation/src/client/chat/structured-error.ts')
-          text = se.read_text()
-          text = text.replace('export interface StructuredErrorField {', '/** One bounded, presentation-safe field extracted from a structured provider error. */\nexport interface StructuredErrorField {')
-          text = text.replace('export interface StructuredErrorPresentation {', '/** Friendly error presentation plus an opt-in, semantically complete raw JSON view. */\nexport interface StructuredErrorPresentation {')
-          text = text.replace('/** Translate only generic error prose, never identifiers, provider/model names, enum values, IDs or URLs. */\nexport function translateGenericErrorProse(value: string): string {', '/**\n * Translate only generic error prose, never identifiers, provider/model names, enum values, IDs or URLs.\n * @param value - provider prose eligible for presentation-only translation.\n * @returns translated generic prose with technical identifiers preserved.\n */\nexport function translateGenericErrorProse(value: string): string {')
-          text = text.replace(' * Arbitrary chat JSON is unaffected because callers use this only on error nodes.\n */\nexport function formatStructuredError(', ' * Arbitrary chat JSON is unaffected because callers use this only on error nodes.\n * @param input - bounded error text containing a JSON object or array.\n * @param explicitCode - optional transport status/code that outranks a payload code.\n * @returns safe presentation data, or undefined when the input is not a structured error.\n */\nexport function formatStructuredError(')
-          se.write_text(text)
-
-          sc = Path('packages/sdk/client/src/api.ts')
-          text = sc.read_text()
-          text = text.replace('  get client(): HarnessClient {', '  /** Active low-level client owned by this harness runtime. */\n  get client(): HarnessClient {')
-          text = text.replace('  /** Whether the current runtime explicitly advertised one v2 lifecycle capability. */\n  supports(capability: keyof HarnessSdkCapabilities): boolean {', '  /**\n   * Whether the current runtime explicitly advertised one v2 lifecycle capability.\n   * @param capability - negotiated lifecycle capability to query.\n   * @returns true only when the runtime explicitly advertised it.\n   */\n  supports(capability: keyof HarnessSdkCapabilities): boolean {')
-          text = text.replace('  session(sessionId?: string): HarnessSession {', '  /** Create a stable SDK session handle. */\n  session(sessionId?: string): HarnessSession {')
-          text = text.replace('  run(input: string | ContentBlock[], options?: RunOptions): Promise<RunResult> {', '  /** Run one turn in an explicit or generated SDK session. */\n  run(input: string | ContentBlock[], options?: RunOptions): Promise<RunResult> {')
-          text = text.replace('  close(): Promise<void> {', '  /** Close the shared runtime subprocess and all SDK-owned resources. */\n  close(): Promise<void> {', 1)
-          text = text.replace('  async run(input: string | ContentBlock[], options?: Pick<RunOptions, \'onNotification\'>): Promise<RunResult> {', '  /** Run one prompt to idle in this stable session. */\n  async run(input: string | ContentBlock[], options?: Pick<RunOptions, \'onNotification\'>): Promise<RunResult> {')
-          text = text.replace('  /** Cancel this session\'s current activity without closing the runtime or discarding queued follow-up work. */\n  async interrupt(): Promise<SessionInterruptResult> {', '  /**\n   * Cancel this session\'s current activity without closing the runtime or discarding queued follow-up work.\n   * @returns whether the session existed and whether it was running.\n   */\n  async interrupt(): Promise<SessionInterruptResult> {')
-          text = text.replace('  /** Dispose this SDK-owned session while preserving the shared PHOENIX runtime for other sessions. */\n  async close(): Promise<SessionCloseResult> {', '  /**\n   * Dispose this SDK-owned session while preserving the shared PHOENIX runtime for other sessions.\n   * @returns whether the server still owned the session when close was requested.\n   */\n  async close(): Promise<SessionCloseResult> {')
-          sc.write_text(text)
-
-          ss = Path('packages/sdk/server/src/server.ts')
-          text = ss.read_text()
-          docs = {
-            '/** Configure the SDK route and negotiate optional protocol features. */': '/**\n   * Configure the SDK route and negotiate optional protocol features.\n   * @param params - runtime route, model, limits, and optional protocol version.\n   * @returns server identity and negotiated protocol capabilities.\n   */',
-            '/** Queue one identified prompt without assigning later activity to it. */': '/**\n   * Queue one identified prompt without assigning later activity to it.\n   * @param params - target session and prompt content blocks.\n   * @returns the queued user-message identifier.\n   */',
-            '/** Cancel only the current activity of one SDK-owned session. */': '/**\n   * Cancel only the current activity of one SDK-owned session.\n   * @param params - target SDK session.\n   * @returns existence and prior running state.\n   */',
-            '/** Dispose one SDK-owned session while leaving the runtime and other sessions alive. */': '/**\n   * Dispose one SDK-owned session while leaving the runtime and other sessions alive.\n   * @param params - target SDK session.\n   * @returns whether that session was found.\n   */',
-            '/** Dispose server-owned agents, adapter, and subscriptions to quiescence. */': '/**\n   * Dispose server-owned agents, adapter, and subscriptions to quiescence.\n   * @returns an empty success record after teardown.\n   */',
-            '/** Dispatch one incoming JSON-RPC request to its typed handler. */': '/**\n   * Dispatch one incoming JSON-RPC request to its typed handler.\n   * @param method - protocol method name.\n   * @param params - decoded request parameters.\n   * @returns typed handler result.\n   */',
-          }
-          for old, new in docs.items():
-              if old not in text: raise SystemExit(f'missing SDK server doc marker: {old}')
-              text = text.replace(old, new, 1)
-          ss.write_text(text)
-
-          # Type-equivalence and README model-experience contracts.
-          replace('docs/subsystems/sandbox.md',
-            '/** Explicit approved mode override, which outranks session policy. */',
-            '/** Explicit approved mode override, which outranks session policy but not HARDNESS runtime protection. */')
-          replace('packages/credentials/authorization/README.md',
-            'None directly: authorization is a configuration-time conversation with a human, and no flow, notice, prompt, OAuth token, credential payload, or broker authentication header enters a model request. Model-visible Google tools receive only the Google API data their owning integration chooses to return.',
-            'None, as authorization is a configuration-time conversation with a human and no flow, notice, prompt, OAuth token, credential payload, or broker authentication header enters a model request; model-visible Google tools receive only the Google API data their owning integration chooses to return.')
-          replace('packages/credentials/authorization/README.md',
-            '- **There is no generic revoke operation on the authorization seam** — providers may own protocol-specific revocation, as the Google broker does, but `ctx.authorization` itself exposes no cross-provider sign-out method.',
-            '- **Disconnect requires provider ownership** — `ctx.authorization.disconnect()` is available only when the registered flow implements protocol-specific teardown; the seam never guesses revocation semantics or deletes provider state behind a flow\'s back.')
-
-          sp = Path('packages/sandbox/sandbox-policy/README.md')
-          text = sp.read_text()
-          standalone = '\nThe `danger-full-access` text is reachable only when launcher HARDNESS protection is absent. A protected PHOENIX launch resolves model-controlled full access to `workspace-write` before this context is rendered.\n'
-          if standalone not in text: raise SystemExit('sandbox README HARDNESS paragraph not found')
-          text = text.replace('With launcher HARDNESS protection active, the same contribution states that the live PHOENIX runtime and data home are protected and directs self-modification to the isolated evolution worktree.', 'With launcher HARDNESS protection active, the same contribution states that the live PHOENIX runtime and data home are protected and directs self-modification to the isolated evolution worktree. The `danger-full-access` text is reachable only when launcher HARDNESS protection is absent; a protected launch resolves model-controlled full access to `workspace-write` before this context is rendered.')
-          text = text.replace(standalone, '\n')
-          sp.write_text(text)
-
-          # Keep legitimate manually-invoked repository tools visible to Knip.
-          replace('knip.json',
-            '        "scripts/**/*.snapshot.ts",',
-            '        "scripts/**/*.snapshot.ts",\n        "scripts/plan-phoenix-scope-migration.ts",\n        "scripts/promote-client-artifacts.ts",')
-
-          note = Path('.agents/notes/implemented/process/2026-08-24-phoenix-package-scope-migration.md')
-          text = note.read_text()
-          if '## Alternatives considered' not in text:
-              text = text.replace('\n## Consequences\n', '\n## Alternatives considered\n\n- **Rename every tracked occurrence immediately** — rejected because it rewrites historical/generated material and creates a mixed, hard-to-audit migration surface.\n- **Cosmetic UI-only branding** — rejected because package identity would remain inconsistent beneath the surface.\n- **Inventory first, then migrate active package surfaces atomically** — selected because it preserves runtime compatibility while making the final namespace change auditable.\n\n## Consequences\n')
-              note.write_text(text)
-          notezh = Path('.agents/notes/implemented/process/2026-08-24-phoenix-package-scope-migration.zh.md')
-          if notezh.exists():
-              text = notezh.read_text()
-              if '## Alternatives considered' not in text:
-                  text = text.replace('\n## Consequences\n', '\n## Alternatives considered\n\n- **立即重命名所有已跟踪引用** — 拒绝，因为会改写历史/生成材料并形成难以审计的混合迁移面。\n- **只做 UI 品牌替换** — 拒绝，因为底层 package identity 仍不一致。\n- **先清点，再原子迁移活跃 package surface** — 采用，因为能保持运行时兼容，同时让最终 namespace 迁移可审计。\n\n## Consequences\n')
-                  notezh.write_text(text)
-          PY
-      - name: Install
+      - name: Apply deterministic finalization patch
+        run: python3 scripts/kira-pr58-finalize.py
+      - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      - name: Regenerate official derived artifacts
-        shell: bash
+      - name: Focused release checks
         run: |
-          pnpm run gen-client-catalog
-          pnpm run gen-config-catalog
-          pnpm run gen-module-graph
-          pnpm run gen-cordis-catalog
-          pnpm run gen-doc-graphs
-          pnpm run verify-translation-pairing -- --write
-      - name: Commit repaired sources and generated artifacts
-        shell: bash
-        run: |
+          pnpm exec vitest run packages/sdk/server/tests/lifecycle-v2.spec.ts packages/subagent/subagent-codex/tests/account-boundary.spec.ts packages/host/apiproxy/tests/api-proxy-authorization.spec.ts packages/client/ui-settings-models/tests/authorization-panel.client.spec.tsx
+          pnpm run check:ci:static
           git diff --check
-          git status --short
-          if git diff --quiet; then exit 0; fi
+      - name: Commit finalization
+        shell: bash
+        run: |
           git config user.name "KIRA PHOENIX"
           git config user.email "actions@users.noreply.github.com"
           git add -A
-          git commit -m "chore(kira): apply PR58 deterministic repairs"
+          git reset .github/workflows/kira-pr58-repair.yml .github/workflows/kira-pr58-pull-request-repair.yml scripts/kira-pr58-repair.py scripts/kira-pr58-finalize.py
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix(release): close auth and SDK lifecycle gates"
           git push origin HEAD:feat/codex-graft-full
-      - name: Static verification snapshot
-        run: pnpm run check:ci:static
