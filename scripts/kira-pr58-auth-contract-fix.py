@@ -1,6 +1,7 @@
 from pathlib import Path
 
 # One-shot release-closure patch. Remove this helper after the verified fix lands.
+# Triggered by KIRA to close PR #58 against the exact branch head.
 
 
 def replace_once(path: str, old: str, new: str) -> None:
