@@ -67,7 +67,7 @@ notice 是单向的，且从不携带机密：一条消息，以及可选的“�
 
 provider 独占不透明的 `authorization-google/account` 记录。授权成功后会写入一个带版本的 `grant` payload，其中包含 access token、可选 refresh token、过期时间以及 Google 实际返回的已授权 scopes。面向浏览器的 `list()`、`describe()`、`inspect()` 与 credential metadata 都不会读取或投射这个 payload。进程重启后会复用这份 durable grant；access token 接近过期时，refresh 会在 credential provider 的串行化 `modifyRecord()` 事务内完成，因此两个 Host 进程不会竞争 refresh-token rotation。
 
-调用方使用 `ctx.googleApi.request({ service, path, ... })`，而不是提供任意 URL 再自行声明 scope。`service` 只能是 `gmail`、`calendar`、`drive`、`docs`、`sheets`、`slides` 或 `contacts`；每个 service 的 API root 与所需 OAuth scope 都由 broker 固定。path 必须保持在该 service root 下，credential/cookie header 会被拒绝，携带凭据的请求强制使用 `redirect: 'error'`，Bearer token 只在最后的 Google `fetch` 边界注入。结果只返回 status、media type 与 body，不返回 access/refresh token。`disconnect()` 即使 Google 的 best-effort revoke 失败，也会删除 durable grant。
+Host integration 通过 `ctx.get('googleApi')` 显式取得 broker，再调用 `request({ service, path, ... })`；这个 submodule 刻意不扩大全局 `Context` API。调用方不能提供任意 URL 再自行声明 scope。`service` 只能是 `gmail`、`calendar`、`drive`、`docs`、`sheets`、`slides` 或 `contacts`；每个 service 的 API root 与所需 OAuth scope 都由 broker 固定。path 必须保持在该 service root 下，credential/cookie header 会被拒绝，携带凭据的请求强制使用 `redirect: 'error'`，Bearer token 只在最后的 Google `fetch` 边界注入。结果只返回 status、media type 与 body，不返回 access/refresh token。`disconnect()` 即使 Google 的 best-effort revoke 失败，也会删除 durable grant。
 
 Google installed application 不支持 incremental authorization，因此挂载的 provider 会在一次浏览器授权中请求配置的 suite scope 集合。但它会持久化 Google **实际** 返回的 scopes，而不是假设用户同意了全部权限。未获授权 scope 对应的能力会以 `GOOGLE_SCOPE_DENIED` fail closed；如果用户希望更改授权范围，可以明确重新连接。使用 sensitive/restricted scopes 的部署仍必须满足 Google 的 OAuth verification 要求。
 
