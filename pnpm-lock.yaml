@@ -1233,6 +1233,9 @@ importers:
       '@deepseek-ai/dsh-web':
         specifier: workspace:^
         version: link:../../web/web
+      '@deepseek-ai/dsh-web-search-free':
+        specifier: workspace:^
+        version: link:../../web/web-search-free
       '@deepseek-ai/dsh-web-search-openrouter':
         specifier: workspace:^
         version: link:../../web/web-search-openrouter
@@ -8607,6 +8610,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
       '@deepseek-ai/dsh-web':
         specifier: workspace:^
         version: link:../web
