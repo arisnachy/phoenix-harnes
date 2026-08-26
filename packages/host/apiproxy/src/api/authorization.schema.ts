@@ -60,6 +60,7 @@ const authorizationEntrySchema = z.object({
   label: z.string().min(1),
   methods: z.array(authorizationMethodSchema).min(1),
   inFlight: z.boolean(),
+  disconnectable: z.literal(true).optional(),
   stored: z.object({ kind: z.union([z.literal('api-key'), z.literal('grant')]) }).optional(),
   telemetry: authorizationTelemetrySchema.optional(),
 })
@@ -138,3 +139,10 @@ export const authorizationCancelRequestSchema = z.object({
 }) satisfies z.ZodType<Wire<RequestPayload<'authorization.cancel'>>>
 /** Validates acknowledgement that cancellation was requested. */
 export const authorizationCancelValueSchema = z.object({ cancelled: z.literal(true) }) satisfies z.ZodType<Wire<ResponseValue<'authorization.cancel'>>>
+
+/** Validates provider-owned account disconnect by credential key. */
+export const authorizationDisconnectRequestSchema = z.object({
+  key: authorizationKeySchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'authorization.disconnect'>>>
+/** Validates acknowledgement that provider teardown completed. */
+export const authorizationDisconnectValueSchema = z.object({ disconnected: z.literal(true) }) satisfies z.ZodType<Wire<ResponseValue<'authorization.disconnect'>>>
