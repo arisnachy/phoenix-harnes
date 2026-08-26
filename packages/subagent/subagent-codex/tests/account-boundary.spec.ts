@@ -7,10 +7,6 @@ const accountSource = readFileSync(
   fileURLToPath(new URL('../src/account.ts', import.meta.url)),
   'utf8',
 )
-const piAiLoginSource = readFileSync(
-  fileURLToPath(new URL('../../../llm/llm-pi-ai/src/login.ts', import.meta.url)),
-  'utf8',
-)
 
 describe('native Codex managed-account boundary', () => {
   it('uses the official Codex account RPCs for login and account telemetry', () => {
