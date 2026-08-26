@@ -41,4 +41,47 @@ describe('account authorization panel', () => {
       expect(begin).toHaveBeenCalledWith({ key: 'llm-pi-ai/openai-codex', method: 'oauth' })
     })
   })
+
+  it('renders Codex-native connector metadata as graphical cards', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'subagent-codex/account',
+        label: 'ChatGPT / Codex',
+        methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
+        inFlight: false,
+        stored: { kind: 'api-key' as const },
+        telemetry: {
+          kind: 'account' as const,
+          provider: 'Codex',
+          plan: 'pro',
+          primaryLimit: { usedPercent: 22 },
+          connectors: [{
+            id: 'github',
+            name: 'GitHub',
+            description: 'Work with repositories and pull requests.',
+            iconUrl: 'https://cdn.example.test/github.svg',
+            category: 'Developer tools',
+            installUrl: 'https://example.test/install/github',
+            accessible: true,
+            enabled: true,
+            installed: true,
+            callable: true,
+          }],
+        },
+      }] }))),
+      begin: vi.fn(),
+      status: vi.fn(() => new Promise(() => undefined)),
+      answer: vi.fn(),
+      cancel: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    render(<AuthorizationPanel api={api} t={key => en[key]} onAuthorized={vi.fn()} />)
+
+    expect(await screen.findByRole('img', { name: 'GitHub' })).toBeTruthy()
+    expect(screen.getByText('GitHub')).toBeTruthy()
+    expect(screen.getByText('Work with repositories and pull requests.')).toBeTruthy()
+    expect(screen.getByText('Connected · callable')).toBeTruthy()
+    expect(screen.getByText(/78% remaining/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Manage GitHub/ }).getAttribute('href')).toBe('https://example.test/install/github')
+  })
 })
