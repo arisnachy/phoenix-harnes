@@ -1,5 +1,7 @@
 /** Compact current-session context remaining meter for the Settings footer. */
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+// Type-only: supplies the canonical settings.trigger.trailing SlotMap row.
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import css from './ContextRemaining.module.css'
 
 interface ContextPressureView {
@@ -34,7 +36,7 @@ export function ContextRemaining({ wide, sessionId, useProjection }: ContextRema
   const remaining = usedPercent === undefined ? undefined : 100 - usedPercent
 
   return (
-    <span className={css.root} aria-hidden="true" title="Context remaining">
+    <span className={css.root} aria-hidden="true">
       <strong className={css.value}>{remaining === undefined ? '—' : `${remaining}%`}</strong>
       <span className={css.track}>
         <span className={css.fill} style={{ width: `${remaining ?? 0}%` }} />
