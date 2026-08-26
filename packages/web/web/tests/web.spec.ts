@@ -113,6 +113,15 @@ describe('WebRuntime execution resolution', () => {
     await expect(web.search({ query: 'q' })).resolves.toMatchObject({ content: 'perplexity' })
   })
 
+  it('falls back to the configured free provider after a recoverable primary failure', async () => {
+    const { web } = await mountWeb({ searchProvider: 'deepseek', searchFallbackProviders: ['browser'] })
+    web.registerSearchProvider(makeSearchProvider('deepseek', available, async () => {
+      throw new Error('Error: This request requires more credits, or fewer max_tokens. You requested up to 65536 tokens, but can only afford 1185.')
+    }))
+    web.registerSearchProvider(makeSearchProvider('browser', available, () => Promise.resolve(searchResult('browser'))))
+    await expect(web.search({ query: 'q' })).resolves.toMatchObject({ content: 'browser' })
+  })
+
   it('ignores unusable providers when auto-selecting', async () => {
     const { web } = await mountWeb()
     web.registerSearchProvider(makeSearchProvider('exa', available, () => Promise.resolve(searchResult('exa'))))

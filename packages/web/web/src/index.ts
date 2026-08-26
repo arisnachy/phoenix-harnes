@@ -55,6 +55,8 @@ interface Selection<P> {
 export interface WebRuntimeConfig {
   /** Explicit search provider id. Omitted = auto-select when exactly one usable. */
   readonly searchProvider?: string
+  /** Ordered search fallbacks used only after recoverable primary failures. */
+  readonly searchFallbackProviders?: string[]
   /** Explicit fetch provider id. Omitted = auto-select when exactly one usable. */
   readonly fetchProvider?: string
 }
@@ -79,17 +81,20 @@ export class WebRuntime extends Service {
    */
   static Config: z<WebRuntimeConfig> = z.object({
     searchProvider: z.string(),
+    searchFallbackProviders: z.array(z.string()).default([]),
     fetchProvider: z.string(),
   })
 
   private searchProviders = new Map<string, WebSearchProvider>()
   private fetchProviders = new Map<string, WebFetchProvider>()
   private readonly searchProviderId: string | undefined
+  private readonly searchFallbackProviderIds: readonly string[]
   private readonly fetchProviderId: string | undefined
 
   constructor(ctx: Context, config: WebRuntimeConfig = {}) {
     super(ctx, 'web')
     this.searchProviderId = config.searchProvider ?? process.env.DSH_WEB_SEARCH_PROVIDER
+    this.searchFallbackProviderIds = config.searchFallbackProviders ?? parseProviderIds(process.env.DSH_WEB_SEARCH_FALLBACK_PROVIDERS)
     this.fetchProviderId = config.fetchProvider ?? process.env.DSH_WEB_FETCH_PROVIDER
   }
 
@@ -138,12 +143,23 @@ export class WebRuntime extends Service {
    * @returns the provider's results, capped to `request.maxResults`.
    */
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
-    const provider = resolveProvider({
-      providers: this.searchProviders,
-      ...this.searchProviderId !== undefined ? { configuredId: this.searchProviderId } : {},
-    })
-    const result = await provider.search(request, signal)
-    return capSources(result, request.maxResults)
+    const providers = resolveSearchProviders(this.searchProviders, this.searchProviderId, this.searchFallbackProviderIds)
+    let lastRecoverable: unknown
+    for (const provider of providers) {
+      if (signal?.aborted === true) throw signal.reason ?? new WebError('web search was aborted', 'WEB_SEARCH_ABORTED')
+      try {
+        const result = await provider.search(request, signal)
+        return capSources(result, request.maxResults)
+      } catch (error) {
+        if (!isRecoverableSearchError(error)) throw error
+        lastRecoverable = error
+      }
+    }
+    throw new WebError(
+      `all configured web search providers failed recoverably: ${providers.map(provider => provider.id).join(', ')}`,
+      'WEB_PROVIDER_FALLBACK_EXHAUSTED',
+      { cause: lastRecoverable },
+    )
   }
 
   /**
@@ -191,6 +207,53 @@ function resolveProvider<P extends ResolvableProvider>(selection: Selection<P>):
     throw new WebError(`multiple usable web providers are registered (${ids}); configure one explicitly`, 'WEB_PROVIDER_AMBIGUOUS')
   }
   return single
+}
+
+/** Provider failures that are safe to retry through a configured fallback. */
+const RECOVERABLE_SEARCH_CODES = new Set([
+  'WEB_PROVIDER_QUOTA',
+  'WEB_PROVIDER_RATE_LIMIT',
+  'WEB_PROVIDER_AUTH',
+  'WEB_PROVIDER_TIMEOUT',
+  'WEB_PROVIDER_UNAVAILABLE',
+  'WEB_PROVIDER_CONFIGURED_UNAVAILABLE',
+  'WEB_PROVIDER_TRANSIENT',
+])
+
+/** Resolve the configured primary followed by usable, explicitly ordered fallbacks. */
+function resolveSearchProviders(
+  providers: ReadonlyMap<string, WebSearchProvider>,
+  configuredId: string | undefined,
+  fallbackIds: readonly string[],
+): WebSearchProvider[] {
+  if (configuredId === undefined) return [resolveProvider({ providers })]
+  const primary = providers.get(configuredId)
+  if (primary === undefined) {
+    throw new WebError(`configured web provider "${configuredId}" is not registered`, 'WEB_PROVIDER_CONFIGURED_MISSING')
+  }
+  const resolved = primary.available() ? [primary] : []
+  for (const id of fallbackIds) {
+    if (id === configuredId) continue
+    const provider = providers.get(id)
+    if (provider?.available() === true) resolved.push(provider)
+  }
+  if (resolved.length === 0) {
+    throw new WebError(`configured web provider "${configuredId}" is registered but unavailable`, 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE')
+  }
+  return resolved
+}
+
+/** Return whether a provider failure can safely trigger the next search route. */
+function isRecoverableSearchError(error: unknown): boolean {
+  if (error instanceof WebError && RECOVERABLE_SEARCH_CODES.has(error.code)) return true
+  if (error instanceof Error) {
+    return /(?:credit|quota|rate.?limit|too many requests|timeout|temporar(?:y|ily)|unavailable|401|403|429)/i.test(error.message)
+  }
+  return false
+}
+
+function parseProviderIds(value: string | undefined): readonly string[] {
+  return value === undefined ? [] : value.split(',').map(id => id.trim()).filter(Boolean)
 }
 
 /** Enforce `maxResults` on a search result: truncate `sources[]` and flag it. */

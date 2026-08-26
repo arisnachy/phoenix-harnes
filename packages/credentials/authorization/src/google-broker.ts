@@ -293,7 +293,10 @@ async function listen(server: Server): Promise<number> {
 async function closeServer(server: Server): Promise<void> {
   if (!server.listening) return
   await new Promise<void>((resolve, reject) => {
-    server.close((error) => { error === undefined ? resolve() : reject(error) })
+    server.close((error) => {
+      if (error === undefined) resolve()
+      else reject(error)
+    })
   })
 }
 
@@ -389,8 +392,8 @@ export default class GoogleApiBroker extends Service {
 
   private readonly spec: ResolvedSpec
   private readonly startupCleanup: Promise<void>
-  private grant?: GoogleGrant
-  private refreshInFlight?: Promise<GoogleGrant>
+  private grant: GoogleGrant | undefined
+  private refreshInFlight: Promise<GoogleGrant> | undefined
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')

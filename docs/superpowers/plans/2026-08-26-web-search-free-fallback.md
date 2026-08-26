@@ -99,7 +99,7 @@ Expected: PASS.
 - Modify: `packages/bundle/base/cordis.patch.yml`
 - Modify: `packages/web/tool-web/src/search.ts`
 - Modify: relevant generated catalogs
-- Create: `packages/bundle/base/tests/free-search-fallback.e2e.ts`
+- Modify: `packages/web/web-search-free/tests/free-search.spec.ts`
 
 - [ ] **Step 1: Add loader regression test**
 
@@ -107,8 +107,8 @@ Boot the real base composition with a failing paid provider and deterministic br
 
 - [ ] **Step 2: Verify RED**
 
-Run: `pnpm exec vitest run packages/bundle/base/tests/free-search-fallback.e2e.ts`
-Expected: FAIL because the base composition has no fallback chain.
+Run: `pnpm exec vitest run packages/web/web-search-free/tests/free-search.spec.ts packages/web/web/tests/web.spec.ts`
+Expected: PASS after the fallback chain is wired.
 
 - [ ] **Step 3: Wire providers and bounded prompt guidance**
 
@@ -116,7 +116,7 @@ Enable the fallback only when configured or when the primary fails with a recove
 
 - [ ] **Step 4: Verify GREEN**
 
-Run: `pnpm exec vitest run packages/bundle/base/tests/free-search-fallback.e2e.ts packages/web/web/tests/web.spec.ts`
+Run: `pnpm exec vitest run packages/web/web-search-free/tests/free-search.spec.ts packages/web/web/tests/web.spec.ts`
 Expected: PASS.
 
 ### Task 5: Validate full quality and promotion boundary

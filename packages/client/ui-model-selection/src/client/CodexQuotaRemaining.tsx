@@ -87,7 +87,7 @@ export function CodexQuotaRemaining({
     return stop
   }, [directoryFor, sessionId, wide])
 
-  const provider = selection?.sessionId === sessionId ? selection.provider : undefined
+  const provider = selection?.sessionId === sessionId ? selection?.provider : undefined
 
   useEffect(() => {
     setQuota(undefined)

@@ -1170,7 +1170,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. HARDNESS protection then clamps the result: the live runtime/data roots are never writable through model-controlled capabilities, and unconfined access becomes workspace-confined while protection is active.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
         returns: 'the fully resolved per-call mode and absolute workspace root.',
       },

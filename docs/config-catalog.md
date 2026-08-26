@@ -1707,7 +1707,7 @@ export interface Config {
 
 Depends on: [`SandboxMode`](subsystems/sandbox.md)
 
-Source: [`packages/sandbox/sandbox-policy/src/index.ts:67`](../packages/sandbox/sandbox-policy/src/index.ts)
+Source: [`packages/sandbox/sandbox-policy/src/index.ts:97`](../packages/sandbox/sandbox-policy/src/index.ts)
 
 <a id="deepseek-aidsh-sdk-jsonrpc-server"></a>
 
@@ -3100,6 +3100,8 @@ Source: [`packages/interaction/user-approval/src/index.ts:177`](../packages/inte
 export interface WebRuntimeConfig {
   /** Explicit search provider id. Omitted = auto-select when exactly one usable. */
   readonly searchProvider?: string
+  /** Ordered search fallbacks used only after recoverable primary failures. */
+  readonly searchFallbackProviders?: string[]
   /** Explicit fetch provider id. Omitted = auto-select when exactly one usable. */
   readonly fetchProvider?: string
 }
@@ -3213,6 +3215,25 @@ export interface Config {
 ```
 
 Source: [`packages/web/web-search-exa/src/index.ts:38`](../packages/web/web-search-exa/src/index.ts)
+
+<a id="deepseek-aidsh-web-search-free"></a>
+
+## `@deepseek-ai/dsh-web-search-free`
+
+Requires: `web`
+
+```ts config-catalog
+export interface Config {
+  /** Ordered public HTML engines; defaults to Bing followed by DuckDuckGo. */
+  engines?: FreeSearchEngine[]
+  /** Per-engine request timeout in milliseconds. */
+  timeoutMs?: number
+}
+
+export type FreeSearchEngine = 'bing' | 'duckduckgo'
+```
+
+Source: [`packages/web/web-search-free/src/index.ts:12`](../packages/web/web-search-free/src/index.ts)
 
 <a id="deepseek-aidsh-web-search-openrouter"></a>
 
