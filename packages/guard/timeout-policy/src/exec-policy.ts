@@ -127,9 +127,10 @@ function matches(tokens: readonly string[], pattern: readonly (string | Readonly
   for (let index = 0; index < pattern.length; index += 1) {
     const expected = pattern[index]
     const actual = tokens[index]
+    if (expected === undefined || actual === undefined) return false
     if (typeof expected === 'string') {
       if (actual !== expected) return false
-    } else if (actual === undefined || !expected.has(actual)) {
+    } else if (!expected.has(actual)) {
       return false
     }
   }
