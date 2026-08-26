@@ -1,8 +1,8 @@
-# 网络研究免费回退方案
+# Fallback gratuito para investigación web
 
-[English](2026-08-26-web-search-free-fallback-design.md) | 中文
+English | [中文](2026-08-26-web-search-free-fallback-design.zh.md)
 
-## 目标
+## Objetivo
 
 Evitar que un fallo de créditos, cuota, autenticación, límite o disponibilidad del proveedor primario termine la investigación. PHOENIX debe intentar una ruta gratuita verificable mediante navegador dedicado y, si no está disponible, una ruta HTTP gratuita.
 

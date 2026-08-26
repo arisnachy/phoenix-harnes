@@ -16,9 +16,7 @@ The first migration phase is therefore observational and safe on `main`. Later r
 
 ## Alternatives considered
 
-- **Rename every tracked occurrence immediately** — rejected because it rewrites historical and generated material, making the migration much larger and harder to audit than the package-identity change itself.
-- **Change only visible PHOENIX branding** — rejected because the runtime would retain inconsistent package identities underneath the UI.
-- **Inventory first, then migrate active package surfaces atomically** — selected because it preserves compatibility while making the later namespace transition explicit, bounded, and verifiable.
+A direct search-and-replace rename was rejected because it would mix package identities across manifests, generated artifacts, and the lockfile. Deferring all inventory work was also rejected because later rename batches need a deterministic collision check.
 
 ## Consequences
 

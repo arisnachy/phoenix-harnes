@@ -71,7 +71,7 @@ interface SandboxExecutionPolicy {
 interface SandboxPolicyRequest {
   /** Calling session; its immutable cwd becomes the workspace boundary. */
   session?: Session
-  /** Explicit approved mode override, which outranks session policy. */
+  /** Explicit approved mode override, which outranks session policy but not HARDNESS runtime protection. */
   mode?: SandboxMode
 }
 ```

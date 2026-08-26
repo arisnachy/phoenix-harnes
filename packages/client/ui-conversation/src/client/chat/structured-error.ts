@@ -5,14 +5,14 @@ const MAX_FIELDS = 24
 const MAX_DEPTH = 4
 const MAX_VALUE_LENGTH = 4_096
 
-/** One bounded field promoted from a provider error payload. */
+/** One safe, user-facing field extracted from a structured error payload. */
 export interface StructuredErrorField {
   readonly label: string
   readonly value: string
   readonly technical: boolean
 }
 
-/** Safe user-facing normalization of one structured provider failure. */
+/** Localized, bounded presentation of a structured provider error. */
 export interface StructuredErrorPresentation {
   readonly title: string
   readonly message?: string
@@ -59,10 +59,9 @@ function bounded(value: string): string {
   return value.length <= MAX_VALUE_LENGTH ? value : `${value.slice(0, MAX_VALUE_LENGTH)}…`
 }
 
-/**
- * Translate only generic error prose.
- * @param value - provider prose to normalize.
- * @returns normalized prose with identifiers preserved.
+/** Translate only generic error prose, never identifiers, provider/model names, enum values, IDs or URLs.
+ * @param value - Error prose to translate.
+ * @returns The translated prose, preserving unknown text.
  */
 export function translateGenericErrorProse(value: string): string {
   return value
@@ -228,9 +227,9 @@ function fallbackAction(code: string | undefined): string | undefined {
 /**
  * Convert a JSON-bearing error string into safe Spanish presentation data.
  * Arbitrary chat JSON is unaffected because callers use this only on error nodes.
- * @param input - JSON error string.
- * @param explicitCode - optional transport/status code.
- * @returns a bounded presentation model or undefined.
+ * @param input - JSON-bearing error text.
+ * @param explicitCode - Optional code supplied by the transport envelope.
+ * @returns Safe presentation data, or undefined for non-error JSON.
  */
 export function formatStructuredError(
   input: string,

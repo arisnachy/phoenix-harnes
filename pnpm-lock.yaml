@@ -8602,6 +8602,18 @@ importers:
         specifier: workspace:^
         version: link:../web
 
+  packages/web/web-search-free:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-web':
+        specifier: workspace:^
+        version: link:../web
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+
   packages/web/web-search-openrouter:
     dependencies:
       '@deepseek-ai/schemastery':

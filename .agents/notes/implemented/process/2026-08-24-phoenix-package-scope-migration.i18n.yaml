@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-24-phoenix-package-scope-migration.md
-2026-08-24-phoenix-package-scope-migration.md: 91b696cdfea6f0e3fead08278b74c770eea96661
-2026-08-24-phoenix-package-scope-migration.zh.md: 21b323a15bd7558e84f9e36a9cc39acfd3fe5101
+2026-08-24-phoenix-package-scope-migration.md: 4414bf3aa227ba711376892a8d912756eb4edcd3
+2026-08-24-phoenix-package-scope-migration.zh.md: 5203a14e0fbfbef6495eee9b35a1cabc6d1f8dbd

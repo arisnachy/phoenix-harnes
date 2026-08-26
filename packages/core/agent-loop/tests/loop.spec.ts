@@ -255,19 +255,10 @@ describe('agent loop', () => {
     send(agent, 'keep using the tool')
     await waitForIdle(ctx, agent)
 
-    expect(adapter.requests).toHaveLength(2)
-    const bounded = agent.session.events.findLast(event => event.type === 'turn/end')
-    expect(bounded?.type === 'turn/end' && bounded.data.reason).toMatchObject({
-      kind: 'error',
-      error: {
-        code: 'UNKNOWN',
-        message: expect.stringContaining('reached maxStepsPerTurn (2)'),
-      },
-    })
-
-    send(agent, 'continue now')
-    await waitForIdle(ctx, agent)
     expect(adapter.requests).toHaveLength(3)
+    const bounded = agent.session.events.find(event => event.type === 'turn/end' && event.data.turn === 1)
+    expect(bounded?.type === 'turn/end' && bounded.data.reason).toEqual({ kind: 'completed' })
+
     const completed = agent.session.events.findLast(event => event.type === 'turn/end')
     expect(completed?.type === 'turn/end' && completed.data.reason).toEqual({ kind: 'completed' })
   })

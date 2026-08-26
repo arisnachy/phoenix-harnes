@@ -1,6 +1,6 @@
-# Fallback gratuito de búsqueda web — 实施计划
+# Fallback gratuito de búsqueda web — Implementation Plan
 
-[English](2026-08-26-web-search-free-fallback.md) | 中文
+English | [中文](2026-08-26-web-search-free-fallback.zh.md)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

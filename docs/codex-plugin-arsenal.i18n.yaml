@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/codex-plugin-arsenal.md
-codex-plugin-arsenal.md: 2244838540bc377f9036c12618d1258a641c46c8
-codex-plugin-arsenal.zh.md: 6126f5170ceff7298772822a1c3fe2ad4bf42948
+codex-plugin-arsenal.md: ff0c3f2dc5244f9e3b7ce77425df5c5534156854
+codex-plugin-arsenal.zh.md: 0d0d1a5fd295e76d26d0cb1116e891fee9770f74

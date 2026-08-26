@@ -41,6 +41,8 @@ Selection never depends on registration, config, or HMR order. A capability has 
 
 The failure branches throw `WebError`, whose structured code (plus message detail — the missing id, the ambiguous candidate set) is the direct callers route on. A provider's own `available()` is a cheap local check (credential presence, parseable config) that feeds this execution-time selection and **must not make network calls**; `dsh-tool-web` never calls it — the tool executes through `ctx.web.search()`/`fetch()` and routes on the thrown codes, so provider selection has one owner.
 
+Search may also configure an ordered `searchFallbackProviders` list (or `$DSH_WEB_SEARCH_FALLBACK_PROVIDERS`). After a configured primary fails with a recoverable quota, rate-limit, authentication, timeout, transient, or availability error, the seam tries usable fallback providers in order. Explicit cancellation, missing configuration, and ambiguous automatic selection remain hard failures. The keyless `@deepseek-ai/dsh-web-search-free` provider supplies Bing/DuckDuckGo HTML as a bounded last-resort route.
+
 ## Vocabulary
 
 `WebSearchRequest` (`query`, `maxResults?`) → `WebSearchResult` (`content?`, `sources[]`, `truncated`); each `WebSearchSource` has a required `url` and optional `title`/`snippet`/`publishedAt` (Perplexity citations may be URL-only). `WebFetchRequest` (`url`) → `WebFetchResult` (final `url`, `statusCode`, `body`, `truncated`); cancellation is a direct optional `AbortSignal` argument to `search()`/`fetch()`. `WebFetchBody` is a CLOSED discriminated union (`html` | `text`) owned here — consumers `switch` to exhaustiveness so a new kind breaks their compilation until handled. See `src/types.ts` for the full contracts and the `WebError` code taxonomy.

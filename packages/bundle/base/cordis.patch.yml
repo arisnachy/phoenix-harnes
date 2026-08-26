@@ -455,11 +455,20 @@
       name: '@deepseek-ai/dsh-web'
       config:
         searchProvider: openrouter
+        searchFallbackProviders: [free-html]
 
     - id: web-search-openrouter
       name: '@deepseek-ai/dsh-web-search-openrouter'
       config:
         apiKeyEnv: OPENROUTER_API_KEY
+
+    # Keyless fallback: uses public HTML search endpoints when the paid route
+    # fails recoverably (quota, credits, rate limit, auth, timeout, or outage).
+    - id: web-search-free
+      name: '@deepseek-ai/dsh-web-search-free'
+      config:
+        engines: [bing, duckduckgo]
+        timeoutMs: 8000
 
     - id: tool-web
       name: '@deepseek-ai/dsh-tool-web'

@@ -21,6 +21,7 @@ import {
   BlockAssembler,
   LlmError,
   createAssistantMessage,
+  createUserMessage,
   deepFreeze,
   errorChain,
   markAgentLoopRequest,
@@ -44,7 +45,14 @@ type Phase =
     lastTurn: number
     wakeRequested: boolean
   }
-  | { kind: 'running'; abort: AbortController; turn: number; step: number; wakeRequested: boolean }
+  | {
+    kind: 'running'
+    abort: AbortController
+    turn: number
+    step: number
+    wakeRequested: boolean
+    automaticContinuations: number
+  }
 
 type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>
 
@@ -190,6 +198,7 @@ export class ReactLoopAgent implements Agent {
       turn: this.phase.lastTurn,
       step: 0,
       wakeRequested: false,
+      automaticContinuations: 0,
     })
     this.loopCtx.agents.withInitiator(this, () => this.kick()).then(driver.resolve, driver.reject)
   }
@@ -267,9 +276,22 @@ export class ReactLoopAgent implements Agent {
         const step = phase.step + 1
         const maxStepsPerTurn = this.maxStepsPerTurn()
         if (step > maxStepsPerTurn) {
-          throw new Error(
-            `agent "${this.id}": turn ${turn} reached maxStepsPerTurn (${maxStepsPerTurn}); send a new prompt to continue`,
-          )
+          // A tool loop can legitimately need another model turn (for example
+          // after a provider fallback). Preserve queued tool results and open
+          // a fresh bounded turn instead of stopping the agent. A small cap
+          // still prevents a pathological loop from running forever.
+          if (phase.automaticContinuations >= 3) {
+            throw new Error(
+              `agent "${this.id}": turn ${turn} reached maxStepsPerTurn (${maxStepsPerTurn}) after automatic continuations`,
+            )
+          }
+          phase.automaticContinuations += 1
+          this.inbox.splice('next-turn', Infinity, 0, [createUserMessage({
+            content: [{ type: 'text', text: 'Continue the current task from the latest tool result without waiting for a new user prompt.' }],
+            source: { kind: 'plugin', plugin: 'agent-loop' },
+          })])
+          turnEnds = { kind: 'completed' }
+          break
         }
         const decision = await this.preStep(target, { turn, step })
         if (decision.kind === 'reject') {
