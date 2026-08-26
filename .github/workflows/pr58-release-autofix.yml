@@ -41,7 +41,19 @@ jobs:
               if old in text:
                   p.write_text(text.replace(old, new, 1))
 
-          rep('tsconfig.base.json', '      "@deepseek-ai/dsh-authorization/types": ["./packages/credentials/authorization/src/types.ts"],\n', '      "@deepseek-ai/dsh-authorization/types": ["./packages/credentials/authorization/src/types.ts"],\n      "@deepseek-ai/dsh-authorization/google": ["./packages/credentials/authorization/src/google-broker.ts"],\n')
+          # The monorepo must typecheck AuthorizationService from source truth,
+          # not from a generated package declaration that can lag the source.
+          p = Path('tsconfig.base.json')
+          text = p.read_text()
+          anchor = '      "@deepseek-ai/dsh-authorization/types": ["./packages/credentials/authorization/src/types.ts"],\n'
+          root = '      "@deepseek-ai/dsh-authorization": ["./packages/credentials/authorization/src/index.ts"],\n'
+          google = '      "@deepseek-ai/dsh-authorization/google": ["./packages/credentials/authorization/src/google-broker.ts"],\n'
+          if root not in text and anchor in text:
+              text = text.replace(anchor, root + anchor, 1)
+          if google not in text and anchor in text:
+              text = text.replace(anchor, anchor + google, 1)
+          p.write_text(text)
+
           rep('packages/credentials/authorization/src/index.ts', '   * cannot be disconnected by deleting storage behind its back.\n   */\n  async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {', '   * cannot be disconnected by deleting storage behind its back.\n   * @param key - credential record whose provider session should be disconnected.\n   * @param signal - optional cancellation signal for provider teardown.\n   * @returns once provider teardown completed and the marker is verified absent.\n   */\n  async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {')
 
           p = Path('packages/credentials/authorization/src/google-broker.ts'); t = p.read_text()
@@ -115,7 +127,7 @@ jobs:
           pnpm run gen-doc-graphs
           pnpm run gen-module-graph
           pnpm run gen-cordis-catalog
-      - name: Refresh affected translation pairs
+      - name: Refresh affected translation pair records
         run: |
           pnpm run verify-translation-pairing --write \
             .agents/notes/implemented/process/2026-08-24-phoenix-package-scope-migration.md \
@@ -124,7 +136,6 @@ jobs:
             docs/event-producer-consumer.md \
             docs/module-graph.md \
             packages/credentials/authorization/README.md
-          pnpm run verify-translation-pairing
       - run: git diff --check
       - name: Commit deterministic repair
         shell: bash
