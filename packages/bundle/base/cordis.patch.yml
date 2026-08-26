@@ -105,7 +105,6 @@
     # enabled provider requests exactly the shipped Workspace capability set.
     - id: authorization-google
       name: '@deepseek-ai/dsh-authorization/google'
-      disabled: !!js !process.env.PHOENIX_GOOGLE_OAUTH_CLIENT_ID
       config:
         clientId: !!js process.env.PHOENIX_GOOGLE_OAUTH_CLIENT_ID
         scopes:

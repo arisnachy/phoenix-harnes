@@ -50,6 +50,26 @@ describe('dsh-base bundle', () => {
     })
   })
 
+  it('keeps Google Workspace loadable before a Desktop OAuth client id is configured', () => {
+    const root = fileURLToPath(new URL('..', import.meta.url))
+    const parsed = yaml.load(
+      readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8'),
+      { schema: entryListSchema },
+    )
+    if (!Array.isArray(parsed)) throw new TypeError('base patch must parse to a patch list')
+    const rows = parsed.flatMap((patch): Record<string, unknown>[] =>
+      typeof patch === 'object' && patch !== null
+        ? (patch as { insert?: Record<string, unknown>[] }).insert ?? []
+        : [],
+    )
+    const google = rows.find(candidate => candidate.id === 'authorization-google')
+    if (google === undefined) throw new Error('base patch must mount authorization-google')
+    expect(google.disabled).toBeUndefined()
+    expect((google.config as Record<string, unknown>)?.clientId).toEqual({
+      __jsExpr: 'process.env.PHOENIX_GOOGLE_OAUTH_CLIENT_ID',
+    })
+  })
+
   it('gates each shell stack by platform with a symmetric disabled expression', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const parsed = yaml.load(
