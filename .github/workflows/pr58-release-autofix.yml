@@ -2,14 +2,15 @@ name: PR58 release autofix
 
 on:
   push:
-    branches: [feat/codex-graft-full]
+    branches:
+      - feat/codex-graft-full
 
 permissions:
   contents: write
 
 jobs:
   autofix:
-    if: ${{ !contains(github.event.head_commit.message, '[pr58-autofix]') }}
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
     env:
       DSH_TELEMETRY_DISABLED: '1'
@@ -38,12 +39,10 @@ jobs:
                   raise SystemExit(f'{path}: expected at least {count} occurrence(s), found {actual}: {old[:100]!r}')
               p.write_text(text.replace(old, new, count))
 
-          # Source resolution for the Google host-only broker subpath.
           replace('tsconfig.base.json',
               '      "@deepseek-ai/dsh-authorization/types": ["./packages/credentials/authorization/src/types.ts"],\n',
               '      "@deepseek-ai/dsh-authorization/types": ["./packages/credentials/authorization/src/types.ts"],\n      "@deepseek-ai/dsh-authorization/google": ["./packages/credentials/authorization/src/google-broker.ts"],\n')
 
-          # Complete public JSDoc contracts.
           replace('packages/credentials/authorization/src/index.ts',
               '   * cannot be disconnected by deleting storage behind its back.\n   */\n  async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {',
               '   * cannot be disconnected by deleting storage behind its back.\n   * @param key - credential record whose provider session should be disconnected.\n   * @param signal - optional cancellation signal for provider teardown.\n   * @returns once provider teardown completed and the marker is verified absent.\n   */\n  async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {')
@@ -76,14 +75,12 @@ export type ExecPolicyPatternPart = string | readonly string[]
           text = text.replace('/** Evaluate one shell command without changing the surrounding policy chain. */\nexport function evaluateExecPolicy', '/**\n * Evaluate one shell command without changing the surrounding policy chain.\n * @param command - raw shell command supplied to a governed tool.\n * @param policy - compiled policy to evaluate.\n * @returns the strictest matching decision, or undefined to inherit the surrounding chain.\n */\nexport function evaluateExecPolicy')
           p.write_text(text)
 
-          # Publish the new exec-policy entry point rather than relying on private src paths.
           p = Path('packages/guard/timeout-policy/package.json')
           text = p.read_text()
           text = text.replace('    "./invariant": {\n      "types": "./lib/types/invariant.d.ts",\n      "default": "./lib/invariant.js"\n    },\n', '    "./invariant": {\n      "types": "./lib/types/invariant.d.ts",\n      "default": "./lib/invariant.js"\n    },\n    "./exec-policy": {\n      "types": "./lib/types/exec-policy.d.ts",\n      "default": "./lib/exec-policy.js"\n    },\n')
           text = text.replace('    "lib/invariant.js",\n    "lib/types/**/*.d.ts"', '    "lib/invariant.js",\n    "lib/exec-policy.js",\n    "lib/types/**/*.d.ts"')
           p.write_text(text)
 
-          # SDK public docs.
           p = Path('packages/sdk/client/src/api.ts')
           text = p.read_text()
           text = text.replace('  get client(): HarnessClient {', '  /** Current low-level transport client owned by this reusable harness. */\n  get client(): HarnessClient {')
@@ -91,12 +88,11 @@ export type ExecPolicyPatternPart = string | readonly string[]
           text = text.replace('  session(sessionId?: string): HarnessSession {', '  /**\n   * Create a lightweight handle for one SDK-owned session id.\n   * @param sessionId - optional stable id; a unique id is minted when omitted.\n   * @returns a session handle sharing this harness runtime.\n   */\n  session(sessionId?: string): HarnessSession {')
           text = text.replace('  run(input: string | ContentBlock[], options?: RunOptions): Promise<RunResult> {', '  /**\n   * Run one turn in a selected or newly minted session.\n   * @param input - prompt text or structured content blocks.\n   * @param options - optional target session and notification observer.\n   * @returns the settled turn result.\n   */\n  run(input: string | ContentBlock[], options?: RunOptions): Promise<RunResult> {')
           text = text.replace('  close(): Promise<void> {', '  /** @returns once the shared runtime subprocess is closed. */\n  close(): Promise<void> {', 1)
-          text = text.replace('  async run(input: string | ContentBlock[], options?: Pick<RunOptions, \'onNotification\'>): Promise<RunResult> {', '  /**\n   * Run one turn in this stable session.\n   * @param input - prompt text or structured content blocks.\n   * @param options - optional notification observer.\n   * @returns the settled turn result.\n   */\n  async run(input: string | ContentBlock[], options?: Pick<RunOptions, \'onNotification\'>): Promise<RunResult> {')
-          text = text.replace('  /** Cancel this session\'s current activity without closing the runtime or discarding queued follow-up work. */\n  async interrupt()', '  /**\n   * Cancel this session\'s current activity without closing the runtime or discarding queued follow-up work.\n   * @returns whether the session existed and whether it was running.\n   */\n  async interrupt()')
+          text = text.replace("  async run(input: string | ContentBlock[], options?: Pick<RunOptions, 'onNotification'>): Promise<RunResult> {", "  /**\n   * Run one turn in this stable session.\n   * @param input - prompt text or structured content blocks.\n   * @param options - optional notification observer.\n   * @returns the settled turn result.\n   */\n  async run(input: string | ContentBlock[], options?: Pick<RunOptions, 'onNotification'>): Promise<RunResult> {")
+          text = text.replace("  /** Cancel this session's current activity without closing the runtime or discarding queued follow-up work. */\n  async interrupt()", "  /**\n   * Cancel this session's current activity without closing the runtime or discarding queued follow-up work.\n   * @returns whether the session existed and whether it was running.\n   */\n  async interrupt()")
           text = text.replace('  /** Dispose this SDK-owned session while preserving the shared PHOENIX runtime for other sessions. */\n  async close()', '  /**\n   * Dispose this SDK-owned session while preserving the shared PHOENIX runtime for other sessions.\n   * @returns whether a live SDK-owned session was found and closed.\n   */\n  async close()')
           p.write_text(text)
 
-          # Codex account bridge docs.
           replace('packages/subagent/subagent-codex/src/account.ts',
               'export async function readCodexAccountSnapshot(\n',
               '/**\n * Read one secret-free native Codex account snapshot, including optional apps.\n * @param ctx - PHOENIX service context used to launch the Codex app-server.\n * @param config - Codex account bridge configuration.\n * @param signal - optional cancellation signal for the inspection.\n * @returns account, quota, usage, and connector metadata with no OAuth token material.\n */\nexport async function readCodexAccountSnapshot(\n')
@@ -104,7 +100,6 @@ export type ExecPolicyPatternPart = string | readonly string[]
               'export function registerCodexAccountFlow(\n',
               '/**\n * Register native ChatGPT/Codex login, inspection, and logout with the authorization seam.\n * @param ctx - PHOENIX service context owning authorization and credentials.\n * @param config - Codex account bridge configuration.\n * @returns disposer for the registered authorization flow.\n */\nexport function registerCodexAccountFlow(\n')
 
-          # Structured error presentation docs.
           p = Path('packages/client/ui-conversation/src/client/chat/structured-error.ts')
           text = p.read_text()
           text = text.replace('export interface StructuredErrorField {', '/** One bounded field promoted from a provider error payload. */\nexport interface StructuredErrorField {')
@@ -117,20 +112,18 @@ export type ExecPolicyPatternPart = string | readonly string[]
               'export class InProcessApiClient extends AbstractApiClient {',
               '/** API client that routes fetches directly into an in-process host handler for tests and embedded runtimes. */\nexport class InProcessApiClient extends AbstractApiClient {')
 
-          # Sandbox docs exactness + README heading contract.
           replace('docs/subsystems/sandbox.md',
               '  /** Explicit approved mode override, which outranks session policy. */',
               '  /** Explicit approved mode override, which outranks session policy but not HARDNESS runtime protection. */')
           p = Path('packages/sandbox/sandbox-policy/README.md')
           text = p.read_text()
-          paragraph = 'One `sandbox:policy` contribution in the current runtime-context snapshot for every agent session. It does not enumerate mounted capabilities. Tool plugins retain operation and escalation guidance, approval policy contributes separately to the same snapshot, and plan guidance remains `dsh-plan-mode`\'s system section. With launcher HARDNESS protection active, the same contribution states that the live PHOENIX runtime and data home are protected and directs self-modification to the isolated evolution worktree.\n\n'
+          paragraph = "One `sandbox:policy` contribution in the current runtime-context snapshot for every agent session. It does not enumerate mounted capabilities. Tool plugins retain operation and escalation guidance, approval policy contributes separately to the same snapshot, and plan guidance remains `dsh-plan-mode`'s system section. With launcher HARDNESS protection active, the same contribution states that the live PHOENIX runtime and data home are protected and directs self-modification to the isolated evolution worktree.\n\n"
           marker = '### Current file sandbox policy\n\n#### What the model sees\n\n' + paragraph
           if marker not in text:
               raise SystemExit('sandbox README model-experience marker not found')
           text = text.replace(marker, '### Current file sandbox policy\n\n' + paragraph + '#### What the model sees\n\n', 1)
           p.write_text(text)
 
-          # Complete host-side authorization projection and disconnect carrier.
           p = Path('packages/host/apiproxy/src/api-proxy.ts')
           text = p.read_text()
           old = '''          return {
@@ -208,7 +201,6 @@ export type ExecPolicyPatternPart = string | readonly string[]
           text = text.replace(old, new, 1)
           p.write_text(text)
 
-          # Keep carrier test doubles structurally complete.
           replace('packages/host/apiproxy/tests/client-handler.spec.ts',
               '      cancel: err,\n      ...overrides.authorization,',
               '      cancel: err,\n      disconnect: err,\n      ...overrides.authorization,')
@@ -216,11 +208,10 @@ export type ExecPolicyPatternPart = string | readonly string[]
               "      async cancel(request) {\n        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }\n      },\n",
               "      async cancel(request) {\n        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }\n      },\n      async disconnect(request) {\n        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }\n      },\n")
 
-          # Regression spec: browser projection must surface provider capability and invoke teardown.
           p = Path('packages/host/apiproxy/tests/api-proxy-authorization.spec.ts')
           text = p.read_text()
           text = text.replace('    inFlight: false,\n  }', '    inFlight: false,\n    disconnectable: true,\n  }', 1)
-          text = text.replace('  let finish: ((outcome: { status: \'authorized\' | \'cancelled\' }) => void) | undefined\n  const service = {', "  let finish: ((outcome: { status: 'authorized' | 'cancelled' }) => void) | undefined\n  let disconnected = false\n  const service = {")
+          text = text.replace("  let finish: ((outcome: { status: 'authorized' | 'cancelled' }) => void) | undefined\n  const service = {", "  let finish: ((outcome: { status: 'authorized' | 'cancelled' }) => void) | undefined\n  let disconnected = false\n  const service = {")
           text = text.replace('    describe: () => ({ ...entry, inFlight: running !== undefined }),\n    begin:', "    describe: () => ({ ...entry, inFlight: running !== undefined }),\n    inspect: async () => ({\n      kind: 'account' as const,\n      provider: 'Codex',\n      connectors: [{ id: 'drive', name: 'Drive', accessible: true, enabled: true, installed: true, callable: true }],\n    }),\n    disconnect: async () => { disconnected = true },\n    begin:")
           text = text.replace('  return { service, key }\n}', '  return { service, key, wasDisconnected: () => disconnected }\n}')
           insert = '''
@@ -247,7 +238,6 @@ export type ExecPolicyPatternPart = string | readonly string[]
           text = text[:-len(end)] + insert + end
           p.write_text(text)
 
-          # Temporary migration helpers are not release entry points.
           for path in ['scripts/plan-phoenix-scope-migration.ts', 'scripts/promote-client-artifacts.ts']:
               Path(path).unlink(missing_ok=True)
           PY
