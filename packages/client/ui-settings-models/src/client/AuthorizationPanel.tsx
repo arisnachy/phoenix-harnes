@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
 import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
+import connectorStyles from './CodexConnectors.module.css'
 import styles from './ModelsSection.module.css'
 
 type AuthorizationClient = IApiClient['authorization']
@@ -11,6 +12,20 @@ interface RateLimitWindow {
   usedPercent: number
   windowDurationMins?: number
   resetsAt?: number
+}
+
+interface ConnectorTelemetry {
+  id: string
+  name: string
+  description?: string
+  iconUrl?: string
+  iconUrlDark?: string
+  category?: string
+  installUrl?: string
+  accessible: boolean
+  enabled: boolean
+  installed?: boolean
+  callable?: boolean
 }
 
 interface AccountTelemetry {
@@ -29,6 +44,7 @@ interface AccountTelemetry {
     currentStreakDays?: number
     longestStreakDays?: number
   }
+  connectors?: ConnectorTelemetry[]
 }
 
 interface Entry {
@@ -86,6 +102,83 @@ function telemetryLines(telemetry: AccountTelemetry | undefined): string[] {
     lines.push(`Peak day: ${integer(telemetry.usage.peakDailyTokens)} tokens`)
   }
   return lines
+}
+
+function connectorStatus(connector: ConnectorTelemetry): { text: string; className: string } {
+  if (!connector.enabled) {
+    return { text: 'Disabled', className: connectorStyles['connectorStatusDisabled'] ?? '' }
+  }
+  if (!connector.accessible) {
+    return { text: 'Unavailable', className: connectorStyles['connectorStatusDisabled'] ?? '' }
+  }
+  if (connector.installed === true && connector.callable === true) {
+    return { text: 'Connected · callable', className: connectorStyles['connectorStatusReady'] ?? '' }
+  }
+  if (connector.installed === true) {
+    return { text: 'Connected', className: connectorStyles['connectorStatusReady'] ?? '' }
+  }
+  return { text: 'Available', className: '' }
+}
+
+function ConnectorCard({ connector }: { connector: ConnectorTelemetry }): ReactNode {
+  const status = connectorStatus(connector)
+  return (
+    <article className={connectorStyles['connectorCard']}>
+      <div className={connectorStyles['connectorTop']}>
+        {connector.iconUrl === undefined ? (
+          <div className={connectorStyles['connectorFallback']} aria-hidden="true">
+            {connector.name.slice(0, 1).toUpperCase()}
+          </div>
+        ) : (
+          <picture>
+            {connector.iconUrlDark === undefined ? null : (
+              <source media="(prefers-color-scheme: dark)" srcSet={connector.iconUrlDark} />
+            )}
+            <img className={connectorStyles['connectorIcon']} src={connector.iconUrl} alt={connector.name} />
+          </picture>
+        )}
+        <div className={connectorStyles['connectorIdentity']}>
+          <span className={connectorStyles['connectorName']}>{connector.name}</span>
+          {connector.category === undefined ? null : (
+            <span className={connectorStyles['connectorCategory']}>{connector.category}</span>
+          )}
+        </div>
+      </div>
+      {connector.description === undefined ? null : (
+        <p className={connectorStyles['connectorDescription']}>{connector.description}</p>
+      )}
+      <div className={connectorStyles['connectorFooter']}>
+        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
+        {connector.installUrl === undefined ? null : (
+          <a
+            className={connectorStyles['connectorLink']}
+            href={connector.installUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Manage ${connector.name}`}
+          >
+            {connector.installed === true ? 'Manage' : 'Connect'}
+          </a>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function ConnectorGrid({ telemetry }: { telemetry: AccountTelemetry | undefined }): ReactNode {
+  const connectors = telemetry?.connectors
+  if (connectors === undefined || connectors.length === 0) return null
+  return (
+    <div className={connectorStyles['connectorSection']} aria-label="Codex connectors">
+      <div className={connectorStyles['connectorHeading']}>
+        <h4 className={connectorStyles['connectorTitle']}>Codex connectors</h4>
+        <p className={connectorStyles['connectorHint']}>Live catalog from the native Codex app-server</p>
+      </div>
+      <div className={connectorStyles['connectorGrid']}>
+        {connectors.map(connector => <ConnectorCard key={connector.id} connector={connector} />)}
+      </div>
+    </div>
+  )
 }
 
 /** Account-based provider login. OAuth grants never pass through API-key inputs. */
@@ -146,6 +239,7 @@ export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelP
                 {lines.map(line => <p key={line} className={styles['advancedHint']}>{line}</p>)}
               </div>
             )}
+            <ConnectorGrid telemetry={entry.telemetry} />
           </div>
         )
       })}
