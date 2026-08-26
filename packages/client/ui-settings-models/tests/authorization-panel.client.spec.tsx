@@ -78,10 +78,63 @@ describe('account authorization panel', () => {
     render(<AuthorizationPanel api={api} t={key => en[key]} onAuthorized={vi.fn()} />)
 
     expect(await screen.findByRole('img', { name: 'GitHub' })).toBeTruthy()
+    expect(screen.getByText('Codex connectors')).toBeTruthy()
     expect(screen.getByText('GitHub')).toBeTruthy()
     expect(screen.getByText('Work with repositories and pull requests.')).toBeTruthy()
     expect(screen.getByText('Connected · callable')).toBeTruthy()
     expect(screen.getByText(/78% remaining/)).toBeTruthy()
     expect(screen.getByRole('link', { name: /Manage GitHub/ }).getAttribute('href')).toBe('https://example.test/install/github')
+  })
+
+  it('renders Google Workspace services from the scopes the account actually granted', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'authorization-google/account',
+        label: 'Google Workspace',
+        methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+        inFlight: false,
+        stored: { kind: 'api-key' as const },
+        telemetry: {
+          kind: 'account' as const,
+          provider: 'Google Workspace',
+          accountType: 'oauth',
+          connectors: [
+            {
+              id: 'gmail',
+              name: 'Gmail',
+              description: 'Read, organize, draft, and send mail.',
+              category: 'Communication',
+              accessible: true,
+              enabled: true,
+              installed: true,
+              callable: true,
+            },
+            {
+              id: 'drive',
+              name: 'Google Drive',
+              description: 'Find, read, create, and manage files.',
+              category: 'Storage',
+              accessible: true,
+              enabled: true,
+              installed: false,
+              callable: false,
+            },
+          ],
+        },
+      }] }))),
+      begin: vi.fn(),
+      status: vi.fn(() => new Promise(() => undefined)),
+      answer: vi.fn(),
+      cancel: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    render(<AuthorizationPanel api={api} t={key => en[key]} onAuthorized={vi.fn()} />)
+
+    expect(await screen.findByText('Google Workspace services')).toBeTruthy()
+    expect(screen.getByText('1 of 2 services authorized by this Google account')).toBeTruthy()
+    expect(screen.getByText('Gmail')).toBeTruthy()
+    expect(screen.getByText('Google Drive')).toBeTruthy()
+    expect(screen.getByText('Permission needed')).toBeTruthy()
+    expect(screen.queryByText(/access-token|refresh-token/i)).toBeNull()
   })
 })
