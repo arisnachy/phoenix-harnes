@@ -6,11 +6,13 @@
  * @module
  */
 
+import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type { Config } from './index.ts'
+import { rejectRedirectFetch } from './oauth.ts'
 
 /**
  * The subprocess seam's scrubbed parent env (credential-shaped and stale
@@ -27,7 +29,7 @@ function buildChildEnv(extra: Record<string, string>): Record<string, string> {
  * loopback endpoint used by an explicitly local server; credentials in the URL
  * are never accepted.
  */
-function validateHttpEndpoint(raw: string): URL {
+export function validateHttpEndpoint(raw: string): URL {
   let url: URL
   try { url = new URL(raw) } catch (error: unknown) { throw new Error(`mcp-client: invalid HTTP endpoint URL: ${raw}`, { cause: error }) }
   if (url.username || url.password) throw new Error('mcp-client: credentials in MCP endpoint URLs are not allowed')
@@ -38,29 +40,46 @@ function validateHttpEndpoint(raw: string): URL {
   return url
 }
 
+/** Config headers may not smuggle a second bearer credential beside the managed OAuth provider. */
+function assertNoConfiguredAuthorizationHeader(headers: Record<string, string>): void {
+  if (Object.keys(headers).some(name => name.toLowerCase() === 'authorization')) {
+    throw new Error('mcp-client: config.headers.Authorization is not allowed when managed OAuth is enabled')
+  }
+}
+
 /**
  * Create an MCP transport from the resolved plugin config.
  *
  * @param config - Resolved plugin config discriminated on `transport`.
+ * @param authProvider - Optional Host-owned OAuth provider for Streamable HTTP.
  * @returns A connected-ready MCP Transport (stdio or Streamable HTTP).
  */
-export function createTransport(config: Config): Transport {
+export function createTransport(config: Config, authProvider?: OAuthClientProvider): Transport {
   switch (config.transport) {
     case 'stdio':
+      if (authProvider !== undefined) throw new Error('mcp-client: managed OAuth is only available for streamable-http')
       return new StdioClientTransport({
         command: config.command,
         args: config.args,
         env: buildChildEnv(config.env),
         cwd: config.cwd,
       })
-    case 'streamable-http':
+    case 'streamable-http': {
+      if (authProvider !== undefined) assertNoConfiguredAuthorizationHeader(config.headers)
+      const options = authProvider === undefined
+        ? { requestInit: { headers: config.headers } }
+        : {
+            requestInit: { headers: config.headers },
+            authProvider,
+            // Credential-bearing provider and resource requests fail on every
+            // redirect rather than forwarding Authorization/client-secret data.
+            fetch: rejectRedirectFetch,
+          }
       // The MCP SDK's StreamableHTTPClientTransport has optional callback
       // properties typed without `| undefined` (exactOptionalPropertyTypes
       // mismatch with the Transport interface); the SDK constructed the
       // object, so the cast records only that widening.
-      return new StreamableHTTPClientTransport(
-        validateHttpEndpoint(config.url),
-        { requestInit: { headers: config.headers } },
-      ) as Transport
+      return new StreamableHTTPClientTransport(validateHttpEndpoint(config.url), options) as Transport
+    }
   }
 }
