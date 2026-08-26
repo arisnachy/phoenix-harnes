@@ -65,11 +65,16 @@ export const inject = ['slots', 'locale', 'connection', 'settingsScope']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-general: dictionaries')
 
+  // Copy freshness is framework-owned: components read the standard `t`
+  // seat, and the nav label is a thunk the owner resolves per render — no
+  // locale/change re-registration wiring.
   const t = ctx.locale.bind(NS)
   const connection = ctx.get('connection') as ConnectionHandle
   const triggerInjected = (): TriggerContentInjected => ({
     authorization: connection.api.authorization,
   })
+  // The action follows the shared describe mirror, whose owning plugin
+  // already refreshes it on document commits and reconnects.
   const documentController = connection.isLoopback
     ? new SettingsDocumentStore(connection.api, ctx.settingsScope.describe())
     : undefined
@@ -80,6 +85,11 @@ export function apply(ctx: ClientContext): void {
       hooks: { snapshot: documentController.store },
     })
   ctx.effect(() => () => { documentController?.dispose() }, 'ui-settings-general: document action directory')
+  // The settings shell: this package occupies the sidebar-owned hole and
+  // declares the settings slots. Ledger → nav-row projection as an observable
+  // source (uSES contract: getSnapshot returns the cached rows until the
+  // ledger version moves). Labels may be locale-following thunks, so the cache
+  // key includes the locale revision and subscribers ride both sources.
   let rowsVersion = -1
   let rowsRevision = -1
   let rows: readonly SettingsSectionRow[] = []
@@ -96,7 +106,7 @@ export function apply(ctx: ClientContext): void {
             rowsRevision = revision
             rows = ctx.slots.entries('settings.section')
               .map(e => ({
-                /* v8 ignore next -- list-slot registration requires id */
+                /* v8 ignore next -- list-slot registration requires id (SlotCore rejects an entry without one) */
                 id: e.options.id ?? '',
                 order: e.options.order ?? 0,
                 label: resolveSlotLabel(e.options.label) ?? '',
@@ -108,7 +118,10 @@ export function apply(ctx: ClientContext): void {
         subscribe: (listener) => {
           const offLedger = ctx.slots.subscribe('settings.section', listener)
           const offLocale = ctx.locale.subscribe(listener)
-          return () => { offLedger(); offLocale() }
+          return () => {
+            offLedger()
+            offLocale()
+          }
         },
       },
       onboardingSteps: {
@@ -117,7 +130,11 @@ export function apply(ctx: ClientContext): void {
           if (version !== onboardingVersion) {
             onboardingVersion = version
             onboardingSteps = ctx.slots.entries('settings.onboarding')
-              .map(e => ({ id: e.options.id ?? '', order: e.options.order ?? 0 }))
+              .map(e => ({
+                /* v8 ignore next -- list-slot registration requires id */
+                id: e.options.id ?? '',
+                order: e.options.order ?? 0,
+              }))
               .sort((a, b) => a.order - b.order)
           }
           return onboardingSteps
@@ -148,13 +165,21 @@ export function apply(ctx: ClientContext): void {
     ctx.slots.register({ name: 'settings.header', locale: NS }, HeaderContent))
   if (documentInjected !== undefined) {
     ctx.slots.inject('settings.action', () => ctx.slots.register({
-      name: 'settings.action', id: 'open-document', order: 0, locale: NS, inject: documentInjected,
+      name: 'settings.action',
+      id: 'open-document',
+      order: 0,
+      locale: NS,
+      inject: documentInjected,
     }, SettingsDocumentAction))
   }
   ctx.slots.inject('settings.close', () =>
     ctx.slots.register({ name: 'settings.close', locale: NS }, CloseLabel))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'general', order: 0, label: () => t('general.nav'), locale: NS,
+    name: 'settings.section',
+    id: 'general',
+    order: 0,
+    label: () => t('general.nav'),
+    locale: NS,
     children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
   }, GeneralSection))
 }
