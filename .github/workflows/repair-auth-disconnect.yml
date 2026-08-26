@@ -31,21 +31,26 @@ jobs:
           from pathlib import Path
           p = Path('packages/host/apiproxy/src/api-proxy.ts')
           text = p.read_text(encoding='utf-8')
-          before = "      async list(request) {\n        const authorization = ctx.get('authorization')"
-          after = "      list(request) {\n        const authorization = ctx.get('authorization')"
-          if text.count(before) != 1:
-              raise SystemExit(f'authorization.list declaration: expected 1 match, got {text.count(before)}')
-          text = text.replace(before, after, 1)
-          before = "        const entries = await Promise.all(authorization.list().map(async (entry) => {"
-          after = "        return Promise.all(authorization.list().map(async (entry) => {"
-          if text.count(before) != 1:
-              raise SystemExit(f'authorization.list Promise: expected 1 match, got {text.count(before)}')
-          text = text.replace(before, after, 1)
-          before = "        }))\n        return ok(request, { entries })\n      },\n      begin(request) {"
-          after = "        })).then(entries => ok(request, { entries }))\n      },\n      begin(request) {"
-          if text.count(before) != 1:
-              raise SystemExit(f'authorization.list tail: expected 1 match, got {text.count(before)}')
-          p.write_text(text.replace(before, after, 1), encoding='utf-8')
+          pairs = [
+            (
+              "      async list(request) {\n        const authorization = ctx.get('authorization')",
+              "      list(request) {\n        const authorization = ctx.get('authorization')",
+            ),
+            (
+              "        const entries = await Promise.all(authorization.list().map(async (entry) => {",
+              "        return Promise.all(authorization.list().map(async (entry) => {",
+            ),
+            (
+              "        }))\n        return ok(request, { entries })\n      },\n\n      begin(request, signal) {",
+              "        })).then(entries => ok(request, { entries }))\n      },\n\n      begin(request, signal) {",
+            ),
+          ]
+          for index, (before, after) in enumerate(pairs, 1):
+              count = text.count(before)
+              if count != 1:
+                  raise SystemExit(f'authorization.list rewrite {index}: expected 1 match, got {count}')
+              text = text.replace(before, after, 1)
+          p.write_text(text, encoding='utf-8')
           PY
           git diff --check
       - name: Install
