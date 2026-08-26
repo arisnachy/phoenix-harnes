@@ -50,6 +50,28 @@ describe('dsh-base bundle', () => {
     })
   })
 
+  it('gates Google Workspace on a configured Desktop OAuth client id', () => {
+    const root = fileURLToPath(new URL('..', import.meta.url))
+    const parsed = yaml.load(
+      readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8'),
+      { schema: entryListSchema },
+    )
+    if (!Array.isArray(parsed)) throw new TypeError('base patch must parse to a patch list')
+    const rows = parsed.flatMap((patch): Record<string, unknown>[] =>
+      typeof patch === 'object' && patch !== null
+        ? (patch as { insert?: Record<string, unknown>[] }).insert ?? []
+        : [],
+    )
+    const google = rows.find(candidate => candidate.id === 'authorization-google')
+    if (google === undefined) throw new Error('base patch must mount authorization-google')
+    const expression = (google.disabled as { __jsExpr?: string } | undefined)?.__jsExpr
+    if (expression === undefined) throw new Error('authorization-google must gate on a !!js disabled expression')
+
+    expect(Boolean(evaluate({ process: { env: {} } }, expression)), 'Google without client id').toBe(true)
+    expect(Boolean(evaluate({ process: { env: { PHOENIX_GOOGLE_OAUTH_CLIENT_ID: '' } } }, expression)), 'Google with empty client id').toBe(true)
+    expect(Boolean(evaluate({ process: { env: { PHOENIX_GOOGLE_OAUTH_CLIENT_ID: 'desktop.apps.googleusercontent.com' } } }, expression)), 'Google with client id').toBe(false)
+  })
+
   it('gates each shell stack by platform with a symmetric disabled expression', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const parsed = yaml.load(
