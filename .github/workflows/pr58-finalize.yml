@@ -42,8 +42,8 @@ jobs:
             printf 'Conflicts to resolve deterministically:\n%s\n' "${conflicts[*]}"
             for path in "${conflicts[@]}"; do
               case "$path" in
-                packages/credentials/authorization/src/google-broker.ts)
-                  # #58 owns functional connector telemetry + provider disconnect.
+                packages/credentials/authorization/src/google-broker.ts|packages/credentials/authorization/README.md)
+                  # #58 owns functional connector telemetry + provider disconnect and its contract documentation.
                   git checkout --ours -- "$path"
                   ;;
                 docs/config-catalog.i18n.yaml|docs/config-catalog.md|docs/config-catalog.zh.md|docs/subsystems/sandbox.i18n.yaml|docs/subsystems/sandbox.md|docs/subsystems/sandbox.zh.md|packages/client/ui-conversation/src/client/chat/structured-error.ts|packages/extensions/cordis-client-runner/src/client/slot-catalog.ts|packages/extensions/tool-cordis/src/api-catalog.ts|tsconfig.base.json)
