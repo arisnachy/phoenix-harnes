@@ -264,6 +264,9 @@ function form(fields: Readonly<Record<string, string>>): URLSearchParams {
 
 function serviceUrl(request: GoogleApiRequest): { url: URL; scope: string } {
   const spec = SERVICES[request.service]
+  if (spec === undefined) {
+    throw new AuthorizationError('Google broker service is not allowed', 'GOOGLE_SERVICE_DENIED')
+  }
   const rawPath = request.path
   if (!nonEmpty(rawPath)
     || rawPath.startsWith('/')
@@ -553,6 +556,13 @@ export default class GoogleApiBroker extends Service {
     if (first.refreshToken === undefined) {
       throw new AuthorizationError('Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED')
     }
+    const clientId = this.spec.clientId
+    if (clientId === undefined) {
+      throw new AuthorizationError(
+        'Google OAuth is not configured. Set PHOENIX_GOOGLE_OAUTH_CLIENT_ID and restart PHOENIX.',
+        'GOOGLE_CLIENT_UNCONFIGURED',
+      )
+    }
 
     const updated = await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, async (current) => {
       const latest = parseGrant(current)
@@ -565,7 +575,7 @@ export default class GoogleApiBroker extends Service {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: form({
-          client_id: this.spec.clientId ?? '',
+          client_id: clientId,
           refresh_token: latest.refreshToken,
           grant_type: 'refresh_token',
         }),
