@@ -1,0 +1,174 @@
+name: Repair auth disconnect
+
+on:
+  push:
+    branches: [release/codex-graft-full]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ !contains(github.event.head_commit.message, '[host-auth-fix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: release/codex-graft-full
+          fetch-depth: 0
+      - name: Patch authorization host path and fixtures
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, got {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          path = 'packages/host/apiproxy/src/api-proxy.ts'
+          old = '''          return {
+            key: String(entry.key),
+            label: entry.label,
+            methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
+            inFlight: entry.inFlight,
+            ...stored === undefined ? {} : { stored },
+          }
+'''
+          new = '''          let telemetry
+          try {
+            telemetry = await authorization.inspect(entry.key)
+          } catch {
+            // Live provider inspection is optional. A transient upstream failure
+            // must not hide the account from the configuration catalog.
+          }
+          return {
+            key: String(entry.key),
+            label: entry.label,
+            methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
+            inFlight: entry.inFlight,
+            ...(entry.disconnectable === true ? { disconnectable: true as const } : {}),
+            ...stored === undefined ? {} : { stored },
+            ...telemetry === undefined ? {} : { telemetry },
+          }
+'''
+          replace_once(path, old, new)
+
+          old = '''      cancel(request) {
+        const attempt = authorizationAttempts.get(request.payload.attemptId)
+        if (attempt === undefined) {
+          return Promise.resolve(err(request, {
+            code: 'internal', message: 'authorization attempt was not found', details: {},
+          }))
+        }
+        if (attempt.status === 'pending') {
+          rejectAuthorizationPrompt(attempt, new AuthorizationDeclinedError('authorization was cancelled'))
+          attempt.controller.abort()
+          ctx.get('authorization')?.cancel(parseCredentialKey(attempt.key))
+        }
+        return Promise.resolve(ok(request, { cancelled: true as const }))
+      },
+'''
+          new = '''      cancel(request) {
+        const attempt = authorizationAttempts.get(request.payload.attemptId)
+        if (attempt === undefined) {
+          return Promise.resolve(err(request, {
+            code: 'internal', message: 'authorization attempt was not found', details: {},
+          }))
+        }
+        if (attempt.status === 'pending') {
+          rejectAuthorizationPrompt(attempt, new AuthorizationDeclinedError('authorization was cancelled'))
+          attempt.controller.abort()
+          ctx.get('authorization')?.cancel(parseCredentialKey(attempt.key))
+        }
+        return Promise.resolve(ok(request, { cancelled: true as const }))
+      },
+
+      async disconnect(request, signal) {
+        const authorization = ctx.get('authorization')
+        if (authorization === undefined) {
+          return err(request, {
+            code: 'internal',
+            message: 'authorization service is absent: this deployment does not mount an authorization provider',
+            details: {},
+          })
+        }
+        let key: ReturnType<typeof parseCredentialKey>
+        try {
+          key = parseCredentialKey(request.payload.key)
+        } catch {
+          return err(request, {
+            code: 'internal', message: 'authorization key is invalid', details: {},
+          })
+        }
+        try {
+          await authorization.disconnect(key, signal)
+          return ok(request, { disconnected: true as const })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+'''
+          replace_once(path, old, new)
+
+          path = 'packages/host/apiproxy/tests/client-handler.spec.ts'
+          old = '''    authorization: {
+      list: err,
+      begin: err,
+      status: err,
+      answer: err,
+      cancel: err,
+      ...overrides.authorization,
+    },
+'''
+          new = '''    authorization: {
+      list: err,
+      begin: err,
+      status: err,
+      answer: err,
+      cancel: err,
+      disconnect: err,
+      ...overrides.authorization,
+    },
+'''
+          replace_once(path, old, new)
+
+          path = 'packages/host/apiproxy/tests/fetch-carrier.spec.ts'
+          old = '''      async cancel(request) {
+        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }
+      },
+    },
+'''
+          new = '''      async cancel(request) {
+        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }
+      },
+      async disconnect(request) {
+        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }
+      },
+    },
+'''
+          replace_once(path, old, new)
+          PY
+          git diff --check
+      - name: Commit repair
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No repair needed'
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/host/apiproxy/src/api-proxy.ts \
+                  packages/host/apiproxy/tests/client-handler.spec.ts \
+                  packages/host/apiproxy/tests/fetch-carrier.spec.ts
+          git commit -m 'fix(auth): complete browser disconnect host path [host-auth-fix]'
+          git push origin HEAD:release/codex-graft-full
