@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /** Plan the package-namespace migration from the inherited DeepSeek scope to PHOENIX. */
 
 import { execFileSync } from 'node:child_process'
@@ -9,21 +10,7 @@ const root = resolve(import.meta.dirname, '..')
 const LEGACY_SCOPE = '@deepseek-ai/'
 const PHOENIX_SCOPE = '@phoenix-ai/'
 
-interface PackageIdentity {
-  readonly path: string
-  readonly current: string
-  readonly target: string
-}
-
-interface ScopeMigrationReport {
-  readonly schema: 1
-  readonly legacyScope: typeof LEGACY_SCOPE
-  readonly targetScope: typeof PHOENIX_SCOPE
-  readonly packages: readonly PackageIdentity[]
-  readonly problems: readonly string[]
-}
-
-function trackedPackageJsonFiles(): string[] {
+function trackedPackageJsonFiles() {
   const output = execFileSync('git', ['ls-files', '-z'], {
     cwd: root,
     encoding: 'buffer',
@@ -36,18 +23,18 @@ function trackedPackageJsonFiles(): string[] {
     .sort()
 }
 
-function packageName(path: string): string | undefined {
+function packageName(path) {
   const text = readFileSync(resolve(root, path), 'utf8')
-  const parsed: unknown = JSON.parse(text)
+  const parsed = JSON.parse(text)
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
-  const name = (parsed as { name?: unknown }).name
+  const name = parsed.name
   return typeof name === 'string' ? name : undefined
 }
 
-function collectReport(): ScopeMigrationReport {
-  const names = new Map<string, string>()
-  const legacy: PackageIdentity[] = []
-  const problems: string[] = []
+function collectReport() {
+  const names = new Map()
+  const legacy = []
+  const problems = []
 
   for (const path of trackedPackageJsonFiles()) {
     const name = packageName(path)
@@ -63,7 +50,7 @@ function collectReport(): ScopeMigrationReport {
     legacy.push({ path, current: name, target: `${PHOENIX_SCOPE}${suffix}` })
   }
 
-  const targets = new Map<string, PackageIdentity>()
+  const targets = new Map()
   for (const entry of legacy) {
     const previous = targets.get(entry.target)
     if (previous !== undefined) {
@@ -93,7 +80,7 @@ function collectReport(): ScopeMigrationReport {
   }
 }
 
-function main(args: readonly string[]): void {
+function main(args) {
   const { values } = parseArgs({
     args,
     options: {

@@ -40,9 +40,14 @@ const invocation = parseDshArgs(rawArgs, readVersion())
 
 switch (invocation.mode) {
   case 'profile': {
-    const [{ runProfile }, { startPhoenixUpdateWatcher }] = await Promise.all([
+    const [
+      { homePatchPath, prepareProfile, runProfile },
+      { startPhoenixUpdateWatcher },
+      { runWithColdPatchRecovery },
+    ] = await Promise.all([
       import('./profile-boot.ts'),
       import('./phoenix-update-watch.ts'),
+      import('./patch-recovery.ts'),
     ])
     startPhoenixUpdateWatcher()
 
@@ -57,12 +62,21 @@ switch (invocation.mode) {
       patches.push(codexPatch)
     }
 
-    await runProfile({
-      environment: loadLayeredEnv('dsh'),
-      profile: invocation.profile,
-      patchFiles: patches,
-      args: invocation.args,
-    })
+    // Resolve the mutable patch paths without parsing the user layer. This is
+    // intentionally outside runProfile: a malformed candidate may fail before
+    // composition, while recovery still needs to know where its verified LKG
+    // lives. Only the profile/home mutable layers are auto-rollback candidates;
+    // explicit --patch overlays remain fail-loud and caller-owned.
+    const profilePatch = prepareProfile(invocation.profile, false).patchPath
+    await runWithColdPatchRecovery(
+      [profilePatch, homePatchPath()],
+      async () => runProfile({
+        environment: loadLayeredEnv('dsh'),
+        profile: invocation.profile,
+        patchFiles: patches,
+        args: invocation.args,
+      }),
+    )
     break
   }
   case 'plugin': {
