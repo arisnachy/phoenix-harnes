@@ -27,7 +27,9 @@ describe('dsh-base bundle', () => {
     )
     expect(Array.isArray(parsed)).toBe(true)
     // The base layer is one insert list over the empty profile root.
-    const rows = (parsed as { insert?: { id?: string; config?: Record<string, unknown> }[] }[]).flatMap(
+    const rows = (parsed as {
+      insert?: { id?: string; disabled?: unknown; config?: Record<string, unknown> }[]
+    }[]).flatMap(
       patch => patch.insert ?? [],
     )
     expect(rows.length).toBeGreaterThan(50)
@@ -48,6 +50,15 @@ describe('dsh-base bundle', () => {
         openrouter: { apiKeyEnv: 'OPENROUTER_API_KEY' },
       },
     })
+
+    const google = rows.find(row => row.id === 'authorization-google')
+    const googleExpression = (google?.disabled as { __jsExpr?: string } | undefined)?.__jsExpr
+    expect(googleExpression).toBe('Boolean(process.env.PHOENIX_GOOGLE_OAUTH_CLIENT_ID) === false')
+    if (googleExpression === undefined) throw new Error('authorization-google must have a disabled expression')
+    expect(Boolean(evaluate({ process: { env: {} } }, googleExpression))).toBe(true)
+    expect(Boolean(evaluate({
+      process: { env: { PHOENIX_GOOGLE_OAUTH_CLIENT_ID: 'desktop-client-id' } },
+    }, googleExpression))).toBe(false)
   })
 
   it('gates each shell stack by platform with a symmetric disabled expression', () => {
