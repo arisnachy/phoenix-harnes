@@ -29,6 +29,19 @@ const usageTelemetrySchema = z.object({
   currentStreakDays: z.number().nonnegative().optional(),
   longestStreakDays: z.number().nonnegative().optional(),
 })
+const connectorTelemetrySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  iconUrl: z.string().min(1).optional(),
+  iconUrlDark: z.string().min(1).optional(),
+  category: z.string().optional(),
+  installUrl: z.string().min(1).optional(),
+  accessible: z.boolean(),
+  enabled: z.boolean(),
+  installed: z.boolean().optional(),
+  callable: z.boolean().optional(),
+})
 const authorizationTelemetrySchema = z.object({
   kind: z.literal('account'),
   provider: z.string().min(1),
@@ -39,6 +52,7 @@ const authorizationTelemetrySchema = z.object({
   secondaryLimit: rateLimitWindowSchema.optional(),
   credits: creditsTelemetrySchema.optional(),
   usage: usageTelemetrySchema.optional(),
+  connectors: z.array(connectorTelemetrySchema).optional(),
 }) satisfies z.ZodType<Wire<AuthorizationTelemetry>>
 
 const authorizationEntrySchema = z.object({
