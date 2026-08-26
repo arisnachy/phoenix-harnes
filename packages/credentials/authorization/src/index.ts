@@ -135,6 +135,12 @@ export interface AuthorizationFlow {
    */
   inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>
   /**
+   * Revoke/logout the provider-owned account and remove this flow's credential
+   * marker. The flow owns protocol-specific teardown for the same reason it
+   * owns login: the generic seam must never guess how a provider stores auth.
+   */
+  disconnect?(signal?: AbortSignal): Promise<void>
+  /**
    * Run one attempt to obtain and commit the credential.
    * @param session - the chosen method, the cancellation signal, and the interaction callbacks.
    * @returns once the record is committed.
@@ -258,6 +264,36 @@ export class AuthorizationService extends Service {
     return flow.inspect?.(signal) ?? Promise.resolve(undefined)
   }
 
+  /**
+   * Ask the owning flow to revoke/logout its provider session, then verify the
+   * corresponding credential marker is gone. A flow that exposes no teardown
+   * cannot be disconnected by deleting storage behind its back.
+   * @param key - credential record whose provider session should be disconnected.
+   * @param signal - optional cancellation signal for provider teardown.
+   * @returns once provider teardown completed and the marker is verified absent.
+   */
+  async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {
+    const flow = this.flows.get(key)
+    if (flow === undefined) {
+      throw new AuthorizationError(`no authorization flow is registered for "${key}"`, 'NO_FLOW')
+    }
+    if (flow.disconnect === undefined) {
+      throw new AuthorizationError(`authorization flow for "${key}" cannot be disconnected`, 'NOT_DISCONNECTABLE')
+    }
+    if (this.running.has(key)) {
+      throw new AuthorizationError(`authorization flow for "${key}" is busy`, 'ALREADY_IN_FLIGHT')
+    }
+    if (signal?.aborted === true) throw signal.reason ?? new Error('authorization disconnect cancelled')
+    await flow.disconnect(signal)
+    const stored = await this.ctx.credentials.describeRecord(key)
+    if (stored.configured) {
+      throw new AuthorizationError(
+        `authorization flow for "${key}" disconnected without removing its credential record`,
+        'NOT_DISCONNECTED',
+      )
+    }
+  }
+
   /** The public view of one registered flow. */
   private entry(flow: AuthorizationFlow): AuthorizationEntry {
     return {
@@ -265,6 +301,7 @@ export class AuthorizationService extends Service {
       label: flow.label,
       methods: flow.methods,
       inFlight: this.running.has(flow.key),
+      ...(flow.disconnect === undefined ? {} : { disconnectable: true as const }),
     }
   }
 
@@ -310,11 +347,6 @@ export class AuthorizationService extends Service {
       throw new AuthorizationError(
         `an authorization attempt for "${key}" is already running`, 'ALREADY_IN_FLIGHT')
     }
-    // Withdrawn before it began: never claim the slot and never run the flow.
-    // Handing an aborted signal to `run()` would rely on every flow checking it
-    // before its first await, and one that does not would hang holding the key.
-    // Validation still runs first, so a caller naming a key or method that does
-    // not exist hears about it whether or not it also gave up.
     if (request.signal?.aborted === true) return { status: 'cancelled' }
     const controller = new AbortController()
     const withdraw = (): void => { controller.abort(request.signal?.reason) }
@@ -328,25 +360,10 @@ export class AuthorizationService extends Service {
     } finally {
       request.signal?.removeEventListener('abort', withdraw)
       this.running.delete(key)
-      // After the slot is released, so a listener that reacts by starting the
-      // next attempt is not refused by the one that just finished.
       this.settle(key, settlement)
     }
   }
 
-  /* jscpd:ignore-start -- deliberate symmetry with the credentials seam's
-     commit fan-out (`CredentialProvider`): the contained-dispatch shape is the
-     reviewed listener-lifecycle contract, and extracting it would couple the
-     two seams' event semantics. */
-  /**
-   * Fan `authorization/settled` out with contained listener failures: every
-   * listener runs, and a sync throw or async rejection is logged without
-   * changing the finished attempt's own outcome — except `INVARIANT`-coded
-   * failures, which rethrow after every listener ran. The attempt is already
-   * over and its key released when this fires, so a broken watcher (that
-   * second browser tab) can never turn the caller's settled result into a
-   * failure of its own.
-   */
   private settle(key: CredentialKey, settlement: AuthorizationSettlement): void {
     let invariantFailure: unknown
     const args = ['authorization/settled', key, settlement]
@@ -368,39 +385,21 @@ export class AuthorizationService extends Service {
     }
     if (invariantFailure !== undefined) throw invariantFailure as Error
   }
-  /* jscpd:ignore-end */
 
-  /** Contained-listener diagnostic shared by the sync and async failure paths. */
   private warnSettledListenerFailure(key: CredentialKey, error: unknown): void {
     this.ctx.logger.warn('authorization: an authorization/settled listener for "%s" failed', key)
     this.ctx.logger.warn(error)
   }
 
-  /** Run the flow, then hold it to its half of the commit contract. */
   private async attempt(
     flow: AuthorizationFlow,
     method: string,
     signal: AbortSignal,
     interaction: AuthorizationInteraction,
   ): Promise<AuthorizationOutcome> {
-    // Withdrawal settles the attempt whether or not the flow reacts to it. A
-    // flow is supposed to stop when its signal fires, but one that does not
-    // would otherwise hold the key for the life of the process, and a wedged
-    // key is indistinguishable from a busy one from the outside. The orphaned
-    // run is left to finish on its own; nothing waits on it, and a record it
-    // still manages to commit is a record the human did authorize.
     const withdrawn = new Promise<'withdrawn'>((resolve) => {
-      // `begin()` returns before claiming the key when its caller has already
-      // withdrawn, so this signal cannot already be aborted here.
       signal.addEventListener('abort', () => { resolve('withdrawn') }, { once: true })
     })
-    // What the seam itself witnessed during the run, held as properties
-    // because closure writes do not narrow locals across awaits: the prompt
-    // wrapper sees a decline first-hand (a flow that rewraps the rejection on
-    // its way out cannot hide it), and confirming the commit means confirming
-    // it happened *now* — on a re-auth the record already exists, so presence
-    // alone would let a flow that wrote nothing report the stale credential
-    // as freshly authorized.
     const observed = { declined: false, committed: false }
     const unwatch = this.ctx.on('credentials/record-updated', (key: CredentialKey) => {
       if (key === flow.key) observed.committed = true
@@ -413,9 +412,6 @@ export class AuthorizationService extends Service {
           try {
             interaction.notify(notice)
           } catch (error) {
-            // Fire-and-forget is held at the seam: a surface that cannot
-            // render a notice (a page whose connection just closed) loses the
-            // notice, never the attempt.
             this.ctx.logger.warn('authorization: the interaction surface failed to render a notice')
             this.ctx.logger.warn(error)
           }
@@ -427,15 +423,10 @@ export class AuthorizationService extends Service {
       })
       try {
         if (await Promise.race([running.then(() => 'ran' as const), withdrawn]) === 'withdrawn') {
-          // Nothing awaits the orphan any more, so its eventual failure has to be
-          // marked handled or it would take down the process.
           void running.catch(() => { this.ctx.logger.debug('authorization: withdrawn flow failed after the fact') })
           return { status: 'cancelled' }
         }
       } catch (error) {
-        // A withdrawn attempt and a declined prompt are outcomes, not
-        // failures: the human said no, or closed the page. Anything else is
-        // the flow failing and belongs to the caller, cause chain intact.
         if (signal.aborted || observed.declined) return { status: 'cancelled' }
         throw error
       }

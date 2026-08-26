@@ -73,6 +73,9 @@ interface ServiceSpec {
   base: string
   uploadBase?: string
   scope: string
+  name: string
+  description: string
+  category: string
 }
 
 const SERVICES: Readonly<Record<GoogleWorkspaceService, ServiceSpec>> = {
@@ -80,32 +83,69 @@ const SERVICES: Readonly<Record<GoogleWorkspaceService, ServiceSpec>> = {
     base: 'https://gmail.googleapis.com/gmail/v1/',
     uploadBase: 'https://gmail.googleapis.com/upload/gmail/v1/',
     scope: 'https://www.googleapis.com/auth/gmail.modify',
+    name: 'Gmail',
+    description: 'Read, organize, draft, and send mail through the user-authorized Gmail scope.',
+    category: 'Communication',
   },
   calendar: {
     base: 'https://www.googleapis.com/calendar/v3/',
     scope: 'https://www.googleapis.com/auth/calendar',
+    name: 'Google Calendar',
+    description: 'Read and manage calendars and events with the connected Google account.',
+    category: 'Productivity',
   },
   drive: {
     base: 'https://www.googleapis.com/drive/v3/',
     uploadBase: 'https://www.googleapis.com/upload/drive/v3/',
     scope: 'https://www.googleapis.com/auth/drive',
+    name: 'Google Drive',
+    description: 'Find, read, create, and manage files in Google Drive.',
+    category: 'Storage',
   },
   docs: {
     base: 'https://docs.googleapis.com/v1/',
     scope: 'https://www.googleapis.com/auth/documents',
+    name: 'Google Docs',
+    description: 'Read and edit Google Docs through the official Documents API.',
+    category: 'Productivity',
   },
   sheets: {
     base: 'https://sheets.googleapis.com/v4/',
     scope: 'https://www.googleapis.com/auth/spreadsheets',
+    name: 'Google Sheets',
+    description: 'Read and edit spreadsheets through the Google Sheets API.',
+    category: 'Productivity',
   },
   slides: {
     base: 'https://slides.googleapis.com/v1/',
     scope: 'https://www.googleapis.com/auth/presentations',
+    name: 'Google Slides',
+    description: 'Read and edit presentations through the Google Slides API.',
+    category: 'Productivity',
   },
   contacts: {
     base: 'https://people.googleapis.com/v1/',
     scope: 'https://www.googleapis.com/auth/contacts',
+    name: 'Google Contacts',
+    description: 'Read and manage contacts through the Google People API.',
+    category: 'Communication',
   },
+}
+
+function serviceTelemetry(grant: GoogleGrant): NonNullable<Extract<AuthorizationTelemetry, { kind: 'account' }>['connectors']> {
+  return (Object.entries(SERVICES) as Array<[GoogleWorkspaceService, ServiceSpec]>).map(([id, spec]) => {
+    const granted = grant.scopes.includes(spec.scope)
+    return {
+      id,
+      name: spec.name,
+      description: spec.description,
+      category: spec.category,
+      accessible: true,
+      enabled: true,
+      installed: granted,
+      callable: granted,
+    }
+  })
 }
 
 /** One Host-side Google API operation through the broker. */
@@ -144,9 +184,10 @@ function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
 }
 
-/** Resolve broker configuration without inventing scopes or a deployment identity.
- * @param config - User and deployment Google authorization settings.
- * @returns The validated broker specification.
+/**
+ * Resolve broker configuration without inventing scopes or a deployment identity.
+ * @param config - deployment-owned Google OAuth client id and requested scopes.
+ * @returns validated, normalized broker configuration.
  */
 export function resolveGoogleSpec(config: Config): ResolvedSpec {
   if (!Array.isArray(config.scopes) || config.scopes.length === 0) {
@@ -296,10 +337,7 @@ async function listen(server: Server): Promise<number> {
 async function closeServer(server: Server): Promise<void> {
   if (!server.listening) return
   await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
-      if (error === undefined) resolve()
-      else reject(error)
-    })
+    server.close((error) => { error === undefined ? resolve() : reject(error) })
   })
 }
 
@@ -412,23 +450,32 @@ export default class GoogleApiBroker extends Service {
       label: 'Google Workspace',
       methods: [{ id: 'oauth', label: 'Sign in with Google' }],
       inspect: () => this.inspect(),
+      disconnect: () => this.disconnect().then(() => undefined),
       run: session => this.authorize(session),
     }))
   }
 
-  /** Secret-free telemetry exists only while this process owns a live grant.
-   * @returns Current account telemetry, or undefined when signed out.
+  /**
+   * Secret-free telemetry exists only while this process owns a live grant.
+   * @returns sanitized Google account and service capability telemetry, when connected.
    */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
     await this.startupCleanup
-    return this.grant === undefined
+    const grant = this.grant
+    return grant === undefined
       ? undefined
-      : { kind: 'account', provider: 'google', accountType: 'oauth' }
+      : {
+        kind: 'account',
+        provider: 'Google Workspace',
+        accountType: 'oauth',
+        connectors: serviceTelemetry(grant),
+      }
   }
 
-  /** Execute one request inside a fixed Google service boundary.
-   * @param request - Approved Google API request.
-   * @returns The bounded Google API response.
+  /**
+   * Execute one request inside a fixed Google service boundary.
+   * @param request - bounded Google service request.
+   * @returns the bounded response without credential-bearing headers.
    */
   async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {
     const destination = serviceUrl(request)
@@ -446,8 +493,9 @@ export default class GoogleApiBroker extends Service {
     }
   }
 
-  /** Clear the process grant and secret-free marker even when provider revocation fails.
-   * @returns Whether Google accepted token revocation.
+  /**
+   * Clear the process grant and secret-free marker even when provider revocation fails.
+   * @returns whether Google acknowledged token revocation.
    */
   async disconnect(): Promise<{ revoked: boolean }> {
     await this.startupCleanup

@@ -66,7 +66,7 @@ import {
 import { llmDiscoverModelsRequestSchema, llmModelsRequestSchema, llmProvidersRequestSchema } from '../api/llm.schema.ts'
 import {
   authorizationAnswerRequestSchema, authorizationBeginRequestSchema, authorizationCancelRequestSchema,
-  authorizationListRequestSchema, authorizationStatusRequestSchema,
+  authorizationDisconnectRequestSchema, authorizationListRequestSchema, authorizationStatusRequestSchema,
 } from '../api/authorization.schema.ts'
 import {
   subagentHistoryRequestSchema,
@@ -149,40 +149,25 @@ const UNARY_ROUTES: UnaryRoutes = {
   'authorization.status': { schema: authorizationStatusRequestSchema, invoke: (api, r) => api.authorization.status(r) },
   'authorization.answer': { schema: authorizationAnswerRequestSchema, invoke: (api, r) => api.authorization.answer(r) },
   'authorization.cancel': { schema: authorizationCancelRequestSchema, invoke: (api, r) => api.authorization.cancel(r) },
+  'authorization.disconnect': { schema: authorizationDisconnectRequestSchema, invoke: (api, r, signal) => api.authorization.disconnect(r, signal) },
 }
 
-/** Route lookup that narrows an arbitrary path segment to a map key (single cast point for the string→key refinement). */
 function methodFor(path: string): keyof RpcMethodMap | undefined {
   return Object.hasOwn(UNARY_ROUTES, path) ? path as keyof RpcMethodMap : undefined
 }
 
-/**
- * Sentinel rpcId for error responses to envelopes whose own rpcId is unreadable: the response
- * must still be a valid ServerResponse (a self-violating shape would turn the server's explicit
- * bad-request report into a client-side parse failure). Fixed value, documented here as wire contract.
- */
 const INVALID_REQUEST_RPC_ID = RpcId('invalid-request')
 
-/** Wrap a business error as a ServerResponse full form (rpcId backfilled; an unreadable rpcId uses the invalid-request sentinel). */
 function errorResponse(rpcId: RpcId, error: RpcError): Response {
   const body: ServerResponse = { type: 'server-response', rpcId, result: { ok: false, error } }
   return Response.json(body)
 }
 
-/** Complete the impl's narrow form into a ServerResponse full form. */
 function fullResponse(narrow: RpcResponse<unknown>): Response {
   const body: ServerResponse = { type: 'server-response', rpcId: narrow.rpcId, result: narrow.result }
   return Response.json(body)
 }
 
-/**
- * Parse the payload and invoke one unary route. Generic over the map key so
- * the row's schema/invoke pairing typechecks; the only cast collapses the
- * Wire<> widening back to the exact payload (undefined-valued properties and
- * absent ones are indistinguishable after JSON transport).
- */
-// K appears once in the signature but ties the UNARY_ROUTES[K] row lookup to its own
-// schema/invoke pairing; a union parameter degrades the row to an uninvokable intersection.
 // oxlint-disable-next-line typescript/no-unnecessary-type-parameters
 async function handleUnary<K extends keyof RpcMethodMap>(
   api: ApiProxy, method: K, message: ClientRequest, signal: AbortSignal,
@@ -195,47 +180,34 @@ async function handleUnary<K extends keyof RpcMethodMap>(
   try {
     return fullResponse(await route.invoke(api, { rpcId: message.rpcId, payload: payload.data }, signal))
   } catch (error: unknown) {
-    // The impl never throws business errors; reaching here means the implementation itself crashed — 500, carrier layer.
     return new Response(`handler failure: ${String(error)}`, { status: 500 })
   }
 }
 
-/** SSE frame: complete the narrow RpcRequest<frame> into a ServerRequest full form (method = frame type). */
 function fullFrame(narrow: RpcRequest<MuxFrame | HostFrame>): ServerRequest {
   return { type: 'server-request', rpcId: narrow.rpcId, method: narrow.payload.type, payload: narrow.payload }
 }
 
-/**
- * Wrap a frame stream as an SSE Response; stops when req.signal aborts. An
- * impl throw mid-stream emits one stream/error frame and then closes.
- */
 function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame>>): Response {
   const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        // Send an SSE comment line on open so clients/proxies see a live channel (the host
-        // stream has no baseline frames and would otherwise emit zero bytes while idle;
-        // a comment line is not a frame, so client frame parsing skips it naturally).
         controller.enqueue(encoder.encode(': connected\n\n'))
         for await (const narrow of frames) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(fullFrame(narrow))}\n\n`))
         }
       } catch (error: unknown) {
-        // Mid-stream impl failure → one stream/error frame, then close: the client must see
-        // the failure instead of a silent end (which reads as a normal disconnect). A fresh
-        // rpcId is minted — this is a server-initiated push like any other frame.
         const failure: MuxFrame | HostFrame = { type: 'stream/error', error: { code: 'internal', message: String(error), details: {} } }
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(fullFrame({ rpcId: RpcId(randomUUID()), payload: failure }))}\n\n`))
         } catch {
-          // Consumer already cancelled the stream: enqueue-after-cancel is the
-          // only reachable error, and there is no one left to tell.
+          // Consumer already cancelled.
         }
       } finally {
         try {
           controller.close()
-        } catch { /* already cancelled by the consumer: a double close is the only reachable error */ }
+        } catch { /* already cancelled */ }
       }
     },
   })
@@ -251,15 +223,11 @@ function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame>>): R
  */
 export function toFetchHandler(api: ApiProxy): { fetch: typeof fetch } {
   return {
-    // Signature matches global fetch: the isomorphic point hands this function to InProcessApiClient as its transport aspect,
-    // Clients call in (url, init) form — normalize to Request before handling.
     async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
       const req = input instanceof Request ? input : new Request(input, init)
       const url = new URL(req.url)
       const path = url.pathname
 
-      // No-envelope read channels (SSE GET streams + host-only download):
-      // physical routes that answer directly, without a wire envelope.
       if (path === '/api/events.mux' && req.method === 'GET') {
         return sseResponse(api.events.mux({ rpcId: RpcId(randomUUID()), payload: {} }, req.signal))
       }
@@ -267,8 +235,6 @@ export function toFetchHandler(api: ApiProxy): { fetch: typeof fetch } {
         return sseResponse(api.events.host({ rpcId: RpcId(randomUUID()), payload: {} }, req.signal))
       }
       if (path === '/api/session.export' && (req.method === 'GET' || req.method === 'HEAD')) {
-        // Query params are a different boundary from the POST envelope, but
-        // the request still casts its brands only through the domain schema.
         const parsed = sessionLogQuerySchema.safeParse(Object.fromEntries(url.searchParams))
         if (!parsed.success) {
           return new Response('missing or invalid sessionId query parameter', { status: 400 })
@@ -283,12 +249,6 @@ export function toFetchHandler(api: ApiProxy): { fetch: typeof fetch } {
         return new Response('not found', { status: 404 })
       }
 
-      // Cross-site write fence: browsers send "simple" POSTs (text/plain,
-      // form encodings) without a CORS preflight, so a malicious page could
-      // otherwise execute side-effectful RPCs blind — the response stays
-      // unreadable cross-origin, but session.prompt would still run. Only the
-      // JSON media type is accepted; anything else is forced into a preflight
-      // this server never answers. 415 = carrier layer, like the 400 below.
       const mediaType = req.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
       if (mediaType !== 'application/json') {
         return new Response('content type must be application/json', { status: 415 })
@@ -298,7 +258,6 @@ export function toFetchHandler(api: ApiProxy): { fetch: typeof fetch } {
       try {
         body = await req.json()
       } catch {
-        // 400 = carrier layer (body is not even JSON); valid JSON with a bad shape goes 200 + bad-request.
         return new Response('body is not JSON', { status: 400 })
       }
 
@@ -313,8 +272,6 @@ export function toFetchHandler(api: ApiProxy): { fetch: typeof fetch } {
 
       const envelope = clientRequestSchema.safeParse(body)
       if (!envelope.success) {
-        // Best effort at correlation: salvage a string rpcId from the raw body;
-        // otherwise the fixed sentinel keeps the response a valid ServerResponse.
         const rawId = (body as { rpcId?: unknown } | null)?.rpcId
         const rpcId = typeof rawId === 'string' ? RpcId(rawId) : INVALID_REQUEST_RPC_ID
         return errorResponse(rpcId, { code: 'bad-request', message: 'invalid client-request message', details: { issues: envelope.error.issues } })

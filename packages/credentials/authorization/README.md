@@ -75,7 +75,7 @@ The current Windows restricted-token sandbox limits writes but not reads, so it 
 
 ## Model Experience
 
-None, as authorization is a configuration-time conversation with a human and no flow, notice, prompt, OAuth token, credential payload, or broker authentication header enters a model request.
+None, as authorization is a configuration-time conversation with a human and no flow, notice, prompt, OAuth token, credential payload, or broker authentication header enters a model request; model-visible Google tools receive only the Google API data their owning integration chooses to return.
 
 #### KV Cache effect
 
@@ -85,5 +85,5 @@ No invalidation; no authorization state enters a request prefix.
 
 - **No flow is resumable** — an attempt lives in the process that started it, so a browser reload during a login abandons it and the human starts over. Durable attempts need a store this seam does not have.
 - **Google login is process-local by design** — a restart requires reauthorization. Persisting the refresh token in `credentials-local` would expose it to deliberately malicious same-UID processes, so durable Google sessions stay disabled until an OS-isolated broker exists.
-- **There is no generic revoke operation on the authorization seam** — providers may own protocol-specific revocation, as the Google broker does, but `ctx.authorization` itself exposes no cross-provider sign-out method.
+- **Disconnect requires provider ownership** — `ctx.authorization.disconnect()` is available only when the registered flow implements protocol-specific teardown; the seam never guesses revocation semantics or deletes provider state behind a flow's back.
 - **A key with no flow is inert** — the seam reports what is registered, so a record left by an uninstalled plugin can be deleted but not re-authorized. Recognizing that orphan is the caller's join, as it is for [`listRecords()`](../credentials/README.md#surface).

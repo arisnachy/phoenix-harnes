@@ -44,6 +44,8 @@ flowchart LR
   cfg --> plugin_dsh_base_credentials
   plugin_dsh_base_authorization["authorization<br/>@deepseek-ai/dsh-authorization"]
   cfg --> plugin_dsh_base_authorization
+  plugin_dsh_base_authorization_google["authorization-google<br/>@deepseek-ai/dsh-authorization/google"]
+  cfg --> plugin_dsh_base_authorization_google
   plugin_dsh_base_llm_pi_ai["llm-pi-ai<br/>@deepseek-ai/dsh-llm-pi-ai"]
   cfg --> plugin_dsh_base_llm_pi_ai
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@deepseek-ai/dsh-session-persistence-jsonl"]
@@ -190,6 +192,7 @@ flowchart LR
 | `user-profile` | `@deepseek-ai/dsh-user-profile` |
 | `credentials` | `@deepseek-ai/dsh-credentials-local` |
 | `authorization` | `@deepseek-ai/dsh-authorization` |
+| `authorization-google` | `@deepseek-ai/dsh-authorization/google` |
 | `llm-pi-ai` | `@deepseek-ai/dsh-llm-pi-ai` |
 | `session-persistence-jsonl` | `@deepseek-ai/dsh-session-persistence-jsonl` |
 | `attachment-local` | `@deepseek-ai/dsh-attachment-local` |
