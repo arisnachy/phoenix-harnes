@@ -21,6 +21,8 @@ function mount(
     useSession: unusedHook,
     useSessions: unusedHook,
     useWorkspaces: unusedHook,
+    useInput: unusedHook,
+    inputActions: unusedHook,
   }
   return render(<ContextRemaining {...props} />)
 }
