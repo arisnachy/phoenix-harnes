@@ -105,6 +105,27 @@ export interface AuthorizationUsageTelemetry {
 }
 
 /**
+ * Secret-free connector/app metadata suitable for a settings card. The shape
+ * is deliberately closed: upstream connector auth/session payloads never cross
+ * the authorization boundary.
+ */
+export interface AuthorizationConnectorTelemetry {
+  id: string
+  name: string
+  description?: string
+  iconUrl?: string
+  iconUrlDark?: string
+  category?: string
+  installUrl?: string
+  accessible: boolean
+  enabled: boolean
+  /** Present only when the provider exposes an authoritative installed snapshot. */
+  installed?: boolean
+  /** Present only when the provider reports whether a model-visible tool is callable. */
+  callable?: boolean
+}
+
+/**
  * Sanitized optional account telemetry a flow may expose after authentication.
  * This contract deliberately has no arbitrary JSON escape hatch: adding a new
  * field requires code review, preventing an upstream token/session object from
@@ -122,6 +143,8 @@ export interface AuthorizationAccountTelemetry {
   secondaryLimit?: AuthorizationRateLimitWindow
   credits?: AuthorizationCreditsTelemetry
   usage?: AuthorizationUsageTelemetry
+  /** Optional provider-native connector catalog, already sanitized. */
+  connectors?: readonly AuthorizationConnectorTelemetry[]
 }
 
 /** Fixed, secret-free telemetry schema exposed by an authorization flow. */
