@@ -142,13 +142,6 @@ interface LoopbackReceiver {
   close(): Promise<void>
 }
 
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    /** Host-only Google API broker; no method returns OAuth credentials. */
-    googleApi: GoogleApiBroker
-  }
-}
-
 function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
 }
