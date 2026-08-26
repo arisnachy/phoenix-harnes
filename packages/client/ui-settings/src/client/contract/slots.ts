@@ -22,6 +22,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'settings.trigger': { kind: 'single'; scope: 'root'; owner: SettingsTriggerOwnerProps }
     /**
+     * Optional live status at the trailing edge of the Settings trigger.
+     * Session-maybe scope lets a feature render current-session telemetry
+     * without moving the root-scoped Settings label or creating global state.
+     * The shell supplies only its wide/rail geometry.
+     */
+    'settings.trigger.trailing': { kind: 'single'; scope: 'session-maybe'; owner: SettingsTriggerTrailingOwnerProps }
+    /**
      * The panel title text seat. Content renders inside the nav heading row;
      * the dialog's accessible name points at that node via aria-labelledby.
      * Absent contribution leaves the heading empty.
@@ -103,6 +110,12 @@ export interface SettingsPluginsTabOwnerProps {
 /** Owner share of the trigger content seat: the sidebar column state. */
 export interface SettingsTriggerOwnerProps {
   /** Whether the sidebar renders wide content (false = 56px rail, icon only). */
+  wide: boolean
+}
+
+/** Owner share of the optional trailing Settings status seat. */
+export interface SettingsTriggerTrailingOwnerProps {
+  /** Whether the sidebar renders wide content (false = 56px rail). */
   wide: boolean
 }
 

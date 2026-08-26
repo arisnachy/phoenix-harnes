@@ -22,6 +22,7 @@ import type {
 import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
 import type { TriggerContentInjected } from './chrome.tsx'
+import { ContextRemaining } from './ContextRemaining.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from './SettingsDocumentAction.tsx'
@@ -146,6 +147,7 @@ export function apply(ctx: ClientContext): void {
     name: 'sidebar.settings',
     children: {
       'settings.trigger': { kind: 'single', scope: 'root' },
+      'settings.trigger.trailing': { kind: 'single', scope: 'session-maybe' },
       'settings.header': { kind: 'single', scope: 'root' },
       'settings.action': { kind: 'list', scope: 'root' },
       'settings.close': { kind: 'single', scope: 'root' },
@@ -157,6 +159,8 @@ export function apply(ctx: ClientContext): void {
 
   ctx.slots.inject('settings.trigger', () =>
     ctx.slots.register({ name: 'settings.trigger', locale: NS, inject: triggerInjected }, TriggerContent))
+  ctx.slots.inject('settings.trigger.trailing', () =>
+    ctx.slots.register({ name: 'settings.trigger.trailing' }, ContextRemaining))
   ctx.slots.inject('settings.header', () =>
     ctx.slots.register({ name: 'settings.header', locale: NS }, HeaderContent))
   if (documentInjected !== undefined) {

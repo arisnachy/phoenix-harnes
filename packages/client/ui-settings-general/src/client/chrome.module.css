@@ -2,11 +2,12 @@
  * only guards against overflow during the sidebar collapse crossfade). */
 
 .triggerLabel {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  text-align: left;
 }
 
 /* Native Codex quota telemetry sits beside Settings only in the expanded
@@ -17,6 +18,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-left: auto;
 }
 
 .quotaChip {
