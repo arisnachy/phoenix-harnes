@@ -52,6 +52,7 @@ interface Entry {
   label: string
   methods: Array<{ id: string; label: string }>
   inFlight: boolean
+  disconnectable?: true
   stored?: { kind: 'api-key' | 'grant' }
   telemetry?: AccountTelemetry
 }
@@ -194,6 +195,7 @@ function ConnectorGrid({ telemetry }: { telemetry: AccountTelemetry | undefined 
 export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
+  const [disconnectingKey, setDisconnectingKey] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
   const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } = useAuthorizationAttempt(api, () => {
     setRefresh(current => current + 1)
@@ -216,6 +218,20 @@ export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelP
   }, [api, refresh])
 
   if (api === undefined || entries.length === 0) return null
+
+  const disconnect = (key: string): void => {
+    setCatalogFailure(undefined)
+    setDisconnectingKey(key)
+    void api.disconnect({ key }).then((response) => {
+      if (!response.result.ok) {
+        setCatalogFailure(response.result.error.message)
+        return
+      }
+      setRefresh(current => current + 1)
+      onAuthorized()
+    }, (error: unknown) => { setCatalogFailure(String(error)) })
+      .finally(() => { setDisconnectingKey(undefined) })
+  }
 
   return (
     <section className={styles['authorizationPanel']} aria-label={t('accountConnections')}>
@@ -241,6 +257,16 @@ export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelP
                     ? t('signingIn')
                     : `${entry.stored === undefined ? t('signInWith') : t('accountSignIn')} ${entry.label}`}
                 </button>
+                {entry.stored === undefined || entry.disconnectable !== true ? null : (
+                  <button
+                    type="button"
+                    className={styles['secondaryButton']}
+                    disabled={attempt?.status === 'pending' || entry.inFlight || disconnectingKey === entry.key}
+                    onClick={() => { disconnect(entry.key) }}
+                  >
+                    {disconnectingKey === entry.key ? 'Disconnecting…' : 'Disconnect'}
+                  </button>
+                )}
               </div>
             </div>
             {lines.length === 0 ? null : (
