@@ -397,6 +397,13 @@ async function readOptionalCodexApps(
   }
 }
 
+/**
+ * Read one secret-free native Codex account snapshot.
+ * @param ctx - PHOENIX service context.
+ * @param config - Codex bridge configuration.
+ * @param signal - optional cancellation signal.
+ * @returns account, quota, usage, and connector metadata without OAuth secrets.
+ */
 export async function readCodexAccountSnapshot(
   ctx: Context,
   config: CodexAccountBridgeConfig,
@@ -510,6 +517,12 @@ async function loginManagedChatGpt(
   }
 }
 
+/**
+ * Register native Codex account authorization.
+ * @param ctx - PHOENIX service context.
+ * @param config - Codex bridge configuration.
+ * @returns disposer for the registered flow.
+ */
 export function registerCodexAccountFlow(
   ctx: Context,
   config: CodexAccountBridgeConfig,

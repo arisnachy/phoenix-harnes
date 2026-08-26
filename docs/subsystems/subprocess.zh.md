@@ -313,7 +313,10 @@ abstract spawn(spec: SubprocessSpawnSpec): SubprocessHandle
 /**
  * Allocate a real terminal and start one owned process session. This is the
  * only non-pipe process primitive: implementations own terminal byte I/O,
- * foreground groups, signals, and complete session-tree cleanup.
+ * foreground groups, signals, and complete session-tree cleanup behind one
+ * awaited termination method; readiness and persistent-shell policy stay in
+ * the PTY consumer. Its output stream ends after queued terminal output when
+ * the top-level process exits.
  * @param spec - fully specified argv, cwd, environment, dimensions, grace, and allocation cancellation.
  * @returns the live terminal handle after allocation succeeds.
  */

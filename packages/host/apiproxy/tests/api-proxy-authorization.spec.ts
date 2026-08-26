@@ -27,12 +27,20 @@ function fakeAuthorization() {
     label: 'ChatGPT (Codex)',
     methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
     inFlight: false,
+    disconnectable: true,
   }
   let running: AuthorizationRequest | undefined
   let finish: ((outcome: { status: 'authorized' | 'cancelled' }) => void) | undefined
+  let disconnected = false
   const service = {
     list: () => [entry],
     describe: () => ({ ...entry, inFlight: running !== undefined }),
+    inspect: async () => ({
+      kind: 'account' as const,
+      provider: 'Codex',
+      connectors: [{ id: 'drive', name: 'Drive', accessible: true, enabled: true, installed: true, callable: true }],
+    }),
+    disconnect: async () => { disconnected = true },
     begin: (authorization: AuthorizationRequest) => {
       running = authorization
       authorization.interaction.notify({ message: 'Continue in your browser', url: 'https://example.test/oauth' })
@@ -50,7 +58,7 @@ function fakeAuthorization() {
       finish?.({ status: 'cancelled' })
     },
   } as unknown as AuthorizationService
-  return { service, key }
+  return { service, key, wasDisconnected: () => disconnected }
 }
 
 describe('authorization API domain', () => {
@@ -122,4 +130,21 @@ describe('authorization API domain', () => {
     const entries = ok(await api.authorization.list(request({})))
     expect(entries.entries[0]?.stored).toBeUndefined()
   })
+
+  it('projects live connector telemetry and forwards provider-owned disconnect', async () => {
+    const ctx = new Context()
+    const { service, key, wasDisconnected } = fakeAuthorization()
+    ctx.provide('authorization', service)
+    ctx.provide('userQuestions', { registerProvider: () => () => {} } as never)
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const entries = ok(await api.authorization.list(request({})))
+    expect(entries.entries[0]?.disconnectable).toBe(true)
+    expect(entries.entries[0]?.telemetry?.connectors?.[0]?.name).toBe('Drive')
+
+    const disconnected = ok(await api.authorization.disconnect(request({ key: String(key) })))
+    expect(disconnected.disconnected).toBe(true)
+    expect(wasDisconnected()).toBe(true)
+  })
+
 })

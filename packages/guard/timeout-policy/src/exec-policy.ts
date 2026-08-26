@@ -13,9 +13,12 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 
+/** One monotonic command-policy outcome. */
 export type ExecPolicyDecision = 'allow' | 'prompt' | 'forbidden'
+/** One exact token or accepted alternatives at one prefix position. */
 export type ExecPolicyPatternPart = string | readonly string[]
 
+/** One validated token-prefix rule and its examples. */
 export interface ExecPolicyRule {
   /** Ordered token prefix; an array member means any one of those alternatives. */
   readonly pattern: readonly ExecPolicyPatternPart[]
@@ -29,6 +32,7 @@ export interface ExecPolicyRule {
   readonly notMatch?: readonly string[]
 }
 
+/** Optional exec-policy configuration. */
 export interface ExecPolicyConfig {
   /** Rules are evaluated together and the strictest matching decision wins. */
   readonly rules?: readonly ExecPolicyRule[]
@@ -38,6 +42,7 @@ export interface ExecPolicyConfig {
   readonly complexDecision?: 'inherit' | 'prompt' | 'forbidden'
 }
 
+/** Immutable runtime form of a validated exec policy. */
 export interface CompiledExecPolicy {
   readonly rules: readonly CompiledRule[]
   readonly shellTools: ReadonlySet<string>
@@ -50,6 +55,7 @@ interface CompiledRule {
   readonly justification?: string
 }
 
+/** Decision returned for one classified shell command. */
 export interface ExecPolicyEvaluation {
   readonly decision: ExecPolicyDecision
   readonly justification?: string
@@ -153,7 +159,11 @@ function exampleMatches(example: string, pattern: readonly (string | ReadonlySet
   return parsed !== undefined && matches(parsed.tokens, pattern)
 }
 
-/** Compile and self-test an exec policy before it can affect live tools. */
+/**
+ * Compile and self-test an exec policy before it can affect live tools.
+ * @param config - source rules and shell-tool settings.
+ * @returns immutable validated runtime policy.
+ */
 export function compileExecPolicy(config: ExecPolicyConfig = {}): CompiledExecPolicy {
   const rules: CompiledRule[] = []
   for (const [index, source] of (config.rules ?? []).entries()) {
@@ -183,7 +193,12 @@ export function compileExecPolicy(config: ExecPolicyConfig = {}): CompiledExecPo
   }
 }
 
-/** Evaluate one shell command without changing the surrounding policy chain. */
+/**
+ * Evaluate one shell command without changing the surrounding policy chain.
+ * @param command - raw shell command.
+ * @param policy - compiled policy to evaluate.
+ * @returns the strictest match or undefined.
+ */
 export function evaluateExecPolicy(
   command: string,
   policy: CompiledExecPolicy,

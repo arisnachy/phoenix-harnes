@@ -41,6 +41,7 @@ export class DeepSeekHarness implements AsyncDisposable {
     this.maxTokens = options.maxTokens
   }
 
+  /** Current low-level transport client owned by this harness. */
   get client(): HarnessClient {
     return this.clientInstance
   }
@@ -50,7 +51,11 @@ export class DeepSeekHarness implements AsyncDisposable {
     return this.negotiatedProtocolVersion
   }
 
-  /** Whether the current runtime explicitly advertised one v2 lifecycle capability. */
+  /**
+   * Query a negotiated v2 lifecycle capability.
+   * @param capability - lifecycle capability to query.
+   * @returns true only when advertised.
+   */
   supports(capability: keyof HarnessSdkCapabilities): boolean {
     return this.negotiatedCapabilities?.[capability] === true
   }
@@ -82,14 +87,26 @@ export class DeepSeekHarness implements AsyncDisposable {
     return this.initialized
   }
 
+  /**
+   * Create a stable session handle.
+   * @param sessionId - optional stable id.
+   * @returns a session handle sharing this runtime.
+   */
   session(sessionId?: string): HarnessSession {
     return new HarnessSession(this, sessionId ?? `session-${randomUUID().replaceAll('-', '')}`)
   }
 
+  /**
+   * Run one turn.
+   * @param input - prompt or content blocks.
+   * @param options - optional run settings.
+   * @returns settled turn result.
+   */
   run(input: string | ContentBlock[], options?: RunOptions): Promise<RunResult> {
     return this.session(options?.sessionId).run(input, options)
   }
 
+  /** @returns once the shared runtime subprocess is closed. */
   close(): Promise<void> {
     this.closed = true
     return this.clientInstance.close()
@@ -112,6 +129,12 @@ export class HarnessSession {
 
   constructor(readonly harness: DeepSeekHarness, readonly id: string) {}
 
+  /**
+   * Run one turn in this stable session.
+   * @param input - prompt or content blocks.
+   * @param options - optional notification observer.
+   * @returns settled turn result.
+   */
   async run(input: string | ContentBlock[], options?: Pick<RunOptions, 'onNotification'>): Promise<RunResult> {
     if (this.closed) throw new SdkProtocolError(`SDK session "${this.id}" is closed`)
     await this.harness.start()
@@ -160,7 +183,10 @@ export class HarnessSession {
     }
   }
 
-  /** Cancel this session's current activity without closing the runtime or discarding queued follow-up work. */
+  /**
+   * Cancel this session's current activity without closing the runtime.
+   * @returns whether the session existed and was running.
+   */
   async interrupt(): Promise<SessionInterruptResult> {
     if (this.closed) return { found: false, wasRunning: false }
     await this.harness.start()
@@ -174,7 +200,10 @@ export class HarnessSession {
     return { found: value.found, wasRunning: value.wasRunning }
   }
 
-  /** Dispose this SDK-owned session while preserving the shared PHOENIX runtime for other sessions. */
+  /**
+   * Dispose this SDK-owned session while preserving the shared runtime.
+   * @returns whether a live SDK session was found and closed.
+   */
   async close(): Promise<SessionCloseResult> {
     if (this.closed) return { found: false }
     await this.harness.start()

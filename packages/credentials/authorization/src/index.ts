@@ -268,6 +268,9 @@ export class AuthorizationService extends Service {
    * Ask the owning flow to revoke/logout its provider session, then verify the
    * corresponding credential marker is gone. A flow that exposes no teardown
    * cannot be disconnected by deleting storage behind its back.
+   * @param key - credential record whose provider session should be disconnected.
+   * @param signal - optional cancellation signal for provider teardown.
+   * @returns once provider teardown completed and the marker is verified absent.
    */
   async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {
     const flow = this.flows.get(key)

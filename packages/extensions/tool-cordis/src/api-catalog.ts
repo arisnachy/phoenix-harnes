@@ -494,6 +494,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'sanitized telemetry from the flow, or undefined when it exposes none.',
       },
       {
+        signature: 'async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void>',
+        description: 'Ask the owning flow to revoke/logout its provider session, then verify the corresponding credential marker is gone. A flow that exposes no teardown cannot be disconnected by deleting storage behind its back.',
+        parameters: [{ name: 'key', description: 'credential record whose provider session should be disconnected.' }, { name: 'signal', description: 'optional cancellation signal for provider teardown.' }],
+        returns: 'once provider teardown completed and the marker is verified absent.',
+      },
+      {
         signature: 'cancel(key: CredentialKey): void',
         description: 'Withdraw the attempt running for a key, if any. Separate from the request\'s own signal because a request/response transport answers a Cancel button on a second call, with no handle on the first one\'s signal.',
         parameters: [{ name: 'key', description: 'the credential record whose attempt should stop.' }],
@@ -1170,7 +1176,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. HARDNESS protection then clamps the result: the live runtime/data roots are never writable through model-controlled capabilities, and unconfined access becomes workspace-confined while protection is active.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
         returns: 'the fully resolved per-call mode and absolute workspace root.',
       },
@@ -1889,7 +1895,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'abstract spawnTerminal(spec: SubprocessTerminalSpawnSpec): Promise<SubprocessTerminalHandle>',
-        description: 'Allocate a real terminal and start one owned process session. This is the only non-pipe process primitive: implementations own terminal byte I/O, foreground groups, signals, and complete session-tree cleanup.',
+        description: 'Allocate a real terminal and start one owned process session. This is the only non-pipe process primitive: implementations own terminal byte I/O, foreground groups, signals, and complete session-tree cleanup behind one awaited termination method; readiness and persistent-shell policy stay in the PTY consumer. Its output stream ends after queued terminal output when the top-level process exits.',
         parameters: [{ name: 'spec', description: 'fully specified argv, cwd, environment, dimensions, grace, and allocation cancellation.' }],
         returns: 'the live terminal handle after allocation succeeds.',
       },
@@ -2994,7 +3000,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AuthorizationAccountTelemetry',
-    declaration: 'export interface AuthorizationAccountTelemetry {\n    kind: \'account\';\n    provider: string;\n    accountType?: string;\n    email?: string;\n    plan?: string;\n    primaryLimit?: AuthorizationRateLimitWindow;\n    secondaryLimit?: AuthorizationRateLimitWindow;\n    credits?: AuthorizationCreditsTelemetry;\n    usage?: AuthorizationUsageTelemetry;\n}',
+    declaration: 'export interface AuthorizationAccountTelemetry {\n    kind: \'account\';\n    provider: string;\n    accountType?: string;\n    email?: string;\n    plan?: string;\n    primaryLimit?: AuthorizationRateLimitWindow;\n    secondaryLimit?: AuthorizationRateLimitWindow;\n    credits?: AuthorizationCreditsTelemetry;\n    usage?: AuthorizationUsageTelemetry;\n    connectors?: readonly AuthorizationConnectorTelemetry[];\n}',
+  },
+  {
+    name: 'AuthorizationConnectorTelemetry',
+    declaration: 'export interface AuthorizationConnectorTelemetry {\n    id: string;\n    name: string;\n    description?: string;\n    iconUrl?: string;\n    iconUrlDark?: string;\n    category?: string;\n    installUrl?: string;\n    accessible: boolean;\n    enabled: boolean;\n    installed?: boolean;\n    callable?: boolean;\n}',
   },
   {
     name: 'AuthorizationCreditsTelemetry',
@@ -3002,11 +3012,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AuthorizationEntry',
-    declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n}',
+    declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n    disconnectable?: true;\n}',
   },
   {
     name: 'AuthorizationFlow',
-    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>;\n    run(session: AuthorizationSession): Promise<void>;\n}',
+    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>;\n    disconnect?(signal?: AbortSignal): Promise<void>;\n    run(session: AuthorizationSession): Promise<void>;\n}',
   },
   {
     name: 'AuthorizationInteraction',

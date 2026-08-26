@@ -5,12 +5,14 @@ const MAX_FIELDS = 24
 const MAX_DEPTH = 4
 const MAX_VALUE_LENGTH = 4_096
 
+/** One bounded field promoted from a provider error payload. */
 export interface StructuredErrorField {
   readonly label: string
   readonly value: string
   readonly technical: boolean
 }
 
+/** Safe user-facing normalization of one structured provider failure. */
 export interface StructuredErrorPresentation {
   readonly title: string
   readonly message?: string
@@ -57,7 +59,11 @@ function bounded(value: string): string {
   return value.length <= MAX_VALUE_LENGTH ? value : `${value.slice(0, MAX_VALUE_LENGTH)}…`
 }
 
-/** Translate only generic error prose, never identifiers, provider/model names, enum values, IDs or URLs. */
+/**
+ * Translate only generic error prose.
+ * @param value - provider prose to normalize.
+ * @returns normalized prose with identifiers preserved.
+ */
 export function translateGenericErrorProse(value: string): string {
   return value
     .replace(/\bThis request requires more credits, or fewer max_tokens\b/giu, 'Esta solicitud requiere más créditos o un max_tokens menor')
@@ -222,6 +228,9 @@ function fallbackAction(code: string | undefined): string | undefined {
 /**
  * Convert a JSON-bearing error string into safe Spanish presentation data.
  * Arbitrary chat JSON is unaffected because callers use this only on error nodes.
+ * @param input - JSON error string.
+ * @param explicitCode - optional transport/status code.
+ * @returns a bounded presentation model or undefined.
  */
 export function formatStructuredError(
   input: string,

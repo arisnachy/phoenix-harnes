@@ -3589,12 +3589,20 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               // The key did not address a record this deployment stores; leave stored off.
             }
           }
+          let telemetry
+          try {
+            telemetry = await authorization.inspect(entry.key)
+          } catch {
+            // Live provider inspection is optional; the flow itself remains usable.
+          }
           return {
             key: String(entry.key),
             label: entry.label,
             methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
             inFlight: entry.inFlight,
+            ...(entry.disconnectable === true ? { disconnectable: true as const } : {}),
             ...stored === undefined ? {} : { stored },
+            ...telemetry === undefined ? {} : { telemetry },
           }
         }))
         return ok(request, { entries })
@@ -3694,6 +3702,32 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ctx.get('authorization')?.cancel(parseCredentialKey(attempt.key))
         }
         return Promise.resolve(ok(request, { cancelled: true as const }))
+      },
+
+      async disconnect(request, signal) {
+        const authorization = ctx.get('authorization')
+        if (authorization === undefined) {
+          return err(request, {
+            code: 'internal',
+            message: 'authorization service is absent: this deployment does not mount an authorization provider',
+            details: {},
+          })
+        }
+        let key: ReturnType<typeof parseCredentialKey>
+        try {
+          key = parseCredentialKey(request.payload.key)
+        } catch {
+          return err(request, { code: 'internal', message: 'authorization key is invalid', details: {} })
+        }
+        try {
+          await authorization.disconnect(key, signal)
+          return ok(request, { disconnected: true as const })
+        } catch (error: unknown) {
+          if (signal?.aborted === true) {
+            return err(request, { code: 'cancelled', message: 'authorization disconnect was aborted', details: {} })
+          }
+          return err(request, { code: 'internal', message: authorizationFailure(error), details: {} })
+        }
       },
     },
 

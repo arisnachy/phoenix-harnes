@@ -184,7 +184,11 @@ function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
 }
 
-/** Resolve broker configuration without inventing scopes or a deployment identity. */
+/**
+ * Resolve broker configuration without inventing scopes or a deployment identity.
+ * @param config - deployment-owned Google OAuth client id and requested scopes.
+ * @returns validated, normalized broker configuration.
+ */
 export function resolveGoogleSpec(config: Config): ResolvedSpec {
   if (!Array.isArray(config.scopes) || config.scopes.length === 0) {
     throw new TypeError('authorization-google: scopes must contain at least one OAuth scope')
@@ -451,7 +455,10 @@ export default class GoogleApiBroker extends Service {
     }))
   }
 
-  /** Secret-free telemetry exists only while this process owns a live grant. */
+  /**
+   * Secret-free telemetry exists only while this process owns a live grant.
+   * @returns sanitized Google account and service capability telemetry, when connected.
+   */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
     await this.startupCleanup
     const grant = this.grant
@@ -465,7 +472,11 @@ export default class GoogleApiBroker extends Service {
       }
   }
 
-  /** Execute one request inside a fixed Google service boundary. */
+  /**
+   * Execute one request inside a fixed Google service boundary.
+   * @param request - bounded Google service request.
+   * @returns the bounded response without credential-bearing headers.
+   */
   async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {
     const destination = serviceUrl(request)
     const headers = callerHeaders(request.headers)
@@ -482,7 +493,10 @@ export default class GoogleApiBroker extends Service {
     }
   }
 
-  /** Clear the process grant and secret-free marker even when provider revocation fails. */
+  /**
+   * Clear the process grant and secret-free marker even when provider revocation fails.
+   * @returns whether Google acknowledged token revocation.
+   */
   async disconnect(): Promise<{ revoked: boolean }> {
     await this.startupCleanup
     const grant = this.grant

@@ -36,9 +36,9 @@ A runtime switch is one log-only `sandbox/mode` event on the session it applies 
 
 ### Current file sandbox policy
 
-#### What the model sees
-
 One `sandbox:policy` contribution in the current runtime-context snapshot for every agent session. It does not enumerate mounted capabilities. Tool plugins retain operation and escalation guidance, approval policy contributes separately to the same snapshot, and plan guidance remains `dsh-plan-mode`'s system section. With launcher HARDNESS protection active, the same contribution states that the live PHOENIX runtime and data home are protected and directs self-modification to the isolated evolution worktree.
+
+#### What the model sees
 
 ##### Read-only
 

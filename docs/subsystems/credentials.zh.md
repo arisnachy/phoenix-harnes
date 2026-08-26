@@ -99,6 +99,16 @@ describe(key: CredentialKey): AuthorizationEntry | undefined
 inspect(key: CredentialKey, signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>
 
 /**
+ * Ask the owning flow to revoke/logout its provider session, then verify the
+ * corresponding credential marker is gone. A flow that exposes no teardown
+ * cannot be disconnected by deleting storage behind its back.
+ * @param key - credential record whose provider session should be disconnected.
+ * @param signal - optional cancellation signal for provider teardown.
+ * @returns once provider teardown completed and the marker is verified absent.
+ */
+async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void>
+
+/**
  * Withdraw the attempt running for a key, if any. Separate from the
  * request's own signal because a request/response transport answers a Cancel
  * button on a second call, with no handle on the first one's signal.

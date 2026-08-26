@@ -528,6 +528,7 @@ export abstract class AbstractApiClient implements IApiClient {
   }
 }
 
+/** API client routing fetches directly into an in-process host handler. */
 export class InProcessApiClient extends AbstractApiClient {
   constructor(private readonly handler: { fetch: typeof fetch }, timeoutMs?: number) {
     super(timeoutMs)
