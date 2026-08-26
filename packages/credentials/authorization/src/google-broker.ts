@@ -389,8 +389,8 @@ export default class GoogleApiBroker extends Service {
 
   private readonly spec: ResolvedSpec
   private readonly startupCleanup: Promise<void>
-  private grant?: GoogleGrant
-  private refreshInFlight?: Promise<GoogleGrant>
+  private grant: GoogleGrant | undefined
+  private refreshInFlight: Promise<GoogleGrant> | undefined
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
