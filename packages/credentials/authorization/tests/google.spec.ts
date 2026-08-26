@@ -144,13 +144,14 @@ describe('Google Workspace OAuth authorization boundary', () => {
   it('rejects a mismatched OAuth state before accepting an authorization code', async () => {
     const controller = new AbortController()
     const receiver = await originalOpenLoopback('expected-state', controller.signal)
+    const rejected = expect(receiver.code).rejects.toMatchObject({ code: 'GOOGLE_STATE_MISMATCH' })
     const callback = new URL(receiver.redirectUri)
     callback.searchParams.set('state', 'wrong-state')
     callback.searchParams.set('code', 'must-not-be-accepted')
 
     const response = await fetch(callback)
     expect(response.status).toBe(400)
-    await expect(receiver.code).rejects.toMatchObject({ code: 'GOOGLE_STATE_MISMATCH' })
+    await rejected
     await receiver.close()
   })
 })
