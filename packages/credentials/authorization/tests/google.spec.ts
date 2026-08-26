@@ -25,6 +25,8 @@ const SCOPES = [
   'https://www.googleapis.com/auth/contacts',
 ] as const
 
+const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
+
 function googleApi(ctx: Context): GoogleApiBroker {
   const service = ctx.get('googleApi')
   if (!(service instanceof GoogleApiBroker)) throw new Error('Google API broker is not mounted')
@@ -229,6 +231,34 @@ describe('Google Workspace API broker', () => {
     expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toEqual({ kind: 'api-key' })
     expect(JSON.stringify(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)))
       .not.toMatch(/refreshed-access|rotated-refresh|refresh-token-private/)
+  })
+
+  it('rechecks each caller scope after callers share one in-flight refresh', async () => {
+    const ctx = await harness()
+    internals.now = () => 1_000_000
+    await authorize(ctx, { expires_in: 1 })
+
+    internals.now = () => 2_000_000
+    const refresh = Promise.withResolvers<Response>()
+    let apiCalls = 0
+    internals.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input) === 'https://oauth2.googleapis.com/token') return refresh.promise
+      apiCalls += 1
+      return new Response('{}', { status: 200 })
+    }) as typeof fetch
+
+    const gmailRequest = googleApi(ctx).request({ service: 'gmail', path: 'users/me/messages?maxResults=1' })
+    const driveRequest = googleApi(ctx).request({ service: 'drive', path: 'files?pageSize=1' })
+    refresh.resolve(tokenResponse({
+      access_token: 'gmail-only-access',
+      refresh_token: 'gmail-only-refresh',
+      scope: GMAIL_SCOPE,
+    }))
+
+    await expect(gmailRequest).resolves.toMatchObject({ status: 200, ok: true })
+    await expect(driveRequest).rejects.toMatchObject({ code: 'GOOGLE_SCOPE_DENIED' })
+    expect(apiCalls).toBe(1)
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toEqual({ kind: 'api-key' })
   })
 
   it('fails closed on caller-controlled destinations and credential headers', async () => {
