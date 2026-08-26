@@ -29,38 +29,17 @@ jobs:
           node-version: ${{ env.PRIMARY_NODE_VERSION }}
           cache: pnpm
 
-      - name: Normalize release sources and self-delete
+      - name: Remove obsolete Knip entry if present and self-delete
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-
-          knip = Path('knip.json')
-          text = knip.read_text()
+          p = Path('knip.json')
+          text = p.read_text()
           orphan = '        "scripts/promote-client-artifacts.ts",\n'
           if orphan in text:
-              text = text.replace(orphan, '', 1)
-              knip.write_text(text)
-
-          api = Path('packages/sdk/client/src/api.ts')
-          text = api.read_text()
-          old = "  /** @returns once the shared runtime subprocess is closed. */\n  close(): Promise<void> {"
-          new = "  /**\n   * Shut down the shared runtime subprocess and permanently close this harness.\n   * @returns once the shared runtime subprocess is closed.\n   */\n  close(): Promise<void> {"
-          if old in text:
-              api.write_text(text.replace(old, new, 1))
-          elif new not in text:
-              raise SystemExit('DeepSeekHarness.close JSDoc shape was not recognized')
-
-          readme = Path('packages/sandbox/sandbox-policy/README.md')
-          text = readme.read_text()
-          prose = "One `sandbox:policy` contribution in the current runtime-context snapshot for every agent session. It does not enumerate mounted capabilities. Tool plugins retain operation and escalation guidance, approval policy contributes separately to the same snapshot, and plan guidance remains `dsh-plan-mode`'s system section. With launcher HARDNESS protection active, the same contribution states that the live PHOENIX runtime and data home are protected and directs self-modification to the isolated evolution worktree."
-          old = f"### Current file sandbox policy\n\n{prose}\n\n#### What the model sees\n"
-          new = f"### Current file sandbox policy\n\n#### What the model sees\n\n{prose}\n"
-          if old in text:
-              readme.write_text(text.replace(old, new, 1))
-          elif new not in text:
-              raise SystemExit('sandbox Model Experience shape was not recognized')
+              p.write_text(text.replace(orphan, '', 1))
           PY
           git rm .github/workflows/kira-main-stable-promote.yml
 
