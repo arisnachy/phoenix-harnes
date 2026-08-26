@@ -36,7 +36,7 @@ jobs:
           pnpm run gen-cordis-catalog
       - name: Refresh affected translation records
         run: |
-          pnpm run verify-translation-pairing -- --write \
+          pnpm exec tsx scripts/verify-translation-pairing.ts --write \
             .agents/notes/implemented/process/2026-08-24-phoenix-package-scope-migration.md \
             docs/codex-plugin-arsenal.md \
             docs/config-catalog.md \
