@@ -360,11 +360,6 @@ async function readAccount(
   }
 }
 
-/**
- * Read the optional Codex Apps catalog. Old pinned Codex releases may not expose
- * these experimental methods; that capability miss must never break account,
- * quota, login, or model operation.
- */
 async function readOptionalCodexApps(
   connection: CodexAccountConnection,
   signal: AbortSignal,
@@ -398,18 +393,10 @@ async function readOptionalCodexApps(
     }
     return { apps: { data }, ...installedApps === undefined ? {} : { installedApps } }
   } catch {
-    // Capability probing is deliberately fail-soft for Codex 0.147.x compatibility.
     return {}
   }
 }
 
-/**
- * Read the native Codex account plus rate-limit/token-activity snapshots.
- * @param ctx - Cordis context used to spawn the Codex app-server.
- * @param config - environment and disposal policy for the native bridge.
- * @param signal - optional cancellation signal for the account read.
- * @returns the current secret-free Codex account snapshot.
- */
 export async function readCodexAccountSnapshot(
   ctx: Context,
   config: CodexAccountBridgeConfig,
@@ -443,7 +430,23 @@ async function commitManagedAccountMarker(ctx: Context): Promise<void> {
   await ctx.credentials.modifyRecord(CODEX_ACCOUNT_KEY, async () => ({ kind: 'api-key' }))
 }
 
-/** Run Codex-managed browser login and commit only a secret-free harness marker. */
+async function logoutManagedChatGpt(
+  ctx: Context,
+  config: CodexAccountBridgeConfig,
+  signal: AbortSignal,
+): Promise<void> {
+  const connection = await openConnection(ctx, config, signal)
+  try {
+    await Promise.race([
+      connection.request('account/logout', {}, signal),
+      connection.processEnded(),
+    ])
+    await ctx.credentials.deleteRecord(CODEX_ACCOUNT_KEY)
+  } finally {
+    await connection.close()
+  }
+}
+
 async function loginManagedChatGpt(
   ctx: Context,
   config: CodexAccountBridgeConfig,
@@ -507,12 +510,6 @@ async function loginManagedChatGpt(
   }
 }
 
-/**
- * Register the native Codex account authorization flow.
- * @param ctx - Cordis context that owns authorization and subprocess services.
- * @param config - environment and disposal policy for the native bridge.
- * @returns disposer that unregisters the Codex account flow.
- */
 export function registerCodexAccountFlow(
   ctx: Context,
   config: CodexAccountBridgeConfig,
@@ -524,6 +521,9 @@ export function registerCodexAccountFlow(
     async inspect(signal) {
       const snapshot = await readCodexAccountSnapshot(ctx, config, signal)
       return codexAccountTelemetry(snapshot)
+    },
+    async disconnect(signal) {
+      await logoutManagedChatGpt(ctx, config, signal ?? new AbortController().signal)
     },
     async run(session) {
       await loginManagedChatGpt(ctx, config, session)
