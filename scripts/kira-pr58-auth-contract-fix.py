@@ -38,3 +38,5 @@ patch(
     "      async cancel(request) {\n        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }\n      },\n    },",
     "      async cancel(request) {\n        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }\n      },\n      async disconnect(request) {\n        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }\n      },\n    },",
 )
+
+# Trigger the focal workflow after the workflow definition exists on the branch.
