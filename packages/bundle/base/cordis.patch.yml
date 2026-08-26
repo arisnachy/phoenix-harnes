@@ -98,8 +98,9 @@
       name: '@deepseek-ai/dsh-authorization'
 
     # Google Workspace authorization is host-owned: the Desktop OAuth client id
-    # is public application identity, while access/refresh tokens remain private
-    # to the broker and never enter the credential document or model/tool plane.
+    # is public application identity. Access/refresh tokens are stored only in
+    # the owner-scoped opaque credential grant; authorization/model surfaces see
+    # metadata and Google API results, never the grant payload or Bearer header.
     # Google installed apps do not support incremental authorization, so the
     # capabilities shipped by this bundle are one explicit human consent set.
     - id: authorization-google
