@@ -73,6 +73,9 @@ interface ServiceSpec {
   base: string
   uploadBase?: string
   scope: string
+  name: string
+  description: string
+  category: string
 }
 
 const SERVICES: Readonly<Record<GoogleWorkspaceService, ServiceSpec>> = {
@@ -80,32 +83,69 @@ const SERVICES: Readonly<Record<GoogleWorkspaceService, ServiceSpec>> = {
     base: 'https://gmail.googleapis.com/gmail/v1/',
     uploadBase: 'https://gmail.googleapis.com/upload/gmail/v1/',
     scope: 'https://www.googleapis.com/auth/gmail.modify',
+    name: 'Gmail',
+    description: 'Read, organize, draft, and send mail through the user-authorized Gmail scope.',
+    category: 'Communication',
   },
   calendar: {
     base: 'https://www.googleapis.com/calendar/v3/',
     scope: 'https://www.googleapis.com/auth/calendar',
+    name: 'Google Calendar',
+    description: 'Read and manage calendars and events with the connected Google account.',
+    category: 'Productivity',
   },
   drive: {
     base: 'https://www.googleapis.com/drive/v3/',
     uploadBase: 'https://www.googleapis.com/upload/drive/v3/',
     scope: 'https://www.googleapis.com/auth/drive',
+    name: 'Google Drive',
+    description: 'Find, read, create, and manage files in Google Drive.',
+    category: 'Storage',
   },
   docs: {
     base: 'https://docs.googleapis.com/v1/',
     scope: 'https://www.googleapis.com/auth/documents',
+    name: 'Google Docs',
+    description: 'Read and edit Google Docs through the official Documents API.',
+    category: 'Productivity',
   },
   sheets: {
     base: 'https://sheets.googleapis.com/v4/',
     scope: 'https://www.googleapis.com/auth/spreadsheets',
+    name: 'Google Sheets',
+    description: 'Read and edit spreadsheets through the Google Sheets API.',
+    category: 'Productivity',
   },
   slides: {
     base: 'https://slides.googleapis.com/v1/',
     scope: 'https://www.googleapis.com/auth/presentations',
+    name: 'Google Slides',
+    description: 'Read and edit presentations through the Google Slides API.',
+    category: 'Productivity',
   },
   contacts: {
     base: 'https://people.googleapis.com/v1/',
     scope: 'https://www.googleapis.com/auth/contacts',
+    name: 'Google Contacts',
+    description: 'Read and manage contacts through the Google People API.',
+    category: 'Communication',
   },
+}
+
+function serviceTelemetry(grant: GoogleGrant): NonNullable<Extract<AuthorizationTelemetry, { kind: 'account' }>['connectors']> {
+  return (Object.entries(SERVICES) as Array<[GoogleWorkspaceService, ServiceSpec]>).map(([id, spec]) => {
+    const granted = grant.scopes.includes(spec.scope)
+    return {
+      id,
+      name: spec.name,
+      description: spec.description,
+      category: spec.category,
+      accessible: true,
+      enabled: true,
+      installed: granted,
+      callable: granted,
+    }
+  })
 }
 
 /** One Host-side Google API operation through the broker. */
@@ -413,9 +453,15 @@ export default class GoogleApiBroker extends Service {
   /** Secret-free telemetry exists only while this process owns a live grant. */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
     await this.startupCleanup
-    return this.grant === undefined
+    const grant = this.grant
+    return grant === undefined
       ? undefined
-      : { kind: 'account', provider: 'google', accountType: 'oauth' }
+      : {
+        kind: 'account',
+        provider: 'Google Workspace',
+        accountType: 'oauth',
+        connectors: serviceTelemetry(grant),
+      }
   }
 
   /** Execute one request inside a fixed Google service boundary. */
