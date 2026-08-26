@@ -571,7 +571,7 @@ export default class GoogleApiBroker extends Service {
     }
     const next: GoogleGrant = {
       accessToken: token.access_token,
-      refreshToken: token.refresh_token ?? current.refreshToken,
+      refreshToken: token.refresh_token ?? refreshToken,
       expiresAt: internals.now() + token.expires_in * 1000,
       scopes: token.scope === undefined ? current.scopes : parseGrantedScopes(token.scope),
     }
