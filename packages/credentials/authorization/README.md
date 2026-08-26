@@ -75,7 +75,7 @@ The current Windows restricted-token sandbox limits writes but not reads, so it 
 
 ## Model Experience
 
-None directly: authorization is a configuration-time conversation with a human, and no flow, notice, prompt, OAuth token, credential payload, or broker authentication header enters a model request. Model-visible Google tools receive only the Google API data their owning integration chooses to return.
+None, as authorization is a configuration-time conversation with a human and no flow, notice, prompt, OAuth token, credential payload, or broker authentication header enters a model request.
 
 #### KV Cache effect
 

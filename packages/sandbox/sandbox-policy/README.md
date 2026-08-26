@@ -58,8 +58,6 @@ Current PHOENIX file policy: workspace-write. Any available operation enforced b
 Current PHOENIX file policy: danger-full-access. The PHOENIX file sandbox does not restrict file modifications by available operations.
 ```
 
-The `danger-full-access` text is reachable only when launcher HARDNESS protection is absent. A protected PHOENIX launch resolves model-controlled full access to `workspace-write` before this context is rendered.
-
 #### Token effect
 
 One concise durable context message on the first request and each effective policy change; unchanged requests add nothing. `workspace-write` carries only the canonical session workspace path; platform-specific temporary paths are summarized without adding host-dependent bytes. HARDNESS-protected self-edit sessions additionally carry the isolated evolution root in the same context contribution.

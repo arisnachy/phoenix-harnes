@@ -1,4 +1,5 @@
 # Agent Note: Búsqueda web resiliente con fallback
+
 Status: implemented
 
 [English](2026-08-26-web-search-free-fallback.md) | 中文

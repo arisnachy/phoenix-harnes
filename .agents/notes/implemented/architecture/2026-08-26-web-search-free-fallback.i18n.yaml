@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-26-web-search-free-fallback.md
-2026-08-26-web-search-free-fallback.md: 65381e469999e9c88788ef1725c4de710935a02d
-2026-08-26-web-search-free-fallback.zh.md: 31d5541460c93a0d0ea6fdbd494909f3034d756c
+2026-08-26-web-search-free-fallback.md: 7f3bb7a193992c208912db6f32c4b51183085fad
+2026-08-26-web-search-free-fallback.zh.md: ab94aba6177b1bda753c5ce0906c29c7602d4412

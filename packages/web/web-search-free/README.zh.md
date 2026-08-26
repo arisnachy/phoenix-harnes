@@ -8,9 +8,11 @@ PHOENIX 的无密钥搜索提供程序。按顺序查询 Bing HTML 和 DuckDuckG
 
 ## Model Experience
 
+### Conversation tool result, indirectly
+
 #### What the model sees
 
-通过 `dsh-tool-web`，模型会在稳定的 `web_search` 契约下收到规范化 URL 来源和受限摘要。Bing 或 DuckDuckGo 的失败不会暴露凭据或原始 HTML。
+通过 [`dsh-tool-web`](../tool-web/README.zh.md)，模型会在稳定的 `web_search` 契约下收到受 `maxResults` 限制的 URL、标题和规范化摘要；Bing 或 DuckDuckGo 的失败不会暴露凭据或原始 HTML。
 
 #### Token effect
 
