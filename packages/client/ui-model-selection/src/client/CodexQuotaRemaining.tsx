@@ -1,7 +1,7 @@
 /** Compact native Codex quota for the Settings trigger trailing seat. */
 import { useEffect, useState } from 'react'
 import type { IApiClient, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
-import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelDirectory } from './directory.ts'
 import css from './CodexQuotaRemaining.module.css'
 
@@ -34,9 +34,11 @@ export interface CodexQuotaRemainingInjected {
   directoryFor: (sessionId: SessionId) => ModelDirectory
 }
 
-/** Settings trailing-seat props plus the model/account faces owned by this feature. */
-export type CodexQuotaRemainingProps =
-  PropsRuntime<'settings.trigger.trailing'> & InjectFace<CodexQuotaRemainingInjected>
+/** Minimal runtime seats actually consumed from the session-maybe Settings outlet. */
+export type CodexQuotaRemainingProps = {
+  wide: boolean
+  sessionId: SessionId | undefined
+} & InjectFace<CodexQuotaRemainingInjected>
 
 const QUOTA_REFRESH_MS = 60_000
 
@@ -57,7 +59,7 @@ function remaining(limit: RateLimitWindow): number {
 /**
  * Show native Codex account quota only when the current session is routed to
  * an OpenAI/Codex provider. Non-OpenAI selections reserve no sidebar space.
- * @param props - session-maybe runtime props plus account/model directory faces.
+ * @param props - session identity/sidebar state plus account/model-directory faces.
  * @returns the compact quota chip or null.
  */
 export function CodexQuotaRemaining({
@@ -71,15 +73,13 @@ export function CodexQuotaRemaining({
       setSelection(undefined)
       return
     }
-    const id = sessionId as SessionId
+    const id = sessionId
     const directory = directoryFor(id)
     const sync = (): void => {
       setSelection({ sessionId: id, provider: directory.store.getSnapshot().current?.provider })
     }
     sync()
     const stop = directory.store.subscribe(sync)
-    // The model selector owns the same directory. Loading here resolves the
-    // provider even when the user has not opened the selector in this session.
     void directory.load().catch(() => { /* no provider fact = no meter */ })
     return stop
   }, [directoryFor, sessionId, wide])
@@ -100,7 +100,6 @@ export function CodexQuotaRemaining({
         const limit = telemetry?.primaryLimit ?? telemetry?.secondaryLimit
         if (!stale) setQuota(limit === undefined ? undefined : remaining(limit))
       } catch {
-        // Non-critical chrome: hide stale/unknown quota rather than inventing a number.
         if (!stale) setQuota(undefined)
       }
     }
