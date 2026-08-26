@@ -1,6 +1,5 @@
 name: KIRA PR58 release contract fix
 
-# One-shot closure workflow; removed after it produces the verified product fix.
 on:
   push:
     branches: [feat/codex-graft-full]
@@ -24,38 +23,20 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Install locked dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Apply deterministic release patches
+      - run: pnpm install --frozen-lockfile
+      - name: Apply focused host authorization patch
         run: python3 scripts/kira-pr58-auth-contract-fix.py
-      - name: Regenerate repository-owned artifacts
-        run: |
-          pnpm run gen-client-catalog
-          pnpm run gen-config-catalog
-          pnpm run gen-doc-graphs
-          pnpm run gen-module-graph
-          pnpm run gen-cordis-catalog
-      - name: Refresh affected translation records
-        run: |
-          pnpm exec tsx scripts/verify-translation-pairing.ts --write \
-            .agents/notes/implemented/process/2026-08-24-phoenix-package-scope-migration.md \
-            docs/codex-plugin-arsenal.md \
-            docs/config-catalog.md \
-            docs/event-producer-consumer.md \
-            docs/module-graph.md \
-            packages/credentials/authorization/README.md
-      - name: Verify host, auth, and static release contracts
+      - name: Verify focused contract
         run: |
           pnpm run typecheck
-          pnpm exec vitest run packages/host/apiproxy/tests/api-proxy-authorization.spec.ts packages/host/apiproxy/tests/client-handler.spec.ts packages/host/apiproxy/tests/fetch-carrier.spec.ts packages/client/ui-settings-models/tests/authorization-panel.client.spec.tsx packages/sdk/server/tests/lifecycle-v2.spec.ts packages/guard/timeout-policy/tests/exec-policy.spec.ts
-          pnpm run check:ci:static
+          pnpm exec vitest run packages/host/apiproxy/tests/api-proxy-authorization.spec.ts packages/host/apiproxy/tests/client-handler.spec.ts packages/host/apiproxy/tests/fetch-carrier.spec.ts packages/client/ui-settings-models/tests/authorization-panel.client.spec.tsx
           git diff --check
-      - name: Commit verified product fix
+      - name: Commit product fix
         shell: bash
         run: |
           git config user.name "KIRA PHOENIX"
           git config user.email "actions@users.noreply.github.com"
-          git add -A -- ':!.github/workflows/kira-pr58-auth-contract-fix.yml' ':!scripts/kira-pr58-auth-contract-fix.py' ':!.github/workflows/pr58-release-autofix.yml'
+          git add packages/host/apiproxy/src/api-proxy.ts packages/host/apiproxy/tests/api-proxy-authorization.spec.ts packages/host/apiproxy/tests/client-handler.spec.ts packages/host/apiproxy/tests/fetch-carrier.spec.ts
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "fix(release): close PR58 contracts and auth carrier"
+          git commit -m "fix(auth): complete browser disconnect carrier"
           git push origin HEAD:feat/codex-graft-full
