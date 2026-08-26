@@ -97,11 +97,35 @@ jobs:
           zh_path = Path('docs/config-catalog.zh.md')
           en = en_path.read_text()
           zh = zh_path.read_text()
+
+          # The timeout-policy package gained a real Config in #58. The reviewed
+          # Chinese peer still listed it among packages without config. Insert the
+          # generated technical contract in the same package position, translating
+          # only the catalog metadata; keep TypeScript byte-identical to English.
+          timeout_anchor = '<a id="deepseek-aidsh-tool-call-timeout-policy"></a>'
+          next_anchor = '<a id="deepseek-aidsh-tool-fs"></a>'
+          if timeout_anchor in en and timeout_anchor not in zh:
+              start = en.index(timeout_anchor)
+              end = en.index(next_anchor, start)
+              section = en[start:end]
+              section = section.replace('\nRequires: `tools`\n', '\n需要：`tools`\n', 1)
+              section = section.replace('\nSource: [', '\n来源：[', 1)
+              if next_anchor not in zh:
+                  raise SystemExit('config-catalog Chinese insertion anchor missing')
+              zh = zh.replace(next_anchor, section + next_anchor, 1)
+              zh = re.sub(
+                  r'^- `@deepseek-ai/dsh-tool-call-timeout-policy`[^\n]*\n',
+                  '',
+                  zh,
+                  count=1,
+                  flags=re.M,
+              )
+
           fence = re.compile(r'```ts config-catalog\n.*?\n```', re.S)
           en_blocks = fence.findall(en)
           zh_blocks = fence.findall(zh)
           if len(en_blocks) != len(zh_blocks):
-              raise SystemExit(f'config-catalog fence count differs after main merge: EN={len(en_blocks)} ZH={len(zh_blocks)}')
+              raise SystemExit(f'config-catalog fence count differs after synchronization: EN={len(en_blocks)} ZH={len(zh_blocks)}')
           iterator = iter(en_blocks)
           zh = fence.sub(lambda _: next(iterator), zh)
           zh_path.write_text(zh)
