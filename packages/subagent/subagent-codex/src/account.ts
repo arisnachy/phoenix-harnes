@@ -9,12 +9,12 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  AuthorizationConnectorTelemetry,
   AuthorizationRateLimitWindow,
   AuthorizationSession,
   AuthorizationTelemetry,
   AuthorizationUsageTelemetry,
 } from '@deepseek-ai/dsh-authorization'
+import type { AuthorizationConnectorTelemetry } from '@deepseek-ai/dsh-authorization/types'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
