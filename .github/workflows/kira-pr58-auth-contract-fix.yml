@@ -1,5 +1,6 @@
 name: KIRA PR58 release contract fix
 
+# One-shot closure workflow; removed after it produces the verified product fix.
 on:
   push:
     branches: [feat/codex-graft-full]
