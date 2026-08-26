@@ -8,6 +8,8 @@ No almacena credenciales ni convierte una respuesta anti-bot en una cita. La nav
 
 ## Model Experience
 
+#### What the model sees
+
 A través de `dsh-tool-web`, el modelo recibe fuentes URL normalizadas y snippets acotados bajo el contrato estable `web_search`. Los fallos de Bing o DuckDuckGo no se exponen como credenciales ni HTML crudo.
 
 #### Token effect

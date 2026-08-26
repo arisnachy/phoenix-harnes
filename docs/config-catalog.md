@@ -3223,6 +3223,7 @@ Source: [`packages/web/web-search-exa/src/index.ts:38`](../packages/web/web-sear
 Requires: `web`
 
 ```ts config-catalog
+/** Cordis configuration for the keyless search provider. */
 export interface Config {
   /** Ordered public HTML engines; defaults to Bing followed by DuckDuckGo. */
   engines?: FreeSearchEngine[]
@@ -3230,10 +3231,11 @@ export interface Config {
   timeoutMs?: number
 }
 
+/** Public HTML search engine supported by the keyless provider. */
 export type FreeSearchEngine = 'bing' | 'duckduckgo'
 ```
 
-Source: [`packages/web/web-search-free/src/index.ts:12`](../packages/web/web-search-free/src/index.ts)
+Source: [`packages/web/web-search-free/src/index.ts:13`](../packages/web/web-search-free/src/index.ts)
 
 <a id="deepseek-aidsh-web-search-openrouter"></a>
 
