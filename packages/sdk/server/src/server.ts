@@ -105,7 +105,11 @@ export class HarnessSdkJsonRpcServer {
     }))
   }
 
-  /** Configure the SDK route and negotiate optional protocol features. */
+  /**
+   * Configure the SDK route and negotiate optional protocol features.
+   * @param params - runtime route, model, limits, and optional protocol version.
+   * @returns server identity and negotiated protocol capabilities.
+   */
   async initialize(params: InitializeParams): Promise<InitializeResult> {
     if (params.maxTokens !== undefined
       && (!Number.isSafeInteger(params.maxTokens) || params.maxTokens <= 0)) {
@@ -136,7 +140,11 @@ export class HarnessSdkJsonRpcServer {
     }
   }
 
-  /** Queue one identified prompt without assigning later activity to it. */
+  /**
+   * Queue one identified prompt without assigning later activity to it.
+   * @param params - target session and prompt content blocks.
+   * @returns the queued user-message identifier.
+   */
   async prompt(params: SessionPromptParams): Promise<SessionPromptResult> {
     const rec = await this.getOrCreateSession(params.sessionId)
     if (this.ctx.agents.get(rec.handle.agent.id) !== rec.handle.agent) {
@@ -147,7 +155,11 @@ export class HarnessSdkJsonRpcServer {
     return { messageId: message.id }
   }
 
-  /** Cancel only the current activity of one SDK-owned session. */
+  /**
+   * Cancel only the current activity of one SDK-owned session.
+   * @param params - target SDK session.
+   * @returns existence and prior running state.
+   */
   async interrupt(params: SessionLifecycleParams): Promise<SessionInterruptResult> {
     const rec = await this.loadedSession(params.sessionId)
     if (rec === undefined || this.ctx.agents.get(rec.handle.agent.id) !== rec.handle.agent) {
@@ -159,7 +171,11 @@ export class HarnessSdkJsonRpcServer {
     return { found: true, wasRunning }
   }
 
-  /** Dispose one SDK-owned session while leaving the runtime and other sessions alive. */
+  /**
+   * Dispose one SDK-owned session while leaving the runtime and other sessions alive.
+   * @param params - target SDK session.
+   * @returns whether that session was found.
+   */
   closeSession(params: SessionLifecycleParams): Promise<SessionCloseResult> {
     const existing = this.sessionCloseTasks.get(params.sessionId)
     if (existing !== undefined) return existing
@@ -178,7 +194,10 @@ export class HarnessSdkJsonRpcServer {
     return { found: true }
   }
 
-  /** Dispose server-owned agents, adapter, and subscriptions to quiescence. */
+  /**
+   * Dispose server-owned agents, adapter, and subscriptions to quiescence.
+   * @returns an empty success record after teardown.
+   */
   shutdown(): Promise<Record<string, never>> {
     this.shutdownTask ??= this.performShutdown()
     return this.shutdownTask
@@ -214,7 +233,12 @@ export class HarnessSdkJsonRpcServer {
     return {}
   }
 
-  /** Dispatch one incoming JSON-RPC request to its typed handler. */
+  /**
+   * Dispatch one incoming JSON-RPC request to its typed handler.
+   * @param method - protocol method name.
+   * @param params - decoded request parameters.
+   * @returns typed handler result.
+   */
   async handleRequest(method: string, params: Record<string, unknown> | undefined): Promise<unknown> {
     switch (method) {
       case 'initialize':
@@ -265,7 +289,10 @@ export class HarnessSdkJsonRpcServer {
       },
     })
     const rec: SessionRecord = { handle }
-    if (this.sessionCloseTasks.has(sessionId) || this.shuttingDown) {
+    // A close task that already claimed this creation owns disposal. Let the
+    // admitted creation publish its record so performCloseSession can observe
+    // and dispose it exactly once; only shutdown tears it down here.
+    if (this.shuttingDown) {
       await handle.dispose()
       throw new Error(`SDK session closed during creation: ${sessionId}`)
     }
