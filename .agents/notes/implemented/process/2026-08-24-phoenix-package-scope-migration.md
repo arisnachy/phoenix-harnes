@@ -14,6 +14,10 @@ Add a read-only migration planner that discovers tracked `package.json` files, i
 
 The first migration phase is therefore observational and safe on `main`. Later rename batches must use this inventory as their package-identity source and regenerate the lockfile and built artifacts as one coherent change.
 
+## Alternatives considered
+
+A direct search-and-replace rename was rejected because it would mix package identities across manifests, generated artifacts, and the lockfile. Deferring all inventory work was also rejected because later rename batches need a deterministic collision check.
+
 ## Consequences
 
 `pnpm run phoenix:scope:plan` prints the complete legacy-to-PHOENIX package map. `pnpm run phoenix:scope:check` performs the collision and consistency checks without mutating the repository. The current runtime remains on `@deepseek-ai/*` until a validated rename batch is executed.
