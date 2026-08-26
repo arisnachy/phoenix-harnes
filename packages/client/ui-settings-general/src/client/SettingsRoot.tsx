@@ -149,6 +149,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
         onClick={() => { setOpen(true) }}
       >
         {renderSlot('settings.trigger', { wide })}
+        {renderSlot('settings.trigger.trailing', { wide })}
       </button>
       {open && (
         <SettingsPanel
