@@ -11,25 +11,25 @@
  * neither entry because those Agent-bound RPCs would activate persisted
  * history outside the direct-parent continuation path.
  */
-// Type-only: the carrier types, the forwarded Host-event face and the ctx.remote merge.
-import type { ModelSelection, SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ConnectionHandle, ModelSelection, SessionId, SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { CommandUiContract, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
-// Type-only: pulls the ui-conversation SlotMap merge (the input.model seat).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-// Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelDirectoryState } from './directory.ts'
 import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
+import { CodexQuotaRemaining } from './CodexQuotaRemaining.tsx'
+import type { CodexQuotaRemainingInjected } from './CodexQuotaRemaining.tsx'
 import { en, zh, type ModelKey } from './locales.ts'
 
 export { ModelDirectory } from './directory.ts'
 export type { ModelDirectoryState } from './directory.ts'
 export { ModelDirectoryResolver } from './service.ts'
 export type { ModelSelectInjected } from './slots.ts'
+export type { CodexQuotaRemainingInjected, CodexQuotaRemainingProps } from './CodexQuotaRemaining.tsx'
 export type { ModelKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -39,12 +39,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** One selectable row's id: an opaque row key (resolved by lookup, never parsed). */
 function rowId(providerId: string, modelId: string): string {
   return `${providerId}/${modelId}`
 }
 
-/** Flatten the directory into popup rows; failure rows are listed for visibility but never selectable. */
 function optionsOf(directory: SessionModels, t: TranslateNS<'model'>): SelectOption[] {
   const rows: SelectOption[] = []
   for (const group of directory.groups) {
@@ -68,13 +66,6 @@ function optionsOf(directory: SessionModels, t: TranslateNS<'model'>): SelectOpt
   return rows
 }
 
-/**
- * Resolve a picked row back to its model selection by matching against the loaded
- * groups (the same data the rows were built from — ids stay opaque).
- * @param state - the session's directory snapshot.
- * @param id - the picked row id.
- * @returns the row's model selection, or undefined for failure rows / stale ids.
- */
 function selectionOf(state: ModelDirectoryState, id: string): ModelSelection | undefined {
   for (const group of state.groups) {
     for (const model of group.models) {
@@ -93,32 +84,15 @@ function selectionOf(state: ModelDirectoryState, id: string): ModelSelection | u
   return undefined
 }
 
-/** Dictionary namespace owned by this plugin. */
 const NS = 'model'
 
-/** Required services: the contribution registry, the seat's slot registry, locale, and the service's own faces. */
 export const inject = ['commandUi', 'connection', 'locale', 'sessions', 'slots', 'remote']
 
-/**
- * Client plugin body: mount ModelDirectoryResolver, register the `model` dictionaries,
- * then register the /model popup contribution and the composer model seat
- * over the service.
- * @param ctx - client root context.
- */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-model-selection: dictionaries')
-
-  // Non-slot faces (the command description, the popup option builder) read
-  // through the bound translate; the seat component reads the standard seat.
   const t = ctx.locale.bind(NS)
-
-  // The composer-block reason is this plugin's own copy, read at raise time so
-  // a locale change reaches the next publish.
   ctx.plugin(ModelDirectoryResolver, { blockReason: () => t('blocked.composer') })
 
-  // Entry 1: the /model popupSelect over the shared directory. The command
-  // description is registry-held text: it reads t() once at registration and
-  // refreshes only on re-registration, not on locale change.
   ctx.inject(['commandUi', 'modelDirectories'], (scope: ClientContext) => {
     const command = scope.get('commandUi') as CommandUiContract
     const models = scope.modelDirectories
@@ -150,7 +124,6 @@ export function apply(ctx: ClientContext): void {
     }), 'ui-model-selection: /model contribution')
   })
 
-  // Entry 2: the composer's named model seat over the SAME directory.
   ctx.inject(['slots', 'modelDirectories'], (scope: ClientContext) => {
     const models = scope.modelDirectories
     const sessions = scope.sessions
@@ -172,5 +145,24 @@ export function apply(ctx: ClientContext): void {
         }
       },
     }, ModelSelect))
+  })
+
+  // Cross-feature composition is intentionally through the slot ledger only.
+  // The model package does not depend on the Settings package; if that outlet
+  // is present, this feature seats its status there, otherwise registration
+  // simply waits for the declaration to appear.
+  ctx.inject(['slots', 'modelDirectories', 'connection'], (scope: ClientContext) => {
+    const models = scope.modelDirectories
+    const connection = scope.get('connection') as ConnectionHandle
+    const directoryFor = (sessionId: SessionId) => models.directoryFor(sessionId)
+    const quotaInjected = (): CodexQuotaRemainingInjected => ({
+      authorization: connection.api.authorization,
+      directoryFor,
+    })
+    const seat = 'settings.trigger.trailing' as never
+    scope.slots.inject(seat, () => scope.slots.register({
+      name: seat,
+      inject: quotaInjected,
+    } as never, CodexQuotaRemaining as never))
   })
 }
