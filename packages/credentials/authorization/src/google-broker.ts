@@ -388,19 +388,19 @@ export default class GoogleApiBroker extends Service {
   static inject = ['authorization', 'credentials']
 
   private readonly spec: ResolvedSpec
-  private readonly legacyCleanup: Promise<void>
+  private readonly startupCleanup: Promise<void>
   private grant?: GoogleGrant
   private refreshInFlight?: Promise<GoogleGrant>
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
     this.spec = resolveGoogleSpec(config)
-    this.legacyCleanup = this.purgeLegacyGrant()
-    // Cleanup starts at construction so a grant written by the superseded
-    // durable implementation is removed even before the first Google request.
+    this.startupCleanup = this.purgeStaleRecord()
+    // Cleanup starts at construction so a secret grant or marker left by an
+    // earlier process cannot be mistaken for this process's live session.
     // Attach a rejection handler immediately to avoid an unhandled rejection;
     // every public operation still awaits the original promise and fails loud.
-    void this.legacyCleanup.catch(() => {})
+    void this.startupCleanup.catch(() => {})
     ctx.effect(() => ctx.authorization.registerFlow({
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Workspace',
@@ -412,7 +412,7 @@ export default class GoogleApiBroker extends Service {
 
   /** Secret-free telemetry exists only while this process owns a live grant. */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
-    await this.legacyCleanup
+    await this.startupCleanup
     return this.grant === undefined
       ? undefined
       : { kind: 'account', provider: 'google', accountType: 'oauth' }
@@ -437,7 +437,7 @@ export default class GoogleApiBroker extends Service {
 
   /** Clear the process grant and secret-free marker even when provider revocation fails. */
   async disconnect(): Promise<{ revoked: boolean }> {
-    await this.legacyCleanup
+    await this.startupCleanup
     const grant = this.grant
     this.grant = undefined
     this.refreshInFlight = undefined
@@ -460,7 +460,7 @@ export default class GoogleApiBroker extends Service {
   }
 
   private async authorize(session: AuthorizationSession): Promise<void> {
-    await this.legacyCleanup
+    await this.startupCleanup
     const clientId = this.spec.clientId
     if (clientId === undefined) {
       throw new AuthorizationError(
@@ -511,7 +511,7 @@ export default class GoogleApiBroker extends Service {
   }
 
   private async usableGrant(requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
-    await this.legacyCleanup
+    await this.startupCleanup
     const current = this.grant
     if (current === undefined) {
       throw new AuthorizationError('Google is not signed in for this PHOENIX process', 'GOOGLE_REAUTH_REQUIRED')
@@ -524,32 +524,30 @@ export default class GoogleApiBroker extends Service {
   }
 
   private refresh(current: GoogleGrant, requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
-    if (this.refreshInFlight !== undefined) {
-      return this.refreshInFlight.then((next) => {
-        if (!next.scopes.includes(requiredScope)) {
-          throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
-        }
-        return next
-      })
+    const checkScope = (next: GoogleGrant): GoogleGrant => {
+      if (!next.scopes.includes(requiredScope)) {
+        throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
+      }
+      return next
     }
+    if (this.refreshInFlight !== undefined) return this.refreshInFlight.then(checkScope)
     const clientId = this.spec.clientId
     const refreshToken = current.refreshToken
     if (clientId === undefined || refreshToken === undefined) {
       return Promise.reject(new AuthorizationError(
         'Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED'))
     }
-    const running = this.refreshGrant(current, clientId, refreshToken, requiredScope, signal).finally(() => {
+    const running = this.refreshGrant(current, clientId, refreshToken, signal).finally(() => {
       if (this.refreshInFlight === running) this.refreshInFlight = undefined
     })
     this.refreshInFlight = running
-    return running
+    return running.then(checkScope)
   }
 
   private async refreshGrant(
     current: GoogleGrant,
     clientId: string,
     refreshToken: string,
-    requiredScope: string,
     signal?: AbortSignal,
   ): Promise<GoogleGrant> {
     const response = await internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
@@ -577,20 +575,14 @@ export default class GoogleApiBroker extends Service {
       expiresAt: internals.now() + token.expires_in * 1000,
       scopes: token.scope === undefined ? current.scopes : parseGrantedScopes(token.scope),
     }
-    if (!next.scopes.includes(requiredScope)) {
-      this.grant = next
-      throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
-    }
     this.grant = next
     return next
   }
 
-  /** Remove a secret-bearing record left by the superseded durable broker. */
-  private async purgeLegacyGrant(): Promise<void> {
+  /** Remove any Google credential record that predates this process-local broker instance. */
+  private async purgeStaleRecord(): Promise<void> {
     const info = await this.ctx.credentials.describeRecord(GOOGLE_ACCOUNT_KEY)
-    if (info.configured && info.kind === 'grant') {
-      await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
-    }
+    if (info.configured) await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
   }
 }
 
