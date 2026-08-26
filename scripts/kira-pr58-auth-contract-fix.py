@@ -1,5 +1,7 @@
 from pathlib import Path
 
+# One-shot release-closure patch. Remove this helper after the verified fix lands.
+
 
 def replace_once(path: str, old: str, new: str) -> None:
     file = Path(path)
