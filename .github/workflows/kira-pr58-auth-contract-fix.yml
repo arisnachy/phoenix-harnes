@@ -1,4 +1,4 @@
-name: KIRA PR58 auth contract fix
+name: KIRA PR58 release contract fix
 
 on:
   push:
@@ -9,8 +9,10 @@ permissions:
 
 jobs:
   repair:
-    if: ${{ github.ref == 'refs/heads/feat/codex-graft-full' }}
+    if: ${{ github.ref == 'refs/heads/feat/codex-graft-full' && github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-24.04
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -21,21 +23,38 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Apply focal authorization patch
-        run: python3 scripts/kira-pr58-auth-contract-fix.py
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      - name: Verify host contract and focused auth tests
+      - name: Apply deterministic release patches
+        run: python3 scripts/kira-pr58-auth-contract-fix.py
+      - name: Regenerate repository-owned artifacts
+        run: |
+          pnpm run gen-client-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-module-graph
+          pnpm run gen-cordis-catalog
+      - name: Refresh affected translation records
+        run: |
+          pnpm run verify-translation-pairing -- --write \
+            .agents/notes/implemented/process/2026-08-24-phoenix-package-scope-migration.md \
+            docs/codex-plugin-arsenal.md \
+            docs/config-catalog.md \
+            docs/event-producer-consumer.md \
+            docs/module-graph.md \
+            packages/credentials/authorization/README.md
+      - name: Verify host, auth, and static release contracts
         run: |
           pnpm run typecheck
-          pnpm exec vitest run packages/host/apiproxy/tests/api-proxy-authorization.spec.ts packages/host/apiproxy/tests/client-handler.spec.ts packages/host/apiproxy/tests/fetch-carrier.spec.ts packages/client/ui-settings-models/tests/authorization-panel.client.spec.tsx
+          pnpm exec vitest run packages/host/apiproxy/tests/api-proxy-authorization.spec.ts packages/host/apiproxy/tests/client-handler.spec.ts packages/host/apiproxy/tests/fetch-carrier.spec.ts packages/client/ui-settings-models/tests/authorization-panel.client.spec.tsx packages/sdk/server/tests/lifecycle-v2.spec.ts packages/guard/timeout-policy/tests/exec-policy.spec.ts
+          pnpm run check:ci:static
           git diff --check
-      - name: Commit product fix only
+      - name: Commit verified product fix
         shell: bash
         run: |
           git config user.name "KIRA PHOENIX"
           git config user.email "actions@users.noreply.github.com"
-          git add packages/host/apiproxy/src/api-proxy.ts packages/host/apiproxy/tests/client-handler.spec.ts packages/host/apiproxy/tests/fetch-carrier.spec.ts
+          git add -A -- ':!.github/workflows/kira-pr58-auth-contract-fix.yml' ':!scripts/kira-pr58-auth-contract-fix.py' ':!.github/workflows/pr58-release-autofix.yml'
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "fix(auth): complete disconnect host contract"
+          git commit -m "fix(release): close PR58 contracts and auth carrier"
           git push origin HEAD:feat/codex-graft-full
