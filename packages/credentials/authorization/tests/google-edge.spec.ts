@@ -8,7 +8,6 @@ import GoogleApiBroker, {
 import { MemoryCredentials } from './memory.ts'
 
 const originalFetch = internals.fetch
-const originalNow = internals.now
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 
@@ -20,7 +19,6 @@ function googleApi(ctx: Context): GoogleApiBroker {
 
 afterEach(() => {
   internals.fetch = originalFetch
-  internals.now = originalNow
   vi.restoreAllMocks()
 })
 
@@ -33,9 +31,8 @@ async function harnessWithoutClientId(): Promise<Context> {
 }
 
 describe('Google Workspace runtime guards', () => {
-  it('rejects an unknown service before any credential read or network request', async () => {
+  it('rejects an unknown service before any network request', async () => {
     const ctx = await harnessWithoutClientId()
-    const readSpy = vi.spyOn(ctx.credentials, 'readRecord')
     const fetchSpy = vi.fn()
     internals.fetch = fetchSpy as typeof fetch
 
@@ -44,28 +41,34 @@ describe('Google Workspace runtime guards', () => {
       path: 'steal',
     })).rejects.toMatchObject({ code: 'GOOGLE_SERVICE_DENIED' })
 
-    expect(readSpy).not.toHaveBeenCalled()
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('refuses refresh when deployment client identity is absent instead of sending an empty client id', async () => {
+  it('refuses interactive authorization when the deployment client identity is absent', async () => {
     const ctx = await harnessWithoutClientId()
-    internals.now = () => 2_000_000
-    await ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({
-      kind: 'grant',
-      payload: {
-        version: 1,
-        accessToken: 'expired-access',
-        refreshToken: 'refresh-private',
-        expiresAt: 1_000_000,
-        scopes: [DRIVE_SCOPE],
+    const fetchSpy = vi.fn()
+    internals.fetch = fetchSpy as typeof fetch
+
+    await expect(ctx.authorization.begin({
+      key: GOOGLE_ACCOUNT_KEY,
+      interaction: {
+        notify: () => {},
+        prompt: () => Promise.reject(new Error('not used')),
       },
-    }))
+    })).rejects.toMatchObject({ code: 'GOOGLE_CLIENT_UNCONFIGURED' })
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toBeUndefined()
+  })
+
+  it('never treats a durable marker as a reusable OAuth grant', async () => {
+    const ctx = await harnessWithoutClientId()
+    await ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
     const fetchSpy = vi.fn()
     internals.fetch = fetchSpy as typeof fetch
 
     await expect(googleApi(ctx).request({ service: 'drive', path: 'files' }))
-      .rejects.toMatchObject({ code: 'GOOGLE_CLIENT_UNCONFIGURED' })
+      .rejects.toMatchObject({ code: 'GOOGLE_REAUTH_REQUIRED' })
 
     expect(fetchSpy).not.toHaveBeenCalled()
   })
