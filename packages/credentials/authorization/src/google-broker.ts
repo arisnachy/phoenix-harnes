@@ -446,6 +446,7 @@ export default class GoogleApiBroker extends Service {
       label: 'Google Workspace',
       methods: [{ id: 'oauth', label: 'Sign in with Google' }],
       inspect: () => this.inspect(),
+      disconnect: () => this.disconnect().then(() => undefined),
       run: session => this.authorize(session),
     }))
   }
