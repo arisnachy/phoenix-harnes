@@ -27,6 +27,7 @@
         "scripts/**/*.mjs",
         "scripts/**/*.cjs",
         "scripts/**/*.snapshot.ts",
+        "scripts/promote-client-artifacts.ts",
         "scripts/types/client-build-environment/index.d.ts"
       ],
       "ignoreUnresolved": [
