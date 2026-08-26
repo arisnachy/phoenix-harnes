@@ -12,11 +12,13 @@
  * history outside the direct-parent continuation path.
  */
 // Type-only: the carrier types, the forwarded Host-event face and the ctx.remote merge.
-import type { ModelSelection, SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ConnectionHandle, ModelSelection, SessionId, SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { CommandUiContract, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
 // Type-only: pulls the ui-conversation SlotMap merge (the input.model seat).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+// Type-only: pulls the Settings trailing-seat SlotMap declaration.
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
@@ -24,12 +26,15 @@ import type { ModelDirectoryState } from './directory.ts'
 import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
+import { CodexQuotaRemaining } from './CodexQuotaRemaining.tsx'
+import type { CodexQuotaRemainingInjected } from './CodexQuotaRemaining.tsx'
 import { en, zh, type ModelKey } from './locales.ts'
 
 export { ModelDirectory } from './directory.ts'
 export type { ModelDirectoryState } from './directory.ts'
 export { ModelDirectoryResolver } from './service.ts'
 export type { ModelSelectInjected } from './slots.ts'
+export type { CodexQuotaRemainingInjected, CodexQuotaRemainingProps } from './CodexQuotaRemaining.tsx'
 export type { ModelKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -101,8 +106,8 @@ export const inject = ['commandUi', 'connection', 'locale', 'sessions', 'slots',
 
 /**
  * Client plugin body: mount ModelDirectoryResolver, register the `model` dictionaries,
- * then register the /model popup contribution and the composer model seat
- * over the service.
+ * then register the /model popup contribution, composer model seat, and the
+ * OpenAI-only native Codex quota status over the same per-session directory.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -172,5 +177,23 @@ export function apply(ctx: ClientContext): void {
         }
       },
     }, ModelSelect))
+  })
+
+  // Entry 3: one compact Settings status. It subscribes to this plugin's
+  // canonical model directory, so switching Luna/OpenAI <-> another provider
+  // shows/hides immediately. The number itself comes only from native account
+  // telemetry — never from conversation context pressure.
+  ctx.inject(['slots', 'modelDirectories', 'connection'], (scope: ClientContext) => {
+    const models = scope.modelDirectories
+    const connection = scope.get('connection') as ConnectionHandle
+    const directoryFor = (sessionId: SessionId) => models.directoryFor(sessionId)
+    const quotaInjected = (): CodexQuotaRemainingInjected => ({
+      authorization: connection.api.authorization,
+      directoryFor,
+    })
+    scope.slots.inject('settings.trigger.trailing', () => scope.slots.register({
+      name: 'settings.trigger.trailing',
+      inject: quotaInjected,
+    }, CodexQuotaRemaining))
   })
 }
