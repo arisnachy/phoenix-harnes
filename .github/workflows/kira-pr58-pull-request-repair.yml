@@ -1,0 +1,47 @@
+name: KIRA PR58 pull request repair
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ github.event.pull_request.number == 58 && github.head_ref == 'feat/codex-graft-full' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/codex-graft-full
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: python3 scripts/kira-pr58-repair.py
+      - run: pnpm install --frozen-lockfile
+      - name: Regenerate official derived artifacts
+        shell: bash
+        run: |
+          pnpm run gen-client-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-module-graph
+          pnpm run gen-cordis-catalog
+          pnpm run gen-doc-graphs
+          pnpm run verify-translation-pairing -- --write
+      - name: Commit repair
+        shell: bash
+        run: |
+          git diff --check
+          git config user.name "KIRA PHOENIX"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git reset .github/workflows/kira-pr58-repair.yml .github/workflows/kira-pr58-pull-request-repair.yml scripts/kira-pr58-repair.py
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore(kira): apply PR58 deterministic repairs"
+          git push origin HEAD:feat/codex-graft-full
+      - run: pnpm run check:ci:static
