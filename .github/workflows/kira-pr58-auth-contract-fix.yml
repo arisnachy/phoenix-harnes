@@ -1,5 +1,6 @@
 name: KIRA PR58 release contract fix
 
+# One-shot PR58 repair lane; remove before merge.
 on:
   push:
     branches: [feat/codex-graft-full]
