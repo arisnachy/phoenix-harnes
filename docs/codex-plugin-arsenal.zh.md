@@ -1,6 +1,6 @@
-# PHOENIX Codex plugin arsenal
+# PHOENIX Codex 插件库
 
-English | [中文](codex-plugin-arsenal.zh.md)
+[English](codex-plugin-arsenal.md) | 中文
 
 PHOENIX can consume the official Codex plugin marketplace without vendoring the upstream plugin repository into this public source tree.
 
