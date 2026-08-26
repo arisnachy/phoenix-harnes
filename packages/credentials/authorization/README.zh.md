@@ -65,13 +65,13 @@ notice 是单向的，且从不携带机密：一条消息，以及可选的“�
 
 `@deepseek-ai/dsh-authorization/google` 是位于中立 seam 旁边、由协议所有者实现的 Host Service。它注册一个 `Google Workspace` flow，并采用 Google Desktop 应用的授权码流程：随机 loopback listener、PKCE S256 与 `state`。配置中的 `clientId` 只标识 OAuth 应用，并不是用户密码或 OAuth token；发布组合从 `PHOENIX_GOOGLE_OAUTH_CLIENT_ID` 读取它。
 
-provider 独占不透明的 `authorization-google/account` 记录。授权成功后会写入一个带版本的 `grant` payload，其中包含 access token、可选 refresh token、过期时间以及 Google 实际返回的已授权 scopes。面向浏览器的 `list()`、`describe()`、`inspect()` 与 credential metadata 都不会读取或投射这个 payload。进程重启后会复用这份 durable grant；access token 接近过期时，refresh 会在 credential provider 的串行化 `modifyRecord()` 事务内完成，因此两个 Host 进程不会竞争 refresh-token rotation。
+Google 的 access token 与 refresh token 被明确限制为**仅当前进程可用**。授权成功后，broker 只把它们保存在 Host Service 的私有内存中，并在 `authorization-google/account` 下提交一个不含机密的 `{ kind: 'api-key' }` marker，让中立 authorization seam 能确认人工授权已经提交。面向浏览器的 `list()`、`describe()`、`inspect()`、credential metadata、配置、环境变量以及 marker 本身都不包含 OAuth token、authorization code 或 PKCE verifier。PHOENIX 重启后必须重新进行 Google 授权；这是有意设计，直到 PHOENIX 拥有一个能够隔离同 UID 工具进程的 credential backend。`credentials-local` 明确不是这种边界。
 
-Host integration 通过 `ctx.get('googleApi')` 显式取得 broker，再调用 `request({ service, path, ... })`；这个 submodule 刻意不扩大全局 `Context` API。调用方不能提供任意 URL 再自行声明 scope。`service` 只能是 `gmail`、`calendar`、`drive`、`docs`、`sheets`、`slides` 或 `contacts`；每个 service 的 API root 与所需 OAuth scope 都由 broker 固定。path 必须保持在该 service root 下，credential/cookie header 会被拒绝，携带凭据的请求强制使用 `redirect: 'error'`，Bearer token 只在最后的 Google `fetch` 边界注入。结果只返回 status、media type 与 body，不返回 access/refresh token。`disconnect()` 即使 Google 的 best-effort revoke 失败，也会删除 durable grant。
+Host integration 通过 `ctx.get('googleApi')` 显式取得 broker，再调用 `request({ service, path, ... })`；这个 submodule 刻意不扩大全局 `Context` API。调用方不能提供任意 URL 再自行声明 scope。`service` 只能是 `gmail`、`calendar`、`drive`、`docs`、`sheets`、`slides` 或 `contacts`；每个 service 的 API root 与所需 OAuth scope 都由 broker 固定。path 必须保持在该 service root 下，credential/cookie header 会被拒绝，携带凭据的请求强制使用 `redirect: 'error'`，Bearer token 只在最后的 Google `fetch` 边界注入。结果只返回 status、media type 与 body，不返回 access/refresh token。`disconnect()` 即使 Google 的 best-effort revoke 失败，也会清空 Host 内存并删除 marker。
 
-Google installed application 不支持 incremental authorization，因此挂载的 provider 会在一次浏览器授权中请求配置的 suite scope 集合。但它会持久化 Google **实际** 返回的 scopes，而不是假设用户同意了全部权限。未获授权 scope 对应的能力会以 `GOOGLE_SCOPE_DENIED` fail closed；如果用户希望更改授权范围，可以明确重新连接。使用 sensitive/restricted scopes 的部署仍必须满足 Google 的 OAuth verification 要求。
+Google installed application 不支持 incremental authorization，因此挂载的 provider 会在一次浏览器授权中请求配置的 suite scope 集合。但它会在 Host 内存中保留 Google **实际** 返回的 scopes，而不是假设用户同意了全部权限。未获授权 scope 对应的能力会以 `GOOGLE_SCOPE_DENIED` fail closed；如果用户希望更改授权范围，可以明确重新连接。在同一个 PHOENIX 进程内，接近过期的 access token 会由 Host broker 刷新；refresh-token rotation 只存在于 Host 内存中，绝不持久化。使用 sensitive/restricted scopes 的部署仍必须满足 Google 的 OAuth verification 要求。
 
-这份 durable grant 继承 `dsh-credentials-local` 的安全边界：file-backed provider 会把值排除在模型 prompt、authorization surface、process environment 与普通配置之外，但一个刻意恶意的同 UID 进程仍然可以读取 `$DSH_HOME/.credentials.yaml`。这是已有的平台限制，而不是 OAuth transport 泄漏；若部署要求即使任意同用户进程也无法读取 secret，仍需要 `credentials-local` 文档中所述、未来的 OS-isolated credential backend。
+当前 Windows restricted-token sandbox 限制写操作，但不限制读操作，因此不能把 `$DSH_HOME/.credentials.yaml` 变成 secret vault。不得在 `credentials-local` 上重新启用 durable Google refresh token。要实现安全的持久化，必须使用独立 credential broker，其存储与 IPC 对任意同 UID 的模型/工具进程不可访问。
 
 ## Model Experience
 
@@ -84,6 +84,6 @@ Google installed application 不支持 incremental authorization，因此挂载�
 ## Known Limitations and Deferred Work
 
 - **flow 不可恢复** —— 一次尝试只存活于发起它的进程中，因此登录途中刷新浏览器会丢弃它，人需要重来。可持久的尝试需要一个本 seam 并不具备的存储。
-- **本地 credential 文件不是同 UID 隔离边界** —— durable Google grant 继承已记录的 `credentials-local` 限制：一个已经以该用户身份运行的进程可以主动读取该文件。更强的 OS-isolated credential provider 仍是后续工作。
+- **Google 登录按设计只在当前进程有效** —— 重启后需要重新授权。把 refresh token 持久化到 `credentials-local` 会暴露给刻意恶意的同 UID 进程，因此在 OS-isolated broker 可用之前，durable Google session 保持禁用。
 - **authorization seam 没有通用 revoke 操作** —— provider 可以像 Google broker 一样拥有协议专属的 revocation，但 `ctx.authorization` 本身不提供跨 provider 的统一登出方法。
 - **没有 flow 的键是惰性的** —— seam 只报告已注册的内容，因此被卸载插件遗留的记录可以删除但无法重新授权。识别这种孤儿记录由调用方自行 join，与 [`listRecords()`](../credentials/README.zh.md#surface) 的情况相同。
