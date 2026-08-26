@@ -64,6 +64,9 @@ jobs:
             exit 1
           fi
 
+      - name: Repair merged workspace lockfile
+        run: pnpm install --no-frozen-lockfile
+
       - name: Regenerate canonical repository-owned surfaces
         run: |
           pnpm run gen-client-catalog
@@ -80,7 +83,6 @@ jobs:
           from pathlib import Path
           import re
 
-          # Reciprocal language switcher required by the pairing contract.
           p = Path('docs/codex-plugin-arsenal.md')
           text = p.read_text()
           switcher = 'English | [中文](codex-plugin-arsenal.zh.md)'
@@ -91,8 +93,6 @@ jobs:
               lines[1:1] = ['', switcher]
               p.write_text('\n'.join(lines) + ('\n' if text.endswith('\n') else ''))
 
-          # Config catalog code is generated technical contract. Preserve Chinese
-          # prose, but keep each generated TS fence byte-identical to English.
           en_path = Path('docs/config-catalog.md')
           zh_path = Path('docs/config-catalog.zh.md')
           en = en_path.read_text()
@@ -106,7 +106,6 @@ jobs:
           zh = fence.sub(lambda _: next(iterator), zh)
           zh_path.write_text(zh)
 
-          # Module graph graph/table are generated technical data, not prose.
           en_path = Path('docs/module-graph.md')
           zh_path = Path('docs/module-graph.zh.md')
           en = en_path.read_text()
