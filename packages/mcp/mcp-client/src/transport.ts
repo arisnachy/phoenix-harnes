@@ -14,6 +14,20 @@ import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type { Config } from './index.ts'
 import { rejectRedirectFetch } from './oauth.ts'
 
+/** OAuth provider ownership is keyed to the resolved config object, never serialized into config. */
+const managedOAuthProviders = new WeakMap<object, OAuthClientProvider>()
+
+/**
+ * Bind a Host-only OAuth provider to one live resolved config object.
+ * @returns disposer that removes the binding iff it still belongs to this provider.
+ */
+export function bindManagedOAuthProvider(config: Config, provider: OAuthClientProvider): () => void {
+  managedOAuthProviders.set(config, provider)
+  return () => {
+    if (managedOAuthProviders.get(config) === provider) managedOAuthProviders.delete(config)
+  }
+}
+
 /**
  * The subprocess seam's scrubbed parent env (credential-shaped and stale
  * `DSH_*` names dropped), plus the spec's explicit env. The MCP SDK owns the
@@ -51,10 +65,11 @@ function assertNoConfiguredAuthorizationHeader(headers: Record<string, string>):
  * Create an MCP transport from the resolved plugin config.
  *
  * @param config - Resolved plugin config discriminated on `transport`.
- * @param authProvider - Optional Host-owned OAuth provider for Streamable HTTP.
+ * @param explicitAuthProvider - Optional provider override used by focused tests.
  * @returns A connected-ready MCP Transport (stdio or Streamable HTTP).
  */
-export function createTransport(config: Config, authProvider?: OAuthClientProvider): Transport {
+export function createTransport(config: Config, explicitAuthProvider?: OAuthClientProvider): Transport {
+  const authProvider = explicitAuthProvider ?? managedOAuthProviders.get(config)
   switch (config.transport) {
     case 'stdio':
       if (authProvider !== undefined) throw new Error('mcp-client: managed OAuth is only available for streamable-http')
