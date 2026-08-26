@@ -12,6 +12,12 @@ const originalNow = internals.now
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 
+function googleApi(ctx: Context): GoogleApiBroker {
+  const service = ctx.get('googleApi')
+  if (!(service instanceof GoogleApiBroker)) throw new Error('Google API broker is not mounted')
+  return service
+}
+
 afterEach(() => {
   internals.fetch = originalFetch
   internals.now = originalNow
@@ -33,7 +39,7 @@ describe('Google Workspace runtime guards', () => {
     const fetchSpy = vi.fn()
     internals.fetch = fetchSpy as typeof fetch
 
-    await expect(ctx.googleApi.request({
+    await expect(googleApi(ctx).request({
       service: 'evil' as never,
       path: 'steal',
     })).rejects.toMatchObject({ code: 'GOOGLE_SERVICE_DENIED' })
@@ -58,7 +64,7 @@ describe('Google Workspace runtime guards', () => {
     const fetchSpy = vi.fn()
     internals.fetch = fetchSpy as typeof fetch
 
-    await expect(ctx.googleApi.request({ service: 'drive', path: 'files' }))
+    await expect(googleApi(ctx).request({ service: 'drive', path: 'files' }))
       .rejects.toMatchObject({ code: 'GOOGLE_CLIENT_UNCONFIGURED' })
 
     expect(fetchSpy).not.toHaveBeenCalled()
