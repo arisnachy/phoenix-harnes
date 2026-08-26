@@ -28,6 +28,8 @@ const CHANNEL_BRANCH = process.env.PHOENIX_UPDATE_CHANNEL ?? 'phoenix/update-cha
 const CHANNEL_PATH = '.phoenix/channel/stable.json'
 const DEFAULT_POLL_MS = 60 * 1000
 const MIN_POLL_MS = 15 * 1000
+const FETCH_ATTEMPTS = 3
+const FETCH_RETRY_MS = 750
 const STATE_FILE = 'phoenix-update-state.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
@@ -146,24 +148,50 @@ function parseManifest(text) {
   return value
 }
 
+function waitForFetchRetry(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+function fetchBranchCommit(root, branch, label) {
+  const safeLabel = label.replace(/[^A-Za-z0-9._-]/gu, '-')
+  const localRef = `refs/phoenix/update/fetch-${String(process.pid)}-${safeLabel}`
+  let lastFailure
+
+  for (let attempt = 1; attempt <= FETCH_ATTEMPTS; attempt += 1) {
+    const result = git(root, [
+      'fetch', '--quiet', REMOTE,
+      `+refs/heads/${branch}:${localRef}`,
+    ], { allowFailure: true })
+    if (result.ok) {
+      const commit = git(root, ['rev-parse', `${localRef}^{commit}`]).stdout
+      git(root, ['update-ref', '-d', localRef], { allowFailure: true })
+      return commit
+    }
+
+    lastFailure = result
+    if (attempt < FETCH_ATTEMPTS) {
+      console.error(`[PHOENIX UPDATE] ${label} fetch attempt ${String(attempt)}/${String(FETCH_ATTEMPTS)} failed; retrying...`)
+      waitForFetchRetry(FETCH_RETRY_MS * attempt)
+    }
+  }
+
+  git(root, ['update-ref', '-d', localRef], { allowFailure: true })
+  const detail = lastFailure?.stderr?.trim()
+  throw new Error(`git fetch ${label} failed after ${String(FETCH_ATTEMPTS)} attempts${detail?.length > 0 ? `: ${detail}` : ''}`)
+}
+
 function fetchStableManifest(root) {
-  git(root, [
-    'fetch', '--quiet', REMOTE,
-    `refs/heads/${CHANNEL_BRANCH}:refs/remotes/${REMOTE}/${CHANNEL_BRANCH}`,
-  ])
-  const text = git(root, ['show', `${REMOTE}/${CHANNEL_BRANCH}:${CHANNEL_PATH}`]).stdout
+  const channelCommit = fetchBranchCommit(root, CHANNEL_BRANCH, 'stable-channel')
+  const text = git(root, ['show', `${channelCommit}:${CHANNEL_PATH}`]).stdout
   return parseManifest(text)
 }
 
 function fetchTarget(root, manifest) {
-  git(root, [
-    'fetch', '--quiet', REMOTE,
-    `refs/heads/${manifest.sourceBranch}:refs/remotes/${REMOTE}/${manifest.sourceBranch}`,
-  ])
+  const mainCommit = fetchBranchCommit(root, manifest.sourceBranch, manifest.sourceBranch)
   const target = manifest.sourceCommit
   const exists = git(root, ['cat-file', '-e', `${target}^{commit}`], { allowFailure: true })
   if (!exists.ok) throw new Error(`stable target ${target} is not available after fetching ${REMOTE}/${manifest.sourceBranch}`)
-  const onMain = git(root, ['merge-base', '--is-ancestor', target, `${REMOTE}/${manifest.sourceBranch}`], { allowFailure: true })
+  const onMain = git(root, ['merge-base', '--is-ancestor', target, mainCommit], { allowFailure: true })
   if (!onMain.ok) throw new Error(`stable target ${target} is not reachable from ${REMOTE}/${manifest.sourceBranch}`)
 }
 
