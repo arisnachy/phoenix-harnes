@@ -36,7 +36,7 @@ jobs:
           pnpm run gen-config-catalog
           pnpm run gen-module-graph
           pnpm run gen-doc-graphs
-          pnpm run verify-translation-pairing -- --write
+          pnpm run verify-translation-pairing --write
       - name: Verify repaired release tree
         env:
           DSH_GATE_CONCURRENCY: 2
