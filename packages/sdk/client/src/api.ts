@@ -106,7 +106,9 @@ export class DeepSeekHarness implements AsyncDisposable {
     return this.session(options?.sessionId).run(input, options)
   }
 
-  /** @returns once the shared runtime subprocess is closed. */
+  /** Close the shared runtime subprocess.
+   * @returns once the shared runtime subprocess is closed.
+   */
   close(): Promise<void> {
     this.closed = true
     return this.clientInstance.close()
