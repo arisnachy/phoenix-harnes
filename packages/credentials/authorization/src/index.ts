@@ -135,6 +135,12 @@ export interface AuthorizationFlow {
    */
   inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>
   /**
+   * Revoke/logout the provider-owned account and remove this flow's credential
+   * marker. The flow owns protocol-specific teardown for the same reason it
+   * owns login: the generic seam must never guess how a provider stores auth.
+   */
+  disconnect?(signal?: AbortSignal): Promise<void>
+  /**
    * Run one attempt to obtain and commit the credential.
    * @param session - the chosen method, the cancellation signal, and the interaction callbacks.
    * @returns once the record is committed.
@@ -258,6 +264,33 @@ export class AuthorizationService extends Service {
     return flow.inspect?.(signal) ?? Promise.resolve(undefined)
   }
 
+  /**
+   * Ask the owning flow to revoke/logout its provider session, then verify the
+   * corresponding credential marker is gone. A flow that exposes no teardown
+   * cannot be disconnected by deleting storage behind its back.
+   */
+  async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {
+    const flow = this.flows.get(key)
+    if (flow === undefined) {
+      throw new AuthorizationError(`no authorization flow is registered for "${key}"`, 'NO_FLOW')
+    }
+    if (flow.disconnect === undefined) {
+      throw new AuthorizationError(`authorization flow for "${key}" cannot be disconnected`, 'NOT_DISCONNECTABLE')
+    }
+    if (this.running.has(key)) {
+      throw new AuthorizationError(`authorization flow for "${key}" is busy`, 'ALREADY_IN_FLIGHT')
+    }
+    if (signal?.aborted === true) throw signal.reason ?? new Error('authorization disconnect cancelled')
+    await flow.disconnect(signal)
+    const stored = await this.ctx.credentials.describeRecord(key)
+    if (stored.configured) {
+      throw new AuthorizationError(
+        `authorization flow for "${key}" disconnected without removing its credential record`,
+        'NOT_DISCONNECTED',
+      )
+    }
+  }
+
   /** The public view of one registered flow. */
   private entry(flow: AuthorizationFlow): AuthorizationEntry {
     return {
@@ -265,6 +298,7 @@ export class AuthorizationService extends Service {
       label: flow.label,
       methods: flow.methods,
       inFlight: this.running.has(flow.key),
+      disconnectable: flow.disconnect !== undefined,
     }
   }
 
