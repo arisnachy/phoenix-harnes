@@ -1,0 +1,57 @@
+name: Codex graft repair
+
+on:
+  push:
+    branches:
+      - release/codex-graft-full
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: release/codex-graft-full
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Apply deterministic repairs
+        run: |
+          node scripts/repair-codex-graft.mjs
+          rm scripts/repair-codex-graft.mjs
+      - name: Regenerate owned artifacts
+        run: |
+          pnpm run gen-cordis-catalog
+          pnpm run gen-client-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-module-graph
+          pnpm run gen-doc-graphs
+          pnpm run verify-translation-pairing -- --write
+      - name: Verify repaired release tree
+        env:
+          DSH_GATE_CONCURRENCY: 2
+        run: |
+          pnpm run typecheck
+          pnpm run check:ci:static
+          git diff --check
+      - name: Commit repaired tree
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No repair changes to commit.'
+            exit 0
+          fi
+          git commit -m 'fix(release): close Codex graft publication gates'
+          git push origin HEAD:release/codex-graft-full
