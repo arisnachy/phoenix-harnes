@@ -1,0 +1,286 @@
+name: PR58 release autofix
+
+on:
+  push:
+    branches: [feat/codex-graft-full]
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    if: ${{ !contains(github.event.head_commit.message, '[pr58-autofix]') }}
+    runs-on: ubuntu-24.04
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/codex-graft-full
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply deterministic release fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, count: int = 1):
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual < count:
+                  raise SystemExit(f'{path}: expected at least {count} occurrence(s), found {actual}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, count))
+
+          # Source resolution for the Google host-only broker subpath.
+          replace('tsconfig.base.json',
+              '      "@deepseek-ai/dsh-authorization/types": ["./packages/credentials/authorization/src/types.ts"],\n',
+              '      "@deepseek-ai/dsh-authorization/types": ["./packages/credentials/authorization/src/types.ts"],\n      "@deepseek-ai/dsh-authorization/google": ["./packages/credentials/authorization/src/google-broker.ts"],\n')
+
+          # Complete public JSDoc contracts.
+          replace('packages/credentials/authorization/src/index.ts',
+              '   * cannot be disconnected by deleting storage behind its back.\n   */\n  async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {',
+              '   * cannot be disconnected by deleting storage behind its back.\n   * @param key - credential record whose provider session should be disconnected.\n   * @param signal - optional cancellation signal for provider teardown.\n   * @returns once provider teardown completed and the marker is verified absent.\n   */\n  async disconnect(key: CredentialKey, signal?: AbortSignal): Promise<void> {')
+
+          replace('packages/credentials/authorization/src/google-broker.ts',
+              '/** Resolve broker configuration without inventing scopes or a deployment identity. */\nexport function resolveGoogleSpec(config: Config): ResolvedSpec {',
+              '/**\n * Resolve broker configuration without inventing scopes or a deployment identity.\n * @param config - deployment-owned Google OAuth client id and requested scopes.\n * @returns validated, normalized broker configuration.\n */\nexport function resolveGoogleSpec(config: Config): ResolvedSpec {')
+          replace('packages/credentials/authorization/src/google-broker.ts',
+              '  /** Secret-free telemetry exists only while this process owns a live grant. */\n  async inspect(): Promise<AuthorizationTelemetry | undefined> {',
+              '  /**\n   * Secret-free telemetry exists only while this process owns a live grant.\n   * @returns sanitized Google account and service capability telemetry, when connected.\n   */\n  async inspect(): Promise<AuthorizationTelemetry | undefined> {')
+          replace('packages/credentials/authorization/src/google-broker.ts',
+              '  /** Execute one request inside a fixed Google service boundary. */\n  async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {',
+              '  /**\n   * Execute one request inside a fixed Google service boundary.\n   * @param request - service id, relative path, method, headers, and optional body.\n   * @returns the bounded response without forwarding credential-bearing headers.\n   */\n  async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {')
+          replace('packages/credentials/authorization/src/google-broker.ts',
+              '  /** Clear the process grant and secret-free marker even when provider revocation fails. */\n  async disconnect(): Promise<{ revoked: boolean }> {',
+              '  /**\n   * Clear the process grant and secret-free marker even when provider revocation fails.\n   * @returns whether Google acknowledged token revocation; local teardown always completes.\n   */\n  async disconnect(): Promise<{ revoked: boolean }> {')
+
+          p = Path('packages/guard/timeout-policy/src/exec-policy.ts')
+          text = p.read_text()
+          text = text.replace("export type ExecPolicyDecision = 'allow' | 'prompt' | 'forbidden'\nexport type ExecPolicyPatternPart = string | readonly string[]\n", """/** One monotonic command-policy outcome, ordered from permissive to restrictive. */
+export type ExecPolicyDecision = 'allow' | 'prompt' | 'forbidden'
+/** One exact token or a closed set of accepted alternatives at one prefix position. */
+export type ExecPolicyPatternPart = string | readonly string[]
+""")
+          text = text.replace('export interface ExecPolicyRule {', '/** One validated token-prefix rule and its examples. */\nexport interface ExecPolicyRule {')
+          text = text.replace('export interface ExecPolicyConfig {', '/** Optional exec-policy configuration mounted into the existing pre-execute chain. */\nexport interface ExecPolicyConfig {')
+          text = text.replace('export interface CompiledExecPolicy {', '/** Immutable runtime form of a validated exec policy. */\nexport interface CompiledExecPolicy {')
+          text = text.replace('export interface ExecPolicyEvaluation {', '/** Decision returned for one classified shell command. */\nexport interface ExecPolicyEvaluation {')
+          text = text.replace('/** Compile and self-test an exec policy before it can affect live tools. */\nexport function compileExecPolicy', '/**\n * Compile and self-test an exec policy before it can affect live tools.\n * @param config - source rules and shell-tool settings.\n * @returns immutable validated runtime policy.\n */\nexport function compileExecPolicy')
+          text = text.replace('/** Evaluate one shell command without changing the surrounding policy chain. */\nexport function evaluateExecPolicy', '/**\n * Evaluate one shell command without changing the surrounding policy chain.\n * @param command - raw shell command supplied to a governed tool.\n * @param policy - compiled policy to evaluate.\n * @returns the strictest matching decision, or undefined to inherit the surrounding chain.\n */\nexport function evaluateExecPolicy')
+          p.write_text(text)
+
+          # Publish the new exec-policy entry point rather than relying on private src paths.
+          p = Path('packages/guard/timeout-policy/package.json')
+          text = p.read_text()
+          text = text.replace('    "./invariant": {\n      "types": "./lib/types/invariant.d.ts",\n      "default": "./lib/invariant.js"\n    },\n', '    "./invariant": {\n      "types": "./lib/types/invariant.d.ts",\n      "default": "./lib/invariant.js"\n    },\n    "./exec-policy": {\n      "types": "./lib/types/exec-policy.d.ts",\n      "default": "./lib/exec-policy.js"\n    },\n')
+          text = text.replace('    "lib/invariant.js",\n    "lib/types/**/*.d.ts"', '    "lib/invariant.js",\n    "lib/exec-policy.js",\n    "lib/types/**/*.d.ts"')
+          p.write_text(text)
+
+          # SDK public docs.
+          p = Path('packages/sdk/client/src/api.ts')
+          text = p.read_text()
+          text = text.replace('  get client(): HarnessClient {', '  /** Current low-level transport client owned by this reusable harness. */\n  get client(): HarnessClient {')
+          text = text.replace('  /** Whether the current runtime explicitly advertised one v2 lifecycle capability. */\n  supports(capability: keyof HarnessSdkCapabilities): boolean {', '  /**\n   * Whether the current runtime explicitly advertised one v2 lifecycle capability.\n   * @param capability - lifecycle capability to query.\n   * @returns true only when the negotiated runtime advertised it.\n   */\n  supports(capability: keyof HarnessSdkCapabilities): boolean {')
+          text = text.replace('  session(sessionId?: string): HarnessSession {', '  /**\n   * Create a lightweight handle for one SDK-owned session id.\n   * @param sessionId - optional stable id; a unique id is minted when omitted.\n   * @returns a session handle sharing this harness runtime.\n   */\n  session(sessionId?: string): HarnessSession {')
+          text = text.replace('  run(input: string | ContentBlock[], options?: RunOptions): Promise<RunResult> {', '  /**\n   * Run one turn in a selected or newly minted session.\n   * @param input - prompt text or structured content blocks.\n   * @param options - optional target session and notification observer.\n   * @returns the settled turn result.\n   */\n  run(input: string | ContentBlock[], options?: RunOptions): Promise<RunResult> {')
+          text = text.replace('  close(): Promise<void> {', '  /** @returns once the shared runtime subprocess is closed. */\n  close(): Promise<void> {', 1)
+          text = text.replace('  async run(input: string | ContentBlock[], options?: Pick<RunOptions, \'onNotification\'>): Promise<RunResult> {', '  /**\n   * Run one turn in this stable session.\n   * @param input - prompt text or structured content blocks.\n   * @param options - optional notification observer.\n   * @returns the settled turn result.\n   */\n  async run(input: string | ContentBlock[], options?: Pick<RunOptions, \'onNotification\'>): Promise<RunResult> {')
+          text = text.replace('  /** Cancel this session\'s current activity without closing the runtime or discarding queued follow-up work. */\n  async interrupt()', '  /**\n   * Cancel this session\'s current activity without closing the runtime or discarding queued follow-up work.\n   * @returns whether the session existed and whether it was running.\n   */\n  async interrupt()')
+          text = text.replace('  /** Dispose this SDK-owned session while preserving the shared PHOENIX runtime for other sessions. */\n  async close()', '  /**\n   * Dispose this SDK-owned session while preserving the shared PHOENIX runtime for other sessions.\n   * @returns whether a live SDK-owned session was found and closed.\n   */\n  async close()')
+          p.write_text(text)
+
+          # Codex account bridge docs.
+          replace('packages/subagent/subagent-codex/src/account.ts',
+              'export async function readCodexAccountSnapshot(\n',
+              '/**\n * Read one secret-free native Codex account snapshot, including optional apps.\n * @param ctx - PHOENIX service context used to launch the Codex app-server.\n * @param config - Codex account bridge configuration.\n * @param signal - optional cancellation signal for the inspection.\n * @returns account, quota, usage, and connector metadata with no OAuth token material.\n */\nexport async function readCodexAccountSnapshot(\n')
+          replace('packages/subagent/subagent-codex/src/account.ts',
+              'export function registerCodexAccountFlow(\n',
+              '/**\n * Register native ChatGPT/Codex login, inspection, and logout with the authorization seam.\n * @param ctx - PHOENIX service context owning authorization and credentials.\n * @param config - Codex account bridge configuration.\n * @returns disposer for the registered authorization flow.\n */\nexport function registerCodexAccountFlow(\n')
+
+          # Structured error presentation docs.
+          p = Path('packages/client/ui-conversation/src/client/chat/structured-error.ts')
+          text = p.read_text()
+          text = text.replace('export interface StructuredErrorField {', '/** One bounded field promoted from a provider error payload. */\nexport interface StructuredErrorField {')
+          text = text.replace('export interface StructuredErrorPresentation {', '/** Safe, user-facing normalization of one structured provider failure. */\nexport interface StructuredErrorPresentation {')
+          text = text.replace('/** Translate only generic error prose, never identifiers, provider/model names, enum values, IDs or URLs. */\nexport function translateGenericErrorProse(value: string): string {', '/**\n * Translate only generic error prose, never identifiers, provider/model names, enum values, IDs or URLs.\n * @param value - provider prose to normalize.\n * @returns Spanish-friendly generic prose with identifiers preserved.\n */\nexport function translateGenericErrorProse(value: string): string {')
+          text = text.replace(' * Arbitrary chat JSON is unaffected because callers use this only on error nodes.\n */\nexport function formatStructuredError(', ' * Arbitrary chat JSON is unaffected because callers use this only on error nodes.\n * @param input - error string containing a JSON object or array.\n * @param explicitCode - optional transport/status code that outranks payload inference.\n * @returns a bounded presentation model, or undefined when the input is not structured JSON.\n */\nexport function formatStructuredError(')
+          p.write_text(text)
+
+          replace('packages/host/apiproxy/src/fetch/client.ts',
+              'export class InProcessApiClient extends AbstractApiClient {',
+              '/** API client that routes fetches directly into an in-process host handler for tests and embedded runtimes. */\nexport class InProcessApiClient extends AbstractApiClient {')
+
+          # Sandbox docs exactness + README heading contract.
+          replace('docs/subsystems/sandbox.md',
+              '  /** Explicit approved mode override, which outranks session policy. */',
+              '  /** Explicit approved mode override, which outranks session policy but not HARDNESS runtime protection. */')
+          p = Path('packages/sandbox/sandbox-policy/README.md')
+          text = p.read_text()
+          paragraph = 'One `sandbox:policy` contribution in the current runtime-context snapshot for every agent session. It does not enumerate mounted capabilities. Tool plugins retain operation and escalation guidance, approval policy contributes separately to the same snapshot, and plan guidance remains `dsh-plan-mode`\'s system section. With launcher HARDNESS protection active, the same contribution states that the live PHOENIX runtime and data home are protected and directs self-modification to the isolated evolution worktree.\n\n'
+          marker = '### Current file sandbox policy\n\n#### What the model sees\n\n' + paragraph
+          if marker not in text:
+              raise SystemExit('sandbox README model-experience marker not found')
+          text = text.replace(marker, '### Current file sandbox policy\n\n' + paragraph + '#### What the model sees\n\n', 1)
+          p.write_text(text)
+
+          # Complete host-side authorization projection and disconnect carrier.
+          p = Path('packages/host/apiproxy/src/api-proxy.ts')
+          text = p.read_text()
+          old = '''          return {
+            key: String(entry.key),
+            label: entry.label,
+            methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
+            inFlight: entry.inFlight,
+            ...stored === undefined ? {} : { stored },
+          }
+'''
+          new = '''          let telemetry
+          try {
+            telemetry = await authorization.inspect(entry.key)
+          } catch {
+            // Live provider inspection is optional; the flow itself remains usable.
+          }
+          return {
+            key: String(entry.key),
+            label: entry.label,
+            methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
+            inFlight: entry.inFlight,
+            ...(entry.disconnectable === true ? { disconnectable: true as const } : {}),
+            ...stored === undefined ? {} : { stored },
+            ...telemetry === undefined ? {} : { telemetry },
+          }
+'''
+          if old not in text:
+              raise SystemExit('api-proxy authorization list projection marker not found')
+          text = text.replace(old, new, 1)
+          old = '''      cancel(request) {
+        const attempt = authorizationAttempts.get(request.payload.attemptId)
+        if (attempt === undefined) {
+          return Promise.resolve(err(request, {
+            code: 'internal', message: 'authorization attempt was not found', details: {},
+          }))
+        }
+        if (attempt.status === 'pending') {
+          rejectAuthorizationPrompt(attempt, new AuthorizationDeclinedError('authorization was cancelled'))
+          attempt.controller.abort()
+          ctx.get('authorization')?.cancel(parseCredentialKey(attempt.key))
+        }
+        return Promise.resolve(ok(request, { cancelled: true as const }))
+      },
+'''
+          new = old + '''
+      async disconnect(request, signal) {
+        const authorization = ctx.get('authorization')
+        if (authorization === undefined) {
+          return err(request, {
+            code: 'internal',
+            message: 'authorization service is absent: this deployment does not mount an authorization provider',
+            details: {},
+          })
+        }
+        let key: ReturnType<typeof parseCredentialKey>
+        try {
+          key = parseCredentialKey(request.payload.key)
+        } catch {
+          return err(request, { code: 'internal', message: 'authorization key is invalid', details: {} })
+        }
+        try {
+          await authorization.disconnect(key, signal)
+          return ok(request, { disconnected: true as const })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+'''
+          if old not in text:
+              raise SystemExit('api-proxy authorization cancel marker not found')
+          text = text.replace(old, new, 1)
+          p.write_text(text)
+
+          # Keep carrier test doubles structurally complete.
+          replace('packages/host/apiproxy/tests/client-handler.spec.ts',
+              '      cancel: err,\n      ...overrides.authorization,',
+              '      cancel: err,\n      disconnect: err,\n      ...overrides.authorization,')
+          replace('packages/host/apiproxy/tests/fetch-carrier.spec.ts',
+              "      async cancel(request) {\n        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }\n      },\n",
+              "      async cancel(request) {\n        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }\n      },\n      async disconnect(request) {\n        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } } }\n      },\n")
+
+          # Regression spec: browser projection must surface provider capability and invoke teardown.
+          p = Path('packages/host/apiproxy/tests/api-proxy-authorization.spec.ts')
+          text = p.read_text()
+          text = text.replace('    inFlight: false,\n  }', '    inFlight: false,\n    disconnectable: true,\n  }', 1)
+          text = text.replace('  let finish: ((outcome: { status: \'authorized\' | \'cancelled\' }) => void) | undefined\n  const service = {', "  let finish: ((outcome: { status: 'authorized' | 'cancelled' }) => void) | undefined\n  let disconnected = false\n  const service = {")
+          text = text.replace('    describe: () => ({ ...entry, inFlight: running !== undefined }),\n    begin:', "    describe: () => ({ ...entry, inFlight: running !== undefined }),\n    inspect: async () => ({\n      kind: 'account' as const,\n      provider: 'Codex',\n      connectors: [{ id: 'drive', name: 'Drive', accessible: true, enabled: true, installed: true, callable: true }],\n    }),\n    disconnect: async () => { disconnected = true },\n    begin:")
+          text = text.replace('  return { service, key }\n}', '  return { service, key, wasDisconnected: () => disconnected }\n}')
+          insert = '''
+
+  it('projects live connector telemetry and forwards provider-owned disconnect', async () => {
+    const ctx = new Context()
+    const { service, key, wasDisconnected } = fakeAuthorization()
+    ctx.provide('authorization', service)
+    ctx.provide('userQuestions', { registerProvider: () => () => {} } as never)
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const entries = ok(await api.authorization.list(request({})))
+    expect(entries.entries[0]?.disconnectable).toBe(true)
+    expect(entries.entries[0]?.telemetry?.connectors?.[0]?.name).toBe('Drive')
+
+    const disconnected = ok(await api.authorization.disconnect(request({ key: String(key) })))
+    expect(disconnected.disconnected).toBe(true)
+    expect(wasDisconnected()).toBe(true)
+  })
+'''
+          end = '\n})\n'
+          if not text.endswith(end):
+              raise SystemExit('authorization spec end marker not found')
+          text = text[:-len(end)] + insert + end
+          p.write_text(text)
+
+          # Temporary migration helpers are not release entry points.
+          for path in ['scripts/plan-phoenix-scope-migration.ts', 'scripts/promote-client-artifacts.ts']:
+              Path(path).unlink(missing_ok=True)
+          PY
+      - name: Regenerate repository-owned artifacts
+        run: |
+          pnpm run gen-client-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-module-graph
+          pnpm run gen-cordis-catalog
+      - name: Refresh only affected translation-pair records
+        run: |
+          pnpm run verify-translation-pairing -- --write \
+            .agents/notes/implemented/process/2026-08-24-phoenix-package-scope-migration.md \
+            docs/codex-plugin-arsenal.md \
+            docs/config-catalog.md \
+            docs/event-producer-consumer.md \
+            docs/module-graph.md \
+            packages/credentials/authorization/README.md
+      - name: Verify exact release contracts
+        run: |
+          pnpm run typecheck
+          pnpm run check:ci:static
+          git diff --check
+      - name: Commit autofix
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m '[pr58-autofix] fix release contracts and authorization carrier'
+          git push origin HEAD:feat/codex-graft-full
