@@ -117,6 +117,9 @@ function connectorStatus(connector: ConnectorTelemetry): { text: string; classNa
   if (connector.installed === true) {
     return { text: 'Connected', className: connectorStyles['connectorStatusReady'] ?? '' }
   }
+  if (connector.installed === false && connector.callable === false && connector.installUrl === undefined) {
+    return { text: 'Permission needed', className: connectorStyles['connectorStatusDisabled'] ?? '' }
+  }
   return { text: 'Available', className: '' }
 }
 
@@ -168,11 +171,17 @@ function ConnectorCard({ connector }: { connector: ConnectorTelemetry }): ReactN
 function ConnectorGrid({ telemetry }: { telemetry: AccountTelemetry | undefined }): ReactNode {
   const connectors = telemetry?.connectors
   if (connectors === undefined || connectors.length === 0) return null
+  const isGoogle = telemetry.provider.toLowerCase().includes('google')
+  const title = isGoogle ? 'Google Workspace services' : 'Codex connectors'
+  const ready = connectors.filter(connector => connector.callable === true).length
+  const hint = isGoogle
+    ? `${integer(ready)} of ${integer(connectors.length)} services authorized by this Google account`
+    : 'Live catalog from the native Codex app-server'
   return (
-    <div className={connectorStyles['connectorSection']} aria-label="Codex connectors">
+    <div className={connectorStyles['connectorSection']} aria-label={title}>
       <div className={connectorStyles['connectorHeading']}>
-        <h4 className={connectorStyles['connectorTitle']}>Codex connectors</h4>
-        <p className={connectorStyles['connectorHint']}>Live catalog from the native Codex app-server</p>
+        <h4 className={connectorStyles['connectorTitle']}>{title}</h4>
+        <p className={connectorStyles['connectorHint']}>{hint}</p>
       </div>
       <div className={connectorStyles['connectorGrid']}>
         {connectors.map(connector => <ConnectorCard key={connector.id} connector={connector} />)}
