@@ -9,6 +9,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {
+  AuthorizationConnectorTelemetry,
   AuthorizationRateLimitWindow,
   AuthorizationSession,
   AuthorizationTelemetry,
@@ -28,12 +29,14 @@ export interface CodexAccountBridgeConfig {
   readonly disposeGraceMs: number
 }
 
-/** Secret-free account, rate-limit, and usage snapshot returned by the Codex app-server. */
+/** Secret-free account, rate-limit, usage, and optional Apps snapshots returned by Codex. */
 export interface CodexAccountSnapshot {
   readonly account: unknown
   readonly requiresOpenaiAuth: boolean
   readonly rateLimits?: unknown
   readonly usage?: unknown
+  readonly apps?: unknown
+  readonly installedApps?: unknown
 }
 
 type JsonObject = Record<string, unknown>
@@ -104,6 +107,67 @@ function usageTelemetry(value: unknown): AuthorizationUsageTelemetry | undefined
   return Object.keys(telemetry).length === 0 ? undefined : telemetry
 }
 
+function categoryOf(app: JsonObject): string | undefined {
+  const branding = maybeObject(app.branding)
+  const branded = optionalString(branding?.category)
+  if (branded !== undefined) return branded
+  const metadata = maybeObject(app.appMetadata)
+  const categories = metadata?.categories
+  if (!Array.isArray(categories)) return undefined
+  return categories.find((value): value is string => typeof value === 'string' && value.length > 0)
+}
+
+function connectorTelemetry(
+  appsValue: unknown,
+  installedValue: unknown,
+): AuthorizationConnectorTelemetry[] | undefined {
+  const appsResponse = maybeObject(appsValue)
+  if (!Array.isArray(appsResponse?.data)) return undefined
+
+  const installedResponse = maybeObject(installedValue)
+  const installedRows = Array.isArray(installedResponse?.apps) ? installedResponse.apps : undefined
+  const installedById = new Map<string, JsonObject>()
+  for (const row of installedRows ?? []) {
+    const installed = maybeObject(row)
+    const id = optionalString(installed?.id)
+    if (installed !== undefined && id !== undefined) installedById.set(id, installed)
+  }
+
+  const connectors: AuthorizationConnectorTelemetry[] = []
+  for (const row of appsResponse.data) {
+    const app = maybeObject(row)
+    if (app === undefined) continue
+    const id = optionalString(app.id)
+    const name = optionalString(app.name)
+    if (id === undefined || name === undefined) continue
+
+    const installed = installedById.get(id)
+    const description = optionalString(app.description)
+    const iconUrl = optionalString(app.logoUrl)
+    const iconUrlDark = optionalString(app.logoUrlDark)
+    const category = categoryOf(app)
+    const installUrl = optionalString(app.installUrl)
+    const accessible = typeof app.isAccessible === 'boolean' ? app.isAccessible : false
+    const enabled = typeof app.isEnabled === 'boolean' ? app.isEnabled : true
+    const callable = typeof installed?.callable === 'boolean' ? installed.callable : undefined
+
+    connectors.push({
+      id,
+      name,
+      ...description === undefined ? {} : { description },
+      ...iconUrl === undefined ? {} : { iconUrl },
+      ...iconUrlDark === undefined ? {} : { iconUrlDark },
+      ...category === undefined ? {} : { category },
+      ...installUrl === undefined ? {} : { installUrl },
+      accessible,
+      enabled,
+      ...installedRows === undefined ? {} : { installed: installed !== undefined },
+      ...callable === undefined ? {} : { callable },
+    })
+  }
+  return connectors.length === 0 ? undefined : connectors
+}
+
 /**
  * Convert Codex account responses into the fixed public authorization schema.
  * Unknown provider fields are discarded rather than copied through.
@@ -132,6 +196,7 @@ export function codexAccountTelemetry(snapshot: CodexAccountSnapshot): Authoriza
     }
     : undefined
   const usage = usageTelemetry(snapshot.usage)
+  const connectors = connectorTelemetry(snapshot.apps, snapshot.installedApps)
 
   const email = optionalString(account.email)
   const plan = optionalString(account.planType)
@@ -145,6 +210,7 @@ export function codexAccountTelemetry(snapshot: CodexAccountSnapshot): Authoriza
     ...secondaryLimit === undefined ? {} : { secondaryLimit },
     ...credits === undefined ? {} : { credits },
     ...usage === undefined ? {} : { usage },
+    ...connectors === undefined ? {} : { connectors },
   }
 }
 
@@ -185,7 +251,7 @@ class CodexAccountConnection {
     })
   }
 
-  async initialize(signal: AbortSignal): Promise<void> {
+  async initialize(signal: AbortSignal, experimentalApi: boolean): Promise<void> {
     this.transport.start()
     object(await this.transport.request('initialize', {
       clientInfo: {
@@ -194,7 +260,7 @@ class CodexAccountConnection {
         version: '0.0.1',
       },
       capabilities: {
-        experimentalApi: false,
+        experimentalApi,
         requestAttestation: false,
       },
     }, signal), 'initialize response')
@@ -260,6 +326,7 @@ async function openConnection(
   ctx: Context,
   config: CodexAccountBridgeConfig,
   signal: AbortSignal,
+  experimentalApi = false,
 ): Promise<CodexAccountConnection> {
   const child = ctx.subprocess.spawn({
     argv: codexAppServerArgv(),
@@ -271,7 +338,7 @@ async function openConnection(
   })
   const connection = new CodexAccountConnection(child, config.disposeGraceMs)
   try {
-    await Promise.race([connection.initialize(signal), connection.processEnded()])
+    await Promise.race([connection.initialize(signal, experimentalApi), connection.processEnded()])
     return connection
   } catch (error) {
     await connection.close().catch(() => {})
@@ -294,6 +361,49 @@ async function readAccount(
 }
 
 /**
+ * Read the optional Codex Apps catalog. Old pinned Codex releases may not expose
+ * these experimental methods; that capability miss must never break account,
+ * quota, login, or model operation.
+ */
+async function readOptionalCodexApps(
+  connection: CodexAccountConnection,
+  signal: AbortSignal,
+): Promise<{ apps?: unknown; installedApps?: unknown }> {
+  try {
+    const data: unknown[] = []
+    let cursor: string | undefined
+    for (let page = 0; page < 20; page++) {
+      const response = object(await Promise.race([
+        connection.request('app/list', {
+          limit: 100,
+          forceRefetch: false,
+          ...cursor === undefined ? {} : { cursor },
+        }, signal),
+        connection.processEnded(),
+      ]), 'app/list response')
+      if (!Array.isArray(response.data)) return {}
+      data.push(...response.data)
+      cursor = optionalString(response.nextCursor)
+      if (cursor === undefined) break
+    }
+
+    let installedApps: unknown
+    try {
+      installedApps = await Promise.race([
+        connection.request('app/installed', { forceRefresh: false }, signal),
+        connection.processEnded(),
+      ])
+    } catch {
+      // app/installed was added separately upstream; list metadata is still useful.
+    }
+    return { apps: { data }, ...installedApps === undefined ? {} : { installedApps } }
+  } catch {
+    // Capability probing is deliberately fail-soft for Codex 0.147.x compatibility.
+    return {}
+  }
+}
+
+/**
  * Read the native Codex account plus rate-limit/token-activity snapshots.
  * @param ctx - Cordis context used to spawn the Codex app-server.
  * @param config - environment and disposal policy for the native bridge.
@@ -305,14 +415,14 @@ export async function readCodexAccountSnapshot(
   config: CodexAccountBridgeConfig,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<CodexAccountSnapshot> {
-  const connection = await openConnection(ctx, config, signal)
+  const connection = await openConnection(ctx, config, signal, true)
   try {
     const account = await readAccount(connection, signal)
     if (account.account === null || account.account === undefined) return account
     const accountObject = object(account.account, 'account')
     if (accountObject.type !== 'chatgpt') return account
 
-    const [rateLimits, usage] = await Promise.all([
+    const [rateLimits, usage, apps] = await Promise.all([
       Promise.race([
         connection.request('account/rateLimits/read', {}, signal),
         connection.processEnded(),
@@ -321,8 +431,9 @@ export async function readCodexAccountSnapshot(
         connection.request('account/usage/read', {}, signal),
         connection.processEnded(),
       ]),
+      readOptionalCodexApps(connection, signal),
     ])
-    return { ...account, rateLimits, usage }
+    return { ...account, rateLimits, usage, ...apps }
   } finally {
     await connection.close()
   }
