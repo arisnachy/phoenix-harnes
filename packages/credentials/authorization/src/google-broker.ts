@@ -2,11 +2,14 @@
  * Host-only Google Workspace OAuth broker.
  *
  * The browser ceremony uses Google's Desktop/installed-application flow with a
- * loopback redirect, PKCE S256, and state. Access and refresh tokens are stored
- * only as an owner-scoped opaque `grant` record behind `ctx.credentials`.
- * Browser/model-facing authorization views never read that payload, and API
- * callers choose a fixed Google service rather than supplying an arbitrary URL
- * or OAuth scope.
+ * loopback redirect, PKCE S256, and state. Access and refresh tokens remain
+ * private fields of this Host Service and are never written to the file-backed
+ * credential provider. The credential store receives only a secret-free marker
+ * so the neutral authorization seam can observe a completed human login.
+ *
+ * API callers choose a fixed Google service rather than supplying an arbitrary
+ * URL or OAuth scope. A PHOENIX restart intentionally requires Google login
+ * again until a credential backend isolated from same-UID tool processes exists.
  *
  * @module @deepseek-ai/dsh-authorization/google
  */
@@ -15,14 +18,10 @@ import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Service, type Context } from '@deepseek-ai/cordis'
-import {
-  credentialKey,
-  type CredentialKey,
-  type CredentialRecord,
-} from '@deepseek-ai/dsh-credentials'
+import { credentialKey, type CredentialKey } from '@deepseek-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
 
-/** Durable Google account owned only by this Host-side provider. */
+/** Secret-free durable marker for the process-local Google account. */
 export const GOOGLE_ACCOUNT_KEY: CredentialKey = credentialKey('authorization-google', 'account')
 
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
@@ -45,8 +44,7 @@ interface ResolvedSpec {
   scopes: readonly string[]
 }
 
-interface GoogleGrantPayload {
-  version: 1
+interface GoogleGrant {
   accessToken: string
   refreshToken?: string
   expiresAt: number
@@ -181,8 +179,7 @@ function parseGrantedScopes(value: string | undefined): readonly string[] {
       'GOOGLE_SCOPE_UNVERIFIED',
     )
   }
-  const scopes = value.trim().split(/\s+/u)
-  return [...new Set(scopes)]
+  return [...new Set(value.trim().split(/\s+/u))]
 }
 
 function parseTokenResponse(value: unknown): TokenResponse {
@@ -214,39 +211,6 @@ async function readTokenResponse(response: Response): Promise<TokenResponse> {
     throw new AuthorizationError('Google returned a non-JSON token response', 'GOOGLE_TOKEN_RESPONSE')
   }
   return parseTokenResponse(value)
-}
-
-function parseGrant(record: CredentialRecord | undefined): GoogleGrantPayload | undefined {
-  if (record === undefined) return undefined
-  if (record.kind !== 'grant' || record.payload === null || typeof record.payload !== 'object' || Array.isArray(record.payload)) {
-    throw new AuthorizationError('Stored Google authorization has an incompatible format; reconnect Google', 'GOOGLE_GRANT_INVALID')
-  }
-  const payload = record.payload as Partial<GoogleGrantPayload>
-  if (payload.version !== 1
-    || !nonEmpty(payload.accessToken)
-    || (payload.refreshToken !== undefined && !nonEmpty(payload.refreshToken))
-    || typeof payload.expiresAt !== 'number'
-    || !Number.isFinite(payload.expiresAt)
-    || !Array.isArray(payload.scopes)
-    || payload.scopes.length === 0
-    || payload.scopes.some(scope => !nonEmpty(scope))) {
-    throw new AuthorizationError('Stored Google authorization has an incompatible format; reconnect Google', 'GOOGLE_GRANT_INVALID')
-  }
-  const scopes = payload.scopes.map(scope => scope.trim())
-  if (new Set(scopes).size !== scopes.length) {
-    throw new AuthorizationError('Stored Google authorization has duplicate scopes; reconnect Google', 'GOOGLE_GRANT_INVALID')
-  }
-  return {
-    version: 1,
-    accessToken: payload.accessToken,
-    ...(payload.refreshToken === undefined ? {} : { refreshToken: payload.refreshToken }),
-    expiresAt: payload.expiresAt,
-    scopes,
-  }
-}
-
-function grantRecord(payload: GoogleGrantPayload): CredentialRecord {
-  return { kind: 'grant', payload }
 }
 
 function form(fields: Readonly<Record<string, string>>): URLSearchParams {
@@ -419,11 +383,13 @@ function createAuthorizationUrl(spec: ResolvedSpec, redirectUri: string, state: 
   return url.toString()
 }
 
-/** Google Host broker. OAuth material stays behind the credentials service. */
+/** Google Host broker. OAuth material never leaves this service instance. */
 export default class GoogleApiBroker extends Service {
   static inject = ['authorization', 'credentials']
 
   private readonly spec: ResolvedSpec
+  private grant?: GoogleGrant
+  private refreshInFlight?: Promise<GoogleGrant>
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
@@ -437,17 +403,14 @@ export default class GoogleApiBroker extends Service {
     }))
   }
 
-  /** Secret-free connection telemetry derived from record metadata, not its payload. */
-  async inspect(): Promise<AuthorizationTelemetry | undefined> {
-    const info = await this.ctx.credentials.describeRecord(GOOGLE_ACCOUNT_KEY)
-    if (!info.configured || info.kind !== 'grant') return undefined
-    return { kind: 'account', provider: 'google', accountType: 'oauth' }
+  /** Secret-free telemetry exists only while this process owns a live grant. */
+  inspect(): Promise<AuthorizationTelemetry | undefined> {
+    return Promise.resolve(this.grant === undefined
+      ? undefined
+      : { kind: 'account', provider: 'google', accountType: 'oauth' })
   }
 
-  /**
-   * Execute one request inside a fixed Google service boundary.
-   * The service determines destination and required scope; the caller cannot.
-   */
+  /** Execute one request inside a fixed Google service boundary. */
   async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {
     const destination = serviceUrl(request)
     const headers = callerHeaders(request.headers)
@@ -464,11 +427,11 @@ export default class GoogleApiBroker extends Service {
     }
   }
 
-  /** Remove the durable grant locally even when Google revocation is unavailable. */
+  /** Clear the process grant and secret-free marker even when provider revocation fails. */
   async disconnect(): Promise<{ revoked: boolean }> {
-    const stored = await this.ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
-    let grant: GoogleGrantPayload | undefined
-    try { grant = parseGrant(stored) } catch { grant = undefined }
+    const grant = this.grant
+    this.grant = undefined
+    this.refreshInFlight = undefined
     let revoked = grant === undefined
     if (grant !== undefined) {
       const token = grant.refreshToken ?? grant.accessToken
@@ -500,7 +463,7 @@ export default class GoogleApiBroker extends Service {
     const receiver = await internals.openLoopback(state, session.signal)
     try {
       session.notify({
-        message: 'Continue with Google in your browser. PHOENIX stores OAuth credentials only in its Host credential store.',
+        message: 'Continue with Google in your browser. PHOENIX keeps OAuth tokens inside the Host process.',
         url: createAuthorizationUrl(this.spec, receiver.redirectUri, state, pkce.challenge),
       })
       const code = await receiver.code
@@ -524,84 +487,84 @@ export default class GoogleApiBroker extends Service {
       if (token.token_type.toLowerCase() !== 'bearer') {
         throw new AuthorizationError('Google returned an unsupported token type', 'GOOGLE_TOKEN_RESPONSE')
       }
-      const payload: GoogleGrantPayload = {
-        version: 1,
+      const next: GoogleGrant = {
         accessToken: token.access_token,
         ...(token.refresh_token === undefined ? {} : { refreshToken: token.refresh_token }),
         expiresAt: internals.now() + token.expires_in * 1000,
         scopes: parseGrantedScopes(token.scope),
       }
-      await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve(grantRecord(payload)))
+      await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
+      this.grant = next
     } finally {
       await receiver.close()
     }
   }
 
-  private async usableGrant(requiredScope: string, signal?: AbortSignal): Promise<GoogleGrantPayload> {
-    const first = parseGrant(await this.ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY))
-    if (first === undefined) {
-      throw new AuthorizationError('Google is not signed in for this PHOENIX profile', 'GOOGLE_REAUTH_REQUIRED')
+  private async usableGrant(requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
+    const current = this.grant
+    if (current === undefined) {
+      throw new AuthorizationError('Google is not signed in for this PHOENIX process', 'GOOGLE_REAUTH_REQUIRED')
     }
-    if (!first.scopes.includes(requiredScope)) {
+    if (!current.scopes.includes(requiredScope)) {
       throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
     }
-    if (first.expiresAt > internals.now() + EXPIRY_SKEW_MS) return first
-    if (first.refreshToken === undefined) {
-      throw new AuthorizationError('Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED')
-    }
+    if (current.expiresAt > internals.now() + EXPIRY_SKEW_MS) return current
+    return this.refresh(current, requiredScope, signal)
+  }
+
+  private refresh(current: GoogleGrant, requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
+    if (this.refreshInFlight !== undefined) return this.refreshInFlight
     const clientId = this.spec.clientId
-    if (clientId === undefined) {
-      throw new AuthorizationError(
-        'Google OAuth is not configured. Set PHOENIX_GOOGLE_OAUTH_CLIENT_ID and restart PHOENIX.',
-        'GOOGLE_CLIENT_UNCONFIGURED',
-      )
+    const refreshToken = current.refreshToken
+    if (clientId === undefined || refreshToken === undefined) {
+      return Promise.reject(new AuthorizationError(
+        'Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED'))
     }
-
-    const updated = await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, async (current) => {
-      const latest = parseGrant(current)
-      if (latest === undefined) return current
-      if (!latest.scopes.includes(requiredScope)) return current
-      if (latest.expiresAt > internals.now() + EXPIRY_SKEW_MS) return current
-      if (latest.refreshToken === undefined) return current
-
-      const response = await internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: form({
-          client_id: clientId,
-          refresh_token: latest.refreshToken,
-          grant_type: 'refresh_token',
-        }),
-        ...(signal === undefined ? {} : { signal }),
-        redirect: 'error',
-      })
-      if (!response.ok) {
-        if (response.status === 400 || response.status === 401) {
-          throw new AuthorizationError('Google authorization is no longer valid; reconnect Google', 'GOOGLE_REAUTH_REQUIRED')
-        }
-        throw new AuthorizationError(`Google token refresh failed with HTTP ${String(response.status)}`, 'GOOGLE_REFRESH_FAILED')
-      }
-      const token = await readTokenResponse(response)
-      if (token.token_type.toLowerCase() !== 'bearer') {
-        throw new AuthorizationError('Google returned an unsupported token type', 'GOOGLE_TOKEN_RESPONSE')
-      }
-      const next: GoogleGrantPayload = {
-        version: 1,
-        accessToken: token.access_token,
-        refreshToken: token.refresh_token ?? latest.refreshToken,
-        expiresAt: internals.now() + token.expires_in * 1000,
-        scopes: token.scope === undefined ? latest.scopes : parseGrantedScopes(token.scope),
-      }
-      return grantRecord(next)
+    const running = this.refreshGrant(current, clientId, refreshToken, requiredScope, signal).finally(() => {
+      if (this.refreshInFlight === running) this.refreshInFlight = undefined
     })
+    this.refreshInFlight = running
+    return running
+  }
 
-    const final = parseGrant(updated)
-    if (final === undefined
-      || final.expiresAt <= internals.now() + EXPIRY_SKEW_MS
-      || !final.scopes.includes(requiredScope)) {
-      throw new AuthorizationError('Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED')
+  private async refreshGrant(
+    current: GoogleGrant,
+    clientId: string,
+    refreshToken: string,
+    requiredScope: string,
+    signal?: AbortSignal,
+  ): Promise<GoogleGrant> {
+    const response = await internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: form({ client_id: clientId, refresh_token: refreshToken, grant_type: 'refresh_token' }),
+      ...(signal === undefined ? {} : { signal }),
+      redirect: 'error',
+    })
+    if (!response.ok) {
+      if (response.status === 400 || response.status === 401) {
+        this.grant = undefined
+        await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
+        throw new AuthorizationError('Google authorization is no longer valid; reconnect Google', 'GOOGLE_REAUTH_REQUIRED')
+      }
+      throw new AuthorizationError(`Google token refresh failed with HTTP ${String(response.status)}`, 'GOOGLE_REFRESH_FAILED')
     }
-    return final
+    const token = await readTokenResponse(response)
+    if (token.token_type.toLowerCase() !== 'bearer') {
+      throw new AuthorizationError('Google returned an unsupported token type', 'GOOGLE_TOKEN_RESPONSE')
+    }
+    const next: GoogleGrant = {
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token ?? current.refreshToken,
+      expiresAt: internals.now() + token.expires_in * 1000,
+      scopes: token.scope === undefined ? current.scopes : parseGrantedScopes(token.scope),
+    }
+    if (!next.scopes.includes(requiredScope)) {
+      this.grant = next
+      throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
+    }
+    this.grant = next
+    return next
   }
 }
 
