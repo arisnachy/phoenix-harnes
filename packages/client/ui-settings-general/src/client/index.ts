@@ -21,8 +21,6 @@ import type {
 } from './shell-contract.ts'
 import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
-import type { TriggerContentInjected } from './chrome.tsx'
-import { ContextRemaining } from './ContextRemaining.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from './SettingsDocumentAction.tsx'
@@ -30,7 +28,7 @@ import { SettingsDocumentStore } from './settings-document-store.ts'
 import { en, zh, type SettingsKey } from './locales.ts'
 
 export type {
-  CloseLabelProps, HeaderContentProps, TriggerContentInjected, TriggerContentProps,
+  CloseLabelProps, HeaderContentProps, TriggerContentProps,
 } from './chrome.tsx'
 export type {
   GeneralSectionComponentProps,
@@ -70,9 +68,6 @@ export function apply(ctx: ClientContext): void {
   // locale/change re-registration wiring.
   const t = ctx.locale.bind(NS)
   const connection = ctx.get('connection') as ConnectionHandle
-  const triggerInjected = (): TriggerContentInjected => ({
-    authorization: connection.api.authorization,
-  })
   // The action follows the shared describe mirror, whose owning plugin
   // already refreshes it on document commits and reconnects.
   const documentController = connection.isLoopback
@@ -158,9 +153,7 @@ export function apply(ctx: ClientContext): void {
   }, SettingsRoot))
 
   ctx.slots.inject('settings.trigger', () =>
-    ctx.slots.register({ name: 'settings.trigger', locale: NS, inject: triggerInjected }, TriggerContent))
-  ctx.slots.inject('settings.trigger.trailing', () =>
-    ctx.slots.register({ name: 'settings.trigger.trailing' }, ContextRemaining))
+    ctx.slots.register({ name: 'settings.trigger', locale: NS }, TriggerContent))
   ctx.slots.inject('settings.header', () =>
     ctx.slots.register({ name: 'settings.header', locale: NS }, HeaderContent))
   if (documentInjected !== undefined) {
