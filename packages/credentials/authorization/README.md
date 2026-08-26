@@ -61,9 +61,21 @@ A notice is one-way and never carries a secret: a message, optionally the page t
 
 The vocabulary is deliberately smaller than any one provider's: it describes what a surface must render, so a surface that renders one flow renders all of them.
 
+## Google Workspace host broker
+
+`@deepseek-ai/dsh-authorization/google` is a protocol-owning Host Service layered beside the neutral seam. It registers one `Google Workspace` flow and uses Google's Desktop-app authorization-code flow with a random loopback listener, PKCE S256, and `state`. The configured `clientId` identifies the OAuth application; it is not a user password or OAuth token. The shipped composition reads it from `PHOENIX_GOOGLE_OAUTH_CLIENT_ID`.
+
+The provider owns the opaque `authorization-google/account` record. Successful authorization stores a versioned `grant` payload containing the access token, optional refresh token, expiry, and the exact scopes Google reported as granted. Browser-facing `list()`, `describe()`, `inspect()`, and credential metadata never read or project that payload. A restart reuses the durable grant; when the access token approaches expiry, refresh happens inside the credential provider's serialized `modifyRecord()` transaction so two Host processes cannot race refresh-token rotation.
+
+Host integrations obtain the broker explicitly with `ctx.get('googleApi')` and call `request({ service, path, ... })`; the submodule deliberately does not widen the global `Context` API. Callers never supply an arbitrary URL plus a caller-declared scope. `service` is one of `gmail`, `calendar`, `drive`, `docs`, `sheets`, `slides`, or `contacts`; the broker owns each service's API root and required OAuth scope. Paths must remain relative to that root, credential/cookie headers are rejected, credential-bearing requests use `redirect: 'error'`, and the Bearer token is injected only at the final Google `fetch` boundary. Results contain status, media type, and body, never the access or refresh token. `disconnect()` removes the durable grant even when Google's best-effort revocation request fails.
+
+Google installed applications do not support incremental authorization. The mounted provider therefore asks for the configured suite scope set in one browser ceremony, but it persists the **actual** scopes returned by Google instead of pretending the user granted all of them. A capability whose scope was not granted fails closed with `GOOGLE_SCOPE_DENIED`; the user can reconnect explicitly if they want to change consent. Deployments using sensitive or restricted scopes must satisfy Google's OAuth verification requirements.
+
+The durable grant inherits the security boundary of `dsh-credentials-local`: the file-backed provider keeps values out of model prompts, authorization surfaces, process environment, and normal configuration, but a deliberately malicious same-UID process can still read `$DSH_HOME/.credentials.yaml`. That is an existing platform limitation, not an OAuth transport leak; deployments that require secrecy even from arbitrary same-user processes still need the deferred OS-isolated credential backend described by `credentials-local`.
+
 ## Model Experience
 
-None, as authorization is a configuration-time conversation with a human and no flow, notice, or prompt reaches a model request.
+None directly: authorization is a configuration-time conversation with a human, and no flow, notice, prompt, OAuth token, credential payload, or broker authentication header enters a model request. Model-visible Google tools receive only the Google API data their owning integration chooses to return.
 
 #### KV Cache effect
 
@@ -72,5 +84,6 @@ No invalidation; no authorization state enters a request prefix.
 ## Known Limitations and Deferred Work
 
 - **No flow is resumable** — an attempt lives in the process that started it, so a browser reload during a login abandons it and the human starts over. Durable attempts need a store this seam does not have.
-- **Nothing revokes** — signing out is `ctx.credentials.deleteRecord(key)`, which forgets the local record without telling the issuer. A provider that needs a server-side revoke has no place to declare it yet.
+- **The local credential file is not a same-UID isolation boundary** — durable Google grants share the documented `credentials-local` limitation: a process already running as the user can deliberately read the file. An OS-isolated credential provider remains the stronger follow-up.
+- **There is no generic revoke operation on the authorization seam** — providers may own protocol-specific revocation, as the Google broker does, but `ctx.authorization` itself exposes no cross-provider sign-out method.
 - **A key with no flow is inert** — the seam reports what is registered, so a record left by an uninstalled plugin can be deleted but not re-authorized. Recognizing that orphan is the caller's join, as it is for [`listRecords()`](../credentials/README.md#surface).
