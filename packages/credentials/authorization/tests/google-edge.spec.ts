@@ -72,4 +72,28 @@ describe('Google Workspace runtime guards', () => {
 
     expect(fetchSpy).not.toHaveBeenCalled()
   })
+
+  it('purges a secret-bearing durable grant left by the superseded Google broker', async () => {
+    const ctx = new Context()
+    await ctx.plugin(MemoryCredentials)
+    await ctx.plugin(AuthorizationService)
+    await ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({
+      kind: 'grant',
+      payload: {
+        version: 1,
+        accessToken: 'legacy-access-must-be-deleted',
+        refreshToken: 'legacy-refresh-must-be-deleted',
+        expiresAt: 9_999_999,
+        scopes: [DRIVE_SCOPE],
+      },
+    }))
+
+    await ctx.plugin(GoogleApiBroker, {
+      clientId: 'desktop.apps.googleusercontent.com',
+      scopes: [DRIVE_SCOPE],
+    })
+
+    await expect(ctx.authorization.inspect(GOOGLE_ACCOUNT_KEY)).resolves.toBeUndefined()
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toBeUndefined()
+  })
 })
