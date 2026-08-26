@@ -1,7 +1,10 @@
 /**
- * Cooperative tool-call timeout enforcer. A tool declares `timeoutMs` and
- * promises to honor `exec.signal`; this wrapper arms that deadline and maps its
- * own expiry to `TOOL_TIMEOUT` without racing or abandoning the tool promise.
+ * Cooperative tool-call timeout enforcer plus the default command-policy gate.
+ * A tool declares `timeoutMs` and promises to honor `exec.signal`; this wrapper
+ * arms that deadline and maps its own expiry to `TOOL_TIMEOUT` without racing
+ * or abandoning the tool promise. The same already-mounted guard composes the
+ * Codex-inspired ExecPolicy at `tools/pre-execute`, keeping bundle wiring small
+ * and making command policy available in every PHOENIX profile.
  *
  * FIXME: settle the intended `@deepseek-ai/dsh-timeout-guard` rename before the
  * first tagged release — suggestion only, aligning the name with its `guard/`
@@ -14,6 +17,16 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+import { apply as applyExecPolicy, type ExecPolicyConfig } from './exec-policy.ts'
+
+export type { ExecPolicyConfig, ExecPolicyDecision, ExecPolicyEvaluation, ExecPolicyPatternPart, ExecPolicyRule } from './exec-policy.ts'
+export { compileExecPolicy, evaluateExecPolicy } from './exec-policy.ts'
+
+/** Guard configuration. Empty ExecPolicy rules preserve the historical behavior. */
+export interface Config {
+  /** Optional Codex-style command rules; omitted means pass-through. */
+  readonly execPolicy?: ExecPolicyConfig
+}
 
 /**
  * The code owned by this plugin, used BOTH as the internal {@link deadline}
@@ -48,11 +61,14 @@ function toolTimeoutResult(timeoutMs: number): ToolExecutionResult {
 }
 
 /**
- * Register the timeout wrapper. It resolves the caller-visible tool definition,
- * temporarily replaces `exec.signal`, delegates, restores the upstream signal,
- * and replaces the result only when this wrapper's own timer fired.
+ * Register the monotonic command-policy preflight and timeout wrapper. ExecPolicy
+ * is pass-through with the default empty configuration; deployments can add
+ * allow/prompt/forbidden rules without a second bundle row. An `allow` still
+ * delegates, so it can never bypass approval, sandbox, HARDNESS, or later gates.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config = {}): void {
+  applyExecPolicy(ctx, config.execPolicy)
+
   ctx.on('tools/execute', async (exec, next): Promise<ToolExecutionResult> => {
     const timeoutMs = ctx.tools.get(exec.name, exec.agent)?.timeoutMs
     // A tool that declares no budget: no deadline, delegate unchanged.

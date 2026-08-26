@@ -75,18 +75,26 @@ describe('SubprocessRuntime seam', () => {
     await expect(ctx.plugin(SecondService)).rejects.toThrow(/service "subprocess" has been registered/)
   })
 
-  it('scrubbedParentEnv drops credential-shaped and DSH_ names (case-insensitively) but keeps PATH', () => {
+  it('scrubbedParentEnv drops credentials, harness state, and implicit loader injection while keeping ordinary runtime state', () => {
     process.env.DSH_SCRUB_PROBE = 'stale'
     process.env.dsh_scrub_probe_lower = 'stale'
     process.env.SCRUB_PROBE_TOKEN = 'secret'
     process.env.SCRUB_PROBE_PASSWORD = 'secret'
     process.env.SCRUB_PROBE_PLAIN = 'visible'
+    process.env.LD_PRELOAD = '/tmp/evil.so'
+    process.env.LD_AUDIT = '/tmp/audit.so'
+    process.env.DYLD_INSERT_LIBRARIES = '/tmp/evil.dylib'
+    process.env.NODE_OPTIONS = '--require=/tmp/evil.cjs'
     try {
       const env = scrubbedParentEnv()
       expect(env.DSH_SCRUB_PROBE).toBeUndefined()
       expect(env.dsh_scrub_probe_lower).toBeUndefined()
       expect(env.SCRUB_PROBE_TOKEN).toBeUndefined()
       expect(env.SCRUB_PROBE_PASSWORD).toBeUndefined()
+      expect(env.LD_PRELOAD).toBeUndefined()
+      expect(env.LD_AUDIT).toBeUndefined()
+      expect(env.DYLD_INSERT_LIBRARIES).toBeUndefined()
+      expect(env.NODE_OPTIONS).toBeUndefined()
       expect(env.SCRUB_PROBE_PLAIN).toBe('visible')
       expect(env.PATH).toBeDefined()
     } finally {
@@ -95,6 +103,10 @@ describe('SubprocessRuntime seam', () => {
       delete process.env.SCRUB_PROBE_TOKEN
       delete process.env.SCRUB_PROBE_PASSWORD
       delete process.env.SCRUB_PROBE_PLAIN
+      delete process.env.LD_PRELOAD
+      delete process.env.LD_AUDIT
+      delete process.env.DYLD_INSERT_LIBRARIES
+      delete process.env.NODE_OPTIONS
     }
   })
 })

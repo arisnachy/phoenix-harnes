@@ -135,6 +135,7 @@ function scriptedApi(overrides: {
       status: err,
       answer: err,
       cancel: err,
+      disconnect: err,
       ...overrides.authorization,
     },
     events: { mux: () => empty<MuxFrame>(), host: () => empty<HostFrame>(), ...overrides.events },

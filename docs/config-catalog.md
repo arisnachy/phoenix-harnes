@@ -2572,6 +2572,52 @@ export interface Config {
 
 Source: [`packages/shell/tool-bash-persistent/src/index.ts:432`](../packages/shell/tool-bash-persistent/src/index.ts)
 
+<a id="deepseek-aidsh-tool-call-timeout-policy"></a>
+
+## `@deepseek-ai/dsh-tool-call-timeout-policy`
+
+Requires: `tools`
+
+```ts config-catalog
+/** Guard configuration. Empty ExecPolicy rules preserve the historical behavior. */
+export interface Config {
+  /** Optional Codex-style command rules; omitted means pass-through. */
+  readonly execPolicy?: ExecPolicyConfig
+}
+
+/** Optional exec-policy configuration. */
+export interface ExecPolicyConfig {
+  /** Rules are evaluated together and the strictest matching decision wins. */
+  readonly rules?: readonly ExecPolicyRule[]
+  /** Model-facing shell tools whose `command` string is governed. */
+  readonly shellTools?: readonly string[]
+  /** What to do with a command containing unquoted shell control operators. */
+  readonly complexDecision?: 'inherit' | 'prompt' | 'forbidden'
+}
+
+/** One validated token-prefix rule and its examples. */
+export interface ExecPolicyRule {
+  /** Ordered token prefix; an array member means any one of those alternatives. */
+  readonly pattern: readonly ExecPolicyPatternPart[]
+  /** Defaults to allow, matching Codex execpolicy. */
+  readonly decision?: ExecPolicyDecision
+  /** Human-readable rationale surfaced on prompt/denial. */
+  readonly justification?: string
+  /** Examples that must match this rule; validated when configuration is compiled. */
+  readonly match?: readonly string[]
+  /** Examples that must not match this rule; validated when configuration is compiled. */
+  readonly notMatch?: readonly string[]
+}
+
+/** One exact token or accepted alternatives at one prefix position. */
+export type ExecPolicyPatternPart = string | readonly string[]
+
+/** One monotonic command-policy outcome. */
+export type ExecPolicyDecision = 'allow' | 'prompt' | 'forbidden'
+```
+
+Source: [`packages/guard/timeout-policy/src/index.ts:26`](../packages/guard/timeout-policy/src/index.ts)
+
 <a id="deepseek-aidsh-tool-fs"></a>
 
 ## `@deepseek-ai/dsh-tool-fs`
@@ -3395,7 +3441,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-subprocess-local` ([`packages/subprocess/subprocess-local/src/index.ts`](../packages/subprocess/subprocess-local/src/index.ts))
 - `@deepseek-ai/dsh-terminal` ([`packages/terminal/terminal/src/index.ts`](../packages/terminal/terminal/src/index.ts))
 - `@deepseek-ai/dsh-tool-ask-user` — requires `tools` · `userQuestions` ([`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts))
-- `@deepseek-ai/dsh-tool-call-timeout-policy` — requires `tools` ([`packages/guard/timeout-policy/src/index.ts`](../packages/guard/timeout-policy/src/index.ts))
 - `@deepseek-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
 - `@deepseek-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
 - `@deepseek-ai/dsh-user-profile` — requires `settings` · `systemPrompt` ([`packages/profile/user-profile/src/index.ts`](../packages/profile/user-profile/src/index.ts))

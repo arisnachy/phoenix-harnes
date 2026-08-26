@@ -80,6 +80,7 @@ export interface RpcMethodMap {
   'authorization.status': AuthorizationApi['status']
   'authorization.answer': AuthorizationApi['answer']
   'authorization.cancel': AuthorizationApi['cancel']
+  'authorization.disconnect': AuthorizationApi['disconnect']
 }
 
 /** Business request payload of method K (reaches through the RpcRequest narrow form to payload). */

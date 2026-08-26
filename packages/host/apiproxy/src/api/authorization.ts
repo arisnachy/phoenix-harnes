@@ -41,6 +41,8 @@ export interface AuthorizationEntryView {
   label: string
   methods: AuthorizationMethodView[]
   inFlight: boolean
+  /** True only when the owning provider implements protocol-specific teardown. */
+  disconnectable?: true
   /** The credential record behind the flow, when one is stored. */
   stored?: AuthorizationStoredView
   /** Provider-owned, explicitly sanitized plan/quota/usage information. */
@@ -101,4 +103,10 @@ export interface AuthorizationApi {
   cancel(
     request: RpcRequest<{ attemptId: string }>,
   ): Promise<RpcResponse<{ cancelled: true }>>
+
+  /** Disconnect one provider-owned account without exposing provider credentials. */
+  disconnect(
+    request: RpcRequest<{ key: string }>,
+    signal?: AbortSignal,
+  ): Promise<RpcResponse<{ disconnected: true }>>
 }

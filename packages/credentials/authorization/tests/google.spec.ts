@@ -115,13 +115,16 @@ describe('Google Workspace OAuth authorization boundary', () => {
       methods: [{ id: 'oauth', label: 'Sign in with Google' }],
       inFlight: false,
     }])
-    expect(await ctx.authorization.inspect(GOOGLE_ACCOUNT_KEY)).toEqual({
+    const telemetry = await ctx.authorization.inspect(GOOGLE_ACCOUNT_KEY)
+    expect(telemetry).toMatchObject({
       kind: 'account',
-      provider: 'google',
+      provider: 'Google Workspace',
       accountType: 'oauth',
     })
-    expect(JSON.stringify(await ctx.authorization.inspect(GOOGLE_ACCOUNT_KEY)))
-      .not.toMatch(/access-token|refresh-token|authorization-code/)
+    if (telemetry?.kind !== 'account') throw new Error('expected Google account telemetry')
+    expect(telemetry.connectors).toHaveLength(7)
+    expect(telemetry.connectors?.every(service => service.callable === true)).toBe(true)
+    expect(JSON.stringify(telemetry)).not.toMatch(/access-token|refresh-token|authorization-code/)
 
     expect(ui.notices).toHaveLength(1)
     expect(ui.notices[0]?.url).toContain('accounts.google.com/o/oauth2/v2/auth')

@@ -29,6 +29,19 @@ const usageTelemetrySchema = z.object({
   currentStreakDays: z.number().nonnegative().optional(),
   longestStreakDays: z.number().nonnegative().optional(),
 })
+const connectorTelemetrySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  iconUrl: z.string().min(1).optional(),
+  iconUrlDark: z.string().min(1).optional(),
+  category: z.string().optional(),
+  installUrl: z.string().min(1).optional(),
+  accessible: z.boolean(),
+  enabled: z.boolean(),
+  installed: z.boolean().optional(),
+  callable: z.boolean().optional(),
+})
 const authorizationTelemetrySchema = z.object({
   kind: z.literal('account'),
   provider: z.string().min(1),
@@ -39,6 +52,7 @@ const authorizationTelemetrySchema = z.object({
   secondaryLimit: rateLimitWindowSchema.optional(),
   credits: creditsTelemetrySchema.optional(),
   usage: usageTelemetrySchema.optional(),
+  connectors: z.array(connectorTelemetrySchema).optional(),
 }) satisfies z.ZodType<Wire<AuthorizationTelemetry>>
 
 const authorizationEntrySchema = z.object({
@@ -46,6 +60,7 @@ const authorizationEntrySchema = z.object({
   label: z.string().min(1),
   methods: z.array(authorizationMethodSchema).min(1),
   inFlight: z.boolean(),
+  disconnectable: z.literal(true).optional(),
   stored: z.object({ kind: z.union([z.literal('api-key'), z.literal('grant')]) }).optional(),
   telemetry: authorizationTelemetrySchema.optional(),
 })
@@ -124,3 +139,10 @@ export const authorizationCancelRequestSchema = z.object({
 }) satisfies z.ZodType<Wire<RequestPayload<'authorization.cancel'>>>
 /** Validates acknowledgement that cancellation was requested. */
 export const authorizationCancelValueSchema = z.object({ cancelled: z.literal(true) }) satisfies z.ZodType<Wire<ResponseValue<'authorization.cancel'>>>
+
+/** Validates provider-owned account disconnect by credential key. */
+export const authorizationDisconnectRequestSchema = z.object({
+  key: authorizationKeySchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'authorization.disconnect'>>>
+/** Validates acknowledgement that provider teardown completed. */
+export const authorizationDisconnectValueSchema = z.object({ disconnected: z.literal(true) }) satisfies z.ZodType<Wire<ResponseValue<'authorization.disconnect'>>>

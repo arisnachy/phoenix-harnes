@@ -63,7 +63,7 @@ import {
 import { llmDiscoverModelsValueSchema, llmModelsValueSchema, llmProvidersValueSchema } from '../api/llm.schema.ts'
 import {
   authorizationAnswerValueSchema, authorizationBeginValueSchema, authorizationCancelValueSchema,
-  authorizationListValueSchema, authorizationStatusValueSchema,
+  authorizationDisconnectValueSchema, authorizationListValueSchema, authorizationStatusValueSchema,
 } from '../api/authorization.schema.ts'
 import {
   subagentHistoryValueSchema,
@@ -171,6 +171,7 @@ export interface IApiClient {
     status(payload: RequestPayload<'authorization.status'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'authorization.status'>>>
     answer(payload: RequestPayload<'authorization.answer'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'authorization.answer'>>>
     cancel(payload: RequestPayload<'authorization.cancel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'authorization.cancel'>>>
+    disconnect(payload: RequestPayload<'authorization.disconnect'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'authorization.disconnect'>>>
   }
   /** client-response passthrough (rpcId is a backfill of the server-request's id — never minted here). */
   respond(message: ClientResponse, signal?: AbortSignal): Promise<RpcReceipt>
@@ -238,6 +239,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'authorization.status': authorizationStatusValueSchema,
   'authorization.answer': authorizationAnswerValueSchema,
   'authorization.cancel': authorizationCancelValueSchema,
+  'authorization.disconnect': authorizationDisconnectValueSchema,
 }
 
 /** Default timeout for bounded unary calls (rpc-compare 2026-07-19: a hung host must not leave callers pending forever). */
@@ -359,8 +361,6 @@ export abstract class AbstractApiClient implements IApiClient {
     this.onEnvelope(full)
     if (full.rpcId !== message.rpcId) throw new Error(`rpcId mismatch for ${method}: sent ${message.rpcId}, got ${full.rpcId}`)
     if (!full.result.ok) return { rpcId: full.rpcId, result: full.result }
-    // Second-level S→C parse: the ok value must match the method's Value schema (mirror of the
-    // handler's request-payload parse). The cast collapses the Wire<> widening, same as the handler side.
     const value = UNARY_VALUE_SCHEMAS[method].parse(full.result.value) as ResponseValue<K>
     return { rpcId: full.rpcId, result: { ok: true, value } }
   }
@@ -423,8 +423,6 @@ export abstract class AbstractApiClient implements IApiClient {
     }
   }
 
-  // ---- IApiClient API (arrow properties so destructured/passed references stay bound) ----
-
   readonly sessions: IApiClient['sessions'] = {
     list: (payload, signal) => this.callUnary('session.list', payload, signal),
     search: (payload, signal) => this.callUnary('session.search', payload, signal),
@@ -449,8 +447,6 @@ export abstract class AbstractApiClient implements IApiClient {
 
   readonly host: IApiClient['host'] = {
     describe: (payload, signal) => this.callUnary('host.describe', payload, signal),
-    // A native system dialog is user-paced and may legitimately stay open
-    // longer than the normal unary deadline. Caller/connection aborts remain.
     pickDirectory: (payload, signal) => this.callUnary(
       'host.pickDirectory', payload, signal, 'caller-signal-only',
     ),
@@ -473,11 +469,6 @@ export abstract class AbstractApiClient implements IApiClient {
     list: (payload, signal) => this.callUnary('skill.list', payload, signal),
   }
 
-  // Annotated like every sibling, and load-bearing rather than cosmetic:
-  // inferring this member inlines `AgentPresetEntry` into the emitted
-  // declaration by the specifier TS picks — the host `index.ts` — which drags
-  // the whole gateway, and with it the host `Context` merges, into every
-  // Client program that imports this carrier.
   readonly agentPresets: IApiClient['agentPresets'] = {
     list: (payload, signal) => this.callUnary('agentPreset.list', payload, signal),
     select: (payload, signal) => this.callUnary('agentPreset.select', payload, signal),
@@ -522,6 +513,7 @@ export abstract class AbstractApiClient implements IApiClient {
     status: (payload, signal) => this.callUnary('authorization.status', payload, signal),
     answer: (payload, signal) => this.callUnary('authorization.answer', payload, signal),
     cancel: (payload, signal) => this.callUnary('authorization.cancel', payload, signal),
+    disconnect: (payload, signal) => this.callUnary('authorization.disconnect', payload, signal),
   }
 
   readonly events: IApiClient['events'] = {
@@ -536,20 +528,12 @@ export abstract class AbstractApiClient implements IApiClient {
   }
 }
 
-/**
- * In-process client over an injected fetch-shaped handler (the isomorphic point:
- * `new InProcessApiClient(toFetchHandler(api))` never touches the network). Lives here because
- * in-process injection is this package's own capability (handler and client are both local).
- */
+/** API client routing fetches directly into an in-process host handler. */
 export class InProcessApiClient extends AbstractApiClient {
   constructor(private readonly handler: { fetch: typeof fetch }, timeoutMs?: number) {
     super(timeoutMs)
   }
 
-  /**
-   * Faithful to real fetch: reject on signal abort even when the in-process
-   * handler ignores the signal (a hung impl must not defeat timeout/cancel).
-   */
   protected doFetch(input: URL, init?: RequestInit): Promise<Response> {
     const signal = init?.signal ?? undefined
     if (signal === undefined) return this.handler.fetch(input, init)
@@ -564,7 +548,6 @@ export class InProcessApiClient extends AbstractApiClient {
   }
 }
 
-/** Mirror fetch's abort rejection: the signal's reason when present, else a DOMException-style AbortError. */
 function abortError(signal: AbortSignal): Error {
   const reason: unknown = signal.reason
   if (reason instanceof Error) return reason

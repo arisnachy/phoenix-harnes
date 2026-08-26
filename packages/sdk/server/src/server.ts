@@ -14,15 +14,19 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
-import type {
-  InitializeParams,
-  InitializeResult,
-  JsonRpcTransportPeer,
-  SessionEventNotification,
-  SessionPromptParams,
-  SessionPromptResult,
-  SubagentFinishedNotification,
-  SubagentStartedNotification,
+import {
+  HARNESS_SDK_PROTOCOL_VERSION,
+  type InitializeParams,
+  type InitializeResult,
+  type JsonRpcTransportPeer,
+  type SessionCloseResult,
+  type SessionEventNotification,
+  type SessionInterruptResult,
+  type SessionLifecycleParams,
+  type SessionPromptParams,
+  type SessionPromptResult,
+  type SubagentFinishedNotification,
+  type SubagentStartedNotification,
 } from '@deepseek-ai/dsh-sdk-protocol'
 
 interface SessionRecord {
@@ -58,6 +62,7 @@ export class HarnessSdkJsonRpcServer {
   private llmFiber: { dispose(): Promise<void> } | undefined
   private readonly sessions = new Map<string, SessionRecord>()
   private readonly sessionCreations = new Map<string, Promise<SessionRecord>>()
+  private readonly sessionCloseTasks = new Map<string, Promise<SessionCloseResult>>()
   private readonly disposers: (() => void)[] = []
   private shutdownTask: Promise<Record<string, never>> | undefined
   private shuttingDown = false
@@ -86,9 +91,6 @@ export class HarnessSdkJsonRpcServer {
     }))
     this.disposers.push(ctx.on('subagent/end', function (this: Scoped<SubagentRuntime>, info: SubagentRunEndInfo) {
       const parent = subagentParentOf(this)
-      // This protocol reports only in-process child sessions. The service
-      // snapshots the provider name and local flag through child disposal;
-      // matching ids or parent lineage alone never establishes locality.
       if (!info.local) return
       const payload: SubagentFinishedNotification = {
         provider: info.provider,
@@ -104,14 +106,18 @@ export class HarnessSdkJsonRpcServer {
   }
 
   /**
-   * Configure the SDK route, mounting the DeepSeek fallback only when unowned.
-   * @param params - SDK handshake parameters.
-   * @returns server identity for the handshake.
+   * Configure the SDK route and negotiate optional protocol features.
+   * @param params - runtime route, model, limits, and optional protocol version.
+   * @returns server identity and negotiated protocol capabilities.
    */
   async initialize(params: InitializeParams): Promise<InitializeResult> {
     if (params.maxTokens !== undefined
       && (!Number.isSafeInteger(params.maxTokens) || params.maxTokens <= 0)) {
       throw new TypeError('initialize maxTokens must be a positive safe integer')
+    }
+    if (params.protocolVersion !== undefined
+      && (!Number.isSafeInteger(params.protocolVersion) || params.protocolVersion <= 0)) {
+      throw new TypeError('initialize protocolVersion must be a positive safe integer')
     }
     this.cwd = resolve(params.cwd)
     this.provider = params.provider
@@ -121,19 +127,26 @@ export class HarnessSdkJsonRpcServer {
       if (this.provider !== 'deepseek-official') throw new Error(`no adapter registered for provider "${this.provider}"`)
       this.llmFiber = await this.ctx.plugin(LlmDeepSeek, {})
     }
-    return { serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } }
+
+    const serverInfo = { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' }
+    if (params.protocolVersion === undefined) return { serverInfo }
+    const protocolVersion = Math.min(params.protocolVersion, HARNESS_SDK_PROTOCOL_VERSION)
+    return {
+      serverInfo,
+      protocolVersion,
+      ...(protocolVersion < 2 ? {} : {
+        capabilities: { sessionInterrupt: true, sessionClose: true },
+      }),
+    }
   }
 
   /**
    * Queue one identified prompt without assigning later activity to it.
-   * @param params - target session and user content.
-   * @returns the durable message identity.
+   * @param params - target session and prompt content blocks.
+   * @returns the queued user-message identifier.
    */
   async prompt(params: SessionPromptParams): Promise<SessionPromptResult> {
     const rec = await this.getOrCreateSession(params.sessionId)
-    // An agent-loop-only reload disposes the loop's agents while this record
-    // survives; a retained agent accepts followup() silently, so validate the
-    // record against the live registry before delivery (as the ACP bridge does).
     if (this.ctx.agents.get(rec.handle.agent.id) !== rec.handle.agent) {
       throw new Error(`session agent was disposed outside the server: ${params.sessionId}`)
     }
@@ -143,9 +156,47 @@ export class HarnessSdkJsonRpcServer {
   }
 
   /**
+   * Cancel only the current activity of one SDK-owned session.
+   * @param params - target SDK session.
+   * @returns existence and prior running state.
+   */
+  async interrupt(params: SessionLifecycleParams): Promise<SessionInterruptResult> {
+    const rec = await this.loadedSession(params.sessionId)
+    if (rec === undefined || this.ctx.agents.get(rec.handle.agent.id) !== rec.handle.agent) {
+      if (rec !== undefined) this.sessions.delete(params.sessionId)
+      return { found: false, wasRunning: false }
+    }
+    const wasRunning = rec.handle.agent.status === 'running'
+    if (wasRunning) rec.handle.agent.cancel({ kind: 'user' }, { keepInbox: true })
+    return { found: true, wasRunning }
+  }
+
+  /**
+   * Dispose one SDK-owned session while leaving the runtime and other sessions alive.
+   * @param params - target SDK session.
+   * @returns whether that session was found.
+   */
+  closeSession(params: SessionLifecycleParams): Promise<SessionCloseResult> {
+    const existing = this.sessionCloseTasks.get(params.sessionId)
+    if (existing !== undefined) return existing
+    const task = this.performCloseSession(params.sessionId).finally(() => {
+      if (this.sessionCloseTasks.get(params.sessionId) === task) this.sessionCloseTasks.delete(params.sessionId)
+    })
+    this.sessionCloseTasks.set(params.sessionId, task)
+    return task
+  }
+
+  private async performCloseSession(sessionId: string): Promise<SessionCloseResult> {
+    const rec = await this.loadedSession(sessionId)
+    if (rec === undefined) return { found: false }
+    if (this.sessions.get(sessionId) === rec) this.sessions.delete(sessionId)
+    await rec.handle.dispose()
+    return { found: true }
+  }
+
+  /**
    * Dispose server-owned agents, adapter, and subscriptions to quiescence.
-   * The surrounding context remains running.
-   * @returns empty JSON-RPC result.
+   * @returns an empty success record after teardown.
    */
   shutdown(): Promise<Record<string, never>> {
     this.shutdownTask ??= this.performShutdown()
@@ -157,6 +208,8 @@ export class HarnessSdkJsonRpcServer {
     const pendingCreations = [...this.sessionCreations.values()]
     await Promise.allSettled(pendingCreations)
     this.sessionCreations.clear()
+    await Promise.allSettled([...this.sessionCloseTasks.values()])
+    this.sessionCloseTasks.clear()
     const records = [...this.sessions.values()]
     this.sessions.clear()
     const failures: unknown[] = []
@@ -181,11 +234,10 @@ export class HarnessSdkJsonRpcServer {
   }
 
   /**
-   * Dispatch one incoming JSON-RPC request to its typed handler. Throws (→ a
-   * JSON-RPC error response) on an unknown method.
-   * @param method - the JSON-RPC method name.
-   * @param params - the raw params object from the wire.
-   * @returns the handler's result, to be serialized as the response.
+   * Dispatch one incoming JSON-RPC request to its typed handler.
+   * @param method - protocol method name.
+   * @param params - decoded request parameters.
+   * @returns typed handler result.
    */
   async handleRequest(method: string, params: Record<string, unknown> | undefined): Promise<unknown> {
     switch (method) {
@@ -193,6 +245,10 @@ export class HarnessSdkJsonRpcServer {
         return this.initialize(params as unknown as InitializeParams)
       case 'session/prompt':
         return this.prompt(params as unknown as SessionPromptParams)
+      case 'session/interrupt':
+        return this.interrupt(params as unknown as SessionLifecycleParams)
+      case 'session/close':
+        return this.closeSession(params as unknown as SessionLifecycleParams)
       case 'shutdown':
         return this.shutdown()
       default:
@@ -200,8 +256,15 @@ export class HarnessSdkJsonRpcServer {
     }
   }
 
+  private async loadedSession(sessionId: string): Promise<SessionRecord | undefined> {
+    const live = this.sessions.get(sessionId)
+    if (live !== undefined) return live
+    return this.sessionCreations.get(sessionId)
+  }
+
   private async getOrCreateSession(sessionId: string): Promise<SessionRecord> {
     if (this.shuttingDown) throw new Error('SDK server is shutting down')
+    if (this.sessionCloseTasks.has(sessionId)) throw new Error(`SDK session is closing: ${sessionId}`)
     const existing = this.sessions.get(sessionId)
     if (existing) return existing
     const pending = this.sessionCreations.get(sessionId)
@@ -216,10 +279,6 @@ export class HarnessSdkJsonRpcServer {
   }
 
   private async createSession(sessionId: string): Promise<SessionRecord> {
-    // No preset composition: this server's compositions keep the model-facing
-    // rows in the host plane, so this agent reads them from the global layer. A
-    // deployment that configures a roster has to join one here first
-    // (@deepseek-ai/dsh-agent-presets README, "Composing a child agent").
     const handle = await this.ctx.agents.create({
       sessionId: SessionId(sessionId),
       meta: { cwd: this.cwd },
@@ -230,6 +289,13 @@ export class HarnessSdkJsonRpcServer {
       },
     })
     const rec: SessionRecord = { handle }
+    // A close task that already claimed this creation owns disposal. Let the
+    // admitted creation publish its record so performCloseSession can observe
+    // and dispose it exactly once; only shutdown tears it down here.
+    if (this.shuttingDown) {
+      await handle.dispose()
+      throw new Error(`SDK session closed during creation: ${sessionId}`)
+    }
     this.sessions.set(sessionId, rec)
     return rec
   }

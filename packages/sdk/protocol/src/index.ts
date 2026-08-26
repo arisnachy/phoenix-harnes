@@ -9,14 +9,19 @@
  */
 
 export { JsonRpcLineTransport, JsonRpcResponseError } from './transport.ts'
+export { HARNESS_SDK_PROTOCOL_VERSION } from './types.ts'
 export type { JsonRpcTransportPeer } from './transport.ts'
 export type {
+  HarnessSdkCapabilities,
   HarnessSdkNotificationMap,
   HarnessSdkRequestMap,
   InitializeParams,
   InitializeResult,
   SdkRunStatus,
+  SessionCloseResult,
   SessionEventNotification,
+  SessionInterruptResult,
+  SessionLifecycleParams,
   SessionStatusNotification,
   SessionPromptParams,
   SessionPromptResult,
