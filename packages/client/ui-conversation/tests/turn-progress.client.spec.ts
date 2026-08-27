@@ -9,7 +9,7 @@ function openTimeline(turn: number): ConversationTimelineSnapshot {
     turnOrder: [turn],
     turns: new Map([[
       turn,
-      { turn, start: undefined, end: undefined, status: 'open', steps: [], data: {} },
+      { turn, start: undefined, end: undefined, status: 'open', steps: [], data: { get: () => undefined } },
     ]]),
   } as unknown as ConversationTimelineSnapshot
 }
@@ -19,7 +19,7 @@ function closedTimeline(turn: number): ConversationTimelineSnapshot {
     turnOrder: [turn],
     turns: new Map([[
       turn,
-      { turn, start: undefined, end: undefined, status: 'closed', steps: [], data: {} },
+      { turn, start: undefined, end: undefined, status: 'closed', steps: [], data: { get: () => undefined } },
     ]]),
   } as unknown as ConversationTimelineSnapshot
 }
@@ -34,8 +34,8 @@ function toolNode(turn: number, { running }: { running: boolean }): ChatConversa
     visibility: 'visible',
     location: {
       kind: 'step',
-      turn: { turn, start: undefined, end: undefined, status: 'open', steps: [], data: {} },
-      step: { turn, step: 1, start: undefined, end: undefined, status: 'open', data: {} },
+      turn: { turn, start: undefined, end: undefined, status: 'open', steps: [], data: { get: () => undefined } },
+      step: { turn, step: 1, start: undefined, end: undefined, status: 'open', data: { get: () => undefined } },
     },
     data: { root: running ? { callId: `call-${turn}` } : { kind: 'tool-result', callId: `call-${turn}` } },
   }
