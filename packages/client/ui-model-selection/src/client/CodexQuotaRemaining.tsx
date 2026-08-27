@@ -52,6 +52,13 @@ function isOpenAIAccount(entry: AuthorizationEntry): boolean {
   return isOpenAI(entry.key) || isOpenAI(entry.label) || isOpenAI(entry.telemetry?.provider)
 }
 
+function isValidRateLimit(value: RateLimitWindow | undefined): value is RateLimitWindow {
+  return value !== undefined
+    && Number.isFinite(value.usedPercent)
+    && value.usedPercent >= 0
+    && value.usedPercent <= 100
+}
+
 function remaining(limit: RateLimitWindow): number {
   return Math.max(0, Math.min(100, Math.round(100 - limit.usedPercent)))
 }
@@ -100,7 +107,7 @@ export function CodexQuotaRemaining({
         if (stale || !response.result.ok) return
         const entry = (response.result.value.entries as AuthorizationEntry[]).find(isOpenAIAccount)
         const telemetry = entry?.telemetry
-        const limit = telemetry?.primaryLimit ?? telemetry?.secondaryLimit
+        const limit = [telemetry?.primaryLimit, telemetry?.secondaryLimit].find(isValidRateLimit)
         if (!stale) setQuota(limit === undefined ? undefined : remaining(limit))
       } catch {
         if (!stale) setQuota(undefined)

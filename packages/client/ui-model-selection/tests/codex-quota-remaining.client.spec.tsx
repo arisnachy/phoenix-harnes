@@ -111,4 +111,39 @@ describe('CodexQuotaRemaining', () => {
     await waitFor(() => { expect(auth.list).toHaveBeenCalledOnce() })
     expect(screen.queryByText(/%/)).toBeNull()
   })
+
+  it.each([Number.NaN, 140])('hides invalid account telemetry: %s', async (usedPercent) => {
+    const d = directory('openai-codex')
+    const auth = authorization(usedPercent)
+    render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
+
+    await waitFor(() => { expect(auth.list).toHaveBeenCalledOnce() })
+    expect(screen.queryByText(/%/)).toBeNull()
+  })
+
+  it('falls back to a valid secondary limit when the primary limit is invalid', async () => {
+    const d = directory('openai-codex')
+    const auth = {
+      list: vi.fn(() => Promise.resolve({
+        rpcId: 'authorization-list-fallback' as never,
+        result: {
+          ok: true as const,
+          value: {
+            entries: [{
+              key: 'openai-codex',
+              telemetry: {
+                kind: 'account' as const,
+                provider: 'Codex',
+                primaryLimit: { usedPercent: Number.NaN },
+                secondaryLimit: { usedPercent: 25 },
+              },
+            }],
+          },
+        },
+      })),
+    }
+    render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
+
+    expect(await screen.findByText('75%')).toBeTruthy()
+  })
 })
