@@ -8,6 +8,8 @@ The service records declared capability descriptors, required permissions, lifec
 
 A route is selected only when the resolver returns a currently usable capability and its declared modalities intersect the requested preference. `unknown` means the need cannot be classified; `missing` means the need is known but no verified capability and modality can satisfy it. Required permissions are copied as declarations for a later broker, never granted here.
 
+`CapabilitySurface` projects a route into stable preview data (`id`, inputs, outputs, modality, verification, and declared permissions). It is JSON-serializable and contains no callback, credential, sandbox handle, or workspace mutation. Missing and unknown resolutions produce no surface.
+
 ## Known Limitations and Deferred Work
 
 The resolver and in-memory provider are the first foundation layer. Durable storage, source adapters, external acquisition, visual renderers, and generative UI are separate consumers and providers planned above this seam.

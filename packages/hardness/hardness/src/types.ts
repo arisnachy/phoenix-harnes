@@ -69,6 +69,20 @@ export interface CapabilityRoute {
   readonly requiredPermissions: readonly CapabilityPermission[]
 }
 
+export interface CapabilitySurface {
+  readonly id: string
+  readonly need: CapabilityNeed
+  readonly capabilityId: CapabilityId
+  readonly capabilityVersion: string
+  readonly modality: CapabilityModality
+  readonly inputs: readonly string[]
+  readonly outputs: readonly string[]
+  readonly requiredPermissions: readonly CapabilityPermission[]
+  readonly verification: CapabilityStatus
+}
+
+export type CapabilitySurfaceResult = CapabilitySurface | undefined
+
 export type CapabilityRouteResult =
   | { readonly kind: 'route'; readonly route: CapabilityRoute }
   | { readonly kind: 'missing'; readonly considered: readonly string[]; readonly reasons: readonly string[] }
@@ -96,4 +110,5 @@ export interface HardnessService {
   snapshot(): HardnessAtlasSnapshot
   restore(snapshot: HardnessAtlasSnapshot): void
   route(need: CapabilityNeed, options?: CapabilityRouteOptions): CapabilityRouteResult
+  surface(result: CapabilityRouteResult): CapabilitySurfaceResult
 }
