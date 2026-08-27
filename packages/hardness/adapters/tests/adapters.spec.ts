@@ -21,7 +21,10 @@ describe('HARDNESS source adapters', () => {
     const disposeTools = indexTools(tools, hardness)
     const disposeSkills = await indexSkills(skills, hardness)
     expect(hardness.get('tool:read_calendar' as never)?.status).toBe('experimental')
+    expect(hardness.get('tool:read_calendar' as never)?.modalities).toEqual(['native'])
     expect(hardness.get('skill:calendar-planning' as never)?.status).toBe('experimental')
+    expect(hardness.get('skill:calendar-planning' as never)?.modalities).toEqual(['native'])
+    expect(hardness.route({ kind: 'tool' }, { modalities: ['native'] }).kind).toBe('missing')
 
     disposeTools()
     disposeSkills()
