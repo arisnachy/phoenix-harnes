@@ -159,8 +159,10 @@ function validateText(value: string, field: string): void {
   if (value.length > USER_PROFILE_LIMITS.textCharacters) {
     throw new TypeError(`user profile ${field} exceeds ${String(USER_PROFILE_LIMITS.textCharacters)} characters`)
   }
-  if ([...value].some(character => character.charCodeAt(0) < 0x20 || character === '\u007f')) {
-    throw new TypeError(`user profile ${field} contains a control character`)
+  for (const character of value) {
+    if (character.charCodeAt(0) < 0x20 || character === '\u007f') {
+      throw new TypeError(`user profile ${field} contains a control character`)
+    }
   }
 }
 
@@ -186,6 +188,6 @@ function validateConsentPatch(value: unknown): void {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  const prototype = Object.getPrototypeOf(value)
+  const prototype = Object.getPrototypeOf(value) as object | null
   return prototype === Object.prototype || prototype === null
 }

@@ -56,7 +56,7 @@ export function ContextInjectionRow({ content, source, provenance, form, t }: Co
            name shape. A source that names no producer drops the dot with it. */
         <>
           <span className={css.sep} aria-hidden />
-          <span className={css.source} data-context-source title={provenance.label ?? undefined}>{producerLabel}</span>
+          <span className={css.source} data-context-source title={provenance.label}>{producerLabel}</span>
           {summary !== null && (
             <>
               <span className={css.sep} aria-hidden />

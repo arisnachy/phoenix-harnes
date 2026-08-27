@@ -148,7 +148,7 @@ function proxy(ctx: Context, visionFallback?: Record<string, unknown>) {
   return createApiProxy(ctx, {
     defaultModelSelection: () => ({ provider: 'plain', model: 'txt-1' }),
     cwd: '/tmp',
-    ...(visionFallback === undefined ? {} : { visionFallback: visionFallback as never }),
+    ...(visionFallback === undefined ? {} : { visionFallback: visionFallback }),
   })
 }
 

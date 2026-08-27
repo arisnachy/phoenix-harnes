@@ -45,7 +45,7 @@ async function authorizedGoogle(grantedScopes: readonly string[]): Promise<Conte
     expires_in: 3600,
     token_type: 'Bearer',
     scope: grantedScopes.join(' '),
-  }), { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch
+  }), { status: 200, headers: { 'content-type': 'application/json' } }))
 
   await ctx.authorization.begin({
     key: GOOGLE_ACCOUNT_KEY,

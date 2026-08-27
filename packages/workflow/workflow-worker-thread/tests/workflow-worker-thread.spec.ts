@@ -576,7 +576,8 @@ describe('dsh-workflow-worker-thread', () => {
           // The rejection VALUE's own coercion throws: a warn built with bare
           // String(error) would itself throw, skipping the ChildDisposed ack
           // and wedging the script's finally until the grace/terminate path.
-          dispose: () => Promise.reject({ toString: () => { throw new Error('coercion trap') } }),
+          dispose: () => Promise.reject(Object.assign(new Error('coercion trap'), { toString: () => { throw new Error('coercion trap') } })),
+
         }),
       }
       ctx.subagents.registerProvider(provider)

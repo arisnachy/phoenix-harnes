@@ -40,7 +40,7 @@ function updateProps(
     t,
     readUpdateState,
     restartForUpdate,
-  } as UpdateFooterActionProps
+  }
 }
 
 const SNAPSHOT = {

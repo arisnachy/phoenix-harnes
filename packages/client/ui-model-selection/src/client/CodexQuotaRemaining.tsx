@@ -131,13 +131,11 @@ export function CodexQuotaRemaining({
         const secondaryLimit = telemetry !== undefined && isValidRateLimit(telemetry.secondaryLimit)
           ? telemetry.secondaryLimit
           : undefined
-        if (!stale) {
-          const nextQuota: QuotaState = {
-            ...primaryLimit === undefined ? {} : { primaryLimit },
-            ...secondaryLimit === undefined ? {} : { secondaryLimit },
-          }
-          setQuota(Object.keys(nextQuota).length === 0 ? undefined : nextQuota)
+        const nextQuota: QuotaState = {
+          ...primaryLimit === undefined ? {} : { primaryLimit },
+          ...secondaryLimit === undefined ? {} : { secondaryLimit },
         }
+        setQuota(Object.keys(nextQuota).length === 0 ? undefined : nextQuota)
       } catch {
         if (!stale) setQuota(undefined)
       }

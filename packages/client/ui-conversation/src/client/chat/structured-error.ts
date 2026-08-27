@@ -121,7 +121,7 @@ function flatten(
       }
       return
     }
-    value.forEach((entry, index) => flatten(entry, fields, [...path, String(index + 1)], depth + 1))
+    value.forEach((entry, index) =>{  flatten(entry, fields, [...path, String(index + 1)], depth + 1) })
     return
   }
 

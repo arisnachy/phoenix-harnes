@@ -97,8 +97,8 @@ function paths() {
   }
 }
 
-function jsonFile<T>(path: string): T {
-  return JSON.parse(readFileSync(path, 'utf8')) as T
+function jsonFile(path: string): unknown {
+  return JSON.parse(readFileSync(path, 'utf8')) as unknown
 }
 
 function run(bin: string, args: string[], cwd?: string): string {
@@ -138,8 +138,8 @@ function syncSource(repository: string): string {
 
 function readState(path: string): ArsenalState | undefined {
   if (!existsSync(path)) return undefined
-  const value = jsonFile<ArsenalState>(path)
-  return value.schema === 1 ? value : undefined
+  const value = jsonFile(path) as { schema?: number }
+  return value.schema === 1 ? value as ArsenalState : undefined
 }
 
 function writeState(path: string, state: ArsenalState): void {
@@ -232,7 +232,7 @@ function envRefs(server: McpServer): string[] {
 
 function renderMcpPatch(pluginName: string, mcpPath: string): { text: string; servers: string[]; requiredEnv: string[] } {
   if (!existsSync(mcpPath)) return { text: '', servers: [], requiredEnv: [] }
-  const doc = jsonFile<{ mcpServers?: Record<string, McpServer> }>(mcpPath)
+  const doc = jsonFile(mcpPath) as { mcpServers?: Record<string, McpServer> }
   const servers = doc.mcpServers ?? {}
   const rows: string[] = []
   const names: string[] = []
@@ -268,7 +268,7 @@ function renderMcpPatch(pluginName: string, mcpPath: string): { text: string; se
       rows.push('        transport: stdio')
       rows.push(`        command: ${yamlScalar(server.command)}`)
       if (Array.isArray(server.args) && server.args.every(argument => typeof argument === 'string')) {
-        rows.push(`        args: [${server.args.map(argument => yamlScalar(argument as string)).join(', ')}]`)
+        rows.push(`        args: [${server.args.map(argument => yamlScalar(argument)).join(', ')}]`)
       }
       if (server.env !== null && typeof server.env === 'object' && !Array.isArray(server.env)) {
         const env = server.env as Record<string, unknown>
@@ -340,7 +340,7 @@ function sync(): number {
   mkdirSync(p.patches, { recursive: true })
   const previous = readState(p.state)
   const sourceCommit = syncSource(p.repository)
-  const marketplace = jsonFile<Marketplace>(join(p.repository, MARKETPLACE_PATH))
+  const marketplace = jsonFile(join(p.repository, MARKETPLACE_PATH)) as Marketplace
   const entries = Array.isArray(marketplace.plugins) ? marketplace.plugins : []
   clearManagedSkills(p.skills, previous)
   rmSync(p.patches, { recursive: true, force: true })
@@ -354,7 +354,7 @@ function sync(): number {
     const pluginDir = resolve(p.repository, relativePath)
     const manifestPath = join(pluginDir, MANIFEST_PATH)
     if (!existsSync(manifestPath)) continue
-    const manifest = jsonFile<CodexManifest>(manifestPath)
+    const manifest = jsonFile(manifestPath) as CodexManifest
     const pluginName = typeof manifest.name === 'string' ? manifest.name : entry.name
     const declaredSkills = typeof manifest.skills === 'string' ? manifest.skills : './skills/'
     const skillSource = resolve(pluginDir, declaredSkills)
@@ -486,7 +486,7 @@ function doctor(): number {
 }
 
 function printHelp(): number {
-  process.stdout.write(`PHOENIX Codex plugin arsenal\n\nCommands:\n  dsh codex-plugin sync\n  dsh codex-plugin list\n  dsh codex-plugin inspect <name>\n  dsh codex-plugin enable <name>\n  dsh codex-plugin disable <name>\n  dsh codex-plugin doctor\n  dsh codex-plugin path\n\n`)
+  process.stdout.write('PHOENIX Codex plugin arsenal\n\nCommands:\n  dsh codex-plugin sync\n  dsh codex-plugin list\n  dsh codex-plugin inspect <name>\n  dsh codex-plugin enable <name>\n  dsh codex-plugin disable <name>\n  dsh codex-plugin doctor\n  dsh codex-plugin path\n\n')
   process.stdout.write('sync installs the official openai/plugins catalog under $DSH_HOME, exposes skills natively, and prepares MCP patches without copying secrets.\n')
   return 0
 }

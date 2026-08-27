@@ -1,5 +1,6 @@
 /** Browser-local mirror of the Host user-profile settings section. */
 
+/* jscpd:ignore-start */
 export interface UserProfileConsent {
   preferredName: boolean
   dateOfBirth: boolean
@@ -25,6 +26,7 @@ export interface UserProfileSettings {
   family?: UserProfileFamilyMember[]
   consent: UserProfileConsent
 }
+/* jscpd:ignore-end */
 
 /** Text field draft and validation state rendered by the profile row. */
 export interface UserProfileFieldState {

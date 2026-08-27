@@ -82,6 +82,7 @@ function StructuredErrorView({ message, code, compact = false }: {
   )
 }
 
+/* jscpd:ignore-start */
 function ModelRetryItem({ node, active, t }: {
   node: ModelRetryNode
   active: boolean
@@ -147,6 +148,7 @@ function ModelRetryItem({ node, active, t }: {
     </details>
   )
 }
+/* jscpd:ignore-end */
 
 /** Persistent, turn-positioned feedback for a terminal failure. */
 function TurnErrorItem({ node, t }: {

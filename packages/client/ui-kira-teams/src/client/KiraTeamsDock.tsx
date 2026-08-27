@@ -102,7 +102,7 @@ export function lineageMembers(state: SessionListState): {
  * @returns The dock element, or null while the lineage has no subagents.
  */
 export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProps) {
-  const state = useSyncExternalStore(list.subscribe, list.getSnapshot)
+  const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
   const { root, rows } = lineageMembers(state)
   const [collapsed, setCollapsed] = useState(initialCollapsed)
   const runningCount = rows.reduce((total, row) => total + (row.summary.running ? 1 : 0), 0)
@@ -178,7 +178,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
             type="button"
             className={css.refresh}
             aria-label={t('dock.refresh')}
-            onClick={() => { if (root !== undefined) refresh(root.id) }}
+            onClick={() => { refresh(root.id) }}
           >
             <IconRefreshOutline14 />
           </button>

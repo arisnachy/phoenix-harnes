@@ -153,13 +153,16 @@ export function UpdateFooterAction({
 
   useEffect(() => {
     let active = true
+    const isActive = (): boolean => active
     const read = async (): Promise<void> => {
-      if (!active) return
+      if (!isActive()) return
       try {
         const next = await readUpdateState()
-        if (active) acceptDurableSnapshot(next)
+        if (!isActive()) return
+        acceptDurableSnapshot(next)
       } catch (error) {
-        if (active) reportReadFailure(error)
+        if (!isActive()) return
+        reportReadFailure(error)
       }
     }
     void read()

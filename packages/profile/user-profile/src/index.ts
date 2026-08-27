@@ -23,6 +23,19 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/** Create presence-only metadata without exposing profile values. */
+function redactProfile(profile: UserProfileSettings): UserProfileRedacted {
+  return {
+    hasPreferredName: profile.preferredName !== undefined,
+    hasDateOfBirth: profile.dateOfBirth !== undefined,
+    hasGender: profile.gender !== undefined,
+    hasPronouns: profile.pronouns !== undefined,
+    hasTone: profile.tone !== undefined,
+    familyCount: profile.family?.length ?? 0,
+    consent: { ...profile.consent },
+  }
+}
+
 /** Render only explicitly consented profile fields for the dynamic context snapshot. */
 function renderConsentedProfile(profile: UserProfileConsented): string {
   const lines: string[] = []
@@ -94,15 +107,7 @@ export class UserProfileService extends Service {
    */
   getRedacted(): UserProfileRedacted {
     const profile = this.scope.get()
-    return {
-      hasPreferredName: profile.preferredName !== undefined,
-      hasDateOfBirth: profile.dateOfBirth !== undefined,
-      hasGender: profile.gender !== undefined,
-      hasPronouns: profile.pronouns !== undefined,
-      hasTone: profile.tone !== undefined,
-      familyCount: profile.family?.length ?? 0,
-      consent: { ...profile.consent },
-    }
+    return redactProfile(profile)
   }
 
   /** Return only fields whose current consent flag is true.
@@ -124,15 +129,7 @@ export class UserProfileService extends Service {
     const profile = structuredClone(this.scope.get())
     return {
       profile,
-      redacted: {
-        hasPreferredName: profile.preferredName !== undefined,
-        hasDateOfBirth: profile.dateOfBirth !== undefined,
-        hasGender: profile.gender !== undefined,
-        hasPronouns: profile.pronouns !== undefined,
-        hasTone: profile.tone !== undefined,
-        familyCount: profile.family?.length ?? 0,
-        consent: { ...profile.consent },
-      },
+      redacted: redactProfile(profile),
       consented: this.getConsented(),
     }
   }

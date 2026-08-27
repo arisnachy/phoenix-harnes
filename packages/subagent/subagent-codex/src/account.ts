@@ -302,7 +302,7 @@ class CodexAccountConnection {
       outcome => Promise.reject(new Error(
         `subagent-codex account: app-server exited before the operation completed (code=${String(outcome.exitCode)}, signal=${String(outcome.signal)})`,
       )),
-      error => Promise.reject(error instanceof Error ? error : new Error(String(error))),
+      (error: unknown) => Promise.reject(error instanceof Error ? error : new Error(String(error))),
     )
   }
 
@@ -377,7 +377,8 @@ async function readOptionalCodexApps(
         connection.processEnded(),
       ]), 'app/list response')
       if (!Array.isArray(response.data)) return {}
-      data.push(...response.data)
+      const pageData = response.data as unknown[]
+      data.push(...pageData)
       cursor = optionalString(response.nextCursor)
       if (cursor === undefined) break
     }
@@ -434,7 +435,7 @@ export async function readCodexAccountSnapshot(
 }
 
 async function commitManagedAccountMarker(ctx: Context): Promise<void> {
-  await ctx.credentials.modifyRecord(CODEX_ACCOUNT_KEY, async () => ({ kind: 'api-key' }))
+  await ctx.credentials.modifyRecord(CODEX_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
 }
 
 async function logoutManagedChatGpt(

@@ -455,7 +455,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               disabled={disabled || keyLocked}
               onChange={(event) => { setKeyDraft(event.target.value) }}
             />
-            {keyLocked && keyState?.configured === true
+            {keyLocked && keyState.configured
               ? (
                 // A reference the launch environment owns is not a dead end:
                 // name it and say what a blank Apply does with it.
@@ -587,7 +587,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
           || shownKeyFailure !== undefined
           // An account-only flow has no key field to satisfy: the blank-key
           // apply (ambient authentication) is exactly the intended submit.
-          || (props.credentialRequired === true && oauthOnly !== true && keyValue.length === 0)}
+          || (props.credentialRequired === true && ! oauthOnly && keyValue.length === 0)}
         submitLabel={props.submitLabel ?? 'apply'}
         submitBusyLabel={props.submitBusyLabel ?? 'applying'}
         {...props.cancelLabel === undefined ? {} : { cancelLabel: props.cancelLabel }}

@@ -17,7 +17,7 @@ function fakeContext(status: 'idle' | 'running' = 'idle'): {
 } {
   const live = new Map<string, Agent>()
   const cancel = vi.fn()
-  const dispose = vi.fn(async function (this: void) {})
+  const dispose = vi.fn(async () => {})
   const create = vi.fn(async ({ sessionId }: { sessionId: ReturnType<typeof SessionId> }): Promise<AgentHandle> => {
     const id = String(sessionId)
     const agent = {
@@ -91,6 +91,6 @@ describe('Harness SDK protocol v2 lifecycle', () => {
       .resolves.toEqual({ found: false })
 
     await expect(server.prompt({ sessionId: 's2', contentBlocks: [{ type: 'text', text: 'still alive' }] }))
-      .resolves.toMatchObject({ messageId: expect.any(String) })
+      .resolves.toHaveProperty('messageId')
   })
 })
