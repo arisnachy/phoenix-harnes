@@ -19,11 +19,14 @@ import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
 export { CapabilitySurfacePreview, registerCapabilitySurfacePreview } from './CapabilitySurfacePreview.tsx'
 export type { CapabilitySurfacePreviewProps } from './CapabilitySurfacePreview.tsx'
+export { CapabilityArtifactPreview, registerCapabilityArtifactPreview } from './CapabilityArtifactPreview.tsx'
+export type { CapabilityArtifactPreviewProps } from './CapabilityArtifactPreview.tsx'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
   WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
+  CapabilityArtifact, CapabilityArtifactRenderModel,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
 
