@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { PermissionGate } from '../src/permission-gate.ts'
-import type { CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+import type { CapabilityId, CapabilitySurface } from '@deepseek-ai/dsh-hardness'
 
 const surface = {
   id: 'tool:calendar@1.0.0:visual',
   need: { kind: 'calendar_invite' },
-  capabilityId: 'tool:calendar',
+  capabilityId: 'tool:calendar' as CapabilityId,
   capabilityVersion: '1.0.0',
   modality: 'visual',
   inputs: ['event'],

@@ -42,6 +42,8 @@ describe('HARDNESS capability surfaces', () => {
       requiredPermissions: [{ kind: 'calendar.write', scope: 'user' }],
       verification: 'verified',
     })
+    expect(surface).toBeDefined()
+    if (surface === undefined) throw new Error('expected a surface for verified route')
     expect(JSON.parse(JSON.stringify(surface))).toEqual(surface)
     expect('execute' in surface).toBe(false)
   })

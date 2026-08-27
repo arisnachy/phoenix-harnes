@@ -18,7 +18,7 @@ describe('HARDNESS mission orchestrator', () => {
     const ledger = new SelfImprovementLedger()
     const acquisition = new AcquisitionRegistry(hardness, { lab, ledger })
     acquisition.register(async need => need.kind === 'weather' ? descriptor : undefined)
-    const tools = { execute: vi.fn(async () => ({ isError: false, content: [], meta: { artifact: { id: 'forecast', mime: 'text/plain', data: 'sunny' } } })) }
+    const tools = { execute: vi.fn(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'forecast', mime: 'text/plain', data: 'sunny' } } })) }
     const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
     const artifacts = new ArtifactRuntime()
     artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
