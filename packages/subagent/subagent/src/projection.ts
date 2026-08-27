@@ -10,7 +10,12 @@ import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { foldSubagentDescriptor } from './descriptor.ts'
 import type { SubagentDescriptorData } from './descriptor.ts'
-import type { SubagentIdentityProjection, SubagentTimingProjection } from './projection-types.ts'
+import type {
+  SubagentActivityPhase,
+  SubagentActivityProjection,
+  SubagentIdentityProjection,
+  SubagentTimingProjection,
+} from './projection-types.ts'
 
 /** Fold state for a subagent's latest timing snapshot. */
 export interface TimingState {
@@ -48,6 +53,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionStateMap {
     subagentTiming: TimingState
     subagent: IdentityState
+    subagentActivity: ActivityState
   }
 }
 
@@ -104,6 +110,100 @@ export const subagentTimingProjectionDefinition = {
   },
   stateVersion: 2,
 } satisfies ProjectionDefinition<'subagentTiming', TimingState>
+
+/** Fold state for the model route and current open-turn activity. */
+export interface ActivityState {
+  descriptorSeen: boolean
+  route?: { provider: string; model: string }
+  openTurn?: {
+    turn: number
+    sawTool: boolean
+    pendingCalls: string[]
+  }
+}
+
+const activityRouteSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+}).strict()
+
+const activityStateSchema: z.ZodType<ActivityState> = z.object({
+  descriptorSeen: z.boolean(),
+  route: activityRouteSchema.optional(),
+  openTurn: z.object({
+    turn: z.number().int().nonnegative(),
+    sawTool: z.boolean(),
+    pendingCalls: z.array(z.string()),
+  }).strict().optional(),
+}).strict()
+
+const activityProjectionSchema: z.ZodType<SubagentActivityProjection> = z.object({
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  phase: z.enum(['preparing', 'running-tools', 'verifying', 'idle']),
+}).strict() as z.ZodType<SubagentActivityProjection>
+
+function activityPhase(state: ActivityState): SubagentActivityPhase {
+  if (state.openTurn === undefined) return 'idle'
+  if (state.openTurn.pendingCalls.length > 0) return 'running-tools'
+  return state.openTurn.sawTool ? 'verifying' : 'preparing'
+}
+
+/** Durable model route and safe phase projection for the teams dock. */
+export const subagentActivityProjectionDefinition = {
+  key: 'subagentActivity',
+  stateSchema: activityStateSchema,
+  init: () => ({ descriptorSeen: false }),
+  apply: (state, event) => {
+    if (event.type === 'subagent/descriptor') return { descriptorSeen: true }
+    if (!state.descriptorSeen) return state
+    if (event.type === 'request/header') {
+      const { provider, model } = event.data.header.config
+      return typeof provider === 'string' && typeof model === 'string'
+        ? { ...state, route: { provider, model } }
+        : state
+    }
+    if (event.type === 'turn/start') {
+      return { ...state, openTurn: { turn: event.data.turn, sawTool: false, pendingCalls: [] } }
+    }
+    if (event.type === 'tool/call' && state.openTurn?.turn === event.data.turn) {
+      return {
+        ...state,
+        openTurn: {
+          ...state.openTurn,
+          sawTool: true,
+          pendingCalls: [...new Set([...state.openTurn.pendingCalls, String(event.data.callId)])],
+        },
+      }
+    }
+    if (event.type === 'tool/result' && state.openTurn?.turn === event.data.turn) {
+      const source = event.data.message.source
+      if (source.kind !== 'tool') return state
+      const callId = String(source.callId)
+      if (!state.openTurn.pendingCalls.includes(callId)) return state
+      return {
+        ...state,
+        openTurn: {
+          ...state.openTurn,
+          pendingCalls: state.openTurn.pendingCalls.filter(id => id !== callId),
+        },
+      }
+    }
+    if (event.type === 'turn/end' && state.openTurn?.turn === event.data.turn) {
+      const { openTurn: _closed, ...rest } = state
+      return rest
+    }
+    return state
+  },
+  wire: {
+    viewSchema: activityProjectionSchema,
+    view: state => ({
+      ...(state.route === undefined ? {} : state.route),
+      phase: activityPhase(state),
+    }),
+  },
+  stateVersion: 1,
+} satisfies ProjectionDefinition<'subagentActivity', ActivityState>
 
 interface IdentityState {
   /** Identity from the last valid descriptor; absent before one, and after an invalid one. */

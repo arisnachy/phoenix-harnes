@@ -17,6 +17,16 @@ export interface SubagentTimingProjection {
   }
 }
 
+/** Safe activity phase shown by the teams dock. */
+export type SubagentActivityPhase = 'preparing' | 'running-tools' | 'verifying' | 'idle'
+
+/** Effective model route and durable phase for one child session. */
+export interface SubagentActivityProjection {
+  provider?: string
+  model?: string
+  phase: SubagentActivityPhase
+}
+
 /**
  * Durable identity of one descriptor-backed subagent session: lifecycle mode
  * plus creation label, folded last-wins from `subagent/descriptor` events.
@@ -60,5 +70,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
      * non-optional.
      */
     subagent: SubagentIdentityProjection | null
+    /** Effective model route and current durable activity phase. */
+    subagentActivity: SubagentActivityProjection
   }
 }
