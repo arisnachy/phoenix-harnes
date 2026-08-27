@@ -7,6 +7,7 @@ import type {
   CapabilityNeed,
   CapabilityRegistration,
   CapabilityResolution,
+  CapabilityResolutionContext,
   CapabilityStatus,
   HardnessService,
 } from './types.ts'
@@ -15,6 +16,7 @@ import {
   transitionCapability,
   validateCapabilityDescriptor,
 } from './registry.ts'
+import { resolveCapabilityNeed } from './resolver.ts'
 
 export type * from './types.ts'
 
@@ -48,12 +50,8 @@ export class HardnessRegistry extends Service implements HardnessService {
     return [...this.descriptors.values()]
   }
 
-  resolveNeed(_need: CapabilityNeed): CapabilityResolution {
-    return {
-      kind: 'unknown',
-      considered: [],
-      reasons: ['capability resolver is not initialized'],
-    }
+  resolveNeed(need: CapabilityNeed, context: CapabilityResolutionContext = {}): CapabilityResolution {
+    return resolveCapabilityNeed(this.list(), need, context)
   }
 
   transition(id: CapabilityId, status: CapabilityStatus, reason: string, evidenceId?: string): void {

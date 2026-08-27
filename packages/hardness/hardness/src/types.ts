@@ -53,6 +53,10 @@ export interface CapabilityNeed {
   readonly permissions?: readonly string[]
 }
 
+export interface CapabilityResolutionContext {
+  readonly permissions?: readonly string[]
+}
+
 export interface CapabilityResolution {
   readonly kind: 'have' | 'missing' | 'unknown'
   readonly capability?: CapabilityDescriptor
@@ -68,6 +72,6 @@ export interface HardnessService {
   register(descriptor: CapabilityDescriptor): CapabilityRegistration
   get(id: CapabilityId): CapabilityDescriptor | undefined
   list(): readonly CapabilityDescriptor[]
-  resolveNeed(need: CapabilityNeed): CapabilityResolution
+  resolveNeed(need: CapabilityNeed, context?: CapabilityResolutionContext): CapabilityResolution
   transition(id: CapabilityId, status: CapabilityStatus, reason: string, evidenceId?: string): void
 }
