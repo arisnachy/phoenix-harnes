@@ -107,6 +107,8 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 
 [实验性 Agent Teams](subsystems/agent-team.zh.md) 是 `ctx.agentTeams` 上的私有显式启用协作 seam，在可继续 subagent 之上提供持久 roster、任务板和 mailbox。
 
+HARDNESS 在 `ctx.hardness` 上增加 provider-neutral 的能力索引。descriptor 只是清单投影，不是执行权限：tools 和 skills 仍由各自 registry 负责，所需权限仍然只是声明，而 `have` 必须有当前的验证证据。`@deepseek-ai/dsh-hardness-atlas-json` 在不保存凭据的前提下原子地持久化带版本的 snapshot。
+
 ## 新行为的归属位置
 
 新行为附加到已有文档记录的扩展点。改动循环本身时，本映射随之更新。
@@ -115,6 +117,7 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 |---|---|
 | 添加模型提供方 | 在 `ctx.llm` 上注册其适配器 |
 | 添加面向模型的能力 | 在 `ctx.tools` 上注册；其 schema 加入提示词组装 |
+| 在不替换提供方的前提下索引能力 | 通过 `ctx.hardness` 发布 descriptor；只有具备证据支持的验证后才解析为 `have` |
 | 让某个会话拥有不同的能力集合 | 组装一个 agent preset；其中的服务行需要 `isolate` realm |
 | 添加 shell 执行 | 注册 `ctx.shell` 后端；本地后端通过 `ctx.subprocess` spawn 进程 |
 | 添加持久化终端执行 | 注册 `ctx.terminals` 后端和 `dsh-tool-terminal` |

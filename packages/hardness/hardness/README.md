@@ -1,5 +1,7 @@
 # `@deepseek-ai/dsh-hardness`
 
+English | [中文](README.zh.md)
+
 Provider-neutral capability registry and Tool Atlas for PHOENIX HARDNESS.
 
 The service records declared capability descriptors, required permissions, lifecycle status, and verification evidence. It does not grant permissions, store credentials, or replace the tool and skill registries.
