@@ -42,6 +42,14 @@ export class LabMode {
     return id
   }
 
+  restore(snapshot: LabSnapshot): void {
+    if (snapshot.lab !== this.lab) throw new Error(`lab snapshot belongs to "${snapshot.lab}"`)
+    this.experiments.clear()
+    this.frozenIds.clear()
+    for (const experiment of snapshot.experiments) this.record(experiment)
+    for (const id of snapshot.frozen) this.freeze(id)
+  }
+
   snapshot(): LabSnapshot {
     return Object.freeze({
       lab: this.lab,
@@ -56,6 +64,11 @@ export class SelfImprovementLedger {
 
   record(change: ImprovementRecord): void {
     this.records.push(Object.freeze({ ...change, sideEffects: Object.freeze([...change.sideEffects]) }))
+  }
+
+  restore(records: readonly ImprovementRecord[]): void {
+    this.records.length = 0
+    for (const record of records) this.record(record)
   }
 
   snapshot(): readonly ImprovementRecord[] {

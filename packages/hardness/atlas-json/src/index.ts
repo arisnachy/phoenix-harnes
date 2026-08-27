@@ -5,6 +5,33 @@ import { dirname, join } from 'node:path'
 import type { HardnessAtlasSnapshot } from '@deepseek-ai/dsh-hardness'
 import { parseAtlasSnapshot } from './format.ts'
 
+export class JsonDocumentStore<T> {
+  constructor(
+    private readonly path: string,
+    private readonly parse: (value: unknown) => T,
+    private readonly empty?: T,
+  ) {}
+
+  async load(): Promise<T> {
+    let content: string
+    try {
+      content = await readFile(this.path, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' && this.empty !== undefined) return this.empty
+      throw error
+    }
+    return this.parse(JSON.parse(content) as unknown)
+  }
+
+  async save(value: T): Promise<void> {
+    const normalized = this.parse(value)
+    await mkdir(dirname(this.path), { recursive: true })
+    const temporary = join(dirname(this.path), `.${this.path.split(/[\\/]/).pop() ?? 'document'}.${process.pid}.tmp`)
+    await writeFile(temporary, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
+    await rename(temporary, this.path)
+  }
+}
+
 export class JsonAtlasStore {
   constructor(private readonly path: string) {}
 

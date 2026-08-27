@@ -12,6 +12,19 @@ describe('HARDNESS LabMode', () => {
     expect(lab.snapshot().frozen).toEqual(['exp-1-holdout'])
   })
 
+  it('restores lab and ledger state from durable snapshots', () => {
+    const source = new LabMode('phoenix-hardness')
+    source.record({ id: 'exp-restore', hypothesis: 'x', metric: 'm', baseline: 1, result: 1, datasetHash: 'sha256:y', holdout: true })
+    source.freeze('exp-restore')
+    const restored = new LabMode('phoenix-hardness')
+    restored.restore(source.snapshot())
+    expect(restored.snapshot().frozen).toEqual(['exp-restore'])
+
+    const ledger = new SelfImprovementLedger()
+    ledger.restore([{ id: 'r', hypothesis: 'h', change: 'c', rollback: 'rb', sideEffects: [] }])
+    expect(ledger.snapshot()).toHaveLength(1)
+  })
+
   it('ledger records rollback and side effects without mutating protected surfaces', () => {
     const ledger = new SelfImprovementLedger()
     ledger.record({ id: 'change-1', hypothesis: 'reduce context', change: 'trim skill', rollback: 'restore skill', sideEffects: ['none'] })
