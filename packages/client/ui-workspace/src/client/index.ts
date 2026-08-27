@@ -129,9 +129,11 @@ export function apply(ctx: ClientContext): void {
     },
     WorkspaceBrowser,
   ))
-  const hardnessFixture = new URLSearchParams(window.location.search).get('hardness') === 'fixture'
+  const hardnessFixture = typeof window !== 'undefined' && (
+    new URLSearchParams(window.location.search).get('hardness') === 'fixture'
     || new URLSearchParams(window.location.hash.replace(/^#/, '')).get('hardness') === 'fixture'
     || window.localStorage.getItem('hardness.fixture') === '1'
+  )
   if (hardnessFixture) {
     const fixture = createHardnessBrowserFixture()
     ctx.effect(() => registerCapabilityArtifactPreview(ctx.slots, fixture.artifact, fixture.rendered), 'ui-workspace: hardness fixture')
