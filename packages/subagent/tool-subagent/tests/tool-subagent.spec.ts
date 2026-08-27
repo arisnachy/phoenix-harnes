@@ -286,45 +286,48 @@ describe('dsh-tool-subagent', () => {
     expect(seen?.agentOptions).toEqual({ model: 'child-model' })
   })
 
-  it('routes OpenAI children to Luna high without changing a non-OpenAI parent route', async () => {
-    let seen: { agentOptions?: { provider?: string; model?: string; reasoningEffort?: string } } | undefined
-    const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
-    await ctx.plugin(ToolRuntime)
-    await ctx.plugin(SubagentRuntime)
-    ctx.subagents.registerProvider({
-      name: 'capture-route',
-      capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
-      inheritsParentContext: false,
-      start: async (request) => {
-        seen = request
-        return {
-          id: SessionId('capture-route-child'),
-          localAgent: undefined,
-          result: Promise.resolve({ output: [{ type: 'text', text: 'ok' }], stopReason: 'completed' as const }),
-          dispose: async () => {},
-        }
-      },
-    })
-    await ctx.plugin(tool, {
-      provider: 'capture-route',
-      childRoute: {
-        whenProvider: 'openai-codex',
-        provider: 'openai-codex',
-        model: 'gpt-5.6-luna',
-        reasoningEffort: 'high',
-      },
-      maxDepth: 'provider-managed',
-    })
+  it.each(['gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.6-terra'])(
+    'routes OpenAI root %s children to Luna high without changing a non-OpenAI parent route',
+    async (rootModel) => {
+      let seen: { agentOptions?: { provider?: string; model?: string; reasoningEffort?: string } } | undefined
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ToolRuntime)
+      await ctx.plugin(SubagentRuntime)
+      ctx.subagents.registerProvider({
+        name: 'capture-route',
+        capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
+        inheritsParentContext: false,
+        start: async (request) => {
+          seen = request
+          return {
+            id: SessionId('capture-route-child'),
+            localAgent: undefined,
+            result: Promise.resolve({ output: [{ type: 'text', text: 'ok' }], stopReason: 'completed' as const }),
+            dispose: async () => {},
+          }
+        },
+      })
+      await ctx.plugin(tool, {
+        provider: 'capture-route',
+        childRoute: {
+          whenProvider: 'openai-codex',
+          provider: 'openai-codex',
+          model: 'gpt-5.6-luna',
+          reasoningEffort: 'high',
+        },
+        maxDepth: 'provider-managed',
+      })
 
-    const openAiParent = { ...fakeAgent(), options: { provider: 'openai-codex', model: 'gpt-5.4' } } as Agent
-    await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: openAiParent })
-    expect(seen?.agentOptions).toEqual({ provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'high' })
+      const openAiParent = { ...fakeAgent(), options: { provider: 'openai-codex', model: rootModel } } as Agent
+      await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: openAiParent })
+      expect(seen?.agentOptions).toEqual({ provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'high' })
 
-    const otherParent = { ...fakeAgent('other-parent'), options: { provider: 'openrouter', model: 'ox-alpha' } } as Agent
-    await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: otherParent })
-    expect(seen?.agentOptions).toBeUndefined()
-  })
+      const otherParent = { ...fakeAgent('other-parent'), options: { provider: 'openrouter', model: 'ox-alpha' } } as Agent
+      await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: otherParent })
+      expect(seen?.agentOptions).toBeUndefined()
+    },
+  )
 
   it('defaults toolName and omits agentOptions when apply() is called directly (schema bypass)', async () => {
     // `ctx.plugin` validates+defaults config first (toolName→'subagent', the
