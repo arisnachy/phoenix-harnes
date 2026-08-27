@@ -6,6 +6,7 @@ describe('HARDNESS browser fixture', () => {
     const fixture = createHardnessBrowserFixture()
     expect(fixture.artifact).toMatchObject({ id: 'hardness-fixture-weather', mime: 'text/plain' })
     expect(fixture.rendered).toMatchObject({ kind: 'hardness-fixture', artifactId: 'hardness-fixture-weather' })
+    expect(fixture.trace).toEqual(['UNKNOWN', 'BUILD', 'VERIFIED', 'APPROVAL', 'EXECUTE', 'ARTIFACT', 'RENDER', 'LEARN'])
     expect(fixture.artifact).not.toHaveProperty('execute')
     expect(fixture.rendered).not.toHaveProperty('execute')
   })
