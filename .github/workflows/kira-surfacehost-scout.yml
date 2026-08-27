@@ -1,0 +1,35 @@
+name: KIRA SurfaceHost Scout
+
+on:
+  push:
+    branches:
+      - feat/surfacehost-windows-native-update
+
+permissions:
+  contents: read
+
+jobs:
+  scout:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate integration seams
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== browser / desktop / playwright paths ==='
+          find packages apps scripts -type f \( -iname '*browser*' -o -iname '*playwright*' -o -iname '*desktop*' -o -iname '*window*' \) | sort | head -200
+          echo '=== tool registration candidates ==='
+          rg -n "register.*tool|tool.*register|ToolDefinition|createTool|toolName|tools:" packages apps | head -300 || true
+          echo '=== browser symbols ==='
+          rg -n "browser|playwright|chromium|page\." packages apps | head -300 || true
+          echo '=== slots / turn tail / message images ==='
+          rg -n "MessageImages|TurnTail|ProducedFiles|ToolDetails|openFile" packages/client | head -300 || true
+          echo '=== sandbox policy exports ==='
+          sed -n '1,260p' packages/sandbox/sandbox-policy/src/index.ts
+          echo '=== client package manifests relevant ==='
+          cat packages/client/ui-conversation/package.json
+          cat packages/client/ui-tool/package.json
+          cat packages/client/ui-deliverables/package.json
+          cat packages/client/ui-attachment/package.json
