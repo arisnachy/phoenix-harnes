@@ -18,7 +18,9 @@
 - Create: `packages/hardness/hardness/README.md`
 - Create: `packages/hardness/hardness/src/types.ts`
 - Create: `packages/hardness/hardness/src/index.ts`
+- Create: `packages/hardness/hardness/src/invariant.ts`
 - Test: `packages/hardness/hardness/tests/service.spec.ts`
+- Test: `packages/hardness/hardness/tests/composition.e2e.ts`
 
 - [ ] **Step 1: Add the package metadata and TypeScript project reference**
 
@@ -53,15 +55,19 @@ Expected result: FAIL because the package and `Hardness` service do not exist.
 
 In `src/types.ts`, define branded `CapabilityId`, extensible string `CapabilityKind`, `CapabilityStatus`, `CapabilityPermission`, `CapabilityDescriptor`, `CapabilityEvidence`, `CapabilityNeed`, `CapabilityResolution`, `CapabilityRegistration`, and `HardnessService`. Keep permissions required-only; do not expose credential payloads. Use discriminated result kinds `have`, `missing`, and `unknown`.
 
-In `src/index.ts`, declare `Context.hardness`, export the public types, export the plugin, and register the empty provider through a reversible Cordis effect.
+In `src/index.ts`, declare `Context.hardness`, export the public types, default-export the service class, and register the empty provider through a reversible Cordis effect. Add the package-owned `src/invariant.ts` and register the manifest name with a meaningful runtime relation check (or a package-specific documented no-runtime-invariant reason).
 
-- [ ] **Step 5: Run the focused test and verify green**
+- [ ] **Step 5: Add the REAL-composition regression test**
 
-Run `pnpm exec vitest run packages/hardness/hardness/tests/service.spec.ts`.
+Boot a test-only `cordis.yml` through the Loader and app/process path used by existing package composition tests. Assert the mounted service can register a descriptor and that its durable/model-visible result is available through the composed context. Dispose the fiber and assert the registration is removed, proving HMR-safe cleanup rather than only testing a hand-built context.
+
+- [ ] **Step 6: Run the focused tests and verify green**
+
+Run `pnpm exec vitest run packages/hardness/hardness/tests/service.spec.ts packages/hardness/hardness/tests/composition.e2e.ts`.
 
 Expected result: PASS.
 
-- [ ] **Step 6: Commit the seam**
+- [ ] **Step 7: Commit the seam**
 
 ```sh
 git add packages/hardness/hardness
@@ -194,6 +200,7 @@ git commit -m "feat: record HARDNESS capability evidence"
 - Create: `packages/hardness/atlas-json/README.md`
 - Create: `packages/hardness/atlas-json/src/index.ts`
 - Create: `packages/hardness/atlas-json/src/format.ts`
+- Create: `packages/hardness/atlas-json/src/invariant.ts`
 - Test: `packages/hardness/atlas-json/tests/atlas-json.spec.ts`
 
 - [ ] **Step 1: Write persistence tests**
@@ -210,7 +217,7 @@ Expected result: FAIL because the provider does not exist.
 
 Define a strict top-level format with `formatVersion`, `capabilities`, `evidence`, and `updatedAt`. Validate on load and save. Write to a sibling temporary file, flush/close it, then replace the target atomically using the repository's existing Windows-safe file replacement pattern. Never treat load failure as an empty atlas.
 
-Mount the provider as a Cordis plugin that receives its path from validated config. Keep the provider host-side and expose only the `HardnessService` interface to consumers.
+Mount the provider as a Cordis plugin that receives its path from validated config, default-export its service class, and provide a package-owned `src/invariant.ts` with the manifest registration and a runtime persistence relation check. Keep the provider host-side and expose only the `HardnessService` interface to consumers.
 
 - [ ] **Step 4: Run persistence tests and verify green**
 
@@ -310,6 +317,8 @@ git commit -m "test: verify HARDNESS unknown capability discovery path"
 - Modify: `docs/architecture.md`
 - Modify: `docs/capability-seams.md`
 - Modify: `packages/README.md`
+- Modify: `tsconfig.host.json` and `tsconfig.client.json` aggregates to register each new package project reference exactly once
+- Modify: the owning base composition manifest to mount the provider only after its persistence dependency is available
 - Create: `packages/hardness/hardness/README.zh.md`
 - Create: `packages/hardness/atlas-json/README.zh.md`
 - Create or modify: owning Agent Note under `.agents/notes/implemented/architecture/`
