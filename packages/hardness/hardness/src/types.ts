@@ -69,4 +69,5 @@ export interface HardnessService {
   get(id: CapabilityId): CapabilityDescriptor | undefined
   list(): readonly CapabilityDescriptor[]
   resolveNeed(need: CapabilityNeed): CapabilityResolution
+  transition(id: CapabilityId, status: CapabilityStatus, reason: string, evidenceId?: string): void
 }

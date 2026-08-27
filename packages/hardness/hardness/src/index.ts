@@ -7,8 +7,14 @@ import type {
   CapabilityNeed,
   CapabilityRegistration,
   CapabilityResolution,
+  CapabilityStatus,
   HardnessService,
 } from './types.ts'
+import {
+  compareCapabilityVersions,
+  transitionCapability,
+  validateCapabilityDescriptor,
+} from './registry.ts'
 
 export type * from './types.ts'
 
@@ -21,6 +27,11 @@ export class HardnessRegistry extends Service implements HardnessService {
   }
 
   register(descriptor: CapabilityDescriptor): CapabilityRegistration {
+    validateCapabilityDescriptor(descriptor)
+    const previous = this.descriptors.get(descriptor.id)
+    if (previous !== undefined && compareCapabilityVersions(descriptor.version, previous.version) <= 0) {
+      throw new Error(`capability descriptor version ${descriptor.version} is not newer than ${previous.version}`)
+    }
     this.descriptors.set(descriptor.id, descriptor)
     return {
       dispose: () => {
@@ -43,6 +54,12 @@ export class HardnessRegistry extends Service implements HardnessService {
       considered: [],
       reasons: ['capability resolver is not initialized'],
     }
+  }
+
+  transition(id: CapabilityId, status: CapabilityStatus, reason: string, evidenceId?: string): void {
+    const descriptor = this.descriptors.get(id)
+    if (descriptor === undefined) throw new Error(`unknown capability: ${id}`)
+    this.descriptors.set(id, transitionCapability(descriptor, status, reason, evidenceId))
   }
 }
 
