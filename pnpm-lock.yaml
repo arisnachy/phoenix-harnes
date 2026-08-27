@@ -4937,6 +4937,18 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
 
+  packages/hardness/adapters:
+    devDependencies:
+      '@deepseek-ai/dsh-hardness':
+        specifier: workspace:^
+        version: link:../hardness
+      '@deepseek-ai/dsh-skill':
+        specifier: workspace:^
+        version: link:../../skill/skill
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+
   packages/hardness/atlas-json:
     devDependencies:
       '@deepseek-ai/cordis':

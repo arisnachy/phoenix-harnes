@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/dsh-hardness-adapters",
+  "description": "Adapters that project PHOENIX tools and skills into the HARDNESS Tool Atlas",
+  "version": "0.1.1-rc.2",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" }, "./src/*": "./src/*" },
+  "files": ["lib"],
+  "license": "MIT",
+  "peerDependencies": { "@deepseek-ai/dsh-hardness": "workspace:^", "@deepseek-ai/dsh-tools": "workspace:^", "@deepseek-ai/dsh-skill": "workspace:^" },
+  "devDependencies": { "@deepseek-ai/dsh-hardness": "workspace:^", "@deepseek-ai/dsh-tools": "workspace:^", "@deepseek-ai/dsh-skill": "workspace:^" }
+}
