@@ -18,18 +18,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== browser / desktop / playwright paths ==='
-          find packages apps scripts -type f \( -iname '*browser*' -o -iname '*playwright*' -o -iname '*desktop*' -o -iname '*window*' \) | sort | head -200
           echo '=== tool registration candidates ==='
-          rg -n "register.*tool|tool.*register|ToolDefinition|createTool|toolName|tools:" packages apps | head -300 || true
+          grep -RInE "register.*tool|tool.*register|ToolDefinition|createTool|toolName|tools:" packages apps --include='*.ts' --include='*.tsx' | head -500 || true
           echo '=== browser symbols ==='
-          rg -n "browser|playwright|chromium|page\." packages apps | head -300 || true
+          grep -RInE "browser|playwright|chromium|page\." packages apps --include='*.ts' --include='*.tsx' | head -500 || true
           echo '=== slots / turn tail / message images ==='
-          rg -n "MessageImages|TurnTail|ProducedFiles|ToolDetails|openFile" packages/client | head -300 || true
-          echo '=== sandbox policy exports ==='
-          sed -n '1,260p' packages/sandbox/sandbox-policy/src/index.ts
-          echo '=== client package manifests relevant ==='
-          cat packages/client/ui-conversation/package.json
-          cat packages/client/ui-tool/package.json
-          cat packages/client/ui-deliverables/package.json
-          cat packages/client/ui-attachment/package.json
+          grep -RInE "MessageImages|TurnTail|ProducedFiles|ToolDetails|openFile" packages/client --include='*.ts' --include='*.tsx' | head -500 || true
+          echo '=== package names mentioning browser/web-search/tools ==='
+          find packages -name package.json -print0 | xargs -0 grep -IlE 'browser|playwright|tools|web-search' | sort | head -200
+          echo '=== subprocess windows inspector ==='
+          sed -n '1,280p' packages/subprocess/subprocess-local/src/windows-inspector.ts
+          echo '=== tool slot model ==='
+          sed -n '1,300p' packages/client/ui-tool/src/client/tool/ToolDetails.tsx
+          find packages/client/ui-tool/src/client/tool/models -type f -maxdepth 1 -print -exec sh -c 'echo --- $1; sed -n "1,260p" "$1"' _ {} \;
+          echo '=== conversation slots ==='
+          grep -RInE "slot|TurnTail|MessageImages" packages/client/ui-conversation/src/client --include='*.ts' --include='*.tsx' | head -500 || true
