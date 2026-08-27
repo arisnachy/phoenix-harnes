@@ -9,7 +9,7 @@ import { homedir } from 'node:os'
 import { dirname } from 'node:path'
 import { z as zod } from 'zod'
 import type { Context } from '@deepseek-ai/cordis'
-import { installModelSelection } from '@deepseek-ai/dsh-agent'
+import { defaultExecutionHandoff, installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
@@ -1158,7 +1158,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
       assembled: undefined,
     }
-    installModelSelection(agent.ctx, selection)
+    installModelSelection(agent.ctx, selection, defaultExecutionHandoff(selection.current))
     selections.set(agent, selection)
     return selection
   }

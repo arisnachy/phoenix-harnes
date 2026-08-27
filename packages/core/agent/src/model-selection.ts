@@ -4,7 +4,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { LlmCallConfig, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
 
 /** Complete provider, model, and optional reasoning effort selected for one live Agent. */
 export interface ModelSelection {
@@ -24,6 +24,27 @@ export interface ModelSelectionRef {
   assembled: ModelSelection | undefined
 }
 
+/** Route used after the initial diagnosis/plan step of a turn. */
+export interface ModelSelectionHandoff {
+  /** Last step that remains on the selected model; execution starts after it. */
+  afterStep: number
+  /** Model and effort used for subsequent execution steps. */
+  selection: ModelSelection
+}
+
+/** Default quality-preserving route for OpenAI Codex orchestrators. */
+export function defaultExecutionHandoff(selection: ModelSelection | undefined): ModelSelectionHandoff | undefined {
+  if (selection?.provider !== 'openai-codex') return undefined
+  return {
+    afterStep: 0,
+    selection: {
+      provider: 'openai-codex',
+      model: 'gpt-5.6-luna',
+      reasoningEffort: ReasoningEffortId('high'),
+    },
+  }
+}
+
 /**
  * Couple one mutable selection to Agent-scoped prompt assembly and request routing.
  * Prompt assembly snapshots the selected model before delegating, then applies
@@ -34,9 +55,14 @@ export interface ModelSelectionRef {
  *
  * @param agentCtx - The selected Agent's scoped context.
  * @param selection - Mutable selection owned by the calling entry point.
+ * @param handoff - Optional route for steps after the initial plan step.
  * @returns Disposer for both scoped waterfall listeners.
  */
-export function installModelSelection(agentCtx: Context, selection: ModelSelectionRef): () => void {
+export function installModelSelection(
+  agentCtx: Context,
+  selection: ModelSelectionRef,
+  handoff?: ModelSelectionHandoff,
+): () => void {
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
@@ -57,14 +83,17 @@ export function installModelSelection(agentCtx: Context, selection: ModelSelecti
       const resolved = await next()
       const selected = selection.assembled
       if (selected === undefined) return resolved
+      const routed = handoff !== undefined && _payload.step > handoff.afterStep
+        ? handoff.selection
+        : selected
       const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
       return {
         ...withoutInheritedEffort,
-        provider: selected.provider,
-        model: selected.model,
-        ...selected.reasoningEffort === undefined
+        provider: routed.provider,
+        model: routed.model,
+        ...routed.reasoningEffort === undefined
           ? {}
-          : { reasoningEffort: selected.reasoningEffort },
+          : { reasoningEffort: routed.reasoningEffort },
       }
     },
   )
