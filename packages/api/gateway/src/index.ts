@@ -20,6 +20,9 @@ import type {
   TypertGatewayErrorCode,
 } from './types.ts'
 
+export { installHardnessMissionRpc } from './hardness-rpc.ts'
+export type { HardnessMissionRpcRunner } from './hardness-rpc.ts'
+
 export type {
   InvokeRemoteRequest,
   TypertGateway,
