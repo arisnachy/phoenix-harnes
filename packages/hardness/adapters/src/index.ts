@@ -19,6 +19,8 @@ export { executeCapabilityNeed } from './execution-bridge.ts'
 export type { CapabilityApproval, CapabilityExecutionContext, CapabilityExecutionResult } from './execution-bridge.ts'
 export { ArtifactRuntime, artifactFromToolResult } from './artifact-runtime.ts'
 export type { ArtifactRenderModel, CapabilityArtifact } from './artifact-runtime.ts'
+export { AcquisitionRegistry } from './acquisition-registry.ts'
+export type { AcquisitionResult, CapabilityBuilder } from './acquisition-registry.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
