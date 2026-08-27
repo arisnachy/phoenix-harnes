@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { HardnessService } from '@deepseek-ai/dsh-hardness/src/types.ts'
 import { indexSkills } from './skill-adapter.ts'
 import { indexTools } from './tool-adapter.ts'
+import { createHardnessAcquisition, installHardnessMissionRuntime } from './mission-runtime.ts'
 
 export { indexTools } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
@@ -25,6 +26,8 @@ export { installSandboxCapabilityGuard } from './sandbox-guard.ts'
 export type { SandboxPolicyResolver } from './sandbox-guard.ts'
 export { runHardnessMission } from './mission-orchestrator.ts'
 export type { HardnessMissionInput, HardnessMissionResult } from './mission-orchestrator.ts'
+export { installHardnessMissionRuntime, createHardnessAcquisition } from './mission-runtime.ts'
+export type { HardnessMissionRpcPayload, HardnessMissionRuntimeDependencies } from './mission-runtime.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -40,7 +43,24 @@ export async function apply(ctx: Context): Promise<() => void> {
   const disposeTools = indexTools(tools, hardness)
   try {
     const disposeSkills = await indexSkills(skills, hardness)
-    return () => { disposeSkills(); disposeTools() }
+    const connection = ctx.get('connection')
+    const agents = ctx.get('agents')
+    const approval = ctx.get('approval')
+    const missionDispose = connection !== undefined && agents !== undefined && approval !== undefined
+      ? installHardnessMissionRuntime({
+        connection,
+        agents,
+        approval,
+        hardness,
+        tools,
+        acquisition: createHardnessAcquisition(hardness),
+      })
+      : undefined
+    return () => {
+      disposeSkills()
+      disposeTools()
+      if (missionDispose !== undefined) void missionDispose()
+    }
   } catch (error) {
     disposeTools()
     throw error

@@ -6,6 +6,8 @@
     { "path": "../hardness" },
     { "path": "../../core/tools" },
     { "path": "../../skill/skill" },
-    { "path": "../../runtime-diagnostics/invariants" }
+    { "path": "../../runtime-diagnostics/invariants" },
+    { "path": "../../client/connection/tsconfig.host.json" },
+    { "path": "../../host/apiproxy" }
   ]
 }
