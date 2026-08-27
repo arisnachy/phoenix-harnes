@@ -2,10 +2,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
-import { CodexQuotaRemaining } from '../src/client/CodexQuotaRemaining.tsx'
+import { CodexQuotaRemaining, formatResetCountdown } from '../src/client/CodexQuotaRemaining.tsx'
 import type { CodexQuotaRemainingProps } from '../src/client/CodexQuotaRemaining.tsx'
 
-afterEach(cleanup)
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+  cleanup()
+})
 
 const sid = 's1' as SessionId
 
@@ -67,6 +71,20 @@ function authorization(usedPercent: number) {
   }
 }
 
+describe('formatResetCountdown', () => {
+  it('formats reset countdowns as hours/minutes and days/hours', () => {
+    const nowMs = Date.parse('2026-08-27T12:00:00.000Z')
+    expect(formatResetCountdown(nowMs / 1000 + (2 * 60 + 18) * 60, nowMs)).toBe('2h 18m')
+    expect(formatResetCountdown(nowMs / 1000 + (4 * 24 + 6) * 60 * 60, nowMs)).toBe('4d 6h')
+  })
+
+  it('uses disponible at or after the reset instant', () => {
+    const nowMs = Date.parse('2026-08-27T12:00:00.000Z')
+    expect(formatResetCountdown(nowMs / 1000, nowMs)).toBe('disponible')
+    expect(formatResetCountdown(nowMs / 1000 - 1, nowMs)).toBe('disponible')
+  })
+})
+
 describe('CodexQuotaRemaining', () => {
   it('shows native 100% Codex availability for an OpenAI/Luna route', async () => {
     const d = directory('openai-codex')
@@ -78,8 +96,10 @@ describe('CodexQuotaRemaining', () => {
     expect(view.container.querySelector('[style]')?.getAttribute('style')).toContain('width: 100%')
   })
 
-  it('shows both the five-hour and weekly Codex quota windows', async () => {
+  it('shows both the five-hour and weekly Codex quota windows with reset countdowns', async () => {
     const d = directory('openai-codex')
+    const nowMs = Date.parse('2026-08-27T12:00:00.000Z')
+    vi.spyOn(Date, 'now').mockReturnValue(nowMs)
     const auth = {
       list: vi.fn(() => Promise.resolve({
         rpcId: 'authorization-list-two-windows' as never,
@@ -92,8 +112,8 @@ describe('CodexQuotaRemaining', () => {
               telemetry: {
                 kind: 'account' as const,
                 provider: 'Codex',
-                primaryLimit: { usedPercent: 14, windowDurationMins: 300 },
-                secondaryLimit: { usedPercent: 9, windowDurationMins: 10080 },
+                primaryLimit: { usedPercent: 14, windowDurationMins: 300, resetsAt: nowMs / 1000 + 2 * 60 * 60 + 18 * 60 },
+                secondaryLimit: { usedPercent: 9, windowDurationMins: 10080, resetsAt: nowMs / 1000 + 4 * 86400 + 6 * 60 * 60 },
               },
             }],
           },
@@ -106,6 +126,19 @@ describe('CodexQuotaRemaining', () => {
     expect(screen.getByText('91%')).toBeTruthy()
     expect(screen.getByTitle(/5h · 86%/)).toBeTruthy()
     expect(screen.getByTitle(/7d · 91%/)).toBeTruthy()
+    expect(screen.getByText('↻ 2h 18m')).toBeTruthy()
+    expect(screen.getByText('↻ 4d 6h')).toBeTruthy()
+    expect(screen.getByLabelText(/5h.*86%.*2h 18m/)).toBeTruthy()
+    expect(screen.getByLabelText(/7d.*91%.*4d 6h/)).toBeTruthy()
+  })
+
+  it('keeps a window visible without inventing a countdown when reset time is absent', async () => {
+    const d = directory('openai-codex')
+    const auth = authorization(14)
+    render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
+
+    expect(await screen.findByText('86%')).toBeTruthy()
+    expect(screen.queryByText(/↻/)).toBeNull()
   })
 
   it('does not render or query Codex quota for a non-OpenAI provider', async () => {

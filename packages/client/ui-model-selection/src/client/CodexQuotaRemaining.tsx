@@ -68,6 +68,19 @@ function remaining(limit: RateLimitWindow): number {
   return Math.max(0, Math.min(100, Math.round(100 - limit.usedPercent)))
 }
 
+/** Format the remaining time until a provider quota window resets. */
+export function formatResetCountdown(resetsAt: number, nowMs = Date.now()): string {
+  const remainingMs = Math.max(0, resetsAt * 1000 - nowMs)
+  if (remainingMs === 0) return 'disponible'
+  const totalMinutes = Math.max(1, Math.ceil(remainingMs / 60_000))
+  const days = Math.floor(totalMinutes / (24 * 60))
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
+  const minutes = totalMinutes % 60
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
+}
+
 function windowLabel(limit: RateLimitWindow, fallback: string): string {
   const minutes = limit.windowDurationMins
   if (minutes === undefined || !Number.isSafeInteger(minutes) || minutes <= 0) return fallback
@@ -90,6 +103,7 @@ export function CodexQuotaRemaining({
     provider: string | undefined
   } | undefined>()
   const [quota, setQuota] = useState<QuotaState | undefined>()
+  const [clockMs, setClockMs] = useState(() => Date.now())
   const authorizationRef = useRef(authorization)
   authorizationRef.current = authorization
 
@@ -149,6 +163,13 @@ export function CodexQuotaRemaining({
     }
   }, [provider, sessionId, wide])
 
+  useEffect(() => {
+    if (!wide || sessionId === undefined || !isOpenAI(provider) || quota === undefined) return
+    setClockMs(Date.now())
+    const timer = window.setInterval(() => { setClockMs(Date.now()) }, QUOTA_REFRESH_MS)
+    return () => { window.clearInterval(timer) }
+  }, [provider, quota, sessionId, wide])
+
   if (!wide || sessionId === undefined || !isOpenAI(provider) || quota === undefined) return null
 
   const windows = [
@@ -156,31 +177,40 @@ export function CodexQuotaRemaining({
       key: 'primary',
       label: windowLabel(quota.primaryLimit, '5h'),
       value: remaining(quota.primaryLimit),
+      resetText: quota.primaryLimit.resetsAt !== undefined && Number.isFinite(quota.primaryLimit.resetsAt)
+        ? formatResetCountdown(quota.primaryLimit.resetsAt, clockMs) : undefined,
     },
     quota.secondaryLimit === undefined ? undefined : {
       key: 'secondary',
       label: windowLabel(quota.secondaryLimit, '7d'),
       value: remaining(quota.secondaryLimit),
+      resetText: quota.secondaryLimit.resetsAt !== undefined && Number.isFinite(quota.secondaryLimit.resetsAt)
+        ? formatResetCountdown(quota.secondaryLimit.resetsAt, clockMs) : undefined,
     },
   ].filter((window): window is {
     key: string
     label: string
     value: number
+    resetText: string | undefined
   } => window !== undefined)
 
   return (
-    <span className={css.root} aria-hidden="true">
+    <span className={css.root}>
       {windows.map(window => (
         <span
           className={css.window}
           key={window.key}
-          title={`OpenAI Codex · ${window.label} · ${window.value}% remaining`}
+          title={`OpenAI Codex · ${window.label} · ${window.value}% remaining${window.resetText === undefined ? '' : ` · resets in ${window.resetText}`}`}
+          aria-label={`Codex ${window.label} · ${window.value}% remaining${window.resetText === undefined ? '' : ` · resets in ${window.resetText}`}`}
         >
-          <span className={css.label}>{window.label}</span>
-          <strong className={css.value}>{window.value}%</strong>
-          <span className={css.track}>
-            <span className={css.fill} style={{ width: `${window.value}%` }} />
+          <span className={css.summary}>
+            <span className={css.label}>{window.label}</span>
+            <strong className={css.value}>{window.value}%</strong>
+            <span className={css.track}>
+              <span className={css.fill} style={{ width: `${window.value}%` }} />
+            </span>
           </span>
+          {window.resetText === undefined ? null : <span className={css.reset}>↻ {window.resetText}</span>}
         </span>
       ))}
     </span>
