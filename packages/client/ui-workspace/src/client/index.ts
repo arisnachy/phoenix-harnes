@@ -17,6 +17,8 @@ import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contra
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+export { CapabilitySurfacePreview, registerCapabilitySurfacePreview } from './CapabilitySurfacePreview.tsx'
+export type { CapabilitySurfacePreviewProps } from './CapabilitySurfacePreview.tsx'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
