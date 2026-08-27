@@ -287,6 +287,7 @@ export class FakeApiClient implements IApiClient {
     }))),
     answer: payload => this.record('authorization.answer', payload, Promise.resolve(ok({ accepted: true as const }))),
     cancel: payload => this.record('authorization.cancel', payload, Promise.resolve(ok({ cancelled: true as const }))),
+    disconnect: payload => this.record('authorization.disconnect', payload, Promise.resolve(ok({ disconnected: true as const }))),
   }
 
   /** When true, streams never fire onOpen (misbehaving-carrier material for the handshake timeout guard). */

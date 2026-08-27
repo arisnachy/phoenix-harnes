@@ -172,7 +172,7 @@ function ConnectorCard({ connector }: { connector: ConnectorTelemetry }): ReactN
 function ConnectorGrid({ telemetry }: { telemetry: AccountTelemetry | undefined }): ReactNode {
   const connectors = telemetry?.connectors
   if (connectors === undefined || connectors.length === 0) return null
-  const isGoogle = telemetry.provider.toLowerCase().includes('google')
+  const isGoogle = telemetry?.provider.toLowerCase().includes('google') === true
   const title = isGoogle ? 'Google Workspace services' : 'Codex connectors'
   const ready = connectors.filter(connector => connector.callable === true).length
   const hint = isGoogle
@@ -237,7 +237,7 @@ export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelP
     <section className={styles['authorizationPanel']} aria-label={t('accountConnections')}>
       <h3 className={styles['authorizationTitle']}>{t('accountConnections')}</h3>
       <p className={styles['advancedHint']}>{t('accountConnectionsHint')}</p>
-      {entries.map(entry => {
+      {entries.map((entry) => {
         const lines = telemetryLines(entry.telemetry)
         return (
           <div key={entry.key} className={styles['rowCard']}>

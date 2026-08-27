@@ -3078,6 +3078,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         message: 'Account authorization is unavailable in fixture mode',
         details: {},
       }),
+      disconnect: request => ok(request, { disconnected: true }),
     },
     respond(message: ClientResponse): Promise<RpcReceipt> {
       // Same routing discipline as the host: rpcId first, then the payload's
@@ -3255,6 +3256,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'authorization.status': return this.api.authorization.status(request)
       case 'authorization.answer': return this.api.authorization.answer(request)
       case 'authorization.cancel': return this.api.authorization.cancel(request)
+      case 'authorization.disconnect': return this.api.authorization.disconnect(request)
     }
   }
 
