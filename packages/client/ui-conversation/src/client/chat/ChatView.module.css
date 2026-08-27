@@ -69,15 +69,15 @@
 /* Selection still sets data-selected for details linkage; no outline —
    tool rows match Think chrome (no selected ring). */
 
-/* Turn activity keeps the former loader's one-line footprint. A pale
-   brand-blue band sweeps from left to right; reduced-motion keeps it static. */
+/* Turn activity keeps a compact one-line footprint. The text shimmer and
+   blue-gold emblem orbit share one calm cadence; reduced-motion keeps both static. */
 .turnStatus {
   align-self: flex-start;
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 26px;
+  gap: 10px;
+  height: 30px;
   font: var(--dsw-font-s-strong-14);
   white-space: nowrap;
   background: linear-gradient(
@@ -94,65 +94,93 @@
   color: transparent;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: dsh-turn-status-shimmer 1.8s linear infinite;
+  animation: dsh-turn-status-shimmer 2.4s linear infinite;
 }
 
 .phoenixActivity {
   position: relative;
+  isolation: isolate;
   display: inline-grid;
   place-items: center;
   flex: none;
-  filter: drop-shadow(0 0 3px rgb(245 158 11 / 72%));
-  animation: phoenix-fire-pulse 900ms ease-in-out infinite alternate;
+  width: 32px;
+  height: 32px;
+}
+
+.phoenixActivity > img {
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 1px 2px rgb(30 64 175 / 28%)) drop-shadow(0 0 3px rgb(245 158 11 / 34%));
+}
+
+.phoenixActivity::before,
+.phoenixActivity::after {
+  position: absolute;
+  pointer-events: none;
+  content: '';
 }
 
 .phoenixActivity::before {
-  position: absolute;
-  z-index: -1;
-  width: 118%;
-  height: 118%;
-  border-radius: 50% 50% 45% 55%;
-  background: radial-gradient(circle at 50% 70%, #fff3b0 0 18%, #ff9d00 38%, #ef3b13 62%, transparent 72%);
-  content: '';
-  opacity: 0.68;
-  transform: rotate(45deg) scale(0.82);
-  animation: phoenix-flame 620ms ease-in-out infinite alternate;
+  z-index: 0;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 20deg,
+    rgb(37 99 235 / 0%) 0deg,
+    rgb(37 99 235 / 92%) 62deg,
+    rgb(124 58 237 / 70%) 132deg,
+    rgb(245 158 11 / 94%) 218deg,
+    rgb(251 191 36 / 42%) 286deg,
+    rgb(37 99 235 / 0%) 360deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  animation: phoenix-orbit 2.4s linear infinite;
+}
+
+.phoenixActivity::after {
+  z-index: 1;
+  inset: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(251 191 36 / 38%) 0%, rgb(59 130 246 / 18%) 48%, transparent 74%);
+  filter: blur(3px);
+  opacity: 0.46;
+  animation: phoenix-breathe 1.8s ease-in-out infinite alternate;
 }
 
 .phoenixCompletion {
   align-self: flex-start;
-  height: 30px;
-  animation: phoenix-complete 1.6s ease-out both;
+  height: 32px;
+  animation: phoenix-complete 1.2s ease-out both;
 }
 
-@keyframes phoenix-fire-pulse {
+@keyframes phoenix-orbit {
   to {
-    filter: drop-shadow(0 0 8px rgb(249 115 22 / 95%));
-    transform: scale(1.06);
+    transform: rotate(360deg);
   }
 }
 
-@keyframes phoenix-flame {
+@keyframes phoenix-breathe {
   to {
-    opacity: 0.92;
-    transform: rotate(45deg) scale(1.04);
+    opacity: 0.78;
+    transform: scale(1.08);
   }
 }
 
 @keyframes phoenix-complete {
   0% {
     opacity: 0;
-    transform: scale(0.45) rotate(-12deg);
+    transform: scale(0.88);
   }
 
-  32% {
+  38% {
     opacity: 1;
-    transform: scale(1.22) rotate(3deg);
+    transform: scale(1.06);
   }
 
   100% {
     opacity: 0;
-    transform: scale(1) rotate(0);
+    transform: scale(1.02);
   }
 }
 
@@ -180,8 +208,18 @@
 
   .phoenixActivity,
   .phoenixActivity::before,
+  .phoenixActivity::after,
   .phoenixCompletion {
     animation: none;
+  }
+
+  .phoenixActivity::before {
+    transform: rotate(18deg);
+  }
+
+  .phoenixActivity::after {
+    opacity: 0.58;
+    transform: scale(1);
   }
 }
 

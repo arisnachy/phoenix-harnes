@@ -955,6 +955,8 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     const activeLogo = view.getByRole('status').querySelector('img')
     expect(activeLogo?.getAttribute('src')).toBe('/phoenix-emblem.png')
+    expect(activeLogo?.getAttribute('width')).toBe('28')
+    expect(activeLogo?.getAttribute('height')).toBe('28')
 
     act(() => { h.set({ running: false }) })
 

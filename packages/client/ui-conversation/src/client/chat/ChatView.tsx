@@ -154,7 +154,7 @@ function TurnStatus({ startTime, progress, t }: {
   return (
     <div className={css.turnStatus} role="status" aria-live="polite">
       <span className={css.phoenixActivity} aria-hidden="true">
-        <PhoenixLogo size={24} />
+        <PhoenixLogo size={28} />
       </span>
       <span>{t(statusKey)}</span>
       {showClock && (
