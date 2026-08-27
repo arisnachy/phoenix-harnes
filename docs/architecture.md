@@ -103,7 +103,7 @@ Seams are why one provider swap changes the whole product. Filesystem and subpro
 
 [Experimental Agent Teams](subsystems/agent-team.md) is a private opt-in coordination seam on `ctx.agentTeams`, with a durable roster, task board, and mailbox layered over continuable subagents.
 
-HARDNESS adds a provider-neutral capability index on `ctx.hardness`. Its descriptors are an inventory projection, not execution authority: tools and skills remain their source registries, required permissions remain declarations, and `have` requires current verification evidence. `@deepseek-ai/dsh-hardness-atlas-json` persists versioned snapshots atomically without credentials.
+HARDNESS adds a provider-neutral capability index and declarative modality router on `ctx.hardness`. Its descriptors are an inventory projection, not execution authority: tools and skills remain their source registries, required permissions remain declarations, and `have`/`route` require current verification evidence. `@deepseek-ai/dsh-hardness-atlas-json` persists versioned snapshots atomically without credentials; visual, workspace, sandbox, and generative UI consumers remain separate authorities.
 
 ## Where new behavior goes
 

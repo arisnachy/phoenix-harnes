@@ -4,7 +4,9 @@
 
 PHOENIX HARDNESS 的 provider-neutral 能力 registry 与 Tool Atlas 服务。
 
-它记录声明的 capability descriptor、所需权限、生命周期状态和验证证据；不会授予权限、保存凭据或替换 tools 与 skills registry。
+它记录声明的 capability descriptor、所需权限、生命周期状态、验证证据和声明式 modality route；不会授予权限、保存凭据、执行 tools 或替换 tools 与 skills registry。
+
+只有 resolver 返回当前可用的 capability，且其声明的 modality 与请求偏好相交时，才会选择 route。`unknown` 表示无法对 need 分类；`missing` 表示 need 已知但没有经过验证的 capability 与 modality 可以满足它。所需权限只会作为声明传给后续 broker，不会在此处授予。
 
 ## Known Limitations and Deferred Work
 
