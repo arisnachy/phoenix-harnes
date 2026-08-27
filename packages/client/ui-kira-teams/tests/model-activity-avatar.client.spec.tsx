@@ -20,10 +20,11 @@ describe('ModelActivityAvatar', () => {
       running: true,
       pending: false,
     })
-    expect(element.props['data-avatar']).toBe('luna')
-    expect(element.props['data-phase']).toBe('running-tools')
-    expect(element.props['data-state']).toBe('running')
-    expect(element.props['aria-hidden']).toBe('true')
+    const props = element.props as Record<string, unknown>
+    expect(props['data-avatar']).toBe('luna')
+    expect(props['data-phase']).toBe('running-tools')
+    expect(props['data-state']).toBe('running')
+    expect(props['aria-hidden']).toBe('true')
   })
 
   it('uses idle and pending states without losing model identity', () => {

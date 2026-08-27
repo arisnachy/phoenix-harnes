@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CallId } from '@deepseek-ai/dsh-brand'
+import type { CallId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import {
   subagentActivityProjectionDefinition,
