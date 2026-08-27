@@ -1,5 +1,7 @@
 # HARDNESS Declarative Capability Router Design
 
+English | [中文](2026-08-27-hardness-capability-router-design.zh.md)
+
 ## Objective
 
 Add a provider-neutral router that turns a declared `CapabilityNeed` into an honest route decision without executing tools, acquiring software, granting permissions, or replacing existing registries.

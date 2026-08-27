@@ -1,5 +1,7 @@
 # HARDNESS Declarative Capability Router Implementation Plan
 
+English | [中文](2026-08-27-hardness-capability-router.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a provider-neutral router that selects a verified capability and requested modality without executing tools or granting permissions.
