@@ -73,7 +73,17 @@ jobs:
           if (( install_status != 0 )); then exit "$install_status"; fi
           exit "$sandbox_status"
       - name: Run exhaustive coverage
-        run: pnpm run check:ci:coverage
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm run check:ci:coverage 2>&1 | tee "$RUNNER_TEMP/coverage-gate.log"
+      - name: Preserve coverage failure log
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phoenix-ci-coverage-failure-${{ github.sha }}
+          path: ${{ runner.temp }}/coverage-gate.log
+          if-no-files-found: error
 
   node-24-consumers:
     if: github.event_name == 'pull_request'
@@ -112,7 +122,17 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
       - name: Run compatibility, snapshot, and artifact gates serially
-        run: pnpm run check:ci:consumers
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm run check:ci:consumers 2>&1 | tee "$RUNNER_TEMP/consumers-gate.log"
+      - name: Preserve consumers failure log
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phoenix-ci-consumers-failure-${{ github.sha }}
+          path: ${{ runner.temp }}/consumers-gate.log
+          if-no-files-found: error
 
   node-compat:
     if: github.event_name == 'pull_request'
