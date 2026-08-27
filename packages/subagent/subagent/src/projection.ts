@@ -114,12 +114,12 @@ export const subagentTimingProjectionDefinition = {
 /** Fold state for the model route and current open-turn activity. */
 export interface ActivityState {
   descriptorSeen: boolean
-  route?: { provider: string; model: string }
+  route?: { provider: string; model: string } | undefined
   openTurn?: {
     turn: number
     sawTool: boolean
     pendingCalls: string[]
-  }
+  } | undefined
 }
 
 const activityRouteSchema = z.object({
@@ -177,9 +177,7 @@ export const subagentActivityProjectionDefinition = {
       }
     }
     if (event.type === 'tool/result' && state.openTurn?.turn === event.data.turn) {
-      const source = event.data.message.source
-      if (source.kind !== 'tool') return state
-      const callId = String(source.callId)
+      const callId = String(event.data.message.source.callId)
       if (!state.openTurn.pendingCalls.includes(callId)) return state
       return {
         ...state,
