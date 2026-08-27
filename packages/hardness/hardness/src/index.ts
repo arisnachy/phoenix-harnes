@@ -9,6 +9,8 @@ import type {
   CapabilityRegistration,
   CapabilityResolution,
   CapabilityResolutionContext,
+  CapabilityRouteOptions,
+  CapabilityRouteResult,
   CapabilityStatus,
   HardnessAtlasSnapshot,
   HardnessService,
@@ -19,6 +21,7 @@ import {
   validateCapabilityDescriptor,
 } from './registry.ts'
 import { resolveCapabilityNeed } from './resolver.ts'
+import { routeCapabilityNeed } from './capability-router.ts'
 import { evidenceForCapability, freezeEvidence } from './evidence.ts'
 
 export type * from './types.ts'
@@ -56,6 +59,10 @@ export class HardnessRegistry extends Service implements HardnessService {
 
   resolveNeed(need: CapabilityNeed, context: CapabilityResolutionContext = {}): CapabilityResolution {
     return resolveCapabilityNeed(this.list(), need, context)
+  }
+
+  route(need: CapabilityNeed, options: CapabilityRouteOptions = {}): CapabilityRouteResult {
+    return routeCapabilityNeed(this, need, options)
   }
 
   transition(id: CapabilityId, status: CapabilityStatus, reason: string, evidenceId?: string): void {

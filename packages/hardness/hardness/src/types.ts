@@ -2,6 +2,7 @@
 
 export type CapabilityId = string & { readonly __capabilityId: unique symbol }
 export type CapabilityKind = string
+export type CapabilityModality = 'native' | 'visual' | 'workspace' | 'sandbox' | 'generative-ui' | (string & {})
 export type CapabilityStatus = 'experimental' | 'testing' | 'verified' | 'broken' | 'quarantined' | 'deprecated'
 
 export interface CapabilityPermission {
@@ -23,6 +24,7 @@ export interface CapabilityDescriptor {
   readonly version: string
   readonly compatibility: readonly string[]
   readonly limitations: readonly string[]
+  readonly modalities: readonly CapabilityModality[]
   readonly status: CapabilityStatus
 }
 
@@ -56,6 +58,22 @@ export interface CapabilityResolution {
   readonly reasons: readonly string[]
 }
 
+export interface CapabilityRouteOptions extends CapabilityResolutionContext {
+  readonly modalities?: readonly CapabilityModality[]
+}
+
+export interface CapabilityRoute {
+  readonly need: CapabilityNeed
+  readonly capability: CapabilityDescriptor
+  readonly modality: CapabilityModality
+  readonly requiredPermissions: readonly CapabilityPermission[]
+}
+
+export type CapabilityRouteResult =
+  | { readonly kind: 'route'; readonly route: CapabilityRoute }
+  | { readonly kind: 'missing'; readonly considered: readonly string[]; readonly reasons: readonly string[] }
+  | { readonly kind: 'unknown'; readonly considered: readonly string[]; readonly reasons: readonly string[] }
+
 export interface CapabilityRegistration {
   readonly dispose: () => void
 }
@@ -77,4 +95,5 @@ export interface HardnessService {
   promoteFromEvidence(evidenceId: string): void
   snapshot(): HardnessAtlasSnapshot
   restore(snapshot: HardnessAtlasSnapshot): void
+  route(need: CapabilityNeed, options?: CapabilityRouteOptions): CapabilityRouteResult
 }

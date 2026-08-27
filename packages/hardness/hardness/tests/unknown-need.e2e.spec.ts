@@ -18,6 +18,7 @@ const descriptor: CapabilityDescriptor = {
   version: '1.0.0',
   compatibility: [],
   limitations: [],
+  modalities: ['native'],
   status: 'experimental',
 }
 

@@ -20,6 +20,7 @@ function descriptor(version = '1.0.0'): CapabilityDescriptor {
     version,
     compatibility: ['calendar_event→text/calendar'],
     limitations: [],
+    modalities: ['native'],
     status: 'experimental',
   }
 }

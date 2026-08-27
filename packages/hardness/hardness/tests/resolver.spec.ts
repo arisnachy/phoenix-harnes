@@ -19,6 +19,7 @@ const descriptor: CapabilityDescriptor = {
   version: '1.0.0',
   compatibility: ['calendar_event→text/calendar'],
   limitations: [],
+  modalities: ['native'],
   status: 'verified',
 }
 

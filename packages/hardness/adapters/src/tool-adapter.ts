@@ -17,6 +17,7 @@ export function indexTools(tools: ToolRuntime, hardness: HardnessService): () =>
     version: '1.0.0',
     compatibility: [],
     limitations: [],
+    modalities: ['native'],
     status: 'experimental',
   }).dispose)
   return () => { for (const dispose of disposers) dispose() }
