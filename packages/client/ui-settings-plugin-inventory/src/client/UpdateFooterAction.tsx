@@ -66,6 +66,7 @@ export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventory
     case 'checking':
     case 'current':
     case 'updated':
+    case 'paused':
     case 'off':
       return undefined
     case 'available': return 'updateAvailable'
@@ -82,7 +83,6 @@ export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventory
     case 'applying': return 'updateApplying'
     case 'rolling-back': return 'updateRollingBack'
     case 'rolled-back': return 'updateRolledBack'
-    case 'paused': return 'updatePaused'
     case 'error':
     case 'rollback-failed': return 'updateError'
     /* v8 ignore next 2 -- compile-time exhaustiveness guard for future statuses. */

@@ -167,7 +167,7 @@ describe('UpdateFooterAction', () => {
     [{ status: 'applying' }, 'updateApplying'],
     [{ status: 'rolling-back' }, 'updateRollingBack'],
     [{ status: 'rolled-back' }, 'updateRolledBack'],
-    [{ status: 'paused' }, 'updatePaused'],
+    [{ status: 'paused' }, undefined],
     [{ status: 'error' }, 'updateError'],
     [{ status: 'rollback-failed' }, 'updateError'],
   ] as Array<[PhoenixUpdateSnapshot, PluginInventoryLocaleKey | undefined]>)('maps %# to stable localized copy', (snapshot, expected) => {
@@ -193,7 +193,6 @@ describe('UpdateFooterAction', () => {
     [{ status: 'restarting', phase: 'restart' }, 'updateRestarting'],
     [{ status: 'applying', phase: 'build' }, 'updateApplying'],
     [{ status: 'rolling-back', phase: 'smoke' }, 'updateRollingBack'],
-    [{ status: 'paused', phase: 'worktree' }, 'updatePaused'],
   ] as Array<[PhoenixUpdateSnapshot, PluginInventoryLocaleKey]>)('renders active state %# as a live status row', async (snapshot, key) => {
     render(<UpdateFooterAction {...updateProps(async () => snapshot)} />)
     expect(await screen.findByRole('status', { name: en[key] })).toBeTruthy()
@@ -224,7 +223,7 @@ describe('UpdateFooterAction', () => {
     render(<UpdateFooterAction {...updateProps(readUpdateState, restartForUpdate)} />)
 
     fireEvent.click(await screen.findByRole('button', { name: en.updateRestart }))
-    expect(await screen.findByRole('status', { name: en.updatePaused })).toBeTruthy()
+    await waitFor(() => { expect(screen.queryByRole('status', { name: en.updatePaused })).toBeNull() })
     expect(readUpdateState).toHaveBeenCalledTimes(2)
   })
 
