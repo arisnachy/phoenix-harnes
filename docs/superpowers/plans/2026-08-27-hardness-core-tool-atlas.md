@@ -20,7 +20,7 @@
 - Create: `packages/hardness/hardness/src/index.ts`
 - Create: `packages/hardness/hardness/src/invariant.ts`
 - Test: `packages/hardness/hardness/tests/service.spec.ts`
-- Test: `packages/hardness/hardness/tests/composition.e2e.ts`
+- Test: `packages/hardness/hardness/tests/loader-composition.spec.ts`
 
 - [ ] **Step 1: Add the package metadata and TypeScript project reference**
 
@@ -63,7 +63,7 @@ Boot a test-only `cordis.yml` through the Loader and app/process path used by ex
 
 - [ ] **Step 6: Run the focused tests and verify green**
 
-Run `pnpm exec vitest run packages/hardness/hardness/tests/service.spec.ts packages/hardness/hardness/tests/composition.e2e.ts`.
+Run `pnpm exec vitest run packages/hardness/hardness/tests/service.spec.ts packages/hardness/hardness/tests/loader-composition.spec.ts`.
 
 Expected result: PASS.
 
