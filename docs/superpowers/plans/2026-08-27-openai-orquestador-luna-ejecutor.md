@@ -1,5 +1,7 @@
 # Prueba OpenAI Orquestador y Luna Ejecutor Implementation Plan
 
+English | [中文](2026-08-27-openai-orquestador-luna-ejecutor.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Verificar y dejar documentada una prueba temporal en la que el modelo OpenAI elegido conserva la orquestación y las delegaciones ejecutan con `openai-codex/gpt-5.6-luna` y `reasoningEffort: high`.
