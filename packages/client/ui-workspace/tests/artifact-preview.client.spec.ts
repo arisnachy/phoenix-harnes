@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import { registerCapabilityArtifactPreview } from '@deepseek-ai/dsh-client-ui-workspace/client'
+import { CapabilityArtifactPreview, registerCapabilityArtifactPreview } from '@deepseek-ai/dsh-client-ui-workspace/client'
 
 describe('CapabilityArtifact workspace preview', () => {
   it('registers rendered artifact data into a reversible workspace slot', async () => {
@@ -18,5 +18,13 @@ describe('CapabilityArtifact workspace preview', () => {
     dispose()
     expect(slots.entries('shell.overlay')).toHaveLength(0)
     disposeDeclaration()
+  })
+
+  it('renders a declarative UI artifact without executable props', () => {
+    const view = CapabilityArtifactPreview({
+      artifact: { id: 'ui1', mime: 'application/vnd.hardness.ui+json', data: { version: 1, root: { type: 'stack', children: [{ type: 'input', id: 'x', label: 'X' }, { type: 'button', label: 'Run' }] } } },
+      rendered: { kind: 'generative-ui', artifactId: 'ui1' },
+    }) as { props: { children: unknown[] } }
+    expect(view.props.children.some(child => typeof child === 'object' && child !== null && 'type' in child && (child as { type: string }).type === 'section')).toBe(true)
   })
 })

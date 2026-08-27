@@ -25,6 +25,8 @@ export type { CapabilitySurfacePreviewProps } from './CapabilitySurfacePreview.t
 export { CapabilityArtifactPreview, registerCapabilityArtifactPreview } from './CapabilityArtifactPreview.tsx'
 export type { CapabilityArtifactPreviewProps } from './CapabilityArtifactPreview.tsx'
 export { callHardnessMission } from './hardness-rpc.ts'
+export { renderGenerativeUi, validateUiSchema } from './generative-ui.ts'
+export type { GenerativeUiRenderModel, UiNode, UiSchema } from './generative-ui.ts'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
