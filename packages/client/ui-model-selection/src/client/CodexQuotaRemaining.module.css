@@ -1,11 +1,14 @@
 .root {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   display: flex;
   align-items: stretch;
   gap: 8px;
+  width: fit-content;
+  max-width: min(300px, 100%);
   min-width: 0;
   height: 40px;
   margin-left: auto;
+  overflow: hidden;
   padding: 4px 8px;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
@@ -15,6 +18,7 @@
 }
 
 .window {
+  flex: 0 1 auto;
   display: flex;
   min-width: 0;
   flex-direction: column;
