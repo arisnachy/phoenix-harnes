@@ -1,5 +1,5 @@
 /** Compact native Codex quota for the Settings trigger trailing seat. */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { IApiClient, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelDirectory } from './directory.ts'
@@ -24,6 +24,11 @@ interface AuthorizationEntry {
   key: string
   label?: string
   telemetry?: AccountTelemetry
+}
+
+type QuotaState = {
+  primaryLimit?: RateLimitWindow
+  secondaryLimit?: RateLimitWindow
 }
 
 /** Registrant-owned faces needed by the OpenAI/Codex quota meter. */
@@ -63,6 +68,14 @@ function remaining(limit: RateLimitWindow): number {
   return Math.max(0, Math.min(100, Math.round(100 - limit.usedPercent)))
 }
 
+function windowLabel(limit: RateLimitWindow, fallback: string): string {
+  const minutes = limit.windowDurationMins
+  if (minutes === undefined || !Number.isSafeInteger(minutes) || minutes <= 0) return fallback
+  if (minutes % (24 * 60) === 0) return `${minutes / (24 * 60)}d`
+  if (minutes % 60 === 0) return `${minutes / 60}h`
+  return `${minutes}m`
+}
+
 /**
  * Show native Codex account quota only when the current session is routed to
  * an OpenAI/Codex provider. Non-OpenAI selections reserve no sidebar space.
@@ -76,7 +89,9 @@ export function CodexQuotaRemaining({
     sessionId: SessionId
     provider: string | undefined
   } | undefined>()
-  const [quota, setQuota] = useState<number | undefined>()
+  const [quota, setQuota] = useState<QuotaState | undefined>()
+  const authorizationRef = useRef(authorization)
+  authorizationRef.current = authorization
 
   useEffect(() => {
     if (!wide || sessionId === undefined) {
@@ -103,12 +118,26 @@ export function CodexQuotaRemaining({
 
     const load = async (): Promise<void> => {
       try {
-        const response = await authorization.list({})
+        const response = await authorizationRef.current.list({})
         if (stale || !response.result.ok) return
-        const entry = (response.result.value.entries as AuthorizationEntry[]).find(isOpenAIAccount)
-        const telemetry = entry?.telemetry
-        const limit = [telemetry?.primaryLimit, telemetry?.secondaryLimit].find(isValidRateLimit)
-        if (!stale) setQuota(limit === undefined ? undefined : remaining(limit))
+        const telemetry = (response.result.value.entries as AuthorizationEntry[])
+          .filter(isOpenAIAccount)
+          .map(entry => entry.telemetry)
+          .find((candidate): candidate is AccountTelemetry => candidate !== undefined
+            && (isValidRateLimit(candidate.primaryLimit) || isValidRateLimit(candidate.secondaryLimit)))
+        const primaryLimit = telemetry !== undefined && isValidRateLimit(telemetry.primaryLimit)
+          ? telemetry.primaryLimit
+          : undefined
+        const secondaryLimit = telemetry !== undefined && isValidRateLimit(telemetry.secondaryLimit)
+          ? telemetry.secondaryLimit
+          : undefined
+        if (!stale) {
+          const nextQuota: QuotaState = {
+            ...primaryLimit === undefined ? {} : { primaryLimit },
+            ...secondaryLimit === undefined ? {} : { secondaryLimit },
+          }
+          setQuota(Object.keys(nextQuota).length === 0 ? undefined : nextQuota)
+        }
       } catch {
         if (!stale) setQuota(undefined)
       }
@@ -120,16 +149,42 @@ export function CodexQuotaRemaining({
       stale = true
       window.clearInterval(timer)
     }
-  }, [authorization, provider, sessionId, wide])
+  }, [provider, sessionId, wide])
 
   if (!wide || sessionId === undefined || !isOpenAI(provider) || quota === undefined) return null
 
+  const windows = [
+    quota.primaryLimit === undefined ? undefined : {
+      key: 'primary',
+      label: windowLabel(quota.primaryLimit, '5h'),
+      value: remaining(quota.primaryLimit),
+    },
+    quota.secondaryLimit === undefined ? undefined : {
+      key: 'secondary',
+      label: windowLabel(quota.secondaryLimit, '7d'),
+      value: remaining(quota.secondaryLimit),
+    },
+  ].filter((window): window is {
+    key: string
+    label: string
+    value: number
+  } => window !== undefined)
+
   return (
-    <span className={css.root} title={`OpenAI Codex · ${quota}% remaining`} aria-hidden="true">
-      <strong className={css.value}>{quota}%</strong>
-      <span className={css.track}>
-        <span className={css.fill} style={{ width: `${quota}%` }} />
-      </span>
+    <span className={css.root} aria-hidden="true">
+      {windows.map(window => (
+        <span
+          className={css.window}
+          key={window.key}
+          title={`OpenAI Codex · ${window.label} · ${window.value}% remaining`}
+        >
+          <span className={css.label}>{window.label}</span>
+          <strong className={css.value}>{window.value}%</strong>
+          <span className={css.track}>
+            <span className={css.fill} style={{ width: `${window.value}%` }} />
+          </span>
+        </span>
+      ))}
     </span>
   )
 }

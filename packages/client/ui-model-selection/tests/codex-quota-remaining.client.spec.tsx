@@ -78,6 +78,36 @@ describe('CodexQuotaRemaining', () => {
     expect(view.container.querySelector('[style]')?.getAttribute('style')).toContain('width: 100%')
   })
 
+  it('shows both the five-hour and weekly Codex quota windows', async () => {
+    const d = directory('openai-codex')
+    const auth = {
+      list: vi.fn(() => Promise.resolve({
+        rpcId: 'authorization-list-two-windows' as never,
+        result: {
+          ok: true as const,
+          value: {
+            entries: [{
+              key: 'subagent-codex/account',
+              label: 'ChatGPT / Codex',
+              telemetry: {
+                kind: 'account' as const,
+                provider: 'Codex',
+                primaryLimit: { usedPercent: 14, windowDurationMins: 300 },
+                secondaryLimit: { usedPercent: 9, windowDurationMins: 10080 },
+              },
+            }],
+          },
+        },
+      })),
+    }
+    render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
+
+    expect(await screen.findByText('86%')).toBeTruthy()
+    expect(screen.getByText('91%')).toBeTruthy()
+    expect(screen.getByTitle(/5h · 86%/)).toBeTruthy()
+    expect(screen.getByTitle(/7d · 91%/)).toBeTruthy()
+  })
+
   it('does not render or query Codex quota for a non-OpenAI provider', async () => {
     const d = directory('openrouter')
     const auth = authorization(0)
@@ -88,6 +118,35 @@ describe('CodexQuotaRemaining', () => {
     expect(auth.list).not.toHaveBeenCalled()
   })
 
+  it('skips a key-only OpenAI entry and uses the later Codex telemetry entry', async () => {
+    const d = directory('openai-codex')
+    const auth = {
+      list: vi.fn(() => Promise.resolve({
+        rpcId: 'authorization-list-multiple-openai' as never,
+        result: {
+          ok: true as const,
+          value: {
+            entries: [
+              { key: 'llm-pi-ai/openai', label: 'OpenAI' },
+              {
+                key: 'subagent-codex/account',
+                label: 'ChatGPT / Codex',
+                telemetry: {
+                  kind: 'account' as const,
+                  provider: 'Codex',
+                  primaryLimit: { usedPercent: 14 },
+                },
+              },
+            ],
+          },
+        },
+      })),
+    }
+    render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
+
+    expect(await screen.findByText('86%')).toBeTruthy()
+  })
+
   it('follows the active provider: OpenAI shows quota, another provider hides it', async () => {
     const d = directory('openai-codex')
     const auth = authorization(26)
@@ -96,6 +155,18 @@ describe('CodexQuotaRemaining', () => {
     expect(await screen.findByText('74%')).toBeTruthy()
     act(() => { d.setProvider('openrouter') })
     await waitFor(() => { expect(screen.queryByText('74%')).toBeNull() })
+  })
+
+  it('keeps the last quota while the authorization face identity changes', async () => {
+    const d = directory('openai-codex')
+    const auth = authorization(26)
+    const view = render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
+
+    expect(await screen.findByText('74%')).toBeTruthy()
+    const pendingAuthorization = { list: vi.fn(() => new Promise<never>(() => {})) }
+    view.rerender(<CodexQuotaRemaining {...propsFor(d.fake, pendingAuthorization)} />)
+
+    expect(screen.getByText('74%')).toBeTruthy()
   })
 
   it('hides unknown telemetry instead of inventing a context percentage', async () => {
