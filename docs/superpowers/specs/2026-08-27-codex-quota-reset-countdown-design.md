@@ -6,23 +6,23 @@ Mejorar el indicador compacto de cuota Codex situado junto a Settings para que m
 
 ## Diseño visual
 
-El indicador será una cápsula contenedora con dos segmentos internos claramente separados:
+El indicador será una cápsula contenedora de dos líneas, con las ventanas distribuidas en paralelo y un divisor vertical sutil:
 
 ```text
-╭────────────────────────────────────────────╮
-│  5h  97%  ━━━━━━━━━━   │   7d  76%  ━━━━━━━ │
-│      ↻ 2h 18m           │       ↻ 4d 6h       │
-╰────────────────────────────────────────────╯
+╭──────────────────────────────────────╮
+│  5h   97%  ━━━━━━━━━━    7d   76%  ━━━━━━━ │
+│       ↻ 2h 18m              ↻ 4d 6h          │
+╰──────────────────────────────────────╯
 ```
 
-- Cada segmento conserva la etiqueta de ventana (`5h` o `7d`).
-- El porcentaje continúa siendo el dato principal.
-- La cuenta regresiva usa texto secundario y un icono de reinicio discreto.
-- Un divisor vertical separa visualmente ambas ventanas.
-- Las barras de progreso permanecen sutiles y no compiten con el contador.
-- El tooltip de cada segmento explica el límite y puede incluir la fecha/hora exacta.
+- Cada columna conserva su etiqueta de ventana (`5h` o `7d`).
+- El porcentaje y la barra son el nivel principal.
+- La cuenta regresiva queda debajo como información secundaria.
+- El icono `↻` identifica que el valor es tiempo hasta el reinicio.
+- Un divisor vertical sutil separa las dos ventanas sin crear tarjetas independientes.
+- El tooltip de cada columna explica el límite y puede incluir la fecha/hora exacta.
 
-En anchos reducidos se conserva la identificación de las ventanas y se compacta el contenido: `5h · 2h18m | 7d · 4d6h`. El porcentaje puede ocultarse solo en el breakpoint estrecho si la geometría actual lo exige.
+En anchos reducidos se compactan espacios internos, pero se conservan las dos líneas y las etiquetas `5h`/`7d`; solo se oculta el porcentaje si la geometría actual lo exige.
 
 ## Arquitectura y flujo de datos
 
