@@ -3,6 +3,7 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type {
   CapabilityDescriptor,
+  CapabilityEvidence,
   CapabilityId,
   CapabilityNeed,
   CapabilityRegistration,
@@ -17,12 +18,14 @@ import {
   validateCapabilityDescriptor,
 } from './registry.ts'
 import { resolveCapabilityNeed } from './resolver.ts'
+import { evidenceForCapability, freezeEvidence } from './evidence.ts'
 
 export type * from './types.ts'
 
 /** Cordis service that owns the provider-neutral HARDNESS capability seam. */
 export class HardnessRegistry extends Service implements HardnessService {
   private readonly descriptors = new Map<CapabilityId, CapabilityDescriptor>()
+  private readonly evidence = new Map<string, CapabilityEvidence>()
 
   constructor(ctx: Context) {
     super(ctx, 'hardness')
@@ -58,6 +61,27 @@ export class HardnessRegistry extends Service implements HardnessService {
     const descriptor = this.descriptors.get(id)
     if (descriptor === undefined) throw new Error(`unknown capability: ${id}`)
     this.descriptors.set(id, transitionCapability(descriptor, status, reason, evidenceId))
+  }
+
+  recordEvidence(value: CapabilityEvidence): CapabilityEvidence {
+    const evidence = freezeEvidence(value)
+    if (this.evidence.has(evidence.id)) throw new Error(`duplicate evidence: ${evidence.id}`)
+    this.evidence.set(evidence.id, evidence)
+    return evidence
+  }
+
+  evidenceFor(id: CapabilityId): readonly CapabilityEvidence[] {
+    return evidenceForCapability(this.evidence, id)
+  }
+
+  promoteFromEvidence(evidenceId: string): void {
+    const evidence = this.evidence.get(evidenceId)
+    if (evidence === undefined) throw new Error(`unknown evidence: ${evidenceId}`)
+    if (evidence.outcome !== 'passed') throw new Error(`evidence ${evidenceId} did not pass verification`)
+    const descriptor = this.descriptors.get(evidence.capabilityId)
+    if (descriptor === undefined) throw new Error(`unknown capability: ${evidence.capabilityId}`)
+    if (descriptor.version !== evidence.descriptorVersion) throw new Error(`stale evidence version for ${evidence.capabilityId}`)
+    this.transition(evidence.capabilityId, 'verified', 'verification evidence', evidenceId)
   }
 }
 

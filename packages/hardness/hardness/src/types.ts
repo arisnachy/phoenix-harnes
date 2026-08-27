@@ -74,4 +74,7 @@ export interface HardnessService {
   list(): readonly CapabilityDescriptor[]
   resolveNeed(need: CapabilityNeed, context?: CapabilityResolutionContext): CapabilityResolution
   transition(id: CapabilityId, status: CapabilityStatus, reason: string, evidenceId?: string): void
+  recordEvidence(evidence: CapabilityEvidence): CapabilityEvidence
+  evidenceFor(id: CapabilityId): readonly CapabilityEvidence[]
+  promoteFromEvidence(evidenceId: string): void
 }
