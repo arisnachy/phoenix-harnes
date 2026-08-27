@@ -1,5 +1,5 @@
 /** Web KIRA teams dock: frame overlay registration and injected sessions face. */
-import type { ClientContext, SessionId, SubagentAddress } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, ISessions, SessionId, SubagentAddress } from '@deepseek-ai/dsh-client-runtime/client'
 import { KiraTeamsDock } from './KiraTeamsDock.tsx'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // The 'shell.overlay' slot key is declared by ui-layout's SlotMap merge.
@@ -24,7 +24,7 @@ export const inject = ['sessions', 'slots', 'locale']
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-kira-teams: dictionaries')
-  const sessions = ctx.sessions
+  const sessions = ctx.get('sessions') as unknown as ISessions
   const dockActions = () => ({
     list: sessions.list,
     openChild(address: SubagentAddress) {
