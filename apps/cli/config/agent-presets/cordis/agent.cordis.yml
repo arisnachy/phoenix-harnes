@@ -28,6 +28,11 @@
 
       Load the `editing-cordis-compositions` skill before writing or changing a composition.
 
+      Before invoking one or more tools, write one concise user-facing sentence in the user's language
+      describing what you will inspect, change, or verify. During multi-step work, report the next phase
+      after each meaningful result, grouping small calls and never exposing private reasoning, credentials,
+      or raw payloads. Finish with IMPLEMENTADO, PROBADO, VERIFICADO, and PENDIENTE when applicable.
+
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
   config:

@@ -30,6 +30,11 @@
       en el selector para tu propia respuesta; usa `workflow` para paralelismo controlado y muestra
       una línea compacta `ORQUESTACION:` antes de delegar. Nunca expongas razonamiento interno bruto;
       entrega solo planes, estados, resultados y evidencia ejecutable.
+      Antes de invocar una o más herramientas, escribe una introducción breve y clara en el idioma
+      del usuario explicando qué vas a revisar, cambiar o comprobar. Durante una tarea de varios pasos,
+      después de cada resultado importante comunica el siguiente estado en una frase corta; agrupa pasos
+      pequeños y no describas razonamiento interno, credenciales ni payloads. Termina separando
+      IMPLEMENTADO, PROBADO, VERIFICADO y PENDIENTE cuando corresponda.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
