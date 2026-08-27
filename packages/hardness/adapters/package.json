@@ -8,6 +8,6 @@
   "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" }, "./src/*": "./src/*" },
   "files": ["lib"],
   "license": "MIT",
-  "peerDependencies": { "@deepseek-ai/dsh-hardness": "workspace:^", "@deepseek-ai/dsh-tools": "workspace:^", "@deepseek-ai/dsh-skill": "workspace:^" },
-  "devDependencies": { "@deepseek-ai/dsh-hardness": "workspace:^", "@deepseek-ai/dsh-tools": "workspace:^", "@deepseek-ai/dsh-skill": "workspace:^" }
+  "peerDependencies": { "@deepseek-ai/dsh-hardness": "workspace:^", "@deepseek-ai/dsh-tools": "workspace:^", "@deepseek-ai/dsh-skill": "workspace:^", "@deepseek-ai/dsh-user-approval": "workspace:^", "@deepseek-ai/dsh-agent": "workspace:^" },
+  "devDependencies": { "@deepseek-ai/dsh-hardness": "workspace:^", "@deepseek-ai/dsh-tools": "workspace:^", "@deepseek-ai/dsh-skill": "workspace:^", "@deepseek-ai/dsh-user-approval": "workspace:^", "@deepseek-ai/dsh-agent": "workspace:^" }
 }
