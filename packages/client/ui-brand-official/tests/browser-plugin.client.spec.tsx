@@ -68,11 +68,8 @@ describe('PHOENIX browser-brand plugin', () => {
   it('renders a clean text PHOENIX name independently from both requested mark sizes', () => {
     const name = render(<PhoenixBrandName />)
     const wordmark = name.getByRole('img', { name: 'PHOENIX' })
-    const artwork = wordmark.querySelector('svg')
-    expect(artwork?.getAttribute('width')).toBe('162')
-    expect(artwork?.getAttribute('height')).toBe('38')
-    expect(artwork?.querySelectorAll('ellipse')).toHaveLength(2)
-    expect(artwork?.querySelector('[data-wordmark-o-flame]')).not.toBeNull()
+    expect(wordmark.textContent?.trim()).toBe('PHOENIX')
+    expect(wordmark.querySelector('svg')).toBeNull()
     expect(name.container.querySelector('img')).toBeNull()
     name.unmount()
 
