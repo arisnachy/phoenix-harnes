@@ -1,0 +1,25 @@
+# Evidence
+
+- Baseline SHA: `f5150ea7f67808075cf6d84f32106162a053aed0`.
+- Official OpenAI documentation: Codex supports ChatGPT subscription sign-in and API-key usage as separate methods; browser sign-in returns credentials to Codex.
+- Baseline repository search found live OpenRouter discovery tests, custom model-id fields, and `llm-pi-ai` OAuth login tests.
+- `corepack pnpm exec vitest run packages/client/web/tests/boot-page.client.spec.ts packages/client/ui-settings-models/tests/provider-form.client.spec.tsx`: 2 files, 89 passed.
+- The base composition now mounts `@deepseek-ai/dsh-authorization` after the credential store.
+- `.github/workflows/phoenix-upstream-quarantine.yml` pins incoming DeepSeek source to a quarantine branch and requires the existing PR CI before review/promotion.
+- `vitest run packages/experimental/tool-agent-team/tests/tool-team.spec.ts packages/experimental/agent-team/tests/team.spec.ts`: 2 files, 55 passed.
+- `vitest run packages/client/ui-settings-models/tests/authorization-panel.client.spec.tsx`: 1 file, 1 passed.
+- First root Host build found two stale `ApiProxy` fixtures missing the new authorization domain; this remains a recorded failure until repair and rerun.
+- 2026-08-24 security audit: independent read-only reports identified unsafe `danger-full-access` user default, unrestricted dynamic host Cordis/ACP/MCP paths, incomplete team isolation, non-reproducible external KIRA assets, open victory gates, and missing SSRF protection. No secrets were read.
+- 2026-08-24 remediation: `~/.dsh/settings.yaml` now defaults to `workspace-write`; web-fetch blocks private/reserved targets after DNS resolution and on every redirect, with `WEB_BLOCKED_URL` coverage.
+- 2026-08-24 focused verification: `pnpm exec vitest run packages/web/web-fetch-http/tests/fetch-http.spec.ts` — 48 passed; `tsc -p packages/web/web-fetch-http/tsconfig.json` — passed.
+- 2026-08-24 Chrome connector verification remains opt-in: loopback CDP and authorized navigation were tested; no remote MCP or Google integration was activated.
+- 2026-08-24 economy intervention: base `compaction-basic` now compacts at `0.72` of the model window, retains `0.10`, caps summarization at `4096`, and disables extra compaction/overflow retries; its focused suite passed 122/122.
+- 2026-08-24 delegation guard: base `tool-subagent` and `tool-subagent-fork` now cap recursion at `maxDepth: 1`; subagent/tool loader focused tests passed 69/69.
+- 2026-08-24 workflow guard: base `workflow-worker-thread` now caps workflows at 1 concurrent and 4 total agents; workflow engine/consumer/session focused tests passed 105/105.
+- 2026-08-24 promotion packet created at `.kira/promotion-review-2026-08-24.md`; it lists exact changed surfaces, evidence, rollback and human-only gates. No commit, merge or push was performed.
+- 2026-08-24 MCP transport guard: remote Streamable HTTP now requires HTTPS, rejects URL credentials, and permits plain HTTP only on loopback fixtures; focused MCP client suite passed 59/59.
+- 2026-08-24 ACP permission guard: unattended `permission: allow` now requires explicit `allowUnattendedPermissions: true`; omission fails during plugin activation. ACP focused suite passed 47/47 with 1 skipped test; package typecheck and `git diff --check` passed.
+- 2026-08-24 Cordis host approval guard: `requireHostApproval` defaults to true; host-only dynamic packages now emit an approval request before evaluation, while direct panel activation remains possible. Runner/versioning/sandbox suites passed 58/58; package typecheck passed.
+- 2026-08-24 post-intervention measurement: `kira-doctor.mjs --host http://127.0.0.1:3080 --json` captured the active historical session at 1,941,934 input / 289,775 output tokens, 594 usage steps, 17 retries and 33 compactions. It is not equivalent to the frozen baseline, so no savings claim is made.
+- 2026-08-24 consolidated focal verification: web, compaction, subagent, workflow, MCP, ACP and Cordis suites passed 333/333 tests with 1 skipped; the two transient regressions (workflow description parsing and localized subagent wording) were repaired and re-run successfully. Relevant package typechecks and `git diff --check` passed.
+- 2026-08-27 HARDNESS focal verification: core + JSON atlas + adapters passed 6/6 tests; core/atlas/adapters project typecheck passed; oxlint reported 0 warnings and 0 errors. Unknown-need proof passed 1/1: `calendar_invite` moved `unknown → missing → have` only after same-version passed evidence and snapshot restore.
