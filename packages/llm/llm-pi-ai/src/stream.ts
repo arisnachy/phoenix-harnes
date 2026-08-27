@@ -56,8 +56,11 @@ function classifyPiAiError(message: string): string {
   // finish_reason`). The connection dropped mid-response, so this is a transport
   // truncation, not a model-level error.
   if (/stream ended (?:before|without)\b/i.test(message)) return 'TRANSPORT'
+  const websocketClosed = /\b(?:other side closed|HTTP2 request did not get a response)\b/i.test(message)
+  const websocketCode = /\bWebSocket closed(?: unexpectedly|(?: with code)?\s+1006)\b/i.test(message)
   if (/\b(?:network|connection|socket|fetch)\b|\bECONN[A-Z]+\b/i.test(message)
-    || /\b(?:other side closed|HTTP2 request did not get a response|WebSocket closed unexpectedly)\b/i.test(message)
+    || websocketClosed
+    || websocketCode
     // undici renders a mid-stream socket drop as a bare `terminated` (its
     // `cause` — the real SocketError — was flattened away upstream); Node's
     // stream layer says `Premature close`.
