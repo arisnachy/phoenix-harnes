@@ -19,15 +19,23 @@ export function PhoenixBrandMark({ size, className }: PhoenixBrandMarkProps) {
  */
 export function PhoenixBrandName() {
   return (
-    <span style={{ display: 'block', width: 156, height: 52 }}>
-      <img
-        src="/phoenix-wordmark.png"
-        width="156"
-        height="52"
-        alt="PHOENIX"
-        draggable={false}
-        style={{ display: 'block', width: 156, height: 52, objectFit: 'contain' }}
-      />
+    <span
+      role="img"
+      aria-label="PHOENIX"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        height: 24,
+        color: 'var(--dsw-alias-label-primary)',
+        fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        fontSize: 18,
+        fontWeight: 600,
+        letterSpacing: '0.12em',
+        lineHeight: 1,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      PHOENIX
     </span>
   )
 }

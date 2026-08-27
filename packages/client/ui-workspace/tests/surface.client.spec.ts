@@ -2,12 +2,12 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { registerCapabilitySurfacePreview } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import type { CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+import type { CapabilityId, CapabilitySurface } from '@deepseek-ai/dsh-hardness'
 
 const surface = {
   id: 'tool:calendar@1.0.0:native',
   need: { kind: 'calendar_invite' },
-  capabilityId: 'tool:calendar',
+  capabilityId: 'tool:calendar' as CapabilityId,
   capabilityVersion: '1.0.0',
   modality: 'native',
   inputs: ['event'],
