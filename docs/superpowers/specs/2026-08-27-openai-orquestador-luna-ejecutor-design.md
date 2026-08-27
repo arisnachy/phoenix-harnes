@@ -1,5 +1,7 @@
 # Prueba temporal: modelo OpenAI como orquestador y Luna como ejecutor
 
+English | [中文](2026-08-27-openai-orquestador-luna-ejecutor-design.zh.md)
+
 ## Objetivo
 
 Validar si PHOENIX mejora la calidad y el tiempo de ejecución cuando el modelo OpenAI elegido por el usuario conserva la orquestación y las delegaciones se ejecutan con `openai-codex/gpt-5.6-luna` usando `reasoningEffort: high`.
