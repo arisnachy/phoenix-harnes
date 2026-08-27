@@ -1,0 +1,53 @@
+name: KIRA implement updater handoff
+
+on:
+  push:
+    branches:
+      - feat/surfacehost-windows-native-update
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/surfacehost-windows-native-update
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply supervised updater handoff
+        shell: pwsh
+        run: python scripts/kira-implement-updater-handoff.py
+      - name: Install
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+      - name: Verify updater contract
+        shell: pwsh
+        run: |
+          node scripts/phoenix-update-supervision-contract.mjs
+          node scripts/phoenix-auto-update.mjs --self-test
+      - name: Typecheck
+        shell: pwsh
+        run: pnpm run typecheck
+      - name: Static gates
+        shell: pwsh
+        run: pnpm run check:ci:static
+      - name: Diff check
+        shell: pwsh
+        run: git diff --check
+      - name: Commit implementation
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if (git diff --cached --quiet) { throw 'Updater implementation produced no changes' }
+          git commit -m "fix(update): activate prepared stable under Windows supervisor"
+          git push origin HEAD:feat/surfacehost-windows-native-update
