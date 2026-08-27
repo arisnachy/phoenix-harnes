@@ -119,9 +119,16 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     await expect.poll(() => existsSync(marker), { timeout: 20_000 }).toBe(true)
     await expect.poll(() => page.getByText(NARRATION, { exact: true }).count(), { timeout: 10_000 }).toBe(1)
     await expect.poll(
-      () => page.getByRole('status').filter({ hasText: 'PHOENIX thinking…' }).isVisible(),
+      () => page.getByRole('status').filter({ hasText: 'PHOENIX verifying the results…' }).isVisible(),
       { timeout: 10_000 },
     ).toBe(true)
+    const narrationBeforeTool = await page.evaluate((text) => {
+      const narration = [...document.querySelectorAll('p')].find(node => node.textContent === text)
+      const tool = [...document.querySelectorAll('button')].find(node => node.textContent?.includes('Bash Print alpha'))
+      return narration !== undefined && tool !== undefined
+        && Boolean(narration.compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING)
+    }, NARRATION)
+    expect(narrationBeforeTool).toBe(true)
     // Only the user bubble owns a footer (clock + copy; user bubbles carry no
     // branch action): the narration is not the answer yet.
     const copyButtons = page.getByRole('button', { name: 'Copy' })

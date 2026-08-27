@@ -15,7 +15,7 @@ const previousEvolutionRoot = process.env.PHOENIX_EVOLUTION_ROOT
 const previousDshHome = process.env.DSH_HOME
 
 function restoreEnv(name: 'PHOENIX_RUNTIME_ROOT' | 'PHOENIX_EVOLUTION_ROOT' | 'DSH_HOME', value: string | undefined): void {
-  if (value === undefined) delete process.env[name]
+  if (value === undefined) Reflect.deleteProperty(process.env, name)
   else process.env[name] = value
 }
 

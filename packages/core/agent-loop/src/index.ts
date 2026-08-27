@@ -121,7 +121,7 @@ async function raceAbortCall<T>(
   try {
     return await raceAbort(pending, signal, id)
   } catch (error: unknown) {
-    if (signal.aborted && releaseAbandoned !== undefined) {
+    if (Reflect.get(signal, 'aborted') && releaseAbandoned !== undefined) {
       void pending.then(releaseAbandoned, () => undefined)
     }
     throw error

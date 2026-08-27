@@ -57,7 +57,7 @@ export async function assertPublicFetchTarget(url: URL): Promise<void> {
   if (isIP(url.hostname) !== 0) return
   let addresses: Array<{ address: string }>
   try {
-    addresses = await lookup(url.hostname, { all: true, verbatim: true })
+    addresses = await lookup(url.hostname, { all: true, order: 'verbatim' })
   } catch (error: unknown) {
     throw new WebError(`could not resolve web target ${url.hostname}`, 'WEB_PROVIDER_ERROR', { cause: error })
   }

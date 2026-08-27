@@ -48,11 +48,11 @@ export function UserProfileRow(props: UserProfileRowProps) {
         <div className={css.body}>
           {!state.writable ? <p className={css.notice}>{t('readOnly')}</p> : null}
           <p className={css.privacy}>{t('privacy')}</p>
-          <ProfileInput id="profile-preferred-name" label={t('preferredName')} hint={t('preferredNameHint')} value={field('preferredName').text} invalid={field('preferredName').invalid} disabled={disabled} onChange={value => props.edit('preferredName', value)} />
-          <ProfileInput id="profile-date-of-birth" label={t('dateOfBirth')} hint={t('dateOfBirthHint')} value={field('dateOfBirth').text} invalid={field('dateOfBirth').invalid} disabled={disabled} type="date" onChange={value => props.edit('dateOfBirth', value)} />
-          <ProfileInput id="profile-gender" label={t('gender')} hint={t('genderHint')} value={field('gender').text} invalid={field('gender').invalid} disabled={disabled} onChange={value => props.edit('gender', value)} />
-          <ProfileInput id="profile-pronouns" label={t('pronouns')} hint={t('pronounsHint')} value={field('pronouns').text} invalid={field('pronouns').invalid} disabled={disabled} onChange={value => props.edit('pronouns', value)} />
-          <ProfileInput id="profile-tone" label={t('tone')} hint={t('toneHint')} value={field('tone').text} invalid={field('tone').invalid} disabled={disabled} onChange={value => props.edit('tone', value)} />
+          <ProfileInput id="profile-preferred-name" label={t('preferredName')} hint={t('preferredNameHint')} value={field('preferredName').text} invalid={field('preferredName').invalid} disabled={disabled} onChange={(value) =>{  props.edit('preferredName', value) }} />
+          <ProfileInput id="profile-date-of-birth" label={t('dateOfBirth')} hint={t('dateOfBirthHint')} value={field('dateOfBirth').text} invalid={field('dateOfBirth').invalid} disabled={disabled} type="date" onChange={(value) =>{  props.edit('dateOfBirth', value) }} />
+          <ProfileInput id="profile-gender" label={t('gender')} hint={t('genderHint')} value={field('gender').text} invalid={field('gender').invalid} disabled={disabled} onChange={(value) =>{  props.edit('gender', value) }} />
+          <ProfileInput id="profile-pronouns" label={t('pronouns')} hint={t('pronounsHint')} value={field('pronouns').text} invalid={field('pronouns').invalid} disabled={disabled} onChange={(value) =>{  props.edit('pronouns', value) }} />
+          <ProfileInput id="profile-tone" label={t('tone')} hint={t('toneHint')} value={field('tone').text} invalid={field('tone').invalid} disabled={disabled} onChange={(value) =>{  props.edit('tone', value) }} />
           <label className={css.label} htmlFor="profile-family">{t('family')}</label>
           <textarea id="profile-family" className={state.family.invalid ? css.inputInvalid : css.textarea} value={state.family.text} disabled={disabled} onChange={(event) => { props.edit('family', event.target.value) }} />
           <p className={css.hint}>{state.family.invalid ? t('invalid') : t('familyHint')}</p>

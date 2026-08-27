@@ -43,6 +43,8 @@
     "@deepseek-ai/cordis-plugin-timer": "workspace:^",
     "@deepseek-ai/dsh-agent": "workspace:^",
     "@deepseek-ai/dsh-agent-default-model": "workspace:^",
+    "@deepseek-ai/dsh-hardness": "workspace:^",
+    "@deepseek-ai/dsh-hardness-adapters": "workspace:^",
     "@deepseek-ai/dsh-agent-loop": "workspace:^",
     "@deepseek-ai/dsh-attachment-local": "workspace:^",
     "@deepseek-ai/dsh-authorization": "workspace:^",

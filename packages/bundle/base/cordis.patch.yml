@@ -483,6 +483,14 @@
     - id: tools
       name: '@deepseek-ai/dsh-tools'
 
+    # Provider-neutral capability inventory. The JSON provider remains opt-in;
+    # this base row mounts the in-memory service and its source projections.
+    - id: hardness
+      name: '@deepseek-ai/dsh-hardness'
+
+    - id: hardness-adapters
+      name: '@deepseek-ai/dsh-hardness-adapters'
+
     # The deployment persona is a deployment choice; plan-mode and tool plugins own
     # their own prompt sections.
     - id: system-prompt

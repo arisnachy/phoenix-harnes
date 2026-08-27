@@ -176,31 +176,35 @@ async function run(ctx: Context, parent: Agent, source: { script: string; meta: 
 }
 
 describe('dsh-workflow-worker-thread', () => {
-  it('routes OpenAI workflow children to Luna high and preserves the cap', async () => {
-    const { ctx, provider } = await setup({
-      config: {
-        maxConcurrentAgents: 2,
-        maxTotalAgents: 2,
-        childRoute: {
-          whenProvider: 'openai-codex',
-          provider: 'openai-codex',
-          model: 'gpt-5.6-luna',
-          reasoningEffort: 'high',
+  it.each(['gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.6-terra'])(
+    'routes OpenAI workflow root %s to Luna high and preserves the cap',
+    async (rootModel) => {
+      const { ctx, provider } = await setup({
+        config: {
+          maxConcurrentAgents: 2,
+          maxTotalAgents: 2,
+          childRoute: {
+            whenProvider: 'openai-codex',
+            provider: 'openai-codex',
+            model: 'gpt-5.6-luna',
+            reasoningEffort: 'high',
+          },
         },
-      },
-    })
-    const result = await run(
-      ctx,
-      fakeParent({ provider: 'openai-codex', model: 'gpt-5.4' }),
-      scripted("return await agent('review the focused change')"),
-    )
-    expect(result.stopReason).toBe('completed')
-    expect(provider.runs[0]?.request.agentOptions).toEqual({
-      provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: 'high',
-    })
-  })
+      })
+      const result = await run(
+        ctx,
+        fakeParent({ provider: 'openai-codex', model: rootModel }),
+        scripted("return await agent('review the focused change')"),
+      )
+      expect(result.stopReason).toBe('completed')
+      expect(result.agentsStarted).toBe(1)
+      expect(provider.runs[0]?.request.agentOptions).toEqual({
+        provider: 'openai-codex',
+        model: 'gpt-5.6-luna',
+        reasoningEffort: 'high',
+      })
+    },
+  )
 
   describe('script execution over a real worker thread', () => {
     it('runs a script end-to-end: agent() text results, phases, log, args, return value, events', async () => {
@@ -576,7 +580,8 @@ describe('dsh-workflow-worker-thread', () => {
           // The rejection VALUE's own coercion throws: a warn built with bare
           // String(error) would itself throw, skipping the ChildDisposed ack
           // and wedging the script's finally until the grace/terminate path.
-          dispose: () => Promise.reject({ toString: () => { throw new Error('coercion trap') } }),
+          dispose: () => Promise.reject(Object.assign(new Error('coercion trap'), { toString: () => { throw new Error('coercion trap') } })),
+
         }),
       }
       ctx.subagents.registerProvider(provider)

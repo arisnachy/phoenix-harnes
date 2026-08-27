@@ -13,15 +13,24 @@ import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+import { registerCapabilityArtifactPreview } from './CapabilityArtifactPreview.tsx'
+import { createHardnessBrowserFixture } from './hardness-fixture.ts'
+export { CapabilitySurfacePreview, registerCapabilitySurfacePreview } from './CapabilitySurfacePreview.tsx'
+export type { CapabilitySurfacePreviewProps } from './CapabilitySurfacePreview.tsx'
+export { CapabilityArtifactPreview, registerCapabilityArtifactPreview } from './CapabilityArtifactPreview.tsx'
+export type { CapabilityArtifactPreviewProps } from './CapabilityArtifactPreview.tsx'
+export { callHardnessMission } from './hardness-rpc.ts'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
   WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
+  CapabilityArtifact, CapabilityArtifactRenderModel,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
 
@@ -120,6 +129,15 @@ export function apply(ctx: ClientContext): void {
     },
     WorkspaceBrowser,
   ))
+  const hardnessFixture = typeof window !== 'undefined' && (
+    new URLSearchParams(window.location.search).get('hardness') === 'fixture'
+    || new URLSearchParams(window.location.hash.replace(/^#/, '')).get('hardness') === 'fixture'
+    || window.localStorage.getItem('hardness.fixture') === '1'
+  )
+  if (hardnessFixture) {
+    const fixture = createHardnessBrowserFixture()
+    ctx.effect(() => registerCapabilityArtifactPreview(ctx.slots, fixture.artifact, fixture.rendered), 'ui-workspace: hardness fixture')
+  }
   ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register(
     {
       name: 'conversation.hero.workspace',

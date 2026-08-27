@@ -23,6 +23,19 @@
  * contract and the same occupant.
  */
 import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
+import type { CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+
+export interface CapabilityArtifact {
+  readonly id: string
+  readonly mime: string
+  readonly data: string | Readonly<Record<string, unknown>>
+}
+
+export interface CapabilityArtifactRenderModel {
+  readonly kind: string
+  readonly artifactId: string
+  readonly [key: string]: unknown
+}
 import type { HostObservable, PropsHooks, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the owner SlotMap merges into programs that resolve the
 // runtime shares below.
@@ -57,6 +70,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
     /** Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry). */
     'sidebar.workspaces.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
+    /** Declarative, non-executing capability preview entries. */
+    'capability.surface.preview': { kind: 'list'; scope: 'root'; owner: { surface: CapabilitySurface } }
   }
 }
 

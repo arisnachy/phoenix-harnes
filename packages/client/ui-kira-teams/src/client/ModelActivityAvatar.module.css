@@ -1,0 +1,178 @@
+.avatar {
+  position: relative;
+  isolation: isolate;
+  display: inline-block;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  opacity: 0.98;
+}
+
+.core,
+.orbit,
+.badge {
+  position: absolute;
+  pointer-events: none;
+}
+
+.core {
+  z-index: 1;
+  inset: 3px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 60%);
+  border-radius: 50%;
+  box-shadow: inset 1px 1px 3px rgb(255 255 255 / 42%), inset -2px -2px 4px rgb(15 23 42 / 30%);
+}
+
+.core::before,
+.core::after {
+  position: absolute;
+  content: '';
+}
+
+.core::before {
+  inset: 18%;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 58%);
+  filter: blur(2px);
+  opacity: 0.62;
+}
+
+.core::after {
+  width: 140%;
+  height: 2px;
+  top: 50%;
+  left: -20%;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 45%);
+  transform: rotate(-24deg);
+}
+
+.orbit {
+  z-index: 0;
+  inset: 0;
+  border: 1.5px solid rgb(59 130 246 / 65%);
+  border-right-color: rgb(245 158 11 / 82%);
+  border-radius: 50%;
+  transform: rotate(-28deg);
+}
+
+.badge {
+  right: -1px;
+  bottom: -1px;
+  z-index: 3;
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--dsh-color-surface, #fff);
+  border-radius: 50%;
+  background: #22c55e;
+  box-sizing: border-box;
+}
+
+.avatar[data-state='done'] {
+  opacity: 0.7;
+}
+
+.avatar[data-state='done'] .badge {
+  background: #86efac;
+  box-shadow: inset 0 0 0 1px #16a34a;
+}
+
+.avatar[data-state='pending'] .badge {
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px rgb(245 158 11 / 18%);
+}
+
+.avatar[data-avatar='sol'] .core {
+  background: radial-gradient(circle at 35% 30%, #fff7c2 0%, #f59e0b 50%, #c2410c 100%);
+}
+
+.avatar[data-avatar='sol'] .orbit {
+  border-color: rgb(245 158 11 / 78%);
+  border-left-color: rgb(251 191 36 / 42%);
+}
+
+.avatar[data-avatar='luna'] .core {
+  background: radial-gradient(circle at 35% 32%, #dbeafe 0%, #6366f1 52%, #312e81 100%);
+}
+
+.avatar[data-avatar='luna'] .core::before {
+  inset: 5% 34% 5% 48%;
+  border-radius: 50%;
+  background: var(--dsh-color-surface, #fff);
+  opacity: 0.82;
+}
+
+.avatar[data-avatar='luna'] .orbit {
+  border-color: rgb(99 102 241 / 78%);
+  border-bottom-color: rgb(191 219 254 / 86%);
+}
+
+.avatar[data-avatar='terra'] .core {
+  background: radial-gradient(circle at 35% 32%, #ccfbf1 0%, #14b8a6 52%, #115e59 100%);
+}
+
+.avatar[data-avatar='terra'] .core::before {
+  inset: 35% -10%;
+  height: 2px;
+  border-radius: 50%;
+  background: rgb(204 251 241 / 78%);
+  box-shadow: 0 -5px 0 rgb(204 251 241 / 46%), 0 5px 0 rgb(204 251 241 / 38%);
+  filter: none;
+  transform: rotate(-10deg);
+}
+
+.avatar[data-avatar='terra'] .orbit {
+  border-color: rgb(20 184 166 / 74%);
+  border-right-color: rgb(125 211 252 / 86%);
+}
+
+.avatar[data-avatar='generic'] .core {
+  background: radial-gradient(circle at 35% 32%, #e0f2fe 0%, #3b82f6 52%, #1e3a8a 100%);
+}
+
+.avatar[data-phase='preparing'] .core {
+  animation: avatar-breathe 1.8s ease-in-out infinite alternate;
+}
+
+.avatar[data-phase='running-tools'] .orbit {
+  animation: avatar-orbit 1.2s linear infinite;
+}
+
+.avatar[data-phase='verifying']::after {
+  position: absolute;
+  z-index: 4;
+  inset: 3px;
+  border-radius: 50%;
+  background: linear-gradient(110deg, transparent 35%, rgb(255 255 255 / 72%) 50%, transparent 65%);
+  content: '';
+  animation: avatar-scan 1.6s ease-in-out infinite;
+}
+
+@keyframes avatar-breathe {
+  to {
+    filter: brightness(1.12);
+    transform: scale(1.06);
+  }
+}
+
+@keyframes avatar-orbit {
+  to {
+    transform: rotate(332deg);
+  }
+}
+
+@keyframes avatar-scan {
+  0%, 100% { opacity: 0; transform: translateX(-5px); }
+  45%, 60% { opacity: 1; transform: translateX(5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar,
+  .avatar::before,
+  .avatar::after,
+  .avatar * {
+    animation: none !important;
+  }
+}

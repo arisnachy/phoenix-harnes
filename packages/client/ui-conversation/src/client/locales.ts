@@ -11,6 +11,9 @@ const PLAN_NEXT_ACTION_EN = 'describe your task to generate plan'
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
   'status.thinking': 'PHOENIX 正在思考…',
+  'status.preparing': 'PHOENIX 正在准备任务…',
+  'status.runningTools': 'PHOENIX 正在运行工具…',
+  'status.verifying': 'PHOENIX 正在验证结果…',
   'view.chat': '对话',
   'hint.plan': PLAN_NEXT_ACTION_ZH,
   'hint.goal': '输入目标，智能体将持续执行',
@@ -195,6 +198,9 @@ export type ConversationKey = keyof typeof zh
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
   'status.thinking': 'PHOENIX thinking…',
+  'status.preparing': 'PHOENIX preparing the task…',
+  'status.runningTools': 'PHOENIX running tools…',
+  'status.verifying': 'PHOENIX verifying the results…',
   'view.chat': 'Chat',
   'hint.plan': PLAN_NEXT_ACTION_EN,
   'hint.goal': 'describe the objective for a long-running task',
@@ -378,6 +384,9 @@ export const en = {
 export const es = {
   ...en,
   'status.thinking': 'PHOENIX está pensando…',
+  'status.preparing': 'PHOENIX está preparando la tarea…',
+  'status.runningTools': 'PHOENIX está ejecutando herramientas…',
+  'status.verifying': 'PHOENIX está verificando los resultados…',
   'view.chat': 'Chat',
   'hint.plan': 'describe tu tarea para generar un plan',
   'hint.goal': 'escribe un objetivo y el agente seguirá trabajando',

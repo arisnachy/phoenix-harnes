@@ -384,7 +384,7 @@ describe('LlmRuntime', () => {
           [Symbol.asyncIterator](): AsyncIterator<StreamChunk> {
             return {
               // Third-party adapters can reject with arbitrary values.
-              next: () => Promise.reject('plain provider failure'),
+              next: () => Promise.reject(new Error('plain provider failure')),
             }
           },
         }

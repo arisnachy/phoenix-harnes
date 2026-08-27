@@ -832,6 +832,8 @@ describe('mapStopReason / mapUsage', () => {
     'other side closed',
     'HTTP2 request did not get a response',
     'WebSocket closed unexpectedly',
+    'WebSocket closed 1006',
+    'WebSocket closed with code 1006',
     // undici flattens a mid-stream socket drop to this bare word (its SocketError
     // cause is discarded upstream before it reaches us).
     'terminated',

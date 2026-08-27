@@ -27,7 +27,7 @@
   - img
   - text: Bash Print alpha to stdout
 - paragraph: partial
-- status: PHOENIX thinking…
+- status: PHOENIX verifying the results…
 - textbox "Message the agent"
 - button "Commands":
   - img

@@ -164,6 +164,10 @@ flowchart LR
   cfg --> plugin_dsh_base_tool_web
   plugin_dsh_base_tools["tools<br/>@deepseek-ai/dsh-tools"]
   cfg --> plugin_dsh_base_tools
+  plugin_dsh_base_hardness["hardness<br/>@deepseek-ai/dsh-hardness"]
+  cfg --> plugin_dsh_base_hardness
+  plugin_dsh_base_hardness_adapters["hardness-adapters<br/>@deepseek-ai/dsh-hardness-adapters"]
+  cfg --> plugin_dsh_base_hardness_adapters
   plugin_dsh_base_system_prompt["system-prompt<br/>@deepseek-ai/dsh-system-prompt"]
   cfg --> plugin_dsh_base_system_prompt
   plugin_dsh_base_agent_loop["agent-loop<br/>@deepseek-ai/dsh-agent-loop"]
@@ -254,6 +258,8 @@ flowchart LR
 | `web-search-free` | `@deepseek-ai/dsh-web-search-free` |
 | `tool-web` | `@deepseek-ai/dsh-tool-web` |
 | `tools` | `@deepseek-ai/dsh-tools` |
+| `hardness` | `@deepseek-ai/dsh-hardness` |
+| `hardness-adapters` | `@deepseek-ai/dsh-hardness-adapters` |
 | `system-prompt` | `@deepseek-ai/dsh-system-prompt` |
 | `agent-loop` | `@deepseek-ai/dsh-agent-loop` |
 | `fs-sandbox` | `@deepseek-ai/dsh-fs-sandbox` |

@@ -114,6 +114,11 @@ export async function watchClientPlugins(
     cwd: root,
     workspace: [...pluginDirs],
     watch: true,
+    // Node 22.21 exposes native TypeScript and tsdown otherwise selects its
+    // native config loader. That path currently conflicts with
+    // import-without-cache's registerHooks when this script itself runs under
+    // tsx, so keep watcher config loading on tsx explicitly.
+    configLoader: 'tsx',
     hooks: {
       'build:done': ({ options }) => {
         if (initialized.has(options)) return

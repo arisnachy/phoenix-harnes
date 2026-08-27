@@ -148,11 +148,11 @@ describe('PHOENIX updater state bridge', () => {
     }))
 
     expect(requestPhoenixUpdateRestart(repo)).toEqual({ accepted: true, status: 'restarting' })
-    const request = JSON.parse(readFileSync(join(repo, '.git', 'phoenix-update-restart-request.json'), 'utf8'))
+    const request = JSON.parse(readFileSync(join(repo, '.git', 'phoenix-update-restart-request.json'), 'utf8')) as { requestedAt?: string }
     expect(request).toMatchObject({ schema: 1, target })
-    expect(new Date(request.requestedAt).toString()).not.toBe('Invalid Date')
+    expect(new Date(request.requestedAt ?? '').toString()).not.toBe('Invalid Date')
 
-    const state = JSON.parse(readFileSync(statePath(repo), 'utf8'))
+    const state = JSON.parse(readFileSync(statePath(repo), 'utf8')) as { at?: string }
     expect(state).toMatchObject({
       schema: 1,
       status: 'restarting',
@@ -160,7 +160,7 @@ describe('PHOENIX updater state bridge', () => {
       current: target,
       target,
     })
-    expect(new Date(state.at).toString()).not.toBe('Invalid Date')
+    expect(new Date(state.at ?? '').toString()).not.toBe('Invalid Date')
   })
 
   it('fails a restart request closed when Git identity disappears between reads', () => {

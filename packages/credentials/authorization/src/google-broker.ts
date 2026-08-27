@@ -16,7 +16,6 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { credentialKey, type CredentialKey } from '@deepseek-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
@@ -264,7 +263,7 @@ function form(fields: Readonly<Record<string, string>>): URLSearchParams {
 }
 
 function serviceUrl(request: GoogleApiRequest): { url: URL; scope: string } {
-  const spec = SERVICES[request.service]
+  const spec = SERVICES[request.service] as ServiceSpec | undefined
   if (spec === undefined) {
     throw new AuthorizationError('Google broker service is not allowed', 'GOOGLE_SERVICE_DENIED')
   }
@@ -328,16 +327,19 @@ async function listen(server: Server): Promise<number> {
   })
   const address = server.address()
   if (address === null || typeof address === 'string') {
-    await new Promise<void>(resolve => server.close(() => resolve()))
+    await new Promise<void>(resolve => server.close(() =>{  resolve() }))
     throw new AuthorizationError('Google loopback receiver did not bind an IP port', 'GOOGLE_CALLBACK_BIND')
   }
-  return (address as AddressInfo).port
+  return (address).port
 }
 
 async function closeServer(server: Server): Promise<void> {
   if (!server.listening) return
   await new Promise<void>((resolve, reject) => {
-    server.close((error) => { error === undefined ? resolve() : reject(error) })
+    server.close((error) => {
+      if (error === undefined) resolve()
+      else reject(error)
+    })
   })
 }
 

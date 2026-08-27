@@ -30,7 +30,13 @@
       "path": "../ui-sidebar"
     },
     {
+      "path": "../ui-layout"
+    },
+    {
       "path": "../ui-conversation"
+    },
+    {
+      "path": "../../hardness/hardness"
     },
     {
       "path": "../../runtime-diagnostics/invariants"

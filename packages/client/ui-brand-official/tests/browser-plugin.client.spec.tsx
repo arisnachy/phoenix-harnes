@@ -65,10 +65,12 @@ describe('PHOENIX browser-brand plugin', () => {
     for (const hole of HOLES) expect(after.slots.entries(hole)).toHaveLength(1)
   })
 
-  it('renders the PHOENIX name independently from both requested mark sizes', () => {
+  it('renders a clean text PHOENIX name independently from both requested mark sizes', () => {
     const name = render(<PhoenixBrandName />)
-    const nameImage = name.getByRole('img', { name: 'PHOENIX' })
-    expect(nameImage.getAttribute('src')).toBe('/phoenix-wordmark.png')
+    const wordmark = name.getByRole('img', { name: 'PHOENIX' })
+    expect(wordmark.textContent?.trim()).toBe('PHOENIX')
+    expect(wordmark.querySelector('svg')).toBeNull()
+    expect(name.container.querySelector('img')).toBeNull()
     name.unmount()
 
     const mark = render(<PhoenixBrandMark size={34} className="hero-mark" />)

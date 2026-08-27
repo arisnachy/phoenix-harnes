@@ -1033,7 +1033,8 @@ export class SessionStore extends Service {
       } catch (error: unknown) {
         // Preserve the listener's exact rejection value; flush is a caller-owned
         // failure boundary, and Cordis listeners may throw arbitrary values.
-        return Promise.reject(error)
+        // Cordis listeners may reject with arbitrary values; preserve that value.
+        return Promise.resolve().then(() => { throw error })
       }
     }))
     const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')

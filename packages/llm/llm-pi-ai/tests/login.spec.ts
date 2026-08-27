@@ -39,8 +39,8 @@ function surface(answer = 'typed'): AuthorizationInteraction & { notices: Author
   return {
     notices,
     prompts,
-    notify: notice => { notices.push(notice) },
-    prompt: prompt => { prompts.push(prompt); return Promise.resolve(answer) },
+    notify: (notice) => { notices.push(notice) },
+    prompt: (prompt) => { prompts.push(prompt); return Promise.resolve(answer) },
   }
 }
 
@@ -114,7 +114,7 @@ describe('pi-ai login flows', () => {
       { type: 'progress', message: 'Exchanging the code' },
       { type: 'quantum-handshake' } as unknown as AuthEvent,
     ]
-    const ui = await attempt(ctx, interaction => {
+    const ui = await attempt(ctx, (interaction) => {
       for (const event of events) interaction.notify(event)
       return Promise.resolve()
     })
@@ -139,7 +139,7 @@ describe('pi-ai login flows', () => {
       { type: 'select', message: 'Which account?', options: [{ id: 'a', label: 'Work' }] },
       { type: 'manual_code', message: 'Paste the code', signal: withdraw.signal },
     ]
-    const ui = await attempt(ctx, async interaction => {
+    const ui = await attempt(ctx, async (interaction) => {
       for (const prompt of prompts) await interaction.prompt(prompt)
     })
     expect(ui.prompts).toEqual([

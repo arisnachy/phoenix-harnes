@@ -58,7 +58,7 @@ export class FreeSearchProvider implements WebSearchProvider {
     const endpoint = engine === 'bing' ? 'https://www.bing.com/search' : 'https://html.duckduckgo.com/html/'
     const url = `${endpoint}?q=${encodeURIComponent(query).replace(/%20/g, '+')}`
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(new Error('free search timeout')), this.timeoutMs)
+    const timer = setTimeout(() =>{  controller.abort(new Error('free search timeout')) }, this.timeoutMs)
     const combined = signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal])
     try {
       return await this.fetcher(url, { signal: combined, headers: { accept: 'text/html' } })

@@ -28,7 +28,7 @@ const SCOPES = [
 const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
 
 function googleApi(ctx: Context): GoogleApiBroker {
-  const service = ctx.get('googleApi')
+  const service: unknown = ctx.get('googleApi')
   if (!(service instanceof GoogleApiBroker)) throw new Error('Google API broker is not mounted')
   return service
 }
@@ -69,7 +69,7 @@ async function authorize(ctx: Context, overrides: Record<string, unknown> = {}):
     code: Promise.resolve('authorization-code-private'),
     close: () => Promise.resolve(),
   })
-  internals.fetch = (async () => tokenResponse(overrides)) as typeof fetch
+  internals.fetch = (async () => tokenResponse(overrides))
   const ui = surface()
   await expect(ctx.authorization.begin({ key: GOOGLE_ACCOUNT_KEY, interaction: ui.interaction }))
     .resolves.toEqual({ status: 'authorized' })
@@ -114,6 +114,7 @@ describe('Google Workspace OAuth authorization boundary', () => {
       label: 'Google Workspace',
       methods: [{ id: 'oauth', label: 'Sign in with Google' }],
       inFlight: false,
+      disconnectable: true,
     }])
     const telemetry = await ctx.authorization.inspect(GOOGLE_ACCOUNT_KEY)
     expect(telemetry).toMatchObject({
@@ -175,14 +176,14 @@ describe('Google Workspace API broker', () => {
     internals.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       calls += 1
       if (calls === 1) return tokenResponse()
-      seenUrl = String(input)
+      seenUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       seenAuthorization = new Headers(init?.headers).get('authorization')
       seenRedirect = init?.redirect
       return new Response(JSON.stringify({ messages: [{ id: 'm1' }] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       })
-    }) as typeof fetch
+    })
 
     await ctx.authorization.begin({ key: GOOGLE_ACCOUNT_KEY, interaction: surface().interaction })
     const result = await googleApi(ctx).request({ service: 'gmail', path: 'users/me/messages?maxResults=1' })
@@ -218,7 +219,9 @@ describe('Google Workspace API broker', () => {
     internals.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
       calls += 1
       if (calls === 1) {
-        expect(String(init?.body)).toContain('refresh_token=refresh-token-private')
+        const body = init?.body
+        const bodyText = typeof body === 'string' ? body : body instanceof URLSearchParams ? body.toString() : ''
+        expect(bodyText).toContain('refresh_token=refresh-token-private')
         return tokenResponse({
           access_token: 'refreshed-access',
           refresh_token: 'rotated-refresh',
@@ -227,7 +230,7 @@ describe('Google Workspace API broker', () => {
       }
       expect(new Headers(init?.headers).get('authorization')).toBe('Bearer refreshed-access')
       return new Response('{}', { status: 200 })
-    }) as typeof fetch
+    })
 
     await googleApi(ctx).request({ service: 'drive', path: 'files?pageSize=1' })
 
@@ -245,10 +248,11 @@ describe('Google Workspace API broker', () => {
     const refresh = Promise.withResolvers<Response>()
     let apiCalls = 0
     internals.fetch = (async (input: RequestInfo | URL) => {
-      if (String(input) === 'https://oauth2.googleapis.com/token') return refresh.promise
+      const inputUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (inputUrl === 'https://oauth2.googleapis.com/token') return refresh.promise
       apiCalls += 1
       return new Response('{}', { status: 200 })
-    }) as typeof fetch
+    })
 
     const gmailRequest = googleApi(ctx).request({ service: 'gmail', path: 'users/me/messages?maxResults=1' })
     const driveRequest = googleApi(ctx).request({ service: 'drive', path: 'files?pageSize=1' })
@@ -284,7 +288,7 @@ describe('Google Workspace API broker', () => {
     const ctx = await harness()
     internals.now = () => 1_000_000
     await authorize(ctx)
-    internals.fetch = (async () => { throw new Error('provider unavailable') }) as typeof fetch
+    internals.fetch = (async () => { throw new Error('provider unavailable') })
 
     await expect(googleApi(ctx).disconnect()).resolves.toEqual({ revoked: false })
     expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toBeUndefined()

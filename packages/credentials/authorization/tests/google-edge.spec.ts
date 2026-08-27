@@ -12,7 +12,7 @@ const originalFetch = internals.fetch
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 
 function googleApi(ctx: Context): GoogleApiBroker {
-  const service = ctx.get('googleApi')
+  const service: unknown = ctx.get('googleApi')
   if (!(service instanceof GoogleApiBroker)) throw new Error('Google API broker is not mounted')
   return service
 }

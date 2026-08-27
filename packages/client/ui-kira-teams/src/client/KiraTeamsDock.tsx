@@ -3,11 +3,13 @@ import { useSyncExternalStore } from 'react'
 import {
   IconChevronDownOutline14, IconRefreshOutline14, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { SubagentActivityProjection } from '@deepseek-ai/dsh-subagent'
 import type {
   SessionId, SessionListState, SessionSummary, SubagentAddress,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { PropsLocale, PropsRuntime, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { NS } from './locales.ts'
+import { ModelActivityAvatar } from './ModelActivityAvatar.tsx'
 import css from './KiraTeamsDock.module.css'
 
 /** Sessions face plus business actions supplied by the slot registration. */
@@ -51,6 +53,10 @@ function initialCollapsed(): boolean {
  * through the `origin === 'subagent'` chain check, matching the header
  * catalog's lineage semantics.
  */
+export function activityOf(summary: SessionSummary): SubagentActivityProjection | undefined {
+  return summary.projectionValues?.subagentActivity
+}
+
 export function lineageMembers(state: SessionListState): {
   root: SessionSummary | undefined
   rows: MemberRow[]
@@ -102,7 +108,7 @@ export function lineageMembers(state: SessionListState): {
  * @returns The dock element, or null while the lineage has no subagents.
  */
 export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProps) {
-  const state = useSyncExternalStore(list.subscribe, list.getSnapshot)
+  const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
   const { root, rows } = lineageMembers(state)
   const [collapsed, setCollapsed] = useState(initialCollapsed)
   const runningCount = rows.reduce((total, row) => total + (row.summary.running ? 1 : 0), 0)
@@ -178,7 +184,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
             type="button"
             className={css.refresh}
             aria-label={t('dock.refresh')}
-            onClick={() => { if (root !== undefined) refresh(root.id) }}
+            onClick={() => { refresh(root.id) }}
           >
             <IconRefreshOutline14 />
           </button>
@@ -203,7 +209,11 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
                 })
               }}
             >
-              <StateDot state={summary.running ? 'ongoing' : 'done'} />
+              <ModelActivityAvatar
+                activity={activityOf(summary)}
+                running={summary.running}
+                pending={summary.pendingInteraction !== undefined}
+              />
               <span className={css.name}>{summary.displayTitle}</span>
               {summary.agentPreset !== undefined && (
                 <span className={css.tag}>{summary.agentPreset}</span>

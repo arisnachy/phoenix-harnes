@@ -20,7 +20,7 @@
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
-  "files": ["lib/index.js", "lib/invariant.js", "lib/bin.js", "lib/types/**/*.d.ts"],
+  "files": ["lib/index.js", "lib/invariant.js", "lib/bin.js", "lib/server-*.js", "lib/types/**/*.d.ts"],
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",

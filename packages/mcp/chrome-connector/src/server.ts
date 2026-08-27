@@ -63,14 +63,13 @@ async function selectedTab(id?: string): Promise<Tab> {
 
 async function cdp<T = unknown>(tab: Tab, method: string, params: Record<string, unknown> = {}): Promise<T> {
   const WebSocketCtor = globalThis.WebSocket
-  if (!WebSocketCtor) throw new Error('El runtime de Node no incluye WebSocket')
   const debuggerUrl = tab.webSocketDebuggerUrl
   if (!debuggerUrl) throw new Error('La pestaña no ofrece una conexión CDP')
   const socket = new WebSocketCtor(debuggerUrl)
   const id = Math.floor(Math.random() * 2_000_000_000)
   return await new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => { socket.close(); reject(new Error(`Tiempo agotado ejecutando ${method}`)) }, 10_000)
-    socket.addEventListener('open', () => socket.send(JSON.stringify({ id, method, params })))
+    socket.addEventListener('open', () =>{  socket.send(JSON.stringify({ id, method, params })) })
     socket.addEventListener('message', (event) => {
       const message = JSON.parse(String(event.data)) as CdpResponse
       if (message.id !== id) return
@@ -111,7 +110,7 @@ server.registerTool('tabs', {
 
 server.registerTool('navigate', {
   description: 'Navega una pestaña a una URL HTTP(S). No envía formularios ni ejecuta acciones de cuenta.',
-  inputSchema: { url: z.string().url(), tabId: z.string().optional() },
+  inputSchema: { url: z.url(), tabId: z.string().optional() },
 }, async ({ url, tabId }) => {
   if (!actionsAllowed()) throw new Error('Navegación bloqueada: habilita PHOENIX_BROWSER_ALLOW_ACTIONS solo después de aprobarlo explícitamente.')
   const parsed = new URL(url)
