@@ -24,6 +24,7 @@ export { CapabilitySurfacePreview, registerCapabilitySurfacePreview } from './Ca
 export type { CapabilitySurfacePreviewProps } from './CapabilitySurfacePreview.tsx'
 export { CapabilityArtifactPreview, registerCapabilityArtifactPreview } from './CapabilityArtifactPreview.tsx'
 export type { CapabilityArtifactPreviewProps } from './CapabilityArtifactPreview.tsx'
+export { callHardnessMission } from './hardness-rpc.ts'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
