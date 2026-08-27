@@ -2229,6 +2229,9 @@ importers:
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-subagent':
+        specifier: workspace:^
+        version: link:../../subagent/subagent
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31

@@ -7,7 +7,7 @@ import {
   type SessionSummary, type SubagentAddress,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
-import { KiraTeamsDock, lineageMembers } from '../src/client/KiraTeamsDock.tsx'
+import { activityOf, KiraTeamsDock, lineageMembers } from '../src/client/KiraTeamsDock.tsx'
 import { apply, inject } from '../src/client/index.ts'
 
 function summary(partial: Partial<SessionSummary> & { id: SessionId }): SessionSummary {
@@ -72,7 +72,21 @@ async function fullBench(sessions: SessionSummary[], current?: SessionId) {
 
 const FAMILY: SessionSummary[] = [
   summary({ id: sid('root'), displayTitle: 'Misión raíz', running: true }),
-  summary({ id: sid('c1'), parentId: sid('root'), origin: 'subagent', displayTitle: 'VEGA-1', running: true, agentPreset: 'luna' }),
+  summary({
+    id: sid('c1'),
+    parentId: sid('root'),
+    origin: 'subagent',
+    displayTitle: 'VEGA-1',
+    running: true,
+    agentPreset: 'luna',
+    projectionValues: {
+      subagentActivity: {
+        provider: 'openai-codex',
+        model: 'gpt-5.6-luna',
+        phase: 'running-tools',
+      },
+    },
+  }),
   summary({ id: sid('g1'), parentId: sid('c1'), origin: 'subagent', displayTitle: 'nieto', running: false }),
   summary({ id: sid('c2'), parentId: sid('root'), origin: 'subagent', displayTitle: 'CONSTELACIÓN-2', running: false }),
   // Foreign lineage and ordinary forks stay out of the board.
@@ -81,6 +95,15 @@ const FAMILY: SessionSummary[] = [
 ]
 
 describe('lineageMembers', () => {
+  it('reads the durable child model activity projection', () => {
+    const child = FAMILY.find(item => item.id === sid('c1'))!
+    expect(activityOf(child)).toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-5.6-luna',
+      phase: 'running-tools',
+    })
+  })
+
   it('collects only the current lineage subagents with depths, root-walking through children', () => {
     // Selected session is a grandchild: the walk climbs to the ordinary root.
     const { root, rows } = lineageMembers(

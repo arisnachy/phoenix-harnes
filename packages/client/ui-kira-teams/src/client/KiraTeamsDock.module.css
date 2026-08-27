@@ -87,9 +87,10 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   width: 100%;
-  padding-block: 6px;
+  min-height: 36px;
+  padding-block: 5px;
   padding-inline-end: 8px;
   border: none;
   border-radius: 8px;

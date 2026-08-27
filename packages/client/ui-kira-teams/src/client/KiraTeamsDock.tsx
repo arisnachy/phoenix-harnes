@@ -3,11 +3,13 @@ import { useSyncExternalStore } from 'react'
 import {
   IconChevronDownOutline14, IconRefreshOutline14, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { SubagentActivityProjection } from '@deepseek-ai/dsh-subagent'
 import type {
   SessionId, SessionListState, SessionSummary, SubagentAddress,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { PropsLocale, PropsRuntime, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { NS } from './locales.ts'
+import { ModelActivityAvatar } from './ModelActivityAvatar.tsx'
 import css from './KiraTeamsDock.module.css'
 
 /** Sessions face plus business actions supplied by the slot registration. */
@@ -51,6 +53,10 @@ function initialCollapsed(): boolean {
  * through the `origin === 'subagent'` chain check, matching the header
  * catalog's lineage semantics.
  */
+export function activityOf(summary: SessionSummary): SubagentActivityProjection | undefined {
+  return summary.projectionValues?.subagentActivity
+}
+
 export function lineageMembers(state: SessionListState): {
   root: SessionSummary | undefined
   rows: MemberRow[]
@@ -203,7 +209,11 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
                 })
               }}
             >
-              <StateDot state={summary.running ? 'ongoing' : 'done'} />
+              <ModelActivityAvatar
+                activity={activityOf(summary)}
+                running={summary.running}
+                pending={summary.pendingInteraction !== undefined}
+              />
               <span className={css.name}>{summary.displayTitle}</span>
               {summary.agentPreset !== undefined && (
                 <span className={css.tag}>{summary.agentPreset}</span>
