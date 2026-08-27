@@ -22,29 +22,33 @@ export function PhoenixBrandName() {
     <span
       role="img"
       aria-label="PHOENIX"
-      style={{ display: 'inline-flex', alignItems: 'center', width: 138, height: 28 }}
+      style={{ display: 'inline-flex', alignItems: 'center', width: 142, height: 34 }}
     >
       <svg
         aria-hidden="true"
-        width="138"
-        height="28"
-        viewBox="0 0 138 28"
+        width="142"
+        height="34"
+        viewBox="0 0 142 34"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <text
-          x="1"
-          y="18"
+        <g
           fill="currentColor"
-          fontFamily="'Avenir Next', 'Inter', ui-sans-serif, system-ui, sans-serif"
-          fontSize="15"
-          fontWeight="600"
-          letterSpacing="2.7"
+          fontFamily="'Segoe UI Variable Display', 'Avenir Next', ui-sans-serif, system-ui, sans-serif"
+          fontSize="21"
+          fontWeight="650"
+          letterSpacing="2.2"
         >
-          PHOENIX
-        </text>
-        <path d="M1 23.5H63L69 21L75 23.5H137" stroke="currentColor" strokeOpacity="0.28" strokeWidth="0.9" />
-        <path d="M69 19.6L70.6 21.2L69 22.8L67.4 21.2L69 19.6Z" fill="currentColor" fillOpacity="0.7" />
+          <text x="1" y="24.5">PH</text>
+          <text x="57" y="24.5">ENIX</text>
+        </g>
+        <ellipse cx="43" cy="17" rx="9" ry="10.5" stroke="currentColor" strokeWidth="2.2" />
+        <path
+          data-wordmark-o-spark="true"
+          d="M43 10.2L44.35 15.65L49.2 17L44.35 18.35L43 23.8L41.65 18.35L36.8 17L41.65 15.65L43 10.2Z"
+          fill="currentColor"
+          fillOpacity="0.72"
+        />
       </svg>
     </span>
   )
