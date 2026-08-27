@@ -23,6 +23,8 @@ export { AcquisitionRegistry } from './acquisition-registry.ts'
 export type { AcquisitionResult, CapabilityBuilder, MissionLearningHooks } from './acquisition-registry.ts'
 export { installSandboxCapabilityGuard } from './sandbox-guard.ts'
 export type { SandboxPolicyResolver } from './sandbox-guard.ts'
+export { runHardnessMission } from './mission-orchestrator.ts'
+export type { HardnessMissionInput, HardnessMissionResult } from './mission-orchestrator.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
