@@ -1,28 +1,24 @@
 # Diseño: visibilidad del updater y cuota OpenAI Codex
 
+English | [中文](2026-08-27-sidebar-update-codex-quota-design.zh.md)
+
 ## Objetivo
 
-Corregir el sidebar de PHOENIX para que una actualización ausente no ocupe espacio y para que la cuota de cuenta OpenAI/Codex aparezca junto a `Settings` únicamente cuando la sesión activa esté en una ruta compatible y exista telemetría válida.
-
-## Evidencia
-
-- `UpdateFooterAction.updateLabelKey` ya oculta `idle`, `checking`, `current`, `updated` y `off`, pero todavía muestra `paused`; la captura confirma que ese estado produce “Actualizaciones en pausa” sin una actualización accionable.
-- `CodexQuotaRemaining` ya reserva el slot `settings.trigger.trailing`, identifica rutas OpenAI/Codex y transforma `usedPercent` en porcentaje restante.
-- El TUI de `openai/codex` sigue el mismo contrato: oculta el indicador si la información es desconocida y calcula el porcentaje con telemetría real, sin estimaciones.
+Corregir el sidebar de PHOENIX para que una actualización ausente no ocupe espacio y para que la cuota de cuenta OpenAI/Codex aparezca junto a `Settings` únicamente con una ruta compatible y telemetría válida.
 
 ## Decisiones
 
-1. Tratar `paused` como estado no visible en `UpdateFooterAction`; se conserva en el contrato Host y en la máquina de estados para diagnóstico y reanudación externa, pero no se pinta como actualización.
-2. Mantener `CodexQuotaRemaining` como dueño de la cuota. No copiar código de `openai/codex` ni crear un segundo medidor de contexto.
-3. Mostrar la cuota junto a `Settings` solo con `wide`, sesión activa, proveedor OpenAI/Codex y `primaryLimit` o `secondaryLimit` numérico y finito. Sin telemetría, el componente devuelve `null` y no deja hueco.
-4. Presentar el valor como porcentaje restante de la cuota de cuenta, con tooltip accesible; el cálculo será `clamp(round(100 - usedPercent), 0, 100)`.
+1. `paused` es un estado de Host válido para diagnóstico, pero no se pinta cuando no hay una actualización accionable.
+2. `CodexQuotaRemaining` es dueño de la cuota y no copia código del repositorio `openai/codex`.
+3. El componente solo renderiza con `wide`, sesión activa, proveedor OpenAI/Codex y una ventana de límite numérica, finita y acotada.
+4. El valor visible es porcentaje restante: `clamp(round(100 - usedPercent), 0, 100)`.
 
 ## Pruebas
 
-- Actualizar el mapa de estados para comprobar que `paused` no produce etiqueta ni DOM.
-- Conservar y ampliar las pruebas de cuota para OpenAI/Codex, proveedor no compatible, telemetría ausente, valores inválidos y cambio de proveedor.
-- Ejecutar build, typecheck, tests focales y verificar la GUI existente tras refrescar.
+- El mapa del updater confirma que `paused` no genera etiqueta ni DOM.
+- La cuota cubre telemetría ausente, valores inválidos, prioridad de ventanas y cambio de proveedor.
+- Build, typecheck, tests focales y refresco de la GUI se ejecutan antes de publicar.
 
-## Seguridad y alcance
+## Seguridad
 
-No se mostrarán tokens, claves, payloads ni respuestas de autorización. Solo se expone el porcentaje derivado de telemetría ya autorizada. La integración se mantiene en la rama de trabajo y se pasará a `main` únicamente después de validar la PR.
+No se muestran tokens, claves, payloads ni respuestas de autorización. Solo se expone el porcentaje derivado de telemetría ya autorizada.

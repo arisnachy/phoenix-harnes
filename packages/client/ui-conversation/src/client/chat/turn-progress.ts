@@ -8,6 +8,9 @@ export type TurnProgress = 'preparing' | 'running-tools' | 'verifying'
 /**
  * Derive a safe progress label from the existing chat projection.
  * Tool arguments and result payloads are intentionally never inspected.
+ * @param timeline - current conversation timeline snapshot.
+ * @param nodes - visible conversation nodes to classify.
+ * @returns the current safe phase, or null when no turn is open.
  */
 export function turnProgress(
   timeline: ConversationTimelineSnapshot,
