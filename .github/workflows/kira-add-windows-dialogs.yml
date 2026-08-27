@@ -1,0 +1,56 @@
+name: KIRA add Windows native dialogs
+
+on:
+  push:
+    branches:
+      - feat/windows-native-dialogs
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/windows-native-dialogs
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Generate Windows dialog capability
+        shell: pwsh
+        run: python scripts/kira-add-windows-dialogs.py
+      - name: Refresh lockfile
+        shell: pwsh
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm install --frozen-lockfile
+      - name: Targeted Windows dialog tests
+        shell: pwsh
+        run: pnpm exec vitest run packages/windows/tool-windows-dialogs/tests/windows-dialogs.spec.ts
+      - name: Typecheck
+        shell: pwsh
+        run: pnpm run typecheck
+      - name: Static gates
+        shell: pwsh
+        run: pnpm run check:ci:static
+      - name: Windows blocking gates
+        shell: pwsh
+        run: pnpm run check:ci:windows-blocking
+      - name: Diff check
+        shell: pwsh
+        run: git diff --check
+      - name: Commit implementation
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if (git diff --cached --quiet) { throw 'Windows dialog implementation produced no changes' }
+          git commit -m "feat(hardness): add semantic Windows native dialog automation"
+          git push origin HEAD:feat/windows-native-dialogs
