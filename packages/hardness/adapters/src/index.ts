@@ -13,6 +13,8 @@ export { PermissionBroker } from './permission-broker.ts'
 export type { PermissionApprovalOutcome, PermissionApprovalRequest, PermissionBrokerResult } from './permission-broker.ts'
 export { createUserApprovalBroker } from './user-approval-broker.ts'
 export type { UserApprovalBroker, UserApprovalContext } from './user-approval-broker.ts'
+export { LabMode, SelfImprovementLedger } from './lab-mode.ts'
+export type { ImprovementRecord, LabExperiment, LabSnapshot } from './lab-mode.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
