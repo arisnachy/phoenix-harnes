@@ -128,9 +128,12 @@ export function apply(ctx: ClientContext): void {
     },
     WorkspaceBrowser,
   ))
-  if (new URLSearchParams(window.location.search).get('hardness') === 'fixture') {
+  const hardnessFixture = new URLSearchParams(window.location.search).get('hardness') === 'fixture'
+    || new URLSearchParams(window.location.hash.replace(/^#/, '')).get('hardness') === 'fixture'
+    || window.localStorage.getItem('hardness.fixture') === '1'
+  if (hardnessFixture) {
     const fixture = createHardnessBrowserFixture()
-    ctx.slots.inject('shell.overlay', () => registerCapabilityArtifactPreview(ctx.slots, fixture.artifact, fixture.rendered))
+    ctx.effect(() => registerCapabilityArtifactPreview(ctx.slots, fixture.artifact, fixture.rendered), 'ui-workspace: hardness fixture')
   }
   ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register(
     {
