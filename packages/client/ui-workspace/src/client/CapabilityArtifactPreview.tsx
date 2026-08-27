@@ -24,7 +24,7 @@ export function registerCapabilityArtifactPreview(
   rendered: CapabilityArtifactRenderModel,
 ): () => void {
   return slots.register({
-    name: 'capability.artifact.preview',
+    name: 'shell.overlay',
     id: artifact.id,
     label: artifact.mime,
     inject: () => ({ artifact, rendered }),

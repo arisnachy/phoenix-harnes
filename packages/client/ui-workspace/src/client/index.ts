@@ -13,10 +13,13 @@ import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+import { registerCapabilityArtifactPreview } from './CapabilityArtifactPreview.tsx'
+import { createHardnessBrowserFixture } from './hardness-fixture.ts'
 export { CapabilitySurfacePreview, registerCapabilitySurfacePreview } from './CapabilitySurfacePreview.tsx'
 export type { CapabilitySurfacePreviewProps } from './CapabilitySurfacePreview.tsx'
 export { CapabilityArtifactPreview, registerCapabilityArtifactPreview } from './CapabilityArtifactPreview.tsx'
@@ -125,6 +128,10 @@ export function apply(ctx: ClientContext): void {
     },
     WorkspaceBrowser,
   ))
+  if (new URLSearchParams(window.location.search).get('hardness') === 'fixture') {
+    const fixture = createHardnessBrowserFixture()
+    ctx.slots.inject('shell.overlay', () => registerCapabilityArtifactPreview(ctx.slots, fixture.artifact, fixture.rendered))
+  }
   ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register(
     {
       name: 'conversation.hero.workspace',

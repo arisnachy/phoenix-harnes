@@ -72,8 +72,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'sidebar.workspaces.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
     /** Declarative, non-executing capability preview entries. */
     'capability.surface.preview': { kind: 'list'; scope: 'root'; owner: { surface: CapabilitySurface } }
-    /** Rendered artifact preview; data is declarative and non-executing. */
-    'capability.artifact.preview': { kind: 'list'; scope: 'root'; owner: { artifact: CapabilityArtifact; rendered: CapabilityArtifactRenderModel } }
   }
 }
 

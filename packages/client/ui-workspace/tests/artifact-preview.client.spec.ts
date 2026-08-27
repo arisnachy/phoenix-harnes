@@ -8,15 +8,15 @@ describe('CapabilityArtifact workspace preview', () => {
     const ctx = new Context()
     await ctx.plugin(SlotRegistry).await()
     const slots = ctx.get('slots') as SlotRegistry
-    const disposeDeclaration = slots.register({ name: 'root', children: { 'capability.artifact.preview': { kind: 'list', scope: 'root' } } } as never, () => null)
+    const disposeDeclaration = slots.register({ name: 'root', children: { 'shell.overlay': { kind: 'list', scope: 'root' } } } as never, () => null)
     const artifact = { id: 'a1', mime: 'text/plain', data: 'hello' }
     const rendered = { kind: 'text-preview', artifactId: 'a1' }
     const dispose = registerCapabilityArtifactPreview(slots, artifact, rendered)
-    const entry = slots.entries('capability.artifact.preview')[0]!
+    const entry = slots.entries('shell.overlay')[0]!
     expect(entry.options.id).toBe('a1')
     expect((entry.inject as () => { artifact: typeof artifact; rendered: typeof rendered })()).toEqual({ artifact, rendered })
     dispose()
-    expect(slots.entries('capability.artifact.preview')).toHaveLength(0)
+    expect(slots.entries('shell.overlay')).toHaveLength(0)
     disposeDeclaration()
   })
 })
