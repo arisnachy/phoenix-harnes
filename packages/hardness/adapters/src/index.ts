@@ -20,7 +20,7 @@ export type { CapabilityApproval, CapabilityExecutionContext, CapabilityExecutio
 export { ArtifactRuntime, artifactFromToolResult } from './artifact-runtime.ts'
 export type { ArtifactRenderModel, CapabilityArtifact } from './artifact-runtime.ts'
 export { AcquisitionRegistry } from './acquisition-registry.ts'
-export type { AcquisitionResult, CapabilityBuilder } from './acquisition-registry.ts'
+export type { AcquisitionResult, CapabilityBuilder, MissionLearningHooks } from './acquisition-registry.ts'
 export { installSandboxCapabilityGuard } from './sandbox-guard.ts'
 export type { SandboxPolicyResolver } from './sandbox-guard.ts'
 

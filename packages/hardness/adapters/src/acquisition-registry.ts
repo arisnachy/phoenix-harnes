@@ -1,8 +1,14 @@
 import type {
   CapabilityDescriptor, CapabilityNeed, HardnessService,
 } from '@deepseek-ai/dsh-hardness'
+import type { LabMode, SelfImprovementLedger } from './lab-mode.ts'
 
 export type CapabilityBuilder = (need: CapabilityNeed) => Promise<CapabilityDescriptor | undefined>
+export interface MissionLearningHooks {
+  readonly lab: LabMode
+  readonly ledger: SelfImprovementLedger
+}
+
 export type AcquisitionResult =
   | { readonly kind: 'built'; readonly capability: CapabilityDescriptor; readonly evidenceId: string }
   | { readonly kind: 'missing'; readonly reasons: readonly string[] }
@@ -10,7 +16,10 @@ export type AcquisitionResult =
 export class AcquisitionRegistry {
   private readonly builders: CapabilityBuilder[] = []
 
-  constructor(private readonly hardness: HardnessService) {}
+  constructor(
+    private readonly hardness: HardnessService,
+    private readonly learning?: MissionLearningHooks,
+  ) {}
 
   register(builder: CapabilityBuilder): () => void {
     this.builders.push(builder)
@@ -38,6 +47,25 @@ export class AcquisitionRegistry {
         artifactRefs: [],
       })
       this.hardness.promoteFromEvidence(evidenceId)
+      if (this.learning !== undefined) {
+        const experimentId = `build:${descriptor.id}:${descriptor.version}`
+        this.learning.lab.record({
+          id: experimentId,
+          hypothesis: `BUILD provider can satisfy ${need.kind ?? 'unknown'}`,
+          metric: 'verified capability',
+          baseline: 0,
+          result: 1,
+          datasetHash: evidenceId,
+          holdout: false,
+        })
+        this.learning.ledger.record({
+          id: `improvement:${experimentId}`,
+          hypothesis: `retain ${descriptor.id} as reusable capability`,
+          change: `register verified capability ${descriptor.id}`,
+          rollback: `remove capability ${descriptor.id}`,
+          sideEffects: [],
+        })
+      }
       return { kind: 'built', capability: this.hardness.get(descriptor.id) ?? descriptor, evidenceId }
     }
     return { kind: 'missing', reasons: [`no acquisition/build provider handles ${need.kind ?? 'unknown'}`] }
