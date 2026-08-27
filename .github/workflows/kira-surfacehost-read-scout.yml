@@ -1,0 +1,23 @@
+name: KIRA SurfaceHost Read Scout
+on:
+  push:
+    branches: [feat/surfacehost-viewer]
+permissions:
+  contents: read
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find file read and host API seams
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== file/read APIs ==='
+          grep -RInE "readFile|readText|openPath|listDirectory|host\.openPath|api\.host" packages apps --include='*.ts' --include='*.tsx' | head -800 || true
+          echo '=== host API definitions ==='
+          grep -RInE "pickDirectory|openPath|listDirectory" packages --include='*.ts' | head -400 || true
+          echo '=== attachment resolve/image URLs ==='
+          grep -RInE "resolveImage|attachment.*url|blob:|createObjectURL" packages/client packages/attachment --include='*.ts' --include='*.tsx' | head -500 || true
+          echo '=== api proxy static/asset route ==='
+          grep -RInE "sendFile|createReadStream|Content-Type|application/pdf|octet-stream" packages/host apps --include='*.ts' | head -500 || true
