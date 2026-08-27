@@ -1,16 +1,8 @@
 /** Public capability and Tool Atlas contracts for HARDNESS. */
 
 export type CapabilityId = string & { readonly __capabilityId: unique symbol }
-
 export type CapabilityKind = string
-
-export type CapabilityStatus =
-  | 'experimental'
-  | 'testing'
-  | 'verified'
-  | 'broken'
-  | 'quarantined'
-  | 'deprecated'
+export type CapabilityStatus = 'experimental' | 'testing' | 'verified' | 'broken' | 'quarantined' | 'deprecated'
 
 export interface CapabilityPermission {
   readonly kind: string
@@ -68,6 +60,12 @@ export interface CapabilityRegistration {
   readonly dispose: () => void
 }
 
+export interface HardnessAtlasSnapshot {
+  readonly formatVersion: 1
+  readonly capabilities: readonly CapabilityDescriptor[]
+  readonly evidence: readonly CapabilityEvidence[]
+}
+
 export interface HardnessService {
   register(descriptor: CapabilityDescriptor): CapabilityRegistration
   get(id: CapabilityId): CapabilityDescriptor | undefined
@@ -77,4 +75,6 @@ export interface HardnessService {
   recordEvidence(evidence: CapabilityEvidence): CapabilityEvidence
   evidenceFor(id: CapabilityId): readonly CapabilityEvidence[]
   promoteFromEvidence(evidenceId: string): void
+  snapshot(): HardnessAtlasSnapshot
+  restore(snapshot: HardnessAtlasSnapshot): void
 }

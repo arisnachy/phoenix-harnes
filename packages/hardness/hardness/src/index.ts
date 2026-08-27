@@ -10,6 +10,7 @@ import type {
   CapabilityResolution,
   CapabilityResolutionContext,
   CapabilityStatus,
+  HardnessAtlasSnapshot,
   HardnessService,
 } from './types.ts'
 import {
@@ -82,6 +83,33 @@ export class HardnessRegistry extends Service implements HardnessService {
     if (descriptor === undefined) throw new Error(`unknown capability: ${evidence.capabilityId}`)
     if (descriptor.version !== evidence.descriptorVersion) throw new Error(`stale evidence version for ${evidence.capabilityId}`)
     this.transition(evidence.capabilityId, 'verified', 'verification evidence', evidenceId)
+  }
+
+  snapshot(): HardnessAtlasSnapshot {
+    return {
+      formatVersion: 1,
+      capabilities: this.list(),
+      evidence: [...this.evidence.values()],
+    }
+  }
+
+  restore(snapshot: HardnessAtlasSnapshot): void {
+    const descriptors = new Map<CapabilityId, CapabilityDescriptor>()
+    for (const descriptor of snapshot.capabilities) {
+      validateCapabilityDescriptor(descriptor)
+      if (descriptors.has(descriptor.id)) throw new Error(`duplicate capability in snapshot: ${descriptor.id}`)
+      descriptors.set(descriptor.id, descriptor)
+    }
+    const evidence = new Map<string, CapabilityEvidence>()
+    for (const value of snapshot.evidence) {
+      const item = freezeEvidence(value)
+      if (evidence.has(item.id)) throw new Error(`duplicate evidence in snapshot: ${item.id}`)
+      evidence.set(item.id, item)
+    }
+    this.descriptors.clear()
+    this.evidence.clear()
+    for (const [id, descriptor] of descriptors) this.descriptors.set(id, descriptor)
+    for (const [id, item] of evidence) this.evidence.set(id, item)
   }
 }
 
