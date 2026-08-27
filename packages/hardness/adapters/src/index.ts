@@ -5,6 +5,8 @@ import { indexTools } from './tool-adapter.ts'
 
 export { indexTools } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
+export { VisualToolRuntime } from './visual-runtime.ts'
+export type { VisualRenderModel, VisualRenderer } from './visual-runtime.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
