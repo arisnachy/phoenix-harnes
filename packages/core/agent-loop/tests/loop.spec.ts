@@ -263,6 +263,64 @@ describe('agent loop', () => {
     expect(completed?.type === 'turn/end' && completed.data.reason).toEqual({ kind: 'completed' })
   })
 
+  it('keeps automatically continuing across more than three bounded turn segments', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'echo', { text: '1' }),
+      toolCallResponse('c2', 'echo', { text: '2' }),
+      toolCallResponse('c3', 'echo', { text: '3' }),
+      toolCallResponse('c4', 'echo', { text: '4' }),
+      toolCallResponse('c5', 'echo', { text: '5' }),
+      toolCallResponse('c6', 'echo', { text: '6' }),
+      toolCallResponse('c7', 'echo', { text: '7' }),
+      toolCallResponse('c8', 'echo', { text: '8' }),
+      textResponse('finished after four automatic continuations'),
+    ])
+    const ctx = await harness(adapter, '', 2)
+    ctx.tools.register(defineContentToolFixture({
+      name: 'echo',
+      description: 'echo back',
+      parameters: { text: { type: 'string' } },
+      async execute(args) {
+        return [{ type: 'text', text: String(args.text) }]
+      },
+    }))
+    const agent = ctx.agentLoop.create(SessionId('long-bounded-turn'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'finish the long tool task')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(9)
+    const turnEnds = agent.session.events.filter(event => event.type === 'turn/end')
+    expect(turnEnds).toHaveLength(5)
+    expect(turnEnds.every(event => event.type === 'turn/end' && event.data.reason.kind === 'completed')).toBe(true)
+  })
+
+  it('reminds a silent tool-calling model to give visible progress before more tools', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'echo', { text: 'ping' }),
+      textResponse('I checked the tool result; next I will finish the task.'),
+    ])
+    const ctx = await harness(adapter)
+    ctx.tools.register(defineContentToolFixture({
+      name: 'echo',
+      description: 'echo back',
+      parameters: { text: { type: 'string' } },
+      async execute(args) {
+        return [{ type: 'text', text: String(args.text) }]
+      },
+    }))
+    const agent = ctx.agentLoop.create(SessionId('silent-progress-reminder'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'do a tool-heavy task')
+    await waitForIdle(ctx, agent)
+
+    const secondRequestText = adapter.requests[1]!.messages
+      .flatMap(message => message.content)
+      .flatMap(block => block.type === 'text' ? [block.text] : [])
+      .join('\n')
+    expect(secondRequestText).toContain('Before calling more tools, send the user a brief progress update')
+  })
+
   it('renders harness identity, then the persona, then tool guidance — with {{variables}} resolved', async () => {
     const adapter = new MockAdapter([textResponse('ok')])
     // The persona is a TEMPLATE: {{model}} is the loop-registered variable
@@ -283,7 +341,7 @@ describe('agent loop', () => {
     await waitForIdle(ctx, agent)
 
     const request = adapter.requests[0]
-    expect(request!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.')
+    expect(request!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.')
     expect(request!.tools?.map(t => t.name)).toEqual(['noop'])
   })
 
@@ -300,7 +358,7 @@ describe('agent loop', () => {
     send(agent, 'hi')
     await waitForIdle(ctx, agent)
 
-    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nWorking in /work/space.')
+    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nWorking in /work/space.')
   })
 
   it('contains a strict-variable render failure: the turn errors, the loop keeps serving turns', async () => {
@@ -336,7 +394,7 @@ describe('agent loop', () => {
     await waitForIdle(ctx, agent)
 
     expect(adapter.requests).toHaveLength(1)
-    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nIn /rescued.')
+    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nIn /rescued.')
     const turnEnds = agent.session.events.filter(e => e.type === 'turn/end')
     expect(turnEnds).toHaveLength(2)
     expect(turnEnds[1]?.type === 'turn/end' && turnEnds[1].data.reason.kind).toBe('completed')
@@ -366,7 +424,7 @@ describe('agent loop', () => {
 
     expect(adapter.requests).toHaveLength(1)
     expect(adapter.requests[0]!.model).toBe('mock')
-    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nYou run on mock.')
+    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.\n\nYou run on mock.')
   })
 
   it('omits the system field when system-prompt/assemble short-circuits with an empty assembly', async () => {

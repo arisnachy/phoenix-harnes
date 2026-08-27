@@ -51,10 +51,12 @@ type Phase =
     turn: number
     step: number
     wakeRequested: boolean
-    automaticContinuations: number
   }
 
 type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>
+
+const SILENT_TOOL_PROGRESS_REMINDER = 'Before calling more tools, send the user a brief progress update in their language. Summarize what you just did or found and what you will do next. Do not reveal hidden chain-of-thought or private reasoning.'
+const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest tool result without waiting for a new user prompt. Keep working until the task is complete. Before more tool calls, give the user a brief progress update if you have not done so recently; do not reveal hidden chain-of-thought.'
 
 type PreparedStep =
   | { kind: 'reject' }
@@ -198,7 +200,6 @@ export class ReactLoopAgent implements Agent {
       turn: this.phase.lastTurn,
       step: 0,
       wakeRequested: false,
-      automaticContinuations: 0,
     })
     this.loopCtx.agents.withInitiator(this, () => this.kick()).then(driver.resolve, driver.reject)
   }
@@ -276,18 +277,11 @@ export class ReactLoopAgent implements Agent {
         const step = phase.step + 1
         const maxStepsPerTurn = this.maxStepsPerTurn()
         if (step > maxStepsPerTurn) {
-          // A tool loop can legitimately need another model turn (for example
-          // after a provider fallback). Preserve queued tool results and open
-          // a fresh bounded turn instead of stopping the agent. A small cap
-          // still prevents a pathological loop from running forever.
-          if (phase.automaticContinuations >= 3) {
-            throw new Error(
-              `agent "${this.id}": turn ${turn} reached maxStepsPerTurn (${maxStepsPerTurn}) after automatic continuations`,
-            )
-          }
-          phase.automaticContinuations += 1
+          // maxStepsPerTurn bounds one durable turn segment, not the mission.
+          // Preserve queued tool results and open another internal turn for as
+          // long as useful work remains; the user can still cancel explicitly.
           this.inbox.splice('next-turn', Infinity, 0, [createUserMessage({
-            content: [{ type: 'text', text: 'Continue the current task from the latest tool result without waiting for a new user prompt.' }],
+            content: [{ type: 'text', text: AUTOMATIC_CONTINUATION_PROMPT }],
             source: { kind: 'plugin', plugin: 'agent-loop' },
           })])
           turnEnds = { kind: 'completed' }
@@ -441,10 +435,21 @@ export class ReactLoopAgent implements Agent {
 
       const toolCalls = message.content.filter(block => block.type === 'tool-call')
       if (toolCalls.length === 0) return { kind: 'completed' }
+      const hasVisibleProgress = message.content.some(block => block.type === 'text' && block.text.trim().length > 0)
       const { concluded } = await executeToolCalls(
         this.loopCtx, turn, step, toolCalls, signal,
         context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
       )
+      // Some providers jump straight from hidden reasoning into tool calls.
+      // Nudge the next model step to narrate safe, user-visible progress instead
+      // of letting a long tool chain remain opaque. This is an internal prompt,
+      // never synthetic assistant text and never hidden chain-of-thought.
+      if (!concluded && !hasVisibleProgress) {
+        this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [createUserMessage({
+          content: [{ type: 'text', text: SILENT_TOOL_PROGRESS_REMINDER }],
+          source: { kind: 'plugin', plugin: 'agent-loop' },
+        })])
+      }
       return concluded ? { kind: 'completed' } : null
     }
   }

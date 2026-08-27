@@ -9,7 +9,7 @@ import SystemPrompt, { AssembleContext, PromptAssembly, renderContextSnapshot, r
  * their own sections; the built-ins' behavior is pinned by its own describe.
  */
 const BUILT_IN = ['harness:identity', 'deployment:persona']
-const IDENTITY = 'You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.'
+const IDENTITY = 'You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.'
 function contributed(assembly: PromptAssembly): PromptAssembly['sections'] {
   return assembly.sections.filter(section => !BUILT_IN.includes(section.name))
 }
