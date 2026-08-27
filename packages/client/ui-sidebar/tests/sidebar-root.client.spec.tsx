@@ -105,6 +105,7 @@ describe('SidebarRoot shell', () => {
 
     expect(screen.getByText('PHOENIX')).toBeTruthy()
     expect(screen.getByText('0123456')).toBeTruthy()
+    expect(container.querySelector('img[src="/phoenix-emblem.png"]')?.getAttribute('width')).toBe('38')
     expect(container.querySelector('svg')).not.toBeNull()
   })
 
