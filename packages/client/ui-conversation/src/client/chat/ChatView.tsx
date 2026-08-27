@@ -14,10 +14,13 @@
 // lifecycle updates replace only their own row without remounting it.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  ConversationTimelineSnapshot,
+} from '@deepseek-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
+import { turnProgress, type TurnProgress } from './turn-progress.ts'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
@@ -116,10 +119,12 @@ function runningTurnStartTime(timeline: ConversationTimelineSnapshot): number | 
 }
 
 /** Turn-level model activity label retained across first-token, tool, and streaming phases. */
-function TurnStatus({ startTime, t }: {
+function TurnStatus({ startTime, progress, t }: {
   /** The running turn's logged `turn/start` time; null falls back to mount
    *  time when that boundary is outside the window. */
   startTime: number | null
+  /** Safe phase derived from the current chat projection. */
+  progress: TurnProgress | null
   /** The owning view's locale seat. */
   t: ChatViewSlotProps['t']
 }) {
@@ -136,15 +141,22 @@ function TurnStatus({ startTime, t }: {
     const id = setInterval(tick, 1000)
     return () => { clearInterval(id) }
   }, [anchor])
-  // Short turns keep the plain label; the clock only appears once the turn
+  // Short turns keep the phase label; the clock only appears once the turn
   // has clearly been running for a while.
+  const statusKey = progress === 'running-tools'
+    ? 'status.runningTools'
+    : progress === 'verifying'
+      ? 'status.verifying'
+      : progress === 'preparing'
+        ? 'status.preparing'
+        : 'status.thinking'
   const showClock = elapsedMs >= 15_000
   return (
     <div className={css.turnStatus} role="status" aria-live="polite">
       <span className={css.phoenixActivity} aria-hidden="true">
         <PhoenixLogo size={24} />
       </span>
-      <span>{t('status.thinking')}</span>
+      <span>{t(statusKey)}</span>
       {showClock && (
         <span className={css.turnStatusClock} aria-hidden>
           {formatRunDuration(elapsedMs, t)}
@@ -220,6 +232,14 @@ export function ChatView({
     [loadImage, renderSlot],
   )
   const runningTurnStart = useMemo(() => runningTurnStartTime(timeline), [timeline])
+  const chatNodes = useMemo(
+    () => order.flatMap((key) => {
+      const node = nodeStore.get(key)
+      return node === undefined ? [] : [node]
+    }),
+    [nodeStore, order],
+  )
+  const progress = useMemo(() => turnProgress(timeline, chatNodes), [chatNodes, timeline])
 
   useEffect(() => {
     const finished = previousRunning.current && !running
@@ -467,7 +487,7 @@ export function ChatView({
               double-render the same wait. */}
           {/* Turn-level loading signal: rides the whole running turn (first-token
               wait, tool execution, streaming) so it never flickers per step. */}
-          {running && <TurnStatus startTime={runningTurnStart} t={t} />}
+          {running && <TurnStatus startTime={runningTurnStart} progress={progress} t={t} />}
           {completionPulse && (
             <div className={css.phoenixCompletion} aria-hidden="true">
               <span className={css.phoenixActivity}>
