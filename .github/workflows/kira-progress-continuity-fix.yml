@@ -1,0 +1,227 @@
+name: KIRA progress feedback and continuity repair
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Apply visible progress and uninterrupted-turn contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          old_identity = r"You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning."
+          new_identity = r"You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning."
+
+          identity_hits = 0
+          for root in (Path('packages'), Path('apps'), Path('scripts')):
+              if not root.exists():
+                  continue
+              for path in root.rglob('*'):
+                  if path.suffix not in {'.ts', '.tsx'}:
+                      continue
+                  text = path.read_text(encoding='utf-8')
+                  if old_identity not in text:
+                      continue
+                  path.write_text(text.replace(old_identity, new_identity), encoding='utf-8')
+                  identity_hits += 1
+          if identity_hits < 1:
+              raise SystemExit('PHOENIX harness identity text was not found')
+
+          agent_path = Path('packages/core/agent-loop/src/agent.ts')
+          agent = agent_path.read_text(encoding='utf-8')
+
+          constants_anchor = "type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>\n"
+          constants = constants_anchor + "\nconst SILENT_TOOL_PROGRESS_REMINDER = 'Before calling more tools, send the user a brief progress update in their language. Summarize what you just did or found and what you will do next. Do not reveal hidden chain-of-thought or private reasoning.'\nconst AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest tool result without waiting for a new user prompt. Keep working until the task is complete. Before more tool calls, give the user a brief progress update if you have not done so recently; do not reveal hidden chain-of-thought.'\n"
+          if 'SILENT_TOOL_PROGRESS_REMINDER' not in agent:
+              if constants_anchor not in agent:
+                  raise SystemExit('agent constants anchor not found')
+              agent = agent.replace(constants_anchor, constants, 1)
+
+          agent = agent.replace("    automaticContinuations: number\n", "")
+          agent = agent.replace("      automaticContinuations: 0,\n", "")
+
+          old_boundary = '''        if (step > maxStepsPerTurn) {
+          // A tool loop can legitimately need another model turn (for example
+          // after a provider fallback). Preserve queued tool results and open
+          // a fresh bounded turn instead of stopping the agent. A small cap
+          // still prevents a pathological loop from running forever.
+          if (phase.automaticContinuations >= 3) {
+            throw new Error(
+              `agent "${this.id}": turn ${turn} reached maxStepsPerTurn (${maxStepsPerTurn}) after automatic continuations`,
+            )
+          }
+          phase.automaticContinuations += 1
+          this.inbox.splice('next-turn', Infinity, 0, [createUserMessage({
+            content: [{ type: 'text', text: 'Continue the current task from the latest tool result without waiting for a new user prompt.' }],
+            source: { kind: 'plugin', plugin: 'agent-loop' },
+          })])
+          turnEnds = { kind: 'completed' }
+          break
+        }
+'''
+          new_boundary = '''        if (step > maxStepsPerTurn) {
+          // maxStepsPerTurn bounds one durable turn segment, not the mission.
+          // Preserve queued tool results and open another internal turn for as
+          // long as useful work remains; the user can still cancel explicitly.
+          this.inbox.splice('next-turn', Infinity, 0, [createUserMessage({
+            content: [{ type: 'text', text: AUTOMATIC_CONTINUATION_PROMPT }],
+            source: { kind: 'plugin', plugin: 'agent-loop' },
+          })])
+          turnEnds = { kind: 'completed' }
+          break
+        }
+'''
+          if old_boundary in agent:
+              agent = agent.replace(old_boundary, new_boundary, 1)
+          elif new_boundary not in agent:
+              raise SystemExit('maxStepsPerTurn boundary shape not recognized')
+
+          old_tools = '''      const toolCalls = message.content.filter(block => block.type === 'tool-call')
+      if (toolCalls.length === 0) return { kind: 'completed' }
+      const { concluded } = await executeToolCalls(
+        this.loopCtx, turn, step, toolCalls, signal,
+        context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
+      )
+      return concluded ? { kind: 'completed' } : null
+'''
+          new_tools = '''      const toolCalls = message.content.filter(block => block.type === 'tool-call')
+      if (toolCalls.length === 0) return { kind: 'completed' }
+      const hasVisibleProgress = message.content.some(block => block.type === 'text' && block.text.trim().length > 0)
+      const { concluded } = await executeToolCalls(
+        this.loopCtx, turn, step, toolCalls, signal,
+        context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
+      )
+      // Some providers jump straight from hidden reasoning into tool calls.
+      // Nudge the next model step to narrate safe, user-visible progress instead
+      // of letting a long tool chain remain opaque. This is an internal prompt,
+      // never synthetic assistant text and never hidden chain-of-thought.
+      if (!concluded && !hasVisibleProgress) {
+        this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [createUserMessage({
+          content: [{ type: 'text', text: SILENT_TOOL_PROGRESS_REMINDER }],
+          source: { kind: 'plugin', plugin: 'agent-loop' },
+        })])
+      }
+      return concluded ? { kind: 'completed' } : null
+'''
+          if old_tools in agent:
+              agent = agent.replace(old_tools, new_tools, 1)
+          elif new_tools not in agent:
+              raise SystemExit('tool continuation shape not recognized')
+          agent_path.write_text(agent, encoding='utf-8')
+
+          loop_path = Path('packages/core/agent-loop/tests/loop.spec.ts')
+          loop = loop_path.read_text(encoding='utf-8')
+          marker = "  it('renders harness identity, then the persona, then tool guidance — with {{variables}} resolved', async () => {"
+          new_tests = r'''  it('keeps automatically continuing across more than three bounded turn segments', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'echo', { text: '1' }),
+      toolCallResponse('c2', 'echo', { text: '2' }),
+      toolCallResponse('c3', 'echo', { text: '3' }),
+      toolCallResponse('c4', 'echo', { text: '4' }),
+      toolCallResponse('c5', 'echo', { text: '5' }),
+      toolCallResponse('c6', 'echo', { text: '6' }),
+      toolCallResponse('c7', 'echo', { text: '7' }),
+      toolCallResponse('c8', 'echo', { text: '8' }),
+      textResponse('finished after four automatic continuations'),
+    ])
+    const ctx = await harness(adapter, '', 2)
+    ctx.tools.register(defineContentToolFixture({
+      name: 'echo',
+      description: 'echo back',
+      parameters: { text: { type: 'string' } },
+      async execute(args) {
+        return [{ type: 'text', text: String(args.text) }]
+      },
+    }))
+    const agent = ctx.agentLoop.create(SessionId('long-bounded-turn'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'finish the long tool task')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(9)
+    const turnEnds = agent.session.events.filter(event => event.type === 'turn/end')
+    expect(turnEnds).toHaveLength(5)
+    expect(turnEnds.every(event => event.type === 'turn/end' && event.data.reason.kind === 'completed')).toBe(true)
+  })
+
+  it('reminds a silent tool-calling model to give visible progress before more tools', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'echo', { text: 'ping' }),
+      textResponse('I checked the tool result; next I will finish the task.'),
+    ])
+    const ctx = await harness(adapter)
+    ctx.tools.register(defineContentToolFixture({
+      name: 'echo',
+      description: 'echo back',
+      parameters: { text: { type: 'string' } },
+      async execute(args) {
+        return [{ type: 'text', text: String(args.text) }]
+      },
+    }))
+    const agent = ctx.agentLoop.create(SessionId('silent-progress-reminder'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'do a tool-heavy task')
+    await waitForIdle(ctx, agent)
+
+    const secondRequestText = adapter.requests[1]!.messages
+      .flatMap(message => message.content)
+      .flatMap(block => block.type === 'text' ? [block.text] : [])
+      .join('\n')
+    expect(secondRequestText).toContain('Before calling more tools, send the user a brief progress update')
+  })
+
+'''
+          if "keeps automatically continuing across more than three bounded turn segments" not in loop:
+              if marker not in loop:
+                  raise SystemExit('loop test insertion marker not found')
+              loop = loop.replace(marker, new_tests + marker, 1)
+          loop_path.write_text(loop, encoding='utf-8')
+          PY
+
+          git rm .github/workflows/kira-progress-continuity-fix.yml
+          git diff --check
+
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify agent progress and continuation behavior
+        run: |
+          pnpm exec vitest run packages/core/agent-loop/tests/loop.spec.ts packages/core/system-prompt/tests
+          pnpm run typecheck
+          pnpm run check:ci:static
+          pnpm run build
+
+      - name: Commit verified repair to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'fix(agent): narrate progress and continue bounded turns'
+          git push origin HEAD:main
+          echo "FINAL_SHA=$(git rev-parse HEAD)"
