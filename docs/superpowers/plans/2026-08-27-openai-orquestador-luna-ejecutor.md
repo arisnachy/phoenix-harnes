@@ -38,7 +38,7 @@ No se creará una pantalla de métricas: los eventos `assistant/message` contien
 
 Reemplazar la prueba que solo usa `gpt-5.4` por una prueba parametrizada con este cuerpo, conservando los helpers e imports ya existentes:
 
-```ts
+```text
 it.each(['gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.6-terra'])(
   'routes OpenAI root %s children to Luna high without changing a non-OpenAI parent route',
   async (rootModel) => {
@@ -121,7 +121,7 @@ git commit -m "test: cover OpenAI root models for Luna delegation"
 
 Usar una tabla para ejecutar el mismo caso con cada raíz, manteniendo una sola ejecución por variante y verificando el límite ya configurado:
 
-```ts
+```text
 it.each(['gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.6-terra'])(
   'routes OpenAI workflow root %s to Luna high and preserves the cap',
   async (rootModel) => {

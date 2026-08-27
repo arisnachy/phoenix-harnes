@@ -38,7 +38,7 @@
 
 将只使用 `gpt-5.4` 的测试替换为以下参数化测试，并保留已有 helper 和 import：
 
-```ts
+```text
 it.each(['gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.6-terra'])(
   'routes OpenAI root %s children to Luna high without changing a non-OpenAI parent route',
   async (rootModel) => {
@@ -121,7 +121,7 @@ git commit -m "test: cover OpenAI root models for Luna delegation"
 
 使用表格让相同场景覆盖每个根模型，保持每个变体只执行一次，并验证已有限制：
 
-```ts
+```text
 it.each(['gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.6-terra'])(
   'routes OpenAI workflow root %s to Luna high and preserves the cap',
   async (rootModel) => {
