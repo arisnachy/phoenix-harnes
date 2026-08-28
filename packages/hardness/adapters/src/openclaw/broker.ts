@@ -68,6 +68,11 @@ export class OpenClawCapabilityBroker {
     this.candidates = [...candidates].sort((left, right) => left.id.localeCompare(right.id))
   }
 
+  /** Return whether this broker owns a projected HARDNESS execution surface. */
+  supports(surface: CapabilitySurface): boolean {
+    return extensionIdFromCapability(surface.capabilityId) !== undefined
+  }
+
   /** Return the last blocked preparation diagnostic for an extension. */
   diagnostics(extensionId: string): OpenClawBrokerDiagnostic | undefined {
     return this.diagnosticsById.get(extensionId)
