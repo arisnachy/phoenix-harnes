@@ -7,9 +7,10 @@ import type { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import type { ApprovalService } from '@deepseek-ai/dsh-user-approval'
 import { AcquisitionRegistry, type CapabilityBuilder } from './acquisition-registry.ts'
 import { createUserApprovalBroker } from './user-approval-broker.ts'
-import type { CapabilityApproval } from './execution-bridge.ts'
+import type { CapabilityApproval, CapabilityExecutor } from './execution-bridge.ts'
 import { ArtifactRuntime } from './artifact-runtime.ts'
 import { runHardnessMission, type HardnessMissionResult } from './mission-orchestrator.ts'
+import type { OpenClawCapabilityBroker } from './openclaw/broker.ts'
 
 export interface HardnessMissionRpcPayload {
   readonly sessionId: string
@@ -25,6 +26,7 @@ export interface HardnessMissionRuntimeDependencies {
   readonly hardness: HardnessService
   readonly tools: Pick<ToolRuntime, 'execute'>
   readonly acquisition: AcquisitionRegistry
+  readonly executor?: CapabilityExecutor
 }
 
 function failure(message: string): RpcResult<never> {
@@ -67,6 +69,7 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
         tools: deps.tools,
         approval,
         artifacts,
+        ...(deps.executor !== undefined ? { executor: deps.executor } : {}),
         need: input.need,
         args: input.args,
         context: { callId: input.callId as never, signal, agent },
@@ -79,8 +82,15 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
 }
 
 /** Build a runtime with explicit providers; no provider is ever discovered implicitly. */
-export function createHardnessAcquisition(hardness: HardnessService, builders: readonly CapabilityBuilder[] = []): AcquisitionRegistry {
+export function createHardnessAcquisition(
+  hardness: HardnessService,
+  builders: readonly CapabilityBuilder[] = [],
+  openclaw?: Pick<OpenClawCapabilityBroker, 'acquire'>,
+): AcquisitionRegistry {
   const acquisition = new AcquisitionRegistry(hardness)
   for (const builder of builders) acquisition.register(builder)
+  if (openclaw !== undefined) {
+    acquisition.register((need, signal) => openclaw.acquire(need, signal))
+  }
   return acquisition
 }

@@ -2,10 +2,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { HardnessService } from '@deepseek-ai/dsh-hardness/src/types.ts'
 import { indexSkills } from './skill-adapter.ts'
 import { indexTools } from './tool-adapter.ts'
+import { indexOpenClawExtensions } from './openclaw-adapter.ts'
 import { createHardnessAcquisition, installHardnessMissionRuntime } from './mission-runtime.ts'
 
 export { indexTools } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
+export { indexOpenClawExtensions } from './openclaw-adapter.ts'
 export { VisualToolRuntime } from './visual-runtime.ts'
 export type { VisualRenderModel, VisualRenderer } from './visual-runtime.ts'
 export { PermissionGate } from './permission-gate.ts'
@@ -33,7 +35,13 @@ export type { HardnessMissionRpcPayload, HardnessMissionRuntimeDependencies } fr
 export const name = 'hardness-adapters'
 export const inject = ['hardness', 'tools', 'skills', 'connection', 'agents', 'approval']
 
-export async function apply(ctx: Context): Promise<() => void> {
+type Disposer = () => void
+
+function disposeAll(disposers: readonly Disposer[]): void {
+  for (let index = disposers.length - 1; index >= 0; index--) disposers[index]?.()
+}
+
+function requiredServices(ctx: Context) {
   const hardness = ctx.get('hardness') as HardnessService | undefined
   const tools = ctx.get('tools')
   const skills = ctx.get('skills')
@@ -44,29 +52,39 @@ export async function apply(ctx: Context): Promise<() => void> {
     || connection === undefined || agents === undefined || approval === undefined) {
     throw new Error('hardness-adapters requires hardness, tools, skills, connection, agents, and approval services')
   }
-  const disposeTools = indexTools(tools, hardness)
+  return { hardness, tools, skills, connection, agents, approval }
+}
+
+/**
+ * Install the HARDNESS projections and mission runtime.
+ * @param ctx - Owning Cordis context with HARDNESS dependencies.
+ * @returns Idempotent disposer for every projection installed by this adapter.
+ */
+export async function apply(ctx: Context): Promise<() => void> {
+  const { hardness, tools, skills, connection, agents, approval } = requiredServices(ctx)
+  const disposers: Disposer[] = []
   try {
-    const disposeSkills = await indexSkills(skills, hardness)
-    const connection = ctx.get('connection')
-    const agents = ctx.get('agents')
-    const approval = ctx.get('approval')
-    const missionDispose = connection !== undefined && agents !== undefined && approval !== undefined
-      ? installHardnessMissionRuntime({
-        connection,
-        agents,
-        approval,
-        hardness,
-        tools,
-        acquisition: createHardnessAcquisition(hardness),
-      })
-      : undefined
-    return () => {
-      disposeSkills()
-      disposeTools()
-      if (missionDispose !== undefined) void missionDispose()
-    }
+    disposers.push(indexOpenClawExtensions(hardness))
+    disposers.push(indexTools(tools, hardness))
+    disposers.push(await indexSkills(skills, hardness))
+    const missionDispose = installHardnessMissionRuntime({
+      connection,
+      agents,
+      approval,
+      hardness,
+      tools,
+      acquisition: createHardnessAcquisition(hardness),
+    })
+    disposers.push(() => { void missionDispose() })
   } catch (error) {
-    disposeTools()
+    disposeAll(disposers)
     throw error
+  }
+
+  let disposed = false
+  return () => {
+    if (disposed) return
+    disposed = true
+    disposeAll(disposers)
   }
 }

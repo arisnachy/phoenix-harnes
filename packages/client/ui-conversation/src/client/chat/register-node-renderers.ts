@@ -6,13 +6,14 @@ import {
   CompactionNodeView, ContextMessageNodeView,
   TurnMaxTokensNodeView, UnknownNodeView, UserMessageNodeView,
 } from './MessageItem.tsx'
+import { HardnessArtifactNodeView } from './HardnessArtifactNodeView.tsx'
 import { RetryNodeView } from './RetryNodeView.tsx'
 import { TurnErrorNodeView } from './TurnErrorNodeView.tsx'
 import { TurnTailNodeView } from './TurnTailNodeView.tsx'
 
 /**
  * Register this package's business renderers behind the keyed Chat Node seat.
- * @param ctx - owning UI Conversation context.
+ * @param ctx - Owning UI Conversation context.
  */
 export function registerChatNodeRenderers(ctx: Context): void {
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
@@ -23,6 +24,8 @@ export function registerChatNodeRenderers(ctx: Context): void {
     { name: 'conversation.chat.node', key: 'context', locale: NS }, ContextMessageNodeView))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
     { name: 'conversation.chat.node', key: 'assistant-step', locale: NS }, AssistantNodeView))
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+    { name: 'conversation.chat.node', key: 'hardness-artifact', locale: NS }, HardnessArtifactNodeView))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'command',

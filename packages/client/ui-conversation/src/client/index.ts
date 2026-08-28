@@ -7,6 +7,7 @@ export type {} from './conversation-nodes/assistant.ts'
 export type {} from './conversation-nodes/command.ts'
 export type {} from './conversation-nodes/compaction.ts'
 export type {} from './conversation-nodes/fallback.ts'
+export type {} from './conversation-nodes/hardness-artifact.ts'
 export type {} from './conversation-nodes/message.ts'
 export type {} from './conversation-nodes/retry.ts'
 export type {} from './conversation-nodes/tool.ts'
@@ -18,6 +19,7 @@ export { apply, inject } from './apply.ts'
 export { ConversationController } from './service.ts'
 export type { IConversation } from './service.ts'
 export type { DraftAttachmentId } from './input/contract.ts'
+export type { HardnessArtifactChatData, HardnessArtifactValue } from './conversation-nodes/hardness-artifact.ts'
 
 export type {
   CallId, ChatStoreState, SelectionTarget, ViewTab,
