@@ -22,3 +22,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run verify-export-jsdoc
+      - run: echo "Focused export JSDoc gate completed."
