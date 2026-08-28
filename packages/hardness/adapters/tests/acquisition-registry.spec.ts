@@ -83,6 +83,22 @@ describe('HARDNESS acquisition/build registry', () => {
     await ctx.fiber.dispose()
   })
 
+  it('preserves concrete provider diagnostics when no provider can build the capability', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const registry = new AcquisitionRegistry(hardness)
+    registry.register(async () => undefined, () => ['MISSING_DEPENDENCY: isolated OpenClaw package installer unavailable'])
+
+    const result = await registry.acquireOrBuild({ kind: 'web-search' })
+
+    expect(result).toEqual({
+      kind: 'missing',
+      reasons: ['MISSING_DEPENDENCY: isolated OpenClaw package installer unavailable'],
+    })
+    await ctx.fiber.dispose()
+  })
+
   it('does not qualify indexed skills or incompatible tool contracts as executable tools', async () => {
     const ctx = new Context()
     await ctx.plugin(HardnessRegistry)
