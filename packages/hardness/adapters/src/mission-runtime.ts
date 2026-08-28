@@ -12,6 +12,7 @@ import { ArtifactRuntime } from './artifact-runtime.ts'
 import { runHardnessMission, type HardnessMissionResult } from './mission-orchestrator.ts'
 import type { OpenClawCapabilityBroker } from './openclaw/broker.ts'
 
+/** Wire payload accepted by the loopback HARDNESS mission RPC. */
 export interface HardnessMissionRpcPayload {
   readonly sessionId: string
   readonly callId: string
@@ -19,6 +20,7 @@ export interface HardnessMissionRpcPayload {
   readonly args: unknown
 }
 
+/** Live PHOENIX services required to mount the governed HARDNESS mission runtime. */
 export interface HardnessMissionRuntimeDependencies {
   readonly connection: HostConnectionHandle
   readonly agents: { get: (id: SessionId) => Agent | undefined }
@@ -42,7 +44,11 @@ function payload(value: unknown): HardnessMissionRpcPayload | undefined {
   return { sessionId: value.sessionId, callId: value.callId, need: value.need as unknown as CapabilityNeed, args: value.args }
 }
 
-/** Install the production HARDNESS RPC against live PHOENIX services. */
+/**
+ * Install the production HARDNESS RPC against live PHOENIX services.
+ * @param deps - Live connection, agent, approval, HARDNESS, tool, acquisition, and optional executor services.
+ * @returns Async disposer for the mounted loopback RPC handler.
+ */
 export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDependencies): () => Promise<void> {
   const artifacts = new ArtifactRuntime()
   artifacts.register('text/plain', artifact => ({ kind: 'hardness-artifact', artifactId: artifact.id }))
@@ -81,7 +87,13 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
   }, { authority: 'loopback' })
 }
 
-/** Build a runtime with explicit providers; no provider is ever discovered implicitly. */
+/**
+ * Build an acquisition registry from explicit providers; nothing is discovered implicitly.
+ * @param hardness - HARDNESS registry that owns prepared capability descriptors.
+ * @param builders - Explicit native acquisition providers to register in order.
+ * @param openclaw - Optional OpenClaw broker used as a lazy acquisition provider.
+ * @returns Configured acquisition registry.
+ */
 export function createHardnessAcquisition(
   hardness: HardnessService,
   builders: readonly CapabilityBuilder[] = [],
