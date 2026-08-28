@@ -16,17 +16,47 @@ describe('HARDNESS source adapters', () => {
     await context.plugin(ToolRuntimePlugin)
     await context.plugin(SkillRegistryPlugin)
     await context.plugin(HardnessRegistry)
+    const hardness = context.get('hardness') as HardnessService
     context.provide('connection', { rpc: { handle: vi.fn(() => async () => {}) } } as never)
     context.provide('agents', { get: () => undefined } as never)
     context.provide('approval', { request: vi.fn() } as never)
 
     const dispose = await apply(context)
     expect(context.tools.get('hardness_run')).toBeDefined()
+    expect(hardness.get('tool:hardness_run' as never)).toBeUndefined()
     const assembly = await context.systemPrompt.assemble()
     expect(renderPrompt(assembly)).toContain('<phoenix_hardness_protocol>')
 
     dispose()
     expect(context.tools.get('hardness_run')).toBeUndefined()
+    await context.fiber.dispose()
+  })
+
+  it('keeps dynamic tool projections synchronized and excludes internal tools', async () => {
+    const context = new Context()
+    await context.plugin(HardnessRegistry)
+    const hardness = context.get('hardness') as HardnessService
+    let schemas = [{ name: 'mcp__calendar__list', description: 'List calendar events.' }]
+    let change: (() => void) | undefined
+    const events = {
+      on: vi.fn((_event: 'tools/change', listener: () => void) => {
+        change = listener
+        return () => { change = undefined }
+      }),
+    }
+    const tools = { schemas: () => schemas } as unknown as ToolRuntime
+
+    const dispose = indexTools(tools, hardness, { events, exclude: ['hardness_run'] })
+    expect(hardness.get('tool:mcp__calendar__list' as never)?.description).toBe('List calendar events.')
+
+    schemas = [{ name: 'mcp__calendar__create', description: 'Create a calendar event.' }, { name: 'hardness_run', description: 'internal' }]
+    change?.()
+    expect(hardness.get('tool:mcp__calendar__list' as never)).toBeUndefined()
+    expect(hardness.get('tool:mcp__calendar__create' as never)?.description).toBe('Create a calendar event.')
+    expect(hardness.get('tool:hardness_run' as never)).toBeUndefined()
+
+    dispose()
+    expect(hardness.list()).toEqual([])
     await context.fiber.dispose()
   })
 

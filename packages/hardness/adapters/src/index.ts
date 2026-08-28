@@ -12,6 +12,7 @@ import { installHardnessProtocol, type HardnessPromptRegistrar } from './protoco
 import { createHardnessTool } from './hardness-tool.ts'
 
 export { indexTools } from './tool-adapter.ts'
+export type { ToolAtlasIndexOptions, ToolChangeSource } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
 export { indexOpenClawExtensions } from './openclaw-adapter.ts'
 export { VisualToolRuntime } from './visual-runtime.ts'
@@ -76,7 +77,7 @@ export async function apply(ctx: Context): Promise<() => void> {
   try {
     disposers.push(installHardnessProtocol(systemPrompt))
     disposers.push(indexOpenClawExtensions(hardness))
-    disposers.push(indexTools(tools, hardness))
+    disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run'] }))
     disposers.push(await indexSkills(skills, hardness))
     const acquisition = createHardnessAcquisition(hardness)
     const missionRunner = createHardnessMissionRunner({ hardness, tools, acquisition, approval })

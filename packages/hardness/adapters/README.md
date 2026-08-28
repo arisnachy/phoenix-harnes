@@ -16,6 +16,8 @@ Consumers may expose stable capability identifiers such as `tool:<name>`, `skill
 
 When the canonical system-prompt service is mounted, this package installs the `hardness:operating-protocol` section. It gives every model the same lifecycle vocabulary and requires resolution, approval, verification, presentation, and evidence before a task is described as complete.
 
+Tool projections may subscribe to `tools/change`; this keeps dynamically connected tools, including MCP tools, represented in HARDNESS while registrations are reversible. The internal `hardness_run` tool is excluded from that projection to prevent recursive routing.
+
 #### Token effect
 
 The protocol section and capability metadata contribute model tokens; indexing source registries alone does not add prompt text.
