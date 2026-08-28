@@ -44,7 +44,8 @@ export class AcquisitionRegistry {
     for (const builder of this.builders) {
       const descriptor = await builder(need)
       if (descriptor === undefined) continue
-      this.hardness.register(descriptor)
+      const existing = this.hardness.get(descriptor.id)
+      if (existing === undefined) this.hardness.register(descriptor)
       this.hardness.transition(descriptor.id, 'testing', 'acquisition/build candidate')
       const preparationId = `prepare:${descriptor.id}:${descriptor.version}`
       if (this.learning !== undefined) {
