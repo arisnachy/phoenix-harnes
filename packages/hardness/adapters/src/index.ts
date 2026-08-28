@@ -30,13 +30,18 @@ export { runHardnessMission } from './mission-orchestrator.ts'
 export type { HardnessMissionInput, HardnessMissionResult } from './mission-orchestrator.ts'
 export { installHardnessMissionRuntime, createHardnessAcquisition } from './mission-runtime.ts'
 export type { HardnessMissionRpcPayload, HardnessMissionRuntimeDependencies } from './mission-runtime.ts'
-export * from './openclaw/index.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
 export const inject = ['hardness', 'tools', 'skills', 'connection', 'agents', 'approval']
 
-export async function apply(ctx: Context): Promise<() => void> {
+type Disposer = () => void
+
+function disposeAll(disposers: readonly Disposer[]): void {
+  for (let index = disposers.length - 1; index >= 0; index--) disposers[index]?.()
+}
+
+function requiredServices(ctx: Context) {
   const hardness = ctx.get('hardness') as HardnessService | undefined
   const tools = ctx.get('tools')
   const skills = ctx.get('skills')
@@ -47,12 +52,21 @@ export async function apply(ctx: Context): Promise<() => void> {
     || connection === undefined || agents === undefined || approval === undefined) {
     throw new Error('hardness-adapters requires hardness, tools, skills, connection, agents, and approval services')
   }
+  return { hardness, tools, skills, connection, agents, approval }
+}
 
-  const disposeOpenClaw = indexOpenClawExtensions(hardness)
-  let disposeTools: (() => void) | undefined
+/**
+ * Install the HARDNESS projections and mission runtime.
+ * @param ctx - Owning Cordis context with HARDNESS dependencies.
+ * @returns Idempotent disposer for every projection installed by this adapter.
+ */
+export async function apply(ctx: Context): Promise<() => void> {
+  const { hardness, tools, skills, connection, agents, approval } = requiredServices(ctx)
+  const disposers: Disposer[] = []
   try {
-    disposeTools = indexTools(tools, hardness)
-    const disposeSkills = await indexSkills(skills, hardness)
+    disposers.push(indexOpenClawExtensions(hardness))
+    disposers.push(indexTools(tools, hardness))
+    disposers.push(await indexSkills(skills, hardness))
     const missionDispose = installHardnessMissionRuntime({
       connection,
       agents,
@@ -61,15 +75,16 @@ export async function apply(ctx: Context): Promise<() => void> {
       tools,
       acquisition: createHardnessAcquisition(hardness),
     })
-    return () => {
-      disposeSkills()
-      disposeTools?.()
-      disposeOpenClaw()
-      void missionDispose()
-    }
+    disposers.push(() => { void missionDispose() })
   } catch (error) {
-    disposeTools?.()
-    disposeOpenClaw()
+    disposeAll(disposers)
     throw error
+  }
+
+  let disposed = false
+  return () => {
+    if (disposed) return
+    disposed = true
+    disposeAll(disposers)
   }
 }
