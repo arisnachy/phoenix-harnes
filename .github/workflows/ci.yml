@@ -35,10 +35,16 @@ jobs:
           cache: pnpm
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
-      - name: Run static gates
-        env:
-          DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
-        run: pnpm run check:ci:static
+      - name: Generate canonical static artifacts for capture
+        run: |
+          pnpm run gen-doc-graphs
+          pnpm run gen-cordis-catalog
+          pnpm run gen-client-catalog
+          pnpm run gen-config-catalog
+          echo '=== PHOENIX_GENERATED_DIFF_BEGIN ==='
+          git diff -- docs/event-producer-consumer.md packages/extensions/tool-cordis/src/api-catalog.ts packages/extensions/cordis-client-runner/src/client/slot-catalog.ts docs/config-catalog.md
+          echo '=== PHOENIX_GENERATED_DIFF_END ==='
+          exit 1
 
   node-24-coverage:
     if: github.event_name == 'pull_request'
