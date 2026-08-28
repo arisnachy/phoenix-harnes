@@ -640,6 +640,76 @@ describe('dsh-tool-skill', () => {
     expect(JSON.stringify(result.content)).not.toContain('First body.')
   })
 
+  it('prepends the operational preflight for every model-facing skill load', async () => {
+    const home = await tempDir('tool-operational-preflight')
+    const ctx = await setup(home)
+    ctx.skills.register({
+      name: 'adapter-demo',
+      description: 'Use web_fetch to inspect a remote report.',
+      source: 'runtime',
+      content: 'Call web_fetch and summarize the report.',
+    })
+    const firstAgent = agentForCwd('/workspace/first')
+    const secondAgent = agentForCwd('/workspace/second')
+
+    const first = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('operational-first'),
+      name: 'skill',
+      arguments: { name: 'adapter-demo' },
+      agent: firstAgent,
+    })
+    const second = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('operational-second'),
+      name: 'skill',
+      arguments: { name: 'adapter-demo' },
+      agent: secondAgent,
+    })
+
+    expect(first.isError).toBe(false)
+    expect(second.isError).toBe(false)
+    const firstText = JSON.stringify(first.content)
+    const secondText = JSON.stringify(second.content)
+    expect(firstText).toContain('<phoenix_operational_preflight>')
+    expect(firstText).toContain('web_fetch → no disponible en este runtime')
+    expect(firstText).toContain('Call web_fetch and summarize the report.')
+    expect(secondText).toBe(firstText)
+  })
+
+  it('renders the same operational preflight in the configured model language', async () => {
+    const home = await tempDir('tool-operational-locale')
+    const overlayRoot = await tempDir('tool-operational-overlays')
+    await writeFile(join(overlayRoot, 'overlays.json'), JSON.stringify({
+      'locale-demo': {
+        description: 'Use web_fetch to produce an English report.',
+        whenToUse: 'When an English report is requested.',
+        content: 'Call web_fetch and summarize the report in English.',
+      },
+    }))
+    const ctx = await setup(home, { locale: 'en', englishOverlayRoot: overlayRoot })
+    ctx.skills.register({
+      name: 'locale-demo',
+      description: 'Use web_fetch for a report.',
+      source: 'runtime',
+      content: 'Call web_fetch and summarize the report.',
+    })
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('operational-locale'),
+      name: 'skill',
+      arguments: { name: 'locale-demo' },
+      agent: agentForCwd('/workspace/locale'),
+    })
+    if (result.isError) throw new Error('expected skill success')
+    const text = JSON.stringify(result.content)
+    expect(text).toContain('Mode: conditional')
+    expect(text).toContain('Call web_fetch and summarize the report in English.')
+    expect(text).not.toContain('Call web_fetch and summarize the report.')
+    expect(text).not.toContain('Modo:')
+    expect(text).not.toMatch(/[\u4e00-\u9fff]/)
+  })
+
   it('resolves the layered registry as the calling agent sees it', async () => {
     const home = await tempDir('tool-scoped-layer')
     const ctx = await setup(home)
@@ -774,11 +844,10 @@ describe('dsh-tool-skill', () => {
 
     expect(result.isError).toBe(false)
     if (result.isError) throw new Error('expected skill success')
-    expect(result.value).toEqual({
+    expect(result.value).toMatchObject({
       name: 'project-skill',
       provider: 'filesystem',
       resourceBase: { kind: 'directory', path: join(project, '.dsh/skills/project-skill') },
-      content: 'Project instructions.',
     })
     const block = result.content[0]
     expect(block?.type).toBe('text')
@@ -791,6 +860,15 @@ describe('dsh-tool-skill', () => {
       '</skill_resources>',
       '',
       '<skill_instructions>',
+      '<phoenix_operational_preflight>',
+      'Skill: project-skill',
+      'Modo: instruction-only',
+      'Entradas obligatorias: ninguna declarada',
+      'Herramientas:',
+      'No se detectó una herramienta específica; usa la skill como guía y no afirmes ejecución.',
+      'No inventes herramientas, no adivines entradas y no presentes una acción condicionada como ejecutada.',
+      '</phoenix_operational_preflight>',
+      '',
       'Project instructions.',
       '</skill_instructions>',
       '</skill_content>',
@@ -992,6 +1070,8 @@ describe('user-explicit invocation injection', () => {
     const block = injection.content[0]
     if (block?.type !== 'text') throw new Error('expected text injection')
     expect(block.text).toContain('<skill_content name="hidden-demo">')
+    expect(block.text).toContain('<phoenix_operational_preflight>')
+    expect(block.text).toContain('No inventes herramientas')
     expect(block.text).toContain('Say the magic word: PINEAPPLE.')
     expect(block.text).not.toContain('what does this do')
   })

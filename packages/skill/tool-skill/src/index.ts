@@ -5,6 +5,9 @@
  */
 
 import { createHash } from 'node:crypto'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -12,11 +15,14 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import {
+  adaptSkillDefinition,
   escapeText,
   isModelInvocable,
   isSkillName,
   isUserInvocable,
   renderSkillContent,
+  type EnglishSkillOverlay,
+  type SkillDefinition,
   type SkillInvocationSource,
   type SkillSummary,
 } from '@deepseek-ai/dsh-skill'
@@ -61,11 +67,17 @@ function catalogSourceEntries(
 export interface Config {
   /** Maximum normalized description length rendered in the session catalog; minimum 3. */
   catalogDescriptionMaxLength?: number
+  /** Language used for generated operational preflight text. */
+  locale?: 'es' | 'en'
+  /** Local root containing the reviewed English `overlays.json` catalog. */
+  englishOverlayRoot?: string
 }
 
 /** Validate and default the model-facing skill catalog configuration. */
 export const Config: z<Config> = z.object({
   catalogDescriptionMaxLength: z.number().default(DEFAULT_CATALOG_DESCRIPTION_MAX_LENGTH),
+  locale: z.union(['es', 'en'] as const).default('es'),
+  englishOverlayRoot: z.string().required(false),
 })
 
 /**
@@ -76,6 +88,12 @@ export const Config: z<Config> = z.object({
  */
 export function apply(ctx: Context, config: Config = {}): void {
   const catalogDescriptionMaxLength = config.catalogDescriptionMaxLength ?? DEFAULT_CATALOG_DESCRIPTION_MAX_LENGTH
+  const locale = config.locale ?? 'es'
+  if (locale !== 'es' && locale !== 'en') throw new Error('locale must be "es" or "en"')
+  const englishOverlayRoot = config.englishOverlayRoot ?? join(homedir(), '.agents', 'skills-en')
+  const englishOverlays = locale === 'en'
+    ? readEnglishOverlayCatalog(englishOverlayRoot)
+    : Promise.resolve<Record<string, EnglishSkillOverlay>>({})
   assertPositiveInteger('catalogDescriptionMaxLength', catalogDescriptionMaxLength, 3)
 
   const skillTool = defineTool({
@@ -145,13 +163,14 @@ export function apply(ctx: Context, config: Config = {}): void {
       if (!isModelInvocable(skill)) {
         throw new Error(`skill "${args.name}" is not available for model invocation`)
       }
+      const adapted = await adaptForAgent(ctx, skill, exec.agent, locale, englishOverlays)
       return {
-        name: skill.name,
-        provider: skill.provider,
-        ...skill.resourceBase !== undefined ? {
-          resourceBase: { ...skill.resourceBase },
+        name: adapted.name,
+        provider: adapted.provider,
+        ...adapted.resourceBase !== undefined ? {
+          resourceBase: { ...adapted.resourceBase },
         } : {},
-        content: skill.content,
+        content: adapted.content,
       }
     },
     presentCall(args) {
@@ -193,9 +212,10 @@ export function apply(ctx: Context, config: Config = {}): void {
       // on the loaded definition — the single lookup that produces what is
       // actually injected.
       if (skill === undefined || !isUserInvocable(skill)) continue
+      const adapted = await adaptForAgent(ctx, skill, agent, locale, englishOverlays)
       const source: SkillInvocationSource = { kind: 'skill-invocation', name, form: 'instructions' }
       injections.push(createUserMessage({
-        content: [{ type: 'text', text: renderSkillContent(skill) }],
+        content: [{ type: 'text', text: renderSkillContent(adapted) }],
         source,
       }))
     }
@@ -249,6 +269,18 @@ export function apply(ctx: Context, config: Config = {}): void {
         : decision.messages.map(message => message.id === existing.message.id ? catalog : message),
     }
   })
+}
+
+async function adaptForAgent(
+  ctx: Context,
+  skill: SkillDefinition,
+  agent: Agent | undefined,
+  locale: 'es' | 'en',
+  englishOverlays: Promise<Record<string, EnglishSkillOverlay>>,
+): Promise<SkillDefinition> {
+  const capabilities = new Set(ctx.tools.schemas(agent).map(schema => schema.name))
+  const overlay = locale === 'en' ? (await englishOverlays)[skill.name] : undefined
+  return adaptSkillDefinition(skill, capabilities, locale, overlay)
 }
 
 function renderCatalogMessage(entries: SkillCatalogSource['entries']): UserMessage {
@@ -406,6 +438,48 @@ function assertPositiveInteger(name: string, value: number, minimum = 1): void {
  * `/` or any non-boundary character breaks the match, which keeps file paths
  * (`/usr/bin`) and fractions (`5/8`) out.
  */
+async function readEnglishOverlayCatalog(root: string): Promise<Record<string, EnglishSkillOverlay>> {
+  const filePath = join(root, 'overlays.json')
+  let raw: string
+  try {
+    raw = await readFile(filePath, 'utf8')
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') return {}
+    throw error
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    throw new Error(`tool-skill: invalid English overlay JSON at ${filePath}`, { cause: error })
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`tool-skill: English overlay catalog must be an object at ${filePath}`)
+  }
+  const catalog: Record<string, EnglishSkillOverlay> = {}
+  for (const [name, value] of Object.entries(parsed)) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`tool-skill: overlay "${name}" must be an object`)
+    }
+    const candidate = value as { description?: unknown; whenToUse?: unknown; content?: unknown }
+    if (typeof candidate.content !== 'string' || candidate.content.length === 0) {
+      throw new Error(`tool-skill: overlay "${name}" requires non-empty content`)
+    }
+    if (candidate.description !== undefined && typeof candidate.description !== 'string') {
+      throw new Error(`tool-skill: overlay "${name}" has an invalid description`)
+    }
+    if (candidate.whenToUse !== undefined && typeof candidate.whenToUse !== 'string') {
+      throw new Error(`tool-skill: overlay "${name}" has an invalid whenToUse`)
+    }
+    catalog[name] = {
+      content: candidate.content,
+      ...(candidate.description !== undefined ? { description: candidate.description } : {}),
+      ...(candidate.whenToUse !== undefined ? { whenToUse: candidate.whenToUse } : {}),
+    }
+  }
+  return catalog
+}
+
 const SKILL_GESTURE = /(^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/g
 
 /**

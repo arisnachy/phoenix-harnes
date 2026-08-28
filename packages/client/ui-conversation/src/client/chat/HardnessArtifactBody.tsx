@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import type { HardnessArtifactValue } from '../conversation-nodes/hardness-artifact.ts'
 import styles from './HardnessArtifactNodeView.module.css'
 
@@ -225,22 +225,38 @@ function DeclarativeUi({ record }: { readonly record: JsonRecord }) {
 
 function sandboxDocument(html: string): string {
   const csp = "default-src 'none'; img-src data: blob:; media-src data: blob:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>html,body{margin:0;padding:0;min-height:100%;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${html}</body></html>`
+  const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
+  const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:100%;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${body}</body></html>`
 }
 
 function MiniApp({ html, expanded, title }: { readonly html: string; readonly expanded: boolean; readonly title: string }) {
   const [interactive, setInteractive] = useState(false)
+  const [previewReady, setPreviewReady] = useState(false)
+  const [reloadToken, setReloadToken] = useState(0)
+  const frameRef = useRef<HTMLIFrameElement>(null)
   const srcDoc = useMemo(() => sandboxDocument(html), [html])
+  const reloadPreview = (): void => {
+    setPreviewReady(false)
+    setReloadToken(value => value + 1)
+  }
   return (
     <div className={styles.stack}>
+      <div className={styles.previewToolbar} role="status" aria-live="polite">
+        <span className={styles.previewState}>{previewReady ? 'Preview ready' : 'Loading preview'}</span>
+        <button className={styles.uiButton} type="button" onClick={reloadPreview}>Reload preview</button>
+      </div>
       <iframe
+        key={reloadToken}
+        ref={frameRef}
         className={`${styles.frame} ${expanded ? styles.frameExpanded : ''}`}
         title={title}
         srcDoc={srcDoc}
         sandbox={interactive ? 'allow-scripts' : ''}
+        onLoad={() => { setPreviewReady(true) }}
       />
       <div>
-        <button className={styles.uiButton} type="button" onClick={() => { setInteractive(value => !value) }}>
+        <button className={styles.uiButton} type="button" onClick={() => { setInteractive(value => !value); setPreviewReady(false) }}>
           {interactive ? 'Disable interaction' : 'Enable sandboxed interaction'}
         </button>
       </div>

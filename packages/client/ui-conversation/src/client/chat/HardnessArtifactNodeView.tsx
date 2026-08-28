@@ -1,4 +1,5 @@
 import { memo, useState } from 'react'
+import { PhoenixLogo } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeViewProps } from '../contract/slots.ts'
 import { HardnessArtifactBody } from './HardnessArtifactBody.tsx'
 import styles from './HardnessArtifactNodeView.module.css'
@@ -16,7 +17,7 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
       data-artifact-mime={artifact.mime}
     >
       <header className={styles.header}>
-        <span className={styles.icon} aria-hidden="true">✦</span>
+        <span className={styles.icon} aria-hidden="true"><PhoenixLogo size={22} /></span>
         <span className={styles.heading}>
           <span className={styles.title}>{artifact.title}</span>
           <span className={styles.meta}>{artifact.mime}</span>

@@ -198,7 +198,7 @@ export function CodexQuotaRemaining({
     <span className={css.root}>
       {windows.map(window => (
         <span
-          className={css.window}
+          className={`${css.window} ${window.key === 'primary' ? css.primary : css.secondary}`}
           key={window.key}
           title={`OpenAI Codex · ${window.label} · ${window.value}% remaining${window.resetText === undefined ? '' : ` · resets in ${window.resetText}`}`}
           aria-label={`Codex ${window.label} · ${window.value}% remaining${window.resetText === undefined ? '' : ` · resets in ${window.resetText}`}`}

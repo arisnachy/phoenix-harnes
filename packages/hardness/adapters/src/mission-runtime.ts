@@ -51,7 +51,16 @@ function payload(value: unknown): HardnessMissionRpcPayload | undefined {
  */
 export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDependencies): () => Promise<void> {
   const artifacts = new ArtifactRuntime()
-  artifacts.register('text/plain', artifact => ({ kind: 'hardness-artifact', artifactId: artifact.id }))
+  for (const mime of [
+    'text/plain',
+    'text/html',
+    'application/vnd.hardness.app+html',
+    'application/json',
+    'text/css',
+    'text/javascript',
+  ]) {
+    artifacts.register(mime, artifact => ({ kind: 'hardness-artifact', artifactId: artifact.id }))
+  }
   const userApproval = createUserApprovalBroker(deps.approval)
   const approval: CapabilityApproval = {
     request: async (surface, context) => {

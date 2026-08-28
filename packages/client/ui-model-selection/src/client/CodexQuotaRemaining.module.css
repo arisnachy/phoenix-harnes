@@ -2,22 +2,24 @@
   flex: 0 1 auto;
   display: flex;
   align-items: stretch;
-  gap: 5px;
+  gap: 6px;
   width: fit-content;
   max-width: min(280px, 100%);
   min-width: 0;
   height: 40px;
   margin-left: auto;
   overflow: hidden;
-  padding: 4px 5px;
+  padding: 4px 6px;
   box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
-  border-radius: 12px;
-  background: var(--dsw-specific-sidebar-nav-item-active);
+  border: 1px solid color-mix(in srgb, #91a6bd 24%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-nav-item-active) 82%, #d9e3ef);
+  box-shadow: 0 1px 2px color-mix(in srgb, #6f8298 12%, transparent);
   color: var(--dsw-alias-label-primary);
 }
 
 .window {
+  --quota-accent: #bf765d;
   flex: 0 1 auto;
   display: flex;
   min-width: 0;
@@ -26,9 +28,17 @@
   gap: 1px;
 }
 
+.primary {
+  --quota-accent: #c77a5f;
+}
+
+.secondary {
+  --quota-accent: #6f8ba9;
+}
+
 .window + .window {
-  padding-left: 5px;
-  border-left: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent);
+  padding-left: 6px;
+  border-left: 1px solid color-mix(in srgb, #91a6bd 28%, transparent);
 }
 
 .summary {
@@ -50,9 +60,10 @@
   text-align: right;
   font-size: 11px;
   line-height: 12px;
-  font-weight: 650;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 
 .track {
@@ -61,25 +72,25 @@
   height: 3px;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: color-mix(in srgb, var(--quota-accent) 17%, transparent);
 }
 
 .fill {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: currentColor;
-  opacity: 0.66;
+  background: var(--quota-accent);
+  opacity: 0.78;
   transition: width 180ms ease-out;
 }
 
 .reset {
-  color: var(--dsw-alias-label-secondary);
+  color: color-mix(in srgb, var(--quota-accent) 58%, var(--dsw-alias-label-secondary));
   font-size: 8px;
   line-height: 10px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  opacity: 0.86;
+  opacity: 0.9;
 }
 
 @media (max-width: 760px) {

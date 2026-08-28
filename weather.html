@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estado del tiempo · Santo Domingo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #182334;
+      background: #f6f9fc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: linear-gradient(145deg, #fbfdff, #edf3f9);
+    }
+    .card {
+      width: min(100%, 520px);
+      padding: 28px;
+      border: 1px solid #d5e0eb;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, .88);
+      box-shadow: 0 18px 42px rgba(76, 102, 130, .14);
+    }
+    .heading { display: flex; align-items: center; gap: 14px; }
+    .icon {
+      display: grid;
+      width: 52px;
+      height: 52px;
+      place-items: center;
+      border-radius: 16px;
+      background: #f4c9a9;
+      font-size: 28px;
+    }
+    h1 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+    .location { margin: 4px 0 0; color: #728197; font-size: 14px; }
+    .summary { display: flex; align-items: end; gap: 12px; margin: 28px 0 24px; }
+    .temperature { color: #bd6949; font-size: 54px; line-height: .9; font-weight: 750; letter-spacing: -.06em; }
+    .condition { color: #53677f; font-size: 16px; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .metric { padding: 14px; border-radius: 15px; background: #eef4fa; }
+    .metric-label { color: #7b8a9d; font-size: 12px; }
+    .metric-value { display: block; margin-top: 6px; color: #415a75; font-size: 18px; font-weight: 700; }
+    .note { margin: 18px 0 0; color: #8a98a9; font-size: 12px; }
+    @media (max-width: 430px) {
+      .card { padding: 22px; }
+      .metrics { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card" aria-labelledby="weather-title">
+    <header class="heading">
+      <span class="icon" aria-hidden="true">🌤️</span>
+      <div>
+        <h1 id="weather-title">Estado del tiempo</h1>
+        <p class="location">Santo Domingo · Actualizado ahora</p>
+      </div>
+    </header>
+    <section class="summary" aria-label="Condición actual">
+      <strong class="temperature">29°</strong>
+      <span class="condition">Parcialmente nublado</span>
+    </section>
+    <section class="metrics" aria-label="Métricas meteorológicas">
+      <div class="metric"><span class="metric-label">Humedad</span><strong class="metric-value">74%</strong></div>
+      <div class="metric"><span class="metric-label">Viento</span><strong class="metric-value">18 km/h</strong></div>
+      <div class="metric"><span class="metric-label">Sensación</span><strong class="metric-value">32°</strong></div>
+    </section>
+    <p class="note">Datos de demostración para validar la previsualización HTML sandbox.</p>
+  </main>
+</body>
+</html>

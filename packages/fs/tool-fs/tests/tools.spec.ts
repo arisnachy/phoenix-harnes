@@ -397,6 +397,9 @@ describe('write tool', () => {
     expect(artifactMetaForFile('/workspace/index.html', '<main>Hola</main>')).toEqual({
       artifact: { id: 'file:/workspace/index.html', title: 'index.html', mime: 'text/html', data: '<main>Hola</main>' },
     })
+    expect(artifactMetaForFile('/workspace/weather.json', '{"temperature":29}')).toEqual({
+      artifact: { id: 'file:/workspace/weather.json', title: 'weather.json', mime: 'application/json', data: '{"temperature":29}' },
+    })
     expect(artifactMetaForFile('/workspace/notes.txt', 'Hola')).toBeUndefined()
   })
 

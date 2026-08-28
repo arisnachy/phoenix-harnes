@@ -6,7 +6,7 @@
 import type {
   ConversationNodeDefinition, ToolResultNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-client-runtime/client'
+import { isAppendSurfaceEvent, resolveWorkspacePath } from '@deepseek-ai/dsh-client-runtime/client'
 import type { MarkdownFileMentions } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
@@ -172,6 +172,39 @@ export function producedFileMentions(
       return { open: () => { openFile(path) }, label: label(path), title: path }
     },
   }
+}
+
+/**
+ * Resolve explicit filesystem paths from assistant prose without guessing at
+ * bare filenames or allowing traversal segments. Relative paths use the session
+ * workspace; absolute paths are already host-resolved and remain explicit.
+ */
+export function workspaceFileMentions(
+  cwd: string | undefined,
+  openFile: (path: string) => void,
+  label: (path: string) => string,
+): MarkdownFileMentions {
+  return {
+    resolve(value) {
+      const path = workspaceMentionPath(cwd, value)
+      if (path === undefined) return undefined
+      return { open: () => { openFile(value) }, label: label(path), title: path }
+    },
+  }
+}
+
+function workspaceMentionPath(cwd: string | undefined, value: string): string | undefined {
+  if (value === '' || value !== value.trim()) return undefined
+  if (value.includes('://') || value === '.' || value === '..') return undefined
+  if (value.split(/[\\/]/u).some(segment => segment === '..')) return undefined
+  if (!value.includes('/') && !value.includes('\\')) return undefined
+  if (isAbsolutePath(value)) return value
+  if (cwd === undefined || cwd === '') return undefined
+  return resolveWorkspacePath(cwd, value)
+}
+
+function isAbsolutePath(value: string): boolean {
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(value) || value.startsWith('\\\\')
 }
 
 /** The single produced path whose basename is exactly `value`, else undefined. */

@@ -24,7 +24,7 @@ describe('HARDNESS production mission runtime', () => {
     })
     const connection: HostConnectionHandle = { rpc: { handle } as never }
     const agent = { session: {} } as Agent
-    const tools = { execute: vi.fn(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'weather', mime: 'text/plain', data: 'sunny' } } })) }
+    const tools = { execute: vi.fn(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'weather', mime: 'text/html', data: '<h1>Sunny</h1>' } } })) }
     const approval = { request: vi.fn(async () => 'allowed-once' as const) }
     installHardnessMissionRuntime({ connection, agents: { get: id => id === 'session-1' ? agent : undefined }, approval: approval as never, hardness, tools, acquisition })
     await expect(handler?.('mission/run', { sessionId: 'session-1', callId: 'call-1', need: { kind: 'weather' }, args: {} }, new AbortController().signal)).resolves.toMatchObject({ ok: true, value: { kind: 'completed', artifact: { id: 'weather' } } })

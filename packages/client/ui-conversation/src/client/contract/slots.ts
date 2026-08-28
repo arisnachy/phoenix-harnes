@@ -349,6 +349,14 @@ export interface ConvViewOwnerProps {
   onInspectDone?: () => void
 }
 
+/** Workspace-aware opener used for explicit inline-code file paths in assistant prose. */
+export interface ChatWorkspaceFileMentionOwner {
+  /** Session workspace root used to authorize absolute paths and resolve relative paths. */
+  cwd?: string | undefined
+  /** Host-backed filesystem opener. */
+  openFile: (path: string) => void
+}
+
 /**
  * Optional prose file-mention provider, consumed via `ctx.get('chatFileMentions')`
  * (optional-service convention): the chat view asks it for a closing message's
@@ -357,13 +365,10 @@ export interface ConvViewOwnerProps {
  * surface off; the prose renders inert code.
  */
 export interface ChatFileMentions {
-  /**
-   * Mention vocabulary for the closing message the owner currency names.
-   * @param owner - Turn-tail owner currency (Turn data, closing seq, opener).
-   * @returns The resolver MarkdownText consumes, or undefined when the turn
-   * produced nothing worth linking.
-   */
+  /** Mention vocabulary for the closing message's produced files. */
   forClosing(owner: TurnTailOwnerProps): MarkdownFileMentions | undefined
+  /** Mention vocabulary for explicit paths inside the current workspace. */
+  forWorkspace(owner: ChatWorkspaceFileMentionOwner): MarkdownFileMentions | undefined
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -424,6 +429,8 @@ export interface ChatNodeOwnerProps {
   /** Render a historical image group through the attachment slot. */
   renderMessageImages: RenderMessageImages
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
+  /** Workspace-path vocabulary for ordinary assistant prose; optional for legacy compositions. */
+  workspaceFileMentions?: ((owner: ChatWorkspaceFileMentionOwner) => MarkdownFileMentions | undefined) | undefined
 }
 
 /** Full props of one registered keyed Chat business renderer. */
@@ -782,6 +789,8 @@ export interface ChatViewInjected {
    * absent or the turn produced nothing worth linking.
    */
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
+  /** Workspace-path vocabulary for ordinary assistant prose; optional for legacy compositions. */
+  workspaceFileMentions?: ((owner: ChatWorkspaceFileMentionOwner) => MarkdownFileMentions | undefined) | undefined
 }
 
 /** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */

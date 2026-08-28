@@ -23,7 +23,7 @@ import {
   fitProducedFiles, ProducedFiles, type ProducedFilesProps,
 } from '../src/client/ProducedFiles.tsx'
 import {
-  basename, deliverablesDefinition, producedFileMentions, producedForClosing, selectProducedFiles,
+  basename, deliverablesDefinition, producedFileMentions, producedForClosing, selectProducedFiles, workspaceFileMentions,
   type DeliverablesTurnData,
 } from '../src/client/turn-deliverables.ts'
 import { apply, inject } from '../src/client/index.ts'
@@ -433,6 +433,30 @@ describe('producedFileMentions resolver', () => {
     expect(resolver.resolve('style.css')).toBeUndefined()
     expect(resolver.resolve('notes.md')).toBeUndefined()
     expect(basename('a\\b\\c.txt')).toBe('c.txt')
+  })
+})
+
+describe('workspaceFileMentions resolver', () => {
+  it('resolves workspace paths and rejects traversal, URLs, and bare code tokens', () => {
+    const opened: string[] = []
+    const resolver = workspaceFileMentions(
+      'C:\\workspace',
+      (path) => { opened.push(path) },
+      path => `Abrir ${path}`,
+    )
+    const relative = resolver.resolve('docs/report.md')
+    expect(relative?.title).toBe('C:\\workspace/docs/report.md')
+    relative?.open()
+    expect(opened).toEqual(['docs/report.md'])
+    const absolute = resolver.resolve('C:\\workspace\\docs\\report.md')
+    expect(absolute?.title).toBe('C:\\workspace\\docs\\report.md')
+    const external = resolver.resolve('C:\\other-workspace\\docs\\report.md')
+    expect(external?.title).toBe('C:\\other-workspace\\docs\\report.md')
+    external?.open()
+    expect(opened).toEqual(['docs/report.md', 'C:\\other-workspace\\docs\\report.md'])
+    expect(resolver.resolve('../secrets.txt')).toBeUndefined()
+    expect(resolver.resolve('https://example.com/report.md')).toBeUndefined()
+    expect(resolver.resolve('report.md')).toBeUndefined()
   })
 })
 

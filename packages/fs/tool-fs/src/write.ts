@@ -43,6 +43,7 @@ export function artifactMetaForFile(filePath: string, content: string): { artifa
   const mime = {
     '.html': 'text/html', '.htm': 'text/html', '.css': 'text/css',
     '.js': 'text/javascript', '.mjs': 'text/javascript', '.cjs': 'text/javascript',
+    '.json': 'application/json',
   }[extension]
   if (mime === undefined) return undefined
   const title = filePath.split(/[\\/]/u).pop() ?? filePath

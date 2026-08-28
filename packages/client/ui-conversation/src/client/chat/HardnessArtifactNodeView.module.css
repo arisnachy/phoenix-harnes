@@ -1,33 +1,41 @@
 .card {
-  width: min(100%, 760px);
-  margin: 10px 0 18px;
-  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
-  border-radius: 18px;
-  background: color-mix(in srgb, currentColor 3%, transparent);
+  width: min(100%, 720px);
+  margin: 12px auto 20px;
   overflow: hidden;
+  border: 1px solid #dce6f0;
+  border-radius: 20px;
+  background: #ffffff;
+  color: #182334;
+  box-shadow: 0 8px 24px rgba(76, 102, 130, .10);
 }
 
 .expanded {
-  width: 100%;
+  width: min(100%, 820px);
 }
 
 .header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #edf2f7;
+  background: #fbfdff;
 }
 
 .icon {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   flex: none;
-  border-radius: 10px;
-  background: color-mix(in srgb, currentColor 8%, transparent);
+  border-radius: 12px;
+  background: #eef4fa;
+  color: #59718d;
   font-size: 16px;
+}
+
+.icon img {
+  display: block;
 }
 
 .heading {
@@ -55,28 +63,36 @@
 }
 
 .expandButton {
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid #d5e0eb;
   border-radius: 10px;
-  background: transparent;
-  color: inherit;
+  background: #ffffff;
+  color: #53677f;
   cursor: pointer;
   font: inherit;
   font-size: 12px;
+  transition: background-color 160ms ease, border-color 160ms ease;
 }
 
 .expandButton:hover {
-  background: color-mix(in srgb, currentColor 6%, transparent);
+  border-color: #b9cada;
+  background: #f2f7fb;
+}
+
+.expandButton:focus-visible {
+  outline: 2px solid #9bb9d3;
+  outline-offset: 2px;
 }
 
 .body {
-  padding: 14px;
+  padding: 12px 16px 16px;
   overflow: hidden;
+  background: #ffffff;
 }
 
 .bodyExpanded {
-  padding: 16px;
+  padding: 14px 16px 18px;
 }
 
 .text {
@@ -141,6 +157,20 @@
 .stack {
   display: grid;
   gap: 12px;
+}
+
+.previewToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  color: inherit;
+}
+
+.previewState {
+  opacity: .68;
+  font-size: 12px;
 }
 
 .barRows {
@@ -218,26 +248,29 @@
 .frame {
   display: block;
   width: 100%;
-  height: 300px;
-  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  border-radius: 12px;
-  background: #fff;
+  height: 260px;
+  border: 1px solid #dce6f0;
+  border-radius: 16px;
+  background: #f8fbfe;
 }
 
 .frameExpanded {
-  height: 520px;
+  height: min(460px, 58vh);
 }
 
 .note {
   margin: 0;
-  opacity: .68;
+  color: #718096;
   font-size: 12px;
   line-height: 1.5;
 }
 
 @media (max-width: 520px) {
-  .header { align-items: flex-start; }
+  .card { border-radius: 16px; }
+  .header { align-items: flex-start; padding: 11px 12px; }
+  .body { padding: 10px 12px 12px; }
   .barRow { grid-template-columns: 70px minmax(70px, 1fr); }
   .barRow > :last-child { grid-column: 2; }
-  .frameExpanded { height: 420px; }
+  .frame { height: 220px; }
+  .frameExpanded { height: 380px; }
 }

@@ -366,6 +366,29 @@ describe('Chat node rendering', () => {
     expect(h.openFile).toHaveBeenCalledWith('for-seq-4/site/report.html')
   })
 
+  it('links explicit workspace paths in ordinary assistant prose', () => {
+    const h = makeHarness({
+      nodes: [
+        user(1, 'show the report'),
+        assistant(2, 'Here is `docs/subsystems/skill-operational-adapters-report.md`.', 1),
+      ],
+    })
+    h.props.workspaceFileMentions = owner => ({
+      resolve: value => value === 'docs/subsystems/skill-operational-adapters-report.md'
+        ? {
+          open: () => { owner.openFile(value) },
+          label: 'Abrir reporte',
+          title: 'C:\\workspace/docs/subsystems/skill-operational-adapters-report.md',
+        }
+        : undefined,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const mention = view.getByRole('button', { name: 'Abrir reporte' })
+    expect(mention.getAttribute('title')).toBe('C:\\workspace/docs/subsystems/skill-operational-adapters-report.md')
+    fireEvent.click(mention)
+    expect(h.openFile).toHaveBeenCalledWith('docs/subsystems/skill-operational-adapters-report.md')
+  })
+
   it('formatRunDuration localizes units and floors partial seconds', () => {
     const t = makeTranslate(zh, commonZh)
     expect(formatRunDuration(0, t)).toBe('0秒')

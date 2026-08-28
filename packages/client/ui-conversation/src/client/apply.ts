@@ -397,6 +397,7 @@ export function apply(ctx: Context): void {
           layout.openDetails()
         },
         fileMentions: owner => ctx.get('chatFileMentions')?.forClosing(owner),
+        workspaceFileMentions: owner => ctx.get('chatFileMentions')?.forWorkspace(owner),
         openFile: (path) => {
           const cwd = sessions.list.getSnapshot().byId[sessionId]?.cwd
           return workspaces.openPath(resolveWorkspacePath(cwd, path))

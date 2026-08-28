@@ -61,4 +61,36 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
     expect(screen.getByText(/network, forms, popups and parent access blocked/i)).toBeTruthy()
   })
+
+  it('shows the PHOENIX mark and an explicit preview-ready reload trigger', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'app-2',
+      mime: 'text/html',
+      title: 'Canvas demo',
+      data: '<h1>Ready</h1>',
+    })} />)
+
+    expect(document.querySelector('img[src="/phoenix-emblem.png"]')).toBeTruthy()
+    const frame = screen.getByTitle('Canvas demo')
+    expect(screen.getAllByText('Loading preview').length).toBeGreaterThan(0)
+    fireEvent.load(frame)
+    expect(screen.getAllByText('Preview ready').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reload preview' }).at(-1)!)
+    expect(screen.getAllByText('Loading preview').length).toBeGreaterThan(0)
+  })
+
+  it('normalizes complete HTML documents before placing them in srcDoc', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'app-3',
+      mime: 'text/html',
+      title: 'Complete document',
+      data: '<!doctype html><html><head><style>body{color:red}</style></head><body><h1>Ready</h1></body></html>',
+    })} />)
+
+    const frame = screen.getByTitle('Complete document')
+    const srcDoc = frame.getAttribute('srcdoc') ?? ''
+    expect(srcDoc).not.toMatch(/<body>\s*<!doctype/i)
+    expect(srcDoc).toContain('<h1>Ready</h1>')
+    expect(srcDoc).toContain('body{color:red}')
+  })
 })

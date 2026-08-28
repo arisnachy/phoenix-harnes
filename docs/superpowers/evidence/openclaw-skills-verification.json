@@ -1,0 +1,976 @@
+{
+  "sourceRepository": "https://github.com/openclaw/openclaw.git",
+  "sourceCommit": "629a47e3cc20a9f8b6d19c105f840b8a693ec4aa",
+  "expectedSkills": 51,
+  "availableSkills": 51,
+  "passed": 51,
+  "failed": 0,
+  "skills": [
+    {
+      "alias": "openclaw-1password",
+      "sourceName": "1password",
+      "status": "passed",
+      "description": "Set up and use 1Password CLI for sign-in, desktop integration, and reading or injecting secrets.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials",
+        "platform-specific"
+      ],
+      "resources": [
+        "references/cli-examples.md",
+        "references/get-started.md"
+      ],
+      "loadedContentLength": 6239,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-1password"
+    },
+    {
+      "alias": "openclaw-apple-notes",
+      "sourceName": "apple-notes",
+      "status": "passed",
+      "description": "Create, view, edit, delete, search, move, or export Apple Notes via the memo CLI on macOS.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 1390,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-apple-notes"
+    },
+    {
+      "alias": "openclaw-apple-reminders",
+      "sourceName": "apple-reminders",
+      "status": "passed",
+      "description": "List, add, edit, complete, or delete Apple Reminders and reminder lists via remindctl.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 2433,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-apple-reminders"
+    },
+    {
+      "alias": "openclaw-bear-notes",
+      "sourceName": "bear-notes",
+      "status": "passed",
+      "description": "Create, search, and manage Bear notes via grizzly CLI.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 2095,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-bear-notes"
+    },
+    {
+      "alias": "openclaw-blogwatcher",
+      "sourceName": "blogwatcher",
+      "status": "passed",
+      "description": "Monitor blogs and RSS/Atom feeds for updates using the blogwatcher CLI.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 832,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-blogwatcher"
+    },
+    {
+      "alias": "openclaw-blucli",
+      "sourceName": "blucli",
+      "status": "passed",
+      "description": "BluOS CLI (blu) for discovery, playback, grouping, and volume.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 503,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-blucli"
+    },
+    {
+      "alias": "openclaw-camsnap",
+      "sourceName": "camsnap",
+      "status": "passed",
+      "description": "Capture frames or clips from RTSP/ONVIF cameras and local webcams, including USB pan/tilt/zoom control.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 1268,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-camsnap"
+    },
+    {
+      "alias": "openclaw-clawhub",
+      "sourceName": "clawhub",
+      "status": "passed",
+      "description": "Search ClawHub for skills when a requested capability is not already available; install, verify, update, uninstall, publish, or sync skills.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 2208,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-clawhub"
+    },
+    {
+      "alias": "openclaw-coding-agent",
+      "sourceName": "coding-agent",
+      "status": "passed",
+      "description": "Delegate coding work to Codex, Claude Code, or OpenCode as background workers; not simple edits or read-only code lookup.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 9700,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-coding-agent"
+    },
+    {
+      "alias": "openclaw-diagram-maker",
+      "sourceName": "diagram-maker",
+      "status": "passed",
+      "description": "Create SVG/HTML or Excalidraw diagrams for concepts, architecture, flows, and whiteboards.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [],
+      "resources": [
+        "references/excalidraw-patterns.md",
+        "references/svg-template.md"
+      ],
+      "loadedContentLength": 2177,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-diagram-maker"
+    },
+    {
+      "alias": "openclaw-eightctl",
+      "sourceName": "eightctl",
+      "status": "passed",
+      "description": "Control Eight Sleep pods (status, temperature, alarms, schedules).",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network"
+      ],
+      "resources": [],
+      "loadedContentLength": 550,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-eightctl"
+    },
+    {
+      "alias": "openclaw-gemini",
+      "sourceName": "gemini",
+      "status": "passed",
+      "description": "Gemini CLI one-shot prompts, summaries, generation, skills, hooks, MCP, or Gemma routing.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 622,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-gemini"
+    },
+    {
+      "alias": "openclaw-gh-issues",
+      "sourceName": "gh-issues",
+      "status": "passed",
+      "description": "Fetch GitHub issues, select candidates, spawn background fix agents, open PRs, and optionally process PR review comments.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 5760,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-gh-issues"
+    },
+    {
+      "alias": "openclaw-gifgrep",
+      "sourceName": "gifgrep",
+      "status": "passed",
+      "description": "Search GIF providers with CLI/TUI, download results, and extract stills/sheets.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 1837,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-gifgrep"
+    },
+    {
+      "alias": "openclaw-github",
+      "sourceName": "github",
+      "status": "passed",
+      "description": "GitHub CLI for issues, PRs, CI/check logs, comments, reviews, releases, repos, and gh api queries.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 2551,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-github"
+    },
+    {
+      "alias": "openclaw-gog",
+      "sourceName": "gog",
+      "status": "passed",
+      "description": "Google Workspace CLI for Gmail, Calendar, Drive, Contacts, Sheets, and Docs.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 4062,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-gog"
+    },
+    {
+      "alias": "openclaw-goplaces",
+      "sourceName": "goplaces",
+      "status": "passed",
+      "description": "Query Google Places for text search, place details, resolve, reviews, or scriptable JSON via goplaces.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 813,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-goplaces"
+    },
+    {
+      "alias": "openclaw-healthcheck",
+      "sourceName": "healthcheck",
+      "status": "passed",
+      "description": "Audit/harden OpenClaw hosts: SSH, firewall, updates, exposure, backups, disk encryption, gateway security.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "credentials",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 2387,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-healthcheck"
+    },
+    {
+      "alias": "openclaw-himalaya",
+      "sourceName": "himalaya",
+      "status": "passed",
+      "description": "Himalaya CLI for IMAP/SMTP mail: list, read, search, compose, reply, forward, copy, move, delete.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [
+        "references/configuration.md",
+        "references/message-composition.md"
+      ],
+      "loadedContentLength": 1194,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-himalaya"
+    },
+    {
+      "alias": "openclaw-mcporter",
+      "sourceName": "mcporter",
+      "status": "passed",
+      "description": "List, configure, authenticate, call, and inspect MCP servers/tools with mcporter over HTTP or stdio.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 1065,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-mcporter"
+    },
+    {
+      "alias": "openclaw-meme-maker",
+      "sourceName": "meme-maker",
+      "status": "passed",
+      "description": "Search meme templates, suggest formats, and generate local or hosted image memes.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [
+        "references/templates.json",
+        "scripts/meme.mjs"
+      ],
+      "loadedContentLength": 2198,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-meme-maker"
+    },
+    {
+      "alias": "openclaw-model-usage",
+      "sourceName": "model-usage",
+      "status": "passed",
+      "description": "Summarize CodexBar local cost logs by model for Codex or Claude, including current or full breakdowns.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "platform-specific"
+      ],
+      "resources": [
+        "references/codexbar-cli.md",
+        "scripts/model_usage.py",
+        "scripts/test_model_usage.py"
+      ],
+      "loadedContentLength": 1967,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-model-usage"
+    },
+    {
+      "alias": "openclaw-nano-pdf",
+      "sourceName": "nano-pdf",
+      "status": "passed",
+      "description": "Edit PDFs with natural-language instructions using the nano-pdf CLI.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 430,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-nano-pdf"
+    },
+    {
+      "alias": "openclaw-node-connect",
+      "sourceName": "node-connect",
+      "status": "passed",
+      "description": "Diagnose OpenClaw Control UI browser and native Android, iOS, or macOS node connection failures across route, auth, pairing, QR/setup-code, and reconnect states.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "external-runtime",
+        "credentials",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 6345,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-node-connect"
+    },
+    {
+      "alias": "openclaw-node-inspect-debugger",
+      "sourceName": "node-inspect-debugger",
+      "status": "passed",
+      "description": "Debug Node.js with node inspect, --inspect, breakpoints, CDP, heap, and CPU profiles.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 3359,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-node-inspect-debugger"
+    },
+    {
+      "alias": "openclaw-notion",
+      "sourceName": "notion",
+      "status": "passed",
+      "description": "Notion CLI/API for pages, Markdown content, data sources, files, comments, search, Workers, and raw API calls.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 3229,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-notion"
+    },
+    {
+      "alias": "openclaw-obsidian",
+      "sourceName": "obsidian",
+      "status": "passed",
+      "description": "Work with Obsidian vaults using the official obsidian CLI: read/search/create/edit notes, tasks, links, properties, plugins.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 2659,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-obsidian"
+    },
+    {
+      "alias": "openclaw-openai-whisper",
+      "sourceName": "openai-whisper",
+      "status": "passed",
+      "description": "Local speech-to-text with the Whisper CLI (no API key).",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 380,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-openai-whisper"
+    },
+    {
+      "alias": "openclaw-openai-whisper-api",
+      "sourceName": "openai-whisper-api",
+      "status": "passed",
+      "description": "OpenAI Audio Transcriptions API via curl; gpt-4o-transcribe, mini, diarize, or whisper-1.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [
+        "scripts/transcribe.sh"
+      ],
+      "loadedContentLength": 1433,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-openai-whisper-api"
+    },
+    {
+      "alias": "openclaw-openhue",
+      "sourceName": "openhue",
+      "status": "passed",
+      "description": "Control Philips Hue lights and scenes via the OpenHue CLI.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 1896,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-openhue"
+    },
+    {
+      "alias": "openclaw-oracle",
+      "sourceName": "oracle",
+      "status": "passed",
+      "description": "Oracle CLI second-model review/debug/refactor/design with selected files, dry-run token checks, API or browser engine.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 4325,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-oracle"
+    },
+    {
+      "alias": "openclaw-ordercli",
+      "sourceName": "ordercli",
+      "status": "passed",
+      "description": "Foodora-only CLI for checking past orders and active order status (Deliveroo WIP).",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 1606,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-ordercli"
+    },
+    {
+      "alias": "openclaw-peekaboo",
+      "sourceName": "peekaboo",
+      "status": "passed",
+      "description": "Capture and automate macOS UI with the Peekaboo CLI.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 6539,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-peekaboo"
+    },
+    {
+      "alias": "openclaw-python-debugpy",
+      "sourceName": "python-debugpy",
+      "status": "passed",
+      "description": "Debug Python with pdb, breakpoint(), post-mortem inspection, and debugpy remote attach.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "external-runtime",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 2354,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-python-debugpy"
+    },
+    {
+      "alias": "openclaw-sag",
+      "sourceName": "sag",
+      "status": "passed",
+      "description": "ElevenLabs text-to-speech with mac-style say UX.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 1749,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-sag"
+    },
+    {
+      "alias": "openclaw-session-logs",
+      "sourceName": "session-logs",
+      "status": "passed",
+      "description": "Search and analyze your own session logs (older/parent conversations) using jq.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [],
+      "resources": [],
+      "loadedContentLength": 6246,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-session-logs"
+    },
+    {
+      "alias": "openclaw-sherpa-onnx-tts",
+      "sourceName": "sherpa-onnx-tts",
+      "status": "passed",
+      "description": "Local text-to-speech via sherpa-onnx (offline, no cloud)",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "platform-specific"
+      ],
+      "resources": [
+        "bin/sherpa-onnx-tts"
+      ],
+      "loadedContentLength": 1541,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-sherpa-onnx-tts"
+    },
+    {
+      "alias": "openclaw-skill-creator",
+      "sourceName": "skill-creator",
+      "status": "passed",
+      "description": "Author or review AgentSkills: create, repair, validate, or restructure SKILL.md files and bundled resources.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "external-runtime"
+      ],
+      "resources": [
+        "license.txt",
+        "scripts/package_skill.py",
+        "scripts/quick_validate.py",
+        "scripts/test_package_skill.py",
+        "scripts/test_quick_validate.py"
+      ],
+      "loadedContentLength": 2150,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-skill-creator"
+    },
+    {
+      "alias": "openclaw-songsee",
+      "sourceName": "songsee",
+      "status": "passed",
+      "description": "Generate spectrograms and feature-panel visualizations from audio with the songsee CLI.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 758,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-songsee"
+    },
+    {
+      "alias": "openclaw-sonoscli",
+      "sourceName": "sonoscli",
+      "status": "passed",
+      "description": "Control Sonos speakers (discover/status/play/volume/group).",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 1927,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-sonoscli"
+    },
+    {
+      "alias": "openclaw-spike",
+      "sourceName": "spike",
+      "status": "passed",
+      "description": "Run throwaway prototypes to validate feasibility, compare approaches, and report a verdict.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 1718,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-spike"
+    },
+    {
+      "alias": "openclaw-spotify-player",
+      "sourceName": "spotify-player",
+      "status": "passed",
+      "description": "Terminal Spotify playback/search via spogo (preferred) or spotify_player.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 884,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-spotify-player"
+    },
+    {
+      "alias": "openclaw-summarize",
+      "sourceName": "summarize",
+      "status": "passed",
+      "description": "Summarize or transcribe URLs, YouTube/videos, podcasts, articles, transcripts, PDFs, and local files.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 1558,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-summarize"
+    },
+    {
+      "alias": "openclaw-taskflow",
+      "sourceName": "taskflow",
+      "status": "passed",
+      "description": "Coordinate multi-step detached tasks as one durable TaskFlow job with owner context, state, waits, and child tasks.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [],
+      "resources": [
+        "examples/inbox-triage.lobster",
+        "examples/pr-intake.lobster"
+      ],
+      "loadedContentLength": 4713,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-taskflow"
+    },
+    {
+      "alias": "openclaw-taskflow-inbox-triage",
+      "sourceName": "taskflow-inbox-triage",
+      "status": "passed",
+      "description": "Example TaskFlow pattern for inbox triage, intent routing, waiting on replies, and later summaries.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [],
+      "resources": [],
+      "loadedContentLength": 2378,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-taskflow-inbox-triage"
+    },
+    {
+      "alias": "openclaw-things-mac",
+      "sourceName": "things-mac",
+      "status": "passed",
+      "description": "Add, update, list, search, or inspect Things 3 todos, inbox, today, projects, areas, and tags on macOS.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials",
+        "platform-specific"
+      ],
+      "resources": [],
+      "loadedContentLength": 2752,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-things-mac"
+    },
+    {
+      "alias": "openclaw-tmux",
+      "sourceName": "tmux",
+      "status": "passed",
+      "description": "Control tmux sessions/panes for interactive CLIs: list, capture output, send keys, paste text, monitor prompts.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "platform-specific"
+      ],
+      "resources": [
+        "scripts/find-sessions.sh",
+        "scripts/wait-for-text.sh"
+      ],
+      "loadedContentLength": 1408,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-tmux"
+    },
+    {
+      "alias": "openclaw-trello",
+      "sourceName": "trello",
+      "status": "passed",
+      "description": "Manage Trello boards, lists, and cards via the Trello REST API.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 2390,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-trello"
+    },
+    {
+      "alias": "openclaw-video-frames",
+      "sourceName": "video-frames",
+      "status": "passed",
+      "description": "Extract frames or short clips from videos using ffmpeg.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [
+        "scripts/frame.sh"
+      ],
+      "loadedContentLength": 462,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-video-frames"
+    },
+    {
+      "alias": "openclaw-weather",
+      "sourceName": "weather",
+      "status": "passed",
+      "description": "Current weather and forecasts with web_fetch, falling back to wttr.in curl for locations, rain, temperature, travel planning.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime"
+      ],
+      "resources": [],
+      "loadedContentLength": 2391,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-weather"
+    },
+    {
+      "alias": "openclaw-xurl",
+      "sourceName": "xurl",
+      "status": "passed",
+      "description": "xurl CLI for authenticated X posts, replies, reads/search, DMs, media upload, followers, auth status, or raw v2 API calls.",
+      "license": "MIT",
+      "invocation": {
+        "modelInvocable": true,
+        "userInvocable": true
+      },
+      "signals": [
+        "network",
+        "external-runtime",
+        "credentials"
+      ],
+      "resources": [],
+      "loadedContentLength": 2002,
+      "resourceBase": "C:\\Users\\arisn\\.dsh\\skills\\openclaw-xurl"
+    }
+  ]
+}

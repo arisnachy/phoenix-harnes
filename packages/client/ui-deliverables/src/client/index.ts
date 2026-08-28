@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { ProducedFiles } from './ProducedFiles.tsx'
 import { en, NS, zh, type DeliverablesKey } from './locales.ts'
 import {
-  deliverablesDefinition, producedFileMentions, selectProducedFiles,
+  deliverablesDefinition, producedFileMentions, selectProducedFiles, workspaceFileMentions,
 } from './turn-deliverables.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -56,10 +56,13 @@ export function apply(ctx: ClientContext): void {
   const mentions: ChatFileMentions = {
     forClosing(owner) {
       // Same claim test the turn-tail chain entry runs: no produced files,
-      // no vocabulary — the two surfaces agree by construction.
+      // no produced-file vocabulary — workspace paths remain a separate face.
       const paths = selectProducedFiles(owner)
       if (paths === null) return undefined
       return producedFileMentions(paths, owner.openFile, path => t('produced.open', { name: path }))
+    },
+    forWorkspace(owner) {
+      return workspaceFileMentions(owner.cwd, owner.openFile, path => t('produced.open', { name: path }))
     },
   }
   ctx.provide('chatFileMentions', mentions)

@@ -16,6 +16,9 @@ import { NamedEntries, ScopedLayers, scopeChainOf, scopeOf } from '@deepseek-ai/
 import type { ScopeKey, ScopeLayer } from '@deepseek-ai/dsh-scope'
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
+import type { SkillOperationalProfile } from './operational.js'
+
+export * from './operational.js'
 
 const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const DEFAULT_COLLECT_CACHE_ENTRIES = 128
@@ -90,6 +93,8 @@ export interface SkillDefinition extends SkillSummary {
   readonly path?: string
   /** Parsed optional metadata object from frontmatter. */
   readonly metadata?: Readonly<Record<string, unknown>>
+  /** Runtime-derived operational guidance added by the common skill loader. */
+  readonly operational?: SkillOperationalProfile
 }
 
 /** Runtime skill contribution accepted by `ctx.skills.register()`. */

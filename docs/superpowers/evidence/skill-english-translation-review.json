@@ -1,0 +1,5782 @@
+{
+  "generatedAt": "2026-08-28T14:11:00.640Z",
+  "overlayFile": "C:\\Users\\arisn\\.agents\\skills-en\\overlays.json",
+  "visibleModelInvocableSkills": 577,
+  "translated": 11,
+  "alreadyEnglish": 566,
+  "fallback": 0,
+  "failed": 0,
+  "needsHumanReview": 6,
+  "skills": [
+    {
+      "name": "chrome-driver",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-airtable-airtable-cli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-airtable-airtable-filters",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-airtable-airtable-overview",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-atlassian-rovo-capture-tasks-from-meeting-notes",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-atlassian-rovo-generate-status-report",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-atlassian-rovo-search-company-knowledge",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-atlassian-rovo-spec-to-backlog",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-atlassian-rovo-triage-issue",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-base44-base44-cli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-base44-base44-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-base44-base44-troubleshooter",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-boltz-api-cli-boltz-check-status",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-boltz-api-cli-boltz-cli-setup",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-boltz-api-cli-boltz-protein-design",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-boltz-api-cli-boltz-protein-screen",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-boltz-api-cli-boltz-small-molecule-adme",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-boltz-api-cli-boltz-small-molecule-design",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-boltz-api-cli-boltz-small-molecule-screen",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-boltz-api-cli-boltz-structure-and-binding",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-box-box",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-brighthire-brighthire",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-ios-apps-ios-app-intents",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-ios-apps-ios-debugger-agent",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-ios-apps-ios-ettrace-performance",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-ios-apps-ios-memgraph-leaks",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-ios-apps-ios-simulator-browser",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-ios-apps-swiftui-liquid-glass",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-ios-apps-swiftui-performance-audit",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-ios-apps-swiftui-ui-patterns",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-ios-apps-swiftui-view-refactor",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-appkit-interop",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-build-run-debug",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-liquid-glass",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-packaging-notarization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-signing-entitlements",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-swiftpm-macos",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-swiftui-patterns",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-telemetry",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-test-triage",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-view-refactor",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-macos-apps-window-management",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-apps-frontend-app-builder",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-apps-frontend-testing-debugging",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-apps-react-best-practices",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-apps-shadcn-best-practices",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-apps-stripe-best-practices",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-apps-supabase-best-practices",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-accessibility-and-inclusive-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-canvas2d-data-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-d3-data-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-dashboards-and-real-time-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-data-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-gantt-chart-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-geospatial-and-cartographic-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-grammar-of-graphics-and-declarative-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-node-link-and-diagram-layout",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-react-and-nextjs-data-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-reports-pdfs-and-slide-automation",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-scrollytelling-and-parallax-data-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-statistical-and-uncertainty-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-testing-data-visualizations",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-threejs-data-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-typescript-data-visualization-engineering",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-uml-and-software-architecture-visualization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-build-web-data-visualization-visualization-strategy-and-critique",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-canva-canva-branded-presentation",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-canva-canva-resize-for-all-social-media",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-canva-canva-translate-design",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-catalyst-by-zoho-catalyst-by-zoho",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-chronograph-gp-chronograph-portfolio-company-one-pager",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-chronograph-lp-chronograph-cashflow-forecast",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-chronograph-lp-chronograph-gp-meeting-prep",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-chronograph-lp-chronograph-portfolio-company-one-pager",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-circleci-builds",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-circleci-chunk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-circleci-cli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-circleci-config",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-cloudflare-agents-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-cloudflare-building-ai-agent-on-cloudflare",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-cloudflare-building-mcp-server-on-cloudflare",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-cloudflare-cloudflare",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-cloudflare-durable-objects",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-cloudflare-sandbox-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-cloudflare-web-perf",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-cloudflare-workers-best-practices",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-cloudflare-wrangler",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-coderabbit-coderabbit-review",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-attack-path-analysis",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-deep-security-scan",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-finding-discovery",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-fix-finding",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-propose-security-hardening",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-security-diff-scan",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-security-scan",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-threat-model",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-track-findings",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-triage-finding",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-validation",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-codex-security-vulnerability-writeup",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-daloopa-build-model",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-daloopa-bull-bear",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-daloopa-capital-allocation",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-daloopa-comp-sheet",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-daloopa-comps",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-datasite-bulk-qa-answers",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-datasite-document-quality-check",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-datasite-gap-analysis",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-datasite-irl-tracker",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-datasite-launch-readiness-orchestrator",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-datasite-risk-analysis-audit",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-datasite-smart-file-renaming",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-datasite-vdr-index-setup",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-deepnote-deepnote",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-deepnote-deepnote-data-execution",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-deepnote-deepnote-links",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-deepnote-deepnote-notebook-editing",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-deepnote-deepnote-notebooks",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-digitalocean-provision-droplet",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-dnb-finance-analytics-fa-jobs-to-be-done",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-building-native-ui",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-codex-expo-run-actions",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-expo-api-routes",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-expo-cicd-workflows",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-expo-deployment",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-expo-dev-client",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-expo-module",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-expo-tailwind-setup",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-expo-ui-jetpack-compose",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-expo-ui-swift-ui",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-native-data-fetching",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-upgrading-expo",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-expo-use-dom",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-code-connect",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-create-new-file",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-design-to-code",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-generate-design",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-generate-diagram",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-generate-library",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-implement-motion",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-swiftui",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-use",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-use-figjam",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-use-motion",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-figma-figma-use-slides",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-game-studio-game-playtest",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-game-studio-game-studio",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-game-studio-game-ui-frontend",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-game-studio-phaser-2d-game",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-game-studio-react-three-fiber-game",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-game-studio-sprite-pipeline",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-game-studio-three-webgl-game",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-game-studio-web-3d-asset-pipeline",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-game-studio-web-game-foundations",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-github-gh-address-comments",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-github-gh-fix-ci",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-github-github",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-github-yeet",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-gmail-gmail",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-gmail-gmail-inbox-triage",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-google-calendar-google-calendar",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-google-calendar-google-calendar-daily-brief",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-google-calendar-google-calendar-free-up-time",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-google-calendar-google-calendar-group-scheduler",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-google-calendar-google-calendar-meeting-prep",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-google-drive-google-docs",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-google-drive-google-drive",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-google-drive-google-drive-comments",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-google-drive-google-sheets",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-google-drive-google-slides",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hex-hex",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-heygen-heygen-avatar",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-heygen-heygen-video",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hubspot-hubspot",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hubspot-hubspot-crm-data-hygiene",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hubspot-hubspot-customer-prep",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hubspot-hubspot-pipeline-health",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-cli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-community-evals",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-datasets",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-gradio",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-jobs",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-llm-trainer",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-paper-publisher",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-papers",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-trackio",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-transformers-js",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hugging-face-vision-trainer",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hyperframes-gsap",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hyperframes-hyperframes",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hyperframes-hyperframes-cli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hyperframes-hyperframes-registry",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-hyperframes-website-to-hyperframes",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-alphafold-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-bgee-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-bindingdb-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-biobankjapan-phewas-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-biorxiv-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-biostudies-arrayexpress-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-cbioportal-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-cellxgene-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-chebi-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-chembl-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-civic-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-clinicaltrials-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-clinvar-variation-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-efo-ontology-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-encode-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-ensembl-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-epigraphdb-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-eqtl-catalogue-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-eva-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-finngen-phewas-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-genebass-gene-burden-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-gnomad-graphql-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-gtex-eqtl-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-gwas-catalog-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-hmdb-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-human-protein-atlas-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-ipd-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-locus-to-gene-mapper-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-metabolights-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-mgnify-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-ncbi-blast-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-ncbi-clinicaltables-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-ncbi-datasets-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-ncbi-entrez-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-ncbi-pmc-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-opentargets-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-pharmgkb-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-pride-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-proteomexchange-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-pubchem-pug-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-quickgo-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-rcsb-pdb-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-reactome-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-research-router-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-rhea-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-rnacentral-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-string-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-tpmi-phewas-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-ukb-topmed-phewas-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-life-science-research-uniprot-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-linear-linear",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-magicpath-magicpath",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-midpage-cite-check",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-midpage-draft-brief",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-midpage-draft-long-form-memo",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-midpage-litigation-update-post",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-mixpanel-headless-dashboard-expert",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-mixpanel-headless-mixpanel-auth",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-mixpanel-headless-mixpanelyst",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-mixpanel-headless-setup",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-moody-s-moody-s-company-analysis",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-moody-s-moody-s-earnings-brief",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-moody-s-moody-s-explore-mcp",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-moody-s-moody-s-issuer-brief",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-moody-s-moody-s-peer-analysis",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-moody-s-moody-s-rating-analysis",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-moody-s-moody-s-sector-brief",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-morningstar-fund-comparison",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-morningstar-fund-screener",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-morningstar-fund-summarizer",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-neon-postgres-neon-postgres",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-neon-postgres-neon-postgres-egress-optimizer",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-ai-gateway",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-blobs",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-caching",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-cli-and-deploy",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-config",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-deploy",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-edge-functions",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-forms",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-frameworks",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-functions",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-identity",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-netlify-netlify-image-cdn",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-amplicon-microbiome",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-analysis-router",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-atacseq-peaks-qc",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-bcl-to-fastq",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-bulk-rnaseq",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-bulk-rnaseq-counts-qc",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-bulk-rnaseq-differential-expression",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-chip-cutrun-peaks-qc",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-dna-germline-variants",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-dna-somatic-variants",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-dna-umi-panel-variants",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-dna-variant-calling",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-epigenomics-peaks",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-fastq-qc",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-runtime-env",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-scrna-seq",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-ngs-shotgun-metagenomics",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-ngs-analysis-scrna-seq-qc",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-notion-notion-knowledge-capture",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-notion-notion-meeting-intelligence",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-notion-notion-research-documentation",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-notion-notion-spec-to-implementation",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-aiq-deploy",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-aiq-research",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-cuopt-user-rules",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-dynamo-interconnect-check",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-dynamo-router-starter",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-nemoclaw-user-get-started",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-omniverse-cad-to-simready",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-omniverse-realtime-viewer",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-omniverse-usd-performance-tuning",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-physical-ai-infrastructure-setup-and-resilient-scaling",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-nvidia-physical-ai-neural-reconstruction",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-openai-ads-conversions-openai-ads-conversions-setup",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-openai-developers-agents-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-openai-developers-build-chatgpt-app",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-openai-developers-chatgpt-app-submission",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-openai-developers-openai-api-troubleshooting",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-openai-developers-openai-platform-api-key",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-calendar-outlook-calendar",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-calendar-outlook-calendar-daily-brief",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-calendar-outlook-calendar-free-up-time",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-calendar-outlook-calendar-group-scheduler",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-calendar-outlook-calendar-meeting-prep",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-calendar-outlook-calendar-shared-calendars",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-email-outlook-email",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-email-outlook-email-inbox-triage",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-email-outlook-email-reply-drafting",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-email-outlook-email-shared-mailboxes",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-email-outlook-email-subscription-cleanup",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-outlook-email-outlook-email-task-extraction",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-plugin-eval-evaluate-plugin",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-plugin-eval-evaluate-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-plugin-eval-improve-skill",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-plugin-eval-metric-pack-designer",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-plugin-eval-plugin-eval",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-posthog-posthog",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-remotion-remotion",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-background-workers",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-blueprints",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-cli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-cron-jobs",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-debug",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-deploy",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-disks",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-docker",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-domains",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-env-vars",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-keyvalue",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-mcp",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-migrate-from-heroku",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-monitor",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-networking",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-postgres",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-private-services",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-scaling",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-static-sites",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-web-services",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-render-render-workflows",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-replayio-replay-qa-api",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-replayio-replayio",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-sentry-sentry",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-sharepoint-sharepoint",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-sharepoint-sharepoint-powerpoint",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-sharepoint-sharepoint-shared-doc-maintenance",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-sharepoint-sharepoint-site-discovery",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-sharepoint-sharepoint-spreadsheet-formula-builder",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-sharepoint-sharepoint-spreadsheets",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-sharepoint-sharepoint-word-docs",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-admin",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-app-store-review",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-custom-data",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-customer",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-dev",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-functions",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-hydrogen",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-liquid",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-onboarding-dev",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-onboarding-merchant",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-partner",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-payments-apps",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-polaris-admin-extensions",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-polaris-app-home",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-polaris-checkout-extensions",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-polaris-customer-account-extensions",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-pos-ui",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-storefront-graphql",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-shopify-use-shopify-cli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-shopify-ucp",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-slack-slack",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-slack-slack-channel-summarization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-slack-slack-daily-digest",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-slack-slack-notification-triage",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-slack-slack-outgoing-message",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-slack-slack-reply-drafting",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-stripe-stripe-best-practices",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-stripe-upgrade-stripe",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-supabase-supabase",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-supabase-supabase-postgres-best-practices",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superhuman-batch-draft-writer",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superhuman-deal-tracker",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superhuman-eod-wrapup",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superhuman-meeting-scheduler",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superhuman-morning-briefing",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superhuman-superhuman-mail",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-brainstorming",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-dispatching-parallel-agents",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-executing-plans",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-finishing-a-development-branch",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-receiving-code-review",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-requesting-code-review",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-subagent-driven-development",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-systematic-debugging",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-test-driven-development",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-using-git-worktrees",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-using-superpowers",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-verification-before-completion",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-writing-plans",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-superpowers-writing-skills",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-teams-teams",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-teams-teams-channel-summarization",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-teams-teams-daily-digest",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-teams-teams-messages",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-teams-teams-notification-triage",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-teams-teams-planner-task-management",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-teams-teams-reply-drafting",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-temporal-temporal-developer",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-test-android-apps-android-emulator-qa",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-test-android-apps-android-performance",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-agent-browser",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-agent-browser-verify",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-ai-elements",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-ai-gateway",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-ai-generation-persistence",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-ai-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-auth",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-bootstrap",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-chat-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-cms",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-cron-jobs",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-deployments-cicd",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-email",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-env-vars",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-geist",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-geistdocs",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-investigation-mode",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-json-render",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-marketplace",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-micro",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-ncc",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-next-forge",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-nextjs",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-observability",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-payments",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-react-best-practices",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-routing-middleware",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-runtime-cache",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-satori",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-shadcn",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-sign-in-with-vercel",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-swr",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-turbopack",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-turborepo",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-v0-dev",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-vercel-agent",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-vercel-api",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-vercel-cli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-vercel-firewall",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-vercel-flags",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-vercel-functions",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-vercel-queues",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-vercel-sandbox",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-vercel-services",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-vercel-storage",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-verification",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-vercel-workflow",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-wix-wix-app",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-wix-wix-design-system",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-wix-wix-headless",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-wix-wix-manage",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-build-zoom-bot",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-build-zoom-meeting-app",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-choose-zoom-approach",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-cobrowse-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-contact-center",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-debug-zoom",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-debug-zoom-integration",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-general",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-meeting-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-oauth",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-phone",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-plan-zoom-integration",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-plan-zoom-product",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-probe-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-rest-api",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-rivet-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-rtms",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-scribe",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-setup-zoom-oauth",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-start",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-team-chat",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-ui-toolkit",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-video-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-virtual-agent",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-webhooks",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-websockets",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zoom-zoom-apps-sdk",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "codex-zotero-zotero",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "developing-with-streamlit",
+      "source": "user-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "dsh-archive-agent-notes",
+      "source": "project-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "dsh-code-review",
+      "source": "project-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "dsh-doc-site-sync",
+      "source": "project-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "dsh-doc-standards",
+      "source": "project-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "dsh-find-simplifications",
+      "source": "project-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "dsh-merging-stacked-prs",
+      "source": "project-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "dsh-pre-push-checks",
+      "source": "project-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "dsh-prose-standard",
+      "source": "project-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "dsh-trim-cot-leakage",
+      "source": "project-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "google-suite-setup",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": true
+    },
+    {
+      "name": "kira-evolution",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": true
+    },
+    {
+      "name": "kira-lab",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "kira-omega",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": true
+    },
+    {
+      "name": "model-router",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": true
+    },
+    {
+      "name": "openclaw-1password",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-apple-notes",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-apple-reminders",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-bear-notes",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-blogwatcher",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-blucli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-camsnap",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-clawhub",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-coding-agent",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-diagram-maker",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-eightctl",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-gemini",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-gh-issues",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-gifgrep",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-github",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-gog",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-goplaces",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-healthcheck",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-himalaya",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-mcporter",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-meme-maker",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-model-usage",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-nano-pdf",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-node-connect",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-node-inspect-debugger",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-notion",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-obsidian",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-openai-whisper",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-openai-whisper-api",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-openhue",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-oracle",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-ordercli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-peekaboo",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-python-debugpy",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-sag",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-session-logs",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-sherpa-onnx-tts",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-skill-creator",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-songsee",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-sonoscli",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-spike",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-spotify-player",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-summarize",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-taskflow",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-taskflow-inbox-triage",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-things-mac",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-tmux",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-trello",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-video-frames",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-weather",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "openclaw-xurl",
+      "source": "user-dsh",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "phoenix-self-improve",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": true
+    },
+    {
+      "name": "phoenix-self-update",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "record-browser-gif",
+      "source": "project-agents",
+      "sourceLanguage": "en",
+      "status": "alreadyEnglish",
+      "overlayPresent": false,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "user-memory",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    },
+    {
+      "name": "web-recon",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": true
+    },
+    {
+      "name": "web-sentinel",
+      "source": "user-agents",
+      "sourceLanguage": "es",
+      "status": "translated",
+      "overlayPresent": true,
+      "technicalTokensPreserved": true,
+      "operationalEnglish": true,
+      "needsHumanReview": false
+    }
+  ]
+}

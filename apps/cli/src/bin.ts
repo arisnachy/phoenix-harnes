@@ -36,6 +36,13 @@ if (rawArgs[0] === 'codex-plugin') {
   process.exit(runCodexPlugin(rawArgs.slice(1)))
 }
 
+// OpenClaw skills are a launcher capability rather than a profile plugin:
+// syncing and auditing them must work before any profile is parsed or booted.
+if (rawArgs[0] === 'openclaw-skills') {
+  const { runOpenClawSkills } = await import('./openclaw-skills.ts')
+  process.exit(runOpenClawSkills(rawArgs.slice(1)))
+}
+
 const invocation = parseDshArgs(rawArgs, readVersion())
 
 switch (invocation.mode) {
