@@ -11,7 +11,10 @@ import { RetryNodeView } from './RetryNodeView.tsx'
 import { TurnErrorNodeView } from './TurnErrorNodeView.tsx'
 import { TurnTailNodeView } from './TurnTailNodeView.tsx'
 
-/** Register this package's business renderers behind the keyed Chat Node seat. */
+/**
+ * Register this package's business renderers behind the keyed Chat Node seat.
+ * @param ctx - Owning UI Conversation context.
+ */
 export function registerChatNodeRenderers(ctx: Context): void {
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
     { name: 'conversation.chat.node', key: 'user', locale: NS }, UserMessageNodeView))
