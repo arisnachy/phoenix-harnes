@@ -66,7 +66,7 @@ function printable(value) {
 function result(ok, value, message) {
   const payload = ok
     ? { isError: false, value: printable(value), content: [] }
-    : { isError: true, value: null, content: [{ type: 'text', text: message ?? 'OpenClaw execution failed' }] };
+    : { isError: true, content: [{ type: 'text', text: message ?? 'OpenClaw execution failed' }] };
   process.stdout.write(RESULT_PREFIX + JSON.stringify(payload) + '\n');
 }
 
@@ -236,7 +236,6 @@ function parseWorkerResult(stdout: string, stderr: string): ToolExecutionResult 
   if (line === undefined) {
     return {
       isError: true,
-      value: null,
       content: [{ type: 'text', text: `OpenClaw worker returned no typed result${stderr.trim().length === 0 ? '' : `: ${stderr.trim()}`}` }],
     }
   }
@@ -247,7 +246,6 @@ function parseWorkerResult(stdout: string, stderr: string): ToolExecutionResult 
   } catch (error) {
     return {
       isError: true,
-      value: null,
       content: [{ type: 'text', text: `OpenClaw worker emitted an invalid typed result: ${error instanceof Error ? error.message : String(error)}` }],
     }
   }
@@ -268,7 +266,6 @@ export function createOpenClawIsolatedRunner(options: OpenClawIsolatedRunnerOpti
       if (confined.enforcement !== 'full') {
         return {
           isError: true,
-          value: null,
           content: [{ type: 'text', text: 'OpenClaw donor execution requires full PHOENIX sandbox enforcement' }],
         }
       }
@@ -292,7 +289,6 @@ export function createOpenClawIsolatedRunner(options: OpenClawIsolatedRunnerOpti
       if (outcome.exitCode !== 0 && !result.isError) {
         return {
           isError: true,
-          value: null,
           content: [{ type: 'text', text: `OpenClaw worker exited with ${String(outcome.exitCode)} after emitting a success result` }],
         }
       }
