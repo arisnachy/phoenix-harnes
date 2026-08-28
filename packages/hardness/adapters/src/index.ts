@@ -4,6 +4,7 @@ import { indexSkills } from './skill-adapter.ts'
 import { indexTools } from './tool-adapter.ts'
 import { indexOpenClawExtensions } from './openclaw-adapter.ts'
 import { createHardnessAcquisition, installHardnessMissionRuntime } from './mission-runtime.ts'
+import { createOpenClawProductionBridge } from './openclaw/production.ts'
 
 export { indexTools } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
@@ -20,7 +21,7 @@ export { LabMode, SelfImprovementLedger } from './lab-mode.ts'
 export type { ImprovementRecord, LabExperiment, LabSnapshot } from './lab-mode.ts'
 export { executeCapabilityNeed } from './execution-bridge.ts'
 export type { CapabilityApproval, CapabilityExecutionContext, CapabilityExecutionResult } from './execution-bridge.ts'
-export { ArtifactRuntime, artifactFromToolResult } from './artifact-runtime.ts'
+export { ArtifactRuntime, artifactFromCapabilityResult, artifactFromToolResult } from './artifact-runtime.ts'
 export type { ArtifactRenderModel, CapabilityArtifact } from './artifact-runtime.ts'
 export { AcquisitionRegistry } from './acquisition-registry.ts'
 export type { AcquisitionResult, CapabilityBuilder, MissionLearningHooks } from './acquisition-registry.ts'
@@ -30,6 +31,8 @@ export { runHardnessMission } from './mission-orchestrator.ts'
 export type { HardnessMissionInput, HardnessMissionResult } from './mission-orchestrator.ts'
 export { installHardnessMissionRuntime, createHardnessAcquisition } from './mission-runtime.ts'
 export type { HardnessMissionRpcPayload, HardnessMissionRuntimeDependencies } from './mission-runtime.ts'
+export { createOpenClawProductionBridge } from './openclaw/production.ts'
+export type { OpenClawProductionBridge } from './openclaw/production.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -67,13 +70,15 @@ export async function apply(ctx: Context): Promise<() => void> {
     disposers.push(indexOpenClawExtensions(hardness))
     disposers.push(indexTools(tools, hardness))
     disposers.push(await indexSkills(skills, hardness))
+    const openclaw = createOpenClawProductionBridge()
     const missionDispose = installHardnessMissionRuntime({
       connection,
       agents,
       approval,
       hardness,
       tools,
-      acquisition: createHardnessAcquisition(hardness),
+      acquisition: createHardnessAcquisition(hardness, [], openclaw.broker),
+      executor: openclaw.executor,
     })
     disposers.push(() => { void missionDispose() })
   } catch (error) {
