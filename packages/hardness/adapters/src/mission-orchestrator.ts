@@ -37,6 +37,8 @@ export type HardnessMissionResult =
   | { readonly kind: 'completed'; readonly artifact: CapabilityArtifact; readonly rendered: ArtifactRenderModel }
   | { readonly kind: 'blocked'; readonly reason: string }
 
+type BlockedHardnessMissionResult = Extract<HardnessMissionResult, { readonly kind: 'blocked' }>
+
 function evidenceFor(
   input: HardnessMissionInput,
   surface: CapabilitySurface,
@@ -62,7 +64,7 @@ function quarantine(
   startedAt: number,
   reason: string,
   artifactRefs: readonly string[] = [],
-): HardnessMissionResult {
+): BlockedHardnessMissionResult {
   const evidence = input.hardness.recordEvidence(evidenceFor(
     input,
     surface,
