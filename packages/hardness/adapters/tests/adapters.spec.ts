@@ -7,7 +7,7 @@ import type { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import type { SkillRegistry, SkillSummary } from '@deepseek-ai/dsh-skill'
 
 describe('HARDNESS source adapters', () => {
-  it('projects tools and skills with discoverable contract metadata and disposes owned descriptors', async () => {
+  it('projects tools and skills with discoverable semantic identity and disposes owned descriptors', async () => {
     const context = new Context()
     await context.plugin(HardnessRegistry)
     const hardness = context.get('hardness') as HardnessService | undefined
@@ -28,6 +28,7 @@ describe('HARDNESS source adapters', () => {
     const skills = { list: async () => [{
       name: 'calendar-planning',
       description: 'Plans calendar events.',
+      whenToUse: 'Use when the user needs to plan calendar work.',
       invocation: { modelInvocable: true, userInvocable: true },
       source: 'runtime',
       provider: 'fixture',
@@ -46,13 +47,16 @@ describe('HARDNESS source adapters', () => {
 
     const skill = hardness.get('skill:calendar-planning' as never)
     expect(skill?.status).toBe('experimental')
+    expect(skill?.kind).toBe('calendar-planning')
     expect(skill?.modalities).toEqual(['native'])
     expect(skill?.compatibility).toEqual(expect.arrayContaining([
       'source:runtime',
       'invocation:model',
       'invocation:user',
+      'routing:when-to-use',
     ]))
     expect(skill?.limitations).toContain('skill summary exposes no executable input/output schema')
+    expect(hardness.resolveNeed({ kind: 'calendar-planning' }).kind).toBe('missing')
 
     expect(hardness.route({ kind: 'read_calendar' }, { modalities: ['native'] }).kind).toBe('missing')
 
