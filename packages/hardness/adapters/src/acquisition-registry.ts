@@ -24,11 +24,17 @@ function includesAll(values: readonly string[], required: readonly string[] | un
   return required === undefined || required.every(value => values.includes(value))
 }
 
+function matchesToolIdentity(descriptor: CapabilityDescriptor, requestedKind: string | undefined): boolean {
+  if (requestedKind === undefined) return true
+  if (descriptor.kind === requestedKind || descriptor.name === requestedKind) return true
+  return descriptor.id.slice('tool:'.length) === requestedKind
+}
+
 function matchesIndexedNativeTool(descriptor: CapabilityDescriptor, need: CapabilityNeed): boolean {
   if (!descriptor.id.startsWith('tool:')) return false
   if (descriptor.status !== 'experimental') return false
   if (!descriptor.modalities.includes('native')) return false
-  if (need.kind !== undefined && descriptor.kind !== need.kind) return false
+  if (!matchesToolIdentity(descriptor, need.kind)) return false
   if (!includesAll(descriptor.inputs, need.inputs)) return false
   if (!includesAll(descriptor.outputs, need.outputs)) return false
   return true
@@ -38,8 +44,10 @@ function matchesIndexedNativeTool(descriptor: CapabilityDescriptor, need: Capabi
  * Reuse an already indexed native tool as a one-pass acquisition candidate.
  * This is deliberately narrower than generic capability discovery: only
  * experimental `tool:*` descriptors with a compatible declared contract are
- * eligible. The AcquisitionRegistry moves the selected descriptor to testing;
- * real execution evidence remains required for verification.
+ * eligible. Semantic needs may name the real tool even though source adapters
+ * preserve the broad `tool` family kind. The AcquisitionRegistry moves the
+ * selected descriptor to testing; real execution evidence remains required
+ * for verification.
  * @param hardness - HARDNESS inventory containing previously indexed tools.
  * @returns acquisition provider for compatible native tools.
  */
