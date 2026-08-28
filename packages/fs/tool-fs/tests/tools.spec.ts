@@ -26,6 +26,7 @@ import * as FsPolicy from '@deepseek-ai/dsh-fs-observation-policy'
 import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import { STREAM_MIN_SIZE } from '../src/read.ts'
 import { formatReadOutput } from '../src/read-render.ts'
+import { artifactMetaForFile } from '../src/write.ts'
 import type { FileReadOutcome } from '../src/read-render.ts'
 import { sessionCwd } from '../src/session-cwd.ts'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
@@ -392,6 +393,13 @@ describe('formatReadOutput footer variants', () => {
 })
 
 describe('write tool', () => {
+  it('creates inline artifact metadata only for visual source files', () => {
+    expect(artifactMetaForFile('/workspace/index.html', '<main>Hola</main>')).toEqual({
+      artifact: { id: 'file:/workspace/index.html', title: 'index.html', mime: 'text/html', data: '<main>Hola</main>' },
+    })
+    expect(artifactMetaForFile('/workspace/notes.txt', 'Hola')).toBeUndefined()
+  })
+
   it('formats a create result and uses createIfAbsent (unobserved, with the gate)', async () => {
     const { ctx, fs } = await setup()
     const result = await call(ctx, 'write', { file_path: 'a.txt', content: 'hi' }, { session: { header: {} } })

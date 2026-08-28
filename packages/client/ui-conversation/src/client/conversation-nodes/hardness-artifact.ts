@@ -82,6 +82,7 @@ export const hardnessArtifactDefinition: ConversationNodeDefinition<HardnessArti
     if (artifact === undefined) throw new Error('hardness-artifact start requires valid tool/result meta.artifact')
     return artifact
   },
+  update: context => context.state,
   buildViewNode: (context) => {
     const artifact = context.state ?? fallbackState(context)
     if (artifact === undefined) return null

@@ -1,8 +1,16 @@
+// @vitest-environment jsdom
+
 import { fireEvent, render, screen } from '@testing-library/react'
+import type { ComponentProps } from 'react'
 import { describe, expect, it } from 'vitest'
 import { HardnessArtifactNodeView } from '../src/client/chat/HardnessArtifactNodeView.tsx'
 
-function props(data: { readonly artifactId: string; readonly mime: string; readonly title: string; readonly data: string | Readonly<Record<string, unknown>> }) {
+function props(data: {
+  readonly artifactId: string
+  readonly mime: string
+  readonly title: string
+  readonly data: string | Readonly<Record<string, unknown>>
+}) {
   return {
     node: {
       kind: 'hardness-artifact',
@@ -19,7 +27,7 @@ function props(data: { readonly artifactId: string; readonly mime: string; reado
         time: 1,
       },
     },
-  } as never
+  } as ComponentProps<typeof HardnessArtifactNodeView>
 }
 
 describe('HARDNESS inline artifact renderer', () => {
