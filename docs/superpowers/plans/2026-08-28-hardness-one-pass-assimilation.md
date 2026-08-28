@@ -1,5 +1,7 @@
 # HARDNESS One-Pass Assimilation Implementation Plan
 
+English | [中文](2026-08-28-hardness-one-pass-assimilation.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close the vertical path from cataloged capability to governed execution, evidence-backed verification, and rich UI in one mission pass.
