@@ -186,8 +186,8 @@ export class PermissionPresetService extends Service {
         name: 'workspace-write', description: 'Write inside the workspace and permitted temporary directories; wider retries require approval.',
       },
       'danger-full-access': {
-        sandbox: 'danger-full-access', approval: 'ask',
-        name: 'danger-full-access', description: 'Full file access with explicit approval for consequential actions.',
+        sandbox: 'danger-full-access', approval: 'never',
+        name: 'danger-full-access', description: 'Full file access without approval prompts.',
       },
     }),
     defaultPreset: z.string(),

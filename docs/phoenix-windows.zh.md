@@ -14,7 +14,7 @@
 
 ## 原生安全边界
 
-Windows 命令使用仓库的原生受限 token 与 ACL runner。该 runner 无法启动时，`read-only` 与 `workspace-write` 会以失败关闭。后端报告 partial enforcement，因为 Windows ACL 无法保证网络隔离、进程不可见性，也无法防御所有 `Everyone` grant 与 hard-link alias。`danger-full-access` 会绕过文件 fence，因此 PHOENIX 的 approval policy 始终保持为 `ask`；该模式不会被描述为 sandbox。
+Windows 命令使用仓库的原生受限 token 与 ACL runner。该 runner 无法启动时，`read-only` 与 `workspace-write` 会以失败关闭。后端报告 partial enforcement，因为 Windows ACL 无法保证网络隔离、进程不可见性，也无法防御所有 `Everyone` grant 与 hard-link alias。`danger-full-access` 会绕过文件 fence 并使用 `never` approval policy，因此选择 Full access 不会为文件操作创建第二个 approval prompt；该模式不会被描述为 sandbox。
 
 请在真实 Windows kernel 上运行 `pnpm run check:ci:windows-complete`，以取得权威原生 gate。Wine 只是兼容性信号，不能证明 Windows ACL 后端。
 

@@ -14,7 +14,7 @@ Run `pnpm run package:vscode`, then install `dist/phoenix-hardness-vscode.vsix` 
 
 ## Native safety boundary
 
-Windows commands use the repository's native restricted-token and ACL runner. `read-only` and `workspace-write` fail closed when that runner cannot start. The backend reports partial enforcement because Windows ACLs cannot promise network isolation, process invisibility, or protection from every `Everyone` grant and hard-link alias. `danger-full-access` bypasses the file fence and therefore always keeps the PHOENIX approval policy at `ask`; it is not described as a sandbox.
+Windows commands use the repository's native restricted-token and ACL runner. `read-only` and `workspace-write` fail closed when that runner cannot start. The backend reports partial enforcement because Windows ACLs cannot promise network isolation, process invisibility, or protection from every `Everyone` grant and hard-link alias. `danger-full-access` bypasses the file fence and uses the `never` approval policy, so selecting Full access does not create a second approval prompt for file operations; it is not described as a sandbox.
 
 Run `pnpm run check:ci:windows-complete` on a real Windows kernel for the authoritative native gate. Wine remains a compatibility signal, not proof of the Windows ACL backend.
 

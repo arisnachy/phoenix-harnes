@@ -81,7 +81,7 @@ describe('PermissionPresetService', () => {
   it('advertises the preset table in declaration order and resolves bundles', async () => {
     const ctx = await mounted()
     expect(ctx.permissionPresets.names).toEqual(['workspace-write', 'danger-full-access'])
-    expect(ctx.permissionPresets.resolve('danger-full-access')).toMatchObject({ sandbox: 'danger-full-access', approval: 'ask' })
+    expect(ctx.permissionPresets.resolve('danger-full-access')).toMatchObject({ sandbox: 'danger-full-access', approval: 'never' })
     expect(() => ctx.permissionPresets.resolve('plan')).toThrow(/unknown preset "plan"/)
   })
 
@@ -132,6 +132,7 @@ describe('PermissionPresetService', () => {
     expect(session.events.map(e => [e.type, e.data])).toEqual([
       ['permission/preset', { preset: 'danger-full-access' }],
       ['sandbox/mode', { mode: 'danger-full-access' }],
+      ['approval/policy', { policy: 'never' }],
     ])
   })
 
@@ -150,7 +151,7 @@ describe('PermissionPresetService', () => {
     // the changed knob.
     session.append('sandbox/mode', { mode: 'read-only' })
     ctx.permissionPresets.set(session, 'danger-full-access')
-    const tail = session.events.slice(3)
+    const tail = session.events.slice(4)
     expect(tail.map(e => [e.type, e.data])).toEqual([
       ['permission/preset', { preset: 'danger-full-access' }],
       ['sandbox/mode', { mode: 'danger-full-access' }],
@@ -164,7 +165,7 @@ describe('PermissionPresetService', () => {
 
   it('optionOf() presents shipped labels/descriptions, falls back to the raw key, and fixes custom', async () => {
     const ctx = await mounted()
-    expect(ctx.permissionPresets.optionOf('danger-full-access')).toEqual({ value: 'danger-full-access', name: 'danger-full-access', description: 'Full file access with explicit approval for consequential actions.' })
+    expect(ctx.permissionPresets.optionOf('danger-full-access')).toEqual({ value: 'danger-full-access', name: 'danger-full-access', description: 'Full file access without approval prompts.' })
     expect(ctx.permissionPresets.optionOf('custom')).toEqual({ value: 'custom', name: 'Custom', description: 'Current sandbox and approval settings do not match a preset.' })
     const bare = await mounted({ config: { presets: { plain: { sandbox: 'workspace-write', approval: 'ask' } } } })
     expect(bare.permissionPresets.optionOf('plain')).toEqual({ value: 'plain', name: 'plain' })
