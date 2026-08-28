@@ -31,14 +31,18 @@ export type { HardnessMissionRpcPayload, HardnessMissionRuntimeDependencies } fr
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
-export const inject = ['hardness', 'tools', 'skills']
+export const inject = ['hardness', 'tools', 'skills', 'connection', 'agents', 'approval']
 
 export async function apply(ctx: Context): Promise<() => void> {
   const hardness = ctx.get('hardness') as HardnessService | undefined
   const tools = ctx.get('tools')
   const skills = ctx.get('skills')
-  if (hardness === undefined || tools === undefined || skills === undefined) {
-    throw new Error('hardness-adapters requires hardness, tools, and skills services')
+  const connection = ctx.get('connection')
+  const agents = ctx.get('agents')
+  const approval = ctx.get('approval')
+  if (hardness === undefined || tools === undefined || skills === undefined
+    || connection === undefined || agents === undefined || approval === undefined) {
+    throw new Error('hardness-adapters requires hardness, tools, skills, connection, agents, and approval services')
   }
   const disposeTools = indexTools(tools, hardness)
   try {

@@ -13,10 +13,19 @@ export function CapabilityArtifactPreview({ artifact, rendered }: CapabilityArti
   const ui = artifact.mime === 'application/vnd.hardness.ui+json' && validateUiSchema(artifact.data)
     ? renderNode(artifact.data.root)
     : createElement('pre', null, typeof artifact.data === 'string' ? artifact.data : JSON.stringify(artifact.data))
-  return createElement('article', { 'data-artifact-id': artifact.id, 'data-artifact-mime': artifact.mime },
-    createElement('strong', null, artifact.mime),
-    createElement('span', { 'data-render-kind': rendered.kind }, ` ${rendered.kind}`),
-    ui,
+  return createElement('article', {
+    'data-artifact-id': artifact.id,
+    'data-artifact-mime': artifact.mime,
+    style: {
+      alignSelf: 'stretch', width: 'calc(100% - 32px)', maxWidth: 720,
+      maxHeight: 'min(60vh, 560px)', overflow: 'auto', margin: '16px auto',
+      padding: 16, border: '1px solid #d7dce5', borderRadius: 12,
+      background: '#ffffff', color: '#111827', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.10)',
+    },
+  },
+  createElement('strong', null, artifact.mime),
+  createElement('span', { 'data-render-kind': rendered.kind }, ` ${rendered.kind}`),
+  ui,
   )
 }
 
