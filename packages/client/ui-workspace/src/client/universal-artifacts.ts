@@ -29,7 +29,6 @@ type BuiltinArtifactBlock =
 export type ArtifactBlock = BuiltinArtifactBlock | CustomArtifactBlock
 
 export interface UniversalArtifact {
-  readonly [key: string]: unknown
   readonly id: string
   readonly title: string
   readonly status: 'experimental' | 'testing' | 'verified' | 'broken' | 'quarantined'
