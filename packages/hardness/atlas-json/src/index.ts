@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import type { HardnessAtlasSnapshot } from '@deepseek-ai/dsh-hardness'
 import { parseAtlasSnapshot } from './format.ts'
 
+/** Generic atomic JSON document store with caller-owned parsing. */
 export class JsonDocumentStore<T> {
   constructor(
     private readonly path: string,
@@ -12,6 +13,10 @@ export class JsonDocumentStore<T> {
     private readonly empty?: T,
   ) {}
 
+  /**
+   * Load and parse the stored JSON document.
+   * @returns parsed document, or the configured empty value when absent.
+   */
   async load(): Promise<T> {
     let content: string
     try {
@@ -23,6 +28,11 @@ export class JsonDocumentStore<T> {
     return this.parse(JSON.parse(content) as unknown)
   }
 
+  /**
+   * Validate and atomically save one JSON document.
+   * @param value - document value accepted by the configured parser.
+   * @returns completion after the atomic rename succeeds.
+   */
   async save(value: T): Promise<void> {
     const normalized = this.parse(value)
     await mkdir(dirname(this.path), { recursive: true })
@@ -32,9 +42,14 @@ export class JsonDocumentStore<T> {
   }
 }
 
+/** Atomic versioned JSON store specialized for HARDNESS atlas snapshots. */
 export class JsonAtlasStore {
   constructor(private readonly path: string) {}
 
+  /**
+   * Load the durable atlas, returning an empty version-one snapshot when absent.
+   * @returns validated HARDNESS atlas snapshot.
+   */
   async load(): Promise<HardnessAtlasSnapshot> {
     let content: string
     try {
@@ -50,6 +65,11 @@ export class JsonAtlasStore {
     }
   }
 
+  /**
+   * Validate and atomically persist the HARDNESS atlas snapshot.
+   * @param snapshot - versioned atlas snapshot to persist.
+   * @returns completion after the atomic rename succeeds.
+   */
   async save(snapshot: HardnessAtlasSnapshot): Promise<void> {
     const normalized = parseAtlasSnapshot(snapshot)
     await mkdir(dirname(this.path), { recursive: true })
