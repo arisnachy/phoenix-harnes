@@ -9,16 +9,19 @@ import type {
   PhoenixExtensionDescriptor,
 } from './types.ts'
 
+/** Metadata-only discovery record published before any extension code executes. */
 export interface OpenClawDiscoveryRecord {
   entry: OpenClawExtensionCatalogEntry
   capabilities: PhoenixOpenClawCapability[]
 }
 
+/** Runtime status for one OpenClaw extension under Phoenix control. */
 export interface OpenClawRuntimeStatus extends CompatibilityReport {
   id: string
   active: boolean
 }
 
+/** Phoenix-owned hooks used by the OpenClaw compatibility runtime. */
 export interface OpenClawCompatibilityRuntimeOptions {
   catalog?: readonly OpenClawExtensionCatalogEntry[]
   environment?: CompatibilityEnvironment
@@ -27,6 +30,7 @@ export interface OpenClawCompatibilityRuntimeOptions {
   deactivateExtension?: (descriptor: PhoenixExtensionDescriptor) => void | Promise<void>
 }
 
+/** Lazy discovery and activation surface for OpenClaw extensions. */
 export interface OpenClawCompatibilityRuntime {
   discover(): OpenClawDiscoveryRecord[]
   status(id: string): Promise<OpenClawRuntimeStatus>
@@ -53,6 +57,11 @@ function withIdentity(
   return { id, status: report.status, reasons: [...report.reasons], active }
 }
 
+/**
+ * Create a lazy compatibility runtime subordinate to Phoenix activation hooks.
+ * @param options - Pinned catalog, environment facts, and Phoenix-owned runtime hooks.
+ * @returns Runtime that discovers metadata without eager extension execution.
+ */
 export function createOpenClawCompatibilityRuntime(
   options: OpenClawCompatibilityRuntimeOptions,
 ): OpenClawCompatibilityRuntime {
