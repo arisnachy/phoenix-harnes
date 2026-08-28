@@ -38,6 +38,7 @@ describe('HARDNESS source adapters', () => {
 
     const tool = hardness.get('tool:read_calendar' as never)
     expect(tool?.status).toBe('experimental')
+    expect(tool?.kind).toBe('read_calendar')
     expect(tool?.modalities).toEqual(['native'])
     expect(tool?.inputs).toEqual(['calendarId', 'date'])
     expect(tool?.compatibility).toContain('json-schema:object')
@@ -53,7 +54,7 @@ describe('HARDNESS source adapters', () => {
     ]))
     expect(skill?.limitations).toContain('skill summary exposes no executable input/output schema')
 
-    expect(hardness.route({ kind: 'tool' }, { modalities: ['native'] }).kind).toBe('missing')
+    expect(hardness.route({ kind: 'read_calendar' }, { modalities: ['native'] }).kind).toBe('missing')
 
     disposeTools()
     disposeSkills()
