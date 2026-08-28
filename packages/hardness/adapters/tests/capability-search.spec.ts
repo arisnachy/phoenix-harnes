@@ -35,6 +35,7 @@ describe('HARDNESS capability search', () => {
     expect(matches).toHaveLength(2)
     expect(matches.map(match => match.id)).toEqual(expect.arrayContaining(['tool:read_calendar', 'skill:calendar-planning']))
     expect(matches.every(match => match.executable === (match.status === 'verified' || match.status === 'testing'))).toBe(true)
+    expect(searchCapabilityAtlas(descriptors, 'quantum-teleporter', 6)).toEqual([])
   })
 
   it('ranks an exact capability family above prose-only overlap and exposes pending permissions', () => {
