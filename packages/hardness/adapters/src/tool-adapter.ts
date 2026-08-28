@@ -26,7 +26,7 @@ export function indexTools(tools: ToolRuntime, hardness: HardnessService): () =>
     const contract = toolContract(schema.parameters)
     return hardness.register({
       id: `tool:${schema.name}` as CapabilityId,
-      kind: 'tool',
+      kind: schema.name,
       name: schema.name,
       description: schema.description,
       inputs: [...contract.inputs],
