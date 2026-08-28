@@ -4,6 +4,10 @@ import { toPhoenixCapabilities } from './capabilities.ts'
 
 const OPENCLAW_VERSION = '2026.8.1'
 
+/**
+ * Project every pinned donor extension into non-routable HARDNESS metadata.
+ * @returns Experimental descriptors visible to ATLAS until individually verified.
+ */
 export function toHardnessCapabilityDescriptors(): CapabilityDescriptor[] {
   return listOpenClawExtensions().flatMap(entry => toPhoenixCapabilities(entry).map(capability => ({
     id: capability.id as CapabilityId,
