@@ -1,0 +1,34 @@
+name: OpenClaw compat focused
+
+on:
+  pull_request:
+    paths:
+      - 'packages/extensions/openclaw-compat/**'
+      - '.github/workflows/openclaw-compat.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openclaw-compat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: focused contract tests
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Run OpenClaw compatibility tests
+        run: pnpm exec vitest run packages/extensions/openclaw-compat/tests/**/*.spec.ts
