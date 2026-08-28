@@ -82,6 +82,11 @@ function unknownMetadata(manifest: Record<string, unknown>): Record<string, unkn
   )
 }
 
+/**
+ * Translate OpenClaw manifest metadata into a Phoenix-safe descriptor.
+ * @param manifestInput - Untrusted metadata parsed from an OpenClaw extension manifest.
+ * @returns Normalized descriptor with sensitive unknown metadata redacted.
+ */
 export function translateOpenClawManifest(manifestInput: unknown): PhoenixExtensionDescriptor {
   if (!isRecord(manifestInput)) throw new TypeError('OpenClaw extension manifest must be an object')
 
@@ -120,6 +125,12 @@ export function translateOpenClawManifest(manifestInput: unknown): PhoenixExtens
   }
 }
 
+/**
+ * Validate a translated extension against the current Phoenix environment.
+ * @param descriptor - Phoenix-safe OpenClaw extension descriptor.
+ * @param environment - Platform and credential references available to activation.
+ * @returns Explicit compatibility state without executing extension runtime code.
+ */
 export function validateOpenClawExtension(
   descriptor: PhoenixExtensionDescriptor,
   environment: CompatibilityEnvironment = {},
