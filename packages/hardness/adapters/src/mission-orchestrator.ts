@@ -12,7 +12,7 @@ import type {
 } from './execution-bridge.ts'
 import { executeCapabilityNeed } from './execution-bridge.ts'
 import {
-  artifactFromToolResult,
+  artifactFromCapabilityResult,
   type ArtifactRenderModel,
   type CapabilityArtifact,
   type ArtifactRuntime,
@@ -110,7 +110,10 @@ export async function runHardnessMission(input: HardnessMissionInput): Promise<H
     return quarantine(input, execution.surface, startedAt, execution.result.error.message)
   }
 
-  const artifact = artifactFromToolResult(execution.result)
+  const artifact = artifactFromCapabilityResult(
+    execution.result,
+    `mission:${String(input.context.callId)}:${execution.surface.capabilityId}`,
+  )
   if (artifact === undefined) {
     return quarantine(input, execution.surface, startedAt, 'mission produced no valid artifact')
   }
