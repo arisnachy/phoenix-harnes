@@ -39,9 +39,11 @@ describe('HARDNESS inline artifact renderer', () => {
       data: { columns: ['Name', 'Score'], rows: [['A', 10], ['B', 12]] },
     })} />)
 
-    expect(screen.getByText('Results')).toBeTruthy()
+    expect(screen.getByText(/Results/)).toBeTruthy()
     expect(screen.getByRole('table')).toBeTruthy()
+    expect(document.querySelector('header')).toBeNull()
     const expand = screen.getByRole('button', { name: 'Expand' })
+    expect(expand.getAttribute('aria-label')).toBe('Expand')
     expect(expand.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(expand)
     expect(screen.getByRole('button', { name: 'Collapse' }).getAttribute('aria-expanded')).toBe('true')
@@ -62,7 +64,7 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.getByText(/network, forms, popups and parent access blocked/i)).toBeTruthy()
   })
 
-  it('shows the PHOENIX mark and an explicit preview-ready reload trigger', () => {
+  it('keeps preview controls without duplicate artifact chrome', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'app-2',
       mime: 'text/html',
@@ -70,7 +72,8 @@ describe('HARDNESS inline artifact renderer', () => {
       data: '<h1>Ready</h1>',
     })} />)
 
-    expect(document.querySelector('img[src="/phoenix-emblem.png"]')).toBeTruthy()
+    expect(document.querySelector('header')).toBeNull()
+    expect(document.querySelector('img[src="/phoenix-emblem.png"]')).toBeNull()
     const frame = screen.getByTitle('Canvas demo')
     expect(screen.getAllByText('Loading preview').length).toBeGreaterThan(0)
     fireEvent.load(frame)
