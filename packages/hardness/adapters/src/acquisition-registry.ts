@@ -9,6 +9,11 @@ export type CapabilityBuilder = (
   signal: AbortSignal,
 ) => Promise<CapabilityDescriptor | undefined>
 
+/** Optional diagnostic source evaluated only when its builder returns no capability. */
+export type CapabilityBuilderDiagnostics = (
+  need: CapabilityNeed,
+) => readonly string[]
+
 /** Learning sinks that retain preparation experience without granting verification. */
 export interface MissionLearningHooks {
   readonly lab: LabMode
@@ -19,6 +24,11 @@ export interface MissionLearningHooks {
 export type AcquisitionResult =
   | { readonly kind: 'built'; readonly capability: CapabilityDescriptor; readonly preparationId: string }
   | { readonly kind: 'missing'; readonly reasons: readonly string[] }
+
+interface RegisteredBuilder {
+  readonly build: CapabilityBuilder
+  readonly diagnostics?: CapabilityBuilderDiagnostics
+}
 
 function includesAll(values: readonly string[], required: readonly string[] | undefined): boolean {
   return required === undefined || required.every(value => values.includes(value))
@@ -44,9 +54,9 @@ function matchesIndexedNativeTool(descriptor: CapabilityDescriptor, need: Capabi
  * Reuse an already indexed native tool as a one-pass acquisition candidate.
  * This is deliberately narrower than generic capability discovery: only
  * experimental `tool:*` descriptors with a compatible declared contract are
- * eligible. Semantic needs may name the real tool even though source adapters
- * preserve the broad `tool` family kind. The AcquisitionRegistry moves the
- * selected descriptor to testing; real execution evidence remains required
+ * eligible. Semantic needs may name the real tool even though older source
+ * adapters used the broad `tool` family kind. The AcquisitionRegistry moves
+ * the selected descriptor to testing; real execution evidence remains required
  * for verification.
  * @param hardness - HARDNESS inventory containing previously indexed tools.
  * @returns acquisition provider for compatible native tools.
@@ -64,7 +74,7 @@ export function createIndexedToolAcquisition(
 
 /** Registry of governed providers capable of preparing missing HARDNESS capabilities. */
 export class AcquisitionRegistry {
-  private readonly builders: CapabilityBuilder[] = []
+  private readonly builders: RegisteredBuilder[] = []
 
   constructor(
     private readonly hardness: HardnessService,
@@ -74,12 +84,14 @@ export class AcquisitionRegistry {
   /**
    * Register one preparation provider.
    * @param builder - governed provider that may prepare a requested capability.
+   * @param diagnostics - optional secret-free reasons retained when the provider cannot prepare the need.
    * @returns disposer that removes the provider from this registry.
    */
-  register(builder: CapabilityBuilder): () => void {
-    this.builders.push(builder)
+  register(builder: CapabilityBuilder, diagnostics?: CapabilityBuilderDiagnostics): () => void {
+    const entry: RegisteredBuilder = diagnostics === undefined ? { build: builder } : { build: builder, diagnostics }
+    this.builders.push(entry)
     return () => {
-      const index = this.builders.indexOf(builder)
+      const index = this.builders.indexOf(entry)
       if (index >= 0) this.builders.splice(index, 1)
     }
   }
@@ -96,10 +108,14 @@ export class AcquisitionRegistry {
     need: CapabilityNeed,
     signal: AbortSignal = new AbortController().signal,
   ): Promise<AcquisitionResult> {
-    for (const builder of this.builders) {
+    const reasons: string[] = []
+    for (const provider of this.builders) {
       if (signal.aborted) return { kind: 'missing', reasons: ['capability acquisition cancelled'] }
-      const descriptor = await builder(need, signal)
-      if (descriptor === undefined) continue
+      const descriptor = await provider.build(need, signal)
+      if (descriptor === undefined) {
+        if (provider.diagnostics !== undefined) reasons.push(...provider.diagnostics(need))
+        continue
+      }
       const existing = this.hardness.get(descriptor.id)
       if (existing === undefined) this.hardness.register(descriptor)
       this.hardness.transition(descriptor.id, 'testing', 'acquisition/build candidate')
@@ -129,6 +145,9 @@ export class AcquisitionRegistry {
         preparationId,
       }
     }
-    return { kind: 'missing', reasons: [`no acquisition/build provider handles ${need.kind ?? 'unknown'}`] }
+    return {
+      kind: 'missing',
+      reasons: reasons.length > 0 ? [...new Set(reasons)] : [`no acquisition/build provider handles ${need.kind ?? 'unknown'}`],
+    }
   }
 }
