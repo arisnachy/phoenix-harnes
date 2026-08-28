@@ -15,7 +15,13 @@ function selectModality(descriptor: CapabilityDescriptor, preferred: readonly st
   return preferred.find(modality => descriptor.modalities.includes(modality))
 }
 
-/** Route a need to a verified capability and modality without execution authority. */
+/**
+ * Route a need to a verified capability and modality without execution authority.
+ * @param hardness - HARDNESS service used for provider-neutral resolution.
+ * @param need - capability requirements to resolve.
+ * @param options - optional permission and modality routing preferences.
+ * @returns routed capability or explicit missing/unknown result.
+ */
 export function routeCapabilityNeed(
   hardness: HardnessService,
   need: CapabilityNeed,
@@ -52,7 +58,12 @@ export function routeCapabilityNeed(
   }
 }
 
-/** Stable comparison retained for future multi-candidate resolver results. */
+/**
+ * Compare routable capabilities deterministically for future multi-candidate resolution.
+ * @param left - first capability descriptor.
+ * @param right - second capability descriptor.
+ * @returns negative, zero, or positive ordering value.
+ */
 export function compareRoutableCapabilities(left: CapabilityDescriptor, right: CapabilityDescriptor): number {
   const version = compareCapabilityVersions(right.version, left.version)
   return version !== 0 ? version : left.id.localeCompare(right.id)
