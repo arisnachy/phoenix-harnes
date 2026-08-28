@@ -86,13 +86,17 @@
 }
 
 .body {
-  padding: 12px 16px 16px;
+  margin: 0 14px 14px;
+  padding: 18px;
   overflow: hidden;
-  background: #ffffff;
+  border: 1px solid #e3ebf3;
+  border-radius: 18px;
+  background: #f7fafc;
 }
 
 .bodyExpanded {
-  padding: 14px 16px 18px;
+  margin: 0 16px 16px;
+  padding: 20px;
 }
 
 .text {
@@ -268,7 +272,7 @@
 @media (max-width: 520px) {
   .card { border-radius: 16px; }
   .header { align-items: flex-start; padding: 11px 12px; }
-  .body { padding: 10px 12px 12px; }
+  .body { margin: 0 10px 10px; padding: 14px; border-radius: 15px; }
   .barRow { grid-template-columns: 70px minmax(70px, 1fr); }
   .barRow > :last-child { grid-column: 2; }
   .frame { height: 220px; }
