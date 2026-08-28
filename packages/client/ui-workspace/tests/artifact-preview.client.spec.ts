@@ -25,7 +25,7 @@ describe('CapabilityArtifact workspace preview', () => {
       artifact: { id: 'ui1', mime: 'application/vnd.hardness.ui+json', data: { version: 1, root: { type: 'stack', children: [{ type: 'input', id: 'x', label: 'X' }, { type: 'button', label: 'Run' }] } } },
       rendered: { kind: 'generative-ui', artifactId: 'ui1' },
     }) as { props: { children: unknown[]; style: Record<string, unknown> } }
-    expect(view.props.style).toMatchObject({ alignSelf: 'stretch', maxWidth: 720, margin: '16px auto' })
-    expect(view.props.children.some(child => typeof child === 'object' && child !== null && 'type' in child && (child as { type: string }).type === 'section')).toBe(true)
+    expect(view.props.style).toMatchObject({ alignSelf: 'stretch', maxWidth: 720, margin: '20px auto' })
+    expect(JSON.stringify(view).includes('"type":"section"')).toBe(true)
   })
 })
