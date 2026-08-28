@@ -1,3 +1,4 @@
+/** Extension ids present in the pinned OpenClaw donor snapshot. */
 export const OPENCLAW_EXTENSION_IDS = [
   'a2a',
   'acpx',
