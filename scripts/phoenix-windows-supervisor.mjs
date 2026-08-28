@@ -81,6 +81,18 @@ function restartRequested() {
   return path !== undefined && existsSync(path)
 }
 
+function clearRestartRequest() {
+  const path = restartRequestPath()
+  if (path === undefined) return
+  try {
+    unlinkSync(path)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.error(`[PHOENIX UPDATE] warning: could not clear restart request: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+}
+
 const sleep = ms => new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 
 async function stopWatcher(watcher) {
@@ -108,7 +120,12 @@ function startHost() {
     cwd: root,
     stdio: 'inherit',
     windowsHide: false,
-    env: process.env,
+    env: {
+      ...process.env,
+      // This supervisor owns the authoritative updater watcher. Mark the Host
+      // so apps/cli does not start a second watcher bound to the Host PID.
+      PHOENIX_UPDATE_SUPERVISED: '1',
+    },
   })
 }
 
@@ -190,9 +207,19 @@ while (true) {
   console.error('[PHOENIX UPDATE] restart request received; activating prepared update under supervisor control...')
   const activationCode = activatePrepared()
   if (activationCode !== 0) {
-    console.error(`[PHOENIX UPDATE] supervised activation failed with exit code ${String(activationCode)}; PHOENIX will not relaunch automatically.`)
-    finalCode = activationCode
-    break
+    // A failed validation leaves the current checkout untouched; a failed live
+    // activation is rolled back by the activator before it returns 1. In both
+    // safe cases the user must never be left with a closed PHOENIX. Clear only
+    // the one-shot restart request, keep the prepared candidate for retry, and
+    // continue the loop so the last-known-good Host comes back immediately.
+    clearRestartRequest()
+    if (activationCode === 12) {
+      console.error('[PHOENIX UPDATE] rollback failed critically; refusing automatic relaunch from an unknown checkout state.')
+      finalCode = activationCode
+      break
+    }
+    console.error(`[PHOENIX UPDATE] activation failed safely with exit code ${String(activationCode)}; relaunching the last-known-good PHOENIX. The prepared update remains available to retry.`)
+    continue
   }
 
   console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
