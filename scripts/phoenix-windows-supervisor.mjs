@@ -123,8 +123,6 @@ function startHost() {
     windowsHide: false,
     env: {
       ...process.env,
-      // This supervisor owns the authoritative updater watcher. Mark the Host
-      // so apps/cli does not start a second watcher bound to the Host PID.
       PHOENIX_UPDATE_SUPERVISED: '1',
     },
   })
@@ -145,9 +143,6 @@ function startWatcher() {
       : { TEMP: updateTemp, TMP: updateTemp }),
   }
 
-  // The watcher observes the supervisor PID, not the Host PID. The supervisor
-  // explicitly stops it before activation, so the watcher's legacy parent-exit
-  // installation path can never race the supervised activator.
   return spawn(process.execPath, [
     shim,
     updater,
@@ -246,11 +241,6 @@ while (true) {
   console.error('[PHOENIX UPDATE] restart request received; activating prepared update under supervisor control...')
   const activationCode = activatePrepared()
   if (activationCode !== 0) {
-    // A failed validation leaves the current checkout untouched; a failed live
-    // activation is rolled back by the activator before it returns 1. In both
-    // safe cases the user must never be left with a closed PHOENIX. Clear only
-    // the one-shot restart request, keep the prepared candidate for retry, and
-    // continue the loop so the last-known-good Host comes back immediately.
     clearRestartRequest()
     if (activationCode === 12) {
       console.error('[PHOENIX UPDATE] rollback failed critically; refusing automatic relaunch from an unknown checkout state.')
@@ -262,7 +252,6 @@ while (true) {
   }
 
   console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
-  // Continue the loop: the same supervisor starts a fresh Host and watcher.
 }
 
 process.exitCode = finalCode
