@@ -1,5 +1,6 @@
 import type { OpenClawExtensionCatalogEntry } from './catalog.ts'
 
+/** Capability families exposed by the OpenClaw compatibility boundary. */
 export type PhoenixOpenClawCapabilityKind =
   | 'agent-protocol'
   | 'memory'
@@ -19,6 +20,7 @@ export type PhoenixOpenClawCapabilityKind =
   | 'local-inference'
   | 'extension'
 
+/** Phoenix-facing capability metadata derived from one OpenClaw extension. */
 export interface PhoenixOpenClawCapability {
   id: string
   extensionId: string
@@ -147,6 +149,11 @@ for (const [kind, ids] of Object.entries(FAMILY_MEMBERS) as Array<[
   for (const id of ids) KIND_BY_EXTENSION.set(id, kind)
 }
 
+/**
+ * Translate one donor catalog entry into Phoenix capability metadata.
+ * @param entry - Pinned OpenClaw catalog entry to classify.
+ * @returns Phoenix capability descriptors for the entry.
+ */
 export function toPhoenixCapabilities(
   entry: Pick<OpenClawExtensionCatalogEntry, 'id'>,
 ): PhoenixOpenClawCapability[] {
