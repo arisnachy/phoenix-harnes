@@ -20,6 +20,16 @@ describe('CapabilityArtifact workspace preview', () => {
     disposeDeclaration()
   })
 
+  it('renders a mixed universal artifact as one dynamic result card', () => {
+    const view = CapabilityArtifactPreview({
+      artifact: { id: 'mixed1', mime: 'application/vnd.hardness.artifact+json', data: { id: 'mixed1', title: 'MLB + análisis', status: 'verified', evidence: [], blocks: [{ type: 'markdown', text: 'Resumen' }, { type: 'code', language: 'python', text: 'print(42)' }, { type: 'table', columns: ['team'], rows: [['Yankees']] }] } },
+      rendered: { kind: 'universal', artifactId: 'mixed1' },
+    })
+    expect(JSON.stringify(view)).toContain('MLB + análisis')
+    expect(JSON.stringify(view)).toContain('Yankees')
+    expect(JSON.stringify(view)).toContain('python')
+  })
+
   it('renders a declarative UI artifact without executable props', () => {
     const view = CapabilityArtifactPreview({
       artifact: { id: 'ui1', mime: 'application/vnd.hardness.ui+json', data: { version: 1, root: { type: 'stack', children: [{ type: 'input', id: 'x', label: 'X' }, { type: 'button', label: 'Run' }] } } },
