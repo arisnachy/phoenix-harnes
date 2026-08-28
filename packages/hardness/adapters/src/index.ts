@@ -3,6 +3,7 @@ import type { HardnessService } from '@deepseek-ai/dsh-hardness/src/types.ts'
 import { indexSkills } from './skill-adapter.ts'
 import { indexTools } from './tool-adapter.ts'
 import { indexOpenClawExtensions } from './openclaw-adapter.ts'
+import { createIndexedToolAcquisition } from './acquisition-registry.ts'
 import { createHardnessAcquisition, installHardnessMissionRuntime } from './mission-runtime.ts'
 import { createOpenClawProductionBridge } from './openclaw/production.ts'
 
@@ -23,7 +24,7 @@ export { executeCapabilityNeed } from './execution-bridge.ts'
 export type { CapabilityApproval, CapabilityExecutionContext, CapabilityExecutionResult } from './execution-bridge.ts'
 export { ArtifactRuntime, artifactFromCapabilityResult, artifactFromToolResult } from './artifact-runtime.ts'
 export type { ArtifactRenderModel, CapabilityArtifact } from './artifact-runtime.ts'
-export { AcquisitionRegistry } from './acquisition-registry.ts'
+export { AcquisitionRegistry, createIndexedToolAcquisition } from './acquisition-registry.ts'
 export type { AcquisitionResult, CapabilityBuilder, MissionLearningHooks } from './acquisition-registry.ts'
 export { installSandboxCapabilityGuard } from './sandbox-guard.ts'
 export type { SandboxPolicyResolver } from './sandbox-guard.ts'
@@ -77,7 +78,7 @@ export async function apply(ctx: Context): Promise<() => void> {
       approval,
       hardness,
       tools,
-      acquisition: createHardnessAcquisition(hardness, [], openclaw.broker),
+      acquisition: createHardnessAcquisition(hardness, [createIndexedToolAcquisition(hardness)], openclaw.broker),
       executor: openclaw.executor,
     })
     disposers.push(() => { void missionDispose() })
