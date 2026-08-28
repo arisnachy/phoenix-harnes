@@ -10,6 +10,7 @@ import { createUserApprovalBroker } from './user-approval-broker.ts'
 import type { CapabilityApproval, CapabilityExecutor } from './execution-bridge.ts'
 import { ArtifactRuntime } from './artifact-runtime.ts'
 import { runHardnessMission, type HardnessMissionResult } from './mission-orchestrator.ts'
+import { createHardnessMissionAudit } from './mission-audit.ts'
 import type { OpenClawCapabilityBroker } from './openclaw/broker.ts'
 
 /** Wire payload accepted by the loopback HARDNESS mission RPC. */
@@ -95,6 +96,9 @@ export function createHardnessMissionRunner(deps: Omit<HardnessMissionRuntimeDep
       tools: deps.tools,
       approval,
       artifacts,
+      ...typeof input.context.agent?.session?.append === 'function'
+        ? { audit: createHardnessMissionAudit(input.context.agent.session) }
+        : {},
       ...(deps.executor === undefined ? {} : { executor: deps.executor }),
       need: input.need,
       args: input.args,

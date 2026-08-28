@@ -18,6 +18,8 @@
 
 Tool projection 可以订阅 `tools/change`；这样动态连接的 tool（包括 MCP tool）会保持在 HARDNESS 中，同时注册仍可撤销。内部 `hardness_run` tool 会被排除，避免递归路由。
 
+每个 live mission 都会向调用方 session 追加无 secret 的 `hardness/mission` trace。trace 记录 protocol 的 terminal state、capability identity、artifact/evidence 引用和稳定 reason code；`replayHardnessMissionAudit` 可以在不重放 arguments、credentials 或 provider error text 的情况下重建一次调用。
+
 #### Token effect
 
 protocol section 和 capability metadata 会增加模型 token；单纯索引源 registry 不会增加 prompt 文本。
@@ -29,3 +31,4 @@ protocol section 和 capability metadata 会增加模型 token；单纯索引源
 ## Known Limitations and Deferred Work
 
 - 外部 extension 执行继续由 Capability Broker 与隔离 package-host contract 管理，不会在启动时被 eager activate。
+- 持久化 mission trace 需要 live agent session；没有 session 的直接 runner 单元调用不会记录，也不能作为 production proof。

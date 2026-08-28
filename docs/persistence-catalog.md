@@ -424,6 +424,19 @@ Source: [`packages/feedback/command-feedback/src/index.ts:62`](../packages/feedb
 
 Source: [`packages/goal/goal/src/domain.ts:66`](../packages/goal/goal/src/domain.ts)
 
+### `hardness/*`
+
+<a id="hardnessmission--log-only"></a>
+
+#### `hardness/mission` — log-only
+
+```ts persistence-catalog
+/** One terminal state in the governed HARDNESS mission protocol. */
+'hardness/mission': HardnessMissionAuditEntry
+```
+
+Source: [`packages/hardness/adapters/src/mission-audit.ts:29`](../packages/hardness/adapters/src/mission-audit.ts)
+
 ### `hook/*`
 
 <a id="hookinvoked--log-only"></a>

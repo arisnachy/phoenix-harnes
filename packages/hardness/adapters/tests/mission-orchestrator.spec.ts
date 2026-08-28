@@ -22,14 +22,25 @@ describe('HARDNESS mission orchestrator', () => {
     const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
     const artifacts = new ArtifactRuntime()
     artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
+    const audit = { record: vi.fn() }
 
-    const result = await runHardnessMission({ hardness, acquisition, tools, approval, artifacts, need: { kind: 'weather', inputs: ['city'], outputs: ['forecast'] }, args: { city: 'Madrid' }, context: { callId: 'mission-1' as never, signal: new AbortController().signal } })
+    const result = await runHardnessMission({ hardness, acquisition, tools, approval, artifacts, audit, need: { kind: 'weather', inputs: ['city'], outputs: ['forecast'] }, args: { city: 'Madrid' }, context: { callId: 'mission-1' as never, signal: new AbortController().signal } })
 
     expect(result).toMatchObject({ kind: 'completed', artifact: { id: 'forecast' }, rendered: { kind: 'text' } })
     expect(tools.execute).toHaveBeenCalledTimes(1)
     expect(hardness.get(descriptor.id)?.status).toBe('verified')
     expect(hardness.evidenceFor(descriptor.id)).toHaveLength(1)
     expect(hardness.evidenceFor(descriptor.id)[0]).toMatchObject({ outcome: 'passed', artifactRefs: ['forecast'] })
+    expect(audit.record.mock.calls.map(([entry]) => [entry.step, entry.outcome])).toEqual([
+      ['inspect', 'completed'],
+      ['resolve', 'completed'],
+      ['plan', 'completed'],
+      ['approve', 'completed'],
+      ['execute', 'completed'],
+      ['verify', 'completed'],
+      ['present', 'completed'],
+      ['audit', 'completed'],
+    ])
     expect(lab.snapshot().experiments).toHaveLength(1)
     expect(ledger.snapshot()).toHaveLength(1)
     await ctx.fiber.dispose()
@@ -45,13 +56,23 @@ describe('HARDNESS mission orchestrator', () => {
     const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
     const artifacts = new ArtifactRuntime()
     artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
+    const audit = { record: vi.fn() }
 
-    const result = await runHardnessMission({ hardness, acquisition, tools, approval, artifacts, need: { kind: 'weather', inputs: ['city'], outputs: ['forecast'] }, args: { city: 'Madrid' }, context: { callId: 'mission-fail' as never, signal: new AbortController().signal } })
+    const result = await runHardnessMission({ hardness, acquisition, tools, approval, artifacts, audit, need: { kind: 'weather', inputs: ['city'], outputs: ['forecast'] }, args: { city: 'Madrid' }, context: { callId: 'mission-fail' as never, signal: new AbortController().signal } })
 
     expect(result).toMatchObject({ kind: 'blocked' })
     expect(hardness.get(descriptor.id)?.status).toBe('quarantined')
     expect(hardness.evidenceFor(descriptor.id)).toHaveLength(1)
     expect(hardness.evidenceFor(descriptor.id)[0]).toMatchObject({ outcome: 'failed' })
+    expect(audit.record.mock.calls.map(([entry]) => [entry.step, entry.outcome])).toEqual([
+      ['inspect', 'completed'],
+      ['resolve', 'completed'],
+      ['plan', 'completed'],
+      ['approve', 'completed'],
+      ['execute', 'completed'],
+      ['execute', 'blocked'],
+      ['audit', 'completed'],
+    ])
     await ctx.fiber.dispose()
   })
 })

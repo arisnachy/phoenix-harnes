@@ -18,6 +18,8 @@ When the canonical system-prompt service is mounted, this package installs the `
 
 Tool projections may subscribe to `tools/change`; this keeps dynamically connected tools, including MCP tools, represented in HARDNESS while registrations are reversible. The internal `hardness_run` tool is excluded from that projection to prevent recursive routing.
 
+Each live mission appends a secret-free `hardness/mission` trace to the calling session. The trace records terminal protocol states, capability identity, artifact/evidence references, and stable reason codes; `replayHardnessMissionAudit` reconstructs one call without replaying arguments, credentials, or provider error text.
+
 #### Token effect
 
 The protocol section and capability metadata contribute model tokens; indexing source registries alone does not add prompt text.
@@ -29,3 +31,4 @@ The projected catalog is cache-friendly while source schemas, extension metadata
 ## Known Limitations and Deferred Work
 
 - External extension execution remains governed by the Capability Broker and isolated package-host contract rather than being activated eagerly at startup.
+- Durable mission tracing requires a live agent session; direct unit-level runner calls without one remain unrecorded and are not production proof.

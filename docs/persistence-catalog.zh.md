@@ -426,6 +426,19 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/goal/goal/src/domain.ts:66`](../packages/goal/goal/src/domain.ts)
 
+### `hardness/*`
+
+<a id="hardnessmission--log-only"></a>
+
+#### `hardness/mission` — log-only
+
+```ts persistence-catalog
+/** One terminal state in the governed HARDNESS mission protocol. */
+'hardness/mission': HardnessMissionAuditEntry
+```
+
+来源：[`packages/hardness/adapters/src/mission-audit.ts:29`](../packages/hardness/adapters/src/mission-audit.ts)
+
 ### `hook/*`
 
 <a id="hookinvoked--log-only"></a>
