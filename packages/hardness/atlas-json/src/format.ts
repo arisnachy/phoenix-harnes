@@ -2,6 +2,11 @@
 
 import type { HardnessAtlasSnapshot } from '@deepseek-ai/dsh-hardness'
 
+/**
+ * Parse and validate one durable HARDNESS atlas snapshot.
+ * @param value - untrusted decoded JSON value.
+ * @returns validated version-one atlas snapshot.
+ */
 export function parseAtlasSnapshot(value: unknown): HardnessAtlasSnapshot {
   if (typeof value !== 'object' || value === null) throw new Error('invalid HARDNESS atlas: expected object')
   const record = value as Record<string, unknown>
