@@ -14,6 +14,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 
 const DEFAULT_WEB_PORT = 3080
 const RELAUNCH_GRACE_MS = 7_000
@@ -268,7 +269,7 @@ async function main() {
   await ensurePhoenixRunning(root)
 }
 
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   await main().catch((error) => {
     console.error(`[PHOENIX UPDATE] supervisor failed safely: ${error instanceof Error ? error.stack ?? error.message : String(error)}`)
     process.exitCode = 1
