@@ -14,9 +14,11 @@ The adapters do not execute tools, load skill bodies, or grant permissions; each
 
 Consumers may expose stable capability identifiers such as `tool:<name>`, `skill:<name>`, and `openclaw:<id>` together with compatibility and verification state; execution remains behind PHOENIX approval and canonical registries.
 
+When the canonical system-prompt service is mounted, this package installs the `hardness:operating-protocol` section. It gives every model the same lifecycle vocabulary and requires resolution, approval, verification, presentation, and evidence before a task is described as complete.
+
 #### Token effect
 
-Only capability metadata selected for a mission contributes model tokens; indexing source registries does not add prompt text on its own.
+The protocol section and capability metadata contribute model tokens; indexing source registries alone does not add prompt text.
 
 #### KV Cache effect
 

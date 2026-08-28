@@ -18,9 +18,13 @@ A route is selected only when the resolver returns a currently usable capability
 
 Consumers may expose declarative HARDNESS fields such as `capabilityId`, modality, verification state, inputs, outputs, and declared permissions; the registry itself exposes no credential or executable handle.
 
+### Operating protocol
+
+The exported `renderHardnessProtocol()` describes the model-facing lifecycle `inspect → resolve → plan → approve → execute → verify → present → audit`. The exported `evaluateHardnessProtocol()` turns current route, approval, execution, verification, presentation, and evidence observations into one serializable next step. Neither function executes a capability or grants authority; unresolved, denied, failed, or unverified work remains blocked.
+
 #### Token effect
 
-Only consumers that serialize selected capability metadata add model tokens; this registry does not append prompt text by itself.
+Only consumers that serialize selected capability metadata or install the protocol guide add model tokens; this registry does not mount a prompt section by itself.
 
 #### KV Cache effect
 

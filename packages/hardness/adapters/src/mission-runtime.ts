@@ -20,6 +20,18 @@ export interface HardnessMissionRpcPayload {
   readonly args: unknown
 }
 
+/** Input accepted by a direct model-facing HARDNESS mission runner. */
+export interface HardnessMissionRunnerInput {
+  readonly need: CapabilityNeed
+  readonly args: unknown
+  readonly context: import('./execution-bridge.ts').CapabilityExecutionContext
+}
+
+/** Direct governed runner shared by model-facing tools and host RPC adapters. */
+export interface HardnessMissionRunner {
+  readonly run: (input: HardnessMissionRunnerInput) => Promise<HardnessMissionResult>
+}
+
 /** Live PHOENIX services required to mount the governed HARDNESS mission runtime. */
 export interface HardnessMissionRuntimeDependencies {
   readonly connection: HostConnectionHandle
@@ -44,12 +56,7 @@ function payload(value: unknown): HardnessMissionRpcPayload | undefined {
   return { sessionId: value.sessionId, callId: value.callId, need: value.need as unknown as CapabilityNeed, args: value.args }
 }
 
-/**
- * Install the production HARDNESS RPC against live PHOENIX services.
- * @param deps - Live connection, agent, approval, HARDNESS, tool, acquisition, and optional executor services.
- * @returns Async disposer for the mounted loopback RPC handler.
- */
-export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDependencies): () => Promise<void> {
+function createArtifacts(): ArtifactRuntime {
   const artifacts = new ArtifactRuntime()
   for (const mime of [
     'text/plain',
@@ -61,8 +68,12 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
   ]) {
     artifacts.register(mime, artifact => ({ kind: 'hardness-artifact', artifactId: artifact.id }))
   }
+  return artifacts
+}
+
+function createApproval(deps: Pick<HardnessMissionRuntimeDependencies, 'approval'>): CapabilityApproval {
   const userApproval = createUserApprovalBroker(deps.approval)
-  const approval: CapabilityApproval = {
+  return {
     request: async (surface, context) => {
       if (context.agent === undefined) return { kind: 'denied' as const, reason: 'HARDNESS requires a live agent session' }
       return userApproval.request(surface, {
@@ -71,6 +82,34 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
       })
     },
   }
+}
+
+/** Create the governed mission runner without exposing connection or RPC authority. */
+export function createHardnessMissionRunner(deps: Omit<HardnessMissionRuntimeDependencies, 'connection' | 'agents'>): HardnessMissionRunner {
+  const artifacts = createArtifacts()
+  const approval = createApproval(deps)
+  return {
+    run: input => runHardnessMission({
+      hardness: deps.hardness,
+      acquisition: deps.acquisition,
+      tools: deps.tools,
+      approval,
+      artifacts,
+      ...(deps.executor === undefined ? {} : { executor: deps.executor }),
+      need: input.need,
+      args: input.args,
+      context: input.context,
+    }),
+  }
+}
+
+/**
+ * Install the production HARDNESS RPC against live PHOENIX services.
+ * @param deps - Live connection, agent, approval, HARDNESS, tool, acquisition, and optional executor services.
+ * @returns Async disposer for the mounted loopback RPC handler.
+ */
+export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDependencies): () => Promise<void> {
+  const runner = createHardnessMissionRunner(deps)
   return deps.connection.rpc.handle('/hardness', async (endpoint, raw, signal): Promise<RpcResult<HardnessMissionResult>> => {
     if (endpoint !== 'mission/run') return failure(`unknown HARDNESS endpoint: ${endpoint}`)
     const input = payload(raw)
@@ -78,13 +117,7 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
     const agent = deps.agents.get(input.sessionId as SessionId)
     if (agent === undefined) return failure(`HARDNESS session is not active: ${input.sessionId}`)
     try {
-      const result = await runHardnessMission({
-        hardness: deps.hardness,
-        acquisition: deps.acquisition,
-        tools: deps.tools,
-        approval,
-        artifacts,
-        ...(deps.executor !== undefined ? { executor: deps.executor } : {}),
+      const result = await runner.run({
         need: input.need,
         args: input.args,
         context: { callId: input.callId as never, signal, agent },

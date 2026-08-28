@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-28-hardness-model-operating-protocol.md
+2026-08-28-hardness-model-operating-protocol.md: 30aaf61aed3612fcb019233da77f702c7a17263e
+2026-08-28-hardness-model-operating-protocol.zh.md: 5aa3016d33f36db7a472c4a6f8a989db3ec225f6

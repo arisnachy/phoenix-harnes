@@ -14,9 +14,11 @@
 
 消费者可以向模型暴露稳定 capability 标识，例如 `tool:<name>`、`skill:<name>` 与 `openclaw:<id>`，以及 compatibility 和验证状态；执行仍由 PHOENIX approval 与规范 registry 控制。
 
+当规范的 system-prompt service 已挂载时，此 package 会安装 `hardness:operating-protocol` section。它为每个模型提供相同的生命周期词汇，并要求在把任务描述为完成之前经过 resolution、approval、verification、presentation 和 evidence。
+
 #### Token effect
 
-只有任务实际选择并呈现的 capability metadata 会增加模型 token；单纯索引源 registry 不会自行增加 prompt 文本。
+protocol section 和 capability metadata 会增加模型 token；单纯索引源 registry 不会增加 prompt 文本。
 
 #### KV Cache effect
 

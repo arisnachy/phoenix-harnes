@@ -1,12 +1,35 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
+import ToolRuntimePlugin from '@deepseek-ai/dsh-tools'
+import SkillRegistryPlugin from '@deepseek-ai/dsh-skill'
 import HardnessRegistry from '../../hardness/src/index.ts'
-import { indexSkills, indexTools } from '../src/index.ts'
+import { apply, indexSkills, indexTools } from '../src/index.ts'
 import type { HardnessService } from '../../hardness/src/types.ts'
 import type { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import type { SkillRegistry, SkillSummary } from '@deepseek-ai/dsh-skill'
 
 describe('HARDNESS source adapters', () => {
+  it('mounts the model-facing tool and protocol in the composed runtime', async () => {
+    const context = new Context()
+    await context.plugin(SystemPrompt)
+    await context.plugin(ToolRuntimePlugin)
+    await context.plugin(SkillRegistryPlugin)
+    await context.plugin(HardnessRegistry)
+    context.provide('connection', { rpc: { handle: vi.fn(() => async () => {}) } } as never)
+    context.provide('agents', { get: () => undefined } as never)
+    context.provide('approval', { request: vi.fn() } as never)
+
+    const dispose = await apply(context)
+    expect(context.tools.get('hardness_run')).toBeDefined()
+    const assembly = await context.systemPrompt.assemble()
+    expect(renderPrompt(assembly)).toContain('<phoenix_hardness_protocol>')
+
+    dispose()
+    expect(context.tools.get('hardness_run')).toBeUndefined()
+    await context.fiber.dispose()
+  })
+
   it('projects tools and skills and disposes owned descriptors', async () => {
     const context = new Context()
     await context.plugin(HardnessRegistry)

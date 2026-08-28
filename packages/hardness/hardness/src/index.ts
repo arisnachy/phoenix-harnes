@@ -26,6 +26,25 @@ import { routeCapabilityNeed } from './capability-router.ts'
 import { surfaceFromRoute } from './surface.ts'
 import { evidenceForCapability, freezeEvidence } from './evidence.ts'
 
+export {
+  HARDNESS_PROTOCOL_STEPS,
+  evaluateHardnessProtocol,
+  renderHardnessProtocol,
+} from './operating-protocol.ts'
+export type {
+  HardnessApprovalState,
+  HardnessAuditState,
+  HardnessExecutionState,
+  HardnessInspectionState,
+  HardnessPlanningState,
+  HardnessPresentationState,
+  HardnessProtocolInput,
+  HardnessProtocolOutcome,
+  HardnessProtocolStep,
+  HardnessProtocolView,
+  HardnessVerificationState,
+} from './operating-protocol.ts'
+
 export type * from './types.ts'
 
 /** Cordis service that owns the provider-neutral HARDNESS capability seam. */

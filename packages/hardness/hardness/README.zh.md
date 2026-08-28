@@ -18,9 +18,13 @@ PHOENIX HARDNESS 的 provider-neutral 能力 registry 与 Tool Atlas 服务。
 
 消费者可以向模型暴露声明式 HARDNESS 字段，例如 `capabilityId`、modality、验证状态、输入、输出和声明权限；registry 本身不会暴露凭据或可执行 handle。
 
+### Operating protocol
+
+导出的 `renderHardnessProtocol()` 描述模型可见的生命周期 `inspect → resolve → plan → approve → execute → verify → present → audit`。导出的 `evaluateHardnessProtocol()` 根据当前 route、approval、execution、verification、presentation 和 evidence 观察结果生成一个可序列化的下一步。两个函数都不会执行 capability 或授予 authority；未解析、被拒绝、失败或未验证的工作仍保持阻塞状态。
+
 #### Token effect
 
-只有将选定 capability metadata 序列化给模型的消费者会增加 token；registry 本身不会追加 prompt 文本。
+只有将选定 capability metadata 序列化给模型或安装 protocol guide 的消费者会增加 token；registry 本身不会自行挂载 prompt section。
 
 #### KV Cache effect
 
