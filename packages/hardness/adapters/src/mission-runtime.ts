@@ -69,7 +69,7 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
         tools: deps.tools,
         approval,
         artifacts,
-        executor: deps.executor,
+        ...(deps.executor !== undefined ? { executor: deps.executor } : {}),
         need: input.need,
         args: input.args,
         context: { callId: input.callId as never, signal, agent },
