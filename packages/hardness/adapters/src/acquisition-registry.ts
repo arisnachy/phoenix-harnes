@@ -4,7 +4,10 @@ import type {
 import type { LabMode, SelfImprovementLedger } from './lab-mode.ts'
 
 /** Provider that prepares one capability for a declared HARDNESS need. */
-export type CapabilityBuilder = (need: CapabilityNeed) => Promise<CapabilityDescriptor | undefined>
+export type CapabilityBuilder = (
+  need: CapabilityNeed,
+  signal: AbortSignal,
+) => Promise<CapabilityDescriptor | undefined>
 
 /** Learning sinks that retain preparation experience without granting verification. */
 export interface MissionLearningHooks {
@@ -40,9 +43,13 @@ export class AcquisitionRegistry {
    * Preparation only advances the capability to `testing`; successful real
    * execution is the sole source of passed evidence and later verification.
    */
-  async acquireOrBuild(need: CapabilityNeed): Promise<AcquisitionResult> {
+  async acquireOrBuild(
+    need: CapabilityNeed,
+    signal: AbortSignal = new AbortController().signal,
+  ): Promise<AcquisitionResult> {
     for (const builder of this.builders) {
-      const descriptor = await builder(need)
+      if (signal.aborted) return { kind: 'missing', reasons: ['capability acquisition cancelled'] }
+      const descriptor = await builder(need, signal)
       if (descriptor === undefined) continue
       const existing = this.hardness.get(descriptor.id)
       if (existing === undefined) this.hardness.register(descriptor)
