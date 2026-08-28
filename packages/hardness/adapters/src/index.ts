@@ -6,6 +6,12 @@ import { indexOpenClawExtensions } from './openclaw-adapter.ts'
 import { createIndexedToolAcquisition } from './acquisition-registry.ts'
 import { createHardnessAcquisition, installHardnessMissionRuntime } from './mission-runtime.ts'
 import { createOpenClawProductionBridge } from './openclaw/production.ts'
+import { InstalledOpenClawPackageInstaller } from './openclaw/installed-installer.ts'
+import {
+  createOpenClawIsolatedRunner,
+  type OpenClawSandboxRuntime,
+  type OpenClawSubprocessRuntime,
+} from './openclaw/isolated-runner.ts'
 
 export { indexTools } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
@@ -36,6 +42,15 @@ export { installHardnessMissionRuntime, createHardnessAcquisition } from './miss
 export type { HardnessMissionRpcPayload, HardnessMissionRuntimeDependencies } from './mission-runtime.ts'
 export { createOpenClawProductionBridge } from './openclaw/production.ts'
 export type { OpenClawProductionBridge } from './openclaw/production.ts'
+export { InstalledOpenClawPackageInstaller, locateInstalledOpenClawPackage } from './openclaw/installed-installer.ts'
+export type {
+  InstalledOpenClawPackageLocation,
+  InstalledOpenClawPackageLocator,
+  OpenClawIsolatedExecutionRequest,
+  OpenClawIsolatedRunner,
+} from './openclaw/installed-installer.ts'
+export { createOpenClawIsolatedRunner } from './openclaw/isolated-runner.ts'
+export type { OpenClawSandboxRuntime, OpenClawSubprocessRuntime } from './openclaw/isolated-runner.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -61,6 +76,26 @@ function requiredServices(ctx: Context) {
   return { hardness, tools, skills, connection, agents, approval }
 }
 
+function isOpenClawSubprocessRuntime(value: unknown): value is OpenClawSubprocessRuntime {
+  return typeof value === 'object' && value !== null
+    && typeof (value as { resolveExecutable?: unknown }).resolveExecutable === 'function'
+    && typeof (value as { spawn?: unknown }).spawn === 'function'
+}
+
+function isOpenClawSandboxRuntime(value: unknown): value is OpenClawSandboxRuntime {
+  return typeof value === 'object' && value !== null
+    && typeof (value as { confine?: unknown }).confine === 'function'
+}
+
+function createProductionOpenClawInstaller(ctx: Context): InstalledOpenClawPackageInstaller {
+  const subprocess = ctx.get('subprocess')
+  const sandbox = ctx.get('sandbox')
+  const runner = isOpenClawSubprocessRuntime(subprocess) && isOpenClawSandboxRuntime(sandbox)
+    ? createOpenClawIsolatedRunner({ subprocess, sandbox, workspaceRoot: process.cwd() })
+    : undefined
+  return new InstalledOpenClawPackageInstaller(undefined, runner)
+}
+
 /**
  * Install the HARDNESS projections and mission runtime.
  * @param ctx - Owning Cordis context with HARDNESS dependencies.
@@ -73,7 +108,7 @@ export async function apply(ctx: Context): Promise<() => void> {
     disposers.push(indexOpenClawExtensions(hardness))
     disposers.push(indexTools(tools, hardness))
     disposers.push(await indexSkills(skills, hardness))
-    const openclaw = createOpenClawProductionBridge()
+    const openclaw = createOpenClawProductionBridge(createProductionOpenClawInstaller(ctx))
     const missionDispose = installHardnessMissionRuntime({
       connection,
       agents,
