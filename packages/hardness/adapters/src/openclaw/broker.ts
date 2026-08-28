@@ -87,6 +87,24 @@ export class OpenClawCapabilityBroker {
   }
 
   /**
+   * Summarize retained preparation failures for candidates matching one need.
+   * Values are intentionally secret-free and suitable for mission diagnostics.
+   * @param need - capability family whose attempted OpenClaw candidates should be explained.
+   * @returns deterministic human-readable preparation reasons.
+   */
+  diagnosticsForNeed(need: CapabilityNeed): readonly string[] {
+    const reasons: string[] = []
+    for (const descriptor of this.candidates.filter(candidate => candidateMatches(candidate, need))) {
+      const extensionId = extensionIdFromCapability(descriptor.id)
+      if (extensionId === undefined) continue
+      const diagnostic = this.diagnosticsById.get(extensionId)
+      if (diagnostic === undefined) continue
+      reasons.push(`openclaw:${extensionId}: ${diagnostic.status}: ${diagnostic.reasons.join('; ')}`)
+    }
+    return reasons
+  }
+
+  /**
    * Prepare the first deterministic OpenClaw candidate that can satisfy the
    * declared need. Preparation is lazy and never marks the capability verified.
    * @param need - Capability requirement declared by HARDNESS.
