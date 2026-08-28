@@ -81,7 +81,7 @@ function quarantine(
 export async function runHardnessMission(input: HardnessMissionInput): Promise<HardnessMissionResult> {
   const initial = input.hardness.route(input.need)
   if (initial.kind !== 'route') {
-    const acquired = await input.acquisition.acquireOrBuild(input.need)
+    const acquired = await input.acquisition.acquireOrBuild(input.need, input.context.signal)
     if (acquired.kind !== 'built') return { kind: 'blocked', reason: acquired.reasons.join('; ') }
   }
 
