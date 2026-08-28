@@ -7,11 +7,18 @@ export {
 export { toPhoenixCapabilities } from './capabilities.ts'
 export { createOpenClawCompatibilityRuntime } from './runtime.ts'
 export { toHardnessCapabilityDescriptors } from './hardness.ts'
+export { OpenClawCapabilityBroker } from './broker.ts'
 export type { OpenClawExtensionCatalogEntry } from './catalog.ts'
 export type {
   PhoenixOpenClawCapability,
   PhoenixOpenClawCapabilityKind,
 } from './capabilities.ts'
+export type {
+  OpenClawCapabilityHost,
+  OpenClawExecutionContext,
+  OpenClawPreparationResult,
+  OpenClawBrokerDiagnostic,
+} from './broker.ts'
 export type {
   OpenClawCompatibilityRuntime,
   OpenClawCompatibilityRuntimeOptions,
