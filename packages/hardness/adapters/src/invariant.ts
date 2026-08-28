@@ -4,8 +4,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
 const PACKAGE_NAME = '@deepseek-ai/dsh-hardness-adapters'
+
+/** Cordis plugin name for the HARDNESS adapters invariant companion. */
 export const name = 'hardness-adapters-invariant'
+/** Required Cordis services for the invariant companion. */
 export const inject = ['invariants']
+// No runtime invariant: package behavior is validated by adapter contract tests.
 const install: InvariantInstaller = () => {}
+/** Register the package invariant companion. */
 export const apply = (ctx: Context): Promise<() => void> =>
   Promise.resolve(ctx.invariants.register(PACKAGE_NAME, install))
