@@ -8,7 +8,7 @@ on:
       - .github/workflows/hotfix-generate.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
@@ -24,17 +24,17 @@ jobs:
       - run: pnpm run gen-client-catalog
       - run: pnpm run gen-config-catalog
       - run: pnpm run gen-module-graph
-      - name: Collect generated promotion files
+      - name: Commit generated promotion files
         run: |
-          mkdir -p /tmp/hardness-hotfix/packages/extensions/cordis-client-runner/src/client
-          mkdir -p /tmp/hardness-hotfix/docs
-          cp pnpm-lock.yaml /tmp/hardness-hotfix/pnpm-lock.yaml
-          cp packages/extensions/cordis-client-runner/src/client/slot-catalog.ts /tmp/hardness-hotfix/packages/extensions/cordis-client-runner/src/client/slot-catalog.ts
-          cp docs/config-catalog.md /tmp/hardness-hotfix/docs/config-catalog.md
-          cp docs/module-graph.md /tmp/hardness-hotfix/docs/module-graph.md
-      - uses: actions/upload-artifact@v6
-        with:
-          name: hardness-hotfix-generated
-          path: /tmp/hardness-hotfix
-          if-no-files-found: error
-          retention-days: 1
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml \
+            packages/extensions/cordis-client-runner/src/client/slot-catalog.ts \
+            docs/config-catalog.md \
+            docs/module-graph.md
+          if git diff --cached --quiet; then
+            echo "Generated files are already current."
+            exit 0
+          fi
+          git commit -m "chore: refresh HARDNESS generated promotion files"
+          git push origin HEAD:graft/openclaw-inline-v4
