@@ -18,6 +18,8 @@ Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**
 
 两个目标 slot 都由其他插件声明，因此 `apply` 使用 `slots.inject()` 在各自的声明生命周期内完成注册，并在目标 slot 的声明恢复后重新注册。
 
+Capability artifact preview 通过 allowlist node renderer 渲染声明式 `application/vnd.hardness.ui+json` tree。字符串形式的 `text/html` artifact 在空 sandbox iframe 中渲染，不允许 script、form、same-origin 访问或 referrer；其他 artifact MIME 类型仍显示为转义文本或 JSON。preview 只负责 presentation，不暴露执行控件。
+
 共享侧边栏投影会隐藏持久化 Session 摘要中带有 `origin: 'subagent'` 的行；用户从所选父级的 subagent 页头目录进入这些对话。每个可见的普通行都会在经不间断的 subagent 谱系可达的任一后代运行时继承蓝色活动指示器；其悬停与无障碍文本会报告确切的运行中后代数量，同时不会把空闲 parent 描述为正在运行。普通 fork 仍然可见，并会终止此聚合，因为仅有谱系不会设置该 origin。待处理的用户交互优先于会话自身的运行中状态，二者无论哪一项存在都会保持为行的主要状态，而后代活动仍作为独立的悬停与无障碍状态保留。两者均不存在时，后代活动优先于绿色的未查看完成提醒；最后一个运行中的后代停止后，该提醒会重新出现。运行时仍保留隐藏行，供对话、标题与已寻址传输状态使用。
 
 ## 模型体验

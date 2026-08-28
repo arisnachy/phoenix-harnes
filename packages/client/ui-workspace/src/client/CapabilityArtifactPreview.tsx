@@ -12,7 +12,15 @@ export interface CapabilityArtifactPreviewProps {
 export function CapabilityArtifactPreview({ artifact, rendered }: CapabilityArtifactPreviewProps): ReactNode {
   const ui = artifact.mime === 'application/vnd.hardness.ui+json' && validateUiSchema(artifact.data)
     ? renderNode(artifact.data.root)
-    : createElement('pre', { style: { margin: 0, whiteSpace: 'pre-wrap', font: '500 14px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace' } }, typeof artifact.data === 'string' ? artifact.data : JSON.stringify(artifact.data, null, 2))
+    : artifact.mime === 'text/html' && typeof artifact.data === 'string'
+      ? createElement('iframe', {
+        title: `Documento ${artifact.id}`,
+        sandbox: '',
+        referrerPolicy: 'no-referrer',
+        srcDoc: artifact.data,
+        style: { display: 'block', width: '100%', minHeight: 360, border: 0, background: '#ffffff' },
+      })
+      : createElement('pre', { style: { margin: 0, whiteSpace: 'pre-wrap', font: '500 14px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace' } }, typeof artifact.data === 'string' ? artifact.data : JSON.stringify(artifact.data, null, 2))
   return createElement('article', {
     'data-artifact-id': artifact.id,
     'data-artifact-mime': artifact.mime,

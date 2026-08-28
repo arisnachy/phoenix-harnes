@@ -28,4 +28,23 @@ describe('CapabilityArtifact workspace preview', () => {
     expect(view.props.style).toMatchObject({ alignSelf: 'stretch', maxWidth: 720, margin: '20px auto' })
     expect(JSON.stringify(view).includes('"type":"section"')).toBe(true)
   })
+
+  it('renders HTML documents in a script-free sandboxed frame', () => {
+    const view = CapabilityArtifactPreview({
+      artifact: { id: 'html1', mime: 'text/html', data: '<!doctype html><h1>Informe PHOENIX</h1>' },
+      rendered: { kind: 'html-document', artifactId: 'html1' },
+    }) as { props: { children: unknown[] } }
+    const body = view.props.children[1] as { props: { children: unknown[] } }
+    const iframe = body.props.children[1] as { type: string; props: Record<string, unknown> }
+    expect(iframe.type).toBe('iframe')
+    expect(iframe.props).toMatchObject({
+      title: 'Documento html1',
+      sandbox: '',
+      referrerPolicy: 'no-referrer',
+      srcDoc: '<!doctype html><h1>Informe PHOENIX</h1>',
+    })
+    expect(iframe.props.sandbox).not.toContain('allow-scripts')
+    expect(iframe.props.sandbox).not.toContain('allow-forms')
+    expect(iframe.props.sandbox).not.toContain('allow-same-origin')
+  })
 })
