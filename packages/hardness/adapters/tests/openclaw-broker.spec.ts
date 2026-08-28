@@ -48,7 +48,7 @@ describe('OpenClaw Capability Broker', () => {
   })
 
   it('executes an OpenClaw surface through the prepared host', async () => {
-    const execute = vi.fn(async () => ({ content: [{ type: 'text', text: 'ok' }], isError: false }))
+    const execute = vi.fn(async () => ({ value: null, content: [{ type: 'text' as const, text: 'ok' }], isError: false as const }))
     const broker = new OpenClawCapabilityBroker({
       prepare: vi.fn(async (extensionId: string) => ({ kind: 'ready' as const, extensionId })),
       execute,
