@@ -1,5 +1,12 @@
 import type { HardnessService, CapabilityId } from '@deepseek-ai/dsh-hardness/src/types.ts'
-import type { SkillRegistry } from '@deepseek-ai/dsh-skill'
+import type { SkillRegistry, SkillSummary } from '@deepseek-ai/dsh-skill'
+
+function skillCompatibility(skill: SkillSummary): readonly string[] {
+  const compatibility = [`source:${skill.source}`]
+  if (skill.invocation.modelInvocable) compatibility.push('invocation:model')
+  if (skill.invocation.userInvocable) compatibility.push('invocation:user')
+  return compatibility
+}
 
 /**
  * Project skill summaries into reversible HARDNESS registrations.
@@ -21,8 +28,8 @@ export async function indexSkills(skills: SkillRegistry, hardness: HardnessServi
     provider: skill.provider,
     location: skill.resourceBase?.kind ?? 'skill-registry',
     version: '1.0.0',
-    compatibility: [],
-    limitations: [],
+    compatibility: [...skillCompatibility(skill)],
+    limitations: ['skill summary exposes no executable input/output schema'],
     modalities: ['native'],
     status: 'experimental',
   }).dispose)
