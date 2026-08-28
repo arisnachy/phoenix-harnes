@@ -5,6 +5,7 @@ import { indexTools } from './tool-adapter.ts'
 import { indexOpenClawExtensions } from './openclaw-adapter.ts'
 import { createIndexedToolAcquisition } from './acquisition-registry.ts'
 import { createHardnessAcquisition, installHardnessMissionRuntime } from './mission-runtime.ts'
+import { installHardnessModelTools } from './model-tools.ts'
 import { createOpenClawProductionBridge } from './openclaw/production.ts'
 import { InstalledOpenClawPackageInstaller } from './openclaw/installed-installer.ts'
 import {
@@ -34,6 +35,10 @@ export { AcquisitionRegistry, createIndexedToolAcquisition } from './acquisition
 export type { AcquisitionResult, CapabilityBuilder, MissionLearningHooks } from './acquisition-registry.ts'
 export { buildCapabilityCensus, capabilityBehavioralFingerprint } from './capability-census.ts'
 export type { CapabilityCensus, CapabilityCensusClassification, CapabilityCensusGroup } from './capability-census.ts'
+export { searchCapabilityAtlas } from './capability-search.ts'
+export type { CapabilitySearchMatch } from './capability-search.ts'
+export { installHardnessModelTools } from './model-tools.ts'
+export type { HardnessModelToolsDependencies } from './model-tools.ts'
 export { installSandboxCapabilityGuard } from './sandbox-guard.ts'
 export type { SandboxPolicyResolver } from './sandbox-guard.ts'
 export { runHardnessMission } from './mission-orchestrator.ts'
@@ -97,7 +102,7 @@ function createProductionOpenClawInstaller(ctx: Context): InstalledOpenClawPacka
 }
 
 /**
- * Install the HARDNESS projections and mission runtime.
+ * Install the HARDNESS projections, model gateways, and mission runtime.
  * @param ctx - Owning Cordis context with HARDNESS dependencies.
  * @returns Idempotent disposer for every projection installed by this adapter.
  */
@@ -109,13 +114,25 @@ export async function apply(ctx: Context): Promise<() => void> {
     disposers.push(indexTools(tools, hardness))
     disposers.push(await indexSkills(skills, hardness))
     const openclaw = createOpenClawProductionBridge(createProductionOpenClawInstaller(ctx))
+    const acquisition = createHardnessAcquisition(
+      hardness,
+      [createIndexedToolAcquisition(hardness)],
+      openclaw.broker,
+    )
+    disposers.push(installHardnessModelTools({
+      hardness,
+      tools,
+      approval,
+      acquisition,
+      executor: openclaw.executor,
+    }))
     const missionDispose = installHardnessMissionRuntime({
       connection,
       agents,
       approval,
       hardness,
       tools,
-      acquisition: createHardnessAcquisition(hardness, [createIndexedToolAcquisition(hardness)], openclaw.broker),
+      acquisition,
       executor: openclaw.executor,
     })
     disposers.push(() => { void missionDispose() })
