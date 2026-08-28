@@ -12,6 +12,10 @@ import { resolve } from 'node:path'
 /** Start one best-effort watcher for the lifetime of this PHOENIX process. */
 export function startPhoenixUpdateWatcher(): void {
   if ((process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase() === 'off') return
+  // phoenix-windows-supervisor.mjs already owns the one authoritative watcher.
+  // Starting a second host-bound watcher here creates a shutdown race where the
+  // legacy parent-exit activation can compete with the supervised activator.
+  if (process.env.PHOENIX_UPDATE_SUPERVISED === '1') return
 
   const rootResult = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     encoding: 'utf8',
