@@ -20,6 +20,40 @@ export type AcquisitionResult =
   | { readonly kind: 'built'; readonly capability: CapabilityDescriptor; readonly preparationId: string }
   | { readonly kind: 'missing'; readonly reasons: readonly string[] }
 
+function includesAll(values: readonly string[], required: readonly string[] | undefined): boolean {
+  return required === undefined || required.every(value => values.includes(value))
+}
+
+function matchesIndexedNativeTool(descriptor: CapabilityDescriptor, need: CapabilityNeed): boolean {
+  if (!descriptor.id.startsWith('tool:')) return false
+  if (descriptor.status !== 'experimental') return false
+  if (!descriptor.modalities.includes('native')) return false
+  if (need.kind !== undefined && descriptor.kind !== need.kind) return false
+  if (!includesAll(descriptor.inputs, need.inputs)) return false
+  if (!includesAll(descriptor.outputs, need.outputs)) return false
+  return true
+}
+
+/**
+ * Reuse an already indexed native tool as a one-pass acquisition candidate.
+ * This is deliberately narrower than generic capability discovery: only
+ * experimental `tool:*` descriptors with a compatible declared contract are
+ * eligible. The AcquisitionRegistry moves the selected descriptor to testing;
+ * real execution evidence remains required for verification.
+ * @param hardness - HARDNESS inventory containing previously indexed tools.
+ * @returns acquisition provider for compatible native tools.
+ */
+export function createIndexedToolAcquisition(
+  hardness: Pick<HardnessService, 'list'>,
+): CapabilityBuilder {
+  return async (need, signal) => {
+    if (signal.aborted) return undefined
+    return hardness.list()
+      .filter(descriptor => matchesIndexedNativeTool(descriptor, need))
+      .sort((left, right) => left.id.localeCompare(right.id))[0]
+  }
+}
+
 /** Registry of governed providers capable of preparing missing HARDNESS capabilities. */
 export class AcquisitionRegistry {
   private readonly builders: CapabilityBuilder[] = []
