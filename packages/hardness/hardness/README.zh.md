@@ -12,7 +12,19 @@ PHOENIX HARDNESS 的 provider-neutral 能力 registry 与 Tool Atlas 服务。
 
 ## Model Experience
 
-模型会获得明确的 capability descriptor、availability 状态、验证证据和 modality route；不会获得隐式 authority、凭据或直接执行 handle。
+### Capability Atlas 元数据
+
+#### What the model sees
+
+消费者可以向模型暴露声明式 HARDNESS 字段，例如 `capabilityId`、modality、验证状态、输入、输出和声明权限；registry 本身不会暴露凭据或可执行 handle。
+
+#### Token effect
+
+只有将选定 capability metadata 序列化给模型的消费者会增加 token；registry 本身不会追加 prompt 文本。
+
+#### KV Cache effect
+
+只要 capability metadata、routing 或验证状态不变，稳定 descriptor 就保持良好的 KV cache 复用特性。
 
 ## Known Limitations and Deferred Work
 
