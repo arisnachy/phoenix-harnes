@@ -154,7 +154,7 @@ describe('sandbox:policy request context', () => {
     const workspaceRoot = resolve('/projects/current')
     const expected = {
       'read-only': 'Current PHOENIX file policy: read-only. Any available operation enforced by the PHOENIX file sandbox cannot modify files in the standing mode. Do not refuse a required modification from this policy alone: try an available tool normally and follow any denial and escalation guidance it returns.',
-      'workspace-write': `Current PHOENIX file policy: workspace-write. Any available operation enforced by the PHOENIX file sandbox may modify files under the session workspace: ${JSON.stringify(workspaceRoot)}. Some platform temporary areas may also be writable.`,
+      'workspace-write': `Current PHOENIX file policy: workspace-write. Any available operation enforced by the PHOENIX file sandbox may modify files under the session workspace: "${workspaceRoot}". Some platform temporary areas may also be writable.`,
       'danger-full-access': 'Current PHOENIX file policy: danger-full-access. The PHOENIX file sandbox does not restrict file modifications by available operations.',
     } as const
 
@@ -193,7 +193,7 @@ describe('sandbox:policy request context', () => {
     expect(await policyContext(ctx, active)).toBe(danger)
 
     setSandboxMode(active, 'workspace-write')
-    expect(await policyContext(ctx, active)).toBe(`Current PHOENIX file policy: workspace-write. Any available operation enforced by the PHOENIX file sandbox may modify files under the session workspace: ${JSON.stringify(resolve('/projects/current'))}. Some platform temporary areas may also be writable.`)
+    expect(await policyContext(ctx, active)).toBe(`Current PHOENIX file policy: workspace-write. Any available operation enforced by the PHOENIX file sandbox may modify files under the session workspace: "${resolve('/projects/current')}". Some platform temporary areas may also be writable.`)
   })
 
   it('reconstructs resumed policy from the session log and omits diagnostics without an agent', async () => {

@@ -55,6 +55,11 @@ function rootsOverlap(left: string, right: string): boolean {
   return isPathUnder(left, right) || isPathUnder(right, left)
 }
 
+/** Render a filesystem path for model prose without escaping Windows separators. */
+function renderPath(path: string): string {
+  return `"${path.replaceAll('"', '\\"')}"`
+}
+
 /** Render the policy without claiming which capabilities are mounted. */
 function renderPolicyContext(policy: SandboxExecutionPolicy, evolutionRoot: string | undefined): string {
   let text: string
@@ -63,7 +68,7 @@ function renderPolicyContext(policy: SandboxExecutionPolicy, evolutionRoot: stri
       text = 'Current PHOENIX file policy: read-only. Any available operation enforced by the PHOENIX file sandbox cannot modify files in the standing mode. Do not refuse a required modification from this policy alone: try an available tool normally and follow any denial and escalation guidance it returns.'
       break
     case 'workspace-write':
-      text = `Current PHOENIX file policy: workspace-write. Any available operation enforced by the PHOENIX file sandbox may modify files under the session workspace: ${JSON.stringify(policy.workspaceRoot)}. Some platform temporary areas may also be writable.`
+      text = `Current PHOENIX file policy: workspace-write. Any available operation enforced by the PHOENIX file sandbox may modify files under the session workspace: ${renderPath(policy.workspaceRoot)}. Some platform temporary areas may also be writable.`
       break
     case 'danger-full-access':
       text = 'Current PHOENIX file policy: danger-full-access. The PHOENIX file sandbox does not restrict file modifications by available operations.'
@@ -77,7 +82,7 @@ function renderPolicyContext(policy: SandboxExecutionPolicy, evolutionRoot: stri
   if (process.env.PHOENIX_RUNTIME_ROOT?.trim().length === 0 || process.env.PHOENIX_RUNTIME_ROOT === undefined) return text
   const destination = evolutionRoot === undefined
     ? 'No isolated evolution worktree is currently available, so self-modification of the live runtime remains read-only.'
-    : `Self-modification must target the isolated evolution worktree ${JSON.stringify(evolutionRoot)}; validate changes there before promotion.`
+    : `Self-modification must target the isolated evolution worktree ${renderPath(evolutionRoot)}; validate changes there before promotion.`
   return `${text} PHOENIX HARDNESS runtime protection is active: model-controlled file and shell operations cannot write the live PHOENIX installation or its durable internal data home. ${destination}`
 }
 
