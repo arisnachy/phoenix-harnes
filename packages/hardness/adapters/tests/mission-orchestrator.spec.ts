@@ -41,7 +41,7 @@ describe('HARDNESS mission orchestrator', () => {
     const hardness = ctx.get('hardness') as HardnessService
     const acquisition = new AcquisitionRegistry(hardness)
     acquisition.register(async need => need.kind === 'weather' ? descriptor : undefined)
-    const tools = { execute: vi.fn(async () => ({ isError: true as const, value: null, content: [{ type: 'text', text: 'provider failed' }] })) }
+    const tools = { execute: vi.fn(async () => ({ isError: true as const, error: { message: 'provider failed' }, content: [{ type: 'text' as const, text: 'provider failed' }] })) }
     const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
     const artifacts = new ArtifactRuntime()
     artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
