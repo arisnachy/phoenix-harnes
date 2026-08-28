@@ -25,7 +25,7 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
           className={styles.expandButton}
           type="button"
           aria-expanded={expanded}
-          onClick={() => setExpanded(value => !value)}
+          onClick={() => { setExpanded(value => !value) }}
         >
           {expanded ? 'Collapse' : 'Expand'}
         </button>

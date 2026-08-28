@@ -27,7 +27,7 @@ function display(value: unknown): string {
   try {
     return JSON.stringify(value)
   } catch {
-    return String(value)
+    return '[unprintable value]'
   }
 }
 
@@ -176,15 +176,27 @@ function UiNodeView({ node, values, setValue }: {
   readonly setValue: (id: string, value: string) => void
 }): ReactNode {
   if (node.type === 'stack') {
-    const children = Array.isArray(node.children) ? node.children.map(asUiNode).filter((item): item is UiNode => item !== undefined) : []
-    return <div className={styles.stack}>{children.map((child, index) => <UiNodeView key={child.id ?? index} node={child} values={values} setValue={setValue} />)}</div>
+    const children = Array.isArray(node.children)
+      ? node.children.map(asUiNode).filter((item): item is UiNode => item !== undefined)
+      : []
+    return (
+      <div className={styles.stack}>
+        {children.map((child, index) => (
+          <UiNodeView key={child.id ?? index} node={child} values={values} setValue={setValue} />
+        ))}
+      </div>
+    )
   }
   if (node.type === 'input') {
     const id = node.id ?? node.label ?? 'input'
     return (
       <label className={styles.formLabel}>
         {node.label ?? id}
-        <input className={styles.input} value={values[id] ?? display(node.value)} onChange={event => setValue(id, event.currentTarget.value)} />
+        <input
+          className={styles.input}
+          value={values[id] ?? display(node.value)}
+          onChange={(event) => { setValue(id, event.currentTarget.value) }}
+        />
       </label>
     )
   }
@@ -193,7 +205,7 @@ function UiNodeView({ node, values, setValue }: {
     return <button className={styles.uiButton} type="button" disabled={hasAction} title={hasAction ? 'External actions require the Phoenix approval bridge.' : undefined}>{node.label ?? 'Button'}</button>
   }
   if (node.type === 'result') return <output>{node.label ?? node.text ?? display(node.value)}</output>
-  return <div>{node.text ?? node.label ?? display(node.value) ?? node.type}</div>
+  return <div>{node.text ?? node.label ?? display(node.value)}</div>
 }
 
 function DeclarativeUi({ record }: { readonly record: JsonRecord }) {
@@ -202,7 +214,11 @@ function DeclarativeUi({ record }: { readonly record: JsonRecord }) {
   if (root === undefined) return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
   return (
     <div className={styles.form}>
-      <UiNodeView node={root} values={values} setValue={(id, value) => setValues(current => ({ ...current, [id]: value }))} />
+      <UiNodeView
+        node={root}
+        values={values}
+        setValue={(id, value) => { setValues(current => ({ ...current, [id]: value })) }}
+      />
     </div>
   )
 }
@@ -224,11 +240,14 @@ function MiniApp({ html, expanded, title }: { readonly html: string; readonly ex
         sandbox={interactive ? 'allow-scripts' : ''}
       />
       <div>
-        <button className={styles.uiButton} type="button" onClick={() => setInteractive(value => !value)}>
+        <button className={styles.uiButton} type="button" onClick={() => { setInteractive(value => !value) }}>
           {interactive ? 'Disable interaction' : 'Enable sandboxed interaction'}
         </button>
       </div>
-      <p className={styles.note}>Mini-app scripts run only inside a unique-origin sandbox with network, forms, popups and parent access blocked.</p>
+      <p className={styles.note}>
+        Mini-app scripts run only inside a unique-origin sandbox with network, forms,
+        popups and parent access blocked.
+      </p>
     </div>
   )
 }
@@ -264,21 +283,45 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
   }
   if (type === 'document' || type === 'file') {
     const url = safeHref(block.url)
+    const textContent = text(block.text)
     const mime = text(block.mime) ?? 'application/octet-stream'
-    return <DocumentPreview key={index} mime={mime} url={url} textContent={text(block.text)} expanded={expanded} title={text(block.filename) ?? 'Document'} />
+    return <DocumentPreview
+      key={index}
+      mime={mime}
+      {...url === undefined ? {} : { url }}
+      {...textContent === undefined ? {} : { textContent }}
+      expanded={expanded}
+      title={text(block.filename) ?? 'Document'}
+    />
   }
   if (type === 'app') {
     const entry = text(block.entry)
     const files = isRecord(block.files) ? block.files : undefined
-    const html = entry !== undefined && files !== undefined && typeof files[entry] === 'string' ? files[entry] as string : text(block.html)
-    return html === undefined ? <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre> : <MiniApp key={index} html={html} expanded={expanded} title="HARDNESS mini-app" />
+    const entryFile = entry === undefined || files === undefined ? undefined : files[entry]
+    const html = typeof entryFile === 'string' ? entryFile : text(block.html)
+    return html === undefined
+      ? <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
+      : <MiniApp key={index} html={html} expanded={expanded} title="HARDNESS mini-app" />
   }
   return <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
 }
 
-function RecordPreview({ record, mime, expanded, title }: { readonly record: JsonRecord; readonly mime: string; readonly expanded: boolean; readonly title: string }) {
+function RecordPreview({ record, mime, expanded, title }: {
+  readonly record: JsonRecord
+  readonly mime: string
+  readonly expanded: boolean
+  readonly title: string
+}) {
   if (Array.isArray(record.blocks)) {
-    return <div className={styles.stack}>{record.blocks.map((block, index) => isRecord(block) ? renderBlock(block, index, expanded) : <pre className={styles.code} key={index}>{display(block)}</pre>)}</div>
+    return (
+      <div className={styles.stack}>
+        {record.blocks.map((block, index) => (
+          isRecord(block)
+            ? renderBlock(block, index, expanded)
+            : <pre className={styles.code} key={index}>{display(block)}</pre>
+        ))}
+      </div>
+    )
   }
   if (mime === 'application/vnd.hardness.ui+json' || isRecord(record.root)) return <DeclarativeUi record={record} />
   if (mime === 'application/vnd.hardness.chart+json' || typeof record.chartType === 'string') return <ChartPreview record={record} />
@@ -300,7 +343,10 @@ export function HardnessArtifactBody({ mime, data, expanded, title }: ArtifactBo
         ? <img className={styles.image} src={src} alt={title} />
         : <a className={styles.link} href={src} target="_blank" rel="noreferrer">Open image</a>
     }
-    if (mime === 'application/pdf') return <DocumentPreview mime={mime} url={safeHref(data)} expanded={expanded} title={title} />
+    if (mime === 'application/pdf') {
+      const url = safeHref(data)
+      return <DocumentPreview mime={mime} {...url === undefined ? {} : { url }} expanded={expanded} title={title} />
+    }
     return <pre className={mime.includes('json') ? styles.code : styles.text}>{data}</pre>
   }
   return <RecordPreview record={data} mime={mime} expanded={expanded} title={title} />
