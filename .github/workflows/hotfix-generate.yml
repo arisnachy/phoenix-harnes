@@ -1,4 +1,4 @@
-name: HARDNESS hotfix static verifier
+name: HARDNESS hotfix client-catalog refresh
 
 on:
   push:
@@ -8,17 +8,31 @@ on:
       - .github/workflows/hotfix-generate.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  static:
+  refresh:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run check:ci:static
+      - run: pnpm run gen-client-catalog
+      - name: Commit refreshed client catalog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/extensions/cordis-client-runner/src/client/slot-catalog.ts
+          if git diff --cached --quiet; then
+            echo "Client catalog already current."
+            exit 0
+          fi
+          git commit -m "chore: refresh HARDNESS client slot catalog"
+          git pull --rebase origin graft/openclaw-inline-v4
+          git push origin HEAD:graft/openclaw-inline-v4
