@@ -8,6 +8,12 @@ export { toPhoenixCapabilities } from './capabilities.ts'
 export { createOpenClawCompatibilityRuntime } from './runtime.ts'
 export { toHardnessCapabilityDescriptors } from './hardness.ts'
 export { OpenClawCapabilityBroker } from './broker.ts'
+export {
+  OPENCLAW_CORE_PACKAGE_SPEC,
+  OpenClawPackageHost,
+  registrationFamilyForOpenClawExtension,
+  resolveOpenClawInstallCandidate,
+} from './package-host.ts'
 export type { OpenClawExtensionCatalogEntry } from './catalog.ts'
 export type {
   PhoenixOpenClawCapability,
@@ -19,6 +25,13 @@ export type {
   OpenClawPreparationResult,
   OpenClawBrokerDiagnostic,
 } from './broker.ts'
+export type {
+  OpenClawInstallCandidate,
+  OpenClawPackageInstaller,
+  OpenClawPackagePrepareResult,
+  OpenClawPreparedPackage,
+  OpenClawRegistrationFamily,
+} from './package-host.ts'
 export type {
   OpenClawCompatibilityRuntime,
   OpenClawCompatibilityRuntimeOptions,
