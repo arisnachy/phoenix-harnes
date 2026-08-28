@@ -1,4 +1,4 @@
-name: HARDNESS hotfix generator
+name: HARDNESS hotfix verifier
 
 on:
   push:
@@ -8,36 +8,17 @@ on:
       - .github/workflows/hotfix-generate.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  generate:
+  static:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm run gen-client-catalog
-      - run: pnpm run gen-config-catalog
-      - run: pnpm run gen-module-graph
-      - name: Commit generated promotion files
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pnpm-lock.yaml \
-            packages/extensions/cordis-client-runner/src/client/slot-catalog.ts \
-            docs/config-catalog.md \
-            docs/module-graph.md
-          if git diff --cached --quiet; then
-            echo "Generated files are already current."
-            exit 0
-          fi
-          git commit -m "chore: refresh HARDNESS generated promotion files"
-          git pull --rebase origin graft/openclaw-inline-v4
-          git push origin HEAD:graft/openclaw-inline-v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check:ci:static
