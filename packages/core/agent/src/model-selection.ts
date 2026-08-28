@@ -32,7 +32,11 @@ export interface ModelSelectionHandoff {
   selection: ModelSelection
 }
 
-/** Default quality-preserving route for OpenAI Codex orchestrators. */
+/**
+ * Resolve the default quality-preserving execution route for OpenAI Codex orchestrators.
+ * @param selection - Current model selection, when one has been chosen.
+ * @returns execution handoff for OpenAI Codex, or undefined for other providers.
+ */
 export function defaultExecutionHandoff(selection: ModelSelection | undefined): ModelSelectionHandoff | undefined {
   if (selection?.provider !== 'openai-codex') return undefined
   return {
