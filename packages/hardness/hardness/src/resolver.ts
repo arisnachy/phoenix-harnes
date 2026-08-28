@@ -21,7 +21,13 @@ function permissionsSatisfied(
   return descriptor.requiredPermissions.every(permission => granted.has(permission.kind))
 }
 
-/** Resolve one need against a stable descriptor snapshot. */
+/**
+ * Resolve one need against a stable descriptor snapshot.
+ * @param descriptors - immutable capability descriptors considered for resolution.
+ * @param need - declarative capability requirements.
+ * @param context - ambient permission facts available to the resolver.
+ * @returns explicit have, missing, or unknown capability resolution.
+ */
 export function resolveCapabilityNeed(
   descriptors: readonly CapabilityDescriptor[],
   need: CapabilityNeed,
