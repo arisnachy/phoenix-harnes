@@ -1,8 +1,10 @@
 # HARDNESS One-Pass Assimilation Design
 
-Date: 2026-08-28
-Status: proposed for implementation
-Base commit: `6afce388522b7849f943a2d5fa929c75bafb4f71`
+English | [中文](2026-08-28-hardness-one-pass-assimilation-design.zh.md)
+
+- Date: 2026-08-28
+- Status: proposed for implementation
+- Base commit: `6afce388522b7849f943a2d5fa929c75bafb4f71`
 
 ## Goal
 
