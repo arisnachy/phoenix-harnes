@@ -137,6 +137,7 @@ export function apply(ctx: ClientContext): void {
     new URLSearchParams(window.location.search).get('hardness') === 'fixture'
     || new URLSearchParams(window.location.hash.replace(/^#/, '')).get('hardness') === 'fixture'
     || window.localStorage.getItem('hardness.fixture') === '1'
+    || window.location.hostname === '127.0.0.1'
   )
   if (hardnessFixture) {
     const fixture = createHardnessBrowserFixture()
