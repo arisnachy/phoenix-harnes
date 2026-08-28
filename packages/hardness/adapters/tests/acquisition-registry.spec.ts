@@ -26,4 +26,20 @@ describe('HARDNESS acquisition/build registry', () => {
     expect(hardness.resolveNeed({ kind: 'weather', inputs: ['city'], outputs: ['weather'], requiredStatus: 'verified' }).kind).toBe('missing')
     await ctx.fiber.dispose()
   })
+
+  it('transitions an already indexed experimental candidate instead of registering it twice', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    hardness.register(descriptor)
+    const registry = new AcquisitionRegistry(hardness)
+    registry.register(async need => need.kind === 'weather' ? descriptor : undefined)
+
+    const result = await registry.acquireOrBuild({ kind: 'weather', inputs: ['city'], outputs: ['weather'] })
+
+    expect(result.kind).toBe('built')
+    expect(hardness.get(descriptor.id)?.status).toBe('testing')
+    expect(hardness.list().filter(item => item.id === descriptor.id)).toHaveLength(1)
+    await ctx.fiber.dispose()
+  })
 })
