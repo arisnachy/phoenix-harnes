@@ -47,6 +47,13 @@ describe('OpenClaw Capability Broker', () => {
     expect(broker.diagnostics('brave')).toMatchObject({ status: 'MISSING_SECRET' })
   })
 
+  it('owns only OpenClaw capability surfaces', () => {
+    const broker = new OpenClawCapabilityBroker({ prepare: vi.fn(), execute: vi.fn(), deactivate: vi.fn() })
+
+    expect(broker.supports(openclawSurface('openclaw:brave'))).toBe(true)
+    expect(broker.supports(openclawSurface('tool:echo'))).toBe(false)
+  })
+
   it('executes an OpenClaw surface through the prepared host', async () => {
     const execute = vi.fn(async () => ({ value: null, content: [{ type: 'text' as const, text: 'ok' }], isError: false as const }))
     const broker = new OpenClawCapabilityBroker({
