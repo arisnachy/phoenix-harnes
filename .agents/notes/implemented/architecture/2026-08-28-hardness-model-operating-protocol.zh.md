@@ -21,3 +21,5 @@ HARDNESS protocol 测试覆盖未知和缺失 route、approval 顺序、permissi
 ## Consequences
 
 即使选择的 provider 不同，模型也会收到相同的生命周期词汇。protocol 是 guidance 和 evaluation，而不是 execution authority；规范的 tool runtime、permission broker、sandbox policy、artifact runtime 和 session persistence 仍保持各自现有的 authority。
+
+该 adapter 还监听 `tools/change`，因此 connector 发布或撤回 tool 时，HARDNESS projection 会更新且不会重复注册。内部 `hardness_run` tool 会被排除在 projection 之外。
