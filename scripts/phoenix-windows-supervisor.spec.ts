@@ -9,10 +9,12 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('function superviseWatcher(host)')
     expect(source).toContain('watcher exited unexpectedly')
     expect(source).toContain('restartTimer = setTimeout(start, WATCHER_RESTART_DELAY_MS)')
+    expect(source).toContain('restartTimer.unref?.()')
   })
 
   it('disables watcher respawn before an intentional host/update shutdown', () => {
     expect(source).toContain('await watcherSupervisor.stop()')
     expect(source).toContain('stopping = true')
+    expect(source).toContain('clearTimeout(restartTimer)')
   })
 })
