@@ -4,6 +4,7 @@ import { registerChatConversationView } from './chat-snapshot-builder.ts'
 import { registerCommandConversationNode } from './command.ts'
 import { registerCompactionConversationNode } from './compaction.ts'
 import { registerUnknownConversationFallback } from './fallback.ts'
+import { registerHardnessArtifactConversationNode } from './hardness-artifact.ts'
 import { registerInboxConversationNodes } from './inbox.ts'
 import { registerMessageConversationNode } from './message.ts'
 import { registerRetryConversationNode } from './retry.ts'
@@ -12,15 +13,13 @@ import { registerTurnErrorConversationNode } from './turn-error.ts'
 import { registerTurnMaxTokensConversationNode } from './turn-max-tokens.ts'
 import { registerTurnTailConversationNode } from './turn-tail.ts'
 
-/**
- * Register the Chat business Definitions and target builder contributed by this package.
- * @param ctx - owning UI Conversation context.
- */
+/** Register the Chat business Definitions and target builder contributed by this package. */
 export function registerConversationNodes(ctx: Context): void {
   registerInboxConversationNodes(ctx)
   registerMessageConversationNode(ctx)
   registerAssistantConversationNode(ctx)
   registerToolConversationNode(ctx)
+  registerHardnessArtifactConversationNode(ctx)
   registerCommandConversationNode(ctx)
   registerCompactionConversationNode(ctx)
   registerRetryConversationNode(ctx)
