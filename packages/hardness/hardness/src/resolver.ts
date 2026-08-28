@@ -17,7 +17,11 @@ function permissionsSatisfied(
   descriptor: CapabilityDescriptor,
   context: CapabilityResolutionContext,
 ): boolean {
-  const granted = new Set(context.permissions ?? [])
+  // An omitted permission context means discovery/routing should surface the
+  // capability and its declared permissions to the approval layer. Supplying a
+  // context is an explicit authorization filter and therefore remains strict.
+  if (context.permissions === undefined) return true
+  const granted = new Set(context.permissions)
   return descriptor.requiredPermissions.every(permission => granted.has(permission.kind))
 }
 
@@ -25,7 +29,7 @@ function permissionsSatisfied(
  * Resolve one need against a stable descriptor snapshot.
  * @param descriptors - immutable capability descriptors considered for resolution.
  * @param need - declarative capability requirements.
- * @param context - ambient permission facts available to the resolver.
+ * @param context - ambient permission facts available to the resolver. Omission discovers pending grants; an explicit list filters strictly.
  * @returns explicit have, missing, or unknown capability resolution.
  */
 export function resolveCapabilityNeed(
