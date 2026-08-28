@@ -5,8 +5,10 @@ import type {
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-client-runtime/client'
 import { chatNode } from './common.ts'
 
+/** Serializable payload accepted by the conversation-native HARDNESS artifact node. */
 export type HardnessArtifactValue = string | Readonly<Record<string, unknown>>
 
+/** Durable chat data projected from one settled Tool result artifact. */
 export interface HardnessArtifactChatData {
   readonly artifactId: string
   readonly callId: string
@@ -87,6 +89,10 @@ export const hardnessArtifactDefinition: ConversationNodeDefinition<HardnessArti
   },
 }
 
+/**
+ * Register the HARDNESS artifact projection with the conversation event assembler.
+ * @param ctx - Owning UI Conversation Cordis context.
+ */
 export function registerHardnessArtifactConversationNode(ctx: Context): void {
   ctx.conversationEvents.register(hardnessArtifactDefinition)
 }
