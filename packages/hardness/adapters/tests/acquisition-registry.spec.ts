@@ -59,6 +59,30 @@ describe('HARDNESS acquisition/build registry', () => {
     await ctx.fiber.dispose()
   })
 
+  it('matches the semantic need against the real indexed tool name even when its family kind is generic', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const indexed = {
+      ...descriptor,
+      id: 'tool:weather' as CapabilityId,
+      kind: 'tool',
+      name: 'weather',
+      provider: 'dsh-tools',
+      location: 'tool-registry',
+      outputs: [],
+    } as const
+    hardness.register(indexed)
+    const registry = new AcquisitionRegistry(hardness)
+    registry.register(createIndexedToolAcquisition(hardness))
+
+    const result = await registry.acquireOrBuild({ kind: 'weather', inputs: ['city'] })
+
+    expect(result.kind).toBe('built')
+    expect(hardness.get(indexed.id)?.status).toBe('testing')
+    await ctx.fiber.dispose()
+  })
+
   it('does not qualify indexed skills or incompatible tool contracts as executable tools', async () => {
     const ctx = new Context()
     await ctx.plugin(HardnessRegistry)
