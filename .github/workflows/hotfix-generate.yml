@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
@@ -37,4 +39,5 @@ jobs:
             exit 0
           fi
           git commit -m "chore: refresh HARDNESS generated promotion files"
+          git pull --rebase origin graft/openclaw-inline-v4
           git push origin HEAD:graft/openclaw-inline-v4
