@@ -1,7 +1,12 @@
 import type { HardnessService, CapabilityId } from '@deepseek-ai/dsh-hardness/src/types.ts'
 import type { SkillRegistry } from '@deepseek-ai/dsh-skill'
 
-/** Project skill summaries into reversible HARDNESS registrations. */
+/**
+ * Project skill summaries into reversible HARDNESS registrations.
+ * @param skills - canonical skill registry queried for metadata-only summaries.
+ * @param hardness - HARDNESS registry receiving projected descriptors.
+ * @returns async disposer that retracts every projected skill capability.
+ */
 export async function indexSkills(skills: SkillRegistry, hardness: HardnessService): Promise<() => void> {
   const summaries = await skills.list()
   const disposers = summaries.map(skill => hardness.register({

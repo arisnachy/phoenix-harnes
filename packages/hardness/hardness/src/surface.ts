@@ -2,6 +2,11 @@
 
 import type { CapabilityRouteResult, CapabilitySurface } from './types.ts'
 
+/**
+ * Project a routed capability into a serializable UI-safe surface.
+ * @param result - capability routing result to project.
+ * @returns frozen surface for a routed capability, otherwise undefined.
+ */
 export function surfaceFromRoute(result: CapabilityRouteResult): CapabilitySurface | undefined {
   if (result.kind !== 'route') return undefined
   const { capability, modality, need, requiredPermissions } = result.route

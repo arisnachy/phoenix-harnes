@@ -77,6 +77,8 @@ function quarantine(
 /**
  * Execute one mission through acquisition, approval, real execution, artifact
  * verification, and evidence-backed promotion or quarantine.
+ * @param input - Live services, declared need, arguments, and execution context.
+ * @returns Completed rendered artifact or the governed reason the mission was blocked.
  */
 export async function runHardnessMission(input: HardnessMissionInput): Promise<HardnessMissionResult> {
   const initial = input.hardness.route(input.need)

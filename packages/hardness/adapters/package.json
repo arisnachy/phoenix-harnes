@@ -2,12 +2,43 @@
   "name": "@deepseek-ai/dsh-hardness-adapters",
   "description": "Adapters that project PHOENIX tools and skills into the HARDNESS Tool Atlas",
   "version": "0.1.1-rc.2",
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/hardness/adapters"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
-  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" }, "./src/*": "./src/*" },
-  "files": ["lib"],
+  "exports": {
+    ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./invariant": { "types": "./lib/types/invariant.d.ts", "default": "./lib/invariant.js" },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib/index.js", "lib/invariant.js", "lib/types/**/*.d.ts"],
   "license": "MIT",
-  "peerDependencies": { "@deepseek-ai/dsh-hardness": "workspace:^", "@deepseek-ai/dsh-tools": "workspace:^", "@deepseek-ai/dsh-skill": "workspace:^", "@deepseek-ai/dsh-user-approval": "workspace:^", "@deepseek-ai/dsh-agent": "workspace:^", "@deepseek-ai/dsh-client-connection": "workspace:^", "@deepseek-ai/dsh-host-apiproxy": "workspace:^" },
-  "devDependencies": { "@deepseek-ai/dsh-hardness": "workspace:^", "@deepseek-ai/dsh-tools": "workspace:^", "@deepseek-ai/dsh-skill": "workspace:^", "@deepseek-ai/dsh-user-approval": "workspace:^", "@deepseek-ai/dsh-agent": "workspace:^", "@deepseek-ai/dsh-client-connection": "workspace:^", "@deepseek-ai/dsh-host-apiproxy": "workspace:^" }
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-agent": "workspace:^",
+    "@deepseek-ai/dsh-client-connection": "workspace:^",
+    "@deepseek-ai/dsh-hardness": "workspace:^",
+    "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
+    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-skill": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^",
+    "@deepseek-ai/dsh-user-approval": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-agent": "workspace:^",
+    "@deepseek-ai/dsh-client-connection": "workspace:^",
+    "@deepseek-ai/dsh-hardness": "workspace:^",
+    "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
+    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-skill": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^",
+    "@deepseek-ai/dsh-user-approval": "workspace:^"
+  }
 }

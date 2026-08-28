@@ -10,6 +10,22 @@ PHOENIX HARDNESS 的 provider-neutral 能力 registry 与 Tool Atlas 服务。
 
 `CapabilitySurface` 会把 route 投影为稳定的预览数据（`id`、输入、输出、modality、验证状态和声明权限）。它可序列化为 JSON，不包含 callback、凭据、sandbox handle 或 workspace mutation；missing 与 unknown 不会生成 surface。
 
+## Model Experience
+
+### Capability Atlas 元数据
+
+#### What the model sees
+
+消费者可以向模型暴露声明式 HARDNESS 字段，例如 `capabilityId`、modality、验证状态、输入、输出和声明权限；registry 本身不会暴露凭据或可执行 handle。
+
+#### Token effect
+
+只有将选定 capability metadata 序列化给模型的消费者会增加 token；registry 本身不会追加 prompt 文本。
+
+#### KV Cache effect
+
+只要 capability metadata、routing 或验证状态不变，稳定 descriptor 就保持良好的 KV cache 复用特性。
+
 ## Known Limitations and Deferred Work
 
-resolver 与内存提供方是第一层基础；持久化、source adapter、外部获取、视觉渲染和生成式 UI 属于后续消费者与提供方。
+- resolver 与内存提供方是第一层基础；持久化、source adapter、外部获取、视觉渲染和生成式 UI 属于后续消费者与提供方。

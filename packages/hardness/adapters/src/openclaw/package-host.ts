@@ -71,7 +71,11 @@ function errorText(error: unknown): string {
   return error instanceof Error && error.message.length > 0 ? error.message : String(error)
 }
 
-/** Translate the catalog capability kind into the package-host registration vocabulary. */
+/**
+ * Translate the catalog capability kind into the package-host registration vocabulary.
+ * @param extensionId - Pinned OpenClaw extension identifier.
+ * @returns Registration family required from the prepared package.
+ */
 export function registrationFamilyForOpenClawExtension(extensionId: string): OpenClawRegistrationFamily {
   const capability = toPhoenixCapabilities({ id: extensionId })[0]
   if (capability === undefined) return 'extension'
@@ -98,7 +102,11 @@ export function registrationFamilyForOpenClawExtension(extensionId: string): Ope
   }
 }
 
-/** Resolve one donor id to an immutable, official package preparation request. */
+/**
+ * Resolve one donor id to an immutable, official package preparation request.
+ * @param extensionId - OpenClaw extension identifier present in the pinned catalog.
+ * @returns Immutable install candidate pinned to the accepted core version and donor commit.
+ */
 export function resolveOpenClawInstallCandidate(extensionId: string): OpenClawInstallCandidate {
   if (!listOpenClawExtensions().some(entry => entry.id === extensionId)) {
     throw new Error(`unknown OpenClaw extension ${extensionId}`)

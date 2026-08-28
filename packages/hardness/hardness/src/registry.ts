@@ -6,7 +6,10 @@ const statuses: readonly CapabilityStatus[] = [
   'experimental', 'testing', 'verified', 'broken', 'quarantined', 'deprecated',
 ]
 
-/** Validate the descriptor fields owned by the registry boundary. */
+/**
+ * Validate the descriptor fields owned by the registry boundary.
+ * @param descriptor - capability descriptor to validate.
+ */
 export function validateCapabilityDescriptor(descriptor: CapabilityDescriptor): void {
   if (descriptor.id.length === 0) throw new Error('invalid capability descriptor: id is required')
   if (descriptor.kind.length === 0) throw new Error('invalid capability descriptor: kind is required')
@@ -17,7 +20,12 @@ export function validateCapabilityDescriptor(descriptor: CapabilityDescriptor): 
   if (!statuses.includes(descriptor.status)) throw new Error('invalid capability descriptor: unknown status')
 }
 
-/** Compare dotted numeric versions used by atlas replacements. */
+/**
+ * Compare dotted numeric versions used by atlas replacements.
+ * @param left - first dotted numeric version.
+ * @param right - second dotted numeric version.
+ * @returns negative, zero, or positive ordering value.
+ */
 export function compareCapabilityVersions(left: string, right: string): number {
   const a = left.split('.').map(Number)
   const b = right.split('.').map(Number)
@@ -28,7 +36,14 @@ export function compareCapabilityVersions(left: string, right: string): number {
   return 0
 }
 
-/** Apply one lifecycle transition, enforcing verification evidence at the boundary. */
+/**
+ * Apply one lifecycle transition, enforcing verification evidence at the boundary.
+ * @param descriptor - current capability descriptor.
+ * @param status - target lifecycle status.
+ * @param reason - human-readable reason for the transition.
+ * @param evidenceId - evidence supporting verification when required.
+ * @returns descriptor with the validated target status.
+ */
 export function transitionCapability(
   descriptor: CapabilityDescriptor,
   status: CapabilityStatus,

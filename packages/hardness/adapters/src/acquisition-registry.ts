@@ -29,7 +29,11 @@ export class AcquisitionRegistry {
     private readonly learning?: MissionLearningHooks,
   ) {}
 
-  /** Register one preparation provider and return its disposer. */
+  /**
+   * Register one preparation provider.
+   * @param builder - governed provider that may prepare a requested capability.
+   * @returns disposer that removes the provider from this registry.
+   */
   register(builder: CapabilityBuilder): () => void {
     this.builders.push(builder)
     return () => {
@@ -42,6 +46,9 @@ export class AcquisitionRegistry {
    * Prepare the first provider that can satisfy a need.
    * Preparation only advances the capability to `testing`; successful real
    * execution is the sole source of passed evidence and later verification.
+   * @param need - capability requirements that were not already routable.
+   * @param signal - cancellation signal propagated into preparation providers.
+   * @returns built testing capability or explicit missing result.
    */
   async acquireOrBuild(
     need: CapabilityNeed,

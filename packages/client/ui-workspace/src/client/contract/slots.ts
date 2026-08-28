@@ -25,12 +25,14 @@
 import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
 import type { CapabilitySurface } from '@deepseek-ai/dsh-hardness'
 
+/** Serializable capability artifact exposed to conversation-native workspace renderers. */
 export interface CapabilityArtifact {
   readonly id: string
   readonly mime: string
   readonly data: string | Readonly<Record<string, unknown>>
 }
 
+/** Provider-neutral render model produced for a validated capability artifact. */
 export interface CapabilityArtifactRenderModel {
   readonly kind: string
   readonly artifactId: string

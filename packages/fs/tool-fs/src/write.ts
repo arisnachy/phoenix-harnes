@@ -27,7 +27,12 @@ export function parseWriteArgs(args: { file_path: string; content: string }): { 
   return { filePath: args.file_path, content: args.content }
 }
 
-/** Build persisted inline artifact metadata for browser-renderable source files. */
+/**
+ * Build persisted inline artifact metadata for browser-renderable source files.
+ * @param filePath - resolved file path used to infer MIME type and artifact identity.
+ * @param content - complete UTF-8 file content persisted in the artifact payload.
+ * @returns artifact metadata for supported browser source types, otherwise undefined.
+ */
 export function artifactMetaForFile(filePath: string, content: string): { artifact: {
   id: string
   title: string

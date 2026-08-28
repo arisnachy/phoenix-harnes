@@ -1,10 +1,18 @@
 import type { HardnessService, CapabilityId } from '@deepseek-ai/dsh-hardness'
 import type { ToolRuntime, ToolGuard } from '@deepseek-ai/dsh-tools'
+
+/** Resolver that supplies the authoritative sandbox policy for one execution context. */
 export interface SandboxPolicyResolver {
   resolve: (request?: { readonly session?: unknown }) => { readonly mode: string; readonly workspaceRoot: string }
 }
 
-/** Install a fail-closed guard for descriptors declaring the sandbox modality. */
+/**
+ * Install a fail-closed guard for descriptors declaring the sandbox modality.
+ * @param tools - canonical tool runtime whose guard chain will be extended.
+ * @param hardness - HARDNESS registry used to inspect tool capability descriptors.
+ * @param sandboxPolicy - authoritative sandbox policy resolver, when available.
+ * @returns disposer for the installed tool guard.
+ */
 export function installSandboxCapabilityGuard(
   tools: Pick<ToolRuntime, 'guard'>,
   hardness: Pick<HardnessService, 'get'>,

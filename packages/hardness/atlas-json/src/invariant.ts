@@ -5,9 +5,17 @@ import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
 const PACKAGE_NAME = '@deepseek-ai/dsh-hardness-atlas-json'
 
+/** Cordis plugin name for the HARDNESS Atlas JSON invariant companion. */
 export const name = 'hardness-atlas-json-invariant'
+/** Required Cordis services for the invariant companion. */
 export const inject = ['invariants']
+// No runtime invariant: persistence behavior is validated by Atlas JSON contract tests.
 const install: InvariantInstaller = () => {}
 
+/**
+ * Register the package invariant companion.
+ * @param ctx - Cordis context that owns the invariant registry.
+ * @returns disposer for the registered invariant companion.
+ */
 export const apply = (ctx: Context): Promise<() => void> =>
   Promise.resolve(ctx.invariants.register(PACKAGE_NAME, install))

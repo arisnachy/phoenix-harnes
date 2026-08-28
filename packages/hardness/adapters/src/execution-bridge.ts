@@ -30,6 +30,14 @@ export type CapabilityExecutionResult =
 /**
  * Route one need, require approval, then dispatch either a Phoenix tool or a
  * compatible external executor. No non-tool surface is executed implicitly.
+ * @param hardness - HARDNESS routing and surface projection service.
+ * @param tools - canonical Phoenix tool runtime for `tool:*` capabilities.
+ * @param approval - approval broker required before execution.
+ * @param need - capability requirements to resolve.
+ * @param args - opaque arguments forwarded only after approval.
+ * @param context - call identity, cancellation, and optional agent context.
+ * @param external - optional executor for non-tool capability families.
+ * @returns governed executed, denied, missing, or unsupported result.
  */
 export async function executeCapabilityNeed(
   hardness: Pick<HardnessService, 'route' | 'surface'>,
