@@ -1,0 +1,40 @@
+name: HARDNESS hotfix generator
+
+on:
+  push:
+    branches:
+      - graft/openclaw-inline-v4
+    paths:
+      - .github/workflows/hotfix-generate.yml
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm run gen-client-catalog
+      - run: pnpm run gen-config-catalog
+      - run: pnpm run gen-module-graph
+      - name: Collect generated promotion files
+        run: |
+          mkdir -p /tmp/hardness-hotfix/packages/extensions/cordis-client-runner/src/client
+          mkdir -p /tmp/hardness-hotfix/docs
+          cp pnpm-lock.yaml /tmp/hardness-hotfix/pnpm-lock.yaml
+          cp packages/extensions/cordis-client-runner/src/client/slot-catalog.ts /tmp/hardness-hotfix/packages/extensions/cordis-client-runner/src/client/slot-catalog.ts
+          cp docs/config-catalog.md /tmp/hardness-hotfix/docs/config-catalog.md
+          cp docs/module-graph.md /tmp/hardness-hotfix/docs/module-graph.md
+      - uses: actions/upload-artifact@v6
+        with:
+          name: hardness-hotfix-generated
+          path: /tmp/hardness-hotfix
+          if-no-files-found: error
+          retention-days: 1
