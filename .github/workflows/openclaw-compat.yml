@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'packages/extensions/openclaw-compat/**'
+      - 'packages/hardness/adapters/**'
       - '.github/workflows/openclaw-compat.yml'
 
 permissions:
@@ -31,4 +32,4 @@ jobs:
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
       - name: Run OpenClaw compatibility tests
-        run: pnpm exec vitest run packages/extensions/openclaw-compat/tests
+        run: pnpm exec vitest run packages/extensions/openclaw-compat/tests packages/hardness/adapters/tests/openclaw-adapter.spec.ts
