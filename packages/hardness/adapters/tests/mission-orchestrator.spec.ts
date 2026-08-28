@@ -2,7 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import HardnessRegistry from '@deepseek-ai/dsh-hardness/src/index.ts'
 import type { CapabilityId, HardnessService } from '@deepseek-ai/dsh-hardness/src/types.ts'
-import { AcquisitionRegistry } from '../src/acquisition-registry.ts'
+import { AcquisitionRegistry, createIndexedToolAcquisition } from '../src/acquisition-registry.ts'
 import { ArtifactRuntime } from '../src/artifact-runtime.ts'
 import { runHardnessMission } from '../src/mission-orchestrator.ts'
 import { LabMode, SelfImprovementLedger } from '../src/lab-mode.ts'
@@ -52,6 +52,41 @@ describe('HARDNESS mission orchestrator', () => {
     expect(hardness.get(descriptor.id)?.status).toBe('quarantined')
     expect(hardness.evidenceFor(descriptor.id)).toHaveLength(1)
     expect(hardness.evidenceFor(descriptor.id)[0]).toMatchObject({ outcome: 'failed' })
+    await ctx.fiber.dispose()
+  })
+
+  it('quarantines a broken candidate and continues to the next candidate in the same mission', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const first = { ...descriptor, id: 'tool:weather-a' as CapabilityId, name: 'weather-a' } as const
+    const second = { ...descriptor, id: 'tool:weather-b' as CapabilityId, name: 'weather-b' } as const
+    hardness.register(first)
+    hardness.register(second)
+    const acquisition = new AcquisitionRegistry(hardness)
+    acquisition.register(createIndexedToolAcquisition(hardness))
+    const tools = { execute: vi.fn(async ({ name }: { name: string }) => name === 'weather-a'
+      ? { isError: true as const, error: { message: 'first provider failed' }, content: [{ type: 'text' as const, text: 'failed' }] }
+      : { isError: false as const, value: { forecast: 'sunny' }, content: [] }) }
+    const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
+    const artifacts = new ArtifactRuntime()
+    artifacts.register('application/json', artifact => ({ kind: 'json', artifactId: artifact.id }))
+
+    const result = await runHardnessMission({
+      hardness,
+      acquisition,
+      tools: tools as never,
+      approval,
+      artifacts,
+      need: { kind: 'weather', inputs: ['city'], outputs: ['forecast'] },
+      args: { city: 'Madrid' },
+      context: { callId: 'mission-fallback' as never, signal: new AbortController().signal },
+    })
+
+    expect(result).toMatchObject({ kind: 'completed' })
+    expect(tools.execute).toHaveBeenCalledTimes(2)
+    expect(hardness.get(first.id)?.status).toBe('quarantined')
+    expect(hardness.get(second.id)?.status).toBe('verified')
     await ctx.fiber.dispose()
   })
 })
