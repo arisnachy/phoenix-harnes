@@ -1,4 +1,4 @@
-name: HARDNESS hotfix generated-doc sync
+name: HARDNESS hotfix JSDoc verifier
 
 on:
   push:
@@ -8,42 +8,17 @@ on:
       - .github/workflows/hotfix-generate.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  sync:
+  jsdoc:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Apply generated English deltas to paired Chinese catalogs
-        env:
-          BASE: 8f5ebf3a97ac287305f9e34a52944e7b9d11278b
-        run: |
-          set -euo pipefail
-          for stem in config-catalog module-graph; do
-            git diff --binary "$BASE" -- "docs/${stem}.md" > "/tmp/${stem}.patch"
-            sed -e "s#docs/${stem}\.md#docs/${stem}.zh.md#g" "/tmp/${stem}.patch" > "/tmp/${stem}.zh.patch"
-            git apply --recount "/tmp/${stem}.zh.patch"
-          done
-      - name: Record bilingual pair hashes
-        run: pnpm run verify-translation-pairing --write docs/config-catalog.md docs/module-graph.md
-      - name: Commit synced generated docs
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/config-catalog.zh.md docs/config-catalog.i18n.yaml docs/module-graph.zh.md docs/module-graph.i18n.yaml
-          if git diff --cached --quiet; then
-            echo "Generated bilingual docs already synchronized."
-            exit 0
-          fi
-          git commit -m "docs: sync generated bilingual promotion catalogs"
-          git pull --rebase origin graft/openclaw-inline-v4
-          git push origin HEAD:graft/openclaw-inline-v4
+      - run: pnpm run verify-export-jsdoc
