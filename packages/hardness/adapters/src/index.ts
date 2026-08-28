@@ -26,6 +26,8 @@ export { ArtifactRuntime, artifactFromCapabilityResult, artifactFromToolResult }
 export type { ArtifactRenderModel, CapabilityArtifact } from './artifact-runtime.ts'
 export { AcquisitionRegistry, createIndexedToolAcquisition } from './acquisition-registry.ts'
 export type { AcquisitionResult, CapabilityBuilder, MissionLearningHooks } from './acquisition-registry.ts'
+export { buildCapabilityCensus, capabilityBehavioralFingerprint } from './capability-census.ts'
+export type { CapabilityCensus, CapabilityCensusClassification, CapabilityCensusGroup } from './capability-census.ts'
 export { installSandboxCapabilityGuard } from './sandbox-guard.ts'
 export type { SandboxPolicyResolver } from './sandbox-guard.ts'
 export { runHardnessMission } from './mission-orchestrator.ts'
