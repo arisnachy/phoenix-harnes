@@ -2,7 +2,6 @@ import { createElement, type ReactNode } from 'react'
 import type { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import type { CapabilityArtifact, CapabilityArtifactRenderModel } from './contract/slots.ts'
 import { validateUiSchema, type UiNode } from './generative-ui.ts'
-import { renderArtifactBlock, validateUniversalArtifact } from './universal-artifacts.ts'
 
 export interface CapabilityArtifactPreviewProps {
   readonly artifact: CapabilityArtifact
@@ -11,14 +10,9 @@ export interface CapabilityArtifactPreviewProps {
 
 /** Render declarative artifacts only; it deliberately exposes no execution controls. */
 export function CapabilityArtifactPreview({ artifact, rendered }: CapabilityArtifactPreviewProps): ReactNode {
-  const universal = validateUniversalArtifact(artifact.data) ? artifact.data : undefined
-  const ui = universal === undefined
-    ? artifact.mime === 'application/vnd.hardness.ui+json' && validateUiSchema(artifact.data)
-      ? renderNode(artifact.data.root)
-      : createElement('pre', { style: { margin: 0, whiteSpace: 'pre-wrap', font: '500 14px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace' } }, typeof artifact.data === 'string' ? artifact.data : JSON.stringify(artifact.data, null, 2))
-    : universal.blocks.map((block, index) => createElement('div', { key: `${block.type}-${index}`, style: { marginTop: index === 0 ? 0 : 16 } }, renderArtifactBlock(block)))
-  const title = universal?.title ?? 'HARDNESS · Resultado'
-  const status = universal?.status.toUpperCase() ?? 'VERIFICADO'
+  const ui = artifact.mime === 'application/vnd.hardness.ui+json' && validateUiSchema(artifact.data)
+    ? renderNode(artifact.data.root)
+    : createElement('pre', { style: { margin: 0, whiteSpace: 'pre-wrap', font: '500 14px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace' } }, typeof artifact.data === 'string' ? artifact.data : JSON.stringify(artifact.data, null, 2))
   return createElement('article', {
     'data-artifact-id': artifact.id,
     'data-artifact-mime': artifact.mime,
@@ -32,10 +26,10 @@ export function CapabilityArtifactPreview({ artifact, rendered }: CapabilityArti
   createElement('header', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid #edf0f4' } },
     createElement('span', { 'aria-hidden': true, style: { display: 'grid', placeItems: 'center', width: 36, height: 36, borderRadius: 12, background: '#eef4ff', color: '#356ae6', fontSize: 20 } }, '✦'),
     createElement('div', { style: { display: 'grid', gap: 2, flex: 1 } },
-      createElement('strong', { style: { fontSize: 16 } }, title),
+      createElement('strong', { style: { fontSize: 16 } }, 'HARDNESS · Resultado'),
       createElement('span', { style: { color: '#64748b', fontSize: 12 } }, artifact.id),
     ),
-    createElement('span', { 'data-render-kind': rendered.kind, style: { padding: '6px 10px', borderRadius: 999, background: '#eef7f1', color: '#18794e', fontSize: 12, fontWeight: 700 } }, status),
+    createElement('span', { 'data-render-kind': rendered.kind, style: { padding: '6px 10px', borderRadius: 999, background: '#eef7f1', color: '#18794e', fontSize: 12, fontWeight: 700 } }, 'VERIFICADO'),
   ),
   createElement('div', { style: { padding: '14px 20px 20px' } },
     createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, color: '#64748b', fontSize: 12 } },
