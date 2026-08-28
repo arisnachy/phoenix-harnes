@@ -20,7 +20,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function explicitArtifact(result: { readonly isError: boolean; readonly meta: unknown }): CapabilityArtifact | undefined {
+function explicitArtifact(result: { readonly isError: boolean; readonly meta?: unknown }): CapabilityArtifact | undefined {
   if (result.isError || !isRecord(result.meta) || !isRecord(result.meta.artifact)) return undefined
   const artifact = result.meta.artifact
   if (typeof artifact.id !== 'string' || typeof artifact.mime !== 'string') return undefined
