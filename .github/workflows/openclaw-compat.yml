@@ -31,4 +31,4 @@ jobs:
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
       - name: Run OpenClaw compatibility tests
-        run: pnpm exec vitest run packages/extensions/openclaw-compat/tests/**/*.spec.ts
+        run: pnpm exec vitest run packages/extensions/openclaw-compat/tests
