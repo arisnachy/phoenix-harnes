@@ -178,6 +178,10 @@ export function producedFileMentions(
  * Resolve explicit filesystem paths from assistant prose without guessing at
  * bare filenames or allowing traversal segments. Relative paths use the session
  * workspace; absolute paths are already host-resolved and remain explicit.
+ * @param cwd - Session workspace root used to resolve explicit relative paths.
+ * @param openFile - File opener invoked with the authored path after resolution succeeds.
+ * @param label - Localizes the accessible open-label for the resolved path.
+ * @returns The resolver consumed by MarkdownText for explicit workspace path mentions.
  */
 export function workspaceFileMentions(
   cwd: string | undefined,
