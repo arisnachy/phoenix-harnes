@@ -28,6 +28,28 @@ export function parseWriteArgs(args: { file_path: string; content: string }): { 
 }
 
 /**
+ * Build persisted inline artifact metadata for browser-renderable source files.
+ * @param filePath - resolved file path used to infer MIME type and artifact identity.
+ * @param content - complete UTF-8 file content persisted in the artifact payload.
+ * @returns artifact metadata for supported browser source types, otherwise undefined.
+ */
+export function artifactMetaForFile(filePath: string, content: string): { artifact: {
+  id: string
+  title: string
+  mime: string
+  data: string
+} } | undefined {
+  const extension = filePath.slice(filePath.lastIndexOf('.')).toLowerCase()
+  const mime = {
+    '.html': 'text/html', '.htm': 'text/html', '.css': 'text/css',
+    '.js': 'text/javascript', '.mjs': 'text/javascript', '.cjs': 'text/javascript',
+  }[extension]
+  if (mime === undefined) return undefined
+  const title = filePath.split(/[\\/]/u).pop() ?? filePath
+  return { artifact: { id: `file:${filePath}`, title, mime, data: content } }
+}
+
+/**
  * Format a write outcome as one model-facing text block body.
  * @param displayPath - the backend-resolved path rendered in the envelope's `<path>` element.
  * @param outcome - the write outcome; its `operation` selects the Created/Updated wording.
@@ -97,6 +119,7 @@ export function applyWriteTool(ctx: Context, sandbox: FsSandboxController): void
           ? []
           : computeHunkDiffs(args.file_path, value.before, value.after)
             .map(({ path, oldText, newText }) => ({ path, oldText, newText })),
+        ...artifactMetaForFile(value.path, value.after) ?? {},
       }),
     },
     async execute(args: WriteToolArgs, exec) {
