@@ -47,6 +47,21 @@ describe('OpenClaw Capability Broker', () => {
     expect(broker.diagnostics('brave')).toMatchObject({ status: 'MISSING_SECRET' })
   })
 
+  it('summarizes retained blocked diagnostics for the requested capability family', async () => {
+    const broker = new OpenClawCapabilityBroker({
+      prepare: vi.fn(async () => ({ kind: 'blocked' as const, status: 'MISSING_DEPENDENCY' as const, reasons: ['isolated OpenClaw package installer unavailable'] })),
+      execute: vi.fn(),
+      deactivate: vi.fn(),
+    })
+
+    await expect(broker.acquire({ kind: 'web-search' }, signal)).resolves.toBeUndefined()
+
+    expect(broker.diagnosticsForNeed({ kind: 'web-search' })).toEqual(expect.arrayContaining([
+      expect.stringContaining('MISSING_DEPENDENCY'),
+      expect.stringContaining('isolated OpenClaw package installer unavailable'),
+    ]))
+  })
+
   it('owns only OpenClaw capability surfaces', () => {
     const broker = new OpenClawCapabilityBroker({ prepare: vi.fn(), execute: vi.fn(), deactivate: vi.fn() })
 
