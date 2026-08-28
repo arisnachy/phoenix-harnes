@@ -68,12 +68,20 @@ export class OpenClawCapabilityBroker {
     this.candidates = [...candidates].sort((left, right) => left.id.localeCompare(right.id))
   }
 
-  /** Return whether this broker owns a projected HARDNESS execution surface. */
+  /**
+   * Return whether this broker owns a projected HARDNESS execution surface.
+   * @param surface - Routed capability surface to inspect.
+   * @returns True only for valid `openclaw:*` surfaces.
+   */
   supports(surface: CapabilitySurface): boolean {
     return extensionIdFromCapability(surface.capabilityId) !== undefined
   }
 
-  /** Return the last blocked preparation diagnostic for an extension. */
+  /**
+   * Return the last blocked preparation diagnostic for an extension.
+   * @param extensionId - OpenClaw catalog identifier.
+   * @returns Last retained diagnostic, or undefined when none is retained.
+   */
   diagnostics(extensionId: string): OpenClawBrokerDiagnostic | undefined {
     return this.diagnosticsById.get(extensionId)
   }
@@ -81,6 +89,9 @@ export class OpenClawCapabilityBroker {
   /**
    * Prepare the first deterministic OpenClaw candidate that can satisfy the
    * declared need. Preparation is lazy and never marks the capability verified.
+   * @param need - Capability requirement declared by HARDNESS.
+   * @param signal - Cancellation signal for package preparation.
+   * @returns First prepared matching descriptor, or undefined when all candidates are blocked.
    */
   async acquire(need: CapabilityNeed, signal: AbortSignal): Promise<CapabilityDescriptor | undefined> {
     const candidates = this.candidates.filter(descriptor => candidateMatches(descriptor, need))
@@ -107,7 +118,13 @@ export class OpenClawCapabilityBroker {
     return undefined
   }
 
-  /** Execute an OpenClaw capability through the prepared isolated host. */
+  /**
+   * Execute an OpenClaw capability through the prepared isolated host.
+   * @param surface - Routed OpenClaw capability surface.
+   * @param args - User/model arguments forwarded to the isolated runtime.
+   * @param context - Governed execution context with call id, cancellation, and optional agent.
+   * @returns Normalized PHOENIX tool execution result.
+   */
   async execute(
     surface: CapabilitySurface,
     args: unknown,
