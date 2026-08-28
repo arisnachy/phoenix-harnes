@@ -77,6 +77,11 @@ export class HardnessRegistry extends Service implements HardnessService {
     this.descriptors.set(id, transitionCapability(descriptor, status, reason, evidenceId))
   }
 
+  /**
+   * Validate, freeze, and store one evidence record.
+   * @param value - evidence record to persist in the in-memory index.
+   * @returns immutable evidence stored by the registry.
+   */
   recordEvidence(value: CapabilityEvidence): CapabilityEvidence {
     const evidence = freezeEvidence(value)
     if (this.evidence.has(evidence.id)) throw new Error(`duplicate evidence: ${evidence.id}`)
