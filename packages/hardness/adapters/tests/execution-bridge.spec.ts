@@ -6,7 +6,7 @@ const openclawSurface = { id: 'openclaw:brave@2026.8.1:native', need: { kind: 'w
 
 describe('HARDNESS execution bridge', () => {
   it('approves then delegates the verified tool route to ctx.tools.execute', async () => {
-    const execute = vi.fn(async () => ({ content: [], isError: false }))
+    const execute = vi.fn(async () => ({ value: null, content: [], isError: false as const }))
     const route = vi.fn(() => ({ kind: 'route', route: { need: toolSurface.need, capability: { id: 'tool:echo', version: '1', status: 'verified' }, modality: 'visual', requiredPermissions: [] } }))
     const projectSurface = vi.fn(() => toolSurface)
     const broker = { request: vi.fn(async () => ({ kind: 'approved', grants: [] })) }
@@ -21,7 +21,7 @@ describe('HARDNESS execution bridge', () => {
     const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
     const external = {
       supports: vi.fn(() => true),
-      execute: vi.fn(async () => ({ content: [], isError: false })),
+      execute: vi.fn(async () => ({ value: null, content: [], isError: false as const })),
     }
 
     await expect(executeCapabilityNeed(
