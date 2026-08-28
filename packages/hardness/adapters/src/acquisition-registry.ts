@@ -30,6 +30,8 @@ interface RegisteredBuilder {
   readonly diagnostics?: CapabilityBuilderDiagnostics
 }
 
+const NON_REACQUIRABLE_STATUSES = new Set(['broken', 'quarantined', 'deprecated'])
+
 function includesAll(values: readonly string[], required: readonly string[] | undefined): boolean {
   return required === undefined || required.every(value => values.includes(value))
 }
@@ -100,6 +102,9 @@ export class AcquisitionRegistry {
    * Prepare the first provider that can satisfy a need.
    * Preparation only advances the capability to `testing`; successful real
    * execution is the sole source of passed evidence and later verification.
+   * A quarantined/broken/deprecated capability cannot be silently resurrected
+   * at the same descriptor version; a genuinely newer descriptor is registered
+   * and must pass qualification again.
    * @param need - capability requirements that were not already routable.
    * @param signal - cancellation signal propagated into preparation providers.
    * @returns built testing capability or explicit missing result.
@@ -117,8 +122,13 @@ export class AcquisitionRegistry {
         continue
       }
       const existing = this.hardness.get(descriptor.id)
-      if (existing === undefined) this.hardness.register(descriptor)
-      this.hardness.transition(descriptor.id, 'testing', 'acquisition/build candidate')
+      if (existing !== undefined && existing.version === descriptor.version && NON_REACQUIRABLE_STATUSES.has(existing.status)) {
+        reasons.push(`${descriptor.id}: ${existing.status} version ${existing.version} cannot be reacquired without a newer descriptor`)
+        continue
+      }
+      if (existing === undefined || existing.version !== descriptor.version) this.hardness.register(descriptor)
+      const current = this.hardness.get(descriptor.id) ?? descriptor
+      if (current.status === 'experimental') this.hardness.transition(descriptor.id, 'testing', 'acquisition/build candidate')
       const preparationId = `prepare:${descriptor.id}:${descriptor.version}`
       if (this.learning !== undefined) {
         const experimentId = `build:${descriptor.id}:${descriptor.version}`
