@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
+// @ts-expect-error The public demo module is JavaScript loaded by the browser.
 import { createPoints, GROUPS, POINT_COUNT } from '../public/demos/canvas-scatterplot-data.js'
+
+type ScatterPoint = { index: number; x: number; y: number; group: string }
 
 describe('Canvas2D scatterplot data', () => {
   it('creates exactly 100,000 finite points with stable seeded output', () => {
-    const first = createPoints(42)
-    const second = createPoints(42)
+    const first: ScatterPoint[] = createPoints(42)
+    const second: ScatterPoint[] = createPoints(42)
 
     expect(POINT_COUNT).toBe(100_000)
     expect(first).toHaveLength(POINT_COUNT)
