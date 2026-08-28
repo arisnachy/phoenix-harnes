@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/hardness/atlas-json/README.md
-README.md: 489e5f97d0ca0286c923ba023313f0d823ca8bef
-README.zh.md: a83fcef7416b000c9e6f875dd2f01d59f0dfe19c
+README.md: 4e6ad3824cad909a60ffd3138178fc5961bd2180
+README.zh.md: d88ea72a44b5568077e75a5512c3f4fddb8101d1
