@@ -23,6 +23,7 @@ const updater = join(root, 'scripts', 'phoenix-auto-update.mjs')
 const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
 const activator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
+const WATCHER_RESTART_DELAY_MS = 1000
 
 function gitValue(cwd, args) {
   const result = spawnSync('git', args, {
@@ -161,6 +162,47 @@ function startWatcher() {
   })
 }
 
+function superviseWatcher(host) {
+  let watcher
+  let restartTimer
+  let stopping = false
+
+  const start = () => {
+    if (stopping || host.exitCode !== null || host.killed) return
+    const child = startWatcher()
+    watcher = child
+    if (child === undefined) return
+
+    child.once('error', (error) => {
+      console.error(`[PHOENIX UPDATE] watcher launch failed: ${error.message}`)
+    })
+    child.once('exit', (code, signal) => {
+      if (watcher !== child) return
+      watcher = undefined
+      if (stopping || host.exitCode !== null || host.killed) return
+      const reason = code === null ? `signal ${signal ?? 'unknown'}` : `exit code ${String(code)}`
+      console.error(`[PHOENIX UPDATE] watcher exited unexpectedly (${reason}); restarting in ${String(WATCHER_RESTART_DELAY_MS)}ms.`)
+      restartTimer = setTimeout(start, WATCHER_RESTART_DELAY_MS)
+      restartTimer.unref?.()
+    })
+  }
+
+  start()
+
+  return {
+    async stop() {
+      stopping = true
+      if (restartTimer !== undefined) {
+        clearTimeout(restartTimer)
+        restartTimer = undefined
+      }
+      const activeWatcher = watcher
+      watcher = undefined
+      await stopWatcher(activeWatcher)
+    },
+  }
+}
+
 function activatePrepared() {
   if (!existsSync(activator)) {
     console.error('[PHOENIX UPDATE] supervised activator is missing; refusing restart.')
@@ -187,17 +229,14 @@ while (true) {
   host.once('error', (error) => {
     console.error(`[PHOENIX] host launch failed: ${error.message}`)
   })
-  const watcher = startWatcher()
-  watcher?.once('error', (error) => {
-    console.error(`[PHOENIX UPDATE] watcher launch failed: ${error.message}`)
-  })
+  const watcherSupervisor = superviseWatcher(host)
 
   const hostExit = await new Promise(resolveExit => {
     host.once('exit', (code, signal) => resolveExit({ code, signal }))
   })
   const requested = restartRequested()
 
-  await stopWatcher(watcher)
+  await watcherSupervisor.stop()
 
   if (!requested) {
     finalCode = hostExit.code ?? (hostExit.signal === null ? 1 : 0)
