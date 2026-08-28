@@ -12,7 +12,19 @@ A route is selected only when the resolver returns a currently usable capability
 
 ## Model Experience
 
-Models receive explicit capability descriptors, availability state, verification evidence, and modality routes; they do not receive implicit authority, credentials, or direct execution handles.
+### Capability Atlas metadata
+
+#### What the model sees
+
+Consumers may expose declarative HARDNESS fields such as `capabilityId`, modality, verification state, inputs, outputs, and declared permissions; the registry itself exposes no credential or executable handle.
+
+#### Token effect
+
+Only consumers that serialize selected capability metadata add model tokens; this registry does not append prompt text by itself.
+
+#### KV Cache effect
+
+Stable descriptors remain cache-friendly until capability metadata, routing, or verification state changes.
 
 ## Known Limitations and Deferred Work
 
