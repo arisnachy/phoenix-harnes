@@ -51,16 +51,16 @@ function scoreCapability(descriptor: CapabilityDescriptor, query: string, queryT
   const description = normalize(descriptor.description)
   const compatibility = normalize(descriptor.compatibility.join(' '))
 
-  let score = STATUS_SCORE[descriptor.status]
-  if (kind === normalizedQuery) score += 120
-  if (name === normalizedQuery || id === normalizedQuery || id.endsWith(` ${normalizedQuery}`)) score += 110
-  if (kind.includes(normalizedQuery)) score += 55
-  if (name.includes(normalizedQuery) || id.includes(normalizedQuery)) score += 45
-  if (description.includes(normalizedQuery)) score += 24
-  score += tokenOverlapScore(queryTokens, `${descriptor.kind} ${descriptor.name} ${descriptor.id}`, 18)
-  score += tokenOverlapScore(queryTokens, descriptor.description, 7)
-  score += tokenOverlapScore(queryTokens, compatibility, 3)
-  return score
+  let relevance = 0
+  if (kind === normalizedQuery) relevance += 120
+  if (name === normalizedQuery || id === normalizedQuery || id.endsWith(` ${normalizedQuery}`)) relevance += 110
+  if (kind.includes(normalizedQuery)) relevance += 55
+  if (name.includes(normalizedQuery) || id.includes(normalizedQuery)) relevance += 45
+  if (description.includes(normalizedQuery)) relevance += 24
+  relevance += tokenOverlapScore(queryTokens, `${descriptor.kind} ${descriptor.name} ${descriptor.id}`, 18)
+  relevance += tokenOverlapScore(queryTokens, descriptor.description, 7)
+  relevance += tokenOverlapScore(queryTokens, compatibility, 3)
+  return relevance === 0 ? 0 : relevance + STATUS_SCORE[descriptor.status]
 }
 
 /**
