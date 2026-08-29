@@ -56,4 +56,46 @@ describe('HARDNESS execution bridge', () => {
     )).resolves.toEqual({ kind: 'denied', reason: 'user denied' })
     expect(external.execute).not.toHaveBeenCalled()
   })
+
+  it('runs the pre-execution gate after approval and before the side effect', async () => {
+    const order: string[] = []
+    const execute = vi.fn(async () => {
+      order.push('execute')
+      return { value: null, content: [], isError: false as const }
+    })
+    const route = vi.fn(() => ({ kind: 'route', route: { need: toolSurface.need, capability: { id: 'tool:echo', version: '1', status: 'verified' }, modality: 'visual', requiredPermissions: [] } }))
+    const projectSurface = vi.fn(() => toolSurface)
+    const approval = { request: vi.fn(async () => { order.push('approved'); return { kind: 'approved' as const, grants: [] } }) }
+
+    await expect(executeCapabilityNeed(
+      { route, surface: projectSurface } as never,
+      { execute } as never,
+      approval,
+      toolSurface.need,
+      {},
+      { callId: 'c4' as never, signal: new AbortController().signal },
+      undefined,
+      { beforeExecute: () => { order.push('before-execute'); return true } },
+    )).resolves.toMatchObject({ kind: 'executed' })
+    expect(order).toEqual(['approved', 'before-execute', 'execute'])
+  })
+
+  it('can abort after approval without executing the capability', async () => {
+    const execute = vi.fn()
+    const route = vi.fn(() => ({ kind: 'route', route: { need: toolSurface.need, capability: { id: 'tool:echo', version: '1', status: 'verified' }, modality: 'visual', requiredPermissions: [] } }))
+    const projectSurface = vi.fn(() => toolSurface)
+    const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
+
+    await expect(executeCapabilityNeed(
+      { route, surface: projectSurface } as never,
+      { execute } as never,
+      approval,
+      toolSurface.need,
+      {},
+      { callId: 'c5' as never, signal: new AbortController().signal },
+      undefined,
+      { beforeExecute: () => false },
+    )).resolves.toEqual({ kind: 'aborted', reason: 'pre-execution gate rejected dispatch' })
+    expect(execute).not.toHaveBeenCalled()
+  })
 })

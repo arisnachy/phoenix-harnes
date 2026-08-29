@@ -10,7 +10,7 @@ HARDNESS evidence recorded capability verification but did not provide a durable
 
 ## Decision
 
-The live HARDNESS mission runner appends one `hardness/mission` session event for each terminal protocol state: `inspect`, `resolve`, `plan`, `approve`, `execute`, `verify`, `present`, and `audit`. The event carries only the call identity, capability identity, artifact/evidence references, duration, and stable reason codes. `replayHardnessMissionAudit` folds the append-only session log back into one call's ordered trace.
+The live HARDNESS mission runner appends one `hardness/mission` session event for each terminal protocol state: `inspect`, `resolve`, `plan`, `approve`, `execute`, `verify`, `present`, and `audit`. The execution bridge records `approve` through a post-approval, pre-execution gate, so no capability side effect starts before that trace row exists; the gate can abort dispatch when the audit cannot be written. The event carries only the call identity, capability identity, artifact/evidence references, duration, and stable reason codes. `replayHardnessMissionAudit` folds the append-only session log back into one call's ordered trace.
 
 The model-facing runner creates the session-backed writer from the calling live agent. The standalone orchestrator keeps its audit writer optional so isolated unit fixtures can exercise capability behavior without fabricating a session.
 

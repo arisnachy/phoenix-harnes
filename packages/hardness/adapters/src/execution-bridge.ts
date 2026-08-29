@@ -20,12 +20,19 @@ export interface CapabilityExecutor {
   execute(surface: CapabilitySurface, args: unknown, context: CapabilityExecutionContext): Promise<ToolExecutionResult>
 }
 
+/** Optional hook run after approval and immediately before the side effect. */
+export interface CapabilityExecutionHooks {
+  /** Return false to abort dispatch before the executor or tool runtime runs. */
+  readonly beforeExecute?: (surface: CapabilitySurface) => boolean | Promise<boolean>
+}
+
 /** Governed result of resolving, approving, and dispatching one capability need. */
 export type CapabilityExecutionResult =
   | { readonly kind: 'executed'; readonly result: ToolExecutionResult; readonly surface: CapabilitySurface }
   | { readonly kind: 'denied'; readonly reason: string }
   | { readonly kind: 'missing'; readonly reasons: readonly string[] }
   | { readonly kind: 'unsupported'; readonly reason: string }
+  | { readonly kind: 'aborted'; readonly reason: string }
 
 /**
  * Route one need, require approval, then dispatch either a Phoenix tool or a
@@ -37,6 +44,7 @@ export type CapabilityExecutionResult =
  * @param args - opaque arguments forwarded only after approval.
  * @param context - call identity, cancellation, and optional agent context.
  * @param external - optional executor for non-tool capability families.
+ * @param hooks - optional post-approval, pre-execution gate.
  * @returns governed executed, denied, missing, or unsupported result.
  */
 export async function executeCapabilityNeed(
@@ -47,6 +55,7 @@ export async function executeCapabilityNeed(
   args: unknown,
   context: CapabilityExecutionContext,
   external?: CapabilityExecutor,
+  hooks?: CapabilityExecutionHooks,
 ): Promise<CapabilityExecutionResult> {
   const routed = hardness.route(need)
   if (routed.kind !== 'route') return { kind: 'missing', reasons: routed.reasons }
@@ -65,6 +74,9 @@ export async function executeCapabilityNeed(
   }
   const decision = await approval.request(surface, approvalContext)
   if (decision.kind !== 'approved') return decision
+  if (hooks?.beforeExecute !== undefined && !(await hooks.beforeExecute(surface))) {
+    return { kind: 'aborted', reason: 'pre-execution gate rejected dispatch' }
+  }
 
   if (isExternal) {
     return {

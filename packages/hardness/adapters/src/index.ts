@@ -26,7 +26,7 @@ export type { UserApprovalBroker, UserApprovalContext } from './user-approval-br
 export { LabMode, SelfImprovementLedger } from './lab-mode.ts'
 export type { ImprovementRecord, LabExperiment, LabSnapshot } from './lab-mode.ts'
 export { executeCapabilityNeed } from './execution-bridge.ts'
-export type { CapabilityApproval, CapabilityExecutionContext, CapabilityExecutionResult } from './execution-bridge.ts'
+export type { CapabilityApproval, CapabilityExecutionContext, CapabilityExecutionHooks, CapabilityExecutionResult } from './execution-bridge.ts'
 export { ArtifactRuntime, artifactFromToolResult } from './artifact-runtime.ts'
 export type { ArtifactRenderModel, CapabilityArtifact } from './artifact-runtime.ts'
 export { AcquisitionRegistry } from './acquisition-registry.ts'

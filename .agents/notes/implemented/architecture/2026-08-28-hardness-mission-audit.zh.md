@@ -10,7 +10,7 @@ HARDNESS evidence 虽然记录了 capability verification，但没有提供 dura
 
 ## 决策
 
-live HARDNESS mission runner 会为每个 terminal protocol state 向 session 追加一个 `hardness/mission` event：`inspect`、`resolve`、`plan`、`approve`、`execute`、`verify`、`present` 和 `audit`。event 只携带 call identity、capability identity、artifact/evidence 引用、duration 与稳定的 reason code。`replayHardnessMissionAudit` 会把 append-only session log 折叠回一次调用的有序 trace。
+live HARDNESS mission runner 会为每个 terminal protocol state 向 session 追加一个 `hardness/mission` event：`inspect`、`resolve`、`plan`、`approve`、`execute`、`verify`、`present` 和 `audit`。execution bridge 通过 approval 之后、执行之前的 gate 记录 `approve`，因此在该 trace row 写入前不会启动 capability side effect；当 audit 无法写入时，gate 可以中止 dispatch。event 只携带 call identity、capability identity、artifact/evidence 引用、duration 与稳定的 reason code。`replayHardnessMissionAudit` 会把 append-only session log 折叠回一次调用的有序 trace。
 
 model-facing runner 从调用方 live agent 创建 session-backed writer。standalone orchestrator 保持可选 audit writer，使隔离的 unit fixture 能在不伪造 session 的情况下测试 capability 行为。
 

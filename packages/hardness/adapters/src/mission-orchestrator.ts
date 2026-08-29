@@ -161,18 +161,19 @@ export async function runHardnessMission(input: HardnessMissionInput): Promise<H
       input.args,
       input.context,
       input.executor,
+      { beforeExecute: () => auditEntry(input, { step: 'approve', outcome: 'completed', ...capability }) },
     )
   } catch {
     return blocked(input, 'execute', 'HARDNESS capability execution failed', 'execution-threw')
   }
   if (execution.kind !== 'executed') {
+    if (execution.kind === 'aborted') return auditUnavailable()
     if (execution.kind === 'missing') return blocked(input, 'resolve', execution.reasons.join('; '), 'capability-unavailable')
     if (execution.kind === 'denied') return blocked(input, 'approve', execution.reason, 'approval-denied', capability)
     return blocked(input, 'execute', execution.reason, 'executor-unavailable', capability)
   }
 
   const { surface } = execution
-  if (!auditEntry(input, { step: 'approve', outcome: 'completed', ...capability })) return auditUnavailable()
   if (!auditEntry(input, { step: 'execute', outcome: 'completed', ...capability })) return auditUnavailable()
 
   if (execution.result.isError) {
