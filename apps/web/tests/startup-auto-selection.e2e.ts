@@ -70,9 +70,10 @@ describe('web e2e: startup auto-selection', () => {
     await page.locator(`${ROOT_PHASE}[data-phase="hero"]`).waitFor({ timeout: 15_000 })
     const headline = page.getByText('PHOENIX', { exact: true })
     const fishHitbox = headline.locator('xpath=preceding-sibling::span[1]')
-    const fish = fishHitbox.locator('svg')
-    expect(await fish.evaluate(node => getComputedStyle(node).color))
-      .toBe(await headline.evaluate(node => getComputedStyle(node).color))
+    const fish = fishHitbox.locator('img[alt=""]')
+    expect(await fish.getAttribute('src')).toMatch(/\/phoenix-emblem\.png$/)
+    expect(await fish.getAttribute('width')).toBe('34')
+    expect(await fish.getAttribute('height')).toBe('34')
     await fishHitbox.hover()
     expect(await fish.evaluate(node => getComputedStyle(node).animationName)).not.toBe('none')
     await page.evaluate(() => {
@@ -152,7 +153,7 @@ describe('web e2e: startup auto-selection', () => {
     // seat with `visibility:hidden`, which Playwright reports as not visible).
     await page.waitForSelector(ROOT_PHASE, { timeout: 15_000 })
     expect(await page.locator(ROOT_PHASE).first().getAttribute('data-phase')).toBe('hero')
-    expect(await page.getByText('PHOENIX').isVisible()).toBe(true)
+    expect(await page.locator('div[data-phase="hero"] span[class*="headlineText"]').isVisible()).toBe(true)
     expect(await page.locator('textarea').first().isVisible()).toBe(true)
 
     releaseHistory()
