@@ -31,7 +31,7 @@
 | `@phoenix-ai/dsh-tool-fs` | `edit`、`read`、`read_image`、`write` | `ctx.tools`、`ctx.fs`、`ctx.systemPrompt`、`ctx.attachments (image-tool registration)`、`ctx.llm + an image-capable route (image-tool execution)` | `tool/call`、`fs/write-intent or fs/edit-intent for mutations`、`fs/observed after read presence/absence or successful file operation`、`durable attachment (read_image)`、`tool/result` | - | 先读后写／编辑策略由 `@phoenix-ai/dsh-fs-observation-policy` 添加；它是一个 `fs/*` 事件门禁插件，不会改变 schema。加载这些工具的部署按预期也应加载该插件。没有 `ctx.attachments` 时图片工具不会注册；其 schema 与路由无关，执行时除非确切路由的模型声明图片输入，否则拒绝。 |
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`、`grep` | `ctx.tools`、`ctx.subprocess`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn 随包提供的 ripgrep 二进制文件（`@vscode/ripgrep`），并作为普通前台调用运行，绝不作为后台任务；无需在宿主机安装 `rg`，也不经过 shell 层。本目录使用 `sampleOverCapGlobResults: true`；部署必须显式选择该行为。结果超过上限时，会通过可选的 ctx.spillStore 后端保存完整的格式化列表；在共置部署中，如果后端公开本地路径，返回的定位信息可供后续读取／搜索。 |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`、`terminal_list`、`terminal_open`、`terminal_read`、`terminal_send`、`terminal_signal` | `ctx.tools`、`ctx.terminals`、`ctx.systemPrompt`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | 这 6 个终端工具需要选择启用，用于补充一次性 bash／文件系统工具。`terminal_send(run_in_background: true)` 会注册到 `ctx.jobs`；schema 不包含 TUI、具名按键序列、BEL、调整尺寸、自动启动和跨 agent 共享。 |
-| `@phoenix-ai/dsh-tool-goal` | `create_goal`、`get_goal`、`update_goal` | `ctx.tools`、`ctx.agents`、`ctx.goals`、`ctx.systemPrompt`、`a calling Agent in an authorized open turn` | `tool/call`、`goal/change for mutations`、`tool/result` | - | create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。 |
+| `@phoenix-ai/dsh-tool-goal` | `create_goal`、`get_goal`、`specialist_lab`、`update_goal` | `ctx.tools`、`ctx.agents`、`ctx.goals`、`ctx.systemPrompt`、`a calling Agent in an authorized open turn` | `tool/call`、`goal/change for mutations`、`tool/result` | - | create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。 |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`、`schedule_delete`、`schedule_list` | `ctx.tools`、`ctx.sessions`、Session 持久化、未来创建的 live 根 Agent | `tool/call`、`schedule/change create or delete`、`tool/result` | - | 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。 |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`、`ctx.lsp`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，因此其模型可见 schema 在更换提供方时保持稳定。运行时要求已注册提供方，例如 `@phoenix-ai/dsh-lsp-stdio`；如果没有提供方，查询会返回结构化 `LSP_UNAVAILABLE` 错误，而不会改变 schema。 |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`、`ctx.workflowEngine`、`ctx.subagents`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents every fresh round)` | `tool/call`、`tool/result`、`workflow and child session events during execution` | - | 固定的前台工作流会在每个 Round 启动一个全新的结构化子级；模型只能选择不可变目标和可选的 Round 上限。 |
@@ -1010,6 +1010,96 @@ glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn �
 {
   "type": "object",
   "properties": {}
+}
+```
+
+来源：[`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
+
+### `specialist_lab`
+
+维护一个持久化且有证据支持的 specialist laboratory。只有在收到明确的专家请求时才启动，然后登记可追溯来源、可证伪假设、可复现实验和 judge 结果。只有通过评估后 specialist 才会进入 ready；评估失败会创建 improving checkpoint，并受 max_iterations 限制。当基础 profile 要求 judge 时，evaluate 会自动调用新的只读独立 judge。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "start, source, hypothesis, experiment, or evaluate",
+      "enum": [
+        "start",
+        "source",
+        "hypothesis",
+        "experiment",
+        "evaluate"
+      ]
+    },
+    "specialist_id": {
+      "type": "string",
+      "description": "Existing specialist laboratory id for non-start actions."
+    },
+    "topic": {
+      "type": "string",
+      "description": "Research topic for start."
+    },
+    "objective": {
+      "type": "string",
+      "description": "Concrete expertise objective for start."
+    },
+    "success_criteria": {
+      "type": "array",
+      "description": "Evidence-based readiness criteria for start.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "max_iterations": {
+      "type": "number",
+      "description": "Positive bounded improvement-loop cap."
+    },
+    "title": {
+      "type": "string",
+      "description": "Source title."
+    },
+    "locator": {
+      "type": "string",
+      "description": "Source URL or stable locator."
+    },
+    "hypothesis": {
+      "type": "string",
+      "description": "Falsifiable hypothesis."
+    },
+    "experiment_name": {
+      "type": "string",
+      "description": "Reproducible experiment name."
+    },
+    "dataset": {
+      "type": "string",
+      "description": "Dataset used by the experiment."
+    },
+    "score": {
+      "type": "number",
+      "description": "Judge score from 0 to 1."
+    },
+    "passed": {
+      "type": "boolean",
+      "description": "Whether all success criteria passed when no independent judge is configured."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Judge summary."
+    },
+    "required_changes": {
+      "type": "array",
+      "description": "Changes required before the next evaluation.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "action"
+  ]
 }
 ```
 

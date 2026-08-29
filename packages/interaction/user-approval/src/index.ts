@@ -46,6 +46,7 @@ declare module '@phoenix-ai/dsh-session/types' {
       toolName: string
       callId?: CallId
       reason?: string
+      deadline?: ApprovalDeadline
     }
     /**
      * The outcome of a prior `approval/asked` (same `id`) — log-only audit.
@@ -73,10 +74,10 @@ declare module '@phoenix-ai/dsh-session/types' {
 }
 
 import { ApprovalRequestId } from './types.ts'
-import type { ApprovalOutcome } from './types.ts'
+import type { ApprovalDeadline, ApprovalOutcome, ApprovalRecommendation, ApprovalRisk } from './types.ts'
 
 export { ApprovalRequestId } from './types.ts'
-export type { ApprovalOutcome } from './types.ts'
+export type { ApprovalDeadline, ApprovalOutcome, ApprovalRecommendation, ApprovalRisk } from './types.ts'
 
 /** Every {@link ApprovalOutcome}, for runtime normalization of answerer returns. */
 const OUTCOMES: readonly ApprovalOutcome[] = ['allowed-once', 'rejected', 'cancelled', 'unavailable']
@@ -95,6 +96,37 @@ export type ApprovalPolicy = 'ask' | 'never'
 
 /** Every {@link ApprovalPolicy}, for option advertisement and runtime validation of untrusted policy strings. */
 export const APPROVAL_POLICIES: readonly ApprovalPolicy[] = ['ask', 'never']
+
+/** Default time available to answer an interactive request. */
+const DEFAULT_TIMEOUT_MS = 15_000
+
+/** Select the automatic outcome for a request without inventing permission for risky work. */
+export function approvalRecommendationFor(input: { risk: ApprovalRisk; reversible: boolean }): ApprovalRecommendation {
+  return input.risk === 'low' && input.reversible ? 'allowed-once' : 'rejected'
+}
+
+/** Build the finite, wire-safe deadline used by host and client. */
+export function createApprovalDeadline(input: {
+  now: number
+  timeoutMs: number
+  risk: ApprovalRisk
+  reversible: boolean
+  policyRevision: number
+}): ApprovalDeadline {
+  if (!Number.isFinite(input.now) || !Number.isFinite(input.timeoutMs) || input.timeoutMs <= 0) {
+    throw new RangeError('approval deadline requires a finite positive timeout')
+  }
+  if (!Number.isInteger(input.policyRevision) || input.policyRevision < 0) {
+    throw new RangeError('approval deadline requires a non-negative policy revision')
+  }
+  return {
+    requestedAt: input.now,
+    expiresAt: input.now + input.timeoutMs,
+    risk: input.risk,
+    recommendation: approvalRecommendationFor(input),
+    policyRevision: input.policyRevision,
+  }
+}
 
 /** Model-facing statement for the deterministic `'never'` policy. */
 const NEVER_SENTENCE = 'Approval prompts are disabled in this session: actions that require approval are rejected automatically — do not request sandbox escalation (do not set `sandbox_permissions`).'
@@ -166,6 +198,10 @@ export interface ApprovalRequest {
   readonly callId?: CallId
   /** The asker's human-readable explanation of WHY it is asking. */
   readonly reason?: string
+  /** Risk class used for the no-answer recommendation. */
+  readonly risk?: ApprovalRisk
+  /** Whether the requested action can be undone without external side effects. */
+  readonly reversible?: boolean
   /**
    * Aborting withdraws the question: the request settles `'cancelled'`
    * immediately and a late answer from a still-pending answerer is discarded.
@@ -182,6 +218,8 @@ export interface Config {
    * prompting (the deterministic CI/unattended stance).
    */
   readonly policy?: ApprovalPolicy
+  /** Milliseconds before an unanswered request takes its recommendation. */
+  readonly timeoutMs?: number
 }
 
 /**
@@ -192,6 +230,7 @@ export interface Config {
 export class ApprovalService extends Service {
   static Config: z<Config> = z.object({
     policy: z.union(['ask', 'never'] as const).default('ask'),
+    timeoutMs: z.number().step(1).min(1).default(DEFAULT_TIMEOUT_MS),
   })
 
   constructor(ctx: Context, public config: Config) {
@@ -264,13 +303,21 @@ export class ApprovalService extends Service {
       )
     }
     const id = ApprovalRequestId(randomUUID())
+    const deadline = createApprovalDeadline({
+      now: Date.now(),
+      timeoutMs: this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      risk: req.risk ?? 'medium',
+      reversible: req.reversible ?? false,
+      policyRevision: this.policyRevision(session),
+    })
     session.append('approval/asked', {
       id,
       toolName: req.toolName,
       ...req.callId !== undefined ? { callId: req.callId } : {},
       ...req.reason !== undefined ? { reason: req.reason } : {},
+      deadline,
     })
-    const outcome = await this.decide(req, session)
+    const outcome = await this.decide(req, session, deadline)
     session.append('approval/decided', { id, outcome })
     return outcome
   }
@@ -284,6 +331,11 @@ export class ApprovalService extends Service {
    */
   private effectivePolicy(session: Session): ApprovalPolicy {
     return this.overrideOf(session) ?? this.config.policy ?? 'ask'
+  }
+
+  /** Count policy switches so an expiry cannot apply an old recommendation. */
+  private policyRevision(session: Session): number {
+    return session.events.reduce((count, event) => event.type === 'approval/policy' ? count + 1 : count, 0)
   }
 
   /**
@@ -301,7 +353,7 @@ export class ApprovalService extends Service {
    * @param session - the request agent's session used for policy lookup.
    * @returns the normalized closed outcome.
    */
-  private async decide(req: ApprovalRequest, session: Session): Promise<ApprovalOutcome> {
+  private async decide(req: ApprovalRequest, session: Session, deadline: ApprovalDeadline): Promise<ApprovalOutcome> {
     const signal = req.signal
     if (signal?.aborted) return 'cancelled'
     // The 'never' policy is decided HERE, before any dispatch: a listener
@@ -327,19 +379,23 @@ export class ApprovalService extends Service {
       // tool call open — the seam contains its callbacks.
       () => 'unavailable',
     )
-    if (signal === undefined) return answer
     return await new Promise<ApprovalOutcome>((resolve) => {
-      const onAbort = () => {
-        signal.removeEventListener('abort', onAbort)
-        resolve('cancelled')
-      }
-      signal.addEventListener('abort', onAbort, { once: true })
-      void answer.then((outcome) => {
-        signal.removeEventListener('abort', onAbort)
-        // After an abort won the race this resolve is a settled-promise no-op:
-        // the late answer is discarded by construction.
+      let settled = false
+      const finish = (outcome: ApprovalOutcome): void => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', onAbort)
         resolve(outcome)
-      })
+      }
+      const onAbort = (): void => { finish('cancelled') }
+      const remaining = Math.max(0, deadline.expiresAt - Date.now())
+      const timer = setTimeout(() => {
+        const currentRevision = this.policyRevision(session)
+        finish(currentRevision === deadline.policyRevision ? deadline.recommendation : 'rejected')
+      }, remaining)
+      signal?.addEventListener('abort', onAbort, { once: true })
+      void answer.then(finish)
     })
   }
 }

@@ -17,6 +17,7 @@ import { Button } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { RunningToolCall } from '@phoenix-ai/dsh-client-runtime/client'
 import { PendingApproval, type ApprovalComposerProps } from '../contract/slots.ts'
 import { rootToolCall } from '../chat/tool-node-reader.ts'
+import { ApprovalCountdown } from './ApprovalCountdown.tsx'
 import css from './ApprovalPanel.module.css'
 
 /** Extract the shell command from an approval's paired running call (bash-family args carry `command`); undefined hides the line. */
@@ -73,14 +74,21 @@ function ApprovalFlow({ pending, command, t }: {
           <div className={css.headline}>{pending.reason ?? t('approval.escalation', { toolName: pending.toolName })}</div>
           {command !== undefined && <div className={css.command}>{command}</div>}
         </div>
-        <div className={css.actionRow}>
-          <Button variant="outline" className={css.reject} disabled={answered} onClick={() => { answer('rejected') }}>
-            {t('approval.reject')}
-          </Button>
-          <Button variant="primary" disabled={answered} onClick={() => { answer('allowed-once') }}>
-            {t('approval.allowOnce')}
-          </Button>
-        </div>
+        {pending.deadline === undefined
+          ? <div className={css.actionRow}>
+            <Button variant="outline" className={css.reject} disabled={answered} onClick={() => { answer('rejected') }}>
+              {t('approval.reject')}
+            </Button>
+            <Button variant="primary" disabled={answered} onClick={() => { answer('allowed-once') }}>
+              {t('approval.allowOnce')}
+            </Button>
+          </div>
+          : <ApprovalCountdown
+            deadline={pending.deadline}
+            onExpire={answer}
+            onChoose={answer}
+            labels={{ allow: t('approval.allowOnce'), reject: t('approval.reject'), automatic: t('approval.waiting'), seconds: 'seconds remaining' }}
+          />}
       </div>
     </div>
   )

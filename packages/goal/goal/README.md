@@ -21,6 +21,8 @@ Event-sourced same-session goal state. The service retains one current completio
 
 Independent completion reviews are durable `goal/judge` events owned by this domain. Continuation consumers can replay the latest non-passing review and carry its bounded findings and required changes into a repair round after a process restart.
 
+The service also exposes `ctx.goals.specialists`, an event-backed `SpecialistLedger`. The `specialist_lab` tool records one bounded topic laboratory: sources, hypotheses, reproducible experiments, evaluations, and judge feedback. Only a passing evaluation enters `ready`; failed evaluations enter `improving` and eventually `blocked` at the configured iteration cap.
+
 Independent completion reviews are durable `goal/judge` events owned by this domain. Continuation consumers can replay the latest non-passing review and carry its bounded findings and required changes into a repair round after a process restart.
 
 At most one goal is current. Creation produces an active revision-one goal and arms it. A non-complete goal must be edited, transitioned, or cleared; a completed goal may be replaced by a globally fresh id. Edits retain phase, blocker reason, and activation. Pause, completion, blocking, and clear disarm activation. A block records a policy-owned lower-kebab-case code plus a normalized free-form explanation; provider limits, configured budgets, execution errors, and requests for human input all use this one durable phase rather than multiplying lifecycle states. Resume accepts a stopped phase or a disarmed active goal only while the configured round cap has remaining capacity; it clears any former blocker reason. An active armed goal rejects the redundant operation.

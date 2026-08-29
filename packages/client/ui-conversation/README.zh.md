@@ -12,6 +12,8 @@
 
 视图环是一个 slot：严格会话主体注册在 `children` 表中声明会话作用域的 `'conversation.view'` 列表，并通过自身的 renderSlot share 渲染活跃配置项（`only: <active id>`）；视图标签页则从注册选项（`id`／`order`／`label`）投影而来。聊天视图是该包自身的配置项；ui-trajectory 等插件通过 `ctx.slots.register` 贡献标签页，每个视图负责自己的 chrome。
 
+HARDNESS 工件使用一个自适应表面来显示 JSON、表格、代码、HTML、图像、文本和执行结果。该表面在有界的响应式范围内测量内容，将工件保留在对话投影中，并且只为显式声明可执行的代码显示运行/停止控件。HTML 保留在具有唯一来源的 iframe 中，使用限制性 CSP，禁止网络和父页面访问；代码执行委托给 Host 挂载的运行时。
+
 Chat 业务行是彼此独立的注册表贡献，不是封闭的内建联合。Client 插件通过 declaration merging 增加类型化 `ChatNodeDataMap` key，在 `ctx.conversationEvents` 上注册 `ConversationNodeDefinition`，再向 `conversation.chat.node` 注册匹配的 keyed renderer；它无须修改会话 fold 或中央 renderer switch。稳定事件 id、append/prepend 回放、Location data 与 renderer 约束见 [Conversation Node 实操手册](../../../docs/cookbook/adding-a-conversation-node.zh.md)。
 
 会话页头通过可选的会话作用域 `'conversation.session.header.lineage'` seat 派发当前普通 title 与每一级 subagent 面包屑，随后依次渲染 `'conversation.session.header.actions'` 列表和最右侧独立的 `'conversation.session.header.utilities'` 列表。每个谱系 owner 都会提供纯数据形式的面包屑身份与显示文本；render site 保留普通 title 作为回退，祖先还会提供向上导航的回调。移除 occupant 会恢复每个 title，且不影响页头操作；可选的会话工具不会改变这两个区域的顺序或位置。编辑器链的 currency 包含当前对话 `session`；ui-subagent 会选取 one-shot 或 parent 不可用的已寻址会话，并按原因显示只读文案，而普通 InputBar 会让所有已寻址 child 仅保留 Send，因为继续执行服务不公开逐 Activation 取消操作，`session.cancel` 也会绕过其所有权。

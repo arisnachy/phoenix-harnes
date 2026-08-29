@@ -2,13 +2,16 @@
 
 English | [中文](README.zh.md)
 
-The model-facing control tools for [`ctx.goals`](../goal/README.md): `get_goal`, `create_goal`, and `update_goal`. The [goal-tool Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-model-facing-goal-tools.md) owns the authority split and Codex-shaped UX.
+The model-facing control tools for [`ctx.goals`](../goal/README.md): `get_goal`, `create_goal`, `update_goal`, and `specialist_lab`. The [goal-tool Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-model-facing-goal-tools.md) owns the authority split and Codex-shaped UX.
 
 ## Tools
 
 - `get_goal()` returns the current goal or `null`, including the compare-and-set id/revision, durable phase, admitted/capped goal rounds, any blocker reason, and current process-local activation.
 - `create_goal(objective, max_goal_rounds?)` creates one goal from a direct top-level human turn. The model may infer long-running goal intent without an exact command phrase; non-human turns and subagents are rejected at execution.
 - `update_goal(goal_id, revision, action, objective?, max_goal_rounds?, blocked_reason?)` supports `edit`, `pause`, `resume`, `complete`, and `blocked`. Replacements belong only to `edit`; `blocked_reason` is required only for `blocked` and is persisted with the stable code `model-reported`. Strict-schema empty-string and zero fillers count as omitted, while meaningful values remain limited to their action.
+- `specialist_lab(action, ...)` maintains a bounded, replayable laboratory for a requested topic. `start` creates the profile, then `source`, `hypothesis`, and `experiment` append evidence; `evaluate` records judge feedback and moves the profile to `ready`, `improving`, or `blocked`. A failed evaluation is not completion: the next bounded iteration must address the recorded changes.
+
+When `requireJudge` is enabled, `evaluate` invokes a fresh structured subagent with the same read-only review allow-list as goal completion. The judge receives the persisted laboratory evidence, and its verdict is stored in the specialist snapshot. A non-pass result is also deferred as model context so the next bounded cycle has the required changes without another user confirmation.
 
 When `requireJudge` is enabled, `complete` first starts a fresh structured subagent with a read-only tool allow-list. The goal enters `complete` only after the judge returns `pass`; `needs_changes` keeps it active, appends the required changes to the session, and allows the next bounded goal round to repair the work. Judge results are persisted as secret-free `goal/judge` events.
 

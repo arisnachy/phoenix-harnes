@@ -21,6 +21,8 @@
 
 独立完成审查是由此域拥有的持久化 `goal/judge` 事件。续行消费者可以重放最新的非通过审查，并在进程重启后将其有界发现和所需修改带入修复轮次。
 
+该服务还公开由事件支持的 `ctx.goals.specialists` 和 `SpecialistLedger`。`specialist_lab` 工具记录一个有界的主题实验室：来源、假设、可重现实验、评估和 judge 反馈。只有通过评估才会进入 `ready`；失败评估进入 `improving`，达到迭代上限后进入 `blocked`。
+
 独立完成审查是由此域拥有的持久化 `goal/judge` 事件。续行消费者可以重放最新的非通过审查，并在进程重启后将其有界发现和所需修改带入修复轮次。
 
 最多只有一个当前目标。创建操作会生成 revision 为 1、phase 为 active 的目标并启用续行。未完成的目标必须编辑、转换或清除；已完成目标可以由拥有全局未使用过的 id 的目标替换。编辑会保留 phase、blocker reason 与 activation。暂停、完成、阻塞和清除都会停用续行。阻塞会记录策略自有的 lower-kebab-case 代码和规范化的自由文本说明；提供方限制、配置预算、执行错误与请求人工输入都使用这一种持久 phase，不会扩增生命周期状态。只有配置的 Round 上限仍有剩余容量时，resume 才接受已停止 phase 或 phase 为 active 但已停用续行的目标；它会清除原 blocker reason。phase 为 active 且已启用续行的目标会拒绝冗余操作。

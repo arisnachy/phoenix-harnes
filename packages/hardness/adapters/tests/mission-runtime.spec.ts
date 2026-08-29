@@ -9,6 +9,34 @@ import { OpenClawCapabilityBroker } from '../src/openclaw/broker.ts'
 import { createHardnessAcquisition, installHardnessMissionRuntime } from '../src/mission-runtime.ts'
 
 describe('HARDNESS production mission runtime', () => {
+  it('runs a code artifact through the isolated runtime endpoint', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    let handler: ((endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>) | undefined
+    const handle = vi.fn((_channel: string, candidate: Parameters<HostConnectionHandle['rpc']['handle']>[1]) => {
+      handler = candidate
+      return async () => {}
+    })
+    const connection: HostConnectionHandle = { rpc: { handle } as never }
+    const agent = { session: {} } as Agent
+    const runtime = { language: 'typescript', isolation: 'worker-thread', run: vi.fn(async () => ({ logs: ['ok'], value: 1 })) }
+    installHardnessMissionRuntime({
+      connection,
+      agents: { get: id => id === 'session-code' ? agent : undefined },
+      approval: { request: vi.fn() } as never,
+      hardness,
+      tools: { execute: vi.fn() },
+      acquisition: new AcquisitionRegistry(hardness),
+      codeRuntime: runtime as never,
+    })
+    await expect(handler?.('artifact/run', {
+      sessionId: 'session-code', language: 'typescript', program: 'return 1',
+    }, new AbortController().signal)).resolves.toMatchObject({ ok: true, value: { kind: 'execution', result: { value: 1 } } })
+    expect(runtime.run).toHaveBeenCalledWith(expect.objectContaining({ program: 'return 1', bindings: [] }))
+    await ctx.fiber.dispose()
+  })
+
   it('resolves a live session and runs the governed mission through RPC', async () => {
     const ctx = new Context()
     await ctx.plugin(HardnessRegistry)

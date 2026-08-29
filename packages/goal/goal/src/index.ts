@@ -46,6 +46,7 @@ import type {
   GoalOperation,
   GoalSnapshotChangeMeta,
 } from './domain.ts'
+import { SpecialistLedger } from './specialist.ts'
 
 // The pure payload outlet (./types.ts, ONE home of the `goal` projection-key
 // declaration) re-exported onto the package root keeps the module edge in
@@ -53,6 +54,11 @@ import type {
 // still receive the SessionProjectionMap merge.
 export type * from './types.ts'
 export type * from './domain.ts'
+export { SpecialistLedger, foldSpecialists } from './specialist.ts'
+export type {
+  AddSpecialistExperimentRequest, AddSpecialistSourceRequest, EvaluateSpecialistRequest,
+  StartSpecialistRequest,
+} from './specialist.ts'
 export { GOAL_CHANGE_VERSION, GoalError, GoalId } from './runtime.ts'
 export { decodeGoalChange, foldGoal, goalChangeRef } from './fold.ts'
 
@@ -189,6 +195,8 @@ export class GoalService extends TypertRemoteService {
 
   private readonly resolved: ResolvedConfig
   private readonly caches = new WeakMap<Session, GoalCache>()
+  /** Event-backed specialist laboratories share the owning goal session. */
+  readonly specialists: SpecialistLedger = new SpecialistLedger()
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'goals')

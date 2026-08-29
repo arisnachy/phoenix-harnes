@@ -34,6 +34,10 @@ export function renderGoalRoundPrompt(
       + 'Continue working toward the objective in this same session. Treat the current workspace, '
       + 'tool results, and durable session state as authoritative; inspect them instead of assuming '
       + 'earlier narration is still current. Make concrete progress and verify the result. Before '
+      + (round === 1
+        ? 'starting execution, write one complete master plan and obtain the single initial user approval; do not split it into mini-plans or ask for routine step-by-step confirmation. '
+        : 'continue the existing master plan; do not replace it with mini-plans or pause for routine step-by-step confirmation. '
+          + 'Use the approval deadline policy for any later gated action. ')
       + (round === 1 ? '' : 'If this is not the first round, use a materially different strategy from earlier attempts and explain what changed. ')
       + (feedback === undefined ? '' : 'Address every required change from the prior judge before requesting another review. ')
       + 'claiming completion, gather evidence that the whole objective is achieved, read the current '

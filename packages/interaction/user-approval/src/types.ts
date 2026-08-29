@@ -27,3 +27,23 @@ export function ApprovalRequestId(id: string): ApprovalRequestId {
  * request, or unavailable answerer. Callers fail closed on `unavailable`.
  */
 export type ApprovalOutcome = 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'
+
+/** Risk classes used to choose a bounded automatic approval outcome. */
+export type ApprovalRisk = 'low' | 'medium' | 'high'
+
+/** The only outcomes the host may apply when a user does not answer in time. */
+export type ApprovalRecommendation = 'allowed-once' | 'rejected'
+
+/** Durable deadline material shared by host frames and session audit events. */
+export interface ApprovalDeadline {
+  /** Wall-clock time at which the request entered the answerer chain. */
+  readonly requestedAt: number
+  /** Wall-clock time after which the automatic recommendation is applied. */
+  readonly expiresAt: number
+  /** Risk class used to derive the recommendation. */
+  readonly risk: ApprovalRisk
+  /** Outcome used when the deadline expires and the policy revision is current. */
+  readonly recommendation: ApprovalRecommendation
+  /** Number of policy events observed when the request was created. */
+  readonly policyRevision: number
+}

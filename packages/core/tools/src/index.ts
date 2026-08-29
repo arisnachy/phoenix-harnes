@@ -15,6 +15,7 @@ import { snapshotJsonValue } from '@phoenix-ai/dsh-session'
 import type { JsonValue, UserMessage } from '@phoenix-ai/dsh-session'
 import type { ToolProviderResult } from '@phoenix-ai/dsh-system-prompt'
 import type { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'
+import type { ApprovalRisk } from '@phoenix-ai/dsh-user-approval'
 // Type-only: makes `ctx.get('approval')` resolve to the ApprovalService
 // augmentation. The seam stays optional at runtime — see `serviceAsk`.
 import type {} from '@phoenix-ai/dsh-user-approval'
@@ -588,7 +589,7 @@ export type ToolExecutionResult = ToolExecutionSuccess | ToolExecutionFailure
 export type PreToolDecision =
   | { kind: 'allow' }
   | { kind: 'deny'; reason: string }
-  | { kind: 'ask'; reason?: string }
+  | { kind: 'ask'; reason?: string; risk?: ApprovalRisk; reversible?: boolean }
 
 /**
  * Post-dispatch decision: accept, replace one projection, attach context for the
@@ -1708,6 +1709,8 @@ export class ToolRuntime extends Service {
       toolName: exec.name,
       callId: exec.callId,
       ...ask.reason !== undefined ? { reason: ask.reason } : {},
+      ...ask.risk === undefined ? {} : { risk: ask.risk },
+      ...ask.reversible === undefined ? {} : { reversible: ask.reversible },
       signal: exec.signal,
     })
     switch (outcome) {

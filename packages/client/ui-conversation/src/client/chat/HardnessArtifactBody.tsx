@@ -7,6 +7,7 @@ interface ArtifactBodyProps {
   readonly data: HardnessArtifactValue
   readonly expanded: boolean
   readonly title: string
+  readonly executable?: boolean
 }
 
 type JsonRecord = Readonly<Record<string, unknown>>
@@ -224,14 +225,25 @@ function DeclarativeUi({ record }: { readonly record: JsonRecord }) {
 }
 
 function sandboxDocument(html: string): string {
-  const csp = "default-src 'none'; img-src data: blob:; media-src data: blob:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+  const csp = [
+    "default-src 'none';", 'img-src data: blob;', 'media-src data: blob;', 'font-src data:',
+    "style-src 'unsafe-inline';", "script-src 'unsafe-inline';", "connect-src 'none';",
+    "frame-src 'none';", "child-src 'none';", "object-src 'none';", "base-uri 'none';", "form-action 'none'",
+  ].join(' ')
   const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
   const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${body}</body></html>`
 }
 
-function MiniApp({ html, expanded, title }: { readonly html: string; readonly expanded: boolean; readonly title: string }) {
-  const [interactive, setInteractive] = useState(false)
+interface MiniAppProps {
+  readonly html: string
+  readonly expanded: boolean
+  readonly title: string
+  readonly executable?: boolean
+}
+
+function MiniApp({ html, expanded, title, executable = false }: MiniAppProps) {
+  const [interactive, setInteractive] = useState(executable)
   const [previewReady, setPreviewReady] = useState(false)
   const [reloadToken, setReloadToken] = useState(0)
   const frameRef = useRef<HTMLIFrameElement>(null)
@@ -349,9 +361,9 @@ function RecordPreview({ record, mime, expanded, title }: {
   return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
 }
 
-export function HardnessArtifactBody({ mime, data, expanded, title }: ArtifactBodyProps) {
+export function HardnessArtifactBody({ mime, data, expanded, title, executable = false }: ArtifactBodyProps) {
   if (typeof data === 'string') {
-    if (mime === 'text/html' || mime === 'application/vnd.hardness.app+html') return <MiniApp html={data} expanded={expanded} title={title} />
+    if (mime === 'text/html' || mime === 'application/vnd.hardness.app+html') return <MiniApp html={data} expanded={expanded} title={title} executable={executable} />
     if (mime.startsWith('image/')) {
       const src = safeHref(data)
       if (src === undefined) return <p className={styles.note}>Image source was rejected.</p>

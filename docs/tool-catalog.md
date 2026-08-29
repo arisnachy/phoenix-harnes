@@ -27,7 +27,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-fs` | `edit`, `read`, `read_image`, `write` | `ctx.tools`, `ctx.fs`, `ctx.systemPrompt`, `ctx.attachments (image-tool registration)`, `ctx.llm + an image-capable route (image-tool execution)` | `tool/call`, `fs/write-intent or fs/edit-intent for mutations`, `fs/observed after read presence/absence or successful file operation`, `durable attachment (read_image)`, `tool/result` | - | The read-before-write/edit policy is added by `@phoenix-ai/dsh-fs-observation-policy` (an `fs/*` event-gate plugin, no schema change); a deployment that loads these tools is expected to also load it. The image tool is not registered without `ctx.attachments`; its schema is route-independent, and execution refuses unless the exact routed model declares image input. |
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`, `grep` | `ctx.tools`, `ctx.subprocess`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments. |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`, `terminal_list`, `terminal_open`, `terminal_read`, `terminal_send`, `terminal_signal` | `ctx.tools`, `ctx.terminals`, `ctx.systemPrompt`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The six terminal tools are opt-in and complement one-shot shell/filesystem tools. `terminal_send(run_in_background: true)` registers with `ctx.jobs`; TUI, named key sequences, BEL, resize, auto-start, and cross-agent sharing are absent from the schema. |
-| `@phoenix-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
+| `@phoenix-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `specialist_lab`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@phoenix-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
@@ -1004,6 +1004,96 @@ Read the current same-session goal, including its exact id/revision, objective, 
 {
   "type": "object",
   "properties": {}
+}
+```
+
+Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
+
+### `specialist_lab`
+
+Maintain one persistent, evidence-based specialist laboratory. Start it only for an explicit expertise request, then register traceable sources, falsifiable hypotheses, reproducible experiments, and judge results. A specialist is ready only after a passing evaluation; failed evaluations create an improving checkpoint and are bounded by max_iterations. When the base profile requires judging, evaluate invokes a fresh read-only independent judge automatically.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "start, source, hypothesis, experiment, or evaluate",
+      "enum": [
+        "start",
+        "source",
+        "hypothesis",
+        "experiment",
+        "evaluate"
+      ]
+    },
+    "specialist_id": {
+      "type": "string",
+      "description": "Existing specialist laboratory id for non-start actions."
+    },
+    "topic": {
+      "type": "string",
+      "description": "Research topic for start."
+    },
+    "objective": {
+      "type": "string",
+      "description": "Concrete expertise objective for start."
+    },
+    "success_criteria": {
+      "type": "array",
+      "description": "Evidence-based readiness criteria for start.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "max_iterations": {
+      "type": "number",
+      "description": "Positive bounded improvement-loop cap."
+    },
+    "title": {
+      "type": "string",
+      "description": "Source title."
+    },
+    "locator": {
+      "type": "string",
+      "description": "Source URL or stable locator."
+    },
+    "hypothesis": {
+      "type": "string",
+      "description": "Falsifiable hypothesis."
+    },
+    "experiment_name": {
+      "type": "string",
+      "description": "Reproducible experiment name."
+    },
+    "dataset": {
+      "type": "string",
+      "description": "Dataset used by the experiment."
+    },
+    "score": {
+      "type": "number",
+      "description": "Judge score from 0 to 1."
+    },
+    "passed": {
+      "type": "boolean",
+      "description": "Whether all success criteria passed when no independent judge is configured."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Judge summary."
+    },
+    "required_changes": {
+      "type": "array",
+      "description": "Changes required before the next evaluation.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "action"
+  ]
 }
 ```
 

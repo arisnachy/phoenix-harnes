@@ -425,6 +425,13 @@ export interface ChatNodeOwnerProps {
   cwd?: string | undefined
   openFile: (path: string) => void
   inspectCall: (callId: CallId) => void
+  /** Execute a code artifact through the host's isolated HARDNESS runtime. */
+  runArtifact?: (artifact: {
+    readonly id: string
+    readonly mime: string
+    readonly data: string
+    readonly language?: string
+  }, signal?: AbortSignal) => Promise<unknown>
   forkAt: (seq: number) => void
   /** Render a historical image group through the attachment slot. */
   renderMessageImages: RenderMessageImages
@@ -712,6 +719,11 @@ export class PendingApproval {
     return this.wait.payload.callId
   }
 
+  /** Server deadline and risk-derived automatic recommendation, when supplied by the host. */
+  get deadline(): ApprovalWait['payload']['deadline'] {
+    return this.wait.payload.deadline
+  }
+
   /**
    * Deliver the user's decision; a rejected carrier receipt throws. Panel
    * removal stays frame-driven: the broadcast `approval/resolved` settles the
@@ -769,6 +781,13 @@ export interface ChatViewInjected {
   loadImage: (attachment: ImageAttachmentRef) => Promise<string>
   /** Hand a call off to the trajectory view: write the one-shot inspect target and switch tabs. */
   inspectCall: (callId: CallId) => void
+  /** Execute a code artifact through the host's isolated HARDNESS runtime. */
+  runArtifact?: (artifact: {
+    readonly id: string
+    readonly mime: string
+    readonly data: string
+    readonly language?: string
+  }, signal?: AbortSignal) => Promise<unknown>
   /**
    * Per-session scroll memory surviving view switches (in-memory, never
    * persisted): the view saves on every scroll and restores on remount; a

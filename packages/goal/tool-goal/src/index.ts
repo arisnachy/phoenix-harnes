@@ -10,7 +10,7 @@ import { GoalId } from '@phoenix-ai/dsh-goal'
 import type { GoalRef, GoalView } from '@phoenix-ai/dsh-goal'
 import { boundContextSummary, createUserMessage, HarnessError } from '@phoenix-ai/dsh-llm'
 import { defineTool } from '@phoenix-ai/dsh-tools'
-import type { GenericCallView } from '@phoenix-ai/dsh-tools'
+import type { GenericCallView, JsonValue } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { judgeGoalCompletion, recordGoalJudge } from './judge.ts'
 import type { GoalJudgeResult } from './judge.ts'
@@ -62,6 +62,13 @@ const GET_DESCRIPTION =
   'Read the current same-session goal, including its exact id/revision, objective, phase, completed '
   + 'continuation rounds, round limit, blocker reason when present, and whether another continuation is armed. '
   + 'Call this before updating a goal.'
+
+const SPECIALIST_DESCRIPTION =
+  'Maintain one persistent, evidence-based specialist laboratory. Start it only for an explicit '
+  + 'expertise request, then register traceable sources, falsifiable hypotheses, reproducible '
+  + 'experiments, and judge results. A specialist is ready only after a passing evaluation; failed '
+  + 'evaluations create an improving checkpoint and are bounded by max_iterations. When the base '
+  + 'profile requires judging, evaluate invokes a fresh read-only independent judge automatically.'
 
 /** Canonical goal-tool output, matching the existing compact Native JSON. */
 type GoalToolValue =
@@ -215,6 +222,29 @@ function goalValue(goal: GoalView | undefined, judge?: GoalJudgeResult): GoalToo
   }
 }
 
+/** Compact model-facing projection of a specialist laboratory. */
+function specialistValue(value: unknown): { specialist: Record<string, JsonValue> } {
+  return { specialist: JSON.parse(JSON.stringify(value)) as Record<string, JsonValue> }
+}
+
+/** Give the independent judge bounded durable laboratory evidence to review. */
+function specialistReviewObjective(profile: {
+  readonly topic: string
+  readonly objective: string
+  readonly successCriteria: readonly string[]
+  readonly sources: readonly unknown[]
+  readonly hypotheses: readonly string[]
+  readonly experiments: readonly unknown[]
+}): string {
+  return `Specialist laboratory review for ${profile.topic}: ${JSON.stringify({
+    objective: profile.objective,
+    successCriteria: profile.successCriteria,
+    sources: profile.sources,
+    hypotheses: profile.hypotheses,
+    experiments: profile.experiments,
+  })}`.slice(0, 8_000)
+}
+
 /** Reusable canonical output declaration for all three goal controls. */
 const GOAL_OUTPUT = {
   schema: GOAL_VALUE_SCHEMA,
@@ -262,7 +292,7 @@ export function apply(ctx: Context, config: Config): void {
       },
     },
     output: GOAL_OUTPUT,
-    execute(args, exec) {
+    async execute(args, exec) {
       const execution = goalToolExecution(ctx, exec)
       requireDirectHuman(ctx, execution)
       const goal = ctx.goals.create(execution.agent, {
@@ -426,5 +456,124 @@ export function apply(ctx: Context, config: Config): void {
           ? args.objective
           : hasRoundCap(args.max_goal_rounds) ? args.max_goal_rounds : args.goal_id,
     ),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'specialist_lab',
+    description: SPECIALIST_DESCRIPTION,
+    parameters: {
+      action: {
+        type: 'string',
+        required: true,
+        description: 'start, source, hypothesis, experiment, or evaluate',
+        enum: ['start', 'source', 'hypothesis', 'experiment', 'evaluate'],
+      },
+      specialist_id: { type: 'string', description: 'Existing specialist laboratory id for non-start actions.' },
+      topic: { type: 'string', description: 'Research topic for start.' },
+      objective: { type: 'string', description: 'Concrete expertise objective for start.' },
+      success_criteria: { type: 'array', items: { type: 'string' }, description: 'Evidence-based readiness criteria for start.' },
+      max_iterations: { type: 'number', description: 'Positive bounded improvement-loop cap.' },
+      title: { type: 'string', description: 'Source title.' },
+      locator: { type: 'string', description: 'Source URL or stable locator.' },
+      hypothesis: { type: 'string', description: 'Falsifiable hypothesis.' },
+      experiment_name: { type: 'string', description: 'Reproducible experiment name.' },
+      dataset: { type: 'string', description: 'Dataset used by the experiment.' },
+      score: { type: 'number', description: 'Judge score from 0 to 1.' },
+      passed: { type: 'boolean', description: 'Whether all success criteria passed when no independent judge is configured.' },
+      summary: { type: 'string', description: 'Judge summary.' },
+      required_changes: { type: 'array', items: { type: 'string' }, description: 'Changes required before the next evaluation.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: { specialist: { type: 'object', additionalProperties: true, required: true } },
+      },
+      render: (_args, value: Record<string, JsonValue>) => [{ type: 'text' as const, text: JSON.stringify(value) }],
+    },
+    async execute(args, exec) {
+      const execution = goalToolExecution(ctx, exec)
+      if (args.action === 'start') {
+        requireDirectHuman(ctx, execution)
+        if (typeof args.topic !== 'string' || typeof args.objective !== 'string' || !Array.isArray(args.success_criteria)) {
+          throw new HarnessError('start requires topic, objective, and success_criteria', 'SPECIALIST_INVALID_REQUEST')
+        }
+        const profile = ctx.goals.specialists.start(execution.agent, {
+          topic: args.topic,
+          objective: args.objective,
+          successCriteria: args.success_criteria,
+          ...(args.max_iterations === undefined ? {} : { maxIterations: args.max_iterations }),
+        })
+        return specialistValue(profile)
+      }
+      if (typeof args.specialist_id !== 'string') throw new HarnessError('specialist_id is required for this action', 'SPECIALIST_INVALID_REQUEST')
+      const id = args.specialist_id
+      const ledger = ctx.goals.specialists
+      if (args.action === 'source') {
+        if (typeof args.title !== 'string' || typeof args.locator !== 'string') {
+          throw new HarnessError('source requires title and locator', 'SPECIALIST_INVALID_REQUEST')
+        }
+        return specialistValue(ledger.addSource(execution.agent, id, { title: args.title, locator: args.locator }))
+      }
+      if (args.action === 'hypothesis') {
+        if (typeof args.hypothesis !== 'string') throw new HarnessError('hypothesis requires hypothesis', 'SPECIALIST_INVALID_REQUEST')
+        return specialistValue(ledger.addHypothesis(execution.agent, id, args.hypothesis))
+      }
+      if (args.action === 'experiment') {
+        if (typeof args.experiment_name !== 'string' || typeof args.dataset !== 'string') {
+          throw new HarnessError('experiment requires experiment_name and dataset', 'SPECIALIST_INVALID_REQUEST')
+        }
+        return specialistValue(ledger.addExperiment(execution.agent, id, { name: args.experiment_name, dataset: args.dataset }))
+      }
+      if (args.action !== 'evaluate') throw new HarnessError(`unknown specialist action: ${args.action}`, 'SPECIALIST_INVALID_REQUEST')
+      const current = ledger.get(execution.agent, id)
+      if (current === undefined) throw new HarnessError(`specialist not found: ${id}`, 'SPECIALIST_INVALID_REQUEST')
+      if (resolved.requireJudge) {
+        const subagents = ctx.get('subagents')
+        if (subagents === undefined) {
+          throw new HarnessError('specialist evaluation requires the subagent judge service', 'SPECIALIST_JUDGE_UNAVAILABLE')
+        }
+        const judge = await judgeGoalCompletion({
+          subagents,
+          provider: resolved.judgeProvider,
+          parent: execution.agent,
+          objective: specialistReviewObjective(current),
+          round: current.iterations + 1,
+          signal: exec.signal,
+        })
+        const profile = ledger.evaluate(execution.agent, id, {
+          score: judge.verdict === 'pass' ? 1 : 0,
+          passed: judge.verdict === 'pass',
+          blocked: judge.verdict === 'blocked',
+          summary: judge.summary,
+          requiredChanges: judge.requiredChanges,
+        })
+        if (judge.verdict !== 'pass') {
+          exec.deferContext(createUserMessage({
+            content: [{
+              type: 'text',
+              text: '<specialist_judge_result>\n'
+                + `Verdict: ${judge.verdict}\n`
+                + `Summary: ${judge.summary}\n`
+                + `Required changes: ${JSON.stringify(judge.requiredChanges)}\n`
+                + 'Keep the specialist active, address these changes, and evaluate again only after verifying the improved evidence.\n'
+                + '</specialist_judge_result>',
+            }],
+            source: {
+              kind: 'plugin', plugin: 'tool-goal', form: 'notice',
+              summary: boundContextSummary(`specialist judge ${judge.verdict}: ${current.topic}`),
+            },
+          }))
+        }
+        return specialistValue(profile)
+      }
+      if (typeof args.score !== 'number' || typeof args.passed !== 'boolean' || typeof args.summary !== 'string') {
+        throw new HarnessError('evaluate requires score, passed, and summary', 'SPECIALIST_INVALID_REQUEST')
+      }
+      return specialistValue(ledger.evaluate(execution.agent, id, {
+        score: args.score, passed: args.passed, summary: args.summary,
+        ...(args.required_changes === undefined ? {} : { requiredChanges: args.required_changes }),
+      }))
+    },
+    presentCall: args => present(`Specialist lab: ${args.action}`, 'other', args.specialist_id ?? args.topic),
   }))
 }

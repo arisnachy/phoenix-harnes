@@ -95,7 +95,7 @@ import type {} from '@phoenix-ai/dsh-authorization'
 import { SessionTitleInvalidError } from '@phoenix-ai/dsh-session-title'
 import type { CallId } from '@phoenix-ai/dsh-llm/brand'
 import type { ScopeKey } from '@phoenix-ai/dsh-scope'
-import type { ApprovalOutcome, ApprovalRequestId } from '@phoenix-ai/dsh-user-approval'
+import type { ApprovalDeadline, ApprovalOutcome, ApprovalRequestId } from '@phoenix-ai/dsh-user-approval'
 // Side-effect type import: resolves the `approval/request` waterfall and
 // `ctx.get('approval')` without a value dependency on the seam (optional composition).
 import type {} from '@phoenix-ai/dsh-user-approval'
@@ -641,6 +641,7 @@ interface PendingApproval {
   toolName: string
   callId?: CallId
   reason?: string
+  deadline?: ApprovalDeadline
   resolve(outcome: ApprovalOutcome): void
 }
 
@@ -678,6 +679,7 @@ function requestedFrame(pending: PendingApproval): RpcRequest<MuxFrame> {
       toolName: pending.toolName,
       ...pending.callId === undefined ? {} : { callId: pending.callId },
       ...pending.reason === undefined ? {} : { reason: pending.reason },
+      ...pending.deadline === undefined ? {} : { deadline: pending.deadline },
     },
   }
 }
@@ -1419,6 +1421,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       for (const entry of pendingApprovals.values()) claimed.add(entry.approvalId)
       const decided = new Set<ApprovalRequestId>()
       let approvalId: ApprovalRequestId | undefined
+      let deadline: ApprovalDeadline | undefined
       for (let i = events.length - 1; i >= 0; i -= 1) {
         const event = events[i] as SessionEvent
         if (event.type === 'approval/decided') {
@@ -1432,6 +1435,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // the callId-less arm guards any future non-tool asker.)
           if ((req.callId ?? null) !== (event.data.callId ?? null)) continue
           approvalId = event.data.id
+          deadline = event.data.deadline
           break
         }
       }
@@ -1461,6 +1465,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           toolName: req.toolName,
           ...req.callId === undefined ? {} : { callId: req.callId },
           ...req.reason === undefined ? {} : { reason: req.reason },
+          ...deadline === undefined ? {} : { deadline },
           resolve: settle,
         }
         pendingApprovals.set(pending.rpcId, pending)

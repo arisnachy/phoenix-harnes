@@ -91,7 +91,11 @@ export async function apply(ctx: Context): Promise<() => void> {
       disposers.push(ctx.tools.register(createConnectorListTool(authorization, mcpConnectors)))
     }
     const acquisition = createHardnessAcquisition(hardness)
-    const missionRunner = createHardnessMissionRunner({ hardness, tools, acquisition, approval })
+    const codeRuntime = ctx.get('codeRuntime')
+    const missionRunner = createHardnessMissionRunner({
+      hardness, tools, acquisition, approval,
+      ...(codeRuntime === undefined ? {} : { codeRuntime }),
+    })
     disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
     let activeConnection: HostConnectionHandle | undefined
     let missionDispose: (() => Promise<void>) | undefined
@@ -111,6 +115,7 @@ export async function apply(ctx: Context): Promise<() => void> {
         hardness,
         tools,
         acquisition,
+        ...(codeRuntime === undefined ? {} : { codeRuntime }),
       })
     }
     syncMissionRuntime()

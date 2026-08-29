@@ -746,7 +746,7 @@ describe('ToolRuntime', () => {
         return Promise.resolve<ApprovalOutcome>('allowed-once')
       })
       ctx.on('tools/pre-execute', async (_exec, _next): Promise<PreToolDecision> =>
-        ({ kind: 'ask', reason: 'hook wants a human' }))
+        ({ kind: 'ask', reason: 'hook wants a human', risk: 'low', reversible: true }))
 
       const result = await ctx.tools.execute({
         callId: CallId('c1'), name: 'echo', arguments: { text: 'hi' }, agent, signal: controller.signal,
@@ -754,7 +754,7 @@ describe('ToolRuntime', () => {
 
       expect(result).toMatchObject({ isError: false, content: [{ type: 'text', text: 'hi' }] })
       expect(seen).toHaveLength(1)
-      expect(seen[0]).toMatchObject({ agent, toolName: 'echo', callId: 'c1', reason: 'hook wants a human' })
+      expect(seen[0]).toMatchObject({ agent, toolName: 'echo', callId: 'c1', reason: 'hook wants a human', risk: 'low', reversible: true })
       expect(seen[0]?.signal).toBe(controller.signal)
     })
 

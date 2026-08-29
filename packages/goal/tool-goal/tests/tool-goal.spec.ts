@@ -329,6 +329,23 @@ describe('goal tool execution authority', () => {
 })
 
 describe('goal tool state transitions', () => {
+  it('exposes a persistent specialist laboratory lifecycle to the model', async () => {
+    const { ctx, root } = await harness()
+    openTurn(root, { kind: 'user' }, 'become an expert in a topic')
+    const started = resultJson(await execute(ctx, 'specialist_lab', {
+      action: 'start', topic: 'topic', objective: 'objective', success_criteria: ['criterion'], max_iterations: 2,
+    }, root.agent))['specialist'] as Record<string, unknown>
+    const id = started['id']
+    await execute(ctx, 'specialist_lab', { action: 'source', specialist_id: id, title: 'Source', locator: 'https://example.test' }, root.agent)
+    await execute(ctx, 'specialist_lab', { action: 'hypothesis', specialist_id: id, hypothesis: 'Testable claim' }, root.agent)
+    await execute(ctx, 'specialist_lab', { action: 'experiment', specialist_id: id, experiment_name: 'Holdout', dataset: 'dataset' }, root.agent)
+    const evaluated = resultJson(await execute(ctx, 'specialist_lab', {
+      action: 'evaluate', specialist_id: id, score: 1, passed: true, summary: 'Evidence passes',
+    }, root.agent))['specialist'] as Record<string, unknown>
+    expect(evaluated).toMatchObject({ id, phase: 'ready', iterations: 1 })
+    expect(root.session.events.map(event => event.type).filter(type => type === 'specialist/change')).toHaveLength(5)
+  })
+
   it('reads null, then edits, pauses, and resumes by exact revision in one human turn', async () => {
     const { ctx, root } = await harness()
     openTurn(root, { kind: 'user' })

@@ -7,7 +7,7 @@
  */
 
 import type { AskUserQuestionItem } from '@phoenix-ai/dsh-user-questions/types'
-import type { ApprovalOutcome, ApprovalRequestId } from '@phoenix-ai/dsh-user-approval/types'
+import type { ApprovalDeadline, ApprovalOutcome, ApprovalRequestId } from '@phoenix-ai/dsh-user-approval/types'
 import type { Message } from '@phoenix-ai/dsh-llm/types'
 import type { MessageId } from '@phoenix-ai/dsh-llm/brand'
 import type { CallId } from '@phoenix-ai/dsh-llm/brand'
@@ -69,7 +69,7 @@ export interface EventsApi {
 export type MuxFrame =
   | { type: 'session/event'; sessionId: SessionId; event: SessionEvent; view?: ToolEventView }
   | { type: 'session/subscribed'; sessionId: SessionId; lastSeq: number }
-  | { type: 'approval/requested'; sessionId: SessionId; approvalId: ApprovalRequestId; toolName: string; callId?: CallId; reason?: string }
+  | { type: 'approval/requested'; sessionId: SessionId; approvalId: ApprovalRequestId; toolName: string; callId?: CallId; reason?: string; deadline?: ApprovalDeadline }
   | { type: 'approval/resolved'; sessionId: SessionId; approvalId: ApprovalRequestId; outcome: ApprovalOutcome }
   | { type: 'question/requested'; sessionId: SessionId; questions: AskUserQuestionItem[] }
   | { type: 'question/resolved'; sessionId: SessionId; questionRpcId: RpcId; outcome: 'answered' | 'cancelled' }

@@ -1,5 +1,6 @@
 /** Registers the conversation components, shared store, and service callbacks. */
 import type { Context } from '@deepseek-ai/cordis'
+import type { ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
 import { resolveSlotLabel, type BoundActions } from '@phoenix-ai/dsh-client-ui-slots'
 import {
   resolveWorkspacePath, type ISessions, type SessionId,
@@ -391,6 +392,7 @@ export function apply(ctx: Context): void {
     inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {
       const conversation = concreteConversation(ctx)
       const scoped = scopedConversation(sessions, sessionId)
+      const connection = ctx.get('connection') as ConnectionHandle
       return {
         openDetails: (target) => {
           actions.select(target)
@@ -409,6 +411,14 @@ export function apply(ctx: Context): void {
         inspectCall: (callId) => {
           actions.setInspect({ callId })
           actions.setView('trajectory')
+        },
+        runArtifact: async (artifact, signal) => {
+          const response = await connection.rpc.call('/hardness', 'artifact/run', {
+            sessionId,
+            ...artifact,
+          }, signal)
+          if (!response.ok) throw new Error(response.error.message)
+          return response.value
         },
         chatScroll: {
           save: (position) => {

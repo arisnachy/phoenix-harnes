@@ -830,6 +830,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Goal service (`ctx.goals`) backed exclusively by the owning session log.',
     methods: [
       {
+        signature: 'readonly specialists: SpecialistLedger = new SpecialistLedger()',
+        description: 'Event-backed specialist laboratories share the owning goal session.',
+        parameters: [],
+      },
+      {
         signature: 'get(agent: Agent): GoalView | undefined',
         description: 'Read the current goal for one exact live agent.',
         parameters: [{ name: 'agent', description: 'owning live agent.' }],
@@ -2914,6 +2919,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AdapterRegistrationHandle {\n    (): void;\n    replace(providers: string[]): void;\n}',
   },
   {
+    name: 'AddSpecialistExperimentRequest',
+    declaration: 'export interface AddSpecialistExperimentRequest {\n    readonly name: string;\n    readonly dataset: string;\n}',
+  },
+  {
+    name: 'AddSpecialistSourceRequest',
+    declaration: 'export interface AddSpecialistSourceRequest {\n    readonly title: string;\n    readonly locator: string;\n}',
+  },
+  {
     name: 'Agent',
     declaration: 'export interface Agent {\n    readonly id: SessionId;\n    readonly options: AgentOptions;\n    readonly session: Session;\n    readonly inbox: Inbox;\n    readonly status: AgentStatus;\n    readonly ctx: Context;\n    cancel(cause: AgentCancelCause, options?: CancelOptions): void;\n    whenIdle(): Promise<void>;\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n    send(message: UserMessage, target: InboxTarget, wakeup: boolean): void;\n    followup(message: UserMessage): void;\n    steer(message: UserMessage): void;\n    inject(message: UserMessage): void;\n}',
   },
@@ -2963,7 +2976,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ApprovalRequest',
-    declaration: 'export interface ApprovalRequest {\n    readonly agent: Agent;\n    readonly toolName: string;\n    readonly callId?: CallId;\n    readonly reason?: string;\n    readonly signal?: AbortSignal;\n}',
+    declaration: 'export interface ApprovalRequest {\n    readonly agent: Agent;\n    readonly toolName: string;\n    readonly callId?: CallId;\n    readonly reason?: string;\n    readonly risk?: ApprovalRisk;\n    readonly reversible?: boolean;\n    readonly signal?: AbortSignal;\n}',
+  },
+  {
+    name: 'ApprovalRisk',
+    declaration: 'export type ApprovalRisk = \'low\' | \'medium\' | \'high\';',
   },
   {
     name: 'ApprovalService',
@@ -3428,6 +3445,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'EpochHeader',
     declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    system?: string;\n    tools?: ToolSchema[];\n}',
+  },
+  {
+    name: 'EvaluateSpecialistRequest',
+    declaration: 'export interface EvaluateSpecialistRequest {\n    readonly score: number;\n    readonly passed: boolean;\n    readonly summary: string;\n    readonly requiredChanges?: readonly string[];\n}',
   },
   {
     name: 'FileDiff',
@@ -3963,7 +3984,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PreToolDecision',
-    declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n} | {\n    kind: \'ask\';\n    reason?: string;\n};',
+    declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n} | {\n    kind: \'ask\';\n    reason?: string;\n    risk?: ApprovalRisk;\n    reversible?: boolean;\n};',
   },
   {
     name: 'ProjectionChangeListener',
@@ -4562,6 +4583,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SpawnTeammateResult {\n    readonly member: TeamMemberView;\n}',
   },
   {
+    name: 'SpecialistExperiment',
+    declaration: 'export interface SpecialistExperiment {\n    readonly id: string;\n    readonly name: string;\n    readonly dataset: string;\n    readonly status: \'planned\' | \'passed\' | \'failed\';\n    readonly result?: string;\n}',
+  },
+  {
+    name: 'SpecialistJudge',
+    declaration: 'export interface SpecialistJudge {\n    readonly verdict: \'pass\' | \'needs_changes\' | \'blocked\';\n    readonly score: number;\n    readonly summary: string;\n    readonly requiredChanges: readonly string[];\n    readonly reviewedAt: number;\n}',
+  },
+  {
+    name: 'SpecialistLedger',
+    declaration: 'export class SpecialistLedger {\n    get(agent: Agent, specialistId: string): SpecialistProfile | undefined;\n    start(agent: Agent, request: StartSpecialistRequest): SpecialistProfile;\n    addSource(agent: Agent, specialistId: string, request: AddSpecialistSourceRequest): SpecialistProfile;\n    addHypothesis(agent: Agent, specialistId: string, hypothesis: string): SpecialistProfile;\n    addExperiment(agent: Agent, specialistId: string, request: AddSpecialistExperimentRequest): SpecialistProfile;\n    evaluate(agent: Agent, specialistId: string, request: EvaluateSpecialistRequest): SpecialistProfile;\n}',
+  },
+  {
+    name: 'SpecialistPhase',
+    declaration: 'export type SpecialistPhase = \'scoping\' | \'researching\' | \'hypothesizing\' | \'experimenting\' | \'evaluating\' | \'improving\' | \'ready\' | \'blocked\';',
+  },
+  {
+    name: 'SpecialistProfile',
+    declaration: 'export interface SpecialistProfile {\n    readonly id: string;\n    readonly topic: string;\n    readonly objective: string;\n    readonly successCriteria: readonly string[];\n    readonly phase: SpecialistPhase;\n    readonly revision: number;\n    readonly maxIterations: number;\n    readonly iterations: number;\n    readonly sources: readonly SpecialistSource[];\n    readonly hypotheses: readonly string[];\n    readonly experiments: readonly SpecialistExperiment[];\n    readonly judge?: SpecialistJudge;\n}',
+  },
+  {
+    name: 'SpecialistSource',
+    declaration: 'export interface SpecialistSource {\n    readonly id: string;\n    readonly title: string;\n    readonly locator: string;\n    readonly addedAt: number;\n}',
+  },
+  {
     name: 'SpillLocator',
     declaration: 'export type SpillLocator = Branded<\'SpillLocator\'>;',
   },
@@ -4576,6 +4621,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SpillSource',
     declaration: 'export interface SpillSource {\n    toolName: string;\n    callId: CallId;\n    label: string;\n}',
+  },
+  {
+    name: 'StartSpecialistRequest',
+    declaration: 'export interface StartSpecialistRequest {\n    readonly topic: string;\n    readonly objective: string;\n    readonly successCriteria: readonly string[];\n    readonly maxIterations?: number;\n}',
   },
   {
     name: 'StorageBackend',

@@ -76,7 +76,7 @@ describe('ApprovalService.request', () => {
 
     await ctx.approval.request(requestOf(agent))
 
-    expect(Object.keys(appended[0]?.data ?? {}).sort()).toEqual(['id', 'toolName'])
+    expect(Object.keys(appended[0]?.data ?? {}).sort()).toEqual(['deadline', 'id', 'toolName'])
   })
 
   it('borrows the exact readonly request for scoped dispatch and audit', async () => {

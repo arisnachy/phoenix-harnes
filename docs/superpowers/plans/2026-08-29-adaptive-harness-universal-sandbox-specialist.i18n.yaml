@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/plans/2026-08-29-adaptive-harness-universal-sandbox-specialist.md
+2026-08-29-adaptive-harness-universal-sandbox-specialist.md: bb4a3b96839027a42f7d22e533c7e03eaf030410
+2026-08-29-adaptive-harness-universal-sandbox-specialist.zh.md: f70921526236d9fc7827e7f8a0e41f562d69d4a0

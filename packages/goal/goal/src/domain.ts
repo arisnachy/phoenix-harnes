@@ -75,6 +75,61 @@ export interface GoalStrategySelection {
   readonly reason: string
 }
 
+/** Durable phase of one bounded specialist laboratory. */
+export type SpecialistPhase =
+  | 'scoping' | 'researching' | 'hypothesizing' | 'experimenting'
+  | 'evaluating' | 'improving' | 'ready' | 'blocked'
+
+/** One traceable source registered by a specialist laboratory. */
+export interface SpecialistSource {
+  readonly id: string
+  readonly title: string
+  readonly locator: string
+  readonly addedAt: number
+}
+
+/** One reproducible experiment tracked by a specialist laboratory. */
+export interface SpecialistExperiment {
+  readonly id: string
+  readonly name: string
+  readonly dataset: string
+  readonly status: 'planned' | 'passed' | 'failed'
+  readonly result?: string
+}
+
+/** Structured judge result for a specialist readiness decision. */
+export interface SpecialistJudge {
+  readonly verdict: 'pass' | 'needs_changes' | 'blocked'
+  readonly score: number
+  readonly summary: string
+  readonly requiredChanges: readonly string[]
+  readonly reviewedAt: number
+}
+
+/** Complete durable specialist laboratory snapshot. */
+export interface SpecialistProfile {
+  readonly id: string
+  readonly topic: string
+  readonly objective: string
+  readonly successCriteria: readonly string[]
+  readonly phase: SpecialistPhase
+  readonly revision: number
+  readonly maxIterations: number
+  readonly iterations: number
+  readonly sources: readonly SpecialistSource[]
+  readonly hypotheses: readonly string[]
+  readonly experiments: readonly SpecialistExperiment[]
+  readonly judge?: SpecialistJudge
+}
+
+/** Full snapshot change written for every specialist laboratory mutation. */
+export interface SpecialistChange {
+  readonly kind: 'specialist/change'
+  readonly version: 1
+  readonly operation: 'start' | 'source' | 'hypothesis' | 'experiment' | 'evaluate'
+  readonly specialist: SpecialistProfile
+}
+
 /** Message attribution for admitted continuation rounds. */
 export interface GoalMessageSource {
   readonly kind: 'goal'
@@ -102,6 +157,8 @@ declare module '@phoenix-ai/dsh-session/types' {
     'goal/supervisor': GoalSupervisorCheckpoint
     /** Strategy selected before one continuation prompt is admitted. */
     'goal/strategy': GoalStrategySelection
+    /** Full replayable specialist-laboratory snapshot. */
+    'specialist/change': SpecialistChange
   }
 }
 

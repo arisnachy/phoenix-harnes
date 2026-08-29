@@ -25,6 +25,8 @@ Tool projections may subscribe to `tools/change`; this keeps dynamically connect
 
 Each live mission appends a secret-free `hardness/mission` trace to the calling session. The trace records terminal protocol states, capability identity, artifact/evidence references, and stable reason codes; `replayHardnessMissionAudit` reconstructs one call without replaying arguments, credentials, or provider error text.
 
+The loopback `artifact/run` endpoint executes a code artifact only through the mounted isolated `CodeRuntime`. The universal client surface forwards cancellation to that runtime and reports missing or incompatible runtimes as errors; it never falls back to browser evaluation for code.
+
 Inspect the need, resolve a verified capability, plan the operation, obtain approval, execute through the governed runtime, verify the artifact, present it, and record evidence before claiming completion.
 ```
 

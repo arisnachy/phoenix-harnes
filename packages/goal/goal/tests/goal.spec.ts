@@ -11,6 +11,7 @@ import GoalService, {
   foldGoal,
 } from '@phoenix-ai/dsh-goal'
 import type { GoalChangeMeta, GoalRef, GoalSnapshotChangeMeta } from '@phoenix-ai/dsh-goal'
+import { SpecialistLedger, foldSpecialists } from '@phoenix-ai/dsh-goal'
 
 interface StubAgent {
   agent: Agent
@@ -242,6 +243,50 @@ describe('GoalService creation and replay', () => {
     }))
   })
 
+})
+
+describe('SpecialistLedger persistence', () => {
+  it('records a bounded research lab and reconstructs it from the session log', async () => {
+    const first = await harness()
+    const specialist = new SpecialistLedger()
+    const started = specialist.start(first.agent, {
+      topic: 'sports analytics',
+      objective: 'build a reproducible educational forecasting method',
+      successCriteria: ['calibrated historical evaluation', 'source traceability'],
+      maxIterations: 4,
+    })
+    specialist.addSource(first.agent, started.id, { title: 'Official dataset', locator: 'https://example.test/data' })
+    specialist.addHypothesis(first.agent, started.id, 'A calibrated baseline is more reliable than an unverified edge')
+    specialist.addExperiment(first.agent, started.id, { name: 'walk-forward baseline', dataset: 'official dataset' })
+    const evaluated = specialist.evaluate(first.agent, started.id, {
+      score: 0.92,
+      passed: true,
+      summary: 'Criteria met on the held-out sample',
+    })
+    expect(evaluated.phase).toBe('ready')
+    expect(evaluated.sources).toHaveLength(1)
+    expect(evaluated.experiments[0]?.status).toBe('passed')
+    expect(first.session.events.map(event => event.type)).toEqual([
+      'specialist/change', 'specialist/change', 'specialist/change', 'specialist/change', 'specialist/change',
+    ])
+
+    const restored = foldSpecialists(first.session.events).get(started.id)
+    expect(restored).toMatchObject({ id: started.id, phase: 'ready', iterations: 1 })
+    expect(restored?.judge?.verdict).toBe('pass')
+  })
+
+  it('turns a failed review into an improving checkpoint instead of claiming readiness', async () => {
+    const { agent } = await harness()
+    const specialist = new SpecialistLedger()
+    const started = specialist.start(agent, {
+      topic: 'topic', objective: 'objective', successCriteria: ['criterion'], maxIterations: 2,
+    })
+    const evaluated = specialist.evaluate(agent, started.id, {
+      score: 0.2, passed: false, summary: 'Needs more evidence', requiredChanges: ['add a holdout test'],
+    })
+    expect(evaluated).toMatchObject({ phase: 'improving', iterations: 1 })
+    expect(evaluated.judge).toMatchObject({ verdict: 'needs_changes', requiredChanges: ['add a holdout test'] })
+  })
 })
 
 describe('GoalService mutations', () => {

@@ -172,7 +172,7 @@ function TurnStatus({ startTime, progress, t }: {
  */
 export function ChatView({
   useSession, useSessions, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  fileMentions, workspaceFileMentions, t,
+  fileMentions, workspaceFileMentions, runArtifact, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -479,6 +479,7 @@ export function ChatView({
               renderMessageImages={renderMessageImages}
               fileMentions={fileMentions}
               workspaceFileMentions={workspaceFileMentions}
+              {...runArtifact === undefined ? {} : { runArtifact }}
               renderSlot={renderSlot}
               t={t}
             />
