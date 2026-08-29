@@ -435,7 +435,18 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'goal/judge': GoalJudgeAuditEntry
 ```
 
-来源：[`packages/goal/tool-goal/src/judge.ts:48`](../packages/goal/tool-goal/src/judge.ts)
+来源：[`packages/goal/goal/src/domain.ts:91`](../packages/goal/goal/src/domain.ts)
+
+<a id="goalsupervisor--log-only"></a>
+
+#### `goal/supervisor` — log-only
+
+```ts persistence-catalog
+/** Latest bounded supervisor checkpoint for a goal. */
+'goal/supervisor': GoalSupervisorCheckpoint
+```
+
+来源：[`packages/goal/goal/src/domain.ts:93`](../packages/goal/goal/src/domain.ts)
 
 ### `hardness/*`
 

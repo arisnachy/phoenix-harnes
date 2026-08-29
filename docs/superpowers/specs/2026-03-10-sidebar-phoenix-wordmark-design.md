@@ -1,5 +1,7 @@
 # Ajuste del wordmark PHOENIX en el lateral
 
+English | [中文](2026-03-10-sidebar-phoenix-wordmark-design.zh.md)
+
 ## Objetivo
 Hacer que la palabra `PHOENIX` del logo lateral tenga una presentación horizontal y compacta, inspirada en la referencia de ChatGPT: sans-serif limpia, oscura, seminegrita y sin espaciado amplio entre letras.
 

@@ -1,5 +1,7 @@
 # PHOENIX Completion Implementation Plan
 
+English | [中文](2026-08-29-phoenix-completion.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Finish the persistent, self-recovering PHOENIX mission workflow, expose the remaining Hermes-style operator controls, verify the web quota surface, and publish the verified branch without claiming unverified connector behavior.
