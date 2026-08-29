@@ -643,6 +643,18 @@ describe('emitRawMarkdownPages', () => {
     expect(readFileSync(join(out, 'guide.md'), 'utf8')).toBe('# C\n\n[A](./a.md)\n')
   })
 
+  it('allows an identical file the build already carries', () => {
+    const { root, pages } = fixture()
+    writeFileSync(join(root, 'docs/a.md'), '![logo](../packages/logo.svg)\n')
+    const out = mirrorDir()
+    const source = readFileSync(join(root, 'packages/logo.svg'))
+    writeFileSync(join(out, 'logo.svg'), source)
+
+    emitRawMarkdownPages(out, { pages, repoRoot: realpathSync(root), repositoryRef: 'abc123' })
+
+    expect(readFileSync(join(out, 'logo.svg'))).toEqual(source)
+  })
+
   it('refuses to overwrite a file the build already carries', () => {
     // The twin pass writes into a populated build directory, and VitePress has
     // already copied `website/public/` there; a page image sharing one of

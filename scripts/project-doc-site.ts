@@ -364,6 +364,13 @@ function projectPagesInto(
     // the twin pass, the build VitePress just wrote, including `public/`
     // copies. Overwriting one would silently corrupt the site.
     if (holder === undefined && existsSync(target)) {
+      // VitePress may have copied the same publishable asset from `public/`
+      // before the raw-Markdown twin pass reaches it. Reusing an identical file
+      // is safe; a different producer must still fail closed.
+      if (readFileSync(target).equals(readFileSync(sourceAbs))) {
+        claimed.set(target, sourceAbs)
+        return
+      }
       throw new Error(
         `project-doc-site: ${repoPath(sourceAbs, context.repoRoot)} would overwrite existing build file`
         + ` ${relative(targetRoot, target).split(sep).join('/')}.`,
