@@ -262,9 +262,13 @@ window.__ModuleLoader__={
   }
 }
 })()`
-  const preload = PARSER_PRELOAD_IDS.map(id => graph.entries.find(entry => entry.id === id))
-    .filter((entry): entry is WebBootEntry => entry !== undefined)
-    .map((entry): IndexInjection => ({ kind: 'script-src', placement: 'head', src: entry.url }))
+  const preload = PARSER_PRELOAD_IDS.map((id) => {
+    const entry = graph.entries.find(candidate => candidate.id === id)
+    if (entry === undefined) {
+      throw new Error(`client-modules: required parser preload "${id}/client.js" is missing from the boot graph`)
+    }
+    return { kind: 'script-src', placement: 'head', src: entry.url } satisfies IndexInjection
+  })
   return [
     { kind: 'script', placement: 'head', text: queue },
     ...preload,

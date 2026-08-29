@@ -8,6 +8,8 @@
 
 Host 会在 parser preload 运行前安装 `window.__ModuleLoader__`。其 queue 模式的 `load()` 保存提前到达的 registration；`create()` 使用拒绝 external 的 bootstrap require 物化本包 factory，并调用其 `createClientModuleSystem` 导出。构造过程把同一组导出缓存为 modules row，把同一个 facade 切换到 live registration，再排空余下 queue。Bundle 通过模块闭包保留生成的系统，因此随后 Cordis `apply()` 能把同一实例提供为 `ctx.modules`，无需另一个页面全局变量。
 
+如果启动图缺少任一 parser preload，Host 会在生成 index HTML 之前拒绝该启动图。这样过期或不完整的构建不会以只能在浏览器中稍后因缺少 `client.js` preload 而失败的页面继续运行。
+
 解析分支顺序（`import(specifier)`）：平台种子词 → 外壳实例；记忆化记录 → 导出；模块图记录（`window.__DSH_BOOT__`）→ 登记其 classic-script factory；已登记 factory → 物化；其他情况一律抛出异常。这是构建时 bundle 纯度门禁的运行时镜像。交给 factory 的同步 `require` 采用相同顺序，但不含异步 graph-row 加载分支，并把观察到的边记录到模块记录中。`prefetch` 是第一阶段到达钩子（只加载脚本并登记 factory；并发调用共享一个进行中的任务）；`invalidate` 会丢弃非 bootstrap factory 与物化记录，使下一次 prefetch/import 重新加载脚本；它是 HMR（热模块替换）钩子。
 
 Node 侧会扫描已启用的 Loader 配置项以发现 web `dsh.client` 包，解析每个 `exports["./client"]`，把构建后的 bundle 哈希和包专属 `dsh.client.external` 请求写入启动图，把动态提供方排在消费者之前，并通过 `/plugins` 提供该文件及其 sourcemap。源码启动会把宿主侧导入映射到 TypeScript 源码，但仍消费这一构建后的客户端导出；缺失文件共享一条构建说明，随后以包／路径列表列出各项，而无关的文件系统错误仍是独立故障。

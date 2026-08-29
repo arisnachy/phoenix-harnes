@@ -136,6 +136,16 @@ describe('HTML bootstrap facade', () => {
       .toThrow(`HTML did not preload ${MODULES_ID}/client.js`)
   })
 
+  it('fails before rendering HTML when a parser preload is missing from the graph', () => {
+    const graph = bootGraph()
+    const incomplete = {
+      ...graph,
+      entries: graph.entries.filter(entry => entry.id !== MODULES_ID),
+    }
+    expect(() => bootInjections(incomplete))
+      .toThrow(`required parser preload "${MODULES_ID}/client.js" is missing from the boot graph`)
+  })
+
   it('rejects a bootstrap bundle with a runtime external', () => {
     const graph = bootGraph()
     const { target } = injectedFacade(graph)
