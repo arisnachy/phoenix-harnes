@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { PromptSection } from '@deepseek-ai/dsh-system-prompt'
 import { installHardnessProtocol } from '../src/protocol.ts'
 
 describe('HARDNESS model protocol prompt adapter', () => {
@@ -21,7 +22,7 @@ describe('HARDNESS model protocol prompt adapter', () => {
   })
 
   it('supports the Spanish model-facing guide without executable handles', () => {
-    const systemPrompt = { section: vi.fn(() => () => {}) }
+    const systemPrompt = { section: vi.fn((_section: PromptSection) => () => {}) }
 
     installHardnessProtocol(systemPrompt, 'es')
 

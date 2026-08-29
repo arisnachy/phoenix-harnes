@@ -13,6 +13,8 @@ function execution(): ToolRunContext {
   return {
     callId,
     rootCallId: callId,
+    name: 'hardness_run',
+    arguments: {},
     token: Symbol('tool-token') as never,
     signal,
     agent,
