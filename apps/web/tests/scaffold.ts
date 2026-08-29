@@ -405,6 +405,10 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     ...basePatches,
     ...surfacePatches,
     ...extraOverlayPatches,
+    // Web replay fixtures publish the deterministic deepseek-official route;
+    // pin the scaffold's session default to that route because production
+    // PHOENIX intentionally defaults new sessions to openrouter/free.
+    { id: 'agent-default-model', config: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } },
     // The roster's `roots` is an assembly fact AppCLIEntry resolves and patches
     // in, exactly like `distIndex` on the webserver row — the shipped preset
     // directory sits beside the composition that names it, and no config author

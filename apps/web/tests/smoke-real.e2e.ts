@@ -29,6 +29,21 @@ import { REPO_ROOT, connectFreshWorkspace, newEnglishPage, probeFreePort, requir
 
 const WEB_SURFACE_PROMPT = fileURLToPath(new URL('./snapshots/web-runtime-context/web-surface-prompt.expected.md', import.meta.url))
 
+/** Pin CLI smoke sessions to the local DeepSeek mock instead of production OpenRouter defaults. */
+function writeDeepSeekDefaultPatch(home: string): void {
+  mkdirSync(home, { recursive: true })
+  writeFileSync(join(home, 'cordis.patch.yml'), [
+    '- id: agent-default-model',
+    '  config:',
+    '    provider: deepseek-official',
+    '    model: deepseek-v4-flash',
+    '- id: llm-deepseek',
+    '  config:',
+    '    streamIdleTimeoutMs: 1000',
+    '',
+  ].join('\n'))
+}
+
 function waitForReadyLine(child: ChildProcess): Promise<string> {
   return new Promise((resolveReady, reject) => {
     let out = ''
@@ -223,6 +238,8 @@ describe('dsh web keyless CLI smoke', () => {
     await new Promise<void>(resolve => provider.listen(0, '127.0.0.1', resolve))
     const address = provider.address()
     if (address === null || typeof address === 'string') throw new Error('mock provider did not bind a TCP port')
+    const harnessHome = join(workspace, '.dsh')
+    writeDeepSeekDefaultPatch(harnessHome)
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
@@ -233,7 +250,7 @@ describe('dsh web keyless CLI smoke', () => {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-workspace',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
-          DSH_HOME: join(workspace, '.dsh'),
+          DSH_HOME: harnessHome,
           DSH_AGENTS_HOME: join(workspace, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
         },
@@ -322,7 +339,7 @@ describe('dsh web keyless CLI smoke', () => {
         mainAttempts++
         if (mainAttempts === 1) {
           response.write('data: {"choices":[{"delta":{"content":"WEB_RETRY_DISCARDED"}}]}\n\n')
-          setTimeout(() => { response.destroy() }, 20)
+          setTimeout(() => { response.destroy(new Error('simulated transport disconnect')) }, 20)
           return
         }
         response.end([
@@ -336,6 +353,8 @@ describe('dsh web keyless CLI smoke', () => {
     await new Promise<void>(resolve => provider.listen(0, '127.0.0.1', resolve))
     const address = provider.address()
     if (address === null || typeof address === 'string') throw new Error('mock provider did not bind a TCP port')
+    const harnessHome = join(workspace, '.dsh')
+    writeDeepSeekDefaultPatch(harnessHome)
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
@@ -346,7 +365,8 @@ describe('dsh web keyless CLI smoke', () => {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-retry',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
-          DSH_HOME: join(workspace, '.dsh'),
+          DSH_HOME: harnessHome,
+          DSH_AGENTS_HOME: join(workspace, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
         },
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -418,6 +438,8 @@ describe('dsh web keyless CLI smoke', () => {
     await new Promise<void>(resolve => provider.listen(0, '127.0.0.1', resolve))
     const address = provider.address()
     if (address === null || typeof address === 'string') throw new Error('mock provider did not bind a TCP port')
+    const harnessHome = join(workspace, '.dsh')
+    writeDeepSeekDefaultPatch(harnessHome)
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
@@ -429,7 +451,7 @@ describe('dsh web keyless CLI smoke', () => {
           DEEPSEEK_API_KEY: 'keyless-web-code-mode',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
           DSH_TOOLS_MODE: 'code',
-          DSH_HOME: join(workspace, '.dsh'),
+          DSH_HOME: harnessHome,
           DSH_AGENTS_HOME: join(workspace, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
         },
