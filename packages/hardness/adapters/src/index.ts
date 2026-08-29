@@ -11,6 +11,8 @@ import {
 } from './mission-runtime.ts'
 import { installHardnessProtocol, type HardnessPromptRegistrar } from './protocol.ts'
 import { createHardnessTool } from './hardness-tool.ts'
+import { createConnectorListTool } from './connector-list-tool.ts'
+import type { AuthorizationService } from '@deepseek-ai/dsh-authorization'
 
 export { indexTools } from './tool-adapter.ts'
 export type { ToolAtlasIndexOptions, ToolChangeSource } from './tool-adapter.ts'
@@ -41,12 +43,13 @@ export type { HardnessMissionAuditEntry, HardnessMissionAuditOutcome, HardnessMi
 export { installHardnessMissionRuntime, createHardnessAcquisition, createHardnessMissionRunner } from './mission-runtime.ts'
 export type { HardnessMissionRpcPayload, HardnessMissionRunner, HardnessMissionRunnerInput, HardnessMissionRuntimeDependencies } from './mission-runtime.ts'
 export { createHardnessTool } from './hardness-tool.ts'
+export { createConnectorListTool } from './connector-list-tool.ts'
 export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
-export const inject = ['hardness', 'tools', 'skills', 'agents', 'approval', 'systemPrompt']
+export const inject = ['hardness', 'tools', 'skills', 'agents', 'approval', 'systemPrompt', 'authorization']
 
 type Disposer = () => void
 
@@ -61,11 +64,12 @@ function requiredServices(ctx: Context) {
   const agents = ctx.get('agents')
   const approval = ctx.get('approval')
   const systemPrompt = ctx.get('systemPrompt') as HardnessPromptRegistrar | undefined
+  const authorization = ctx.get('authorization') as AuthorizationService | undefined
   if (hardness === undefined || tools === undefined || skills === undefined
     || agents === undefined || approval === undefined || systemPrompt === undefined) {
     throw new Error('hardness-adapters requires hardness, tools, skills, agents, approval, and systemPrompt services')
   }
-  return { hardness, tools, skills, agents, approval, systemPrompt }
+  return { hardness, tools, skills, agents, approval, systemPrompt, authorization }
 }
 
 /**
@@ -74,13 +78,14 @@ function requiredServices(ctx: Context) {
  * @returns Idempotent disposer for every projection installed by this adapter.
  */
 export async function apply(ctx: Context): Promise<() => void> {
-  const { hardness, tools, skills, agents, approval, systemPrompt } = requiredServices(ctx)
+  const { hardness, tools, skills, agents, approval, systemPrompt, authorization } = requiredServices(ctx)
   const disposers: Disposer[] = []
   try {
     disposers.push(installHardnessProtocol(systemPrompt))
     disposers.push(indexOpenClawExtensions(hardness))
     disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run'] }))
     disposers.push(await indexSkills(skills, hardness))
+    if (authorization !== undefined) disposers.push(ctx.tools.register(createConnectorListTool(authorization)))
     const acquisition = createHardnessAcquisition(hardness)
     const missionRunner = createHardnessMissionRunner({ hardness, tools, acquisition, approval })
     disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))

@@ -1,0 +1,83 @@
+import { describe, expect, it, vi } from 'vitest'
+import type { AuthorizationEntry, AuthorizationTelemetry } from '@deepseek-ai/dsh-authorization'
+import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import { createConnectorListTool } from '../src/connector-list-tool.ts'
+
+function service(overrides: Partial<{
+  list: () => readonly AuthorizationEntry[]
+  inspect: (key: never) => Promise<AuthorizationTelemetry | undefined>
+}> = {}) {
+  return {
+    list: overrides.list ?? (() => [{
+      key: credentialKey('authorization-google', 'account'),
+      label: 'Google Workspace',
+      methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+      inFlight: false,
+      disconnectable: true as const,
+    }]),
+    inspect: overrides.inspect ?? (async () => ({
+      kind: 'account' as const,
+      provider: 'google',
+      email: 'private@example.com',
+      connectors: [{
+        id: 'drive',
+        name: 'Google Drive',
+        description: 'Files',
+        category: 'Productivity',
+        accessible: true,
+        enabled: true,
+        installed: true,
+        callable: true,
+      }],
+    })),
+  }
+}
+
+describe('connector_list tool', () => {
+  it('projects connected services without leaking account identity or credential fields', async () => {
+    const tool = createConnectorListTool(service())
+    const result = await tool.execute({}, {
+      signal: new AbortController().signal,
+    } as never)
+
+    expect(result).toEqual({
+      kind: 'connector_list',
+      connectors: [{
+        id: 'authorization-google/account',
+        label: 'Google Workspace',
+        methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+        status: 'connected',
+        in_flight: false,
+        disconnectable: true,
+        services: [{
+          id: 'drive',
+          name: 'Google Drive',
+          description: 'Files',
+          category: 'Productivity',
+          accessible: true,
+          enabled: true,
+          installed: true,
+          callable: true,
+        }],
+      }],
+    })
+    expect(JSON.stringify(result)).not.toContain('private@example.com')
+  })
+
+  it('distinguishes an inspectable disconnected flow from a provider without telemetry', async () => {
+    const tool = createConnectorListTool(service({ inspect: vi.fn(async () => undefined) }))
+    await expect(tool.execute({}, {} as never)).resolves.toMatchObject({
+      connectors: [{ status: 'not-connected', services: [] }],
+    })
+
+    const unknown = createConnectorListTool(service({ inspect: vi.fn(async () => { throw new Error('offline') }) }))
+    await expect(unknown.execute({}, {} as never)).resolves.toMatchObject({
+      connectors: [{ status: 'unknown', services: [] }],
+    })
+  })
+
+  it('returns an empty inventory when no authorization flows are registered', async () => {
+    const tool = createConnectorListTool(service({ list: () => [] }))
+    await expect(tool.execute({}, {} as never)).resolves.toEqual({ kind: 'connector_list', connectors: [] })
+  })
+})

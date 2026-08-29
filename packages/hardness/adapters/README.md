@@ -28,6 +28,8 @@ Each live mission appends a secret-free `hardness/mission` trace to the calling 
 Inspect the need, resolve a verified capability, plan the operation, obtain approval, execute through the governed runtime, verify the artifact, present it, and record evidence before claiming completion.
 ```
 
+The model also receives the read-only `connector_list` tool when the authorization seam is mounted. It reports registered authorization flows, whether provider telemetry confirms a connection, and sanitized callable service metadata. It never begins authorization, grants permission, or exposes account credentials; a missing or failed telemetry read is reported as `not-connected` or `unknown`.
+
 #### Token effect
 
 The protocol section and capability metadata contribute model tokens; indexing source registries alone does not add prompt text.

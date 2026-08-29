@@ -28,6 +28,8 @@ Each live mission appends a secret-free `hardness/mission` trace to the calling 
 Inspect the need, resolve a verified capability, plan the operation, obtain approval, execute through the governed runtime, verify the artifact, present it, and record evidence before claiming completion.
 ```
 
+当 authorization seam 被挂载时，模型还会获得只读的 `connector_list` tool。它报告已注册的 authorization flow、provider telemetry 是否确认已连接，以及经过清理的可调用服务 metadata。它不会启动 authorization、授予权限或暴露账户凭据；缺少或读取 telemetry 失败会分别报告为 `not-connected` 或 `unknown`。
+
 #### Token effect
 
 protocol section 和 capability metadata 会增加模型 token；单纯索引源 registry 不会增加 prompt 文本。

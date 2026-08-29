@@ -4,6 +4,7 @@
   "include": ["src"],
   "references": [
     { "path": "../hardness" },
+    { "path": "../../credentials/authorization" },
     { "path": "../../core/tools" },
     { "path": "../../skill/skill" },
     { "path": "../../runtime-diagnostics/invariants" },

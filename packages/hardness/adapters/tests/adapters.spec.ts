@@ -53,6 +53,33 @@ describe('HARDNESS source adapters', () => {
     await context.fiber.dispose()
   })
 
+  it('exposes the read-only connector inventory when authorization is mounted', async () => {
+    const context = new Context()
+    await context.plugin(SystemPrompt)
+    await context.plugin(ToolRuntimePlugin)
+    await context.plugin(SkillRegistryPlugin)
+    await context.plugin(HardnessRegistry)
+    context.provide('agents', { get: () => undefined } as never)
+    context.provide('approval', { request: vi.fn() } as never)
+    context.provide('authorization', {
+      list: () => [{
+        key: 'authorization-google/account',
+        label: 'Google Workspace',
+        methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+        inFlight: false,
+      }],
+      inspect: async () => undefined,
+    } as never)
+
+    const dispose = await apply(context)
+    expect(context.tools.get('connector_list')).toBeDefined()
+    expect((context.get('hardness') as HardnessService).get('tool:connector_list' as never)).toBeDefined()
+
+    dispose()
+    expect(context.tools.get('connector_list')).toBeUndefined()
+    await context.fiber.dispose()
+  })
+
   it('keeps dynamic tool projections synchronized and excludes internal tools', async () => {
     const context = new Context()
     await context.plugin(HardnessRegistry)
