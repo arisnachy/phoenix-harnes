@@ -40,7 +40,11 @@ function decodeCheckpoint(value: unknown): GoalSupervisorCheckpoint | undefined 
   } as GoalSupervisorCheckpoint
 }
 
-/** Rebuild the latest valid supervisor checkpoint for one goal. */
+/** Rebuild the latest valid supervisor checkpoint for one goal.
+ * @param events - session events to replay.
+ * @param goalId - goal identity whose checkpoints are selected.
+ * @returns the latest valid checkpoint, when present.
+ */
 export function replayGoalSupervisor(
   events: readonly SessionEvent[],
   goalId: GoalId | string,
@@ -50,7 +54,10 @@ export function replayGoalSupervisor(
   return event === undefined ? undefined : decodeCheckpoint(event.data)
 }
 
-/** Append one bounded, secret-free checkpoint to the owning session. */
+/** Append one bounded, secret-free checkpoint to the owning session.
+ * @param session - owning durable session.
+ * @param checkpoint - validated supervisor state to append.
+ */
 export function recordGoalSupervisor(session: Session, checkpoint: GoalSupervisorCheckpoint): void {
   const decoded = decodeCheckpoint(checkpoint)
   if (decoded === undefined) throw new TypeError('invalid goal supervisor checkpoint')

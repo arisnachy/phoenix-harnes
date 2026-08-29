@@ -1065,6 +1065,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'mcpConnectors',
+    summary: 'Process-local MCP lifecycle registry.',
+    description: 'Process-local MCP lifecycle registry. It stores no connection settings, credentials, URLs, headers, environment variables, or provider errors.',
+    methods: [
+      {
+        signature: 'register(input: McpConnectorRegistrationInput): McpConnectorRegistration',
+        description: 'Register one server identity in stable insertion order.',
+        parameters: [{ name: 'input', description: 'secret-free server identity and transport.' }],
+        returns: 'a handle that publishes state and removes the entry.',
+      },
+      {
+        signature: 'list(): readonly McpConnectorEntry[]',
+        description: 'Return detached entries in registration order.',
+        parameters: [],
+        returns: 'snapshots safe to pass to model-facing projection code.',
+      },
+    ],
+  },
+  {
     key: 'messageFeedback',
     summary: 'Storage-domain sidecar service.',
     description: 'Storage-domain sidecar service. It inspects persisted Session history and never creates or resumes an Agent or Session.',
@@ -3765,6 +3784,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ManualCompactAgentContext',
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
+  },
+  {
+    name: 'McpConnectorEntry',
+    declaration: 'export interface McpConnectorEntry {\n    readonly serverName: string;\n    readonly transport: McpConnectorTransport;\n    readonly status: McpConnectorStatus;\n    readonly toolNames: readonly string[];\n    readonly reasonCode?: McpConnectorReasonCode;\n}',
+  },
+  {
+    name: 'McpConnectorReasonCode',
+    declaration: 'export type McpConnectorReasonCode = \'connection-failed\' | \'connection-lost\' | \'authorization-required\' | \'retry-exhausted\';',
+  },
+  {
+    name: 'McpConnectorRegistration',
+    declaration: 'export interface McpConnectorRegistration {\n    setStatus(status: McpConnectorStatus, reasonCode?: McpConnectorReasonCode): void;\n    setTools(toolNames: readonly string[]): void;\n    dispose(): void;\n}',
+  },
+  {
+    name: 'McpConnectorRegistrationInput',
+    declaration: 'export interface McpConnectorRegistrationInput {\n    readonly serverName: string;\n    readonly transport: McpConnectorTransport;\n}',
+  },
+  {
+    name: 'McpConnectorStatus',
+    declaration: 'export type McpConnectorStatus = \'starting\' | \'ready\' | \'disconnected\' | \'failed\' | \'auth-required\';',
+  },
+  {
+    name: 'McpConnectorTransport',
+    declaration: 'export type McpConnectorTransport = \'stdio\' | \'streamable-http\';',
   },
   {
     name: 'Message',

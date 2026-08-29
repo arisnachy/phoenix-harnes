@@ -322,7 +322,7 @@ git commit -m "feat: render accessible inline UI cards"
 
 Extend the chat harness so `ChatViewInjected` exposes a spy:
 
-```ts
+```ts ignore-check
 const prepareDraft = vi.fn()
 const h = makeHarness({
   nodes: [assistantWithBlocks([{ kind: 'ui-card', card: followUpCard }])],
@@ -350,7 +350,7 @@ Expected: FAIL because `AssistantMarkdown` does not dispatch `ui-card` and the o
 
 Add to `ChatNodeOwnerProps` and `ChatViewInjected`:
 
-```ts
+```ts ignore-check
 /** Place a card response in the active session composer; never sends implicitly. */
 prepareCardDraft: (text: string) => void
 ```

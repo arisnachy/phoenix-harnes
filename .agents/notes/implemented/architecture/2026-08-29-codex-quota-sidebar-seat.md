@@ -15,3 +15,8 @@ The seat reads only sanitized OpenAI/Codex account telemetry from the authorizat
 ## Consequences
 
 The account limit remains visible while the model route changes. The component does not expose credentials, raw authorization payloads, or token-derived estimates. A real five-hour or seven-day value still requires the authorization provider to publish that window.
+
+## Alternatives considered
+
+- **Gate the seat on the active model route.** Rejected because an OpenAI/Codex account limit remains useful while another provider is selected.
+- **Estimate missing windows from local token counts.** Rejected because local counts are not authoritative provider quota telemetry.

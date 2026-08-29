@@ -47,11 +47,29 @@ Cancellation removes pending inbox work or leaves an agent-wide aborted state. A
 
 Each admitted round is one retained user-role `<goal_round>` block naming the full objective and positive round number. Earlier human messages, goal-state snapshots, assistant output, and tool records remain in the same session history.
 
-When the previous completion judge returned `needs_changes` or `blocked`, the driver reconstructs that result from the durable `goal/judge` event and places its bounded findings and required changes in the next round prompt. This survives process restart; activation still requires the explicit resume authority described above.
+##### Goal-round protocol
 
-The driver also writes bounded `goal/supervisor` checkpoints. A checkpoint records the exact goal revision, admitted round count, supervisor status, next action, and a redacted failure summary. On session start the latest checkpoint is replayed for diagnostics, while the driver remains disarmed until the direct human `resume` operation re-establishes authority.
+```markdown
+The model receives the complete objective and positive round number in the retained `<goal_round>` block.
+```
 
-Before each admitted continuation, the driver records one strategy selection in `goal/strategy` and includes it in the prompt. The bounded rotation is `baseline`, `verification-first`, `alternate-tool`, and `minimal-change`; the next selection is deterministic and never repeats the immediately previous strategy.
+##### Judge feedback
+
+```markdown
+When the previous completion judge returned needs_changes or blocked, the driver reconstructs that result from the durable goal/judge event and places its bounded findings and required changes in the next round prompt. This survives process restart; activation still requires the explicit resume authority described above.
+```
+
+##### Supervisor checkpoint
+
+```markdown
+The driver also writes bounded goal/supervisor checkpoints. A checkpoint records the exact goal revision, admitted round count, supervisor status, next action, and a redacted failure summary. On session start the latest checkpoint is replayed for diagnostics, while the driver remains disarmed until the direct human resume operation re-establishes authority.
+```
+
+##### Strategy selection
+
+```markdown
+Before each admitted continuation, the driver records one strategy selection in goal/strategy and includes it in the prompt. The bounded rotation is baseline, verification-first, alternate-tool, and minimal-change; the next selection is deterministic and never repeats the immediately previous strategy.
+```
 
 #### Token effect
 
@@ -63,8 +81,8 @@ Append-only within an epoch: each admitted round extends the existing conversati
 
 ## Known Limitations and Deferred Work
 
-- **No independent evaluator** — the model-facing goal policy decides when evidence is sufficient for completion and whether a blocker is semantically unchanged; evaluator-backed certification remains deferred.
+- **Judge provider policy is separate** — `dsh-tool-goal` can require an independent read-only judge and the driver replays its findings; provider selection and judge invocation remain outside this package.
 - **Same-session execution only** — this package deliberately does not spawn a fresh agent, fork a session prefix, or implement Ralph-style independent attempts; that workflow belongs to its own plugin layer.
 - **Accepted-queue unload race** — Cordis plugin unload is asynchronous. A goal prompt already accepted by the agent inbox can begin and consume its round before unload starts; teardown then cancels the request, disarms the goal, and awaits quiescence. No later round starts.
 - **Round cap, not resource budget** — token, currency, time, and provider quota policies remain independent. Their session events are not attributed to the goal message or mapped into goal blocker codes.
-- **No abnormal auto-retry** — transient provider and persistence failures require a later human-authorized resume rather than an implicit retry policy.
+- **No abnormal goal auto-retry** — transient provider and persistence failures require a later human-authorized resume rather than an implicit goal-round retry; provider-level bounded retry remains owned by `llm-retry`.

@@ -47,11 +47,29 @@
 
 每个已准入 Round 都是一段保留的用户角色 `<goal_round>` 块，其中点明完整目标与正数 Round 编号。更早的用户消息、goal 状态快照、assistant 输出与工具记录仍保留在同一会话历史中。
 
-当上一次完成 judge 返回 `needs_changes` 或 `blocked` 时，驱动器会从持久化的 `goal/judge` 事件重建该结果，并将其中有界的发现与所需修改放入下一轮提示词。该信息在进程重启后仍然存在；续行启用仍需要上述显式 resume 权限。
+##### Goal Round 协议
 
-驱动器还会写入有界的 `goal/supervisor` 检查点。检查点记录确切的 goal revision、已准入轮次、supervisor 状态、下一步动作和经过脱敏的失败摘要。会话启动时会重放最新检查点用于诊断，但驱动器仍保持停用，直到直接人类 `resume` 操作重新建立权限。
+```markdown
+The model receives the complete objective and positive round number in the retained `<goal_round>` block.
+```
 
-每次准入续行前，driver 会在 `goal/strategy` 中记录一个策略选择，并把它放入 prompt。有限轮换为 `baseline`、`verification-first`、`alternate-tool` 和 `minimal-change`；下一次选择是确定性的，并且不会立即重复上一个策略。
+##### Judge 反馈
+
+```markdown
+When the previous completion judge returned needs_changes or blocked, the driver reconstructs that result from the durable goal/judge event and places its bounded findings and required changes in the next round prompt. This survives process restart; activation still requires the explicit resume authority described above.
+```
+
+##### Supervisor 检查点
+
+```markdown
+The driver also writes bounded goal/supervisor checkpoints. A checkpoint records the exact goal revision, admitted round count, supervisor status, next action, and a redacted failure summary. On session start the latest checkpoint is replayed for diagnostics, while the driver remains disarmed until the direct human resume operation re-establishes authority.
+```
+
+##### Strategy 选择
+
+```markdown
+Before each admitted continuation, the driver records one strategy selection in goal/strategy and includes it in the prompt. The bounded rotation is baseline, verification-first, alternate-tool, and minimal-change; the next selection is deterministic and never repeats the immediately previous strategy.
+```
 
 #### Token 影响
 
@@ -63,8 +81,8 @@
 
 ## 已知限制与暂缓事项
 
-- **没有独立评估器**：面向模型的 goal 策略会判断证据是否足以完成，以及 blocker 在语义上是否未变；评估器支持的认证仍保持暂缓。
+- **Judge 提供方策略独立**：`dsh-tool-goal` 可以要求独立的只读 judge，驱动器会重放其发现；提供方选择与 judge 调用仍属于此包之外。
 - **只在同一会话执行**：此包有意不 spawn 新 agent、不 fork 会话前缀，也不实现 Ralph 风格的独立尝试；该工作流属于单独的插件层。
 - **已接受队列的卸载竞态**：Cordis 插件卸载是异步的。已经被 agent inbox 接受的 goal 提示词可以在卸载开始前启动并消耗其 Round；teardown 随后会取消请求、停用 goal 的续行并等待完全停稳。不会再启动后续 Round。
 - **只有 Round 上限，不是资源预算**：token、货币、时间与提供方配额策略保持独立。对应的会话事件不会归属于 goal 消息，也不会映射为 goal 阻塞代码。
-- **异常情况不自动重试**：暂时性的提供方与持久化失败需要之后由用户授权 resume，而不会采用隐式重试策略。
+- **Goal Round 不自动重试异常**：暂时性的提供方与持久化失败需要之后由用户授权 resume，而不会采用隐式 goal-round 重试；提供方级有界重试仍由 `llm-retry` 负责。

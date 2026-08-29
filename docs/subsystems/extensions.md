@@ -257,6 +257,29 @@ Types: [Agent](core.md)
 
 Source: [`packages/extensions/cordis-host-runner/src/index.ts`](../../packages/extensions/cordis-host-runner/src/index.ts)
 
+<a id="ctxmcpconnectors--mcpconnectorregistry"></a>
+
+### `ctx.mcpConnectors` — `McpConnectorRegistry`
+
+Process-local MCP lifecycle registry. It stores no connection settings, credentials, URLs, headers, environment variables, or provider errors.
+
+```ts cordis-catalog
+/**
+ * Register one server identity in stable insertion order.
+ * @param input - secret-free server identity and transport.
+ * @returns a handle that publishes state and removes the entry.
+ */
+register(input: McpConnectorRegistrationInput): McpConnectorRegistration
+
+/**
+ * Return detached entries in registration order.
+ * @returns snapshots safe to pass to model-facing projection code.
+ */
+list(): readonly McpConnectorEntry[]
+```
+
+Source: [`packages/mcp/mcp-registry/src/index.ts`](../../packages/mcp/mcp-registry/src/index.ts)
+
 <a id="cordis-events"></a>
 
 ### `cordis/*` events

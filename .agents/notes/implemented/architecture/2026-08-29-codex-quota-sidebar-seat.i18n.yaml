@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-29-codex-quota-sidebar-seat.md
-2026-08-29-codex-quota-sidebar-seat.md: 8434ca61e7ff2754e466ec0e55efbc873aa8be7b
-2026-08-29-codex-quota-sidebar-seat.zh.md: 4d6564f9f237e5567c05edc6980a9b291cea83bd
+2026-08-29-codex-quota-sidebar-seat.md: 55930b746e1d23b865af355f154b0743aeaed7f2
+2026-08-29-codex-quota-sidebar-seat.zh.md: 048259e8dd23327a8c884e3cfe8944859b8bd144
