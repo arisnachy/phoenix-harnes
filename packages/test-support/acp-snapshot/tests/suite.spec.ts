@@ -840,6 +840,23 @@ describe('refreshFixtureReplacements', () => {
     ])
   })
 
+  it('applies Windows cwd replacements inside JSON-escaped paths', () => {
+    const freshCwd = String.raw`C:\Users\runner\AppData\Local\Temp\acp-snap-cwd-fresh`
+    const existingCwd = String.raw`C:\Users\runner\AppData\Local\Temp\acp-snap-cwd-existing`
+    const session = (cwd: string): string => [
+      JSON.stringify({ type: 'session', id: 'same', cwd }),
+      JSON.stringify({ type: 'tool/result', data: { path: `${cwd}\\proof.txt` } }),
+      '',
+    ].join('\n')
+    const replacements = refreshFixtureReplacements(
+      [{ id: 'diagnostic', createdAt: 1, content: session(freshCwd) }],
+      [session(existingCwd)],
+    )
+
+    expect(stabilize(session(freshCwd), session(existingCwd), replacements))
+      .toBe(session(existingCwd))
+  })
+
   it('stabilizes moved snapshot spill paths by filename while skipping unchanged or unmatched names', () => {
     const spill = (session: string, hash: string, name: string): string =>
       `/tmp/dsh-acp-snapshot-spill/session-${session}/${hash}-${name}`

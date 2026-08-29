@@ -869,6 +869,10 @@ it('pins native DeepSeek Files offload and inline fallback in assembled requests
           { type: 'file', file_id: 'file-api-snapshot-1' },
         ],
       },
+      {
+        role: 'user',
+        content: 'Before calling more tools, send the user a brief progress update in their language. Summarize what you just did or found and what you will do next. Do not reveal hidden chain-of-thought or private reasoning.',
+      },
     ])
 
     rejectFiles = true

@@ -32,6 +32,27 @@ describe('HARDNESS source adapters', () => {
     await context.fiber.dispose()
   })
 
+  it('mounts without a connection and waits for the optional RPC host', async () => {
+    const context = new Context()
+    await context.plugin(SystemPrompt)
+    await context.plugin(ToolRuntimePlugin)
+    await context.plugin(SkillRegistryPlugin)
+    await context.plugin(HardnessRegistry)
+    context.provide('agents', { get: () => undefined } as never)
+    context.provide('approval', { request: vi.fn() } as never)
+
+    const handle = vi.fn(() => async () => {})
+    const dispose = await apply(context)
+    expect(context.tools.get('hardness_run')).toBeDefined()
+    expect(handle).not.toHaveBeenCalled()
+
+    context.provide('connection', { rpc: { handle } } as never)
+    expect(handle).toHaveBeenCalledWith('/hardness', expect.any(Function), { authority: 'loopback' })
+
+    dispose()
+    await context.fiber.dispose()
+  })
+
   it('keeps dynamic tool projections synchronized and excludes internal tools', async () => {
     const context = new Context()
     await context.plugin(HardnessRegistry)

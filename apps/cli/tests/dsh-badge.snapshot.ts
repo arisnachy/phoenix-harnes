@@ -81,6 +81,15 @@ describe('PHOENIX badge assembled snapshot', () => {
       </skill_resources>
 
       <skill_instructions>
+      <phoenix_operational_preflight>
+      Skill: dsh-badge
+      Modo: instruction-only
+      Entradas obligatorias: ninguna declarada
+      Herramientas:
+      No se detectó una herramienta específica; usa la skill como guía y no afirmes ejecución.
+      No inventes herramientas, no adivines entradas y no presentes una acción condicionada como ejecutada.
+      </phoenix_operational_preflight>
+
       # PHOENIX Badge
 
       Add the official “powered by PHOENIX” badge without recreating or restyling it.
@@ -120,7 +129,16 @@ describe('PHOENIX badge assembled snapshot', () => {
           ],
           "isError": false,
           "value": {
-            "content": "# PHOENIX Badge
+            "content": "<phoenix_operational_preflight>
+      Skill: dsh-badge
+      Modo: instruction-only
+      Entradas obligatorias: ninguna declarada
+      Herramientas:
+      No se detectó una herramienta específica; usa la skill como guía y no afirmes ejecución.
+      No inventes herramientas, no adivines entradas y no presentes una acción condicionada como ejecutada.
+      </phoenix_operational_preflight>
+
+      # PHOENIX Badge
 
       Add the official “powered by PHOENIX” badge without recreating or restyling it.
 

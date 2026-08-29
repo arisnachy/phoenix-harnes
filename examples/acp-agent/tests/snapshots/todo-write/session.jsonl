@@ -20,8 +20,11 @@
 {"type":"tool/call","data":{"turn":1,"step":1,"callId":"call_00_UHvM5RrwIkjNJ9xh3S735164","name":"todo_write","arguments":"{\"todos\": [{\"content\": \"read the code\", \"status\": \"in_progress\"}, {\"content\": \"watch the background build\", \"status\": \"in_progress\"}, {\"content\": \"write the fix\", \"status\": \"pending\"}]}"}}
 {"type":"todo/write","data":{"todos":[{"content":"read the code","status":"in_progress"},{"content":"watch the background build","status":"in_progress"},{"content":"write the fix","status":"pending"}]}}
 {"type":"tool/result","data":{"turn":1,"step":1,"message":{"source":{"kind":"tool","callId":"call_00_UHvM5RrwIkjNJ9xh3S735164"},"content":[{"type":"tool-result","toolCallId":"call_00_UHvM5RrwIkjNJ9xh3S735164","content":[{"type":"text","text":"Updated todo list: 1 pending, 2 in progress, 0 completed."}],"isError":false}],"role":"user","id":"65e181f3-565f-4be4-9ffe-9d59c808f7f8"}},"sourceEventSeqs":[97],"surfaceOp":"append"}
+{"type":"agent/inbox/spliced","data":{"target":"next-step","start":0,"inserted":[{"content":[{"type":"text","text":"Before calling more tools, send the user a brief progress update in their language. Summarize what you just did or found and what you will do next. Do not reveal hidden chain-of-thought or private reasoning."}],"source":{"kind":"plugin","plugin":"agent-loop"},"role":"user","id":"1a5da752-770f-4a3a-b20f-faadbabe55ce"}]}}
 {"type":"step/end","data":{"turn":1,"step":1}}
+{"type":"agent/inbox/spliced","data":{"target":"next-step","start":0,"removedCount":1,"inserted":[]}}
 {"type":"step/start","data":{"turn":1,"step":2}}
+{"type":"user/message","data":{"content":[{"type":"text","text":"Before calling more tools, send the user a brief progress update in their language. Summarize what you just did or found and what you will do next. Do not reveal hidden chain-of-thought or private reasoning."}],"source":{"kind":"plugin","plugin":"agent-loop"},"role":"user","id":"1a5da752-770f-4a3a-b20f-faadbabe55ce"},"surfaceOp":"append"}
 {"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"block-start","index":0,"blockType":"reasoning"}}}
 {"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"reasoning-delta","index":0,"text":"Done"}}}
 {"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"reasoning-delta","index":0,"text":"."}}}
@@ -32,6 +35,6 @@
 {"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"block-end","index":1,"block":{"type":"text","text":"DONE"}}}}
 {"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"usage","usage":{"inputTokens":154,"outputTokens":5,"cacheReadTokens":5760,"reasoningTokens":2}}}}
 {"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"finish","reason":{"kind":"stop"}}}}
-{"type":"assistant/message","data":{"turn":1,"step":2,"message":{"role":"assistant","content":[{"type":"reasoning","text":"Done."},{"type":"text","text":"DONE"}],"source":{"kind":"model","provider":"deepseek-official","model":"deepseek-v4-flash"},"id":"e4db2f4e-732f-4b58-a44f-5d08b50ce234"},"usage":{"inputTokens":154,"outputTokens":5,"cacheReadTokens":5760,"reasoningTokens":2}},"sourceEventSeqs":[102,103,104,105,106,107,108,109,110,111],"surfaceOp":"append"}
+{"type":"assistant/message","data":{"turn":1,"step":2,"message":{"role":"assistant","content":[{"type":"reasoning","text":"Done."},{"type":"text","text":"DONE"}],"source":{"kind":"model","provider":"deepseek-official","model":"deepseek-v4-flash"},"id":"e4db2f4e-732f-4b58-a44f-5d08b50ce234"},"usage":{"inputTokens":154,"outputTokens":5,"cacheReadTokens":5760,"reasoningTokens":2}},"sourceEventSeqs":[105,106,107,108,109,110,111,112,113,114],"surfaceOp":"append"}
 {"type":"step/end","data":{"turn":1,"step":2}}
 {"type":"turn/end","data":{"turn":1,"reason":{"kind":"completed"}}}

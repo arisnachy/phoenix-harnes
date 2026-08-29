@@ -657,7 +657,15 @@ function fixtureMessageIdReplacements(logs: readonly string[], fixtures: readonl
 /** Apply literal fixture replacements without changing any other fresh value. */
 function applyFixtureReplacements(content: string, replacements: readonly FixtureReplacement[]): string {
   let stable = content
-  for (const { from, to } of replacements) stable = stable.split(from).join(to)
+  for (const { from, to } of replacements) {
+    stable = stable.split(from).join(to)
+    const escapedFrom = JSON.stringify(from).slice(1, -1)
+    const escapedTo = JSON.stringify(to).slice(1, -1)
+    if (escapedFrom !== from) {
+      stable = stable.split(`${escapedFrom}\\\\`).join(`${escapedTo}/`)
+      stable = stable.split(escapedFrom).join(escapedTo)
+    }
+  }
   return stable
 }
 
@@ -1222,7 +1230,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         // Record writes live model fixtures; keyless refresh writes every comparable replayed
         // fixture. Pinning JSONL keeps prefixes but moves prompts and schemas into sidecars.
         const portableFixture = scenario.workspaceParent === undefined
-          ? tokenizeSessionFixtureCwd
+          ? (log: string): string => tokenizeSessionFixtureCwd(log, result.cwd)
           : (log: string): string => log
         const writesSessionFixtures = (RECORDING && scenario.recorded && scenario.hasModelTurn)
           || (REFRESHING && comparesLog)

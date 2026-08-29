@@ -33,7 +33,9 @@ class CliMockAdapter extends LlmAdapter {
       yield { type: 'finish', reason: { kind: 'error', failure: { code: 'SERVER', message: 'CLI mock provider failed' } } }
       return
     }
-    const toolResult = options.messages.at(-1)?.content.find(block => block.type === 'tool-result')
+    const toolResult = options.messages
+      .flatMap(message => message.content)
+      .find(block => block.type === 'tool-result')
     if (toolResult === undefined) {
       const shellTool = options.tools?.some(tool => tool.name === 'pwsh') === true ? 'pwsh' : 'bash'
       const args = JSON.stringify({

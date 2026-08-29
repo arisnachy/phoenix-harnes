@@ -552,6 +552,22 @@ describe('tokenizeSessionFixtureCwd', () => {
     expect(tokenizeSessionFixtureCwd(out)).toBe(out)
   })
 
+  it('uses the harvested cwd when refresh stabilization already tokenized the header', () => {
+    const cwd = String.raw`C:\Users\runner\AppData\Local\Temp\acp-snap-cwd-refresh`
+    const raw = [
+      JSON.stringify({ type: 'session', id: 's', createdAt: 1, cwd: '{{cwd}}' }),
+      JSON.stringify({
+        type: 'tool/result',
+        data: { path: `${cwd}\\proof.txt` },
+      }),
+      '',
+    ].join('\n')
+
+    const out = tokenizeSessionFixtureCwd(raw, cwd)
+    expect(out).toContain('"cwd":"{{cwd}}"')
+    expect(out).toContain('"path":"{{cwd}}\\\\proof.txt"')
+  })
+
   it('rejects a log without a session cwd', () => {
     expect(() => tokenizeSessionFixtureCwd('')).toThrow(
       'acp-snapshot: cannot tokenize a cwd without a basename',

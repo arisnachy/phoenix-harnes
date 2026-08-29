@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
 import type { HardnessService } from '@deepseek-ai/dsh-hardness/src/types.ts'
 import { indexSkills } from './skill-adapter.ts'
 import { indexTools } from './tool-adapter.ts'
@@ -45,7 +46,7 @@ export type { HardnessPromptRegistrar } from './protocol.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
-export const inject = ['hardness', 'tools', 'skills', 'connection', 'agents', 'approval', 'systemPrompt']
+export const inject = ['hardness', 'tools', 'skills', 'agents', 'approval', 'systemPrompt']
 
 type Disposer = () => void
 
@@ -57,15 +58,14 @@ function requiredServices(ctx: Context) {
   const hardness = ctx.get('hardness') as HardnessService | undefined
   const tools = ctx.get('tools')
   const skills = ctx.get('skills')
-  const connection = ctx.get('connection')
   const agents = ctx.get('agents')
   const approval = ctx.get('approval')
   const systemPrompt = ctx.get('systemPrompt') as HardnessPromptRegistrar | undefined
   if (hardness === undefined || tools === undefined || skills === undefined
-    || connection === undefined || agents === undefined || approval === undefined || systemPrompt === undefined) {
-    throw new Error('hardness-adapters requires hardness, tools, skills, connection, agents, approval, and systemPrompt services')
+    || agents === undefined || approval === undefined || systemPrompt === undefined) {
+    throw new Error('hardness-adapters requires hardness, tools, skills, agents, approval, and systemPrompt services')
   }
-  return { hardness, tools, skills, connection, agents, approval, systemPrompt }
+  return { hardness, tools, skills, agents, approval, systemPrompt }
 }
 
 /**
@@ -74,7 +74,7 @@ function requiredServices(ctx: Context) {
  * @returns Idempotent disposer for every projection installed by this adapter.
  */
 export async function apply(ctx: Context): Promise<() => void> {
-  const { hardness, tools, skills, connection, agents, approval, systemPrompt } = requiredServices(ctx)
+  const { hardness, tools, skills, agents, approval, systemPrompt } = requiredServices(ctx)
   const disposers: Disposer[] = []
   try {
     disposers.push(installHardnessProtocol(systemPrompt))
@@ -84,15 +84,36 @@ export async function apply(ctx: Context): Promise<() => void> {
     const acquisition = createHardnessAcquisition(hardness)
     const missionRunner = createHardnessMissionRunner({ hardness, tools, acquisition, approval })
     disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
-    const missionDispose = installHardnessMissionRuntime({
-      connection,
-      agents,
-      approval,
-      hardness,
-      tools,
-      acquisition,
+    let activeConnection: HostConnectionHandle | undefined
+    let missionDispose: (() => Promise<void>) | undefined
+    const syncMissionRuntime = (): void => {
+      const connection = ctx.get('connection') as HostConnectionHandle | undefined
+      if (connection === activeConnection) return
+      const previousDispose = missionDispose
+      activeConnection = undefined
+      missionDispose = undefined
+      if (previousDispose !== undefined) void previousDispose()
+      if (connection === undefined) return
+      activeConnection = connection
+      missionDispose = installHardnessMissionRuntime({
+        connection,
+        agents,
+        approval,
+        hardness,
+        tools,
+        acquisition,
+      })
+    }
+    syncMissionRuntime()
+    disposers.push(ctx.on('internal/service', (name) => {
+      if (name === 'connection') syncMissionRuntime()
+    }))
+    disposers.push(() => {
+      const disposeMission = missionDispose
+      activeConnection = undefined
+      missionDispose = undefined
+      if (disposeMission !== undefined) void disposeMission()
     })
-    disposers.push(() => { void missionDispose() })
   } catch (error) {
     disposeAll(disposers)
     throw error
