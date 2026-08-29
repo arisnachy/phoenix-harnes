@@ -26,6 +26,7 @@ const descriptor: CapabilityDescriptor = {
 const restricted: CapabilityDescriptor = {
   ...descriptor,
   id: 'tool:restricted' as CapabilityId,
+  kind: 'restricted-tool',
   requiredPermissions: [{ kind: 'network', scope: 'calendar.example' }],
 }
 
@@ -53,6 +54,26 @@ describe('HARDNESS capability resolver', () => {
     const missingPermission = service.resolveNeed({ kind: 'tool', permissions: ['filesystem'] })
     expect(missingPermission.kind).toBe('missing')
     expect(missingPermission.reasons.some(reason => /permission/i.test(reason))).toBe(true)
+
+    await ctx.fiber.dispose()
+  })
+
+  it('discovers a restricted capability without a grant so routing can surface approval requirements', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const service = ctx.get('hardness') as HardnessService
+    service.register(restricted)
+
+    const discovery = service.resolveNeed({ kind: 'restricted-tool' })
+    expect(discovery.kind).toBe('have')
+    expect(discovery.capability?.requiredPermissions).toEqual([{ kind: 'network', scope: 'calendar.example' }])
+
+    const explicitlyDenied = service.resolveNeed({ kind: 'restricted-tool' }, { permissions: [] })
+    expect(explicitlyDenied.kind).toBe('missing')
+    expect(explicitlyDenied.reasons.some(reason => /permission/i.test(reason))).toBe(true)
+
+    const explicitlyGranted = service.resolveNeed({ kind: 'restricted-tool' }, { permissions: ['network'] })
+    expect(explicitlyGranted.kind).toBe('have')
 
     await ctx.fiber.dispose()
   })

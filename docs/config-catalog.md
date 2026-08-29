@@ -2030,7 +2030,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/skill/src/index.ts:279`](../packages/skill/skill/src/index.ts)
+Source: [`packages/skill/skill/src/index.ts:284`](../packages/skill/skill/src/index.ts)
 
 <a id="deepseek-aidsh-skill-filesystem"></a>
 
@@ -2834,10 +2834,14 @@ Requires: `agents` · `tools` · `skills`
 export interface Config {
   /** Maximum normalized description length rendered in the session catalog; minimum 3. */
   catalogDescriptionMaxLength?: number
+  /** Language used for generated operational preflight text. */
+  locale?: 'es' | 'en'
+  /** Local root containing the reviewed English `overlays.json` catalog. */
+  englishOverlayRoot?: string
 }
 ```
 
-Source: [`packages/skill/tool-skill/src/index.ts:61`](../packages/skill/tool-skill/src/index.ts)
+Source: [`packages/skill/tool-skill/src/index.ts:67`](../packages/skill/tool-skill/src/index.ts)
 
 <a id="deepseek-aidsh-tool-str-replace-editor"></a>
 

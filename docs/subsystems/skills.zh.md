@@ -172,6 +172,8 @@ interface SkillDefinition extends SkillSummary {
   readonly path?: string
   /** Parsed optional metadata object from frontmatter. */
   readonly metadata?: Readonly<Record<string, unknown>>
+  /** Runtime-derived operational guidance added by the common skill loader. */
+  readonly operational?: SkillOperationalProfile
 }
 ```
 

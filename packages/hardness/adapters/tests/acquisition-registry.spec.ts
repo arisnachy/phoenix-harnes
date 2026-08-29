@@ -2,7 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import HardnessRegistry from '@deepseek-ai/dsh-hardness/src/index.ts'
 import type { CapabilityId, HardnessService } from '@deepseek-ai/dsh-hardness/src/types.ts'
-import { AcquisitionRegistry } from '../src/acquisition-registry.ts'
+import { AcquisitionRegistry, createIndexedToolAcquisition } from '../src/acquisition-registry.ts'
 
 const descriptor = {
   id: 'tool:weather@1.0.0' as CapabilityId, kind: 'weather', name: 'Weather builder', description: 'built', inputs: ['city'], outputs: ['weather'], dependencies: [], requiredPermissions: [], provider: 'fixture-builder', location: 'local', version: '1.0.0', compatibility: [], limitations: [], modalities: ['native'], status: 'experimental',
@@ -40,6 +40,77 @@ describe('HARDNESS acquisition/build registry', () => {
     expect(result.kind).toBe('built')
     expect(hardness.get(descriptor.id)?.status).toBe('testing')
     expect(hardness.list().filter(item => item.id === descriptor.id)).toHaveLength(1)
+    await ctx.fiber.dispose()
+  })
+
+  it('qualifies an already indexed native tool in the same acquisition pass', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    hardness.register(descriptor)
+    const registry = new AcquisitionRegistry(hardness)
+    registry.register(createIndexedToolAcquisition(hardness))
+
+    const result = await registry.acquireOrBuild({ kind: 'weather', inputs: ['city'], outputs: ['weather'] })
+
+    expect(result.kind).toBe('built')
+    expect(hardness.get(descriptor.id)?.status).toBe('testing')
+    expect(hardness.evidenceFor(descriptor.id)).toHaveLength(0)
+    await ctx.fiber.dispose()
+  })
+
+  it('matches the semantic need against the real indexed tool name even when its family kind is generic', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const indexed = {
+      ...descriptor,
+      id: 'tool:weather' as CapabilityId,
+      kind: 'tool',
+      name: 'weather',
+      provider: 'dsh-tools',
+      location: 'tool-registry',
+      outputs: [],
+    } as const
+    hardness.register(indexed)
+    const registry = new AcquisitionRegistry(hardness)
+    registry.register(createIndexedToolAcquisition(hardness))
+
+    const result = await registry.acquireOrBuild({ kind: 'weather', inputs: ['city'] })
+
+    expect(result.kind).toBe('built')
+    expect(hardness.get(indexed.id)?.status).toBe('testing')
+    await ctx.fiber.dispose()
+  })
+
+  it('preserves concrete provider diagnostics when no provider can build the capability', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const registry = new AcquisitionRegistry(hardness)
+    registry.register(async () => undefined, () => ['MISSING_DEPENDENCY: isolated OpenClaw package installer unavailable'])
+
+    const result = await registry.acquireOrBuild({ kind: 'web-search' })
+
+    expect(result).toEqual({
+      kind: 'missing',
+      reasons: ['MISSING_DEPENDENCY: isolated OpenClaw package installer unavailable'],
+    })
+    await ctx.fiber.dispose()
+  })
+
+  it('does not qualify indexed skills or incompatible tool contracts as executable tools', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    hardness.register({ ...descriptor, id: 'skill:weather' as CapabilityId, kind: 'weather', provider: 'skill', status: 'experimental' })
+    hardness.register({ ...descriptor, id: 'tool:no-city' as CapabilityId, inputs: [], status: 'experimental' })
+    const registry = new AcquisitionRegistry(hardness)
+    registry.register(createIndexedToolAcquisition(hardness))
+
+    await expect(registry.acquireOrBuild({ kind: 'weather', inputs: ['city'], outputs: ['weather'] })).resolves.toMatchObject({ kind: 'missing' })
+    expect(hardness.get('skill:weather' as CapabilityId)?.status).toBe('experimental')
+    expect(hardness.get('tool:no-city' as CapabilityId)?.status).toBe('experimental')
     await ctx.fiber.dispose()
   })
 })

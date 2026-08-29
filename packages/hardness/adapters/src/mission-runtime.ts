@@ -96,6 +96,8 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
   }, { authority: 'loopback' })
 }
 
+type OpenClawAcquisition = Pick<OpenClawCapabilityBroker, 'acquire'> & Partial<Pick<OpenClawCapabilityBroker, 'diagnosticsForNeed'>>
+
 /**
  * Build an acquisition registry from explicit providers; nothing is discovered implicitly.
  * @param hardness - HARDNESS registry that owns prepared capability descriptors.
@@ -106,12 +108,15 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
 export function createHardnessAcquisition(
   hardness: HardnessService,
   builders: readonly CapabilityBuilder[] = [],
-  openclaw?: Pick<OpenClawCapabilityBroker, 'acquire'>,
+  openclaw?: OpenClawAcquisition,
 ): AcquisitionRegistry {
   const acquisition = new AcquisitionRegistry(hardness)
   for (const builder of builders) acquisition.register(builder)
   if (openclaw !== undefined) {
-    acquisition.register((need, signal) => openclaw.acquire(need, signal))
+    acquisition.register(
+      (need, signal) => openclaw.acquire(need, signal),
+      need => openclaw.diagnosticsForNeed?.(need) ?? [],
+    )
   }
   return acquisition
 }

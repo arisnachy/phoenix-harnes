@@ -3,7 +3,16 @@ import type { HardnessService } from '@deepseek-ai/dsh-hardness/src/types.ts'
 import { indexSkills } from './skill-adapter.ts'
 import { indexTools } from './tool-adapter.ts'
 import { indexOpenClawExtensions } from './openclaw-adapter.ts'
+import { createIndexedToolAcquisition } from './acquisition-registry.ts'
 import { createHardnessAcquisition, installHardnessMissionRuntime } from './mission-runtime.ts'
+import { installHardnessModelTools } from './model-tools.ts'
+import { createOpenClawProductionBridge } from './openclaw/production.ts'
+import { InstalledOpenClawPackageInstaller } from './openclaw/installed-installer.ts'
+import {
+  createOpenClawIsolatedRunner,
+  type OpenClawSandboxRuntime,
+  type OpenClawSubprocessRuntime,
+} from './openclaw/isolated-runner.ts'
 
 export { indexTools } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
@@ -20,16 +29,33 @@ export { LabMode, SelfImprovementLedger } from './lab-mode.ts'
 export type { ImprovementRecord, LabExperiment, LabSnapshot } from './lab-mode.ts'
 export { executeCapabilityNeed } from './execution-bridge.ts'
 export type { CapabilityApproval, CapabilityExecutionContext, CapabilityExecutionResult } from './execution-bridge.ts'
-export { ArtifactRuntime, artifactFromToolResult } from './artifact-runtime.ts'
+export { ArtifactRuntime, artifactFromCapabilityResult, artifactFromToolResult } from './artifact-runtime.ts'
 export type { ArtifactRenderModel, CapabilityArtifact } from './artifact-runtime.ts'
-export { AcquisitionRegistry } from './acquisition-registry.ts'
+export { AcquisitionRegistry, createIndexedToolAcquisition } from './acquisition-registry.ts'
 export type { AcquisitionResult, CapabilityBuilder, MissionLearningHooks } from './acquisition-registry.ts'
+export { buildCapabilityCensus, capabilityBehavioralFingerprint } from './capability-census.ts'
+export type { CapabilityCensus, CapabilityCensusClassification, CapabilityCensusGroup } from './capability-census.ts'
+export { searchCapabilityAtlas } from './capability-search.ts'
+export type { CapabilitySearchMatch } from './capability-search.ts'
+export { installHardnessModelTools } from './model-tools.ts'
+export type { HardnessModelToolsDependencies } from './model-tools.ts'
 export { installSandboxCapabilityGuard } from './sandbox-guard.ts'
 export type { SandboxPolicyResolver } from './sandbox-guard.ts'
 export { runHardnessMission } from './mission-orchestrator.ts'
 export type { HardnessMissionInput, HardnessMissionResult } from './mission-orchestrator.ts'
 export { installHardnessMissionRuntime, createHardnessAcquisition } from './mission-runtime.ts'
 export type { HardnessMissionRpcPayload, HardnessMissionRuntimeDependencies } from './mission-runtime.ts'
+export { createOpenClawProductionBridge } from './openclaw/production.ts'
+export type { OpenClawProductionBridge } from './openclaw/production.ts'
+export { InstalledOpenClawPackageInstaller, locateInstalledOpenClawPackage } from './openclaw/installed-installer.ts'
+export type {
+  InstalledOpenClawPackageLocation,
+  InstalledOpenClawPackageLocator,
+  OpenClawIsolatedExecutionRequest,
+  OpenClawIsolatedRunner,
+} from './openclaw/installed-installer.ts'
+export { createOpenClawIsolatedRunner } from './openclaw/isolated-runner.ts'
+export type { OpenClawSandboxRuntime, OpenClawSubprocessRuntime } from './openclaw/isolated-runner.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -55,8 +81,28 @@ function requiredServices(ctx: Context) {
   return { hardness, tools, skills, connection, agents, approval }
 }
 
+function isOpenClawSubprocessRuntime(value: unknown): value is OpenClawSubprocessRuntime {
+  return typeof value === 'object' && value !== null
+    && typeof (value as { resolveExecutable?: unknown }).resolveExecutable === 'function'
+    && typeof (value as { spawn?: unknown }).spawn === 'function'
+}
+
+function isOpenClawSandboxRuntime(value: unknown): value is OpenClawSandboxRuntime {
+  return typeof value === 'object' && value !== null
+    && typeof (value as { confine?: unknown }).confine === 'function'
+}
+
+function createProductionOpenClawInstaller(ctx: Context): InstalledOpenClawPackageInstaller {
+  const subprocess = ctx.get('subprocess')
+  const sandbox = ctx.get('sandbox')
+  const runner = isOpenClawSubprocessRuntime(subprocess) && isOpenClawSandboxRuntime(sandbox)
+    ? createOpenClawIsolatedRunner({ subprocess, sandbox, workspaceRoot: process.cwd() })
+    : undefined
+  return new InstalledOpenClawPackageInstaller(undefined, runner)
+}
+
 /**
- * Install the HARDNESS projections and mission runtime.
+ * Install the HARDNESS projections, model gateways, and mission runtime.
  * @param ctx - Owning Cordis context with HARDNESS dependencies.
  * @returns Idempotent disposer for every projection installed by this adapter.
  */
@@ -67,13 +113,27 @@ export async function apply(ctx: Context): Promise<() => void> {
     disposers.push(indexOpenClawExtensions(hardness))
     disposers.push(indexTools(tools, hardness))
     disposers.push(await indexSkills(skills, hardness))
+    const openclaw = createOpenClawProductionBridge(createProductionOpenClawInstaller(ctx))
+    const acquisition = createHardnessAcquisition(
+      hardness,
+      [createIndexedToolAcquisition(hardness)],
+      openclaw.broker,
+    )
+    disposers.push(installHardnessModelTools({
+      hardness,
+      tools,
+      approval,
+      acquisition,
+      executor: openclaw.executor,
+    }))
     const missionDispose = installHardnessMissionRuntime({
       connection,
       agents,
       approval,
       hardness,
       tools,
-      acquisition: createHardnessAcquisition(hardness),
+      acquisition,
+      executor: openclaw.executor,
     })
     disposers.push(() => { void missionDispose() })
   } catch (error) {

@@ -12,7 +12,7 @@ import type {
 } from './execution-bridge.ts'
 import { executeCapabilityNeed } from './execution-bridge.ts'
 import {
-  artifactFromToolResult,
+  artifactFromCapabilityResult,
   type ArtifactRenderModel,
   type CapabilityArtifact,
   type ArtifactRuntime,
@@ -36,6 +36,8 @@ export interface HardnessMissionInput {
 export type HardnessMissionResult =
   | { readonly kind: 'completed'; readonly artifact: CapabilityArtifact; readonly rendered: ArtifactRenderModel }
   | { readonly kind: 'blocked'; readonly reason: string }
+
+type BlockedHardnessMissionResult = Extract<HardnessMissionResult, { readonly kind: 'blocked' }>
 
 function evidenceFor(
   input: HardnessMissionInput,
@@ -62,7 +64,7 @@ function quarantine(
   startedAt: number,
   reason: string,
   artifactRefs: readonly string[] = [],
-): HardnessMissionResult {
+): BlockedHardnessMissionResult {
   const evidence = input.hardness.recordEvidence(evidenceFor(
     input,
     surface,
@@ -74,64 +76,96 @@ function quarantine(
   return { kind: 'blocked', reason }
 }
 
+function blockedReason(failures: readonly string[], terminal: readonly string[]): string {
+  return [...failures, ...terminal].filter(Boolean).join('; ')
+}
+
 /**
  * Execute one mission through acquisition, approval, real execution, artifact
- * verification, and evidence-backed promotion or quarantine.
+ * verification, and evidence-backed promotion or quarantine. Deterministically
+ * broken candidates are quarantined and the same bounded mission continues to
+ * another already-known or acquirable candidate instead of restarting from
+ * scratch. Approval denial and policy/executor blocks remain terminal.
  * @param input - Live services, declared need, arguments, and execution context.
  * @returns Completed rendered artifact or the governed reason the mission was blocked.
  */
 export async function runHardnessMission(input: HardnessMissionInput): Promise<HardnessMissionResult> {
-  const initial = input.hardness.route(input.need)
-  if (initial.kind !== 'route') {
-    const acquired = await input.acquisition.acquireOrBuild(input.need, input.context.signal)
-    if (acquired.kind !== 'built') return { kind: 'blocked', reason: acquired.reasons.join('; ') }
-  }
+  const failures: string[] = []
+  const attemptBudget = Math.max(1, input.hardness.list().length + 1)
 
-  const startedAt = Date.now()
-  const execution = await executeCapabilityNeed(
-    input.hardness,
-    input.tools,
-    input.approval,
-    input.need,
-    input.args,
-    input.context,
-    input.executor,
-  )
-  if (execution.kind !== 'executed') {
-    return {
-      kind: 'blocked',
-      reason: execution.kind === 'denied' || execution.kind === 'unsupported'
-        ? execution.reason
-        : execution.reasons.join('; '),
+  for (let attempt = 0; attempt < attemptBudget; attempt += 1) {
+    if (input.context.signal.aborted) return { kind: 'blocked', reason: blockedReason(failures, ['capability mission cancelled']) }
+
+    const initial = input.hardness.route(input.need)
+    if (initial.kind !== 'route') {
+      const acquired = await input.acquisition.acquireOrBuild(input.need, input.context.signal)
+      if (acquired.kind !== 'built') {
+        return { kind: 'blocked', reason: blockedReason(failures, acquired.reasons) }
+      }
     }
-  }
 
-  if (execution.result.isError) {
-    return quarantine(input, execution.surface, startedAt, execution.result.error.message)
-  }
+    const startedAt = Date.now()
+    const execution = await executeCapabilityNeed(
+      input.hardness,
+      input.tools,
+      input.approval,
+      input.need,
+      input.args,
+      input.context,
+      input.executor,
+    )
+    if (execution.kind !== 'executed') {
+      return {
+        kind: 'blocked',
+        reason: blockedReason(failures, [
+          execution.kind === 'denied' || execution.kind === 'unsupported'
+            ? execution.reason
+            : execution.reasons.join('; '),
+        ]),
+      }
+    }
 
-  const artifact = artifactFromToolResult(execution.result)
-  if (artifact === undefined) {
-    return quarantine(input, execution.surface, startedAt, 'mission produced no valid artifact')
-  }
-  const rendered = input.artifacts.render(artifact)
-  if (rendered === undefined) {
-    return quarantine(
+    if (execution.result.isError) {
+      const result = quarantine(input, execution.surface, startedAt, execution.result.error.message)
+      failures.push(`${execution.surface.capabilityId}: ${result.reason}`)
+      continue
+    }
+
+    const artifact = artifactFromCapabilityResult(
+      execution.result,
+      `mission:${String(input.context.callId)}:${execution.surface.capabilityId}`,
+    )
+    if (artifact === undefined) {
+      const result = quarantine(input, execution.surface, startedAt, 'mission produced no valid artifact')
+      failures.push(`${execution.surface.capabilityId}: ${result.reason}`)
+      continue
+    }
+    const rendered = input.artifacts.render(artifact)
+    if (rendered === undefined) {
+      const result = quarantine(
+        input,
+        execution.surface,
+        startedAt,
+        `no renderer registered for ${artifact.mime}`,
+        [artifact.id],
+      )
+      failures.push(`${execution.surface.capabilityId}: ${result.reason}`)
+      continue
+    }
+
+    const evidence = input.hardness.recordEvidence(evidenceFor(
       input,
       execution.surface,
-      startedAt,
-      `no renderer registered for ${artifact.mime}`,
+      'passed',
+      Math.max(0, Date.now() - startedAt),
       [artifact.id],
-    )
+    ))
+    input.hardness.promoteFromEvidence(evidence.id)
+    return { kind: 'completed', artifact, rendered }
   }
 
-  const evidence = input.hardness.recordEvidence(evidenceFor(
-    input,
-    execution.surface,
-    'passed',
-    Math.max(0, Date.now() - startedAt),
-    [artifact.id],
-  ))
-  input.hardness.promoteFromEvidence(evidence.id)
-  return { kind: 'completed', artifact, rendered }
+  return {
+    kind: 'blocked',
+    reason: blockedReason(failures, ['capability mission exhausted its bounded candidate budget']),
+  }
 }
