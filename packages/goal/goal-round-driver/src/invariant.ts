@@ -6,6 +6,7 @@ import { foldGoal, type FoldedGoal, type GoalJudgeAuditEntry, type GoalMessageSo
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
+import { replayGoalStrategy } from './strategy.ts'
 
 const PACKAGE_NAME = '@phoenix-ai/dsh-goal-round-driver'
 
@@ -51,6 +52,11 @@ function latestJudge(prior: readonly SessionEvent[], goalId: GoalMessageSource['
   )?.data
 }
 
+/** Rebuild the strategy selected immediately before a continuation prompt. */
+function latestStrategy(prior: readonly SessionEvent[], goalId: GoalMessageSource['goalId']) {
+  return replayGoalStrategy(prior, goalId)
+}
+
 /** Validate one package-owned continuation message against its durable prefix. */
 function validateEvent(
   prior: readonly SessionEvent[],
@@ -61,7 +67,12 @@ function validateEvent(
   const source = event.data.source
   if (source.kind !== 'goal' || source.round <= 0) return
   const goal = goalView(foldChecked(prior, fail), source, fail)
-  const expected = renderGoalRoundPrompt(goal, source.round, latestJudge(prior, source.goalId))
+  const expected = renderGoalRoundPrompt(
+    goal,
+    source.round,
+    latestJudge(prior, source.goalId),
+    latestStrategy(prior, source.goalId)?.strategy,
+  )
   if (!isDeepStrictEqual(event.data.content, expected)) {
     fail(`goal round ${source.round} content does not match the package-owned continuation prompt`)
   }

@@ -13,10 +13,13 @@ import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm
 import type { Session, SessionEvent, UserMessage } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
+import { recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 
 export { renderGoalRoundPrompt } from './prompt.ts'
 export { recordGoalSupervisor, replayGoalSupervisor } from './supervisor.ts'
 export type { GoalSupervisorState } from './supervisor.ts'
+export { GOAL_STRATEGIES, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
+export type { GoalStrategyId } from './strategy.ts'
 
 export const name = 'goal-round-driver'
 export const inject = ['agents', 'goals', 'sessions']
@@ -111,6 +114,11 @@ export function apply(ctx: Context): void {
       && event.data.goalId === goal.id
       && event.data.verdict !== 'pass',
     )?.data
+  }
+
+  /** Read the last strategy so a repair round can select a different one. */
+  function latestStrategy(state: DriverState, goal: GoalView) {
+    return replayGoalStrategy(state.agent.session.events, goal.id)
   }
 
   /** Persist one supervisor state transition without duplicating the latest row. */
@@ -224,7 +232,17 @@ export function apply(ctx: Context): void {
     }
 
     const round = goal.roundsStarted + 1
-    const content = renderGoalRoundPrompt(goal, round, latestJudge(state, goal))
+    const strategy = selectNextStrategy(latestStrategy(state, goal)?.strategy, goal.roundsStarted)
+    recordGoalStrategy(state.agent.session, {
+      goalId: goal.id,
+      revision: goal.revision,
+      round,
+      strategy,
+      reason: latestJudge(state, goal) === undefined
+        ? 'continue the active mission with a bounded strategy'
+        : 'address the latest independent judge findings with a different strategy',
+    })
+    const content = renderGoalRoundPrompt(goal, round, latestJudge(state, goal), strategy)
     const message = createUserMessage({
       content,
       source: { kind: 'goal', goalId: goal.id, revision: goal.revision, round },

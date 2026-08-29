@@ -422,7 +422,7 @@ Source: [`packages/feedback/command-feedback/src/index.ts:62`](../packages/feedb
 'goal/change': GoalChangeMeta
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:89`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:98`](../packages/goal/goal/src/domain.ts)
 
 <a id="goaljudge--log-only"></a>
 
@@ -433,7 +433,18 @@ Source: [`packages/goal/goal/src/domain.ts:89`](../packages/goal/goal/src/domain
 'goal/judge': GoalJudgeAuditEntry
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:91`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:100`](../packages/goal/goal/src/domain.ts)
+
+<a id="goalstrategy--log-only"></a>
+
+#### `goal/strategy` — log-only
+
+```ts persistence-catalog
+/** Strategy selected before one continuation prompt is admitted. */
+'goal/strategy': GoalStrategySelection
+```
+
+Source: [`packages/goal/goal/src/domain.ts:104`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalsupervisor--log-only"></a>
 
@@ -444,7 +455,7 @@ Source: [`packages/goal/goal/src/domain.ts:91`](../packages/goal/goal/src/domain
 'goal/supervisor': GoalSupervisorCheckpoint
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:93`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:102`](../packages/goal/goal/src/domain.ts)
 
 ### `hardness/*`
 

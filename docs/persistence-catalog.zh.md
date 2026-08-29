@@ -437,6 +437,17 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/goal/goal/src/domain.ts:91`](../packages/goal/goal/src/domain.ts)
 
+<a id="goalstrategy--log-only"></a>
+
+#### `goal/strategy` — log-only
+
+```ts persistence-catalog
+/** Strategy selected before one continuation prompt is admitted. */
+'goal/strategy': GoalStrategySelection
+```
+
+来源：[`packages/goal/goal/src/domain.ts:104`](../packages/goal/goal/src/domain.ts)
+
 <a id="goalsupervisor--log-only"></a>
 
 #### `goal/supervisor` — log-only
@@ -446,7 +457,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'goal/supervisor': GoalSupervisorCheckpoint
 ```
 
-来源：[`packages/goal/goal/src/domain.ts:93`](../packages/goal/goal/src/domain.ts)
+来源：[`packages/goal/goal/src/domain.ts:102`](../packages/goal/goal/src/domain.ts)
 
 ### `hardness/*`
 

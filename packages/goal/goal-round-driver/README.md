@@ -51,6 +51,8 @@ When the previous completion judge returned `needs_changes` or `blocked`, the dr
 
 The driver also writes bounded `goal/supervisor` checkpoints. A checkpoint records the exact goal revision, admitted round count, supervisor status, next action, and a redacted failure summary. On session start the latest checkpoint is replayed for diagnostics, while the driver remains disarmed until the direct human `resume` operation re-establishes authority.
 
+Before each admitted continuation, the driver records one strategy selection in `goal/strategy` and includes it in the prompt. The bounded rotation is `baseline`, `verification-first`, `alternate-tool`, and `minimal-change`; the next selection is deterministic and never repeats the immediately previous strategy.
+
 #### Token effect
 
 One fixed instruction block plus the objective is added per admitted round. Later requests resend retained rounds until compaction shadows them; no fresh agent or copied conversation prefix is created.

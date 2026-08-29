@@ -2,6 +2,7 @@
 
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { GoalJudgeAuditEntry, GoalView } from '@phoenix-ai/dsh-goal'
+import type { GoalStrategyId } from './strategy.ts'
 
 /** Last persisted review that must guide the next repair round. */
 export type GoalRoundFeedback = Pick<GoalJudgeAuditEntry, 'verdict' | 'summary' | 'findings' | 'requiredChanges'>
@@ -17,12 +18,14 @@ export function renderGoalRoundPrompt(
   goal: GoalView,
   round: number,
   feedback?: GoalRoundFeedback,
+  strategy?: GoalStrategyId,
 ): ContentBlock[] {
   return [{
     type: 'text',
     text: '<goal_round>\n'
       + `Objective: ${JSON.stringify(goal.objective)}\n`
       + `Round: ${round}/${goal.maxGoalRounds}\n\n`
+      + (strategy === undefined ? '' : `Selected strategy: ${strategy}\n\n`)
       + (feedback === undefined ? ''
         : `Prior independent judge: ${feedback.verdict}. ${feedback.summary}\n`
           + `Judge findings: ${JSON.stringify(feedback.findings)}\n`

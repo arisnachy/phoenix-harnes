@@ -51,6 +51,8 @@
 
 驱动器还会写入有界的 `goal/supervisor` 检查点。检查点记录确切的 goal revision、已准入轮次、supervisor 状态、下一步动作和经过脱敏的失败摘要。会话启动时会重放最新检查点用于诊断，但驱动器仍保持停用，直到直接人类 `resume` 操作重新建立权限。
 
+每次准入续行前，driver 会在 `goal/strategy` 中记录一个策略选择，并把它放入 prompt。有限轮换为 `baseline`、`verification-first`、`alternate-tool` 和 `minimal-change`；下一次选择是确定性的，并且不会立即重复上一个策略。
+
 #### Token 影响
 
 每个已准入 Round 会增加一个固定指令块和目标。后续请求会重新发送保留的 Round，直到压缩（compaction）将其遮蔽；不会创建新 agent，也不会复制对话前缀。

@@ -66,6 +66,15 @@ export interface GoalSupervisorCheckpoint {
   readonly lastError?: string
 }
 
+/** Durable choice of the next bounded recovery strategy. */
+export interface GoalStrategySelection {
+  readonly goalId: string
+  readonly revision: number
+  readonly round: number
+  readonly strategy: 'baseline' | 'verification-first' | 'alternate-tool' | 'minimal-change'
+  readonly reason: string
+}
+
 /** Message attribution for admitted continuation rounds. */
 export interface GoalMessageSource {
   readonly kind: 'goal'
@@ -91,6 +100,8 @@ declare module '@phoenix-ai/dsh-session/types' {
     'goal/judge': GoalJudgeAuditEntry
     /** Latest bounded supervisor checkpoint for a goal. */
     'goal/supervisor': GoalSupervisorCheckpoint
+    /** Strategy selected before one continuation prompt is admitted. */
+    'goal/strategy': GoalStrategySelection
   }
 }
 
