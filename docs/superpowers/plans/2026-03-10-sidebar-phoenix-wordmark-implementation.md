@@ -21,7 +21,7 @@ English | [中文](2026-03-10-sidebar-phoenix-wordmark-implementation.zh.md)
 
 En el caso que ya verifica el logo lateral expandido, localizar el elemento del nombre de marca y añadir aserciones para que el contrato visual sea explícito:
 
-```ts
+```ts ignore-check
 const brandName = screen.getByText('PHOENIX', { exact: true })
 expect(brandName).toHaveClass(styles.brandName)
 expect(brandName).toHaveStyle({

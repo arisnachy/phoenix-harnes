@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/superpowers/plans/2026-03-10-sidebar-phoenix-wordmark-implementation.md
-2026-03-10-sidebar-phoenix-wordmark-implementation.md: 26531fe332d739003a47739044a571648ffc21c9
-2026-03-10-sidebar-phoenix-wordmark-implementation.zh.md: 2762ceb9b171f6e49aa2882fd38e5a360732c4af
+2026-03-10-sidebar-phoenix-wordmark-implementation.md: 505d6552d441d8a7a3455994024f1c23cb14fb14
+2026-03-10-sidebar-phoenix-wordmark-implementation.zh.md: 190ebda63f208f86658ca403643635f418a4ec8d

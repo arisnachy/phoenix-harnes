@@ -11,7 +11,7 @@
 
 - [ ] 在展开的 wordmark 测试中验证 `brandName` CSS 类和字体属性。
 
-```ts
+```ts ignore-check
 const brandName = screen.getByText('PHOENIX', { exact: true })
 expect(brandName).toHaveClass(styles.brandName)
 expect(brandName).toHaveStyle({
