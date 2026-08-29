@@ -1,7 +1,9 @@
 import type { SkillDefinition } from './index.js'
 
+/** Runtime classification of a skill's executable support. */
 export type SkillExecutionMode = 'native' | 'conditional' | 'instruction-only'
 
+/** Parsed skill fields used to derive an operational profile. */
 export interface OperationalSkillInput {
   readonly name: string
   readonly description: string
@@ -9,18 +11,21 @@ export interface OperationalSkillInput {
   readonly content: string
 }
 
+/** Mapping from a tool named by a skill to a currently available runtime tool. */
 export interface SkillToolMapping {
   readonly documented: string
   readonly runtimeTool?: string
   readonly available: boolean
 }
 
+/** Human-question rule required before an ambiguous skill input is used. */
 export interface SkillDisambiguationRule {
   readonly input: string
   readonly rule: string
   readonly question: string
 }
 
+/** Derived execution guidance attached to a loaded skill definition. */
 export interface SkillOperationalProfile {
   readonly skillName: string
   readonly executionMode: SkillExecutionMode
@@ -66,6 +71,11 @@ const WEATHER_OVERRIDE: Pick<SkillOperationalProfile, 'requiredInputs' | 'disamb
   ],
 }
 
+/** Derive executable support, required inputs, and safe fallbacks from a skill.
+ * @param skill - parsed skill content and metadata.
+ * @param capabilities - currently visible runtime capability names.
+ * @returns operational profile for model and user surfaces.
+ */
 export function buildOperationalProfile(
   skill: OperationalSkillInput,
   capabilities: ReadonlySet<string>,
@@ -110,6 +120,13 @@ export function buildOperationalProfile(
   }
 }
 
+/** Add operational guidance and an optional English overlay to a skill.
+ * @param skill - source skill definition to adapt.
+ * @param capabilities - currently visible runtime capability names.
+ * @param locale - language used for the generated prelude.
+ * @param overlay - reviewed English content replacement, when available.
+ * @returns adapted skill definition preserving the input's concrete type.
+ */
 export function adaptSkillDefinition<T extends SkillDefinition>(
   skill: T,
   capabilities: ReadonlySet<string>,
@@ -130,6 +147,11 @@ export function adaptSkillDefinition<T extends SkillDefinition>(
   }
 }
 
+/** Render a model-safe operational preflight for a skill.
+ * @param profile - derived operational facts to render.
+ * @param locale - language used for the preflight.
+ * @returns plain-text preflight with no executable values.
+ */
 export function renderOperationalPrelude(profile: SkillOperationalProfile, locale: 'es' | 'en' = 'es'): string {
   if (locale === 'en') return renderEnglishPrelude(profile)
   const mappings = profile.toolMappings.length === 0

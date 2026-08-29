@@ -178,6 +178,10 @@ export function producedFileMentions(
  * Resolve explicit filesystem paths from assistant prose without guessing at
  * bare filenames or allowing traversal segments. Relative paths use the session
  * workspace; absolute paths are already host-resolved and remain explicit.
+ * @param cwd - session workspace root used for relative paths.
+ * @param openFile - callback invoked when the rendered mention is opened.
+ * @param label - callback that creates the visible mention label.
+ * @returns resolver for explicit workspace paths in assistant prose.
  */
 export function workspaceFileMentions(
   cwd: string | undefined,

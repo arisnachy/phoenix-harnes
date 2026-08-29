@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-28-hardness-model-operating-protocol.md
-2026-08-28-hardness-model-operating-protocol.md: d511a8c2af9390717a851087eb4aa2033e5770af
-2026-08-28-hardness-model-operating-protocol.zh.md: 1a41ad22f9c5af77454fb25c54d57d9df8b262b7
+2026-08-28-hardness-model-operating-protocol.md: 76c46d04d21340ada1a36d907d417514677036b8
+2026-08-28-hardness-model-operating-protocol.zh.md: e26a2e1ee2c8b7fe1b44529c0b9ad7d2b38cc69f

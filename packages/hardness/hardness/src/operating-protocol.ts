@@ -62,7 +62,10 @@ export interface HardnessProtocolView {
   readonly reason: string
 }
 
-/** Evaluate the next governed lifecycle step without executing or authorizing anything. */
+/** Evaluate the next governed lifecycle step without executing or authorizing anything.
+ * @param input - observed route and lifecycle states.
+ * @returns serializable next-step guidance and allowed/forbidden actions.
+ */
 export function evaluateHardnessProtocol(input: HardnessProtocolInput): HardnessProtocolView {
   if (input.inspection === 'pending') {
     return {
@@ -205,7 +208,10 @@ export function evaluateHardnessProtocol(input: HardnessProtocolInput): Hardness
   }
 }
 
-/** Render the stable model-facing lifecycle rules without executable values. */
+/** Render the stable model-facing lifecycle rules without executable values.
+ * @param locale - language used by the rendered guide.
+ * @returns prompt text containing the shared HARDNESS lifecycle.
+ */
 export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
   const steps = HARDNESS_PROTOCOL_STEPS.join(' → ')
   if (locale === 'es') {

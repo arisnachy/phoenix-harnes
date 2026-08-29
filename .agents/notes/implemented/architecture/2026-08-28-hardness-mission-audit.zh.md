@@ -4,6 +4,10 @@ Status：implemented
 
 [English](2026-08-28-hardness-mission-audit.md) | 中文
 
+## Problem
+
+HARDNESS evidence 虽然记录了 capability verification，但没有提供 durable、ordered trace 来解释 live mission 在完成或停止前到达了哪些 governed protocol state。
+
 ## 决策
 
 live HARDNESS mission runner 会为每个 terminal protocol state 向 session 追加一个 `hardness/mission` event：`inspect`、`resolve`、`plan`、`approve`、`execute`、`verify`、`present` 和 `audit`。event 只携带 call identity、capability identity、artifact/evidence 引用、duration 与稳定的 reason code。`replayHardnessMissionAudit` 会把 append-only session log 折叠回一次调用的有序 trace。
@@ -21,3 +25,7 @@ focused adapter tests 覆盖成功与失败 trace 的顺序、session append/rep
 ## 后果
 
 session replay 可以解释 mission 为什么完成或停止，同时不暴露发送给 provider 的数据。没有 live session 的 direct runner 仍然有意保持为未记录的 test fixture；production model 与 loopback RPC path 会从其 live agent session 获得 writer。
+
+## Alternatives considered
+
+只把 trace 保存在 process memory，或把它返回到 model result，会在 restart 时丢失，或把 audit metadata 与 provider-facing data 混合；session event 能在不授予 execution authority 的情况下保留 replay。

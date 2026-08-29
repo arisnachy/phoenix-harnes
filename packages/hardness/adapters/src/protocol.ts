@@ -7,7 +7,11 @@ export interface HardnessPromptRegistrar {
   section: (section: { readonly name: string; readonly order: number; readonly text: string }) => () => void
 }
 
-/** Install the stable HARDNESS lifecycle guide into the model system prompt. */
+/** Install the stable HARDNESS lifecycle guide into the model system prompt.
+ * @param systemPrompt - canonical prompt registrar receiving the section.
+ * @param locale - language used by the guide.
+ * @returns disposer for the registered prompt section.
+ */
 export function installHardnessProtocol(
   systemPrompt: HardnessPromptRegistrar,
   locale: 'en' | 'es' = 'en',

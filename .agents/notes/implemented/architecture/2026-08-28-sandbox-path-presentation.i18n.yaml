@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-28-sandbox-path-presentation.md
-2026-08-28-sandbox-path-presentation.md: c9af90f4b45335eb2fa8b1a7546e019654815304
-2026-08-28-sandbox-path-presentation.zh.md: eaffaa3222048f4127825ca212026ee77e5e04d5
+2026-08-28-sandbox-path-presentation.md: eef822fd9cd5905e1f44875de932a806d8c41a22
+2026-08-28-sandbox-path-presentation.zh.md: af7ed4a12e4f36ebffe1a0e04ba61cf3d0a4b6eb

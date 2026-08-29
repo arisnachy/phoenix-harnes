@@ -4,6 +4,10 @@ Status: implemented
 
 [English](2026-08-28-hardness-model-operating-protocol.md) | 中文
 
+## Problem
+
+model-facing HARDNESS surface 虽然已有 capability metadata 与 execution adapter，但没有一个共享且可 inspect 的 lifecycle 来告诉模型何时可以 resolve、approve、execute、verify、present 或 claim completion。
+
 ## Decision
 
 PHOENIX 为受 HARDNESS 管理的操作提供一个确定性的模型可见生命周期：`inspect`、`resolve`、`plan`、`approve`、`execute`、`verify`、`present` 和 `audit`。`@deepseek-ai/dsh-hardness` 负责可序列化的 protocol 类型、评估器和 guide renderer。`@deepseek-ai/dsh-hardness-adapters` 以 `hardness:operating-protocol` 的名称将 guide 安装到规范的 system-prompt service。
@@ -23,3 +27,7 @@ HARDNESS protocol 测试覆盖未知和缺失 route、approval 顺序、permissi
 即使选择的 provider 不同，模型也会收到相同的生命周期词汇。protocol 是 guidance 和 evaluation，而不是 execution authority；规范的 tool runtime、permission broker、sandbox policy、artifact runtime 和 session persistence 仍保持各自现有的 authority。
 
 该 adapter 还监听 `tools/change`，因此 connector 发布或撤回 tool 时，HARDNESS projection 会更新且不会重复注册。内部 `hardness_run` tool 会被排除在 projection 之外。
+
+## Alternatives considered
+
+如果只在各个 tool description 中维护 lifecycle，就会重复 policy，使 provider 产生分歧，并且模型无法跨 capability family inspect 稳定 protocol。

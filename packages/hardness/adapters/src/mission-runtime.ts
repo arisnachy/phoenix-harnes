@@ -85,7 +85,10 @@ function createApproval(deps: Pick<HardnessMissionRuntimeDependencies, 'approval
   }
 }
 
-/** Create the governed mission runner without exposing connection or RPC authority. */
+/** Create the governed mission runner without exposing connection or RPC authority.
+ * @param deps - live HARDNESS, tool, approval, acquisition, and optional executor services.
+ * @returns runner that applies the shared mission protocol for each input.
+ */
 export function createHardnessMissionRunner(deps: Omit<HardnessMissionRuntimeDependencies, 'connection' | 'agents'>): HardnessMissionRunner {
   const artifacts = createArtifacts()
   const approval = createApproval(deps)

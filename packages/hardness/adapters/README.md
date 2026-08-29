@@ -8,10 +8,15 @@ The adapters do not execute tools, load skill bodies, or grant permissions; each
 
 ## Model Experience
 
-### Projected capability metadata
+### Projected capability metadata and operating protocol
 
 #### What the model sees
 
+The model sees a stable capability catalog, the shared HARDNESS lifecycle guide, and a replayable audit trace while execution remains governed by PHOENIX.
+
+##### HARDNESS mission guidance
+
+```markdown
 Consumers may expose stable capability identifiers such as `tool:<name>`, `skill:<name>`, and `openclaw:<id>` together with compatibility and verification state; execution remains behind PHOENIX approval and canonical registries.
 
 When the canonical system-prompt service is mounted, this package installs the `hardness:operating-protocol` section. It gives every model the same lifecycle vocabulary and requires resolution, approval, verification, presentation, and evidence before a task is described as complete.
@@ -19,6 +24,9 @@ When the canonical system-prompt service is mounted, this package installs the `
 Tool projections may subscribe to `tools/change`; this keeps dynamically connected tools, including MCP tools, represented in HARDNESS while registrations are reversible. The internal `hardness_run` tool is excluded from that projection to prevent recursive routing.
 
 Each live mission appends a secret-free `hardness/mission` trace to the calling session. The trace records terminal protocol states, capability identity, artifact/evidence references, and stable reason codes; `replayHardnessMissionAudit` reconstructs one call without replaying arguments, credentials, or provider error text.
+
+Inspect the need, resolve a verified capability, plan the operation, obtain approval, execute through the governed runtime, verify the artifact, present it, and record evidence before claiming completion.
+```
 
 #### Token effect
 

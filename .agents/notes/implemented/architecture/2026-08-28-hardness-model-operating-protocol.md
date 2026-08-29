@@ -4,6 +4,10 @@ Status: implemented
 
 English | [中文](2026-08-28-hardness-model-operating-protocol.zh.md)
 
+## Problem
+
+The model-facing HARDNESS surface had capability metadata and execution adapters but no shared, inspectable lifecycle that told the model when it could resolve, approve, execute, verify, present, or claim completion.
+
 ## Decision
 
 PHOENIX exposes one deterministic model-facing lifecycle for governed HARDNESS operations: `inspect`, `resolve`, `plan`, `approve`, `execute`, `verify`, `present`, and `audit`. `@deepseek-ai/dsh-hardness` owns the serializable protocol types, evaluator, and guide renderer. `@deepseek-ai/dsh-hardness-adapters` installs the guide into the canonical system-prompt service as `hardness:operating-protocol`.
@@ -23,3 +27,7 @@ The HARDNESS protocol tests cover unknown and missing routes, approval ordering,
 Models receive a shared lifecycle vocabulary even when the selected provider changes. The protocol is guidance and evaluation, not an execution authority; the canonical tool runtime, permission broker, sandbox policy, artifact runtime, and session persistence remain their existing authorities.
 
 The adapter also follows `tools/change`, so a connector that publishes or retracts tools updates the HARDNESS projection without duplicating registrations. The internal `hardness_run` tool is excluded from that projection.
+
+## Alternatives considered
+
+Keeping the lifecycle only in individual tool descriptions would duplicate policy, allow providers to diverge, and give the model no stable protocol to inspect across capability families.

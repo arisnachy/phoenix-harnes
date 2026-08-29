@@ -4,6 +4,10 @@ Status: implemented
 
 English | [中文](2026-08-28-hardness-mission-audit.zh.md)
 
+## Problem
+
+HARDNESS evidence recorded capability verification but did not provide a durable, ordered trace explaining which governed protocol states a live mission reached before it completed or stopped.
+
 ## Decision
 
 The live HARDNESS mission runner appends one `hardness/mission` session event for each terminal protocol state: `inspect`, `resolve`, `plan`, `approve`, `execute`, `verify`, `present`, and `audit`. The event carries only the call identity, capability identity, artifact/evidence references, duration, and stable reason codes. `replayHardnessMissionAudit` folds the append-only session log back into one call's ordered trace.
@@ -21,3 +25,7 @@ Focused adapter tests cover ordered success and failure traces, session append/r
 ## Consequences
 
 Session replay can explain why a mission completed or stopped without exposing the data sent to a provider. Direct runners without a live session remain intentionally unrecorded test fixtures; production model and loopback RPC paths receive the writer from their live agent session.
+
+## Alternatives considered
+
+Keeping the trace only in process memory or returning it in the model result would lose it on restart or mix audit metadata with provider-facing data; a session event preserves replay without granting execution authority.

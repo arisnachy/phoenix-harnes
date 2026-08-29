@@ -4452,7 +4452,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SkillDefinition',
-    declaration: 'export interface SkillDefinition extends SkillSummary {\n    readonly content: string;\n    readonly path?: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
+    declaration: 'export interface SkillDefinition extends SkillSummary {\n    readonly content: string;\n    readonly path?: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n    readonly operational?: SkillOperationalProfile;\n}',
+  },
+  {
+    name: 'SkillDisambiguationRule',
+    declaration: 'export interface SkillDisambiguationRule {\n    readonly input: string;\n    readonly rule: string;\n    readonly question: string;\n}',
+  },
+  {
+    name: 'SkillExecutionMode',
+    declaration: 'export type SkillExecutionMode = \'native\' | \'conditional\' | \'instruction-only\';',
   },
   {
     name: 'SkillInvocationPolicy',
@@ -4461,6 +4469,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillLookupOptions',
     declaration: 'export interface SkillLookupOptions {\n    readonly cwd?: string | undefined;\n    readonly signal?: AbortSignal | undefined;\n}',
+  },
+  {
+    name: 'SkillOperationalProfile',
+    declaration: 'export interface SkillOperationalProfile {\n    readonly skillName: string;\n    readonly executionMode: SkillExecutionMode;\n    readonly requiredInputs: readonly string[];\n    readonly toolMappings: readonly SkillToolMapping[];\n    readonly disambiguation: readonly SkillDisambiguationRule[];\n    readonly fallbacks: readonly string[];\n    readonly externalRequirements: readonly string[];\n}',
   },
   {
     name: 'SkillProvider',
@@ -4489,6 +4501,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillSummary',
     declaration: 'export interface SkillSummary {\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly invocation: SkillInvocationPolicy;\n    readonly source: SkillSource;\n    readonly provider: string;\n    readonly resourceBase?: SkillResourceBase;\n}',
+  },
+  {
+    name: 'SkillToolMapping',
+    declaration: 'export interface SkillToolMapping {\n    readonly documented: string;\n    readonly runtimeTool?: string;\n    readonly available: boolean;\n}',
   },
   {
     name: 'SkillViewOptions',

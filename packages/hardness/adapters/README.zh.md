@@ -8,17 +8,25 @@
 
 ## Model Experience
 
-### 投影的 capability metadata
+### 投影的 capability metadata 与 operating protocol
 
 #### What the model sees
 
-消费者可以向模型暴露稳定 capability 标识，例如 `tool:<name>`、`skill:<name>` 与 `openclaw:<id>`，以及 compatibility 和验证状态；执行仍由 PHOENIX approval 与规范 registry 控制。
+模型会看到稳定的 capability catalog、共享的 HARDNESS lifecycle guide 与可 replay 的 audit trace，而执行仍由 PHOENIX 管理。
 
-当规范的 system-prompt service 已挂载时，此 package 会安装 `hardness:operating-protocol` section。它为每个模型提供相同的生命周期词汇，并要求在把任务描述为完成之前经过 resolution、approval、verification、presentation 和 evidence。
+##### HARDNESS mission guidance
 
-Tool projection 可以订阅 `tools/change`；这样动态连接的 tool（包括 MCP tool）会保持在 HARDNESS 中，同时注册仍可撤销。内部 `hardness_run` tool 会被排除，避免递归路由。
+```markdown
+Consumers may expose stable capability identifiers such as `tool:<name>`, `skill:<name>`, and `openclaw:<id>` together with compatibility and verification state; execution remains behind PHOENIX approval and canonical registries.
 
-每个 live mission 都会向调用方 session 追加无 secret 的 `hardness/mission` trace。trace 记录 protocol 的 terminal state、capability identity、artifact/evidence 引用和稳定 reason code；`replayHardnessMissionAudit` 可以在不重放 arguments、credentials 或 provider error text 的情况下重建一次调用。
+When the canonical system-prompt service is mounted, this package installs the `hardness:operating-protocol` section. It gives every model the same lifecycle vocabulary and requires resolution, approval, verification, presentation, and evidence before a task is described as complete.
+
+Tool projections may subscribe to `tools/change`; this keeps dynamically connected tools, including MCP tools, represented in HARDNESS while registrations are reversible. The internal `hardness_run` tool is excluded from that projection to prevent recursive routing.
+
+Each live mission appends a secret-free `hardness/mission` trace to the calling session. The trace records terminal protocol states, capability identity, artifact/evidence references, and stable reason codes; `replayHardnessMissionAudit` reconstructs one call without replaying arguments, credentials, or provider error text.
+
+Inspect the need, resolve a verified capability, plan the operation, obtain approval, execute through the governed runtime, verify the artifact, present it, and record evidence before claiming completion.
+```
 
 #### Token effect
 

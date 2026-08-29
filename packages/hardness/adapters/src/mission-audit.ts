@@ -35,7 +35,10 @@ export interface HardnessMissionAuditWriter {
   record(entry: HardnessMissionAuditEntry): void
 }
 
-/** Create a session-backed HARDNESS audit writer. */
+/** Create a session-backed HARDNESS audit writer.
+ * @param session - live session that owns the mission log.
+ * @returns writer that appends secret-free mission rows to the session.
+ */
 export function createHardnessMissionAudit(session: Session): HardnessMissionAuditWriter {
   return {
     record(entry) {
@@ -44,7 +47,11 @@ export function createHardnessMissionAudit(session: Session): HardnessMissionAud
   }
 }
 
-/** Replay all audit rows belonging to one model tool call in log order. */
+/** Replay all audit rows belonging to one model tool call in log order.
+ * @param events - session events to scan.
+ * @param callId - model tool call whose audit rows are requested.
+ * @returns matching audit rows in append order.
+ */
 export function replayHardnessMissionAudit(
   events: readonly SessionEvent[],
   callId: CallId,
