@@ -11,7 +11,7 @@ import {
 const HIGH = ReasoningEffortId('high')
 const OFF = ReasoningEffortId('off')
 
-/** Keyless headless-agent adapter: one real native shell call followed by a final answer. */
+/** Keyless headless-agent adapter: deterministic tool calls followed by a final answer. */
 class CliMockAdapter extends LlmAdapter {
   override async resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return {
@@ -37,6 +37,17 @@ class CliMockAdapter extends LlmAdapter {
       .flatMap(message => message.content)
       .find(block => block.type === 'tool-result')
     if (toolResult === undefined) {
+      if (process.env.DSH_CLI_MOCK_CONNECTOR_INVENTORY === '1') {
+        const inventoryTool = options.tools?.find(tool => tool.name === 'connector_list')
+        if (inventoryTool === undefined) throw new Error('connector_list was not mounted in the assembled profile')
+        const args = '{}'
+        yield { type: 'block-start', index: 0, blockType: 'tool-call' }
+        yield { type: 'tool-call-delta', index: 0, id: CallId('cli-connector-inventory-call'), name: inventoryTool.name, argumentsDelta: args }
+        yield { type: 'block-end', index: 0, block: { type: 'tool-call', id: CallId('cli-connector-inventory-call'), name: inventoryTool.name, arguments: args } }
+        yield { type: 'usage', usage: { inputTokens: 11, outputTokens: 3, cacheReadTokens: 2 } }
+        yield { type: 'finish', reason: { kind: 'tool-calls' } }
+        return
+      }
       const shellTool = options.tools?.some(tool => tool.name === 'pwsh') === true ? 'pwsh' : 'bash'
       const args = JSON.stringify({
         command: 'node -e "process.stdout.write(\'CLI_TOOL_ROUND_TRIP\')"',
@@ -54,7 +65,9 @@ class CliMockAdapter extends LlmAdapter {
       .filter(block => block.type === 'text')
       .map(block => block.text)
       .join('')
-    const reply = `CLI tool round trip complete: ${toolText.trim()}`
+    const reply = process.env.DSH_CLI_MOCK_CONNECTOR_INVENTORY === '1'
+      ? `CONNECTOR_INVENTORY_OK:${toolText.trim()}`
+      : `CLI tool round trip complete: ${toolText.trim()}`
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'text-delta', index: 0, text: reply }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: reply } }

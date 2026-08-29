@@ -19,6 +19,9 @@
       "path": "../../llm/llm"
     },
     {
+      "path": "../mcp-registry"
+    },
+    {
       "path": "../../core/tools"
     },
     {

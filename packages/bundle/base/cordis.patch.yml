@@ -479,6 +479,11 @@
 
     # ── rows every mode mounts, whose values each overlay may state ──────────────
 
+    # Secret-free lifecycle state for MCP servers. MCP client overlays publish their
+    # current connection and public-tool generation through this shared registry.
+    - id: mcp-connector-registry
+      name: '@deepseek-ai/dsh-mcp-connector-registry'
+
     # The tool registry. Presentation mode is a deployment choice; omitting it here
     # keeps the schema default (native).
     - id: tools

@@ -28,7 +28,11 @@ Each live mission appends a secret-free `hardness/mission` trace to the calling 
 Inspect the need, resolve a verified capability, plan the operation, obtain approval, execute through the governed runtime, verify the artifact, present it, and record evidence before claiming completion.
 ```
 
-The model also receives the read-only `connector_list` tool when the authorization seam is mounted. It reports registered authorization flows, whether provider telemetry confirms a connection, and sanitized callable service metadata. It never begins authorization, grants permission, or exposes account credentials; a missing or failed telemetry read is reported as `not-connected` or `unknown`.
+##### Connector inventory
+
+```markdown
+The model also receives the read-only connector_list tool when the authorization or MCP connector seam is mounted. Authorization rows report registered flows, provider telemetry, and sanitized callable service metadata. MCP rows report server identity, transport, lifecycle status, stable reason code, and public tool names. The tool never begins authorization, grants permission, invokes a connection, or exposes credentials or transport configuration.
+```
 
 #### Token effect
 

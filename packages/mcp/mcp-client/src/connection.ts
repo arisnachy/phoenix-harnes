@@ -23,6 +23,7 @@ import { createTransport } from './transport.ts'
 import { syncTools } from './tools.ts'
 import type { ToolBridgeOptions, ToolDisposers } from './tools.ts'
 import type { Config } from './index.ts'
+import type { McpConnectorReasonCode, McpConnectorRegistration, McpConnectorStatus } from '@deepseek-ai/dsh-mcp-connector-registry'
 
 /** Automatic reconnect policy for one MCP server connection. */
 export interface ReconnectConfig {
@@ -51,6 +52,27 @@ const GENERATION_CLOSE_TIMEOUT_MS = 5_000
 
 /** Fully resolved reconnect policy captured at plugin load. */
 export type ResolvedReconnectPolicy = Readonly<Required<ReconnectConfig>>
+
+/** Model-safe lifecycle sink used by the optional MCP connector registry. */
+export interface ConnectionLifecycle {
+  /** Publish a closed lifecycle state and stable reason code. */
+  setStatus(status: McpConnectorStatus, reasonCode?: McpConnectorReasonCode): void
+  /** Publish the current public tool names. */
+  setTools(toolNames: readonly string[]): void
+}
+
+function httpStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null) return undefined
+  const status = (error as { status?: unknown }).status
+  return typeof status === 'number' ? status : undefined
+}
+
+function failureStatus(config: Config, error: unknown): { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode } {
+  if (config.transport === 'streamable-http' && (httpStatus(error) === 401 || httpStatus(error) === 403)) {
+    return { status: 'auth-required', reasonCode: 'authorization-required' }
+  }
+  return { status: 'failed', reasonCode: 'connection-failed' }
+}
 
 /**
  * The one explicit resolve step from raw reconnect config to the policy the
@@ -118,9 +140,15 @@ export interface ConnectionHandle {
  * @param ctx - Cordis context providing the `tools` registry and logger.
  * @param config - Resolved plugin config selecting the transport and server identity.
  * @param policy - Resolved reconnect policy from {@link resolveReconnectPolicy}.
+ * @param lifecycle - Optional model-safe state publisher for the connector registry.
  * @returns Handle with a `ready` promise for startup-await and a `dispose` for teardown.
  */
-export function startConnection(ctx: Context, config: Config, policy: ResolvedReconnectPolicy): ConnectionHandle {
+export function startConnection(
+  ctx: Context,
+  config: Config,
+  policy: ResolvedReconnectPolicy,
+  lifecycle?: ConnectionLifecycle | McpConnectorRegistration,
+): ConnectionHandle {
   const label = `mcp-client(${config.serverName})`
   const opts: ToolBridgeOptions = {
     registrationFailure: 'contain',
@@ -148,6 +176,9 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   let connectedAt: number | undefined
   /** The real error from the first connection attempt, for startup-await diagnostics. */
   let firstAttemptError: unknown
+  const publishStatus = lifecycle?.setStatus.bind(lifecycle)
+  const publishTools = lifecycle?.setTools.bind(lifecycle)
+  publishStatus?.('starting')
 
   /** A generation may act only while it is the current one on a live plugin. */
   const isCurrent = (generation: Client): boolean => !disposed && client === generation
@@ -170,8 +201,11 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   }
 
   /** One disconnect decision per generation: the isCurrent guard makes racing close/error signals idempotent. */
-  function generationDown(generation: Client): void {
+  function generationDown(generation: Client, status?: { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode }): void {
     if (!isCurrent(generation)) return
+    if (status !== undefined) publishStatus?.(status.status, status.reasonCode)
+    else if (connectedAt !== undefined) publishStatus?.('disconnected', 'connection-lost')
+    else publishStatus?.('failed', 'connection-failed')
     client = undefined
     clientClosed = undefined
     scheduleReconnect()
@@ -209,7 +243,9 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       syncChain = syncChain.then(() => {
         for (const dispose of disposers.values()) dispose()
         disposers = new Map()
+        publishTools?.([])
       })
+      publishStatus?.('failed', 'retry-exhausted')
       ctx.logger.error(`${label}: giving up after ${policy.maxAttempts} consecutive failed reconnect attempts — tools unregistered; reload the plugin or restart the Host to reconnect`)
       return
     }
@@ -218,6 +254,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     ctx.logger.warn(`${label}: ${action} in ${delayMs}ms (attempt ${failedAttempts}/${policy.maxAttempts})`)
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined
+      publishStatus?.('starting')
       settling = connectGeneration(false)
     }, delayMs)
     // An armed reconnect timer must never hold the process open on its own.
@@ -272,7 +309,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       await generation.connect(createTransport(config))
       if (hasClosed()) {
         attemptSettled = true
-        generationDown(generation)
+        generationDown(generation, { status: 'failed', reasonCode: 'connection-failed' })
         return
       }
       await enqueueSync(generation, startup ? startupOpts : opts)
@@ -280,7 +317,11 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       if (firstAttemptError === undefined) firstAttemptError = error
       // Disposal clears current ownership before it closes the generation, so
       // only a live supervisor reports an attempt failure.
-      if (isCurrent(generation)) ctx.logger.warn(`${label}: connection attempt failed: ${String(error)}`)
+      const status = failureStatus(config, error)
+      if (isCurrent(generation)) {
+        publishStatus?.(status.status, status.reasonCode)
+        ctx.logger.warn(`${label}: connection attempt failed: ${String(error)}`)
+      }
       try { await generation.close() } catch { /* transport already gone */ }
       const quiesced = hasClosed() || await waitForClose(closed.promise)
       attemptSettled = true
@@ -291,16 +332,18 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         ctx.logger.error(`${label}: failed generation did not close within ${GENERATION_CLOSE_TIMEOUT_MS}ms — reconnect stopped to avoid overlapping server processes; reload the plugin or restart the Host to retry`)
         return
       }
-      generationDown(generation)
+      generationDown(generation, status)
       return
     }
     attemptSettled = true
     if (hasClosed()) {
-      generationDown(generation)
+      generationDown(generation, { status: 'failed', reasonCode: 'connection-failed' })
       return
     }
     if (!isCurrent(generation)) return
     connectedAt = Date.now()
+    publishTools?.([...disposers.keys()])
+    publishStatus?.('ready')
     if (failedAttempts > 0) ctx.logger.info(`${label}: reconnected and re-synced tools (attempt ${failedAttempts}/${policy.maxAttempts})`)
   }
 

@@ -6,4 +6,5 @@
 
 | 包 | 职责 |
 |---|---|
+| [`mcp-registry/`](mcp-registry/README.zh.md) | MCP server 和公开 tools 的无 secret 生命周期 registry |
 | [`mcp-client/`](mcp-client/README.zh.md) | MCP 客户端桥接，将外部服务器工具注册到 `ctx.tools` |

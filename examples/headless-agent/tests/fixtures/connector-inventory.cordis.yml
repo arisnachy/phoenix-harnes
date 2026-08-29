@@ -1,0 +1,26 @@
+- id: base
+  name: '@deepseek-ai/cordis-plugin-include'
+  config:
+    path: ./cli.cordis.yml
+    patches:
+      - insert:
+          - id: connector-inventory-fixture
+            name: './connector-inventory.ts'
+          - id: mcp-connector-registry
+            name: '@deepseek-ai/dsh-mcp-connector-registry'
+          - id: tools
+            name: '@deepseek-ai/dsh-tools'
+          - id: authorization
+            name: '@deepseek-ai/dsh-authorization'
+          - id: hardness
+            name: '@deepseek-ai/dsh-hardness'
+          - id: skill
+            name: '@deepseek-ai/dsh-skill'
+          - id: system-prompt
+            name: '@deepseek-ai/dsh-system-prompt'
+          - id: approval
+            name: '@deepseek-ai/dsh-user-approval'
+            config:
+              policy: never
+          - id: hardness-adapters
+            name: '@deepseek-ai/dsh-hardness-adapters'

@@ -6,6 +6,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import McpConnectorRegistry from '@deepseek-ai/dsh-mcp-connector-registry/src/index.ts'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
 
 // ---- Mock MCP SDK ----
@@ -62,6 +63,7 @@ async function mountRegistry(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(McpConnectorRegistry)
   return ctx
 }
 
@@ -179,6 +181,12 @@ describe('apply (plugin lifecycle)', () => {
     expect(mockSetNotificationHandler).toHaveBeenCalled()
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
     expect(ctx.tools.get('remote')).toBeUndefined()
+    expect(ctx.mcpConnectors.list()).toEqual([{
+      serverName: 'srv',
+      transport: 'stdio',
+      status: 'ready',
+      toolNames: ['mcp__srv__remote'],
+    }])
   })
 
   it('keeps the Cordis plugin loading until initial discovery publishes its tools', async () => {
@@ -399,5 +407,29 @@ describe('apply (plugin lifecycle)', () => {
 
     expect(mockConnect).toHaveBeenCalled()
     expect(ctx.tools.get('mcp__web__remote')).toBeDefined()
+  })
+
+  it('publishes auth-required only for an explicit HTTP 401 or 403', async () => {
+    const httpConfig: Config = {
+      transport: 'streamable-http',
+      serverName: 'web-auth',
+      url: 'http://localhost:3000/mcp',
+      headers: {},
+      toolCallTimeoutMs: 30_000,
+      failOnStartupError: false,
+      reconnect: { enabled: false },
+    }
+    mockConnect.mockRejectedValue({ status: 401, message: 'private provider detail' })
+
+    await apply(ctx, httpConfig)
+
+    expect(ctx.mcpConnectors.list()).toEqual([{
+      serverName: 'web-auth',
+      transport: 'streamable-http',
+      status: 'auth-required',
+      reasonCode: 'authorization-required',
+      toolNames: [],
+    }])
+    expect(JSON.stringify(ctx.mcpConnectors.list())).not.toContain('private provider detail')
   })
 })

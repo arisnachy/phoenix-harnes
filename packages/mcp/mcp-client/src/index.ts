@@ -15,6 +15,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import type { McpConnectorRegistry } from '@deepseek-ai/dsh-mcp-connector-registry'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
@@ -160,13 +161,25 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     return () => void names.delete(config.serverName)
   }, 'mcp-client.serverName')
 
+  // The registry is a model-facing status projection, not a required part of
+  // the transport seam. Keeping the lookup optional preserves minimal test and
+  // embedded compositions while the base profile mounts the shared service.
+  const mcpConnectors = ctx.get('mcpConnectors') as McpConnectorRegistry | undefined
+  const registration = mcpConnectors?.register({
+    serverName: config.serverName,
+    transport: config.transport,
+  })
+
   // The supervisor owns the client/transport generations, the reconnect
   // loop, and the live tool registrations; disposal stops reconnection,
   // quiesces in-flight work, and unregisters the current generation.
-  const connection = startConnection(ctx, config, reconnect)
+  const connection = startConnection(ctx, config, reconnect, registration)
 
   ctx.effect(() => {
-    return () => connection.dispose()
+    return () => {
+      void connection.dispose()
+      registration?.dispose()
+    }
   }, 'mcp-client.connection')
 
   // Block plugin activation on the initial connection + tool discovery so

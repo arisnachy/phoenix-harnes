@@ -8,6 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import McpConnectorRegistry from '@deepseek-ai/dsh-mcp-connector-registry/src/index.ts'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
 
@@ -69,6 +70,7 @@ async function mountRegistry(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(McpConnectorRegistry)
   return ctx
 }
 
@@ -142,16 +144,19 @@ describe('reconnect supervisor', () => {
     await apply(ctx, stdioConfig({ initialDelayMs: 5, maxDelayMs: 40, maxAttempts: 5 }))
     await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__remote')).toBeDefined() })
     expect(instances).toHaveLength(1)
+    expect(ctx.mcpConnectors.list()[0]).toMatchObject({ status: 'ready', toolNames: ['mcp__srv__remote'] })
 
     // The recovered server advertises a different list: the swap must neither
     // duplicate nor leak the pre-crash generation.
     mockListTools.mockResolvedValue(listing('revived'))
     instances[0]!.onclose?.()
+    expect(ctx.mcpConnectors.list()[0]).toMatchObject({ status: 'disconnected', reasonCode: 'connection-lost' })
 
     await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__revived')).toBeDefined() })
     expect(ctx.tools.get('mcp__srv__remote')).toBeUndefined()
     expect(instances).toHaveLength(2)
     expect(mockConnect).toHaveBeenCalledTimes(2)
+    expect(ctx.mcpConnectors.list()[0]).toMatchObject({ status: 'ready', toolNames: ['mcp__srv__revived'] })
 
     // Post-recovery calls execute through the re-registered definition.
     const result = await ctx.tools.execute({
@@ -188,6 +193,7 @@ describe('reconnect supervisor', () => {
     })
     // Stale tools do not leak past final failure.
     expect(ctx.tools.get('mcp__srv__remote')).toBeUndefined()
+    expect(ctx.mcpConnectors.list()[0]).toMatchObject({ status: 'failed', reasonCode: 'retry-exhausted', toolNames: [] })
     // Initial connect + exactly maxAttempts reconnect attempts.
     expect(mockConnect).toHaveBeenCalledTimes(3)
     expect(warns.some(line => line.includes('connection attempt failed: Error: server gone'))).toBe(true)
@@ -314,6 +320,7 @@ describe('reconnect supervisor', () => {
 
     await fiber.dispose()
     expect(ctx.tools.get('mcp__srv__remote')).toBeUndefined()
+    expect(ctx.mcpConnectors.list()).toEqual([])
 
     // The disposer's client.close() fires onclose in the real SDK.
     instances[0]!.onclose?.()

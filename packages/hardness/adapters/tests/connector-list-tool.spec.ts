@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthorizationEntry, AuthorizationTelemetry } from '@deepseek-ai/dsh-authorization'
+import type { McpConnectorEntry } from '@deepseek-ai/dsh-mcp-connector-registry'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import { createConnectorListTool } from '../src/connector-list-tool.ts'
 
@@ -78,6 +79,83 @@ describe('connector_list tool', () => {
 
   it('returns an empty inventory when no authorization flows are registered', async () => {
     const tool = createConnectorListTool(service({ list: () => [] }))
+    await expect(tool.execute({}, {} as never)).resolves.toEqual({ kind: 'connector_list', connectors: [] })
+  })
+
+  it('merges ready and unavailable MCP state without exposing configuration', async () => {
+    const entries: readonly McpConnectorEntry[] = [
+      {
+        serverName: 'github',
+        transport: 'streamable-http',
+        status: 'ready',
+        toolNames: ['issues'],
+      },
+      {
+        serverName: 'local',
+        transport: 'stdio',
+        status: 'disconnected',
+        reasonCode: 'connection-lost',
+        toolNames: ['files'],
+      },
+      {
+        serverName: 'private',
+        transport: 'streamable-http',
+        status: 'auth-required',
+        reasonCode: 'authorization-required',
+        toolNames: [],
+      },
+    ]
+    const tool = createConnectorListTool(undefined, { list: () => entries })
+    const result = await tool.execute({}, {} as never)
+
+    expect(result).toEqual({
+      kind: 'connector_list',
+      connectors: [
+        {
+          kind: 'mcp',
+          id: 'mcp:github',
+          label: 'MCP github',
+          methods: [],
+          status: 'ready',
+          in_flight: false,
+          services: [],
+          transport: 'streamable-http',
+          tools: ['issues'],
+        },
+        {
+          kind: 'mcp',
+          id: 'mcp:local',
+          label: 'MCP local',
+          methods: [],
+          status: 'disconnected',
+          in_flight: false,
+          services: [],
+          transport: 'stdio',
+          tools: ['files'],
+          reason_code: 'connection-lost',
+        },
+        {
+          kind: 'mcp',
+          id: 'mcp:private',
+          label: 'MCP private',
+          methods: [],
+          status: 'auth-required',
+          in_flight: false,
+          services: [],
+          transport: 'streamable-http',
+          tools: [],
+          reason_code: 'authorization-required',
+        },
+      ],
+    })
+    const rendered = JSON.stringify(result)
+    expect(rendered).not.toContain('https://')
+    expect(rendered).not.toContain('Authorization')
+    expect(rendered).not.toContain('token')
+  })
+
+  it('registers the inventory with only the MCP registry', async () => {
+    const tool = createConnectorListTool(undefined, { list: () => [] })
     await expect(tool.execute({}, {} as never)).resolves.toEqual({ kind: 'connector_list', connectors: [] })
   })
 })

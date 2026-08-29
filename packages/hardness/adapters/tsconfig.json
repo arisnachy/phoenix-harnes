@@ -5,6 +5,7 @@
   "references": [
     { "path": "../hardness" },
     { "path": "../../credentials/authorization" },
+    { "path": "../../mcp/mcp-registry" },
     { "path": "../../core/tools" },
     { "path": "../../skill/skill" },
     { "path": "../../runtime-diagnostics/invariants" },

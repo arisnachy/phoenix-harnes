@@ -6,4 +6,5 @@ Packages bridging the harness to the MCP ecosystem.
 
 | Package | Role |
 |---|---|
+| [`mcp-registry/`](mcp-registry/README.md) | Secret-free lifecycle registry for MCP servers and public tools |
 | [`mcp-client/`](mcp-client/README.md) | MCP client bridge that registers external server tools on `ctx.tools` |

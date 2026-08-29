@@ -9,6 +9,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
 const binScript = fileURLToPath(new URL('./fixtures/headless-driver.ts', import.meta.url))
 const configPath = fileURLToPath(new URL('./fixtures/cli.cordis.yml', import.meta.url))
+const connectorInventoryConfigPath = fileURLToPath(new URL('./fixtures/connector-inventory.cordis.yml', import.meta.url))
 const tsconfigPath = fileURLToPath(new URL('../../../tsconfig.json', import.meta.url))
 const decompress = promisify(zstdDecompress)
 
@@ -45,5 +46,39 @@ describe('headless-agent keyless smoke', () => {
     })
     expect(String(result?.['output'])).toContain('CLI_TOOL_ROUND_TRIP')
     expect(persistedHeader).toMatchObject({ type: 'session' })
+  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
+
+  it('snapshots the assembled model-visible MCP connector inventory', async () => {
+    const { stdout, stderr } = await runLoaderSmoke({
+      label: 'headless-agent connector inventory',
+      tempDirPrefix: 'headless-agent-connector-inventory-',
+      binScript,
+      libBinScript: binScript,
+      configPath: connectorInventoryConfigPath,
+      binArgs: [connectorInventoryConfigPath, 'inspect the mounted connectors'],
+      tsconfigPath,
+      env: {
+        DSH_CLI_MOCK_CONNECTOR_INVENTORY: '1',
+        DSH_TELEMETRY_DISABLED: '1',
+      },
+    })
+    const lines = stdout.trimEnd().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
+    const events = lines.slice(0, -1).map(line => line['event'] as SessionEvent)
+    const result = lines.at(-1)
+    const projection = {
+      connectorCalls: events
+        .filter(event => event.type === 'tool/call')
+        .map(event => event.data.name),
+      output: result?.['output'],
+    }
+    expect(stderr).toBe('')
+    expect(projection).toMatchInlineSnapshot(`
+      {
+        "connectorCalls": [
+          "connector_list",
+        ],
+        "output": "CONNECTOR_INVENTORY_OK:{"kind":"connector_list","connectors":[{"kind":"mcp","id":"mcp:fixture","label":"MCP fixture","methods":[],"status":"ready","in_flight":false,"services":[],"transport":"stdio","tools":["search"]}]}",
+      }
+    `)
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 })

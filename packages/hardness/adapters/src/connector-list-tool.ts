@@ -3,6 +3,7 @@ import type {
   AuthorizationService,
   AuthorizationTelemetry,
 } from '@deepseek-ai/dsh-authorization'
+import type { McpConnectorEntry, McpConnectorRegistry } from '@deepseek-ai/dsh-mcp-connector-registry'
 import {
   defineTool,
   type JsonValue,
@@ -10,6 +11,30 @@ import {
 } from '@deepseek-ai/dsh-tools'
 
 type ConnectorListService = Pick<AuthorizationService, 'list' | 'inspect'>
+type McpConnectorListService = Pick<McpConnectorRegistry, 'list'>
+type AuthorizationStatus = 'connected' | 'not-connected' | 'unknown'
+type ConnectorStatus = AuthorizationStatus | McpConnectorEntry['status']
+type AuthorizationConnector = {
+  id: string
+  label: string
+  methods: { id: string; label: string }[]
+  status: AuthorizationStatus
+  in_flight: boolean
+  disconnectable?: true
+  services: JsonValue[]
+}
+type McpConnector = {
+  kind: 'mcp'
+  id: string
+  label: string
+  methods: []
+  status: McpConnectorEntry['status']
+  in_flight: false
+  services: []
+  transport: McpConnectorEntry['transport']
+  tools: string[]
+  reason_code?: NonNullable<McpConnectorEntry['reasonCode']>
+}
 
 type ConnectorListResult = {
   kind: 'connector_list'
@@ -17,14 +42,18 @@ type ConnectorListResult = {
     id: string
     label: string
     methods: { id: string; label: string }[]
-    status: 'connected' | 'not-connected' | 'unknown'
+    status: ConnectorStatus
     in_flight: boolean
     disconnectable?: true
     services: JsonValue[]
+    kind?: 'mcp'
+    transport?: McpConnectorEntry['transport']
+    tools?: string[]
+    reason_code?: NonNullable<McpConnectorEntry['reasonCode']>
   }[]
 }
 
-function connectorStatus(telemetry: AuthorizationTelemetry | undefined, inspectable: boolean): ConnectorListResult['connectors'][number]['status'] {
+function connectorStatus(telemetry: AuthorizationTelemetry | undefined, inspectable: boolean): AuthorizationStatus {
   if (telemetry !== undefined) return 'connected'
   return inspectable ? 'not-connected' : 'unknown'
 }
@@ -46,7 +75,7 @@ function serviceViews(telemetry: AuthorizationTelemetry | undefined): JsonValue[
 async function projectEntry(
   authorization: ConnectorListService,
   entry: AuthorizationEntry,
-): Promise<ConnectorListResult['connectors'][number]> {
+): Promise<AuthorizationConnector> {
   let telemetry: AuthorizationTelemetry | undefined
   let inspectable = false
   try {
@@ -67,12 +96,31 @@ async function projectEntry(
   }
 }
 
+function projectMcpEntry(entry: McpConnectorEntry): McpConnector {
+  return {
+    kind: 'mcp',
+    id: `mcp:${entry.serverName}`,
+    label: `MCP ${entry.serverName}`,
+    methods: [],
+    status: entry.status,
+    in_flight: false,
+    services: [],
+    transport: entry.transport,
+    tools: [...entry.toolNames],
+    ...(entry.reasonCode === undefined ? {} : { reason_code: entry.reasonCode }),
+  }
+}
+
 /**
  * Create the model-facing, read-only connector inventory tool.
- * @param authorization - authorization service owning provider flows and safe telemetry.
+ * @param authorization - optional authorization service owning provider flows and safe telemetry.
+ * @param mcpConnectors - optional registry owning secret-free MCP lifecycle state.
  * @returns Tool definition that reports connector state without credential values.
  */
-export function createConnectorListTool(authorization: ConnectorListService): ToolDefinition {
+export function createConnectorListTool(
+  authorization?: ConnectorListService,
+  mcpConnectors?: McpConnectorListService,
+): ToolDefinition {
   return defineTool({
     name: 'connector_list',
     description: 'List authorized connectors and their callable services without changing access.',
@@ -90,6 +138,7 @@ export function createConnectorListTool(authorization: ConnectorListService): To
               type: 'object',
               additionalProperties: false,
               properties: {
+                kind: { type: 'string', const: 'mcp' },
                 id: { type: 'string', required: true },
                 label: { type: 'string', required: true },
                 methods: {
@@ -104,10 +153,20 @@ export function createConnectorListTool(authorization: ConnectorListService): To
                     },
                   },
                 },
-                status: { type: 'string', enum: ['connected', 'not-connected', 'unknown'], required: true },
+                status: {
+                  type: 'string',
+                  enum: ['connected', 'not-connected', 'unknown', 'starting', 'ready', 'disconnected', 'failed', 'auth-required'],
+                  required: true,
+                },
                 in_flight: { type: 'boolean', required: true },
                 disconnectable: { type: 'boolean' },
                 services: { type: 'array', items: { type: 'json' }, required: true },
+                transport: { type: 'string', enum: ['stdio', 'streamable-http'] },
+                tools: { type: 'array', items: { type: 'string' } },
+                reason_code: {
+                  type: 'string',
+                  enum: ['connection-failed', 'connection-lost', 'authorization-required', 'retry-exhausted'],
+                },
               },
             },
           },
@@ -116,7 +175,11 @@ export function createConnectorListTool(authorization: ConnectorListService): To
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute() {
-      const entries = await Promise.all(authorization.list().map(entry => projectEntry(authorization, entry)))
+      const authorizationEntries = authorization === undefined
+        ? []
+        : await Promise.all(authorization.list().map(entry => projectEntry(authorization, entry)))
+      const mcpEntries = mcpConnectors?.list().map(projectMcpEntry) ?? []
+      const entries = [...authorizationEntries, ...mcpEntries]
       return { kind: 'connector_list', connectors: entries } satisfies ConnectorListResult
     },
     presentCall() {

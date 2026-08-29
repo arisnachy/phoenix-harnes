@@ -13,6 +13,7 @@ import { installHardnessProtocol, type HardnessPromptRegistrar } from './protoco
 import { createHardnessTool } from './hardness-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import type { AuthorizationService } from '@deepseek-ai/dsh-authorization'
+import type { McpConnectorRegistry } from '@deepseek-ai/dsh-mcp-connector-registry'
 
 export { indexTools } from './tool-adapter.ts'
 export type { ToolAtlasIndexOptions, ToolChangeSource } from './tool-adapter.ts'
@@ -65,11 +66,12 @@ function requiredServices(ctx: Context) {
   const approval = ctx.get('approval')
   const systemPrompt = ctx.get('systemPrompt') as HardnessPromptRegistrar | undefined
   const authorization = ctx.get('authorization') as AuthorizationService | undefined
+  const mcpConnectors = ctx.get('mcpConnectors') as McpConnectorRegistry | undefined
   if (hardness === undefined || tools === undefined || skills === undefined
     || agents === undefined || approval === undefined || systemPrompt === undefined) {
     throw new Error('hardness-adapters requires hardness, tools, skills, agents, approval, and systemPrompt services')
   }
-  return { hardness, tools, skills, agents, approval, systemPrompt, authorization }
+  return { hardness, tools, skills, agents, approval, systemPrompt, authorization, mcpConnectors }
 }
 
 /**
@@ -78,14 +80,16 @@ function requiredServices(ctx: Context) {
  * @returns Idempotent disposer for every projection installed by this adapter.
  */
 export async function apply(ctx: Context): Promise<() => void> {
-  const { hardness, tools, skills, agents, approval, systemPrompt, authorization } = requiredServices(ctx)
+  const { hardness, tools, skills, agents, approval, systemPrompt, authorization, mcpConnectors } = requiredServices(ctx)
   const disposers: Disposer[] = []
   try {
     disposers.push(installHardnessProtocol(systemPrompt))
     disposers.push(indexOpenClawExtensions(hardness))
     disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run'] }))
     disposers.push(await indexSkills(skills, hardness))
-    if (authorization !== undefined) disposers.push(ctx.tools.register(createConnectorListTool(authorization)))
+    if (authorization !== undefined || mcpConnectors !== undefined) {
+      disposers.push(ctx.tools.register(createConnectorListTool(authorization, mcpConnectors)))
+    }
     const acquisition = createHardnessAcquisition(hardness)
     const missionRunner = createHardnessMissionRunner({ hardness, tools, acquisition, approval })
     disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))

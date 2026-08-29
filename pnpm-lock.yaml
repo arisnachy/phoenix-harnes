@@ -450,6 +450,9 @@ importers:
       '@deepseek-ai/dsh-attachment-local':
         specifier: workspace:*
         version: link:../packages/attachment/attachment-local
+      '@deepseek-ai/dsh-authorization':
+        specifier: workspace:*
+        version: link:../packages/credentials/authorization
       '@deepseek-ai/dsh-bash-local':
         specifier: workspace:*
         version: link:../packages/shell/bash-local
@@ -510,6 +513,12 @@ importers:
       '@deepseek-ai/dsh-goal-round-driver':
         specifier: workspace:*
         version: link:../packages/goal/goal-round-driver
+      '@deepseek-ai/dsh-hardness':
+        specifier: workspace:*
+        version: link:../packages/hardness/hardness
+      '@deepseek-ai/dsh-hardness-adapters':
+        specifier: workspace:*
+        version: link:../packages/hardness/adapters
       '@deepseek-ai/dsh-hooks-claude-code':
         specifier: workspace:*
         version: link:../packages/hooks/hooks-claude-code
@@ -546,6 +555,9 @@ importers:
       '@deepseek-ai/dsh-mcp-client':
         specifier: workspace:*
         version: link:../packages/mcp/mcp-client
+      '@deepseek-ai/dsh-mcp-connector-registry':
+        specifier: workspace:*
+        version: link:../packages/mcp/mcp-registry
       '@deepseek-ai/dsh-permission-presets':
         specifier: workspace:*
         version: link:../packages/interaction/permission-presets
@@ -4978,6 +4990,9 @@ importers:
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-mcp-connector-registry':
+        specifier: workspace:^
+        version: link:../../mcp/mcp-registry
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -5969,6 +5984,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-mcp-connector-registry':
+        specifier: workspace:^
+        version: link:../mcp-registry
       '@deepseek-ai/dsh-subprocess':
         specifier: workspace:^
         version: link:../../subprocess/subprocess
@@ -5984,6 +6002,12 @@ importers:
       '@modelcontextprotocol/server-filesystem':
         specifier: ^2026.7.4
         version: 2026.7.10(zod@4.4.3)
+
+  packages/mcp/mcp-registry:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
 
   packages/plan/plan-mode:
     dependencies:

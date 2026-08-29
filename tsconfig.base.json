@@ -41,6 +41,7 @@
       "@deepseek-ai/dsh-invariants": ["./packages/runtime-diagnostics/invariants/src/index.ts"],
       "@deepseek-ai/dsh-hardness": ["./packages/hardness/hardness/src"],
       "@deepseek-ai/dsh-hardness-adapters": ["./packages/hardness/adapters/src"],
+      "@deepseek-ai/dsh-mcp-connector-registry": ["./packages/mcp/mcp-registry/src"],
       "@deepseek-ai/dsh-tool-call-timeout-policy": ["./packages/guard/timeout-policy/src"],
       "@deepseek-ai/dsh-tool-call-timeout-policy/invariant": ["./packages/guard/timeout-policy/src/invariant.ts"],
       "@deepseek-ai/dsh-typert-registry": ["./packages/typert/registry/src/index.ts"],
