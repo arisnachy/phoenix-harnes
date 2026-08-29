@@ -7,7 +7,7 @@ import { isDeepStrictEqual } from 'node:util'
 import { FiberState } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
-import type { GoalMessageSource, GoalRef, GoalView } from '@phoenix-ai/dsh-goal'
+import type { GoalJudgeAuditEntry, GoalMessageSource, GoalRef, GoalView } from '@phoenix-ai/dsh-goal'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, UserMessage } from '@phoenix-ai/dsh-session'
@@ -99,6 +99,15 @@ export function apply(ctx: Context): void {
     return ctx.goals.get(state.agent)
   }
 
+  /** Read the latest non-passing judge result for this goal from durable history. */
+  function latestJudge(state: DriverState, goal: GoalView): GoalJudgeAuditEntry | undefined {
+    return state.agent.session.events.findLast((event): event is SessionEvent<'goal/judge'> =>
+      event.type === 'goal/judge'
+      && event.data.goalId === goal.id
+      && event.data.verdict !== 'pass',
+    )?.data
+  }
+
   /** Whether this exact lifecycle is quiescent with no competing prompt. */
   function readyToDrive(state: DriverState): boolean {
     return ctx.fiber.state === FiberState.ACTIVE
@@ -172,7 +181,7 @@ export function apply(ctx: Context): void {
     }
 
     const round = goal.roundsStarted + 1
-    const content = renderGoalRoundPrompt(goal, round)
+    const content = renderGoalRoundPrompt(goal, round, latestJudge(state, goal))
     const message = createUserMessage({
       content,
       source: { kind: 'goal', goalId: goal.id, revision: goal.revision, round },

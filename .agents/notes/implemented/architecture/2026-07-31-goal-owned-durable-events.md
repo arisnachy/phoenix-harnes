@@ -20,6 +20,8 @@ Activation remains process-local. The service associates the synchronously appen
 
 The domain does not automatically project each mutation into model input. Goal tools return current state, and continuation prompts include the objective and round state when work is actually scheduled. Any future always-visible goal context is a separate context plugin that owns its inbox message rather than a persistence side effect.
 
+Independent completion reviews are durable `goal/judge` events owned by this domain. A continuation driver replays the latest non-passing review and includes its bounded findings and required changes in the next repair prompt, so a restart does not discard the judge's work list.
+
 ## Alternatives considered
 
 - **Keep round-zero goal messages as the durable record.** Rejected because it couples domain commits to queue mutation and requires the goal fold to understand claim and admission reconciliation even though queue outcomes cannot roll back domain state.
@@ -28,6 +30,6 @@ The domain does not automatically project each mutation into model input. Goal t
 
 ## Consequences
 
-Goal state is independent of inbox placement and admission. Replay has one mutation path, projections advance directly on `goal/change`, and continuation messages carry only round attribution. The model does not receive a mutation-only `<goal_state>` message; model-visible state appears through goal tools and scheduled continuation prompts. Direct session writers remain trusted and can append malformed changes, which the strict fold and invariant companion reject.
+Goal state is independent of inbox placement and admission. Replay has one mutation path, projections advance directly on `goal/change`, and continuation messages carry round attribution plus any latest non-passing judge feedback. The model does not receive a mutation-only `<goal_state>` message; model-visible state appears through goal tools and scheduled continuation prompts. Direct session writers remain trusted and can append malformed changes, which the strict fold and invariant companion reject.
 
 Focused goal, goal-round-driver, command, TUI, and client-fixture tests pin durable replay, positive-round accounting, inbox independence, projection updates, and restored-session behavior. The keyless process test inspects the persisted `goal/change` event and verifies that creation alone starts no continuation round.

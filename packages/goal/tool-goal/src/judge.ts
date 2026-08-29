@@ -1,7 +1,8 @@
 /** Independent, read-only completion judge for long-running goals. */
 
 import type { Agent } from '@phoenix-ai/dsh-agent'
-import type { CallId, ContentBlock } from '@phoenix-ai/dsh-llm'
+import type { ContentBlock } from '@phoenix-ai/dsh-llm'
+import type { GoalJudgeAuditEntry } from '@phoenix-ai/dsh-goal'
 import type { Session } from '@phoenix-ai/dsh-session'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
@@ -30,24 +31,6 @@ export const GOAL_JUDGE_OUTPUT_SCHEMA: ObjectJsonSchema = {
 const READ_ONLY_TOOLS = ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search'] as const
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 12
-
-/** Durable audit row for one independent completion review. */
-export interface GoalJudgeAuditEntry {
-  readonly callId: CallId
-  readonly goalId: string
-  readonly round: number
-  readonly verdict: GoalJudgeResult['verdict']
-  readonly summary: string
-  readonly findings: readonly string[]
-  readonly requiredChanges: readonly string[]
-}
-
-declare module '@phoenix-ai/dsh-session/types' {
-  interface SessionEventMap {
-    /** One independent completion review; it never changes goal state itself. */
-    'goal/judge': GoalJudgeAuditEntry
-  }
-}
 
 function normalizedText(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value === value.trim() && value.length <= MAX_TEXT

@@ -99,6 +99,25 @@ describe('goal-round-driver prompt invariants', () => {
     }))
   })
 
+  it('accepts a continuation rebuilt with persisted judge feedback', async () => {
+    const { session } = await mount()
+    appendChange(session)
+    const feedback = {
+      callId: 'judge-call' as never,
+      goalId: change.goal.id,
+      round: 0,
+      verdict: 'needs_changes' as const,
+      summary: 'The result needs one more verification pass.',
+      findings: ['The acceptance evidence is incomplete.'],
+      requiredChanges: ['Add the missing verification evidence.'],
+    }
+    session.append('goal/judge', feedback)
+
+    expect(() => {
+      appendRound(session, 2, renderGoalRoundPrompt(view(0), 1, feedback))
+    }).not.toThrow()
+  })
+
   it('rejects a goal round without a reconstructable active goal', async () => {
     const { session } = await mount()
     const source = { kind: 'goal', goalId: change.goal.id, revision: 1, round: 1 } as const

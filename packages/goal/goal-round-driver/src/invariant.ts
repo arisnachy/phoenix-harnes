@@ -2,7 +2,7 @@
 
 import { isDeepStrictEqual } from 'node:util'
 import type { Context } from '@deepseek-ai/cordis'
-import { foldGoal, type FoldedGoal, type GoalMessageSource, type GoalView } from '@phoenix-ai/dsh-goal'
+import { foldGoal, type FoldedGoal, type GoalJudgeAuditEntry, type GoalMessageSource, type GoalView } from '@phoenix-ai/dsh-goal'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
@@ -42,6 +42,15 @@ function goalView(folded: FoldedGoal, source: GoalMessageSource, fail: Invariant
   }
 }
 
+/** Rebuild the latest persisted judge feedback that precedes one round. */
+function latestJudge(prior: readonly SessionEvent[], goalId: GoalMessageSource['goalId']): GoalJudgeAuditEntry | undefined {
+  return prior.findLast((event): event is SessionEvent<'goal/judge'> =>
+    event.type === 'goal/judge'
+    && event.data.goalId === goalId
+    && event.data.verdict !== 'pass',
+  )?.data
+}
+
 /** Validate one package-owned continuation message against its durable prefix. */
 function validateEvent(
   prior: readonly SessionEvent[],
@@ -51,7 +60,8 @@ function validateEvent(
   if (event.type !== 'user/message') return
   const source = event.data.source
   if (source.kind !== 'goal' || source.round <= 0) return
-  const expected = renderGoalRoundPrompt(goalView(foldChecked(prior, fail), source, fail), source.round)
+  const goal = goalView(foldChecked(prior, fail), source, fail)
+  const expected = renderGoalRoundPrompt(goal, source.round, latestJudge(prior, source.goalId))
   if (!isDeepStrictEqual(event.data.content, expected)) {
     fail(`goal round ${source.round} content does not match the package-owned continuation prompt`)
   }

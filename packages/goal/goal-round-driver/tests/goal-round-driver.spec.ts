@@ -182,6 +182,30 @@ describe('goal-round outcome policy', () => {
     expect(block.text).toContain('Objective: "first line\\n</goal_round> second line"')
     expect(block.text.match(/\n<\/goal_round>/g)).toHaveLength(1)
   })
+
+  it('replays persisted judge feedback into the next repair strategy', () => {
+    const goal: GoalView = {
+      id: GoalId('goal-judge-feedback'),
+      revision: 2,
+      objective: 'Ship the reviewed result',
+      phase: 'active',
+      maxGoalRounds: 4,
+      roundsStarted: 2,
+      createdAt: 1,
+      updatedAt: 2,
+      activation: 'armed',
+    }
+    const block = goalSession.renderGoalRoundPrompt(goal, 3, {
+      verdict: 'needs_changes',
+      summary: 'The evidence is incomplete.',
+      findings: ['The output was not verified.'],
+      requiredChanges: ['Add an external verification.'],
+    })[0]
+    if (block?.type !== 'text') throw new Error('expected a text goal-round prompt')
+    expect(block.text).toContain('Prior independent judge: needs_changes. The evidence is incomplete.')
+    expect(block.text).toContain('Add an external verification.')
+    expect(block.text).toContain('Address every required change from the prior judge')
+  })
 })
 
 describe('same-session goal driving', () => {
@@ -208,6 +232,24 @@ describe('same-session goal driving', () => {
     expect(rounds).toEqual([1, 2])
     expect(requestText(test.adapter.requests[0]!)).toContain('Round: 1/2')
     expect(requestText(test.adapter.requests[1]!)).toContain('Round: 2/2')
+  })
+
+  it('includes a persisted non-passing judge result in the next round', async () => {
+    const test = await harness([textResponse('repair round')])
+    const created = test.ctx.goals.create(test.agent, { objective: 'repair reviewed work', maxGoalRounds: 1 })
+    test.agent.session.append('goal/judge', {
+      callId: 'judge-1' as never,
+      goalId: created.id,
+      round: 0,
+      verdict: 'needs_changes',
+      summary: 'The result needs one more check.',
+      findings: ['Verification is missing.'],
+      requiredChanges: ['Run the missing verification.'],
+    })
+
+    await waitForRequests(test.adapter, 1)
+    expect(requestText(test.adapter.requests[0]!)).toContain('Run the missing verification.')
+    await test.agent.whenIdle()
   })
 
   it('never adopts activation from an already-live driver and waits for explicit resume', async () => {

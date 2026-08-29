@@ -47,6 +47,8 @@ Cancellation removes pending inbox work or leaves an agent-wide aborted state. A
 
 Each admitted round is one retained user-role `<goal_round>` block naming the full objective and positive round number. Earlier human messages, goal-state snapshots, assistant output, and tool records remain in the same session history.
 
+When the previous completion judge returned `needs_changes` or `blocked`, the driver reconstructs that result from the durable `goal/judge` event and places its bounded findings and required changes in the next round prompt. This survives process restart; activation still requires the explicit resume authority described above.
+
 #### Token effect
 
 One fixed instruction block plus the objective is added per admitted round. Later requests resend retained rounds until compaction shadows them; no fresh agent or copied conversation prefix is created.

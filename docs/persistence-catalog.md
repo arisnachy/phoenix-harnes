@@ -422,7 +422,7 @@ Source: [`packages/feedback/command-feedback/src/index.ts:62`](../packages/feedb
 'goal/change': GoalChangeMeta
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:66`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:78`](../packages/goal/goal/src/domain.ts)
 
 <a id="goaljudge--log-only"></a>
 
@@ -433,7 +433,7 @@ Source: [`packages/goal/goal/src/domain.ts:66`](../packages/goal/goal/src/domain
 'goal/judge': GoalJudgeAuditEntry
 ```
 
-Source: [`packages/goal/tool-goal/src/judge.ts:48`](../packages/goal/tool-goal/src/judge.ts)
+Source: [`packages/goal/goal/src/domain.ts:80`](../packages/goal/goal/src/domain.ts)
 
 ### `hardness/*`
 

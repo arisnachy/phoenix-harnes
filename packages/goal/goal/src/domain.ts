@@ -8,6 +8,7 @@
  */
 
 import type { Agent } from '@phoenix-ai/dsh-agent'
+import type { CallId } from '@phoenix-ai/dsh-llm'
 import type { GoalId, GoalRef, GoalSnapshot, GoalView } from './types.ts'
 
 /** Goal state-changing verbs recorded in the durable source change. */
@@ -43,6 +44,17 @@ export interface GoalClearChangeMeta {
 /** Durable change union carried by the goal domain's own session event. */
 export type GoalChangeMeta = GoalSnapshotChangeMeta | GoalClearChangeMeta
 
+/** Durable, secret-free result of one independent completion review. */
+export interface GoalJudgeAuditEntry {
+  readonly callId: CallId
+  readonly goalId: string
+  readonly round: number
+  readonly verdict: 'pass' | 'needs_changes' | 'blocked'
+  readonly summary: string
+  readonly findings: readonly string[]
+  readonly requiredChanges: readonly string[]
+}
+
 /** Message attribution for admitted continuation rounds. */
 export interface GoalMessageSource {
   readonly kind: 'goal'
@@ -64,6 +76,8 @@ declare module '@phoenix-ai/dsh-session/types' {
      * Complete post-mutation goal state or clear tombstone.
      */
     'goal/change': GoalChangeMeta
+    /** One independent completion review; it never changes goal state itself. */
+    'goal/judge': GoalJudgeAuditEntry
   }
 }
 
