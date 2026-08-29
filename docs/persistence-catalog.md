@@ -422,7 +422,7 @@ Source: [`packages/feedback/command-feedback/src/index.ts:62`](../packages/feedb
 'goal/change': GoalChangeMeta
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:78`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:89`](../packages/goal/goal/src/domain.ts)
 
 <a id="goaljudge--log-only"></a>
 
@@ -433,7 +433,18 @@ Source: [`packages/goal/goal/src/domain.ts:78`](../packages/goal/goal/src/domain
 'goal/judge': GoalJudgeAuditEntry
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:80`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:91`](../packages/goal/goal/src/domain.ts)
+
+<a id="goalsupervisor--log-only"></a>
+
+#### `goal/supervisor` — log-only
+
+```ts persistence-catalog
+/** Latest bounded supervisor checkpoint for a goal. */
+'goal/supervisor': GoalSupervisorCheckpoint
+```
+
+Source: [`packages/goal/goal/src/domain.ts:93`](../packages/goal/goal/src/domain.ts)
 
 ### `hardness/*`
 

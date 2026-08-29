@@ -49,6 +49,8 @@ Each admitted round is one retained user-role `<goal_round>` block naming the fu
 
 When the previous completion judge returned `needs_changes` or `blocked`, the driver reconstructs that result from the durable `goal/judge` event and places its bounded findings and required changes in the next round prompt. This survives process restart; activation still requires the explicit resume authority described above.
 
+The driver also writes bounded `goal/supervisor` checkpoints. A checkpoint records the exact goal revision, admitted round count, supervisor status, next action, and a redacted failure summary. On session start the latest checkpoint is replayed for diagnostics, while the driver remains disarmed until the direct human `resume` operation re-establishes authority.
+
 #### Token effect
 
 One fixed instruction block plus the objective is added per admitted round. Later requests resend retained rounds until compaction shadows them; no fresh agent or copied conversation prefix is created.

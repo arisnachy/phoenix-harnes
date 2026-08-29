@@ -55,6 +55,17 @@ export interface GoalJudgeAuditEntry {
   readonly requiredChanges: readonly string[]
 }
 
+/** Durable checkpoint for one goal supervisor lifecycle. */
+export interface GoalSupervisorCheckpoint {
+  readonly goalId: string
+  readonly revision: number
+  readonly roundsStarted: number
+  readonly status: 'active' | 'awaiting-human' | 'retrying' | 'blocked' | 'complete'
+  readonly nextAction: 'continue' | 'resume' | 'review' | 'blocked' | 'none'
+  readonly attempts: number
+  readonly lastError?: string
+}
+
 /** Message attribution for admitted continuation rounds. */
 export interface GoalMessageSource {
   readonly kind: 'goal'
@@ -78,6 +89,8 @@ declare module '@phoenix-ai/dsh-session/types' {
     'goal/change': GoalChangeMeta
     /** One independent completion review; it never changes goal state itself. */
     'goal/judge': GoalJudgeAuditEntry
+    /** Latest bounded supervisor checkpoint for a goal. */
+    'goal/supervisor': GoalSupervisorCheckpoint
   }
 }
 

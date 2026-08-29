@@ -12,8 +12,11 @@ import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, UserMessage } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
+import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
 
 export { renderGoalRoundPrompt } from './prompt.ts'
+export { recordGoalSupervisor, replayGoalSupervisor } from './supervisor.ts'
+export type { GoalSupervisorState } from './supervisor.ts'
 
 export const name = 'goal-round-driver'
 export const inject = ['agents', 'goals', 'sessions']
@@ -43,6 +46,7 @@ interface DriverState {
   requested: boolean
   run: Promise<void> | undefined
   stopping: boolean
+  supervisor: GoalSupervisorState | undefined
 }
 
 /** Whether a source identifies an automatic, positive-numbered goal round. */
@@ -88,6 +92,7 @@ export function apply(ctx: Context): void {
       requested: false,
       run: undefined,
       stopping: false,
+      supervisor: undefined,
     }
     states.set(agent, state)
     return state
@@ -106,6 +111,42 @@ export function apply(ctx: Context): void {
       && event.data.goalId === goal.id
       && event.data.verdict !== 'pass',
     )?.data
+  }
+
+  /** Persist one supervisor state transition without duplicating the latest row. */
+  function checkpoint(
+    state: DriverState,
+    goal: GoalView,
+    status: GoalSupervisorState['status'],
+    nextAction: GoalSupervisorState['nextAction'],
+    lastError?: string,
+  ): void {
+    const previous = state.supervisor
+    const next: GoalSupervisorState = {
+      goalId: goal.id,
+      revision: goal.revision,
+      roundsStarted: goal.roundsStarted,
+      status,
+      nextAction,
+      attempts: Math.max(previous?.attempts ?? 0, goal.roundsStarted),
+      ...lastError === undefined ? {} : { lastError: lastError.slice(0, 500) },
+    }
+    if (previous !== undefined
+      && previous.goalId === next.goalId
+      && previous.revision === next.revision
+      && previous.roundsStarted === next.roundsStarted
+      && previous.status === next.status
+      && previous.nextAction === next.nextAction
+      && previous.attempts === next.attempts
+      && previous.lastError === next.lastError) return
+    try {
+      recordGoalSupervisor(state.agent.session, next)
+      state.supervisor = next
+    } catch (error: unknown) {
+      ctx.logger.warn(`goal-round-driver: supervisor checkpoint failed for agent "${state.agent.id}": ${renderThrown(error)}`)
+      state.supervisor = previous
+      disarm(state)
+    }
   }
 
   /** Whether this exact lifecycle is quiescent with no competing prompt. */
@@ -172,7 +213,9 @@ export function apply(ctx: Context): void {
 
     const goal = currentGoal(state)
     if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') return
+    checkpoint(state, goal, 'active', 'continue')
     if (goal.roundsStarted >= goal.maxGoalRounds) {
+      checkpoint(state, goal, 'blocked', 'blocked')
       ctx.goals.block(agent, goalRef(goal), {
         code: 'round-limit',
         message: `Goal reached its configured limit of ${goal.maxGoalRounds} rounds.`,
@@ -205,6 +248,7 @@ export function apply(ctx: Context): void {
       const latest = currentGoal(state)
       if (latest !== undefined && latest.id === goal.id && latest.revision === goal.revision
         && latest.phase === 'active' && latest.activation === 'armed') {
+        checkpoint(state, latest, 'awaiting-human', 'resume', `Could not queue goal round ${round}: ${renderThrown(error)}`)
         ctx.goals.block(agent, goalRef(latest), {
           code: 'queue-failed',
           message: `Could not queue goal round ${round}: ${renderThrown(error)}`,
@@ -264,6 +308,7 @@ export function apply(ctx: Context): void {
       state.attempt = undefined
       state.competingQueued = false
       state.needsCheckpoint = false
+      state.supervisor = replayGoalSupervisor(agent.session.events, currentGoal(state)?.id ?? '')
     })
     ctx.on('agent/status', ({ agent, status }) => {
       const state = stateFor(agent)
@@ -287,6 +332,12 @@ export function apply(ctx: Context): void {
     ctx.on('goal/changed', ({ agent }) => {
       const state = stateFor(agent)
       state.needsCheckpoint = true
+      const goal = currentGoal(state)
+      if (goal !== undefined) {
+        checkpoint(state, goal,
+          goal.phase === 'complete' ? 'complete' : goal.phase === 'blocked' ? 'blocked' : 'active',
+          goal.phase === 'complete' ? 'none' : goal.phase === 'blocked' ? 'blocked' : 'continue')
+      }
       requestDrive(state)
     })
 
