@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type {
@@ -107,6 +109,17 @@ describe('SidebarRoot shell', () => {
     expect(screen.getByText('0123456')).toBeTruthy()
     expect(container.querySelector('img[src="/phoenix-emblem.png"]')?.getAttribute('width')).toBe('38')
     expect(container.querySelector('svg')).not.toBeNull()
+  })
+
+  it('uses the compact sans-serif PHOENIX wordmark styling in the sidebar', () => {
+    const css = readFileSync(resolve(process.cwd(), 'packages/client/ui-sidebar/src/client/SidebarRoot.module.css'), 'utf8')
+    const brandName = css.match(/\.brandName\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
+
+    expect(brandName).toContain('font-family: ui-sans-serif')
+    expect(brandName).toContain('font-size: 19px')
+    expect(brandName).toContain('font-weight: 650')
+    expect(brandName).toContain('letter-spacing: -0.03em')
+    expect(brandName).toContain('white-space: nowrap')
   })
 
   it('hands the region its wide flag and clamps expandSidebar to the collapsed state', () => {
