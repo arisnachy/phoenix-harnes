@@ -11,6 +11,7 @@ const demoMetric = document.querySelector('[data-demo-metric]')
 const demoDetail = document.querySelector('[data-demo-detail]')
 const demoStatusDot = document.querySelector('.demo-status-dot')
 const demoButtons = [...document.querySelectorAll('[data-demo-state]')]
+const menuLabel = document.querySelector('#mobile-menu-toggle .sr-only')
 
 function setDemoState(stateName) {
   const state = demoStates[stateName]
@@ -22,6 +23,7 @@ function setDemoState(stateName) {
   demoButtons.forEach((button) => {
     button.classList.toggle('is-active', button.dataset.demoState === stateName)
     button.setAttribute('aria-pressed', String(button.dataset.demoState === stateName))
+    button.setAttribute('aria-selected', String(button.dataset.demoState === stateName))
   })
   if (demoStatusDot) demoStatusDot.style.background = stateName === 'conservar' ? '#8cc6af' : stateName === 'conversar' ? '#f2c477' : '#8cc6af'
 }
@@ -34,12 +36,15 @@ const mobileMenu = document.querySelector('#mobile-menu')
 function closeMobileMenu() {
   if (!menuToggle || !mobileMenu) return
   menuToggle.setAttribute('aria-expanded', 'false')
+  if (menuLabel) menuLabel.textContent = 'Abrir menú'
   mobileMenu.classList.remove('is-open')
 }
 menuToggle?.addEventListener('click', () => {
   const isOpen = menuToggle.getAttribute('aria-expanded') === 'true'
-  menuToggle.setAttribute('aria-expanded', String(!isOpen))
-  mobileMenu?.classList.toggle('is-open', !isOpen)
+  const nextOpen = !isOpen
+  menuToggle.setAttribute('aria-expanded', String(nextOpen))
+  if (menuLabel) menuLabel.textContent = nextOpen ? 'Cerrar menú' : 'Abrir menú'
+  mobileMenu?.classList.toggle('is-open', nextOpen)
 })
 mobileMenu?.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeMobileMenu))
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMobileMenu() })
