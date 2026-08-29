@@ -231,23 +231,29 @@ try {
 }
 `
 
+function executionFailure(message: string): ToolExecutionResult {
+  return {
+    isError: true,
+    error: new Error(message),
+    content: [{ type: 'text', text: message }],
+  }
+}
+
 function parseWorkerResult(stdout: string, stderr: string): ToolExecutionResult {
   const line = stdout.split(/\r?\n/u).reverse().find(candidate => candidate.startsWith(RESULT_PREFIX))
   if (line === undefined) {
-    return {
-      isError: true,
-      content: [{ type: 'text', text: `OpenClaw worker returned no typed result${stderr.trim().length === 0 ? '' : `: ${stderr.trim()}`}` }],
-    }
+    return executionFailure(`OpenClaw worker returned no typed result${stderr.trim().length === 0 ? '' : `: ${stderr.trim()}`}`)
   }
   try {
     const parsed = JSON.parse(line.slice(RESULT_PREFIX.length)) as ToolExecutionResult
     if (typeof parsed.isError !== 'boolean' || !Array.isArray(parsed.content)) throw new Error('invalid result shape')
+    if (parsed.isError) {
+      const text = parsed.content.find(block => block.type === 'text')?.text
+      return executionFailure(typeof text === 'string' && text.length > 0 ? text : 'OpenClaw execution failed')
+    }
     return parsed
   } catch (error) {
-    return {
-      isError: true,
-      content: [{ type: 'text', text: `OpenClaw worker emitted an invalid typed result: ${error instanceof Error ? error.message : String(error)}` }],
-    }
+    return executionFailure(`OpenClaw worker emitted an invalid typed result: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -264,10 +270,7 @@ export function createOpenClawIsolatedRunner(options: OpenClawIsolatedRunnerOpti
         { mode: 'read-only', workspaceRoot: options.workspaceRoot },
       )
       if (confined.enforcement !== 'full') {
-        return {
-          isError: true,
-          content: [{ type: 'text', text: 'OpenClaw donor execution requires full PHOENIX sandbox enforcement' }],
-        }
+        return executionFailure('OpenClaw donor execution requires full PHOENIX sandbox enforcement')
       }
 
       const handle = options.subprocess.spawn({
@@ -287,10 +290,7 @@ export function createOpenClawIsolatedRunner(options: OpenClawIsolatedRunnerOpti
       const stderr = handle.collected.stderr?.readFrom(0).text ?? ''
       const result = parseWorkerResult(stdout, stderr)
       if (outcome.exitCode !== 0 && !result.isError) {
-        return {
-          isError: true,
-          content: [{ type: 'text', text: `OpenClaw worker exited with ${String(outcome.exitCode)} after emitting a success result` }],
-        }
+        return executionFailure(`OpenClaw worker exited with ${String(outcome.exitCode)} after emitting a success result`)
       }
       return result
     },
