@@ -4,13 +4,13 @@
 
 ## 目标
 
-修复 PHOENIX 侧边栏：没有更新时不占用空间；只有兼容路由拥有有效遥测时，才在 `Settings` 旁显示 OpenAI/Codex 账户配额。
+修复 PHOENIX 侧边栏：没有更新时不占用空间；只要 OpenAI/Codex 账户拥有有效遥测，就在 `Settings` 旁显示配额，不依赖当前模型路由。
 
 ## 决策
 
 1. `paused` 是有效的 Host 状态，可用于诊断；但没有可操作更新时不渲染。
 2. `CodexQuotaRemaining` 负责配额，不复制 `openai/codex` 仓库中的代码。
-3. 组件只在 `wide`、会话有效、提供方为 OpenAI/Codex 且限制窗口为有限数值并在范围内时渲染。
+3. 组件只在 `wide`、会话有效且 OpenAI/Codex 账户的限制窗口为有限数值并在范围内时渲染。
 4. 可见值是剩余百分比：`clamp(round(100 - usedPercent), 0, 100)`。
 
 ## 测试

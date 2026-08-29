@@ -14,6 +14,8 @@ Host 报告的 `ModelSelection` 是唯一的选择事实，其中包含提供方
 
 `/client` 导出面为插件本体（`apply`/`inject`）、`ModelDirectoryResolver`、`ModelDirectory` 及其状态形状、slot 注入面类型。
 
+Settings trigger 还接收一个紧凑的 Codex 配额 seat。当 authorization catalog 提供 OpenAI/Codex 账户 telemetry 时，它会显示报告的主要和次要窗口（通常为 5h 和 7d）的剩余百分比以及可用的重置倒计时。它独立于当前模型提供方，每分钟刷新一次；缺少或无效 telemetry 时隐藏，并且绝不根据 token 数量估算限制。
+
 ## 模型体验
 
 间接影响。两个入口都通过仅供普通会话使用的 `session.selectModel` RPC 提交完整的 `ModelSelection`；Host 会在下一次提示词组装边界对其进行快照，因此后续请求采用所选提供方、模型与推理强度，而运行中的步骤保留已组装选择。只有当现有请求头记录一次实际采用该选择的请求后，选择才会持久化；菜单交互不会添加提示词内容。

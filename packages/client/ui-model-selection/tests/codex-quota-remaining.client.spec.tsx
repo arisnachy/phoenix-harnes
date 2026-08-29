@@ -86,7 +86,7 @@ describe('formatResetCountdown', () => {
 })
 
 describe('CodexQuotaRemaining', () => {
-  it('shows native 100% Codex availability for an OpenAI/Luna route', async () => {
+  it('shows native 100% Codex availability when telemetry is available', async () => {
     const d = directory('openai-codex')
     const auth = authorization(0)
     const view = render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
@@ -141,14 +141,13 @@ describe('CodexQuotaRemaining', () => {
     expect(screen.queryByText(/↻/)).toBeNull()
   })
 
-  it('does not render or query Codex quota for a non-OpenAI provider', async () => {
+  it('shows Codex quota beside Settings even when another model provider is active', async () => {
     const d = directory('openrouter')
     const auth = authorization(0)
     render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
 
-    await waitFor(() => { expect(d.fake.load).toHaveBeenCalledOnce() })
-    expect(screen.queryByText(/%/)).toBeNull()
-    expect(auth.list).not.toHaveBeenCalled()
+    expect(await screen.findByText('100%')).toBeTruthy()
+    expect(auth.list).toHaveBeenCalledWith({})
   })
 
   it('skips a key-only OpenAI entry and uses the later Codex telemetry entry', async () => {
@@ -180,14 +179,14 @@ describe('CodexQuotaRemaining', () => {
     expect(await screen.findByText('86%')).toBeTruthy()
   })
 
-  it('follows the active provider: OpenAI shows quota, another provider hides it', async () => {
+  it('keeps the account quota visible while the active model provider changes', async () => {
     const d = directory('openai-codex')
     const auth = authorization(26)
     render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
 
     expect(await screen.findByText('74%')).toBeTruthy()
     act(() => { d.setProvider('openrouter') })
-    await waitFor(() => { expect(screen.queryByText('74%')).toBeNull() })
+    expect(screen.getByText('74%')).toBeTruthy()
   })
 
   it('keeps the last quota while the authorization face identity changes', async () => {

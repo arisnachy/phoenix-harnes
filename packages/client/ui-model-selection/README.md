@@ -14,6 +14,8 @@ Every resident directory refetches directly on forwarded `llm/adapters-updated` 
 
 The `/client` exports are the plugin body (`apply`/`inject`), `ModelDirectoryResolver`, `ModelDirectory` with its state fields, and the seat's injected face type.
 
+The Settings trigger also receives a compact Codex quota seat. When the authorization catalog exposes OpenAI/Codex account telemetry, it shows the remaining percentage for the reported primary and secondary windows (normally 5h and 7d) plus each available reset countdown. It is independent of the active model provider, refreshes once per minute, and stays hidden when telemetry is absent or invalid; it never estimates limits from token counts.
+
 ## Model Experience
 
 Indirectly, through the `session.selectModel` RPC available to ordinary sessions, both entries submit the complete `ModelSelection` that the Host snapshots at the next prompt-assembly boundary, so the following request uses the selected provider, model, and effort while a running step keeps its assembled selection; the selection becomes durable only when the existing request header records a request that consumes it, and menu interaction adds no prompt content.

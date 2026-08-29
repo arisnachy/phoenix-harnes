@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { IApiClient, SessionId } from '@phoenix-ai/dsh-api-remotes/client'
 import type { InjectFace } from '@phoenix-ai/dsh-client-ui-slots'
-import type { ModelDirectory } from './directory.ts'
 import css from './CodexQuotaRemaining.module.css'
 
 type AuthorizationClient = IApiClient['authorization']
@@ -35,8 +34,6 @@ type QuotaState = {
 export interface CodexQuotaRemainingInjected {
   /** Native authorization catalog carrying account rate-limit telemetry. */
   authorization: AuthorizationClient
-  /** Resolve the same per-session model directory used by the composer selector. */
-  directoryFor: (sessionId: SessionId) => ModelDirectory
 }
 
 /** Minimal runtime seats actually consumed from the session-maybe Settings outlet. */
@@ -90,18 +87,15 @@ function windowLabel(limit: RateLimitWindow, fallback: string): string {
 }
 
 /**
- * Show native Codex account quota only when the current session is routed to
- * an OpenAI/Codex provider. Non-OpenAI selections reserve no sidebar space.
+ * Show native Codex account quota whenever the current session has a visible
+ * sidebar and the authorization catalog provides OpenAI/Codex telemetry.
+ * Missing telemetry reserves no sidebar space and never invents limits.
  * @param props - session identity/sidebar state plus account/model-directory faces.
  * @returns the compact quota chip or null.
  */
 export function CodexQuotaRemaining({
-  wide, sessionId, authorization, directoryFor,
+  wide, sessionId, authorization,
 }: CodexQuotaRemainingProps) {
-  const [selection, setSelection] = useState<{
-    sessionId: SessionId
-    provider: string | undefined
-  } | undefined>()
   const [quota, setQuota] = useState<QuotaState | undefined>()
   const [clockMs, setClockMs] = useState(() => Date.now())
   const authorizationRef = useRef(authorization)
@@ -109,25 +103,9 @@ export function CodexQuotaRemaining({
 
   useEffect(() => {
     if (!wide || sessionId === undefined) {
-      setSelection(undefined)
+      setQuota(undefined)
       return
     }
-    const id = sessionId
-    const directory = directoryFor(id)
-    const sync = (): void => {
-      setSelection({ sessionId: id, provider: directory.store.getSnapshot().current?.provider })
-    }
-    sync()
-    const stop = directory.store.subscribe(sync)
-    void directory.load().catch(() => { /* no provider fact = no meter */ })
-    return stop
-  }, [directoryFor, sessionId, wide])
-
-  const provider = selection?.sessionId === sessionId ? selection?.provider : undefined
-
-  useEffect(() => {
-    setQuota(undefined)
-    if (!wide || sessionId === undefined || !isOpenAI(provider)) return
     let stale = false
 
     const load = async (): Promise<void> => {
@@ -161,16 +139,16 @@ export function CodexQuotaRemaining({
       stale = true
       window.clearInterval(timer)
     }
-  }, [provider, sessionId, wide])
+  }, [sessionId, wide])
 
   useEffect(() => {
-    if (!wide || sessionId === undefined || !isOpenAI(provider) || quota === undefined) return
+    if (!wide || sessionId === undefined || quota === undefined) return
     setClockMs(Date.now())
     const timer = window.setInterval(() => { setClockMs(Date.now()) }, QUOTA_REFRESH_MS)
     return () => { window.clearInterval(timer) }
-  }, [provider, quota, sessionId, wide])
+  }, [quota, sessionId, wide])
 
-  if (!wide || sessionId === undefined || !isOpenAI(provider) || quota === undefined) return null
+  if (!wide || sessionId === undefined || quota === undefined) return null
 
   const windows = [
     quota.primaryLimit === undefined ? undefined : {

@@ -11,7 +11,7 @@
  * neither entry because those Agent-bound RPCs would activate persisted
  * history outside the direct-parent continuation path.
  */
-import type { ConnectionHandle, ModelSelection, SessionId, SessionModels } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ConnectionHandle, ModelSelection, SessionModels } from '@phoenix-ai/dsh-api-remotes/client'
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
 import type { CommandUiContract, SelectOption } from '@phoenix-ai/dsh-client-ui-commands/client'
 import type {} from '@phoenix-ai/dsh-client-ui-conversation/client'
@@ -151,13 +151,10 @@ export function apply(ctx: ClientContext): void {
   // The model package does not depend on the Settings package; if that outlet
   // is present, this feature seats its status there, otherwise registration
   // simply waits for the declaration to appear.
-  ctx.inject(['slots', 'modelDirectories', 'connection'], (scope: ClientContext) => {
-    const models = scope.modelDirectories
+  ctx.inject(['slots', 'connection'], (scope: ClientContext) => {
     const connection = scope.get('connection') as ConnectionHandle
-    const directoryFor = (sessionId: SessionId) => models.directoryFor(sessionId)
     const quotaInjected = (): CodexQuotaRemainingInjected => ({
       authorization: connection.api.authorization,
-      directoryFor,
     })
     const seat = 'settings.trigger.trailing' as never
     scope.slots.inject(seat, () => scope.slots.register({
