@@ -2,18 +2,18 @@
  * JSON-RPC methods and notifications for out-of-process harness SDKs.
  * The surrounding context owns plugins, persistence, and configured adapters.
  *
- * @module @deepseek-ai/dsh-sdk-jsonrpc-server/server
+ * @module @phoenix-ai/dsh-sdk-jsonrpc-server/server
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { resolve } from 'node:path'
-import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { carrierKeyOf, type Scoped } from '@deepseek-ai/dsh-scope'
-import { SessionId } from '@deepseek-ai/dsh-session'
-import type SubagentRuntime from '@deepseek-ai/dsh-subagent'
-import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import type { Agent, AgentHandle } from '@phoenix-ai/dsh-agent'
+import { createUserMessage } from '@phoenix-ai/dsh-llm'
+import { carrierKeyOf, type Scoped } from '@phoenix-ai/dsh-scope'
+import { SessionId } from '@phoenix-ai/dsh-session'
+import type SubagentRuntime from '@phoenix-ai/dsh-subagent'
+import type { SubagentRunEndInfo } from '@phoenix-ai/dsh-subagent'
+import * as LlmDeepSeek from '@phoenix-ai/dsh-llm-deepseek'
 import {
   HARNESS_SDK_PROTOCOL_VERSION,
   type InitializeParams,
@@ -27,7 +27,7 @@ import {
   type SessionPromptResult,
   type SubagentFinishedNotification,
   type SubagentStartedNotification,
-} from '@deepseek-ai/dsh-sdk-protocol'
+} from '@phoenix-ai/dsh-sdk-protocol'
 
 interface SessionRecord {
   handle: AgentHandle

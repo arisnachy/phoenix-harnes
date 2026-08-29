@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-agent-tool-presentation",
+  "name": "@phoenix-ai/dsh-agent-tool-presentation",
   "description": "Agent-plane presentation selector: composes one agent's tools as Code Mode, native, or both",
   "version": "0.1.1-rc.2",
   "publishConfig": {
@@ -35,18 +35,18 @@
     "@deepseek-ai/schemastery": "workspace:^"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-agent": "workspace:^",
-    "@deepseek-ai/dsh-code-runtime": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-scope": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-system-prompt": "workspace:^",
-    "@deepseek-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-code-runtime": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-scope": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-system-prompt": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

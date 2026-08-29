@@ -6,17 +6,17 @@
  * Codex-inspired ExecPolicy at `tools/pre-execute`, keeping bundle wiring small
  * and making command policy available in every PHOENIX profile.
  *
- * FIXME: settle the intended `@deepseek-ai/dsh-timeout-guard` rename before the
+ * FIXME: settle the intended `@phoenix-ai/dsh-timeout-guard` rename before the
  * first tagged release — suggestion only, aligning the name with its `guard/`
  * home; decide at resolution time
  * ([regrouping Agent Note](../../../../.agents/notes/implemented/architecture/2026-07-29-package-regrouping.md)).
  *
- * @module @deepseek-ai/dsh-tool-call-timeout-policy
+ * @module @phoenix-ai/dsh-tool-call-timeout-policy
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
-import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+import { deadline, timeoutOf } from '@phoenix-ai/dsh-timeout'
+import type { ToolExecutionResult } from '@phoenix-ai/dsh-tools'
 import { apply as applyExecPolicy, type ExecPolicyConfig } from './exec-policy.ts'
 
 export type { ExecPolicyConfig, ExecPolicyDecision, ExecPolicyEvaluation, ExecPolicyPatternPart, ExecPolicyRule } from './exec-policy.ts'

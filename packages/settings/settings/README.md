@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-settings
+# @phoenix-ai/dsh-settings
 
 English | [中文](README.zh.md)
 

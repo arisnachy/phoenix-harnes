@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@deepseek-ai/dsh-client-ui-sidebar`.
- * @module @deepseek-ai/dsh-client-ui-sidebar/invariant
+ * Package-owned invariant companion for `@phoenix-ai/dsh-client-ui-sidebar`.
+ * @module @phoenix-ai/dsh-client-ui-sidebar/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
-import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-client-ui-sidebar'
+const PACKAGE_NAME = '@phoenix-ai/dsh-client-ui-sidebar'
 
 /** Cordis companion plugin name. */
 export const name = 'client-ui-sidebar-invariant'

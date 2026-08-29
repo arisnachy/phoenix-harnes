@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-session-title",
+  "name": "@phoenix-ai/dsh-session-title",
   "description": "Log-backed session title service and provider registry for the PHOENIX",
   "version": "0.1.1-rc.2",
   "publishConfig": {
@@ -41,11 +41,11 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/dsh-brand": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-session-projection": "workspace:^",
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-session-projection": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "dependencies": {
@@ -53,13 +53,13 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-brand": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:^",
-    "@deepseek-ai/dsh-session-persistence-sqlite": "workspace:^",
-    "@deepseek-ai/dsh-session-projection": "workspace:^",
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-session-persistence-jsonl": "workspace:^",
+    "@phoenix-ai/dsh-session-persistence-sqlite": "workspace:^",
+    "@phoenix-ai/dsh-session-projection": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

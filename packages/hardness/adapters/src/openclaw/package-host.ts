@@ -1,4 +1,4 @@
-import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+import type { ToolExecutionResult } from '@phoenix-ai/dsh-tools'
 import type {
   OpenClawCapabilityHost,
   OpenClawExecutionContext,

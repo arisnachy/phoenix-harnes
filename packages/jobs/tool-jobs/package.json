@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-tool-jobs",
+  "name": "@phoenix-ai/dsh-tool-jobs",
   "description": "Model-facing background job control tools (job_output, job_list, job_kill) over the ctx.jobs registry",
   "version": "0.1.1-rc.2",
   "publishConfig": {
@@ -35,25 +35,25 @@
     "@deepseek-ai/schemastery": "workspace:^"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-agent": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-output-retention": "workspace:^",
-    "@deepseek-ai/dsh-system-prompt": "workspace:^",
-    "@deepseek-ai/dsh-jobs": "workspace:^",
-    "@deepseek-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-output-retention": "workspace:^",
+    "@phoenix-ai/dsh-system-prompt": "workspace:^",
+    "@phoenix-ai/dsh-jobs": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-agent": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-output-retention": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-system-prompt": "workspace:^",
-    "@deepseek-ai/dsh-jobs": "workspace:^",
-    "@deepseek-ai/dsh-jobs-local": "workspace:^",
-    "@deepseek-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-output-retention": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-system-prompt": "workspace:^",
+    "@phoenix-ai/dsh-jobs": "workspace:^",
+    "@phoenix-ai/dsh-jobs-local": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

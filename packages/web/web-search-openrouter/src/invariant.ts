@@ -1,9 +1,9 @@
 /** Package-owned invariant companion for OpenRouter web search. */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-web-search-openrouter'
+const PACKAGE_NAME = '@phoenix-ai/dsh-web-search-openrouter'
 /** Cordis companion plugin name. */
 export const name = 'web-search-openrouter-invariant'
 /** Service required before reserving package ownership. */

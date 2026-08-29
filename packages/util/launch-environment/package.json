@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-launch-environment",
+  "name": "@phoenix-ai/dsh-launch-environment",
   "description": "Immutable PHOENIX launch environment that records which layer supplied each value",
   "version": "0.1.1-rc.2",
   "publishConfig": {
@@ -32,11 +32,11 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

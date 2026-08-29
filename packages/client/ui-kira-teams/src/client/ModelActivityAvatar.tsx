@@ -1,4 +1,4 @@
-import type { SubagentActivityProjection } from '@deepseek-ai/dsh-subagent'
+import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import css from './ModelActivityAvatar.module.css'
 
 export type ModelAvatarKind = 'sol' | 'luna' | 'terra' | 'generic'

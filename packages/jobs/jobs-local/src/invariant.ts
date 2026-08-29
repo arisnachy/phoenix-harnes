@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@deepseek-ai/dsh-jobs-local`.
- * @module @deepseek-ai/dsh-jobs-local/invariant
+ * Package-owned invariant companion for `@phoenix-ai/dsh-jobs-local`.
+ * @module @phoenix-ai/dsh-jobs-local/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
-import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-jobs-local'
+const PACKAGE_NAME = '@phoenix-ai/dsh-jobs-local'
 
 /** Cordis companion plugin name. */
 export const name = 'jobs-local-invariant'
@@ -15,7 +15,7 @@ export const name = 'jobs-local-invariant'
 export const inject = ['invariants']
 
 /**
- * No runtime invariant: `@deepseek-ai/dsh-jobs/invariant` owns per-snapshot identity, status,
+ * No runtime invariant: `@phoenix-ai/dsh-jobs/invariant` owns per-snapshot identity, status,
  * timestamp, and owner checks. This provider's admission decision uses private configuration and
  * must fail before a backend starter runs; `LocalJobRegistry.start()` enforces it synchronously
  * for current producers. Repeating an aggregate after publication would expose private

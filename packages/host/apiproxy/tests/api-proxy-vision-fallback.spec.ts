@@ -7,19 +7,19 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import AgentRegistry from '@deepseek-ai/dsh-agent'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import AttachmentStore from '@deepseek-ai/dsh-attachment'
-import LlmRuntime, { LlmAdapter } from '@deepseek-ai/dsh-llm'
+import AgentRegistry from '@phoenix-ai/dsh-agent'
+import type { Agent } from '@phoenix-ai/dsh-agent'
+import AttachmentStore from '@phoenix-ai/dsh-attachment'
+import LlmRuntime, { LlmAdapter } from '@phoenix-ai/dsh-llm'
 import type {
   GenerateOptions, LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo,
   StreamChunk, UserMessage,
-} from '@deepseek-ai/dsh-llm'
-import SessionStore from '@deepseek-ai/dsh-session'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import UserQuestionService from '@deepseek-ai/dsh-user-questions'
-import type { RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
-import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
+} from '@phoenix-ai/dsh-llm'
+import SessionStore from '@phoenix-ai/dsh-session'
+import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
+import UserQuestionService from '@phoenix-ai/dsh-user-questions'
+import type { RpcRequest } from '@phoenix-ai/dsh-host-apiproxy/api/rpc'
+import { RpcId } from '@phoenix-ai/dsh-host-apiproxy/api/rpc'
 import { createApiProxy } from '../src/api-proxy.ts'
 
 let nextRpc = 1
@@ -83,7 +83,7 @@ async function harness(options?: {
 }): Promise<{
   ctx: Context
   agent: Agent
-  sessionId: import('@deepseek-ai/dsh-session').SessionId
+  sessionId: import('@phoenix-ai/dsh-session').SessionId
   eyeCalls: GenerateOptions[]
   followup: ReturnType<typeof vi.fn>
 }> {

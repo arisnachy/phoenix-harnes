@@ -3,8 +3,8 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
-import SkillRegistry from '@deepseek-ai/dsh-skill'
-import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
+import SkillRegistry from '@phoenix-ai/dsh-skill'
+import * as SkillFileSystem from '@phoenix-ai/dsh-skill-filesystem'
 import { auditBundle, openClawAlias } from '../src/openclaw-skills.ts'
 
 async function tempDir(name: string): Promise<string> {

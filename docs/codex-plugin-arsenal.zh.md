@@ -14,8 +14,8 @@ corepack pnpm run dsh -- codex-plugin sync
 
 PHOENIX 按以下方式桥接受支持的 Codex 表面：
 
-- **Skills**：复制到 `$DSH_HOME/skills`，并使用命名空间化的 `codex-*` skill 名称。现有 `@deepseek-ai/dsh-skill-filesystem` provider 会在下一次 catalog refresh/启动时发现它们。
-- **MCP servers**：把每个插件的 `.mcp.json` 转换为 PHOENIX `@deepseek-ai/dsh-mcp-client` Cordis patch。除非用户明确启用，否则保持禁用。
+- **Skills**：复制到 `$DSH_HOME/skills`，并使用命名空间化的 `codex-*` skill 名称。现有 `@phoenix-ai/dsh-skill-filesystem` provider 会在下一次 catalog refresh/启动时发现它们。
+- **MCP servers**：把每个插件的 `.mcp.json` 转换为 PHOENIX `@phoenix-ai/dsh-mcp-client` Cordis patch。除非用户明确启用，否则保持禁用。
 - **Agents、commands、hooks、apps、scripts 和 assets**：保留在托管的上游检出中，并记录到 `arsenal.json`。PHOENIX 不会仅因为 Codex hook 或 app 声明存在就执行它；不受支持的可执行表面保持惰性，不会静默获得宿主权限。
 
 这是有意的 capability-safe 设计。安装武器库**不会**自动把浏览器、shell、文件系统、凭据或远程服务权限授予所有插件。

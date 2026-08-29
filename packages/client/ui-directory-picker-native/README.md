@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-client-ui-directory-picker-native
+# @phoenix-ai/dsh-client-ui-directory-picker-native
 
 English | [中文](README.zh.md)
 

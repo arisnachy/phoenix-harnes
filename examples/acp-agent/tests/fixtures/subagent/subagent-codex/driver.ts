@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /** Inspect the public Codex provider composition without invoking the product. */
 
-import { boot, loadOverlayPatches, resolveConfigPath } from '@deepseek-ai/dsh-app-boot'
-import type {} from '@deepseek-ai/dsh-subagent'
-import type {} from '@deepseek-ai/dsh-tools'
+import { boot, loadOverlayPatches, resolveConfigPath } from '@phoenix-ai/dsh-app-boot'
+import type {} from '@phoenix-ai/dsh-subagent'
+import type {} from '@phoenix-ai/dsh-tools'
 
 const configPath = process.argv[2]
 const bundlePatchPath = process.argv[3]

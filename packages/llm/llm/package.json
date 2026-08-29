@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-llm",
+  "name": "@phoenix-ai/dsh-llm",
   "description": "Provider-neutral LLM service interface for the PHOENIX",
   "version": "0.1.1-rc.2",
   "publishConfig": {
@@ -45,20 +45,20 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/dsh-attachment": "workspace:^",
-    "@deepseek-ai/dsh-brand": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-timeout": "workspace:^",
+    "@phoenix-ai/dsh-attachment": "workspace:^",
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-timeout": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-attachment": "workspace:^",
-    "@deepseek-ai/dsh-brand": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-timeout": "workspace:^",
+    "@phoenix-ai/dsh-attachment": "workspace:^",
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-timeout": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

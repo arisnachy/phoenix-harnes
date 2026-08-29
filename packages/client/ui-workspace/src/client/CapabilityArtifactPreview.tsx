@@ -1,5 +1,5 @@
 import { createElement, type ReactNode } from 'react'
-import type { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
 import type { CapabilityArtifact, CapabilityArtifactRenderModel } from './contract/slots.ts'
 import { validateUiSchema, type UiNode } from './generative-ui.ts'
 

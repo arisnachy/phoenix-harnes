@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-api-remotes",
+  "name": "@phoenix-ai/dsh-api-remotes",
   "description": "Remote BFF assembly and Host Agent/Session lookup policy",
   "version": "0.1.1-rc.2",
   "publishConfig": {
@@ -36,7 +36,7 @@
   "dsh": {
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-api-gateway"
+        "@phoenix-ai/dsh-api-gateway"
       ],
       "platform": "web",
       "immediately": true
@@ -55,46 +55,46 @@
     "lib/types/**/*.d.ts"
   ],
   "dependencies": {
-    "@deepseek-ai/dsh-typert-protocol": "workspace:^"
+    "@phoenix-ai/dsh-typert-protocol": "workspace:^"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-agent": "workspace:^",
-    "@deepseek-ai/dsh-agent-presets": "workspace:^",
-    "@deepseek-ai/dsh-api-gateway": "workspace:^",
-    "@deepseek-ai/dsh-commands": "workspace:^",
-    "@deepseek-ai/dsh-cordis-host-runner": "workspace:^",
-    "@deepseek-ai/dsh-credentials": "workspace:^",
-    "@deepseek-ai/dsh-file-reference": "workspace:^",
-    "@deepseek-ai/dsh-goal": "workspace:^",
-    "@deepseek-ai/dsh-host-plugin-inventory": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-message-feedback": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-session-persistence": "workspace:^",
-    "@deepseek-ai/dsh-session-reference": "workspace:^",
-    "@deepseek-ai/dsh-settings": "workspace:^",
-    "@deepseek-ai/dsh-typert-registry": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-agent-presets": "workspace:^",
+    "@phoenix-ai/dsh-api-gateway": "workspace:^",
+    "@phoenix-ai/dsh-commands": "workspace:^",
+    "@phoenix-ai/dsh-cordis-host-runner": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^",
+    "@phoenix-ai/dsh-file-reference": "workspace:^",
+    "@phoenix-ai/dsh-goal": "workspace:^",
+    "@phoenix-ai/dsh-host-plugin-inventory": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-message-feedback": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-session-persistence": "workspace:^",
+    "@phoenix-ai/dsh-session-reference": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^",
+    "@phoenix-ai/dsh-typert-registry": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-agent": "workspace:^",
-    "@deepseek-ai/dsh-agent-presets": "workspace:^",
-    "@deepseek-ai/dsh-api-gateway": "workspace:^",
-    "@deepseek-ai/dsh-commands": "workspace:^",
-    "@deepseek-ai/dsh-cordis-host-runner": "workspace:^",
-    "@deepseek-ai/dsh-credentials": "workspace:^",
-    "@deepseek-ai/dsh-file-reference": "workspace:^",
-    "@deepseek-ai/dsh-goal": "workspace:^",
-    "@deepseek-ai/dsh-host-plugin-inventory": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-message-feedback": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-session-persistence": "workspace:^",
-    "@deepseek-ai/dsh-session-reference": "workspace:^",
-    "@deepseek-ai/dsh-settings": "workspace:^",
-    "@deepseek-ai/dsh-typert-registry": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-agent-presets": "workspace:^",
+    "@phoenix-ai/dsh-api-gateway": "workspace:^",
+    "@phoenix-ai/dsh-commands": "workspace:^",
+    "@phoenix-ai/dsh-cordis-host-runner": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^",
+    "@phoenix-ai/dsh-file-reference": "workspace:^",
+    "@phoenix-ai/dsh-goal": "workspace:^",
+    "@phoenix-ai/dsh-host-plugin-inventory": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-message-feedback": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-session-persistence": "workspace:^",
+    "@phoenix-ai/dsh-session-reference": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^",
+    "@phoenix-ai/dsh-typert-registry": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

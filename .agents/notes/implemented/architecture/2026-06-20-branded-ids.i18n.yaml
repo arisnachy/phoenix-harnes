@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-06-20-branded-ids.md
-2026-06-20-branded-ids.md: 29b258b21240c92e74051339f0939a8e70933099
-2026-06-20-branded-ids.zh.md: 2f960bac3172f1e83161f1af8f4e9d2cc0cda7bd
+2026-06-20-branded-ids.md: f3d1629e569d2e8f612afad3097b31e960fd1b7a
+2026-06-20-branded-ids.zh.md: 7f807f8b66b17155eab16319a1e62cf004bc343f

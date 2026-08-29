@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type {
   ChatConversationViewNode, ConversationTimelineSnapshot,
-} from '@deepseek-ai/dsh-client-runtime/client'
+} from '@phoenix-ai/dsh-client-runtime/client'
 import { turnProgress } from '../src/client/chat/turn-progress.ts'
 
 function openTimeline(turn: number): ConversationTimelineSnapshot {

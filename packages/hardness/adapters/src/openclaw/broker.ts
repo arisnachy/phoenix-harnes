@@ -1,11 +1,11 @@
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@phoenix-ai/dsh-agent'
 import type {
   CapabilityDescriptor,
   CapabilityNeed,
   CapabilitySurface,
-} from '@deepseek-ai/dsh-hardness'
-import type { CallId } from '@deepseek-ai/dsh-llm'
-import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+} from '@phoenix-ai/dsh-hardness'
+import type { CallId } from '@phoenix-ai/dsh-llm'
+import type { ToolExecutionResult } from '@phoenix-ai/dsh-tools'
 import { toHardnessCapabilityDescriptors } from './hardness.ts'
 import type { CompatibilityStatus } from './types.ts'
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
-import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import type { SessionId } from '@phoenix-ai/dsh-api-remotes/client'
 import { CodexQuotaRemaining, formatResetCountdown } from '../src/client/CodexQuotaRemaining.tsx'
 import type { CodexQuotaRemainingProps } from '../src/client/CodexQuotaRemaining.tsx'
 

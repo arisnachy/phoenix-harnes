@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-web
+# @phoenix-ai/dsh-web
 
 English | [中文](README.zh.md)
 
@@ -8,11 +8,11 @@ This package owns the Service Definition role of the web capability. Unlike shel
 
 | Package | Role |
 |---|---|
-| `@deepseek-ai/dsh-web` (this) | Service Definition: the service, provider registries, selection policy, request/result vocabulary, the `WebError` taxonomy |
-| `@deepseek-ai/dsh-web-search-exa` | Search provider: Exa |
-| `@deepseek-ai/dsh-web-search-perplexity` | Search provider: Perplexity |
-| `@deepseek-ai/dsh-web-fetch-http` | Fetch provider: anonymous public HTTP(S) |
-| `@deepseek-ai/dsh-tool-web` | Consumer: the model-facing `web_search` / `web_fetch` tool schemas over `ctx.web` |
+| `@phoenix-ai/dsh-web` (this) | Service Definition: the service, provider registries, selection policy, request/result vocabulary, the `WebError` taxonomy |
+| `@phoenix-ai/dsh-web-search-exa` | Search provider: Exa |
+| `@phoenix-ai/dsh-web-search-perplexity` | Search provider: Perplexity |
+| `@phoenix-ai/dsh-web-fetch-http` | Fetch provider: anonymous public HTTP(S) |
+| `@phoenix-ai/dsh-tool-web` | Consumer: the model-facing `web_search` / `web_fetch` tool schemas over `ctx.web` |
 
 Search and fetch share no request schema and no business logic, but they are deliberately one seam: `ctx.web` is a single web-access middle layer with one provider-selection policy owner, one abort/error vocabulary, and one product-facing "how this harness reaches the web" config surface. The `Search`/`Fetch` method pairs are deliberately parallel.
 
@@ -41,7 +41,7 @@ Selection never depends on registration, config, or HMR order. A capability has 
 
 The failure branches throw `WebError`, whose structured code (plus message detail — the missing id, the ambiguous candidate set) is the direct callers route on. A provider's own `available()` is a cheap local check (credential presence, parseable config) that feeds this execution-time selection and **must not make network calls**; `dsh-tool-web` never calls it — the tool executes through `ctx.web.search()`/`fetch()` and routes on the thrown codes, so provider selection has one owner.
 
-Search may also configure an ordered `searchFallbackProviders` list (or `$DSH_WEB_SEARCH_FALLBACK_PROVIDERS`). After a configured primary fails with a recoverable quota, rate-limit, authentication, timeout, transient, or availability error, the seam tries usable fallback providers in order. Explicit cancellation, missing configuration, and ambiguous automatic selection remain hard failures. The keyless `@deepseek-ai/dsh-web-search-free` provider supplies Bing/DuckDuckGo HTML as a bounded last-resort route.
+Search may also configure an ordered `searchFallbackProviders` list (or `$DSH_WEB_SEARCH_FALLBACK_PROVIDERS`). After a configured primary fails with a recoverable quota, rate-limit, authentication, timeout, transient, or availability error, the seam tries usable fallback providers in order. Explicit cancellation, missing configuration, and ambiguous automatic selection remain hard failures. The keyless `@phoenix-ai/dsh-web-search-free` provider supplies Bing/DuckDuckGo HTML as a bounded last-resort route.
 
 ## Vocabulary
 

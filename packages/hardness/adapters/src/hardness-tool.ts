@@ -1,11 +1,11 @@
-import type { CapabilityNeed, CapabilityStatus } from '@deepseek-ai/dsh-hardness'
-import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
+import type { CapabilityNeed, CapabilityStatus } from '@phoenix-ai/dsh-hardness'
+import { snapshotJsonValue } from '@phoenix-ai/dsh-session'
 import {
   defineTool,
   ToolArgsError,
   type JsonValue,
   type ToolDefinition,
-} from '@deepseek-ai/dsh-tools'
+} from '@phoenix-ai/dsh-tools'
 import type { CapabilityExecutionContext } from './execution-bridge.ts'
 import type { HardnessMissionResult } from './mission-orchestrator.ts'
 import type { HardnessMissionRunner } from './mission-runtime.ts'

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { CapabilitySurface } from '@deepseek-ai/dsh-hardness/src/types.ts'
+import type { CapabilitySurface } from '@phoenix-ai/dsh-hardness/src/types.ts'
 import { OpenClawCapabilityBroker } from '../src/openclaw/broker.ts'
 
 const signal = new AbortController().signal

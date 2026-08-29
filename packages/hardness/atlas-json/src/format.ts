@@ -1,6 +1,6 @@
 /** Runtime validation for the durable HARDNESS atlas format. */
 
-import type { HardnessAtlasSnapshot } from '@deepseek-ai/dsh-hardness'
+import type { HardnessAtlasSnapshot } from '@phoenix-ai/dsh-hardness'
 
 /**
  * Parse and validate one durable HARDNESS atlas snapshot.

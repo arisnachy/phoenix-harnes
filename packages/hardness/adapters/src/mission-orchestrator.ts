@@ -3,8 +3,8 @@ import type {
   CapabilityNeed,
   CapabilitySurface,
   HardnessService,
-} from '@deepseek-ai/dsh-hardness'
-import type { ToolRuntime } from '@deepseek-ai/dsh-tools'
+} from '@phoenix-ai/dsh-hardness'
+import type { ToolRuntime } from '@phoenix-ai/dsh-tools'
 import type {
   CapabilityApproval,
   CapabilityExecutionContext,

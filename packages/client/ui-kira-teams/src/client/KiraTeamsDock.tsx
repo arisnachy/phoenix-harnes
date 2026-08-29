@@ -2,12 +2,12 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useSyncExternalStore } from 'react'
 import {
   IconChevronDownOutline14, IconRefreshOutline14, StateDot,
-} from '@deepseek-ai/dsh-client-ui-primitives'
-import type { SubagentActivityProjection } from '@deepseek-ai/dsh-subagent'
+} from '@phoenix-ai/dsh-client-ui-primitives'
+import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import type {
   SessionId, SessionListState, SessionSummary, SubagentAddress,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import type { PropsLocale, PropsRuntime, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
+} from '@phoenix-ai/dsh-client-runtime/client'
+import type { PropsLocale, PropsRuntime, TranslateNS } from '@phoenix-ai/dsh-client-ui-slots'
 import { NS } from './locales.ts'
 import { ModelActivityAvatar } from './ModelActivityAvatar.tsx'
 import css from './KiraTeamsDock.module.css'

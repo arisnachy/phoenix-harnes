@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import McpConnectorRegistry from '@deepseek-ai/dsh-mcp-connector-registry/src/index.ts'
+import McpConnectorRegistry from '@phoenix-ai/dsh-mcp-connector-registry/src/index.ts'
 
 describe('McpConnectorRegistry', () => {
   it('publishes detached state snapshots and reversible updates', () => {

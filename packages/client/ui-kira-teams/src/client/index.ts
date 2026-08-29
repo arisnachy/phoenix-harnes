@@ -1,12 +1,12 @@
 /** Web KIRA teams dock: frame overlay registration and injected sessions face. */
-import type { ClientContext, ISessions, SessionId, SubagentAddress } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, ISessions, SessionId, SubagentAddress } from '@phoenix-ai/dsh-client-runtime/client'
 import { KiraTeamsDock } from './KiraTeamsDock.tsx'
-import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@phoenix-ai/dsh-client-locale/client'
 // The 'shell.overlay' slot key is declared by ui-layout's SlotMap merge.
-import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
 import { en, es, NS, zh, type KiraTeamsKey } from './locales.ts'
 
-declare module '@deepseek-ai/dsh-client-ui-slots' {
+declare module '@phoenix-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** KIRA teams dock copy. */
     'kira-teams': KiraTeamsKey

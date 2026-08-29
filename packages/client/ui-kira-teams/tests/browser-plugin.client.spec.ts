@@ -1,12 +1,12 @@
 /** ui-kira-teams browser half: overlay registration, injected actions, lineage read model. */
 import { Context } from '@deepseek-ai/cordis'
-import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
 import { describe, expect, it } from 'vitest'
 import {
   SlotRegistry, type SessionId, type SessionListState,
   type SessionSummary, type SubagentAddress,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
+} from '@phoenix-ai/dsh-client-runtime/client'
+import { apply as applyLocale, inject as localeInject } from '@phoenix-ai/dsh-client-locale/client'
 import { activityOf, KiraTeamsDock, lineageMembers } from '../src/client/KiraTeamsDock.tsx'
 import { apply, inject } from '../src/client/index.ts'
 

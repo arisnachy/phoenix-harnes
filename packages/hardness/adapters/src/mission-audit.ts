@@ -1,9 +1,9 @@
 /** Durable, secret-free audit records for governed HARDNESS missions. */
 
-import type { CallId } from '@deepseek-ai/dsh-llm'
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import type { CapabilityId } from '@deepseek-ai/dsh-hardness'
-import type { HardnessProtocolStep } from '@deepseek-ai/dsh-hardness'
+import type { CallId } from '@phoenix-ai/dsh-llm'
+import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
+import type { CapabilityId } from '@phoenix-ai/dsh-hardness'
+import type { HardnessProtocolStep } from '@phoenix-ai/dsh-hardness'
 
 /** Terminal state recorded for one HARDNESS protocol step. */
 export type HardnessMissionAuditOutcome = 'completed' | 'blocked'
@@ -23,7 +23,7 @@ export interface HardnessMissionAuditEntry {
   readonly durationMs?: number
 }
 
-declare module '@deepseek-ai/dsh-session/types' {
+declare module '@phoenix-ai/dsh-session/types' {
   interface SessionEventMap {
     /** One terminal state in the governed HARDNESS mission protocol. */
     'hardness/mission': HardnessMissionAuditEntry

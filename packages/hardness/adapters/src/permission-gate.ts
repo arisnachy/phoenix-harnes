@@ -1,6 +1,6 @@
 /** Explicit-grant evaluator; this is not a grant store or execution broker. */
 
-import type { CapabilityPermission, CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+import type { CapabilityPermission, CapabilitySurface } from '@phoenix-ai/dsh-hardness'
 
 /** Result of checking declared capability permissions against explicit grants. */
 export type PermissionDecision =

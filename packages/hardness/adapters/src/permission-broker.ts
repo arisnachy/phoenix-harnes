@@ -1,6 +1,6 @@
 /** One-shot approval bridge; persistence and execution stay outside HARDNESS. */
 
-import type { CapabilityPermission, CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+import type { CapabilityPermission, CapabilitySurface } from '@phoenix-ai/dsh-hardness'
 
 /** One-shot outcome returned by the host approval surface. */
 export type PermissionApprovalOutcome = 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'

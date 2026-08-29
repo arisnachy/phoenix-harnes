@@ -3,7 +3,7 @@ import type {
   CapabilityDescriptor,
   CapabilityRegistration,
   HardnessService,
-} from '@deepseek-ai/dsh-hardness/src/types.ts'
+} from '@phoenix-ai/dsh-hardness/src/types.ts'
 import { indexOpenClawExtensions } from '../src/openclaw-adapter.ts'
 
 describe('HARDNESS OpenClaw adapter', () => {

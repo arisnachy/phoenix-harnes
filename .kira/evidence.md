@@ -4,7 +4,7 @@
 - Official OpenAI documentation: Codex supports ChatGPT subscription sign-in and API-key usage as separate methods; browser sign-in returns credentials to Codex.
 - Baseline repository search found live OpenRouter discovery tests, custom model-id fields, and `llm-pi-ai` OAuth login tests.
 - `corepack pnpm exec vitest run packages/client/web/tests/boot-page.client.spec.ts packages/client/ui-settings-models/tests/provider-form.client.spec.tsx`: 2 files, 89 passed.
-- The base composition now mounts `@deepseek-ai/dsh-authorization` after the credential store.
+- The base composition now mounts `@phoenix-ai/dsh-authorization` after the credential store.
 - `.github/workflows/phoenix-upstream-quarantine.yml` pins incoming DeepSeek source to a quarantine branch and requires the existing PR CI before review/promotion.
 - `vitest run packages/experimental/tool-agent-team/tests/tool-team.spec.ts packages/experimental/agent-team/tests/team.spec.ts`: 2 files, 55 passed.
 - `vitest run packages/client/ui-settings-models/tests/authorization-panel.client.spec.tsx`: 1 file, 1 passed.

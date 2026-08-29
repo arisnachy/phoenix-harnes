@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { Config } from '@deepseek-ai/dsh-terminal-bash/src/config.ts'
-import { resolveConfig, validateConfig } from '@deepseek-ai/dsh-terminal-bash/src/config.ts'
-import { resolveBashPath } from '@deepseek-ai/dsh-bash-local'
+import type { Config } from '@phoenix-ai/dsh-terminal-bash/src/config.ts'
+import { resolveConfig, validateConfig } from '@phoenix-ai/dsh-terminal-bash/src/config.ts'
+import { resolveBashPath } from '@phoenix-ai/dsh-bash-local'
 
 function config(overrides: Partial<Config> = {}): Config {
   return {

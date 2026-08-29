@@ -1,9 +1,9 @@
-/** Package-owned invariant companion for `@deepseek-ai/dsh-hardness-adapters`. */
+/** Package-owned invariant companion for `@phoenix-ai/dsh-hardness-adapters`. */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-hardness-adapters'
+const PACKAGE_NAME = '@phoenix-ai/dsh-hardness-adapters'
 
 /** Cordis plugin name for the HARDNESS adapters invariant companion. */
 export const name = 'hardness-adapters-invariant'

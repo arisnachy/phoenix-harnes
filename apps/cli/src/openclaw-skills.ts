@@ -16,7 +16,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
-import { dshHomeDisplay, dshHomePath, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { dshHomeDisplay, dshHomePath, resolveDshHome } from '@phoenix-ai/dsh-home-paths'
 
 const NAME = 'dsh openclaw-skills'
 const SOURCE_REPOSITORY = 'https://github.com/openclaw/openclaw.git'

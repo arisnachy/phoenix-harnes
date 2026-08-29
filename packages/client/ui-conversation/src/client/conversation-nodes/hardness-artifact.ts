@@ -1,8 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {
   ConversationMatch, ConversationNodeContext, ConversationNodeDefinition,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-client-runtime/client'
+} from '@phoenix-ai/dsh-client-runtime/client'
+import { isAppendSurfaceEvent } from '@phoenix-ai/dsh-client-runtime/client'
 import { chatNode } from './common.ts'
 
 /** Serializable payload accepted by the conversation-native HARDNESS artifact node. */
@@ -19,7 +19,7 @@ export interface HardnessArtifactChatData {
   readonly time: number
 }
 
-declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
+declare module '@phoenix-ai/dsh-client-ui-conversation/client' {
   interface ChatNodeDataMap {
     /** HARDNESS/tool artifact rendered as a conversation-native inline card. */
     'hardness-artifact': HardnessArtifactChatData

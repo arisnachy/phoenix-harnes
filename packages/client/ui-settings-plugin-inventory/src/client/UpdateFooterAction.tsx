@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import type {
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateSnapshot,
-} from '@deepseek-ai/dsh-api-remotes/client'
-import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+} from '@phoenix-ai/dsh-api-remotes/client'
+import { Tooltip } from '@phoenix-ai/dsh-client-ui-primitives'
+import type { SidebarFooterActionOwnerProps } from '@phoenix-ai/dsh-client-ui-sidebar/client'
+import type { InjectFace, PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
 import css from './UpdateFooterAction.module.css'
 

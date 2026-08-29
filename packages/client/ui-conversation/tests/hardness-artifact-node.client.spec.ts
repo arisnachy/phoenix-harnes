@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type {
   ChatConversationViewNode, ChatSnapshot, ConversationEventInput,
   ConversationNodeDefinition, ConversationViewDefinition,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import { ConversationNodeAssembler } from '@deepseek-ai/dsh-client-runtime/client'
+} from '@phoenix-ai/dsh-client-runtime/client'
+import { ConversationNodeAssembler } from '@phoenix-ai/dsh-client-runtime/client'
 import { chatViewDefinition } from '../src/client/conversation-nodes/chat-snapshot-builder.ts'
 import { unknownFallbackDefinition } from '../src/client/conversation-nodes/fallback.ts'
 import { hardnessArtifactDefinition, type HardnessArtifactChatData } from '../src/client/conversation-nodes/hardness-artifact.ts'

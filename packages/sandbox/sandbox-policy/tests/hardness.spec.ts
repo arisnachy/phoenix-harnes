@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import type { Agent } from '@phoenix-ai/dsh-agent'
+import { Session, SessionId } from '@phoenix-ai/dsh-session'
+import SandboxPolicyService from '@phoenix-ai/dsh-sandbox-policy'
+import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 
 const previousRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT
 const previousEvolutionRoot = process.env.PHOENIX_EVOLUTION_ROOT

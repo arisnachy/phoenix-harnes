@@ -6,7 +6,7 @@
 
 **Arquitectura:** generar el overlay específico de locale durante la carga de la skill, usando el mismo snapshot dinámico de `ctx.skills.list()` que usan los adaptadores operativos. El contenido original sigue siendo la fuente de verdad; las traducciones se almacenan por separado y de forma auditable. La verificación falla si una respuesta inglesa mezcla etiquetas generadas en español/chino o pierde tokens técnicos obligatorios.
 
-**Tecnología:** TypeScript, `@deepseek-ai/dsh-skill`, `@deepseek-ai/dsh-tool-skill`, overlays en filesystem, evidencia Markdown/JSON y Vitest.
+**Tecnología:** TypeScript, `@phoenix-ai/dsh-skill`, `@phoenix-ai/dsh-tool-skill`, overlays en filesystem, evidencia Markdown/JSON y Vitest.
 
 ---
 

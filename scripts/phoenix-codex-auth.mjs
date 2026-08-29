@@ -14,7 +14,7 @@ if (codexArgs === undefined) {
   process.exit(2)
 }
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
-const child = spawn(pnpm, ['--filter','@deepseek-ai/dsh-subagent-codex','exec','codex',...codexArgs], {
+const child = spawn(pnpm, ['--filter','@phoenix-ai/dsh-subagent-codex','exec','codex',...codexArgs], {
   stdio: 'inherit', env: process.env, windowsHide: false,
 })
 child.once('error', error => {

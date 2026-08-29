@@ -26,7 +26,7 @@
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
-import { credentialKey, credentialRef } from '@deepseek-ai/dsh-credentials'
+import { credentialKey, credentialRef } from '@phoenix-ai/dsh-credentials'
 
 declare const ctx: Context
 

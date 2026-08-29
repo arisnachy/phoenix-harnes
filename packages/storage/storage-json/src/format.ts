@@ -2,11 +2,11 @@
  * On-disk JSON unit format: the file is always the current net state, kept
  * human-readable (pretty-printed, stable key order from insertion) — that
  * legibility is this backend's reason to exist.
- * @module @deepseek-ai/dsh-storage-json/src/format
+ * @module @phoenix-ai/dsh-storage-json/src/format
  */
 
-import { StorageError } from '@deepseek-ai/dsh-storage'
-import type { KvUnitDescriptor } from '@deepseek-ai/dsh-storage'
+import { StorageError } from '@phoenix-ai/dsh-storage'
+import type { KvUnitDescriptor } from '@phoenix-ai/dsh-storage'
 
 /** In-memory authoritative state of one unit; the file is its projection. `global` is `null` until first written. */
 export interface UnitState {

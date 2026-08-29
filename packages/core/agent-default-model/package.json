@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-agent-default-model",
+  "name": "@phoenix-ai/dsh-agent-default-model",
   "description": "Default model selection shared by Agent entry points",
   "version": "0.1.1-rc.2",
   "publishConfig": {
@@ -35,17 +35,17 @@
     "@deepseek-ai/schemastery": "workspace:^"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-agent": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-settings": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-agent": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-settings": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

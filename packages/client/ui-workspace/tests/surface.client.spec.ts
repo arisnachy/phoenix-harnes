@@ -1,8 +1,8 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import { registerCapabilitySurfacePreview } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import type { CapabilityId, CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
+import { registerCapabilitySurfacePreview } from '@phoenix-ai/dsh-client-ui-workspace/client'
+import type { CapabilityId, CapabilitySurface } from '@phoenix-ai/dsh-hardness'
 
 const surface = {
   id: 'tool:calendar@1.0.0:native',

@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-tool-goal
+# @phoenix-ai/dsh-tool-goal
 
 [English](README.md) | 中文
 
@@ -9,6 +9,8 @@
 - `get_goal()` 返回当前 goal 或 `null`，包括比较并设置 id／revision、持久 phase、Goal Round 的已准入数／上限、任何 blocker reason，以及当前进程本地续行启用状态。
 - `create_goal(objective, max_goal_rounds?)` 根据人类直接发起的顶层轮次创建一个 goal。模型可以推断长期运行的 goal 意图，而无需精确命令短语；非人类轮次和 subagent 会在执行时被拒绝。
 - `update_goal(goal_id, revision, action, objective?, max_goal_rounds?, blocked_reason?)` 支持 `edit`、`pause`、`resume`、`complete` 和 `blocked`。替换值只属于 `edit`；`blocked_reason` 只有在 action 为 `blocked` 时才必填，并以稳定代码 `model-reported` 持久化。严格 schema 下的空字符串和零填充值视为省略，而有意义的值仍限定到各自 action。
+
+启用 `requireJudge` 后，`complete` 会先启动一个新的结构化 subagent，并只允许读取工具。只有 judge 返回 `pass` 时 goal 才会进入 `complete`；`needs_changes` 会保持 goal active，将所需修改追加到会话，并允许下一次有上限的 Goal Round 修复工作。Judge 结果会以不含秘密的 `goal/judge` 事件持久化。
 
 所有调用都互斥，因此模型排序的批次能观察到更早变更及其新 revision。UI 客户端会收到纯通用卡片：`get_goal` 使用 read，变更使用 other。变更卡片选择第一个有意义的 action 值，否则显示 goal id，因此已接受的填充值绝不会产生空输入。
 
@@ -28,12 +30,14 @@ complete 与 blocked 还接受完全一致的当前 Goal Round：来源为 goal 
 
 ```yaml
 - id: tool-goal
-  name: '@deepseek-ai/dsh-tool-goal'
+  name: '@phoenix-ai/dsh-tool-goal'
   config:
     blockedAfterConsecutiveRounds: 3
+    requireJudge: true
+    judgeProvider: spawn
 ```
 
-该值必须是正的安全整数。它既提供模型自行报告阻塞的硬下限，也决定模型指引中指明的数值。
+`blockedAfterConsecutiveRounds` 必须是正的安全整数。`requireJudge` 启用独立完成认证；`judgeProvider` 指定新的结构化 subagent 提供方。PHOENIX 基础 profile 默认启用这两个 judge 字段。
 
 ## 模型体验
 
@@ -41,12 +45,12 @@ complete 与 blocked 还接受完全一致的当前 Goal Round：来源为 goal 
 
 #### 模型看到的内容
 
-固定 goal 策略说明何种用户语义意图值得创建 goal，要求更新前先精确读取 ref，解释会话 resume／fork 后如何重新启用续行，并限制完成／阻塞声明。配置的阈值会插入该指引。
+固定 goal 策略说明何种用户语义意图值得创建 goal，要求更新前先精确读取 ref，解释会话 resume／fork 后如何重新启用续行，并限制完成／阻塞声明。启用 judge 时，它还会说明自报完成必须等待独立 judge 返回 `pass`。配置的阈值会插入该指引。
 
 ##### Goal 策略
 
 ```markdown
-Use goal tools for one long-running completion objective in the current session. create_goal may infer goal intent from a direct human request in any language; do not create a goal for routine single-turn work. Call get_goal before update_goal and copy its exact goal_id and revision. After session resume or fork, an active goal is disarmed: when a human asks to continue or resume in any wording or language, use update_goal action resume to rearm it. Mark complete only when the objective is actually achieved. Mark blocked only after the same blocking condition persists for at least 3 consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, or useful remaining work is not blocked.
+Use goal tools for one long-running completion objective in the current session. create_goal may infer goal intent from a direct human request in any language; do not create a goal for routine single-turn work. Call get_goal before update_goal and copy its exact goal_id and revision. After session resume or fork, an active goal is disarmed: when a human asks to continue or resume in any wording or language, use update_goal action resume to rearm it. Mark complete only when the objective is actually achieved. The independent read-only judge must return pass before completion is accepted; use its required_changes as the next work list. Mark blocked only after the same blocking condition persists for at least 3 consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, or useful remaining work is not blocked.
 ```
 
 #### Token 影响
@@ -61,7 +65,7 @@ Use goal tools for one long-running completion objective in the current session.
 
 #### 模型看到的内容
 
-生成的 [`get_goal`、`create_goal` 和 `update_goal` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-goal)。成功结果是紧凑 JSON。变更会追加 goal 领域的持久 `goal/change` 事件，而不会将模型上下文加入队列。结果中的 `activation` 是实时观察值，绝不会成为回放权限依据。
+生成的 [`get_goal`、`create_goal` 和 `update_goal` schema](../../../docs/tool-catalog.zh.md#phoenix-aidsh-tool-goal)。成功结果是紧凑 JSON。变更会追加 goal 领域的持久 `goal/change` 事件，而不会将模型上下文加入队列。结果中的 `activation` 是实时观察值，绝不会成为回放权限依据。
 
 #### Token 影响
 
@@ -74,7 +78,7 @@ schema 的定义与可见性不变时，前缀保持稳定。调用和结果会�
 ## 已知限制与暂缓事项
 
 - **语义意图仍由模型判断**：执行只能证明当前轮次包含一条人类直接发送的消息，无法证明请求是否足够重大而值得创建 goal。
-- **阻塞条件是否相同仍由模型判断**：运行时强制统计互不重复的已准入 Goal Round，而不判断障碍在语义上是否等价；独立评估器的实现暂缓。
+- **阻塞条件是否相同仍由模型判断**：运行时强制统计互不重复的已准入 Goal Round，而不判断障碍在语义上是否等价。完成 judge 认证请求的结果，但不认证 blocker 的语义等价性。
 - **不负责调度或直接面向人类呈现**：这些工具只变更状态；同会话驱动器与 [`dsh-command-goal`](../command-goal/README.zh.md) 是同一领域的独立消费方。
 - **Goal Round 权限需要驱动器**：除非续行驱动器准入 goal 来源的用户轮次，否则自主 `complete`／`blocked` 路径不会启用；只挂载这个包不会创建这些轮次。
 - **提示词注册与过滤相互独立**：某个范围可能隐藏工具，却保留指引，除非部署将两项注册限定在同一范围。

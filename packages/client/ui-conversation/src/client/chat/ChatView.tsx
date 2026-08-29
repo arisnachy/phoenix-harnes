@@ -16,8 +16,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   ConversationTimelineSnapshot,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@deepseek-ai/dsh-client-ui-primitives'
+} from '@phoenix-ai/dsh-client-runtime/client'
+import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { turnProgress, type TurnProgress } from './turn-progress.ts'

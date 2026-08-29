@@ -7,11 +7,11 @@
  * select the accumulated assistant text. Selection is independent of the
  * run's stop reason.
  *
- * @module @deepseek-ai/dsh-subagent/assistant-output
+ * @module @phoenix-ai/dsh-subagent/assistant-output
  */
 
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import type { ContentBlock } from '@phoenix-ai/dsh-llm'
+import type { SessionEvent } from '@phoenix-ai/dsh-session'
 
 /**
  * Incremental fold of the selection rule, for backends that observe a child's

@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-client-ui-goal",
+  "name": "@phoenix-ai/dsh-client-ui-goal",
   "description": "Session goal surface: GoalBar docked above the composer, read from the goal session projection",
   "version": "0.1.1-rc.2",
   "publishConfig": {
@@ -32,10 +32,10 @@
   "dsh": {
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-api-remotes",
-        "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-conversation"
+        "@phoenix-ai/dsh-client-runtime",
+        "@phoenix-ai/dsh-api-remotes",
+        "@phoenix-ai/dsh-client-locale",
+        "@phoenix-ai/dsh-client-ui-conversation"
       ],
       "platform": "web"
     }
@@ -46,35 +46,35 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/dsh-client-locale": "workspace:^",
-    "@deepseek-ai/dsh-api-remotes": "workspace:^",
-    "@deepseek-ai/dsh-client-runtime": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
-    "@deepseek-ai/dsh-commands": "workspace:^",
-    "@deepseek-ai/dsh-goal": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-client-locale": "workspace:^",
+    "@phoenix-ai/dsh-api-remotes": "workspace:^",
+    "@phoenix-ai/dsh-client-runtime": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-conversation": "workspace:^",
+    "@phoenix-ai/dsh-commands": "workspace:^",
+    "@phoenix-ai/dsh-goal": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-typert-protocol": "workspace:^"
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-typert-protocol": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-client-locale": "workspace:^",
-    "@deepseek-ai/dsh-api-remotes": "workspace:^",
-    "@deepseek-ai/dsh-client-runtime": "workspace:^",
-    "@deepseek-ai/dsh-client-test-runtime": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
-    "@deepseek-ai/dsh-commands": "workspace:^",
-    "@deepseek-ai/dsh-goal": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-client-locale": "workspace:^",
+    "@phoenix-ai/dsh-api-remotes": "workspace:^",
+    "@phoenix-ai/dsh-client-runtime": "workspace:^",
+    "@phoenix-ai/dsh-client-test-runtime": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-conversation": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-primitives": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-slots": "workspace:^",
+    "@phoenix-ai/dsh-commands": "workspace:^",
+    "@phoenix-ai/dsh-goal": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
     "@testing-library/react": "^16.1.0",
     "@types/react": "~18.3.1",
     "@deepseek-ai/cordis": "workspace:^",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-typert-protocol": "workspace:^"
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-typert-protocol": "workspace:^"
   },
   "files": [
     "lib/index.js",

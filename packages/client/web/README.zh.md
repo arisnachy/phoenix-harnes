@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-client-web
+# @phoenix-ai/dsh-client-web
 
 [English](README.md) | 中文
 

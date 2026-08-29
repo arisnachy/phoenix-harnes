@@ -33,13 +33,13 @@ const vendoredPackages = new Set([
   '@deepseek-ai/cordis-plugin-logger-console',
 ])
 const publicLandlockPackages = new Set([
-  '@deepseek-ai/node-addon-landlock-run',
-  '@deepseek-ai/node-addon-landlock-run-linux-arm64',
-  '@deepseek-ai/node-addon-landlock-run-linux-x64',
+  '@phoenix-ai/node-addon-landlock-run',
+  '@phoenix-ai/node-addon-landlock-run-linux-arm64',
+  '@phoenix-ai/node-addon-landlock-run-linux-x64',
 ])
 /** Deliberate source payloads whose exact bytes are part of the package's audit surface. */
 const publicationSourceAllowlist: Readonly<Record<string, readonly string[]>> = {
-  '@deepseek-ai/node-addon-landlock-run': ['src/main.c'],
+  '@phoenix-ai/node-addon-landlock-run': ['src/main.c'],
 }
 const repositoryUrl = 'git+https://github.com/deepseek-harness/deepseek-harness.git'
 /**
@@ -54,17 +54,17 @@ const publishedRepositoryUrls = new Set([publishedRepositoryUrl, phoenixReposito
 /** Private packages that participate in workspace checks but not releases. */
 const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 /** npm namespace reserved for private experimental packages. */
-const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'
+const experimentalPackageNamePrefix = '@phoenix-ai/dsh-experimental-'
 /** Directories whose packages this repository publishes: one release member each. */
 const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/[^/]+|vendor\/[^/]+)$/
 
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
-  '@deepseek-ai/dsh': ['lib/*.js', 'config'],
+  '@phoenix-ai/dsh': ['lib/*.js', 'config'],
   // The Web build emits sourcemaps for browser debugging; publishing them is
   // what the payload policy forbids, so the bundle ships without them.
-  '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],
-  '@deepseek-ai/dsh-vscode': ['extension.cjs', 'README.md', 'CHANGELOG.md', 'LICENSE'],
+  '@phoenix-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],
+  '@phoenix-ai/dsh-vscode': ['extension.cjs', 'README.md', 'CHANGELOG.md', 'LICENSE'],
 }
 
 /** The subset of package.json fields this constraint check cares about. */
@@ -150,24 +150,24 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // them through its own CSS pipeline, so the sheets are published artifacts.
   // The glob covers whichever sheets a package emits; sourcemaps stay
   // unpublished, as everywhere else in the repository.
-  '@deepseek-ai/dsh-client-ui-primitives': ['lib/**/*.css'],
-  '@deepseek-ai/dsh-client-web': ['lib/**/*.css'],
-  '@deepseek-ai/dsh-client-ui-theme': ['lib/styles'],
+  '@phoenix-ai/dsh-client-ui-primitives': ['lib/**/*.css'],
+  '@phoenix-ai/dsh-client-web': ['lib/**/*.css'],
+  '@phoenix-ai/dsh-client-ui-theme': ['lib/styles'],
   // The CPython side ships as source .py files, published as-is rather than built.
-  '@deepseek-ai/dsh-code-runtime-python': ['py/**/*.py'],
+  '@phoenix-ai/dsh-code-runtime-python': ['py/**/*.py'],
   // The Python runtime uses a distinct closed-resolution bin; the public CLI
   // keeps config-owned bare-package resolution through lib/bin.js.
-  '@deepseek-ai/dsh-sdk-jsonrpc-demo': ['lib/packaged-bin.js'],
+  '@phoenix-ai/dsh-sdk-jsonrpc-demo': ['lib/packaged-bin.js'],
   // The argv-prefix runner entry ships beside the lib as its own bundle;
   // sandbox-local resolves it through the package's ./runner export. tsdown
   // also shares its generated FFI code through a hashed runtime chunk.
-  '@deepseek-ai/dsh-sandbox-windows-acl': ['lib/runner.js', 'lib/types-*.js'],
+  '@phoenix-ai/dsh-sandbox-windows-acl': ['lib/runner.js', 'lib/types-*.js'],
   // The Chrome connector's standalone bin and plugin entry share a hashed server chunk.
-  '@deepseek-ai/dsh-chrome-connector': ['lib/server-*.js'],
+  '@phoenix-ai/dsh-chrome-connector': ['lib/server-*.js'],
   // SQLite loads every statement from immutable package resources at runtime.
-  '@deepseek-ai/dsh-session-persistence-sqlite': ['resources/sql/**/*.sql'],
-  '@deepseek-ai/dsh-skill-badge': ['assets'],
-  '@deepseek-ai/dsh-subprocess-local': ['scripts/ensure-spawn-helper.mjs'],
+  '@phoenix-ai/dsh-session-persistence-sqlite': ['resources/sql/**/*.sql'],
+  '@phoenix-ai/dsh-skill-badge': ['assets'],
+  '@phoenix-ai/dsh-subprocess-local': ['scripts/ensure-spawn-helper.mjs'],
 }
 
 function sameStringList(actual: readonly string[] | undefined, expected: readonly string[]): boolean {
@@ -338,7 +338,7 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
     }
   }
 
-  if (dir.startsWith('packages/') && manifest.name?.startsWith('@deepseek-ai/dsh-')) {
+  if (dir.startsWith('packages/') && manifest.name?.startsWith('@phoenix-ai/dsh-')) {
     const peer = manifest.peerDependencies?.['@deepseek-ai/cordis']
     const dev = manifest.devDependencies?.['@deepseek-ai/cordis']
 

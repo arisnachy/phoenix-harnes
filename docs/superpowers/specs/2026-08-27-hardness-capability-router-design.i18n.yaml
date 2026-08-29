@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/superpowers/specs/2026-08-27-hardness-capability-router-design.md
-2026-08-27-hardness-capability-router-design.md: 5b3b354e0a4bd5c11b30d30c11739f436a2902b9
-2026-08-27-hardness-capability-router-design.zh.md: 24cf870df956455f1543b86ea8b7c56850d3d885
+2026-08-27-hardness-capability-router-design.md: c1acfe1ddf8bcfd311f4ea5a63787b03914d7b67
+2026-08-27-hardness-capability-router-design.zh.md: 7a9889a65f60e036e9659ec4c88c3e533285a795

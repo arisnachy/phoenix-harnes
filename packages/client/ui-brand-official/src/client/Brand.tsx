@@ -1,6 +1,6 @@
-import { PhoenixLogo } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import { PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
+import type { HeroBrandMarkOwnerProps } from '@phoenix-ai/dsh-client-ui-conversation/client'
+import type { SidebarBrandMarkOwnerProps } from '@phoenix-ai/dsh-client-ui-sidebar/client'
 
 type PhoenixBrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerProps
 

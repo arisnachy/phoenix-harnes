@@ -27,7 +27,7 @@ function declaration(
   fields: Partial<Omit<ClientDeclaration, 'name' | 'manifest'>> = {},
 ): ClientDeclaration {
   return {
-    name: short.startsWith('@') ? short : '@deepseek-ai/dsh-client-' + short,
+    name: short.startsWith('@') ? short : '@phoenix-ai/dsh-client-' + short,
     manifest: 'packages/client/' + short.replace(/^.*\//, '') + '/package.json',
     dynamic: true,
     external: [],
@@ -73,26 +73,26 @@ function facts(
 describe('source package uses', () => {
   it('counts type imports, module augmentations, dynamic imports, and JSX', () => {
     const uses = collectSourcePackageUses('feature.tsx', [
-      "import type { A } from '@deepseek-ai/dsh-a/subpath'",
-      "declare module '@deepseek-ai/dsh-client-ui-slots' {}",
-      "const load = () => import('@deepseek-ai/dsh-b')",
+      "import type { A } from '@phoenix-ai/dsh-a/subpath'",
+      "declare module '@phoenix-ai/dsh-client-ui-slots' {}",
+      "const load = () => import('@phoenix-ai/dsh-b')",
       'export const view = <div />',
       "export type { Local } from './local.ts'",
     ].join('\n'))
 
     expect([...uses].sort()).toEqual([
-      '@deepseek-ai/dsh-a',
-      '@deepseek-ai/dsh-b',
-      '@deepseek-ai/dsh-client-ui-slots',
+      '@phoenix-ai/dsh-a',
+      '@phoenix-ai/dsh-b',
+      '@phoenix-ai/dsh-client-ui-slots',
       'react',
     ])
     expect([...collectRuntimeSourcePackageUses('feature.tsx', [
-      "import type { A } from '@deepseek-ai/dsh-a/subpath'",
-      "declare module '@deepseek-ai/dsh-client-ui-slots' {}",
-      "const load = () => import('@deepseek-ai/dsh-b')",
+      "import type { A } from '@phoenix-ai/dsh-a/subpath'",
+      "declare module '@phoenix-ai/dsh-client-ui-slots' {}",
+      "const load = () => import('@phoenix-ai/dsh-b')",
       'export const view = <div />',
     ].join('\n'))].sort()).toEqual([
-      '@deepseek-ai/dsh-b',
+      '@phoenix-ai/dsh-b',
       'react',
     ])
   })
@@ -135,7 +135,7 @@ describe('package modes', () => {
       parserPreloadIds: [],
     }))).toEqual([
       'packages/client/web/src/platform.ts: parser-preloaded external '
-      + '"@deepseek-ai/dsh-client-runtime/client" has no matching PARSER_PRELOAD_IDS row in '
+      + '"@phoenix-ai/dsh-client-runtime/client" has no matching PARSER_PRELOAD_IDS row in '
       + 'packages/client/modules/src/index.ts',
     ])
   })
@@ -145,23 +145,23 @@ describe('dependency sections', () => {
   it('accepts dynamic peer plus dev relationships, static dev inputs, and private dependencies', () => {
     const slots = pkg('ui-slots', { dynamic: false, staticLinked: true })
     const runtime = pkg('runtime', {
-      inject: ['@deepseek-ai/dsh-client-feature'],
+      inject: ['@phoenix-ai/dsh-client-feature'],
       sourceUses: {
-        '@deepseek-ai/dsh-agent': ['packages/client/runtime/src/index.ts'],
-        '@deepseek-ai/dsh-client-ui-slots': ['packages/client/runtime/src/client/slots.ts'],
+        '@phoenix-ai/dsh-agent': ['packages/client/runtime/src/index.ts'],
+        '@phoenix-ai/dsh-client-ui-slots': ['packages/client/runtime/src/client/slots.ts'],
         react: ['packages/client/runtime/src/client/view.tsx'],
       },
       dependencies: { immer: '^10.1.1' },
       peerDependencies: {
         [CORDIS]: 'workspace:^',
-        '@deepseek-ai/dsh-agent': 'workspace:^',
-        '@deepseek-ai/dsh-client-feature': 'workspace:^',
+        '@phoenix-ai/dsh-agent': 'workspace:^',
+        '@phoenix-ai/dsh-client-feature': 'workspace:^',
       },
       devDependencies: {
         [CORDIS]: 'workspace:^',
-        '@deepseek-ai/dsh-agent': 'workspace:^',
-        '@deepseek-ai/dsh-client-feature': 'workspace:^',
-        '@deepseek-ai/dsh-client-ui-slots': 'workspace:^',
+        '@phoenix-ai/dsh-agent': 'workspace:^',
+        '@phoenix-ai/dsh-client-feature': 'workspace:^',
+        '@phoenix-ai/dsh-client-ui-slots': 'workspace:^',
         react: '^18.2.0',
       },
     })
@@ -174,10 +174,10 @@ describe('dependency sections', () => {
     const slots = pkg('ui-slots', { dynamic: false, staticLinked: true })
     const subject = pkg('feature', {
       sourceUses: {
-        '@deepseek-ai/dsh-agent': ['packages/client/feature/src/index.ts'],
+        '@phoenix-ai/dsh-agent': ['packages/client/feature/src/index.ts'],
         [slots.name]: ['packages/client/feature/src/view.tsx'],
       },
-      dependencies: { '@deepseek-ai/dsh-agent': 'workspace:^' },
+      dependencies: { '@phoenix-ai/dsh-agent': 'workspace:^' },
       peerDependencies: { [CORDIS]: 'workspace:^', [slots.name]: 'workspace:^' },
       devDependencies: { [CORDIS]: 'workspace:^', [slots.name]: 'workspace:*' },
     })
@@ -233,12 +233,12 @@ describe('dependency sections', () => {
 
   it('allows npm dependency cycles', () => {
     const a = pkg('a', {
-      peerDependencies: { [CORDIS]: 'workspace:^', '@deepseek-ai/dsh-client-b': 'workspace:^' },
-      devDependencies: { [CORDIS]: 'workspace:^', '@deepseek-ai/dsh-client-b': 'workspace:^' },
+      peerDependencies: { [CORDIS]: 'workspace:^', '@phoenix-ai/dsh-client-b': 'workspace:^' },
+      devDependencies: { [CORDIS]: 'workspace:^', '@phoenix-ai/dsh-client-b': 'workspace:^' },
     })
     const b = pkg('b', {
-      peerDependencies: { [CORDIS]: 'workspace:^', '@deepseek-ai/dsh-client-a': 'workspace:^' },
-      devDependencies: { [CORDIS]: 'workspace:^', '@deepseek-ai/dsh-client-a': 'workspace:^' },
+      peerDependencies: { [CORDIS]: 'workspace:^', '@phoenix-ai/dsh-client-a': 'workspace:^' },
+      devDependencies: { [CORDIS]: 'workspace:^', '@phoenix-ai/dsh-client-a': 'workspace:^' },
     })
     expect(collectClientPackageViolations(facts([a, b]))).toEqual([])
   })
@@ -246,7 +246,7 @@ describe('dependency sections', () => {
 
 describe('module requests', () => {
   it('accepts a dynamic row supplier and its client subpath', () => {
-    const ui = declaration('ui', { external: ['@deepseek-ai/dsh-client-slots/client'] })
+    const ui = declaration('ui', { external: ['@phoenix-ai/dsh-client-slots/client'] })
     const slots = declaration('slots')
     expect(collectClientPackageViolations(facts([], { declarations: [ui, slots] }))).toEqual([])
   })
@@ -263,8 +263,8 @@ describe('module requests', () => {
 
   it('rejects duplicates, empty values, self-requests, and missing suppliers', () => {
     const ui = declaration('ui', {
-      external: ['', '@deepseek-ai/dsh-client-ui', '@deepseek-ai/dsh-missing', '@deepseek-ai/dsh-missing'],
-      inject: ['', '@deepseek-ai/dsh-a', '@deepseek-ai/dsh-a'],
+      external: ['', '@phoenix-ai/dsh-client-ui', '@phoenix-ai/dsh-missing', '@phoenix-ai/dsh-missing'],
+      inject: ['', '@phoenix-ai/dsh-a', '@phoenix-ai/dsh-a'],
     })
     const found = collectClientPackageViolations(facts([], { declarations: [ui] }))
     expect(found).toHaveLength(6)
@@ -276,12 +276,12 @@ describe('module requests', () => {
 
   it('rejects synchronous module-request cycles but ignores inject cycles', () => {
     const a = declaration('a', {
-      external: ['@deepseek-ai/dsh-client-b'],
-      inject: ['@deepseek-ai/dsh-client-b'],
+      external: ['@phoenix-ai/dsh-client-b'],
+      inject: ['@phoenix-ai/dsh-client-b'],
     })
     const b = declaration('b', {
-      external: ['@deepseek-ai/dsh-client-a'],
-      inject: ['@deepseek-ai/dsh-client-a'],
+      external: ['@phoenix-ai/dsh-client-a'],
+      inject: ['@phoenix-ai/dsh-client-a'],
     })
     const found = collectClientPackageViolations(facts([], { declarations: [a, b] }))
     expect(found).toHaveLength(1)
@@ -316,18 +316,18 @@ describe('manifest declarations', () => {
     const root = mkdtempSync(join(tmpdir(), 'client-packages-fix-'))
     roots.push(root)
     const subject = pkg('feature', {
-      external: ['', 'react', '@deepseek-ai/dsh-client-feature', '@deepseek-ai/dsh-missing'],
-      inject: ['', '@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-agent'],
+      external: ['', 'react', '@phoenix-ai/dsh-client-feature', '@phoenix-ai/dsh-missing'],
+      inject: ['', '@phoenix-ai/dsh-agent', '@phoenix-ai/dsh-agent'],
       sourceUses: {
-        '@deepseek-ai/dsh-agent': ['packages/client/feature/src/index.ts'],
-        '@deepseek-ai/dsh-client-ui-slots': ['packages/client/feature/src/view.tsx'],
+        '@phoenix-ai/dsh-agent': ['packages/client/feature/src/index.ts'],
+        '@phoenix-ai/dsh-client-ui-slots': ['packages/client/feature/src/view.tsx'],
       },
       dependencies: {
         [CORDIS]: 'workspace:^',
-        '@deepseek-ai/dsh-agent': 'workspace:*',
+        '@phoenix-ai/dsh-agent': 'workspace:*',
       },
       peerDependencies: {
-        '@deepseek-ai/dsh-client-ui-slots': 'workspace:^',
+        '@phoenix-ai/dsh-client-ui-slots': 'workspace:^',
         '@deepseek-ai/cordis-plugin-loader': 'workspace:^',
       },
       devDependencies: {},
@@ -357,19 +357,19 @@ describe('manifest declarations', () => {
       devDependencies: Record<string, string>
     }
     expect(fixed.dsh.client).toMatchObject({
-      external: ['@deepseek-ai/dsh-missing'],
-      inject: ['@deepseek-ai/dsh-agent'],
+      external: ['@phoenix-ai/dsh-missing'],
+      inject: ['@phoenix-ai/dsh-agent'],
     })
     expect(fixed.dependencies).toBeUndefined()
     expect(fixed.peerDependencies).toEqual({
       '@deepseek-ai/cordis-plugin-loader': 'workspace:^',
       [CORDIS]: 'workspace:^',
-      '@deepseek-ai/dsh-agent': 'workspace:*',
+      '@phoenix-ai/dsh-agent': 'workspace:*',
     })
     expect(fixed.devDependencies).toEqual({
-      '@deepseek-ai/dsh-client-ui-slots': 'workspace:^',
+      '@phoenix-ai/dsh-client-ui-slots': 'workspace:^',
       [CORDIS]: 'workspace:^',
-      '@deepseek-ai/dsh-agent': 'workspace:*',
+      '@phoenix-ai/dsh-agent': 'workspace:*',
       '@deepseek-ai/cordis-plugin-loader': 'workspace:^',
     })
   })

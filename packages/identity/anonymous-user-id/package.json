@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-anonymous-user-id",
+  "name": "@phoenix-ai/dsh-anonymous-user-id",
   "description": "Shared anonymous user identity for PHOENIX telemetry and feedback correlation",
   "version": "0.1.1-rc.2",
   "publishConfig": {
@@ -32,15 +32,15 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/dsh-brand": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-home-paths": "workspace:^",
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-home-paths": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-brand": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-home-paths": "workspace:^",
+    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-home-paths": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

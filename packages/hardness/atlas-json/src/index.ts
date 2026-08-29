@@ -2,7 +2,7 @@
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { HardnessAtlasSnapshot } from '@deepseek-ai/dsh-hardness'
+import type { HardnessAtlasSnapshot } from '@phoenix-ai/dsh-hardness'
 import { parseAtlasSnapshot } from './format.ts'
 
 /** Generic atomic JSON document store with caller-owned parsing. */

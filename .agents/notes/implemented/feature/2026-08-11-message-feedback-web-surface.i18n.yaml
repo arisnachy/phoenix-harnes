@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-11-message-feedback-web-surface.md
-2026-08-11-message-feedback-web-surface.md: 762137a6ab179dcbf0b7019cd0ee0163829bd767
-2026-08-11-message-feedback-web-surface.zh.md: 4ed2f61879a2880402300a3150793370d090d2c0
+2026-08-11-message-feedback-web-surface.md: 58a5cbfbe88fc395ce8ea11fcfa1c8d7d35ca6d5
+2026-08-11-message-feedback-web-surface.zh.md: 67cdd86d0a5af72051b6fa433f8c55a96a95db99

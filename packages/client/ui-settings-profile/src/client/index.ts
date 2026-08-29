@@ -1,8 +1,8 @@
 /** Browser contribution for the local user-profile settings row. */
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
+import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
+import type {} from '@phoenix-ai/dsh-client-locale/client'
 import { UserProfileRow } from './UserProfileRow.tsx'
 import { UserProfileForm, USER_PROFILE_SETTINGS_NAMESPACE } from './profile-controller.ts'
 import { en, es, zh, type UserProfileLocaleKey } from './locales.ts'
@@ -12,7 +12,7 @@ export type { UserProfileRowProps } from './UserProfileRow.tsx'
 export type { UserProfileRowState, UserProfileSettings } from './types.ts'
 export type { UserProfileLocaleKey } from './locales.ts'
 
-declare module '@deepseek-ai/dsh-client-ui-slots' {
+declare module '@phoenix-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** Local user-profile settings row copy. */
     'settings.profile': UserProfileLocaleKey

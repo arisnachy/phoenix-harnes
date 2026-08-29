@@ -1,6 +1,6 @@
 import type {
   CapabilityDescriptor, CapabilityNeed, HardnessService,
-} from '@deepseek-ai/dsh-hardness'
+} from '@phoenix-ai/dsh-hardness'
 import type { LabMode, SelfImprovementLedger } from './lab-mode.ts'
 
 /** Provider that prepares one capability for a declared HARDNESS need. */

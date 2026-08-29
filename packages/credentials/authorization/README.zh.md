@@ -14,8 +14,8 @@
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
-import { AuthorizationDeclinedError, type AuthorizationSession } from '@deepseek-ai/dsh-authorization'
-import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import { AuthorizationDeclinedError, type AuthorizationSession } from '@phoenix-ai/dsh-authorization'
+import { credentialKey } from '@phoenix-ai/dsh-credentials'
 
 declare const ctx: Context
 declare const exchange: (signal: AbortSignal) => Promise<void>
@@ -63,7 +63,7 @@ notice 是单向的，且从不携带机密：一条消息，以及可选的“�
 
 ## Google Workspace Host broker
 
-`@deepseek-ai/dsh-authorization/google` 是位于中立 seam 旁边、由协议所有者实现的 Host Service。它注册一个 `Google Workspace` flow，并采用 Google Desktop 应用的授权码流程：随机 loopback listener、PKCE S256 与 `state`。配置中的 `clientId` 只标识 OAuth 应用，并不是用户密码或 OAuth token；发布组合从 `PHOENIX_GOOGLE_OAUTH_CLIENT_ID` 读取它。
+`@phoenix-ai/dsh-authorization/google` 是位于中立 seam 旁边、由协议所有者实现的 Host Service。它注册一个 `Google Workspace` flow，并采用 Google Desktop 应用的授权码流程：随机 loopback listener、PKCE S256 与 `state`。配置中的 `clientId` 只标识 OAuth 应用，并不是用户密码或 OAuth token；发布组合从 `PHOENIX_GOOGLE_OAUTH_CLIENT_ID` 读取它。
 
 Google 的 access token 与 refresh token 被明确限制为**仅当前进程可用**。授权成功后，broker 只把它们保存在 Host Service 的私有内存中，并在 `authorization-google/account` 下提交一个不含机密的 `{ kind: 'api-key' }` marker，让中立 authorization seam 能确认人工授权已经提交。面向浏览器的 `list()`、`describe()`、`inspect()`、credential metadata、配置、环境变量以及 marker 本身都不包含 OAuth token、authorization code 或 PKCE verifier。PHOENIX 重启后必须重新进行 Google 授权；这是有意设计，直到 PHOENIX 拥有一个能够隔离同 UID 工具进程的 credential backend。`credentials-local` 明确不是这种边界。
 

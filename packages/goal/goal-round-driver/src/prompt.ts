@@ -1,7 +1,7 @@
 /** Model-visible continuation prompt for one same-session goal round. */
 
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { GoalView } from '@deepseek-ai/dsh-goal'
+import type { ContentBlock } from '@phoenix-ai/dsh-llm'
+import type { GoalView } from '@phoenix-ai/dsh-goal'
 
 /**
  * Render the complete goal-round instruction retained in session history.
@@ -18,6 +18,7 @@ export function renderGoalRoundPrompt(goal: GoalView, round: number): ContentBlo
       + 'Continue working toward the objective in this same session. Treat the current workspace, '
       + 'tool results, and durable session state as authoritative; inspect them instead of assuming '
       + 'earlier narration is still current. Make concrete progress and verify the result. Before '
+      + (round === 1 ? '' : 'If this is not the first round, use a materially different strategy from earlier attempts and explain what changed. ')
       + 'claiming completion, gather evidence that the whole objective is achieved, read the current '
       + 'goal, and mark it complete. If work remains, leave the goal active for the next round. Follow '
       + 'the configured goal-tool policy before reporting a blocker.\n'

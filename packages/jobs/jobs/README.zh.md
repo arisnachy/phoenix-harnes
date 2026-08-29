@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-jobs
+# @phoenix-ai/dsh-jobs
 
 [English](README.md) | 中文
 

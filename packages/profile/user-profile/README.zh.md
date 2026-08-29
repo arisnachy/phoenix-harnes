@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-user-profile
+# @phoenix-ai/dsh-user-profile
 
 [English](README.md) | 中文
 

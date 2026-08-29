@@ -1,4 +1,4 @@
-import type { CapabilityRegistration, HardnessService } from '@deepseek-ai/dsh-hardness/src/types.ts'
+import type { CapabilityRegistration, HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'
 import { toHardnessCapabilityDescriptors } from './openclaw/index.ts'
 
 function disposeRegistrations(registrations: readonly CapabilityRegistration[]): void {

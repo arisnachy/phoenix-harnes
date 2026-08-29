@@ -6,9 +6,9 @@ import SkillRegistry, {
   adaptSkillDefinition,
   renderOperationalPrelude,
   type EnglishSkillOverlay,
-} from '@deepseek-ai/dsh-skill'
-import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
-import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+} from '@phoenix-ai/dsh-skill'
+import * as SkillFileSystem from '@phoenix-ai/dsh-skill-filesystem'
+import { resolveDshHome } from '@phoenix-ai/dsh-home-paths'
 
 interface OverlayRow {
   name: string

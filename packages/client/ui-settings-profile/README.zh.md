@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-client-ui-settings-profile
+# @phoenix-ai/dsh-client-ui-settings-profile
 
 [English](README.md) | 中文
 

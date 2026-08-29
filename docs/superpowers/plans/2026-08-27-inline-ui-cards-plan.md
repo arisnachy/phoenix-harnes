@@ -159,7 +159,7 @@ Expected: FAIL because the validator, `ui-card` projection, and model type do no
 Create `ui-card-model.ts` with:
 
 ```ts
-import type { UiCardBlock, UiCardField } from '@deepseek-ai/dsh-llm'
+import type { UiCardBlock, UiCardField } from '@phoenix-ai/dsh-llm'
 
 export type UiCardValues = Readonly<Record<string, string>>
 

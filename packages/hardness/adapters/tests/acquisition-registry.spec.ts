@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import HardnessRegistry from '@deepseek-ai/dsh-hardness/src/index.ts'
-import type { CapabilityId, HardnessService } from '@deepseek-ai/dsh-hardness/src/types.ts'
+import HardnessRegistry from '@phoenix-ai/dsh-hardness/src/index.ts'
+import type { CapabilityId, HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'
 import { AcquisitionRegistry } from '../src/acquisition-registry.ts'
 
 const descriptor = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AttachmentId } from '@deepseek-ai/dsh-attachment'
+import { AttachmentId } from '@phoenix-ai/dsh-attachment'
 import {
   CallId,
   createUserMessage,

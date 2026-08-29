@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { IApiClient, RpcResponse } from '@deepseek-ai/dsh-api-remotes/client'
+import type { IApiClient, RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
 import { AuthorizationPanel } from '../src/client/AuthorizationPanel.tsx'
 import { en } from '../src/client/locales.ts'
 

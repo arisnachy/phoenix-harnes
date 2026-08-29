@@ -4,7 +4,7 @@
 
 **Goal:** Make every skill visible through `ctx.skills.list()` discoverable and operationally understandable by every model in PHOENIX, then verify each skill individually and report its purpose, invocation, requirements, and execution mode.
 
-**Architecture:** Add a model-neutral adapter seam to `@deepseek-ai/dsh-skill`, apply it at the common `@deepseek-ai/dsh-tool-skill` loader boundary, and render a generated PHOENIX preflight before the original skill body. Keep upstream bodies untouched, derive profiles dynamically from the current runtime catalog, and use explicit overrides only for safety-critical ambiguity such as weather locations.
+**Architecture:** Add a model-neutral adapter seam to `@phoenix-ai/dsh-skill`, apply it at the common `@phoenix-ai/dsh-tool-skill` loader boundary, and render a generated PHOENIX preflight before the original skill body. Keep upstream bodies untouched, derive profiles dynamically from the current runtime catalog, and use explicit overrides only for safety-critical ambiguity such as weather locations.
 
 **Tech Stack:** TypeScript, Cordis services, PHOENIX `ctx.skills` registry, `tool-skill`, Vitest, `tsx`, Markdown/JSON evidence.
 
@@ -40,7 +40,7 @@ import {
   buildOperationalProfile,
   renderOperationalPrelude,
   type OperationalSkillInput,
-} from '@deepseek-ai/dsh-skill'
+} from '@phoenix-ai/dsh-skill'
 
 const skill = (patch: Partial<OperationalSkillInput> = {}): OperationalSkillInput => ({
   name: 'demo-skill',
@@ -130,7 +130,7 @@ The `openclaw-weather` override must be selected by exact normalized skill name;
 
 Render Spanish operational labels only when the current harness locale is Spanish; render English labels when the locale is English. Never emit Chinese as a generated label. Keep skill names, commands, paths, URLs, and quoted upstream text unchanged. The preflight must state that unavailable tools are unavailable and that `conditional`/`instruction-only` skills must not be presented as executed.
 
-- [ ] **Step 4: Export the adapter API from `@deepseek-ai/dsh-skill`**
+- [ ] **Step 4: Export the adapter API from `@phoenix-ai/dsh-skill`**
 
 Export the types and functions from `src/index.ts` and add `readonly operational?: SkillOperationalProfile` to `SkillDefinition`. Keep `SkillCandidate` and provider registration source-compatible; providers do not have to construct the optional field.
 

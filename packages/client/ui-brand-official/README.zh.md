@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-client-ui-brand-official
+# @phoenix-ai/dsh-client-ui-brand-official
 
 [English](README.md) | 中文
 
@@ -16,5 +16,5 @@
 
 ## 已知限制与暂缓事项
 
-- **本包保留上游 npm 身份** —— `@deepseek-ai/dsh-client-ui-brand-official` 继续作为内部包名；用户可见产品身份为 PHOENIX。
+- **本包保留上游 npm 身份** —— `@phoenix-ai/dsh-client-ui-brand-official` 继续作为内部包名；用户可见产品身份为 PHOENIX。
 - **浏览器标题相互独立** —— Web shell 与 official artifact profile 也会在 slot 系统之外选择 PHOENIX。

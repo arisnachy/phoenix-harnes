@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-The `@deepseek-ai/dsh-mcp-connector-registry` package provides `ctx.mcpConnectors`, a process-local inventory of MCP server lifecycle state and public tool names.
+The `@phoenix-ai/dsh-mcp-connector-registry` package provides `ctx.mcpConnectors`, a process-local inventory of MCP server lifecycle state and public tool names.
 
 ## Service contract
 

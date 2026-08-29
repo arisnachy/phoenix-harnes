@@ -10,7 +10,7 @@ The model-facing HARDNESS surface had capability metadata and execution adapters
 
 ## Decision
 
-PHOENIX exposes one deterministic model-facing lifecycle for governed HARDNESS operations: `inspect`, `resolve`, `plan`, `approve`, `execute`, `verify`, `present`, and `audit`. `@deepseek-ai/dsh-hardness` owns the serializable protocol types, evaluator, and guide renderer. `@deepseek-ai/dsh-hardness-adapters` installs the guide into the canonical system-prompt service as `hardness:operating-protocol`.
+PHOENIX exposes one deterministic model-facing lifecycle for governed HARDNESS operations: `inspect`, `resolve`, `plan`, `approve`, `execute`, `verify`, `present`, and `audit`. `@phoenix-ai/dsh-hardness` owns the serializable protocol types, evaluator, and guide renderer. `@phoenix-ai/dsh-hardness-adapters` installs the guide into the canonical system-prompt service as `hardness:operating-protocol`.
 
 The evaluator accepts only observed route, approval, execution, verification, presentation, and evidence states. It returns the next step, an explicit outcome, allowed actions, forbidden actions, and a reason. It never executes a tool, grants a permission, opens a connector, or carries a credential.
 

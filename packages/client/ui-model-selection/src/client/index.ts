@@ -11,12 +11,12 @@
  * neither entry because those Agent-bound RPCs would activate persisted
  * history outside the direct-parent continuation path.
  */
-import type { ConnectionHandle, ModelSelection, SessionId, SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type { CommandUiContract, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ConnectionHandle, ModelSelection, SessionId, SessionModels } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
+import type { CommandUiContract, SelectOption } from '@phoenix-ai/dsh-client-ui-commands/client'
+import type {} from '@phoenix-ai/dsh-client-ui-conversation/client'
+import type {} from '@phoenix-ai/dsh-client-locale/client'
+import type { TranslateNS } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelDirectoryState } from './directory.ts'
 import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
@@ -32,7 +32,7 @@ export type { ModelSelectInjected } from './slots.ts'
 export type { CodexQuotaRemainingInjected, CodexQuotaRemainingProps } from './CodexQuotaRemaining.tsx'
 export type { ModelKey } from './locales.ts'
 
-declare module '@deepseek-ai/dsh-client-ui-slots' {
+declare module '@phoenix-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** The model selection surfaces' copy (/model popup + composer seat). */
     model: ModelKey

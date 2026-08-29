@@ -7,11 +7,11 @@
  * control operators outside quotes mark a command as compound, so a benign
  * allowed prefix can never bless `safe && dangerous` as one operation.
  *
- * @module @deepseek-ai/dsh-tool-call-timeout-policy/exec-policy
+ * @module @phoenix-ai/dsh-tool-call-timeout-policy/exec-policy
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
+import type { PreToolDecision } from '@phoenix-ai/dsh-tools'
 
 /** One monotonic command-policy outcome. */
 export type ExecPolicyDecision = 'allow' | 'prompt' | 'forbidden'

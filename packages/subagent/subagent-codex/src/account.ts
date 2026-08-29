@@ -13,11 +13,11 @@ import type {
   AuthorizationSession,
   AuthorizationTelemetry,
   AuthorizationUsageTelemetry,
-} from '@deepseek-ai/dsh-authorization'
-import type { AuthorizationConnectorTelemetry } from '@deepseek-ai/dsh-authorization/types'
-import { credentialKey } from '@deepseek-ai/dsh-credentials'
-import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
-import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
+} from '@phoenix-ai/dsh-authorization'
+import type { AuthorizationConnectorTelemetry } from '@phoenix-ai/dsh-authorization/types'
+import { credentialKey } from '@phoenix-ai/dsh-credentials'
+import { JsonRpcLineTransport } from '@phoenix-ai/dsh-sdk-protocol'
+import type { SubprocessHandle } from '@phoenix-ai/dsh-subprocess'
 import { codexAppServerArgv } from './run.ts'
 
 /** Credential marker for the Codex-managed ChatGPT account session. */

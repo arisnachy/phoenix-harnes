@@ -1,5 +1,5 @@
 /** Free, keyless HTML search provider for Bing and DuckDuckGo. */
-import { WebError, type WebSearchProvider, type WebSearchRequest, type WebSearchResult, type WebSearchSource } from '@deepseek-ai/dsh-web'
+import { WebError, type WebSearchProvider, type WebSearchRequest, type WebSearchResult, type WebSearchSource } from '@phoenix-ai/dsh-web'
 
 /** Public HTML search engine supported by the keyless provider. */
 export type FreeSearchEngine = 'bing' | 'duckduckgo'

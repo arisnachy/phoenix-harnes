@@ -1,8 +1,8 @@
 /** Local user profile service with explicit model-context consent. */
 
 import { Service, type Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-system-prompt'
-import { settingsNamespace, type SettingsScope } from '@deepseek-ai/dsh-settings'
+import type {} from '@phoenix-ai/dsh-system-prompt'
+import { settingsNamespace, type SettingsScope } from '@phoenix-ai/dsh-settings'
 import {
   DEFAULT_USER_PROFILE_CONSENT, USER_PROFILE_SETTINGS_NAMESPACE, UserProfileSettingsSchema,
   deriveAge, mergeUserProfile, validateUserProfile, validateUserProfileUpdate,

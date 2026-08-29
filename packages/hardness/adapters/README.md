@@ -1,4 +1,4 @@
-# `@deepseek-ai/dsh-hardness-adapters`
+# `@phoenix-ai/dsh-hardness-adapters`
 
 English | [中文](README.zh.md)
 

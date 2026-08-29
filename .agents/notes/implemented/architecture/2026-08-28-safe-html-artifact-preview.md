@@ -14,7 +14,7 @@ The workspace artifact preview renders string `text/html` results in an iframe w
 
 ## Verification
 
-The focused client artifact-preview test passes and the `@deepseek-ai/dsh-client-ui-workspace` client typecheck passes. The preview remains presentation-only and does not add an execution or connector authority.
+The focused client artifact-preview test passes and the `@phoenix-ai/dsh-client-ui-workspace` client typecheck passes. The preview remains presentation-only and does not add an execution or connector authority.
 
 ## Consequences
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
-import SessionStore, { type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
-import * as PermissionInvariant from '@deepseek-ai/dsh-permission-presets/invariant'
-import InvariantRegistry from '@deepseek-ai/dsh-invariants'
+import SessionStore, { type Session, type SessionEvent } from '@phoenix-ai/dsh-session'
+import * as PermissionInvariant from '@phoenix-ai/dsh-permission-presets/invariant'
+import InvariantRegistry from '@phoenix-ai/dsh-invariants'
 
 class PermissionProbe extends Service {
   readonly names = ['safe', 'trusted']

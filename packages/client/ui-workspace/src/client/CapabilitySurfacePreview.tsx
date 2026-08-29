@@ -1,5 +1,5 @@
-import type { CapabilitySurface } from '@deepseek-ai/dsh-hardness'
-import type { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
+import type { CapabilitySurface } from '@phoenix-ai/dsh-hardness'
+import type { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
 import { createElement, type ReactNode } from 'react'
 
 export interface CapabilitySurfacePreviewProps {

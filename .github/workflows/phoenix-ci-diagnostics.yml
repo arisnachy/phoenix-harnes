@@ -95,7 +95,7 @@ jobs:
           if (( install_status != 0 )); then exit "$install_status"; fi
           exit "$sandbox_status"
       - name: Install Playwright Chromium
-        run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
+        run: pnpm --filter @phoenix-ai/dsh-web-frontend exec playwright install --with-deps chromium
       - name: Consumers / official build
         env:
           DSH_BUILD_CLIENT_PROFILE: official

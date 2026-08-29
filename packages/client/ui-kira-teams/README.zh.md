@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-client-ui-kira-teams
+# @phoenix-ai/dsh-client-ui-kira-teams
 
 [English](README.md) | 中文
 

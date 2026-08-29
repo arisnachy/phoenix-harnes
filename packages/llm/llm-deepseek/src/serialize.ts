@@ -6,9 +6,9 @@
  * @module dsh-llm-deepseek/serialize
  */
 
-import { contentHasImage, LlmError, offloadRequestImagesWithPolicy, requestImageHandleText } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
-import type { ImageAttachmentRef, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
+import { contentHasImage, LlmError, offloadRequestImagesWithPolicy, requestImageHandleText } from '@phoenix-ai/dsh-llm'
+import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
+import type { ImageAttachmentRef, RequestImageAttachment } from '@phoenix-ai/dsh-attachment'
 import type {
   WireImageContentPart,
   WireMessage,

@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import AuthorizationService from '@deepseek-ai/dsh-authorization'
+import AuthorizationService from '@phoenix-ai/dsh-authorization'
 import GoogleApiBroker, {
   GOOGLE_ACCOUNT_KEY,
   internals,
   resolveGoogleSpec,
-} from '@deepseek-ai/dsh-authorization/google'
+} from '@phoenix-ai/dsh-authorization/google'
 import { MemoryCredentials } from './memory.ts'
 
 const originalFetch = internals.fetch

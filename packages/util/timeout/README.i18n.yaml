@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/util/timeout/README.md
-README.md: c29f6a7661abf40eadafc7637c1bbca509a62a24
-README.zh.md: 38bbebe1462e4351a207b28a831d1274d9578e58
+README.md: 3e2c5a8092ca1256f73acf05dd5ecbe873ed18d9
+README.zh.md: 97fcae0510213075950e0c1cd444f4336b1665c0

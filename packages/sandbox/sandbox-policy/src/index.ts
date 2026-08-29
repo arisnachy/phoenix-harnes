@@ -23,17 +23,17 @@
  * becomes read-only. This lets the model evolve PHOENIX without editing the
  * runtime that is currently executing it.
  *
- * @module @deepseek-ai/dsh-sandbox-policy
+ * @module @phoenix-ai/dsh-sandbox-policy
  */
 
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type {} from '@deepseek-ai/dsh-agent'
-import { canonicalPath, type SandboxExecutionPolicy, type SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import type { Session } from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@phoenix-ai/dsh-agent'
+import { canonicalPath, type SandboxExecutionPolicy, type SandboxMode } from '@phoenix-ai/dsh-sandbox'
+import type { Session } from '@phoenix-ai/dsh-session'
+import type {} from '@phoenix-ai/dsh-system-prompt'
 import { effectiveSandboxMode } from './session-mode.ts'
 
 export { SANDBOX_MODES, effectiveSandboxMode, setSandboxMode } from './session-mode.ts'

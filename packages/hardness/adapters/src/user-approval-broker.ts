@@ -1,7 +1,7 @@
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import type ApprovalService from '@deepseek-ai/dsh-user-approval'
-import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
-import type { CapabilityPermission, CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+import type { Agent } from '@phoenix-ai/dsh-agent'
+import type ApprovalService from '@phoenix-ai/dsh-user-approval'
+import type { ApprovalOutcome } from '@phoenix-ai/dsh-user-approval'
+import type { CapabilityPermission, CapabilitySurface } from '@phoenix-ai/dsh-hardness'
 import type { PermissionBrokerResult } from './permission-broker.ts'
 
 /** Live agent and optional cancellation signal for one user-approval request. */

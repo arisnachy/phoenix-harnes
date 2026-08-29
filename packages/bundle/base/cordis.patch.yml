@@ -22,29 +22,29 @@
         root: ['.']
 
     - id: llm
-      name: '@deepseek-ai/dsh-llm'
+      name: '@phoenix-ai/dsh-llm'
 
     - id: session
-      name: '@deepseek-ai/dsh-session'
+      name: '@phoenix-ai/dsh-session'
 
     - id: typert
-      name: '@deepseek-ai/dsh-typert-registry'
+      name: '@phoenix-ai/dsh-typert-registry'
 
     - id: typert-loader
-      name: '@deepseek-ai/dsh-typert-loader'
+      name: '@phoenix-ai/dsh-typert-loader'
 
     - id: typert-gateway
-      name: '@deepseek-ai/dsh-api-gateway'
+      name: '@phoenix-ai/dsh-api-gateway'
 
     - id: session-title
-      name: '@deepseek-ai/dsh-session-title'
+      name: '@phoenix-ai/dsh-session-title'
       config:
         fallbackMaxWords: 5
         fallbackMaxBytes: 40
         maxTitleBytes: 80
 
     - id: session-title-llm
-      name: '@deepseek-ai/dsh-session-title-first-prompt-llm'
+      name: '@phoenix-ai/dsh-session-title-first-prompt-llm'
       config:
         targetWords: 5
         targetCjkCharacters: 10
@@ -53,49 +53,49 @@
         timeoutMs: 60000
 
     - id: user-questions
-      name: '@deepseek-ai/dsh-user-questions'
+      name: '@phoenix-ai/dsh-user-questions'
 
     - id: agent
-      name: '@deepseek-ai/dsh-agent'
+      name: '@phoenix-ai/dsh-agent'
 
     # The transport-independent default for Agents created by entry points.
     # Settings may supply a saved selection; consumers read it at creation time.
     - id: agent-default-model
-      name: '@deepseek-ai/dsh-agent-default-model'
+      name: '@phoenix-ai/dsh-agent-default-model'
       config:
         provider: openrouter
         model: openrouter/free
 
     - id: jobs
-      name: '@deepseek-ai/dsh-jobs-local'
+      name: '@phoenix-ai/dsh-jobs-local'
 
     - id: llm-retry
-      name: '@deepseek-ai/dsh-llm-retry'
+      name: '@phoenix-ai/dsh-llm-retry'
 
     # User-settings document (`$DSH_HOME/settings.yaml`, hot-reloaded): a
     # `llm-deepseek:` or `llm-pi-ai:` section there overrides the adapter entries
     # below without a restart, and is what the web Models page writes.
     - id: settings
-      name: '@deepseek-ai/dsh-settings-file'
+      name: '@phoenix-ai/dsh-settings-file'
 
     # Private local profile. Every value is excluded from model context until
     # the user opts in for that individual field in General settings.
     - id: user-profile
-      name: '@deepseek-ai/dsh-user-profile'
+      name: '@phoenix-ai/dsh-user-profile'
 
     # Credential sources: inherited environment over the managed
     # `$DSH_HOME/.credentials.yaml`, with project and user `.env` fallbacks.
     # Adapters resolve references per request; the Models page writes only the
     # managed document, which is never materialized into the process environment.
     - id: credentials
-      name: '@deepseek-ai/dsh-credentials-local'
+      name: '@phoenix-ai/dsh-credentials-local'
 
     # Interactive provider sign-in (for example ChatGPT/Codex OAuth) is a
     # separate capability from API-key storage. The authorization service owns
     # the human conversation while each provider owns its protocol and writes
     # the resulting credential through the credential store above.
     - id: authorization
-      name: '@deepseek-ai/dsh-authorization'
+      name: '@phoenix-ai/dsh-authorization'
 
     # Google Workspace authorization is opt-in until a deployment supplies its
     # verified Desktop OAuth client id. Access/refresh tokens are stored only in
@@ -104,7 +104,7 @@
     # Google installed apps do not support incremental authorization, so the
     # enabled provider requests exactly the shipped Workspace capability set.
     - id: authorization-google
-      name: '@deepseek-ai/dsh-authorization/google'
+      name: '@phoenix-ai/dsh-authorization/google'
       config:
         clientId: !!js process.env.PHOENIX_GOOGLE_OAUTH_CLIENT_ID
         scopes:
@@ -123,14 +123,14 @@
     # including `openrouter/free`, while Settings -> Models can replace the route
     # catalog or add other providers without restarting the app.
     - id: llm-pi-ai
-      name: '@deepseek-ai/dsh-llm-pi-ai'
+      name: '@phoenix-ai/dsh-llm-pi-ai'
       config:
         providers:
           openrouter:
             apiKeyEnv: OPENROUTER_API_KEY
 
     - id: session-persistence-jsonl
-      name: '@deepseek-ai/dsh-session-persistence-jsonl'
+      name: '@phoenix-ai/dsh-session-persistence-jsonl'
       config:
         root: !!js dshHomePath('sessions')
 
@@ -138,7 +138,7 @@
     # keep content-addressed references that this shared backend resolves for
     # provider requests and authorized history reads.
     - id: attachment-local
-      name: '@deepseek-ai/dsh-attachment-local'
+      name: '@phoenix-ai/dsh-attachment-local'
 
     # Full-text session search is opt-in. `openAt: never` keeps
     # ctx.sessionQuery mounted — exact reads, titles, and lineage traces
@@ -149,7 +149,7 @@
     # `first-search` or `startup` in a later patch layer (profile
     # cordis.patch.yml or a --patch overlay), typically with a durable `path`.
     - id: session-query-sqlite
-      name: '@deepseek-ai/dsh-session-query-sqlite'
+      name: '@phoenix-ai/dsh-session-query-sqlite'
       config:
         path: ':memory:'
         openAt: never
@@ -158,7 +158,7 @@
     # through its registered units, so the `list_agents` surface below fails
     # loud without it; web layers reuse this same mount for list rows.
     - id: session-projection
-      name: '@deepseek-ai/dsh-session-projection'
+      name: '@phoenix-ai/dsh-session-projection'
 
     # Session telemetry is mounted but disabled by default. DSH_TELEMETRY_MODE
     # explicitly opts into FULL or FEEDBACK_ONLY reporting; uploading mirrors
@@ -180,7 +180,7 @@
     # promise never settles. Every CLI exit path drains it by disposing the root
     # on SIGINT/SIGTERM.
     - id: session-telemetry-otel
-      name: '@deepseek-ai/dsh-session-telemetry-otel'
+      name: '@phoenix-ai/dsh-session-telemetry-otel'
       config:
         mode: !!js process.env.DSH_TELEMETRY_MODE || 'DISABLED'
         shutdownTimeoutMillis: 3000
@@ -195,40 +195,40 @@
           exportTimeoutMillis: 1500
 
     - id: subprocess
-      name: '@deepseek-ai/dsh-subprocess-local'
+      name: '@phoenix-ai/dsh-subprocess-local'
 
     # Every shipped CLI mode starts with the same file-effect boundary.
     # An explicit danger-full-access environment selection carries the same
     # no-approval policy as the matching permission preset; other modes retain
     # the interactive approval default below.
     - id: sandbox
-      name: '@deepseek-ai/dsh-sandbox-local'
+      name: '@phoenix-ai/dsh-sandbox-local'
 
     - id: sandbox-policy
-      name: '@deepseek-ai/dsh-sandbox-policy'
+      name: '@phoenix-ai/dsh-sandbox-policy'
       config:
         mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'
         workspaceRoot: !!js process.cwd()
 
     - id: bash-sandbox
-      name: '@deepseek-ai/dsh-bash-sandbox'
+      name: '@phoenix-ai/dsh-bash-sandbox'
       disabled: !!js process.platform === 'win32'
       config:
         timeoutMs: 60000
 
     - id: pwsh-sandbox
-      name: '@deepseek-ai/dsh-pwsh-sandbox'
+      name: '@phoenix-ai/dsh-pwsh-sandbox'
       disabled: !!js process.platform !== 'win32'
 
     - id: approval
-      name: '@deepseek-ai/dsh-user-approval'
+      name: '@phoenix-ai/dsh-user-approval'
       config:
         # Full access is already the user's explicit permission choice; a
         # second approval escalation would contradict that selected mode.
         policy: !!js "(process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'"
 
     - id: permission
-      name: '@deepseek-ai/dsh-permission-presets'
+      name: '@phoenix-ai/dsh-permission-presets'
       config:
         presets:
           read-only:
@@ -242,65 +242,65 @@
             approval: never
 
     - id: shell-env
-      name: '@deepseek-ai/dsh-shell-env'
+      name: '@phoenix-ai/dsh-shell-env'
 
     - id: tool-bash
-      name: '@deepseek-ai/dsh-tool-bash'
+      name: '@phoenix-ai/dsh-tool-bash'
       disabled: !!js process.platform === 'win32'
 
     - id: tool-pwsh
-      name: '@deepseek-ai/dsh-tool-pwsh'
+      name: '@phoenix-ai/dsh-tool-pwsh'
       disabled: !!js process.platform !== 'win32'
 
     - id: tool-jobs
-      name: '@deepseek-ai/dsh-tool-jobs'
+      name: '@phoenix-ai/dsh-tool-jobs'
 
     - id: fs-observation-policy
-      name: '@deepseek-ai/dsh-fs-observation-policy'
+      name: '@phoenix-ai/dsh-fs-observation-policy'
 
     - id: tool-fs
-      name: '@deepseek-ai/dsh-tool-fs'
+      name: '@phoenix-ai/dsh-tool-fs'
 
     - id: tool-fs-search
-      name: '@deepseek-ai/dsh-tool-fs-search'
+      name: '@phoenix-ai/dsh-tool-fs-search'
       config:
         sampleOverCapGlobResults: false
 
     - id: agent-instructions
-      name: '@deepseek-ai/dsh-agent-instructions'
+      name: '@phoenix-ai/dsh-agent-instructions'
       config:
         maxBytes: 65536
 
     - id: skill
-      name: '@deepseek-ai/dsh-skill'
+      name: '@phoenix-ai/dsh-skill'
 
     - id: skill-filesystem
-      name: '@deepseek-ai/dsh-skill-filesystem'
+      name: '@phoenix-ai/dsh-skill-filesystem'
 
     - id: skill-badge
-      name: '@deepseek-ai/dsh-skill-badge'
+      name: '@phoenix-ai/dsh-skill-badge'
       disabled: true
 
     - id: tool-skill
-      name: '@deepseek-ai/dsh-tool-skill'
+      name: '@phoenix-ai/dsh-tool-skill'
 
     - id: commands
-      name: '@deepseek-ai/dsh-commands'
+      name: '@phoenix-ai/dsh-commands'
 
     - id: command-feedback
-      name: '@deepseek-ai/dsh-command-feedback'
+      name: '@phoenix-ai/dsh-command-feedback'
 
     - id: goal
-      name: '@deepseek-ai/dsh-goal'
+      name: '@phoenix-ai/dsh-goal'
 
     - id: goal-round-driver
-      name: '@deepseek-ai/dsh-goal-round-driver'
+      name: '@phoenix-ai/dsh-goal-round-driver'
 
     - id: command-goal
-      name: '@deepseek-ai/dsh-command-goal'
+      name: '@phoenix-ai/dsh-command-goal'
 
     - id: plan-mode
-      name: '@deepseek-ai/dsh-plan-mode'
+      name: '@phoenix-ai/dsh-plan-mode'
       config:
         section: |
               You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
@@ -316,10 +316,10 @@
               When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
 
     - id: token-meter
-      name: '@deepseek-ai/dsh-token-meter'
+      name: '@phoenix-ai/dsh-token-meter'
 
     - id: compaction-basic
-      name: '@deepseek-ai/dsh-compaction-basic'
+      name: '@phoenix-ai/dsh-compaction-basic'
       # Economy guard: compact earlier, retain a smaller recent window, and do
       # not spend extra model calls retrying compaction. This is deliberately
       # conservative; quality is measured in phoenix-self before tightening it.
@@ -333,31 +333,31 @@
     # Human `/compact`: one useful reduction below the automatic threshold. Backend
     # independent, so it follows whichever compaction service this leaf mounts.
     - id: command-compact
-      name: '@deepseek-ai/dsh-command-compact'
+      name: '@phoenix-ai/dsh-command-compact'
 
     - id: subagent
-      name: '@deepseek-ai/dsh-subagent'
+      name: '@phoenix-ai/dsh-subagent'
 
     - id: subagent-spawn-in-process
-      name: '@deepseek-ai/dsh-subagent-spawn-in-process'
+      name: '@phoenix-ai/dsh-subagent-spawn-in-process'
       config:
         providerName: spawn
 
     - id: subagent-fork-in-process
-      name: '@deepseek-ai/dsh-subagent-fork-in-process'
+      name: '@phoenix-ai/dsh-subagent-fork-in-process'
       config:
         providerName: fork
 
     # Continuable background children are selected per delegation tool. The
     # separately loaded follow-up tool registers the one global `send_message`.
     - id: tool-subagent-control
-      name: '@deepseek-ai/dsh-tool-subagent-control'
+      name: '@phoenix-ai/dsh-tool-subagent-control'
 
     - id: tool-subagent-list-agents
-      name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+      name: '@phoenix-ai/dsh-tool-subagent-control/list-agents'
 
     - id: tool-subagent
-      name: '@deepseek-ai/dsh-tool-subagent'
+      name: '@phoenix-ai/dsh-tool-subagent'
       config:
         provider: spawn
         toolName: subagent
@@ -370,7 +370,7 @@
     # fork children install neither, keeping the parent's request prefix.
     # See .agents/notes/implemented/architecture/2026-08-10-fork-children-stay-one-shot.md.
     - id: tool-subagent-fork
-      name: '@deepseek-ai/dsh-tool-subagent'
+      name: '@phoenix-ai/dsh-tool-subagent'
       config:
         provider: fork
         toolName: subagent_fork
@@ -380,10 +380,10 @@
 
     # Optional direct-child return channel; absent from roots and one-shot agents.
     - id: tool-subagent-report
-      name: '@deepseek-ai/dsh-tool-subagent-report'
+      name: '@phoenix-ai/dsh-tool-subagent-report'
 
     - id: workflow-worker-thread
-      name: '@deepseek-ai/dsh-workflow-worker-thread'
+      name: '@phoenix-ai/dsh-workflow-worker-thread'
       config:
         provider: spawn
         # Explicit workflows remain available, but the default deployment cannot
@@ -392,57 +392,62 @@
         maxTotalAgents: 4
 
     - id: tool-workflow
-      name: '@deepseek-ai/dsh-tool-workflow'
+      name: '@phoenix-ai/dsh-tool-workflow'
 
     - id: timeout-policy
-      name: '@deepseek-ai/dsh-tool-call-timeout-policy'
+      name: '@phoenix-ai/dsh-tool-call-timeout-policy'
 
     - id: spill-local
-      name: '@deepseek-ai/dsh-spill-local'
+      name: '@phoenix-ai/dsh-spill-local'
 
     - id: spill-policy
-      name: '@deepseek-ai/dsh-spill-policy'
+      name: '@phoenix-ai/dsh-spill-policy'
       config:
         maxInlineBytes: 50000
 
     # Durability checkpoints before each model request and top-level dispatch.
     - id: session-checkpoint-policy
-      name: '@deepseek-ai/dsh-session-checkpoint-policy'
+      name: '@phoenix-ai/dsh-session-checkpoint-policy'
 
     # Compacts oversized tool results before the broader conversation compactor
     # runs, preserving the model-visible result within the configured budget.
     - id: tool-result-pruner
-      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      name: '@phoenix-ai/dsh-compaction-tool-result-pruner'
       config:
         thresholdChars: 8192
         headChars: 4096
         tailChars: 1024
 
     - id: tool-todo
-      name: '@deepseek-ai/dsh-tool-todo'
+      name: '@phoenix-ai/dsh-tool-todo'
       config:
         allowParallelInProgress: true
 
     # Persisted same-session goals reach the model and the slash menu here; the
     # domain, driver, and `/goal` command are above.
     - id: tool-goal
-      name: '@deepseek-ai/dsh-tool-goal'
+      name: '@phoenix-ai/dsh-tool-goal'
+      config:
+        # A goal cannot enter complete until a fresh read-only structured judge
+        # independently approves the whole objective.
+        requireJudge: true
+        judgeProvider: spawn
 
     # Fresh-agent Ralph iteration over a build-time-fixed script.
     - id: tool-ralph
-      name: '@deepseek-ai/dsh-tool-ralph'
+      name: '@phoenix-ai/dsh-tool-ralph'
       config:
         subagentProvider: spawn
         maxRounds: 64
 
     - id: tool-str-replace-editor
-      name: '@deepseek-ai/dsh-tool-str-replace-editor'
+      name: '@phoenix-ai/dsh-tool-str-replace-editor'
       config:
         maxOutputChars: 16000
 
     # Consecutive-repeat reminders on the tool chain.
     - id: repeat-tool-reminder
-      name: '@deepseek-ai/dsh-repeat-tool-reminder'
+      name: '@phoenix-ai/dsh-repeat-tool-reminder'
       config:
         thresholds: [3, 5, 8]
         argumentsPreviewChars: 500
@@ -453,26 +458,26 @@
     # because a model-chosen URL needs a separate SSRF policy. Search is a full
     # auxiliary model request, so the shipped route gets a 60s budget.
     - id: web
-      name: '@deepseek-ai/dsh-web'
+      name: '@phoenix-ai/dsh-web'
       config:
         searchProvider: openrouter
         searchFallbackProviders: [free-html]
 
     - id: web-search-openrouter
-      name: '@deepseek-ai/dsh-web-search-openrouter'
+      name: '@phoenix-ai/dsh-web-search-openrouter'
       config:
         apiKeyEnv: OPENROUTER_API_KEY
 
     # Keyless fallback: uses public HTML search endpoints when the paid route
     # fails recoverably (quota, credits, rate limit, auth, timeout, or outage).
     - id: web-search-free
-      name: '@deepseek-ai/dsh-web-search-free'
+      name: '@phoenix-ai/dsh-web-search-free'
       config:
         engines: [bing, duckduckgo]
         timeoutMs: 8000
 
     - id: tool-web
-      name: '@deepseek-ai/dsh-tool-web'
+      name: '@phoenix-ai/dsh-tool-web'
       config:
         fetch: false
         searchTimeoutMs: 60000
@@ -482,25 +487,25 @@
     # Secret-free lifecycle state for MCP servers. MCP client overlays publish their
     # current connection and public-tool generation through this shared registry.
     - id: mcp-connector-registry
-      name: '@deepseek-ai/dsh-mcp-connector-registry'
+      name: '@phoenix-ai/dsh-mcp-connector-registry'
 
     # The tool registry. Presentation mode is a deployment choice; omitting it here
     # keeps the schema default (native).
     - id: tools
-      name: '@deepseek-ai/dsh-tools'
+      name: '@phoenix-ai/dsh-tools'
 
     # Provider-neutral capability inventory. The JSON provider remains opt-in;
     # this base row mounts the in-memory service and its source projections.
     - id: hardness
-      name: '@deepseek-ai/dsh-hardness'
+      name: '@phoenix-ai/dsh-hardness'
 
     - id: hardness-adapters
-      name: '@deepseek-ai/dsh-hardness-adapters'
+      name: '@phoenix-ai/dsh-hardness-adapters'
 
     # The deployment persona is a deployment choice; plan-mode and tool plugins own
     # their own prompt sections.
     - id: system-prompt
-      name: '@deepseek-ai/dsh-system-prompt'
+      name: '@phoenix-ai/dsh-system-prompt'
       config:
         persona: |
           You are PHOENIX, a warm, persistent, and safety-governed agent harness.
@@ -520,18 +525,18 @@
     # Agents created at startup. The base stays empty; raw overlays may create
     # agents, while Web creates sessions on client request.
     - id: agent-loop
-      name: '@deepseek-ai/dsh-agent-loop'
+      name: '@phoenix-ai/dsh-agent-loop'
       config:
         agents: []
 
     # The sandboxed filesystem provider. `cwd` defaults to `process.cwd()`; an
     # overlay can pin another workspace.
     - id: fs-sandbox
-      name: '@deepseek-ai/dsh-fs-sandbox'
+      name: '@phoenix-ai/dsh-fs-sandbox'
 
     # The native DeepSeek adapter. No key or endpoint is inlined: both resolve per
     # request from the `llm-deepseek:` settings section over this entry, with the
     # key coming from the credential store below. Thinking defaults are a deployment
     # choice.
     - id: llm-deepseek
-      name: '@deepseek-ai/dsh-llm-deepseek'
+      name: '@phoenix-ai/dsh-llm-deepseek'

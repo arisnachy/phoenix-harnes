@@ -3,7 +3,7 @@ import {
   buildOperationalProfile,
   renderOperationalPrelude,
   type OperationalSkillInput,
-} from '@deepseek-ai/dsh-skill'
+} from '@phoenix-ai/dsh-skill'
 
 const skill = (patch: Partial<OperationalSkillInput> = {}): OperationalSkillInput => ({
   name: 'demo-skill',

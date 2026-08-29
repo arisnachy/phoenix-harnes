@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { StateDot } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatNodeViewProps } from '../contract/slots.ts'
 import { StructuredErrorView } from './StructuredErrorView.tsx'
 import css from './MessageItem.module.css'

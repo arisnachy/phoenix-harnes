@@ -1,14 +1,14 @@
 - id: credentials
-  name: '@deepseek-ai/dsh-credentials-local'
+  name: '@phoenix-ai/dsh-credentials-local'
   config:
     path: !!js process.env.PHOENIX_GOOGLE_REAL_CREDENTIALS_PATH
     watch: false
 
 - id: authorization
-  name: '@deepseek-ai/dsh-authorization'
+  name: '@phoenix-ai/dsh-authorization'
 
 - id: authorization-google
-  name: '@deepseek-ai/dsh-authorization/google'
+  name: '@phoenix-ai/dsh-authorization/google'
   config:
     clientId: test-client.apps.googleusercontent.com
     scopes:

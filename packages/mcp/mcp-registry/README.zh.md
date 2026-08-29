@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-`@deepseek-ai/dsh-mcp-connector-registry` 提供 `ctx.mcpConnectors`，用于记录 MCP server 的进程内生命周期状态和公开 tool 名称。
+`@phoenix-ai/dsh-mcp-connector-registry` 提供 `ctx.mcpConnectors`，用于记录 MCP server 的进程内生命周期状态和公开 tool 名称。
 
 ## Service contract
 

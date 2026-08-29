@@ -1,6 +1,6 @@
 /** Model-facing HARDNESS protocol registration for the canonical prompt service. */
 
-import { renderHardnessProtocol } from '@deepseek-ai/dsh-hardness'
+import { renderHardnessProtocol } from '@phoenix-ai/dsh-hardness'
 
 /** Minimal structural prompt registrar required by the protocol adapter. */
 export interface HardnessPromptRegistrar {

@@ -1,10 +1,10 @@
 /** Host plugin inventory Settings tab plus the stable-update sidebar action. */
 
-import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@phoenix-ai/dsh-client-locale/client'
+import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
+import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 // Type-only: supplies the sidebar.footer.action SlotMap declaration.
-import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type {} from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import { PluginInventorySettingsTab, type PluginInventorySettingsTabInjected } from './PluginInventorySettingsTab.tsx'
 import { UpdateFooterAction, type UpdateFooterActionInjected } from './UpdateFooterAction.tsx'
 import { en, es, zh, type PluginInventoryLocaleKey } from './locales.ts'
@@ -13,7 +13,7 @@ export type { PluginInventorySettingsTabInjected, PluginInventorySettingsTabProp
 export type { UpdateFooterActionInjected, UpdateFooterActionProps } from './UpdateFooterAction.tsx'
 export type { PluginInventoryLocaleKey } from './locales.ts'
 
-declare module '@deepseek-ai/dsh-client-ui-slots' {
+declare module '@phoenix-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** Host plugin inventory and PHOENIX update copy. */
     'settings.pluginInventory': PluginInventoryLocaleKey

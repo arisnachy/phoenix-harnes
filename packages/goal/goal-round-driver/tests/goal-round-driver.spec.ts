@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
-import { agentEvents } from '@deepseek-ai/dsh-agent'
-import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import GoalService, { GoalId } from '@deepseek-ai/dsh-goal'
-import type { GoalView } from '@deepseek-ai/dsh-goal'
-import { createUserMessage, LlmAdapter, LlmError  } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
-import type { UserMessage } from '@deepseek-ai/dsh-session'
+import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
+import { agentEvents } from '@phoenix-ai/dsh-agent'
+import AgentLoop from '@phoenix-ai/dsh-agent-loop'
+import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
+import GoalService, { GoalId } from '@phoenix-ai/dsh-goal'
+import type { GoalView } from '@phoenix-ai/dsh-goal'
+import { createUserMessage, LlmAdapter, LlmError  } from '@phoenix-ai/dsh-llm'
+import type { GenerateOptions, StreamChunk } from '@phoenix-ai/dsh-llm'
+import { SessionId } from '@phoenix-ai/dsh-session'
+import type { UserMessage } from '@phoenix-ai/dsh-session'
 import * as goalSession from '../src/index.ts'
 
 type ScriptEntry = StreamChunk[] | Error | 'hang' | ((options: GenerateOptions) => StreamChunk[])
@@ -162,6 +162,7 @@ describe('goal-round outcome policy', () => {
     expect(block.text).toMatch(
       /<goal_round>\nObjective: "Ship verified support"\nRound: 3\/9[\s\S]*current workspace[\s\S]*verify[\s\S]*mark it complete/,
     )
+    expect(block.text).toContain('If this is not the first round, use a materially different strategy')
   })
 
   it('quotes multiline or tag-like objective text as one unambiguous data value', () => {

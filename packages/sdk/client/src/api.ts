@@ -4,18 +4,18 @@
  * prompt and settles when the whole agent next becomes idle.
  * Mirrors the Python SDK's `DeepSeekHarness`/`Session` pair.
  *
- * @module @deepseek-ai/dsh-sdk-client/api
+ * @module @phoenix-ai/dsh-sdk-client/api
  */
 
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import type { SessionEvent } from '@phoenix-ai/dsh-session'
 import {
   HARNESS_SDK_PROTOCOL_VERSION,
   type HarnessSdkCapabilities,
   type SessionCloseResult,
   type SessionInterruptResult,
-} from '@deepseek-ai/dsh-sdk-protocol'
+} from '@phoenix-ai/dsh-sdk-protocol'
 import { HarnessClient, isRecord, SdkProtocolError } from './client.ts'
 import type { ContentBlock, DeepSeekHarnessOptions, HarnessClientOptions, HarnessNotification, RunResult } from './types.ts'
 

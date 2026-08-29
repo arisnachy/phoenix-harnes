@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PermissionGate } from '../src/permission-gate.ts'
-import type { CapabilityId, CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+import type { CapabilityId, CapabilitySurface } from '@phoenix-ai/dsh-hardness'
 
 const surface = {
   id: 'tool:calendar@1.0.0:visual',

@@ -1,4 +1,4 @@
-import type { CapabilityDescriptor, CapabilityId } from '@deepseek-ai/dsh-hardness/src/types.ts'
+import type { CapabilityDescriptor, CapabilityId } from '@phoenix-ai/dsh-hardness/src/types.ts'
 import { OPENCLAW_DONOR_COMMIT, listOpenClawExtensions } from './catalog.ts'
 import { toPhoenixCapabilities } from './capabilities.ts'
 

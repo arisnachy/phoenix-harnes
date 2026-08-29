@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ToolGuard, ToolRuntime } from '@deepseek-ai/dsh-tools'
-import type { CapabilityDescriptor, CapabilityId, HardnessService } from '@deepseek-ai/dsh-hardness'
+import type { ToolGuard, ToolRuntime } from '@phoenix-ai/dsh-tools'
+import type { CapabilityDescriptor, CapabilityId, HardnessService } from '@phoenix-ai/dsh-hardness'
 import { installSandboxCapabilityGuard } from '../src/sandbox-guard.ts'
 
 const descriptor = { id: 'tool:run', modalities: ['sandbox'] } as unknown as CapabilityDescriptor

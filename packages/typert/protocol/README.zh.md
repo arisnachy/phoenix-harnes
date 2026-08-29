@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-typert-protocol
+# @phoenix-ai/dsh-typert-protocol
 
 [English](README.md) | 中文
 

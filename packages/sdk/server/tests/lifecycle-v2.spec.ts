@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { SessionId } from '@deepseek-ai/dsh-session'
-import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import type { JsonRpcTransportPeer } from '@deepseek-ai/dsh-sdk-protocol'
+import { SessionId } from '@phoenix-ai/dsh-session'
+import type { Agent, AgentHandle } from '@phoenix-ai/dsh-agent'
+import type { JsonRpcTransportPeer } from '@phoenix-ai/dsh-sdk-protocol'
 import { HarnessSdkJsonRpcServer } from '../src/server.ts'
 
 class SilentTransport implements JsonRpcTransportPeer {

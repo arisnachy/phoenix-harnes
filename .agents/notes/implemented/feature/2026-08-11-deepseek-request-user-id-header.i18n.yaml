@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-11-deepseek-request-user-id-header.md
-2026-08-11-deepseek-request-user-id-header.md: 0641c1c78ee9992a77c9c3ea99c9b7377296b3a0
-2026-08-11-deepseek-request-user-id-header.zh.md: 18b84b9debbf598150a6712689c0db078cb99c2f
+2026-08-11-deepseek-request-user-id-header.md: 2f88dd897bd64f35f9c261e57146e3dece29f152
+2026-08-11-deepseek-request-user-id-header.zh.md: 603c48864b42bd236a6965cca63151102b652f01

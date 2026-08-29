@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-client-ui-sidebar
+# @phoenix-ai/dsh-client-ui-sidebar
 
 [English](README.md) | 中文
 

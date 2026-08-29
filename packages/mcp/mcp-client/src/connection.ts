@@ -18,12 +18,12 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { Context } from '@deepseek-ai/cordis'
-import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import { createTransport } from './transport.ts'
 import { syncTools } from './tools.ts'
 import type { ToolBridgeOptions, ToolDisposers } from './tools.ts'
 import type { Config } from './index.ts'
-import type { McpConnectorReasonCode, McpConnectorRegistration, McpConnectorStatus } from '@deepseek-ai/dsh-mcp-connector-registry'
+import type { McpConnectorReasonCode, McpConnectorRegistration, McpConnectorStatus } from '@phoenix-ai/dsh-mcp-connector-registry'
 
 /** Automatic reconnect policy for one MCP server connection. */
 export interface ReconnectConfig {

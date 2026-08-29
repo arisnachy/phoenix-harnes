@@ -1,9 +1,9 @@
-/** Package-owned invariant companion for `@deepseek-ai/dsh-hardness-atlas-json`. */
+/** Package-owned invariant companion for `@phoenix-ai/dsh-hardness-atlas-json`. */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-hardness-atlas-json'
+const PACKAGE_NAME = '@phoenix-ai/dsh-hardness-atlas-json'
 
 /** Cordis plugin name for the HARDNESS Atlas JSON invariant companion. */
 export const name = 'hardness-atlas-json-invariant'

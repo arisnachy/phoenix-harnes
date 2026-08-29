@@ -11,13 +11,13 @@
  * The transcription is fail-closed per prompt: if any image cannot be
  * described, the whole prompt is refused rather than silently dropping an
  * attachment the user explicitly sent.
- * @module @deepseek-ai/dsh-host-apiproxy/src/vision-fallback
+ * @module @phoenix-ai/dsh-host-apiproxy/src/vision-fallback
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import { createUserMessage } from '@phoenix-ai/dsh-llm'
+import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { ModelSelection } from './api/index.ts'
 
 /** Deployment configuration for borrowed-eyes transcription. */

@@ -1,7 +1,7 @@
 /**
  * Shared filesystem path helpers for PHOENIX user data.
  *
- * @module @deepseek-ai/dsh-home-paths
+ * @module @phoenix-ai/dsh-home-paths
  */
 
 import { opendir, realpath } from 'node:fs/promises'

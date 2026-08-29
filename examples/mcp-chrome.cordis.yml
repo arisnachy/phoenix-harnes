@@ -3,7 +3,7 @@
 # Edge: msedge.exe --remote-debugging-port=9223 --user-data-dir=<perfil-aislado>
 - insert:
     - id: browser-connector
-      name: '@deepseek-ai/dsh-mcp-client'
+      name: '@phoenix-ai/dsh-mcp-client'
       config:
         serverName: browser
         transport: stdio

@@ -1,17 +1,19 @@
 /**
  * Model-facing `get_goal`, `create_goal`, and `update_goal` tools over the
  * persisted same-session goal domain.
- * @module @deepseek-ai/dsh-tool-goal
+ * @module @phoenix-ai/dsh-tool-goal
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { GoalId } from '@deepseek-ai/dsh-goal'
-import type { GoalRef, GoalView } from '@deepseek-ai/dsh-goal'
-import { boundContextSummary, createUserMessage, HarnessError } from '@deepseek-ai/dsh-llm'
-import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { GenericCallView } from '@deepseek-ai/dsh-tools'
-import type {} from '@deepseek-ai/dsh-system-prompt'
+import { GoalId } from '@phoenix-ai/dsh-goal'
+import type { GoalRef, GoalView } from '@phoenix-ai/dsh-goal'
+import { boundContextSummary, createUserMessage, HarnessError } from '@phoenix-ai/dsh-llm'
+import { defineTool } from '@phoenix-ai/dsh-tools'
+import type { GenericCallView } from '@phoenix-ai/dsh-tools'
+import type {} from '@phoenix-ai/dsh-system-prompt'
+import { judgeGoalCompletion, recordGoalJudge } from './judge.ts'
+import type { GoalJudgeResult } from './judge.ts'
 import {
   completionAuthority,
   goalToolExecution,
@@ -26,16 +28,24 @@ export const inject = ['agents', 'goals', 'tools', 'systemPrompt']
 export interface Config {
   /** Minimum admitted goal rounds before the model may self-report `blocked`. */
   blockedAfterConsecutiveRounds?: number
+  /** Require an independent judge before a goal can enter `complete`. */
+  requireJudge?: boolean
+  /** Fresh structured subagent provider used for completion review. */
+  judgeProvider?: string
 }
 
 /** Schemastery config for the goal-tool policy. */
 export const Config: z<Config> = z.object({
   blockedAfterConsecutiveRounds: z.number().step(1).min(1).default(3),
+  requireJudge: z.boolean().default(false),
+  judgeProvider: z.string().default('spawn'),
 })
 
 /** Fully materialized tool policy. */
 interface ResolvedConfig {
   readonly blockedAfterConsecutiveRounds: number
+  readonly requireJudge: boolean
+  readonly judgeProvider: string
 }
 
 type UpdateAction = 'edit' | 'pause' | 'resume' | 'complete' | 'blocked'
@@ -67,6 +77,12 @@ type GoalToolValue =
       blockedReason?: { code: string; message: string }
     }
     activation: GoalView['activation']
+    judge?: {
+      verdict: GoalJudgeResult['verdict']
+      summary: string
+      findings: string[]
+      requiredChanges: string[]
+    }
   }
 
 const GOAL_VALUE_SCHEMA = {
@@ -104,13 +120,23 @@ const GOAL_VALUE_SCHEMA = {
           },
         },
         activation: { type: 'string', required: true, enum: ['armed', 'disarmed'] },
+        judge: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            verdict: { type: 'string', required: true, enum: ['pass', 'needs_changes', 'blocked'] },
+            summary: { type: 'string', required: true },
+            findings: { type: 'array', items: { type: 'string' }, required: true },
+            requiredChanges: { type: 'array', items: { type: 'string' }, required: true },
+          },
+        },
       },
     },
   ],
 } as const
 
 /** Render policy guidance with its deployment-selected blocked threshold. */
-function guidance(blockedAfter: number): string {
+function guidance(blockedAfter: number, requireJudge: boolean): string {
   return 'Use goal tools for one long-running completion objective in the current session. '
     + 'create_goal may infer goal intent from a direct human request in any language; do not '
     + 'create a goal for routine single-turn work. Call get_goal before update_goal and copy its '
@@ -120,15 +146,24 @@ function guidance(blockedAfter: number): string {
     + `blocked only after the same blocking condition persists for at least ${blockedAfter} `
     + 'consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, '
     + 'or useful remaining work is not blocked.'
+    + (requireJudge
+      ? ' Completion is gated by an independent read-only judge: a self-reported complete result '
+        + 'remains active until the judge returns pass; use its required_changes as the next work list.'
+      : '')
 }
 
 /** Validate config even when apply is called directly outside Loader normalization. */
 function resolveConfig(config: Config): ResolvedConfig {
   const blockedAfter = config.blockedAfterConsecutiveRounds ?? 3
+  const requireJudge = config.requireJudge ?? false
+  const judgeProvider = config.judgeProvider ?? 'spawn'
   if (!Number.isSafeInteger(blockedAfter) || blockedAfter < 1) {
     throw new TypeError('blockedAfterConsecutiveRounds must be a positive safe integer')
   }
-  return { blockedAfterConsecutiveRounds: blockedAfter }
+  if (judgeProvider.length === 0 || judgeProvider !== judgeProvider.trim()) {
+    throw new TypeError('judgeProvider must be a non-empty normalized string')
+  }
+  return { blockedAfterConsecutiveRounds: blockedAfter, requireJudge, judgeProvider }
 }
 
 /** Whether optional text is meaningful rather than a strict-schema empty filler. */
@@ -154,7 +189,7 @@ function goalRef(goalId: string, revision: number): GoalRef {
 }
 
 /** Stable compact model result; activation is an observation, not replay state. */
-function goalValue(goal: GoalView | undefined): GoalToolValue {
+function goalValue(goal: GoalView | undefined, judge?: GoalJudgeResult): GoalToolValue {
   if (goal === undefined) return { goal: null }
   return {
     goal: {
@@ -169,6 +204,14 @@ function goalValue(goal: GoalView | undefined): GoalToolValue {
       },
     },
     activation: goal.activation,
+    ...judge === undefined ? {} : {
+      judge: {
+        verdict: judge.verdict,
+        summary: judge.summary,
+        findings: [...judge.findings],
+        requiredChanges: [...judge.requiredChanges],
+      },
+    },
   }
 }
 
@@ -189,7 +232,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.section({
     name: 'tool:goal',
     order: 114,
-    text: guidance(resolved.blockedAfterConsecutiveRounds),
+    text: guidance(resolved.blockedAfterConsecutiveRounds, resolved.requireJudge),
   })
 
   ctx.tools.register(defineTool({
@@ -254,7 +297,7 @@ export function apply(ctx: Context, config: Config): void {
       },
     },
     output: GOAL_OUTPUT,
-    execute(args, exec) {
+    async execute(args, exec) {
       const execution = goalToolExecution(ctx, exec)
       const ref = goalRef(args.goal_id, args.revision)
       const replacements = {
@@ -304,6 +347,55 @@ export function apply(ctx: Context, config: Config): void {
           'GOAL_TOOL_BLOCK_THRESHOLD',
         )
       }
+      let judge: GoalJudgeResult | undefined
+      if (args.action === 'complete' && resolved.requireJudge) {
+        const subagents = ctx.get('subagents')
+        if (subagents === undefined) {
+          throw new HarnessError('goal completion requires the subagent judge service', 'GOAL_JUDGE_UNAVAILABLE')
+        }
+        const currentGoal = ctx.goals.get(execution.agent)
+        if (currentGoal === undefined || currentGoal.id !== ref.id || currentGoal.revision !== ref.revision) {
+          throw new HarnessError('goal completion judge requires the current goal revision', 'GOAL_TOOL_STALE_REVISION')
+        }
+        judge = await judgeGoalCompletion({
+          subagents,
+          provider: resolved.judgeProvider,
+          parent: execution.agent,
+          objective: currentGoal.objective,
+          round: currentGoal.roundsStarted,
+          signal: exec.signal,
+        })
+        recordGoalJudge(execution.agent.session, {
+          callId: exec.callId,
+          goalId: currentGoal.id,
+          round: currentGoal.roundsStarted,
+          verdict: judge.verdict,
+          summary: judge.summary,
+          findings: judge.findings,
+          requiredChanges: judge.requiredChanges,
+        })
+        if (judge.verdict !== 'pass') {
+          exec.deferContext(createUserMessage({
+            content: [{
+              type: 'text',
+              text: '<goal_judge_result>\n'
+                + `Verdict: ${judge.verdict}\n`
+                + `Summary: ${judge.summary}\n`
+                + `Required changes: ${JSON.stringify(judge.requiredChanges)}\n`
+                + 'Keep the goal active, address these changes with a materially different or improved strategy, '
+                + 'and request another independent review only after verifying the result.\n'
+                + '</goal_judge_result>',
+            }],
+            source: {
+              kind: 'plugin',
+              plugin: 'tool-goal',
+              form: 'notice',
+              summary: boundContextSummary(`judge ${judge.verdict}: ${currentGoal.objective}`),
+            },
+          }))
+          return goalValue(ctx.goals.get(execution.agent), judge)
+        }
+      }
       const goal = args.action === 'complete'
         ? ctx.goals.complete(execution.agent, ref)
         : ctx.goals.block(execution.agent, ref, {
@@ -323,7 +415,7 @@ export function apply(ctx: Context, config: Config): void {
           },
         }))
       }
-      return Promise.resolve(goalValue(goal))
+      return goalValue(goal, judge)
     },
     presentCall: args => present(
       `${args.action === 'blocked' ? 'Mark' : args.action.charAt(0).toUpperCase() + args.action.slice(1)} goal`,

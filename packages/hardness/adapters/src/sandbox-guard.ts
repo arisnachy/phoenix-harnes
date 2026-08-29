@@ -1,5 +1,5 @@
-import type { HardnessService, CapabilityId } from '@deepseek-ai/dsh-hardness'
-import type { ToolRuntime, ToolGuard } from '@deepseek-ai/dsh-tools'
+import type { HardnessService, CapabilityId } from '@phoenix-ai/dsh-hardness'
+import type { ToolRuntime, ToolGuard } from '@phoenix-ai/dsh-tools'
 
 /** Resolver that supplies the authoritative sandbox policy for one execution context. */
 export interface SandboxPolicyResolver {

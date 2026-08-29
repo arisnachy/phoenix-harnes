@@ -1,16 +1,16 @@
 /**
  * Safe HTTP(S) retrieval for `ctx.web`: validates URLs, follows only same-origin redirects,
  * enforces time and size limits, classifies and decodes text, and leaves presentation to
- * `@deepseek-ai/dsh-tool-web`. Requests carry no browser cookies or ambient credentials.
+ * `@phoenix-ai/dsh-tool-web`. Requests carry no browser cookies or ambient credentials.
  *
  * Private and reserved targets are blocked after URL validation and DNS resolution. A deployment
  * requiring protection against a hostile DNS-rebinding environment should still use an egress proxy.
- * @module @deepseek-ai/dsh-web-fetch-http/provider
+ * @module @phoenix-ai/dsh-web-fetch-http/provider
  */
 
-import { WebError } from '@deepseek-ai/dsh-web'
-import type { WebFetchBody, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@deepseek-ai/dsh-web'
-import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
+import { WebError } from '@phoenix-ai/dsh-web'
+import type { WebFetchBody, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@phoenix-ai/dsh-web'
+import { deadline, timeoutOf } from '@phoenix-ai/dsh-timeout'
 import { assertPublicFetchTarget, classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
 
 /** Resolved provider limits (the plugin's schemastery Config supplies defaults). */

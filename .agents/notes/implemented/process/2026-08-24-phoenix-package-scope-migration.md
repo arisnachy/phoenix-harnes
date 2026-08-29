@@ -6,18 +6,16 @@ English | [中文](2026-08-24-phoenix-package-scope-migration.zh.md)
 
 ## Problem
 
-PHOENIX still uses the inherited `@deepseek-ai/*` npm namespace for its workspace and vendored packages. Renaming package identities directly on `main` would affect manifests, imports, Cordis client module ids, generated Typert references, peer dependencies, the workspace lockfile, and build artifacts at the same time. A partial rename can therefore produce a mixed runtime that resolves some packages under the old scope and others under the new one.
+PHOENIX inherited the `@deepseek-ai/*` npm namespace. Renaming package identities affects manifests, imports, Cordis client module ids, generated Typert references, peer dependencies, the workspace lockfile, and build artifacts together. A partial rename can produce a mixed runtime.
 
 ## Decision
 
-Add a read-only migration planner that discovers tracked `package.json` files, inventories every package whose name starts with `@deepseek-ai/`, and derives the corresponding `@phoenix-ai/` target name. The planner fails when two legacy packages map to one target or when a target name already exists in the workspace. It does not rewrite package manifests, imports, generated files, or the lockfile.
-
-The first migration phase is therefore observational and safe on `main`. Later rename batches must use this inventory as their package-identity source and regenerate the lockfile and built artifacts as one coherent change.
+Rename the PHOENIX-owned package family to `@phoenix-ai/*` in one workspace-wide mechanical batch, then reinstall and regenerate derived catalogs. Keep `@deepseek-ai/cordis`, `@deepseek-ai/cosmokit`, `@deepseek-ai/schemastery`, and the vendored Cordis plugin names as upstream identities. The batch is local to the feature branch; `main` and `stable` remain unchanged until publication gates pass.
 
 ## Alternatives considered
 
-A direct search-and-replace rename was rejected because it would mix package identities across manifests, generated artifacts, and the lockfile. Deferring all inventory work was also rejected because later rename batches need a deterministic collision check.
+A literal rename of every `@deepseek-ai/*` name was rejected because it would repackage upstream Cordis and its provenance. A partial package-only rename was rejected because manifests, generated artifacts, and lockfile entries would disagree.
 
 ## Consequences
 
-`pnpm run phoenix:scope:plan` prints the complete legacy-to-PHOENIX package map. `pnpm run phoenix:scope:check` performs the collision and consistency checks without mutating the repository. The current runtime remains on `@deepseek-ai/*` until a validated rename batch is executed.
+The current feature branch has no active legacy DSH-scope references outside archived notes and has reinstalled the workspace against the new package identities. Remaining `@deepseek-ai/*` references are upstream dependencies or historical/provenance records and must not be treated as PHOENIX package contamination. A full build and clean publication verification are still required before promotion.

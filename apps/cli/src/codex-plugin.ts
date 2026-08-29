@@ -17,7 +17,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
-import { dshHomePath, dshHomeDisplay, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { dshHomePath, dshHomeDisplay, resolveDshHome } from '@phoenix-ai/dsh-home-paths'
 
 const NAME = 'dsh codex-plugin'
 const SOURCE_REPOSITORY = 'https://github.com/openai/plugins.git'
@@ -247,7 +247,7 @@ function renderMcpPatch(pluginName: string, mcpPath: string): { text: string; se
     if (!isHttp && !isStdio) continue
 
     rows.push(`    - id: codex-mcp-${kebab(pluginName)}-${kebab(rawName)}`)
-    rows.push("      name: '@deepseek-ai/dsh-mcp-client'")
+    rows.push("      name: '@phoenix-ai/dsh-mcp-client'")
     rows.push('      config:')
     rows.push(`        serverName: ${yamlScalar(serverName)}`)
 

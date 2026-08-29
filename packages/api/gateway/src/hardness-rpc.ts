@@ -1,5 +1,5 @@
-import type { ConnectionRpcHandler, HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
-import type { RpcResult } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { ConnectionRpcHandler, HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
+import type { RpcResult } from '@phoenix-ai/dsh-host-apiproxy/api'
 
 /** Executes one governed HARDNESS mission payload for the loopback RPC endpoint. */
 export type HardnessMissionRpcRunner = (payload: Readonly<Record<string, unknown>>, signal: AbortSignal) => Promise<unknown>

@@ -15,8 +15,8 @@
  * @module
  */
 
-import { StorageError } from '@deepseek-ai/dsh-storage'
-import type { KvFacet, KvUnit, KvUnitDescriptor, StorageBackend } from '@deepseek-ai/dsh-storage'
+import { StorageError } from '@phoenix-ai/dsh-storage'
+import type { KvFacet, KvUnit, KvUnitDescriptor, StorageBackend } from '@phoenix-ai/dsh-storage'
 
 /** One unit's medium: tables of records plus the global slot (`null` = never written). */
 export interface MemoryMedium {

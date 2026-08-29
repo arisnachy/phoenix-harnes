@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@phoenix-ai/dsh-agent'
 import { createUserApprovalBroker } from '../src/user-approval-broker.ts'
-import type { CapabilityId, CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+import type { CapabilityId, CapabilitySurface } from '@phoenix-ai/dsh-hardness'
 
 const surface = {
   id: 'tool:calendar@1.0.0:visual', need: { kind: 'calendar_invite' }, capabilityId: 'tool:calendar' as CapabilityId, capabilityVersion: '1.0.0', modality: 'visual', inputs: [], outputs: [], requiredPermissions: [{ kind: 'calendar.write' }], verification: 'verified',

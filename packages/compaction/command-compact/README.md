@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-command-compact
+# @phoenix-ai/dsh-command-compact
 
 English | [中文](README.zh.md)
 
@@ -34,11 +34,11 @@ The producer injects `commands` and `compact`. Mount the command registry, one b
 
 ```yaml
 - id: commands
-  name: '@deepseek-ai/dsh-commands'
+  name: '@phoenix-ai/dsh-commands'
 - id: compaction-basic
-  name: '@deepseek-ai/dsh-compaction-basic'
+  name: '@phoenix-ai/dsh-compaction-basic'
 - id: command-compact
-  name: '@deepseek-ai/dsh-command-compact'
+  name: '@phoenix-ai/dsh-command-compact'
 ```
 
 The shipped `dsh` base mounts it beside `compaction-basic`, and the Web client provides the command adapter. Automation surfaces that compose no command adapter keep automatic compaction only.

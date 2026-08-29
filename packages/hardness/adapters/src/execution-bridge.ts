@@ -1,10 +1,10 @@
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { HardnessService, CapabilityNeed, CapabilitySurface } from '@deepseek-ai/dsh-hardness'
-import type { ToolRuntime, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+import type { Agent } from '@phoenix-ai/dsh-agent'
+import type { HardnessService, CapabilityNeed, CapabilitySurface } from '@phoenix-ai/dsh-hardness'
+import type { ToolRuntime, ToolExecutionResult } from '@phoenix-ai/dsh-tools'
 
 /** Invocation context shared by native tools and external capability executors. */
 export interface CapabilityExecutionContext {
-  readonly callId: import('@deepseek-ai/dsh-llm').CallId
+  readonly callId: import('@phoenix-ai/dsh-llm').CallId
   readonly signal: AbortSignal
   readonly agent?: Agent
 }

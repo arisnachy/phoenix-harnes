@@ -2,13 +2,13 @@
 /** ToolCallTree-owned root/subcall markers and selection projection. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
-import type { HostDescription } from '@deepseek-ai/dsh-client-connection/client'
-import type { ConversationSnapshot, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
+import type { HostDescription } from '@phoenix-ai/dsh-client-connection/client'
+import type { ConversationSnapshot, ToolResultNode } from '@phoenix-ai/dsh-client-runtime/client'
+import { makeTranslate } from '@phoenix-ai/dsh-client-test-runtime'
+import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
 import type { ToolTreeProps } from '../src/client/contract/slots.ts'
 import { ToolCallTree } from '../src/client/tool/ToolCallTree.tsx'
-import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
+import { zh } from '@phoenix-ai/dsh-client-ui-conversation/src/client/locales.ts'
 
 afterEach(cleanup)
 

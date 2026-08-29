@@ -1,7 +1,7 @@
 /** PHOENIX occupants for the generic browser-brand slots. */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
+import type {} from '@phoenix-ai/dsh-client-ui-conversation/client'
+import type {} from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import { PhoenixBrandMark, PhoenixBrandName } from './Brand.tsx'
 
 /** Required service: the UI slot registry. */

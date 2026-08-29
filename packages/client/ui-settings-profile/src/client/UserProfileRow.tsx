@@ -1,10 +1,10 @@
 /** Expandable General-settings row for the private user profile. */
 
 import { useState } from 'react'
-import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { UserProfileRowFace } from './profile-controller.ts'
 import css from './UserProfileRow.module.css'
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 
 /** Props synthesized by the General settings slot. */
 export type UserProfileRowProps =

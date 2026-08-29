@@ -14,8 +14,8 @@ Authorization Service Definition (`ctx.authorization`). Some credentials cannot 
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
-import { AuthorizationDeclinedError, type AuthorizationSession } from '@deepseek-ai/dsh-authorization'
-import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import { AuthorizationDeclinedError, type AuthorizationSession } from '@phoenix-ai/dsh-authorization'
+import { credentialKey } from '@phoenix-ai/dsh-credentials'
 
 declare const ctx: Context
 declare const exchange: (signal: AbortSignal) => Promise<void>
@@ -63,7 +63,7 @@ The vocabulary is deliberately smaller than any one provider's: it describes wha
 
 ## Google Workspace host broker
 
-`@deepseek-ai/dsh-authorization/google` is a protocol-owning Host Service layered beside the neutral seam. It registers one `Google Workspace` flow and uses Google's Desktop-app authorization-code flow with a random loopback listener, PKCE S256, and `state`. The configured `clientId` identifies the OAuth application; it is not a user password or OAuth token. The shipped composition reads it from `PHOENIX_GOOGLE_OAUTH_CLIENT_ID`.
+`@phoenix-ai/dsh-authorization/google` is a protocol-owning Host Service layered beside the neutral seam. It registers one `Google Workspace` flow and uses Google's Desktop-app authorization-code flow with a random loopback listener, PKCE S256, and `state`. The configured `clientId` identifies the OAuth application; it is not a user password or OAuth token. The shipped composition reads it from `PHOENIX_GOOGLE_OAUTH_CLIENT_ID`.
 
 Google access and refresh tokens are deliberately **process-local**. After successful authorization the broker keeps them only in private Host memory and commits a secret-free `{ kind: 'api-key' }` marker under `authorization-google/account` so the neutral authorization seam can observe that the human flow committed. Browser-facing `list()`, `describe()`, `inspect()`, credential metadata, config, environment, and the marker itself contain no OAuth token, authorization code, or PKCE verifier. A PHOENIX restart therefore requires Google authorization again. This is intentional until PHOENIX has a credential backend that is isolated from same-UID tool processes; `credentials-local` explicitly is not such a boundary.
 

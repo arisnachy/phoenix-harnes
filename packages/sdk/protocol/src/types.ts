@@ -1,14 +1,14 @@
 /**
  * Named wire types for the PHOENIX SDK runtime protocol. The server plugin
- * (`@deepseek-ai/dsh-sdk-jsonrpc-server`) and SDK clients share these shapes;
+ * (`@phoenix-ai/dsh-sdk-jsonrpc-server`) and SDK clients share these shapes;
  * `serverInfo.name` stays the wire-stable `deepseek-harness-sdk-runtime`.
  *
- * @module @deepseek-ai/dsh-sdk-protocol/types
+ * @module @phoenix-ai/dsh-sdk-protocol/types
  */
 
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import type { SubagentStopReason } from '@deepseek-ai/dsh-subagent'
+import type { ContentBlock } from '@phoenix-ai/dsh-llm'
+import type { SessionEvent } from '@phoenix-ai/dsh-session'
+import type { SubagentStopReason } from '@phoenix-ai/dsh-subagent'
 
 /** Latest optional protocol feature level understood by this SDK package. */
 export const HARNESS_SDK_PROTOCOL_VERSION = 2

@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { boot } from '@deepseek-ai/dsh-app-boot'
-import { GOOGLE_ACCOUNT_KEY } from '@deepseek-ai/dsh-authorization/google'
+import { boot } from '@phoenix-ai/dsh-app-boot'
+import { GOOGLE_ACCOUNT_KEY } from '@phoenix-ai/dsh-authorization/google'
 
 const fixture = fileURLToPath(new URL('./fixtures/google-authorization.cordis.yml', import.meta.url))
 

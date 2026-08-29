@@ -2,11 +2,11 @@
 
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
-import type { JsonValue } from '@deepseek-ai/dsh-session/types'
-import { assertSupportedJsonSchema, validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
-import type { JsonSchemaNode } from '@deepseek-ai/dsh-tools'
+import type { Agent } from '@phoenix-ai/dsh-agent'
+import { snapshotJsonValue } from '@phoenix-ai/dsh-session'
+import type { JsonValue } from '@phoenix-ai/dsh-session/types'
+import { assertSupportedJsonSchema, validateJsonSchemaValue } from '@phoenix-ai/dsh-tools'
+import type { JsonSchemaNode } from '@phoenix-ai/dsh-tools'
 import type {
   CordisInspectMethodManifest, CordisInspectPlatform, CordisInspectProviderManifest,
   CordisInspectProviderView, CordisInspectQueryRequest, CordisInspectQueryResolution,

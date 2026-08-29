@@ -23,7 +23,7 @@ const packageDir = fileURLToPath(new URL('..', import.meta.url))
 const repoRoot = fileURLToPath(new URL('../../../..', import.meta.url))
 const nativeDir = join(repoRoot, 'native/landlock-run')
 const sourceLauncher = join(nativeDir, 'packages', `linux-${process.arch}`, 'bin', 'landlock-run')
-const platformPackageName = `@deepseek-ai/node-addon-landlock-run-linux-${process.arch}`
+const platformPackageName = `@phoenix-ai/node-addon-landlock-run-linux-${process.arch}`
 
 /** The harness closure the consumer needs; native tarballs are packed through their mode-preserving release script. */
 const WORKSPACE_CLOSURE = [
@@ -124,8 +124,8 @@ describe.skipIf(!packable)('sandbox-local: packed-tarball distribution (publish-
       import { spawnSync } from 'node:child_process'
       import { existsSync } from 'node:fs'
       import { Context } from '@deepseek-ai/cordis'
-      import { launcherPath } from '@deepseek-ai/node-addon-landlock-run'
-      import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
+      import { launcherPath } from '@phoenix-ai/node-addon-landlock-run'
+      import { LocalSandboxProvider } from '@phoenix-ai/dsh-sandbox-local'
       const ctx = new Context()
       await ctx.plugin(LocalSandboxProvider, {})
       const sandbox = ctx.sandbox

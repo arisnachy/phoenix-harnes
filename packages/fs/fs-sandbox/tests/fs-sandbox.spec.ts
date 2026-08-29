@@ -14,11 +14,11 @@ import { existsSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, parse } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { FsError, FsTargetKey } from '@deepseek-ai/dsh-fs'
-import type { FsTarget } from '@deepseek-ai/dsh-fs'
-import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
-import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { SandboxedFileSystem } from '@deepseek-ai/dsh-fs-sandbox'
+import { FsError, FsTargetKey } from '@phoenix-ai/dsh-fs'
+import type { FsTarget } from '@phoenix-ai/dsh-fs'
+import SandboxPolicyService from '@phoenix-ai/dsh-sandbox-policy'
+import type { SandboxMode } from '@phoenix-ai/dsh-sandbox'
+import { SandboxedFileSystem } from '@phoenix-ai/dsh-fs-sandbox'
 
 let base: string
 let workspace: string

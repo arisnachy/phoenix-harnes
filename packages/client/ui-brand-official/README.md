@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-client-ui-brand-official
+# @phoenix-ai/dsh-client-ui-brand-official
 
 English | [中文](README.zh.md)
 
@@ -16,5 +16,5 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
-- **The package retains its upstream npm identity** — `@deepseek-ai/dsh-client-ui-brand-official` remains the internal package name; the user-visible product identity is PHOENIX.
+- **The package retains its upstream npm identity** — `@phoenix-ai/dsh-client-ui-brand-official` remains the internal package name; the user-visible product identity is PHOENIX.
 - **The browser title is independent** — the Web shell and official artifact profile also select PHOENIX outside the slot system.

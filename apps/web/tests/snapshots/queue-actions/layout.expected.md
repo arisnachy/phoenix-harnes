@@ -18,10 +18,10 @@
   - img
   - img
   - text: Context injection goal
-- button "Context injection @deepseek-ai/dsh-system-prompt":
+- button "Context injection @phoenix-ai/dsh-system-prompt":
   - img
   - img
-  - text: Context injection @deepseek-ai/dsh-system-prompt
+  - text: Context injection @phoenix-ai/dsh-system-prompt
 - paragraph: partial
 - status: PHOENIX thinking…
 - region "To-dos":

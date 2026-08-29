@@ -11,7 +11,7 @@ import {
   dshHomePath,
   expandHomePath,
   resolveDshHome,
-} from '@deepseek-ai/dsh-home-paths'
+} from '@phoenix-ai/dsh-home-paths'
 
 afterEach(() => {
   vi.unstubAllEnvs()

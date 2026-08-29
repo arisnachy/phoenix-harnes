@@ -22,8 +22,8 @@
  * and a hole has exactly one declaring entry — they carry the same owner
  * contract and the same occupant.
  */
-import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
-import type { CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+import type { HostDescriptionSource } from '@phoenix-ai/dsh-client-connection/client'
+import type { CapabilitySurface } from '@phoenix-ai/dsh-hardness'
 
 /** Serializable capability artifact exposed to conversation-native workspace renderers. */
 export interface CapabilityArtifact {
@@ -38,14 +38,14 @@ export interface CapabilityArtifactRenderModel {
   readonly artifactId: string
   readonly [key: string]: unknown
 }
-import type { HostObservable, PropsHooks, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
+import type { HostObservable, PropsHooks, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@phoenix-ai/dsh-client-ui-slots'
 // Type-only: pull the owner SlotMap merges into programs that resolve the
 // runtime shares below.
-import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@phoenix-ai/dsh-client-ui-sidebar/client'
+import type {} from '@phoenix-ai/dsh-client-ui-conversation/client'
 import type {
   SessionId, SessionSearchResultItem, WorkspaceId, WorkspaceView,
-} from '@deepseek-ai/dsh-client-runtime/client'
+} from '@phoenix-ai/dsh-client-runtime/client'
 import type { createWorkspaceViewStore } from '../stores.ts'
 
 /**
@@ -66,7 +66,7 @@ export interface DirectoryFlowOwnerProps {
   onError: (message: string) => void
 }
 
-declare module '@deepseek-ai/dsh-client-ui-slots' {
+declare module '@phoenix-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /** Directory-flow hole under the conversation empty-state picker (declared by the WorkspacePicker entry). */
     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }

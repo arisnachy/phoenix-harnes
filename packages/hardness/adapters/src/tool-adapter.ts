@@ -1,5 +1,5 @@
-import type { CapabilityId, HardnessService } from '@deepseek-ai/dsh-hardness/src/types.ts'
-import type { ToolRuntime } from '@deepseek-ai/dsh-tools'
+import type { CapabilityId, HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'
+import type { ToolRuntime } from '@phoenix-ai/dsh-tools'
 
 /** Event source used to observe dynamic tool-registry changes. */
 export interface ToolChangeSource {

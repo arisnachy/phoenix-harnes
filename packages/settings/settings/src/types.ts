@@ -4,10 +4,10 @@
  * no runtime code, and nothing here reaches a Host-only symbol, so a Client
  * compilation face reads exactly the signatures the Host emits.
  *
- * @module @deepseek-ai/dsh-settings/types
+ * @module @phoenix-ai/dsh-settings/types
  */
 
-import type { Branded } from '@deepseek-ai/dsh-brand'
+import type { Branded } from '@phoenix-ai/dsh-brand'
 
 /** Nominal id of one registered settings namespace. */
 export type SettingsNamespace = Branded<'SettingsNamespace'>

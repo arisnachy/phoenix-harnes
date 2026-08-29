@@ -1,4 +1,4 @@
-# `@deepseek-ai/dsh-hardness-atlas-json`
+# `@phoenix-ai/dsh-hardness-atlas-json`
 
 English | [中文](README.zh.md)
 

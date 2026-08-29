@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-session-query-sqlite
+# @phoenix-ai/dsh-session-query-sqlite
 
 [English](README.md) | 中文
 

@@ -1,10 +1,10 @@
-/** Package-owned invariant companion. @module @deepseek-ai/dsh-user-profile/invariant */
+/** Package-owned invariant companion. @module @phoenix-ai/dsh-user-profile/invariant */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
-import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-user-profile'
+const PACKAGE_NAME = '@phoenix-ai/dsh-user-profile'
 
 /** Cordis companion plugin name. */
 export const name = 'user-profile-invariant'

@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntimePlugin from '@deepseek-ai/dsh-tools'
-import SkillRegistryPlugin from '@deepseek-ai/dsh-skill'
+import SystemPrompt, { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
+import ToolRuntimePlugin from '@phoenix-ai/dsh-tools'
+import SkillRegistryPlugin from '@phoenix-ai/dsh-skill'
 import HardnessRegistry from '../../hardness/src/index.ts'
 import { apply, indexSkills, indexTools } from '../src/index.ts'
 import type { HardnessService } from '../../hardness/src/types.ts'
-import type { ToolRuntime } from '@deepseek-ai/dsh-tools'
-import type { SkillRegistry, SkillSummary } from '@deepseek-ai/dsh-skill'
+import type { ToolRuntime } from '@phoenix-ai/dsh-tools'
+import type { SkillRegistry, SkillSummary } from '@phoenix-ai/dsh-skill'
 
 describe('HARDNESS source adapters', () => {
   it('mounts the model-facing tool and protocol in the composed runtime', async () => {

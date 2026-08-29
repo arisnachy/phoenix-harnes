@@ -1,2 +1,6 @@
-2026-08-27-openai-orquestador-luna-ejecutor-design.md: 1a687514e5d9066cf662c3a637ba2c0703a97d98
-2026-08-27-openai-orquestador-luna-ejecutor-design.zh.md: 99679a825be4ff0e405e5a1fa4365231d8b21995
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/specs/2026-08-27-openai-orquestador-luna-ejecutor-design.md
+2026-08-27-openai-orquestador-luna-ejecutor-design.md: 6620b9063279fa3b8db2030a8f054ca0f9f0817f
+2026-08-27-openai-orquestador-luna-ejecutor-design.zh.md: 55d31c1ba8314d616e1a13d856241198b7745880

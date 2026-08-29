@@ -11,13 +11,13 @@
  * URL or OAuth scope. A PHOENIX restart intentionally requires Google login
  * again until a credential backend isolated from same-UID tool processes exists.
  *
- * @module @deepseek-ai/dsh-authorization/google
+ * @module @phoenix-ai/dsh-authorization/google
  */
 
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { Service, type Context } from '@deepseek-ai/cordis'
-import { credentialKey, type CredentialKey } from '@deepseek-ai/dsh-credentials'
+import { credentialKey, type CredentialKey } from '@phoenix-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
 
 /** Secret-free durable marker for the process-local Google account. */

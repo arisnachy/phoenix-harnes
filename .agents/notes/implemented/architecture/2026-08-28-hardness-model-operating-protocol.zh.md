@@ -10,7 +10,7 @@ model-facing HARDNESS surface 虽然已有 capability metadata 与 execution ada
 
 ## Decision
 
-PHOENIX 为受 HARDNESS 管理的操作提供一个确定性的模型可见生命周期：`inspect`、`resolve`、`plan`、`approve`、`execute`、`verify`、`present` 和 `audit`。`@deepseek-ai/dsh-hardness` 负责可序列化的 protocol 类型、评估器和 guide renderer。`@deepseek-ai/dsh-hardness-adapters` 以 `hardness:operating-protocol` 的名称将 guide 安装到规范的 system-prompt service。
+PHOENIX 为受 HARDNESS 管理的操作提供一个确定性的模型可见生命周期：`inspect`、`resolve`、`plan`、`approve`、`execute`、`verify`、`present` 和 `audit`。`@phoenix-ai/dsh-hardness` 负责可序列化的 protocol 类型、评估器和 guide renderer。`@phoenix-ai/dsh-hardness-adapters` 以 `hardness:operating-protocol` 的名称将 guide 安装到规范的 system-prompt service。
 
 评估器只接受已观察到的 route、approval、execution、verification、presentation 和 evidence 状态。它返回下一步、明确的结果、允许的操作、禁止的操作和原因。它不会执行 tool、授予 permission、打开 connector 或携带 credential。
 

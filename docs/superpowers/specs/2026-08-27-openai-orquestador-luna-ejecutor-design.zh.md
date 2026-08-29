@@ -35,9 +35,9 @@
 
 标准 preset 保留基于 `whenProvider: openai-codex` 的条件子任务路径。该路径必须存在于以下位置且保持一致：
 
-1. `@deepseek-ai/dsh-tool-subagent` 的 `spawn` 供应商。
-2. `@deepseek-ai/dsh-tool-subagent` 的 `fork` 供应商。
-3. `@deepseek-ai/dsh-workflow-worker-thread`。
+1. `@phoenix-ai/dsh-tool-subagent` 的 `spawn` 供应商。
+2. `@phoenix-ai/dsh-tool-subagent` 的 `fork` 供应商。
+3. `@phoenix-ai/dsh-workflow-worker-thread`。
 
 通用配置为：
 

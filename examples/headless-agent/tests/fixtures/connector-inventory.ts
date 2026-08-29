@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { McpConnectorRegistry } from '@deepseek-ai/dsh-mcp-connector-registry'
+import type { McpConnectorRegistry } from '@phoenix-ai/dsh-mcp-connector-registry'
 
 export const name = 'connector-inventory-fixture'
 export const inject = ['mcpConnectors']

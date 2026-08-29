@@ -4,9 +4,9 @@
 
 **Goal:** Implementar un ciclo seguro que normalice cada fallo, diagnostique su causa, pruebe soluciones gobernadas, evite rutas reincidentes y persista evidencia reutilizable.
 
-**Architecture:** Crear un paquete provider-neutral `@deepseek-ai/dsh-failure-learning` con tipos, redacción, fingerprints, memoria Markdown y selección de recuperación. Exponer adaptadores pequeños para LLM/HARDNESS y una política de ruta consumible por `model-router`; el núcleo no ejecuta cambios peligrosos ni modifica pesos de modelos. HARDNESS seguirá siendo la puerta de experimento, holdout, rollback y promoción.
+**Architecture:** Crear un paquete provider-neutral `@phoenix-ai/dsh-failure-learning` con tipos, redacción, fingerprints, memoria Markdown y selección de recuperación. Exponer adaptadores pequeños para LLM/HARDNESS y una política de ruta consumible por `model-router`; el núcleo no ejecuta cambios peligrosos ni modifica pesos de modelos. HARDNESS seguirá siendo la puerta de experimento, holdout, rollback y promoción.
 
-**Tech Stack:** TypeScript ESM del monorepo, Vitest, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-hardness`, `LabMode`, `SelfImprovementLedger`, persistencia UTF-8 atómica y lint/typecheck existentes.
+**Tech Stack:** TypeScript ESM del monorepo, Vitest, `@phoenix-ai/dsh-llm`, `@phoenix-ai/dsh-hardness`, `LabMode`, `SelfImprovementLedger`, persistencia UTF-8 atómica y lint/typecheck existentes.
 
 ---
 
@@ -84,7 +84,7 @@ export function isVerifiedLearning(value: Pick<LearningEntry, 'confidence'>): bo
 }
 ```
 
-Crear el paquete ESM con peer dependency de `@deepseek-ai/dsh-llm` opcional solo en el adaptador, no en el núcleo.
+Crear el paquete ESM con peer dependency de `@phoenix-ai/dsh-llm` opcional solo en el adaptador, no en el núcleo.
 
 - [ ] **Step 4: Ejecutar la prueba.**
 

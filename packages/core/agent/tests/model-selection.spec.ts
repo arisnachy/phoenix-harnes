@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import {
   agentEvents,
   defaultExecutionHandoff,
@@ -8,7 +8,7 @@ import {
   type Agent,
   type ModelSelectionRef,
 } from '../src/index.ts'
-import { ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 describe('installModelSelection()', () => {
   it('only provides the default Luna handoff for OpenAI Codex', () => {

@@ -6,7 +6,7 @@ English | [中文](2026-08-27-hardness-capability-router.zh.md)
 
 **Goal:** Add a provider-neutral router that selects a verified capability and requested modality without executing tools or granting permissions.
 
-**Architecture:** Extend `@deepseek-ai/dsh-hardness` with explicit modality metadata and a `CapabilityRouter` consumer. The router delegates capability matching to `HardnessService.resolveNeed`, applies modality preferences deterministically, and returns `route`, `missing`, or `unknown`. Existing tools, skills, sandbox, Permission Broker, visual runtime, workspace, and acquisition remain independent authorities.
+**Architecture:** Extend `@phoenix-ai/dsh-hardness` with explicit modality metadata and a `CapabilityRouter` consumer. The router delegates capability matching to `HardnessService.resolveNeed`, applies modality preferences deterministically, and returns `route`, `missing`, or `unknown`. Existing tools, skills, sandbox, Permission Broker, visual runtime, workspace, and acquisition remain independent authorities.
 
 **Tech Stack:** TypeScript strict mode, Cordis `Service`, Vitest, oxlint, existing HARDNESS package and Host aggregate.
 

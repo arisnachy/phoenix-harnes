@@ -20,7 +20,7 @@ Required permissions are copied as declarations only. The router does not call a
 
 ## Lifecycle and integration
 
-The router is a plain consumer service in `@deepseek-ai/dsh-hardness`, exposed through the existing HARDNESS service without changing the Tool Atlas source registries. It has no independent persistence; routes are derived from the current atlas snapshot and are therefore replayable.
+The router is a plain consumer service in `@phoenix-ai/dsh-hardness`, exposed through the existing HARDNESS service without changing the Tool Atlas source registries. It has no independent persistence; routes are derived from the current atlas snapshot and are therefore replayable.
 
 ## Verification
 

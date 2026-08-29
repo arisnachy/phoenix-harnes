@@ -1,5 +1,5 @@
-import type { HardnessService, CapabilityId } from '@deepseek-ai/dsh-hardness/src/types.ts'
-import type { SkillRegistry } from '@deepseek-ai/dsh-skill'
+import type { HardnessService, CapabilityId } from '@phoenix-ai/dsh-hardness/src/types.ts'
+import type { SkillRegistry } from '@phoenix-ai/dsh-skill'
 
 /**
  * Project skill summaries into reversible HARDNESS registrations.

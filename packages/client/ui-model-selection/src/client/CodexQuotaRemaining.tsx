@@ -1,7 +1,7 @@
 /** Compact native Codex quota for the Settings trigger trailing seat. */
 import { useEffect, useRef, useState } from 'react'
-import type { IApiClient, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
-import type { InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
+import type { IApiClient, SessionId } from '@phoenix-ai/dsh-api-remotes/client'
+import type { InjectFace } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelDirectory } from './directory.ts'
 import css from './CodexQuotaRemaining.module.css'
 

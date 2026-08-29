@@ -1,6 +1,6 @@
 /** Staged browser form over the Host's user-profile settings namespace. */
 
-import { createSnapshotStore, type SettingsScope, type SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type SettingsScope, type SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { UserProfileConsent, UserProfileFamilyMember, UserProfileRowState, UserProfileSettings } from './types.ts'
 
 /** Settings namespace join key; it intentionally does not import the Host package. */

@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type {} from '@deepseek-ai/dsh-web'
+import type {} from '@phoenix-ai/dsh-web'
 import { FreeSearchProvider, type FreeSearchEngine } from './provider.ts'
 
 export { FREE_SEARCH_PROVIDER_ID, FreeSearchProvider } from './provider.ts'

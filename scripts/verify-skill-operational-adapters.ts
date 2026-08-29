@@ -1,13 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { resolveDshHome } from '@phoenix-ai/dsh-home-paths'
 import SkillRegistry, {
   adaptSkillDefinition,
   buildOperationalProfile,
   renderOperationalPrelude,
-} from '@deepseek-ai/dsh-skill'
-import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
+} from '@phoenix-ai/dsh-skill'
+import * as SkillFileSystem from '@phoenix-ai/dsh-skill-filesystem'
 
 interface VerificationRow {
   name: string

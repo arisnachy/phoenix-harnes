@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import { CapabilityArtifactPreview, registerCapabilityArtifactPreview } from '@deepseek-ai/dsh-client-ui-workspace/client'
+import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
+import { CapabilityArtifactPreview, registerCapabilityArtifactPreview } from '@phoenix-ai/dsh-client-ui-workspace/client'
 
 describe('CapabilityArtifact workspace preview', () => {
   it('registers rendered artifact data into a reversible workspace slot', async () => {

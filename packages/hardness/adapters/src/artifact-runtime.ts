@@ -1,4 +1,4 @@
-import type { ToolResult } from '@deepseek-ai/dsh-tools'
+import type { ToolResult } from '@phoenix-ai/dsh-tools'
 
 /** Serializable artifact emitted by a successful governed capability result. */
 export interface CapabilityArtifact {

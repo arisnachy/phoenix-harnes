@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react'
-import type { ModelRetryNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ModelRetryNode } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
 import { StructuredErrorView } from './StructuredErrorView.tsx'
 import css from './MessageItem.module.css'

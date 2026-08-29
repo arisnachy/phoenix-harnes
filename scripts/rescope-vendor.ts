@@ -11,7 +11,7 @@
  * scalar. A match needs a quote (or `name: `) immediately left and the matching
  * quote — optionally after a `/subpath` — immediately right, which excludes
  * `cordis.yml`, the Loader's `cordis:` builtin prefix, `cordis-config-entry`,
- * `@deepseek-ai/dsh-tool-cordis`, and `cordiverse/cordis`, and makes the
+ * `@phoenix-ai/dsh-tool-cordis`, and `cordiverse/cordis`, and makes the
  * rewrite idempotent because the scoped name's `cordis` is preceded by `/`.
  * Markdown follows the rename inside every fence, and in `docs/` prose too:
  * a tutorial that teaches an unresolvable name is wrong, while prose elsewhere
@@ -77,6 +77,9 @@ interface GenericSkip {
 }
 
 const GENERIC_SKIPS: readonly GenericSkip[] = [
+  // These plans name the shipped `cordis` preset id, not the vendored package.
+  { file: 'docs/superpowers/plans/2026-08-27-visible-progress-hardness.md', upstream: ['cordis'] },
+  { file: 'docs/superpowers/plans/2026-08-27-visible-progress-hardness.zh.md', upstream: ['cordis'] },
   // `vendorPackages` lists vendor/ directory names, joined with 'vendor' below it.
   { file: 'packages/examples/acp-demo/tests/built-bin.e2e.ts', upstream: ['cordis', 'cosmokit', 'schemastery'] },
   // `Symbol.for('schemastery')` and the `vendor:` metadata field are upstream identifiers.
@@ -197,37 +200,6 @@ const EXACT_EDITS: readonly ExactEdit[] = [
     expect: 1,
   },
   {
-    // The rescoped name is already covered by the `@deepseek-ai/.+` pattern beside it.
-    id: 'knip-logger-console',
-    file: 'knip.json',
-    find: `      "ignoreDependencies": [
-        "@cordisjs/plugin-logger-console",
-        "@deepseek-ai/.+"
-      ]
-    },
-    "packages/util/home": {`,
-    replace: `      "ignoreDependencies": [
-        "@deepseek-ai/.+"
-      ]
-    },
-    "packages/util/home": {`,
-    expect: 1,
-  },
-  {
-    id: 'knip-bundle-base',
-    file: 'knip.json',
-    find: `    "packages/bundle/base": {
-      "ignoreDependencies": [
-        "@deepseek-ai/.+",
-        "@cordisjs/.+"
-      ]`,
-    replace: `    "packages/bundle/base": {
-      "ignoreDependencies": [
-        "@deepseek-ai/.+"
-      ]`,
-    expect: 1,
-  },
-  {
     // Rescoped packages are never fetched from a registry, so the exclusion is dead config.
     id: 'pnpm-release-age',
     file: 'pnpm-workspace.yaml',
@@ -342,13 +314,6 @@ const VENDORED_LIBRARY = /^@deepseek-ai\\/(cosmokit|schemastery)(\\/|$)/
     file: 'docs/cookbook/adding-a-vendored-package.md',
     find: "keep upstream's `name`/`version`/`exports`/`type`",
     replace: "rescope the `name` ([mapping](../rescope.md)) while keeping upstream's `version`/`exports`/`type`",
-    expect: 1,
-  },
-  {
-    id: 'vendoring-cookbook-name-invariant-zh',
-    file: 'docs/cookbook/adding-a-vendored-package.zh.md',
-    find: '保留上游的 `name`/`version`/`exports`/`type`',
-    replace: '改写 `name` 的 scope（[映射](../rescope.md)），保留上游的 `version`/`exports`/`type`',
     expect: 1,
   },
   {

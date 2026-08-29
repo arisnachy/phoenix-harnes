@@ -1,7 +1,7 @@
 /** OpenRouter-backed implementation of the provider-neutral PHOENIX web-search seam. */
 
-import { WebError } from '@deepseek-ai/dsh-web'
-import type { WebSearchProvider, WebSearchRequest, WebSearchResult, WebSearchSource } from '@deepseek-ai/dsh-web'
+import { WebError } from '@phoenix-ai/dsh-web'
+import type { WebSearchProvider, WebSearchRequest, WebSearchResult, WebSearchSource } from '@phoenix-ai/dsh-web'
 import type { OpenRouterErrorResponse, OpenRouterSearchResponse, OpenRouterUrlCitation } from './types.ts'
 
 /** Stable id registered in `ctx.web`. */

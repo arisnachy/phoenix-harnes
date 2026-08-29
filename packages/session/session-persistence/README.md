@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-session-persistence
+# @phoenix-ai/dsh-session-persistence
 
 English | [中文](README.zh.md)
 

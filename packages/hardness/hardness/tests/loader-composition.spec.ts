@@ -22,7 +22,7 @@ describe('HARDNESS real Loader composition', () => {
   it('boots the service through cordis.yml and disposes its service fiber', async () => {
     root = await mkdtemp(join(tmpdir(), 'dsh-hardness-loader-'))
     const configPath = join(root, 'cordis.yml')
-    await writeFile(configPath, "- name: '@deepseek-ai/dsh-hardness'\n")
+    await writeFile(configPath, "- name: '@phoenix-ai/dsh-hardness'\n")
 
     context = new Context()
     context.baseUrl = pathToFileURL(root).href + '/'
@@ -31,7 +31,7 @@ describe('HARDNESS real Loader composition', () => {
     context.loader.internal = {
       version: 'v2',
       async import(specifier: string) {
-        if (specifier !== '@deepseek-ai/dsh-hardness') throw new Error(`unexpected Loader import: ${specifier}`)
+        if (specifier !== '@phoenix-ai/dsh-hardness') throw new Error(`unexpected Loader import: ${specifier}`)
         return HardnessRegistry
       },
     } as unknown as NonNullable<typeof context.loader.internal>

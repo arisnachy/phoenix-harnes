@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-subprocess-local",
+  "name": "@phoenix-ai/dsh-subprocess-local",
   "description": "Local-subprocess implementation of the PHOENIX subprocess seam",
   "version": "0.1.1-rc.2",
   "publishConfig": {
@@ -36,9 +36,9 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-subprocess": "workspace:^",
-    "@deepseek-ai/dsh-timeout": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-subprocess": "workspace:^",
+    "@phoenix-ai/dsh-timeout": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "dependencies": {
@@ -46,10 +46,10 @@
     "node-pty": "1.2.0-beta.15"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-loader-smoke": "workspace:^",
-    "@deepseek-ai/dsh-subprocess": "workspace:^",
-    "@deepseek-ai/dsh-timeout": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-loader-smoke": "workspace:^",
+    "@phoenix-ai/dsh-subprocess": "workspace:^",
+    "@phoenix-ai/dsh-timeout": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

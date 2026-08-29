@@ -6,8 +6,8 @@ import {
   validateDateOfBirth,
   validateUserProfile,
   validateUserProfileUpdate,
-} from '@deepseek-ai/dsh-user-profile'
-import type { UserProfileSettings } from '@deepseek-ai/dsh-user-profile'
+} from '@phoenix-ai/dsh-user-profile'
+import type { UserProfileSettings } from '@phoenix-ai/dsh-user-profile'
 
 function profile(overrides: Partial<UserProfileSettings> = {}): UserProfileSettings {
   return {

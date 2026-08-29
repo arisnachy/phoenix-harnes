@@ -6,10 +6,10 @@
 
 import type {
   AuthorizationNotice, AuthorizationPromptOption, AuthorizationTelemetry,
-} from '@deepseek-ai/dsh-authorization/types'
+} from '@phoenix-ai/dsh-authorization/types'
 import type { RpcRequest, RpcResponse } from './rpc.ts'
 
-export type { AuthorizationTelemetry } from '@deepseek-ai/dsh-authorization/types'
+export type { AuthorizationTelemetry } from '@phoenix-ai/dsh-authorization/types'
 
 /** A prompt with its signal removed before it crosses the wire. */
 export type AuthorizationPromptView = {

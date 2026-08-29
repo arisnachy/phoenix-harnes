@@ -14,7 +14,7 @@ Workspace artifact preview 会在空 sandbox iframe 中渲染字符串形式的 
 
 ## Verification
 
-聚焦的 client artifact-preview 测试通过，`@deepseek-ai/dsh-client-ui-workspace` client typecheck 也通过。preview 仍只负责 presentation，不增加 execution 或 connector authority。
+聚焦的 client artifact-preview 测试通过，`@phoenix-ai/dsh-client-ui-workspace` client typecheck 也通过。preview 仍只负责 presentation，不增加 execution 或 connector authority。
 
 ## Consequences
 

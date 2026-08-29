@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-client-ui-renderer
+# @phoenix-ai/dsh-client-ui-renderer
 
 [English](README.md) | 中文
 

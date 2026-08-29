@@ -1,7 +1,7 @@
 /**
  * Durable session skill catalog and model-facing `skill` loader tool.
  *
- * @module @deepseek-ai/dsh-tool-skill
+ * @module @phoenix-ai/dsh-tool-skill
  */
 
 import { createHash } from 'node:crypto'
@@ -10,10 +10,10 @@ import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
-import { defineTool } from '@deepseek-ai/dsh-tools'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { UserMessage } from '@deepseek-ai/dsh-session'
+import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
+import { defineTool } from '@phoenix-ai/dsh-tools'
+import { createUserMessage } from '@phoenix-ai/dsh-llm'
+import type { UserMessage } from '@phoenix-ai/dsh-session'
 import {
   adaptSkillDefinition,
   escapeText,
@@ -25,7 +25,7 @@ import {
   type SkillDefinition,
   type SkillInvocationSource,
   type SkillSummary,
-} from '@deepseek-ai/dsh-skill'
+} from '@phoenix-ai/dsh-skill'
 
 export const name = 'tool-skill'
 export const inject = ['agents', 'tools', 'skills']
@@ -46,7 +46,7 @@ export interface SkillCatalogSource {
   readonly entries: readonly { readonly name: string; readonly description: string }[]
 }
 
-declare module '@deepseek-ai/dsh-llm' {
+declare module '@phoenix-ai/dsh-llm' {
   interface MessageSourceMap {
     'skill-catalog': SkillCatalogSource
   }

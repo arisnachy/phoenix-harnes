@@ -45,7 +45,7 @@ import {
   LlmAdapter,
   LlmError,
   ReasoningEffortId,
-} from '@deepseek-ai/dsh-llm'
+} from '@phoenix-ai/dsh-llm'
 import type {
   GenerateOptions,
   LlmModelInfo,
@@ -55,9 +55,9 @@ import type {
   ReasoningEffortId as ReasoningEffortIdType,
   ResolvedRetryPolicy,
   StreamChunk,
-} from '@deepseek-ai/dsh-llm'
-import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
-import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
+} from '@phoenix-ai/dsh-llm'
+import type { AttachmentStore } from '@phoenix-ai/dsh-attachment'
+import { idleWatchdog, timeoutOf } from '@phoenix-ai/dsh-timeout'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
 import { toPiContext } from './context.ts'

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { PromptSection } from '@deepseek-ai/dsh-system-prompt'
+import type { PromptSection } from '@phoenix-ai/dsh-system-prompt'
 import { installHardnessProtocol } from '../src/protocol.ts'
 
 describe('HARDNESS model protocol prompt adapter', () => {

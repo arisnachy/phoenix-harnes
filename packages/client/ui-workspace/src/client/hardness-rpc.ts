@@ -1,5 +1,5 @@
-import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
-import type { RpcResult } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { ClientConnectionRpc } from '@phoenix-ai/dsh-client-connection/client'
+import type { RpcResult } from '@phoenix-ai/dsh-host-apiproxy/api'
 
 /**
  * Call the governed HARDNESS mission endpoint through PHOENIX's official connection.

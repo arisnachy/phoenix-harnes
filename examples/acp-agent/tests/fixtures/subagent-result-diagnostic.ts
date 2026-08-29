@@ -5,8 +5,8 @@ import {
   NO_START_CAPABILITIES,
   type ResolvedSubagentStartRequest,
   type SubagentProvider,
-} from '@deepseek-ai/dsh-subagent'
-import { SessionId } from '@deepseek-ai/dsh-session'
+} from '@phoenix-ai/dsh-subagent'
+import { SessionId } from '@phoenix-ai/dsh-session'
 
 export const name = 'subagent-result-diagnostic'
 export const inject = ['subagents']

@@ -1,6 +1,6 @@
 import type {
   ChatConversationViewNode, ConversationTimelineSnapshot,
-} from '@deepseek-ai/dsh-client-runtime/client'
+} from '@phoenix-ai/dsh-client-runtime/client'
 
 /** Compact user-facing phase for the currently open turn. */
 export type TurnProgress = 'preparing' | 'running-tools' | 'verifying'

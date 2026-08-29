@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-web-search-free
+# @phoenix-ai/dsh-web-search-free
 
 English | [中文](README.zh.md)
 

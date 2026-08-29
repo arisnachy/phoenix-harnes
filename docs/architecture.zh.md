@@ -107,7 +107,7 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 
 [实验性 Agent Teams](subsystems/agent-team.zh.md) 是 `ctx.agentTeams` 上的私有显式启用协作 seam，在可继续 subagent 之上提供持久 roster、任务板和 mailbox。
 
-HARDNESS 在 `ctx.hardness` 上增加 provider-neutral 的能力索引和声明式 modality router。descriptor 只是清单投影，不是执行权限：tools 和 skills 仍由各自 registry 负责，所需权限仍然只是声明，而 `have`/`route` 必须有当前的验证证据。`@deepseek-ai/dsh-hardness-atlas-json` 在不保存凭据的前提下原子地持久化带版本的 snapshot；视觉、workspace、sandbox 和 generative UI 消费方仍是独立 authority。
+HARDNESS 在 `ctx.hardness` 上增加 provider-neutral 的能力索引和声明式 modality router。descriptor 只是清单投影，不是执行权限：tools 和 skills 仍由各自 registry 负责，所需权限仍然只是声明，而 `have`/`route` 必须有当前的验证证据。`@phoenix-ai/dsh-hardness-atlas-json` 在不保存凭据的前提下原子地持久化带版本的 snapshot；视觉、workspace、sandbox 和 generative UI 消费方仍是独立 authority。
 
 ## 新行为的归属位置
 

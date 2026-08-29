@@ -3,7 +3,7 @@ import {
   mapOpenRouterResponse,
   OpenRouterSearchProvider,
   OPENROUTER_SEARCH_PROVIDER_ID,
-} from '@deepseek-ai/dsh-web-search-openrouter'
+} from '@phoenix-ai/dsh-web-search-openrouter'
 
 afterEach(() => { vi.unstubAllGlobals() })
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ConnectionRpcHandler, HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
+import type { ConnectionRpcHandler, HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
 import { installHardnessMissionRpc } from '../src/hardness-rpc.ts'
 
 describe('HARDNESS host RPC', () => {

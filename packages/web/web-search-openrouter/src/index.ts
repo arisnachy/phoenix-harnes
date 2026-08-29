@@ -2,12 +2,12 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type {} from '@deepseek-ai/dsh-agent'
-import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
-import type {} from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-web'
+import type {} from '@phoenix-ai/dsh-agent'
+import { credentialRef } from '@phoenix-ai/dsh-credentials'
+import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
+import { installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
+import type {} from '@phoenix-ai/dsh-session'
+import type {} from '@phoenix-ai/dsh-web'
 import {
   OpenRouterSearchProvider,
   OPENROUTER_SEARCH_DEFAULT_BASE_URL,

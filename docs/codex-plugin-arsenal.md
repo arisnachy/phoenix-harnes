@@ -14,8 +14,8 @@ The command maintains a managed checkout of `openai/plugins` under `$DSH_HOME/co
 
 PHOENIX bridges supported Codex surfaces as follows:
 
-- **Skills**: copied into `$DSH_HOME/skills` as namespaced `codex-*` skills. The existing `@deepseek-ai/dsh-skill-filesystem` provider discovers them on the next catalog refresh/boot.
-- **MCP servers**: translated from each plugin's `.mcp.json` into PHOENIX `@deepseek-ai/dsh-mcp-client` Cordis patches. They stay disabled until explicitly enabled.
+- **Skills**: copied into `$DSH_HOME/skills` as namespaced `codex-*` skills. The existing `@phoenix-ai/dsh-skill-filesystem` provider discovers them on the next catalog refresh/boot.
+- **MCP servers**: translated from each plugin's `.mcp.json` into PHOENIX `@phoenix-ai/dsh-mcp-client` Cordis patches. They stay disabled until explicitly enabled.
 - **Agents, commands, hooks, apps, scripts, and assets**: retained in the managed upstream checkout and inventoried in `arsenal.json`. PHOENIX does not execute a Codex hook or app declaration merely because it exists; unsupported executable surfaces remain inert rather than silently receiving host authority.
 
 This is intentionally capability-safe. Installing the arsenal does **not** grant browser, shell, filesystem, credentials, or remote-service authority to every plugin.

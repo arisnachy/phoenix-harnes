@@ -1,9 +1,9 @@
-/** Package-owned invariant companion for `@deepseek-ai/dsh-hardness`. */
+/** Package-owned invariant companion for `@phoenix-ai/dsh-hardness`. */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-hardness'
+const PACKAGE_NAME = '@phoenix-ai/dsh-hardness'
 
 export const name = 'hardness-invariant'
 export const inject = ['invariants']

@@ -5,17 +5,17 @@ import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
-import type { AgentHandle } from '@deepseek-ai/dsh-agent'
-import { CallId, createUserMessage, LlmAdapter } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import type { AgentHandle } from '@phoenix-ai/dsh-agent'
+import { CallId, createUserMessage, LlmAdapter } from '@phoenix-ai/dsh-llm'
+import type { GenerateOptions, StreamChunk } from '@phoenix-ai/dsh-llm'
+import { SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'
 import {
   ScheduleId,
   createEveryScheduleRecord,
   foldScheduleEvents,
   resolveEveryOccurrence,
   type EveryScheduleRecord,
-} from '@deepseek-ai/dsh-schedule'
+} from '@phoenix-ai/dsh-schedule'
 import {
   assertFixtureInventory,
   captureStableAria,

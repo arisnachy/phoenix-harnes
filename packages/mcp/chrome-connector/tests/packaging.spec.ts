@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 const packageRoot = resolve(import.meta.dirname, '..')
 
-describe('@deepseek-ai/dsh-chrome-connector packaging', () => {
+describe('@phoenix-ai/dsh-chrome-connector packaging', () => {
   it('emits the executable and shared chunk declared by package.json', () => {
     const manifest = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
       files?: string[]

@@ -43,8 +43,8 @@ El worktree debe partir de `4009f771c3` y conservar los cambios no relacionados 
 - [ ] **Paso 2: Verificar baseline focal**
 
 ```powershell
-pnpm --filter @deepseek-ai/dsh-authorization test --run packages/credentials/authorization/tests/google.spec.ts
-pnpm --filter @deepseek-ai/dsh-mcp-client test --run packages/mcp/mcp-client/tests/apply.spec.ts
+pnpm --filter @phoenix-ai/dsh-authorization test --run packages/credentials/authorization/tests/google.spec.ts
+pnpm --filter @phoenix-ai/dsh-mcp-client test --run packages/mcp/mcp-client/tests/apply.spec.ts
 ```
 
 Esperado: ambos comandos terminan con estado 0 antes de agregar Microsoft.
@@ -84,7 +84,7 @@ it('desconecta localmente aunque falle la revocación remota', async () => {})
 - [ ] **Paso 2: Ejecutar solo el archivo nuevo**
 
 ```powershell
-pnpm --filter @deepseek-ai/dsh-authorization test --run packages/credentials/authorization/tests/microsoft.spec.ts
+pnpm --filter @phoenix-ai/dsh-authorization test --run packages/credentials/authorization/tests/microsoft.spec.ts
 ```
 
 Esperado: FAIL porque aún no existen `MicrosoftGraphBroker`, `MICROSOFT_ACCOUNT_KEY` ni sus exports.
@@ -156,7 +156,7 @@ Registrar un `AuthorizationFlow` con label `Microsoft Outlook`, método `oauth`,
 - [ ] **Paso 6: Ejecutar pruebas del broker**
 
 ```powershell
-pnpm --filter @deepseek-ai/dsh-authorization test --run packages/credentials/authorization/tests/microsoft.spec.ts
+pnpm --filter @phoenix-ai/dsh-authorization test --run packages/credentials/authorization/tests/microsoft.spec.ts
 ```
 
 Esperado: PASS en todas las pruebas nuevas y las de Google.
@@ -185,7 +185,7 @@ En `tests/host.spec.ts`, comprobar nonce inválido, nonce expirado, método no p
 - [ ] **Paso 2: Ejecutar las pruebas nuevas antes de implementar**
 
 ```powershell
-pnpm --filter @deepseek-ai/dsh-microsoft-graph-mcp test --run
+pnpm --filter @phoenix-ai/dsh-microsoft-graph-mcp test --run
 ```
 
 Esperado: FAIL por paquete y servidor inexistentes.
@@ -233,7 +233,7 @@ Mapear cada herramienta a una operación fija del broker. El cliente MCP podrá 
 
 - [ ] **Paso 3: Montar el cliente MCP existente**
 
-Invocar el bridge `@deepseek-ai/dsh-mcp-client` con transporte `stdio`, namespace `microsoft`, comando Node y entorno limpiado que contenga solo URL/nonce efímeros. Esperar el descubrimiento inicial y cerrar cliente, IPC y broker mediante `ctx.effect`.
+Invocar el bridge `@phoenix-ai/dsh-mcp-client` con transporte `stdio`, namespace `microsoft`, comando Node y entorno limpiado que contenga solo URL/nonce efímeros. Esperar el descubrimiento inicial y cerrar cliente, IPC y broker mediante `ctx.effect`.
 
 - [ ] **Paso 4: Registrar la política de aprobación**
 
@@ -255,8 +255,8 @@ Verificar con `ApprovalService` que rechazo, cancelación y ausencia del canal n
 - [ ] **Paso 6: Ejecutar pruebas MCP y de paquetes relacionados**
 
 ```powershell
-pnpm --filter @deepseek-ai/dsh-microsoft-graph-mcp test --run
-pnpm --filter @deepseek-ai/dsh-mcp-client test --run packages/mcp/mcp-client/tests/apply.spec.ts
+pnpm --filter @phoenix-ai/dsh-microsoft-graph-mcp test --run
+pnpm --filter @phoenix-ai/dsh-mcp-client test --run packages/mcp/mcp-client/tests/apply.spec.ts
 ```
 
 Esperado: PASS sin alterar las pruebas existentes del cliente MCP.
@@ -300,10 +300,10 @@ git commit -m "docs: explain Microsoft Graph OAuth MCP setup"
 - [ ] **Paso 1: Ejecutar lint, tipos y pruebas focales**
 
 ```powershell
-pnpm --filter @deepseek-ai/dsh-authorization lint
-pnpm --filter @deepseek-ai/dsh-authorization test --run
-pnpm --filter @deepseek-ai/dsh-microsoft-graph-mcp lint
-pnpm --filter @deepseek-ai/dsh-microsoft-graph-mcp test --run
+pnpm --filter @phoenix-ai/dsh-authorization lint
+pnpm --filter @phoenix-ai/dsh-authorization test --run
+pnpm --filter @phoenix-ai/dsh-microsoft-graph-mcp lint
+pnpm --filter @phoenix-ai/dsh-microsoft-graph-mcp test --run
 ```
 
 Esperado: estado 0 en todos los comandos.

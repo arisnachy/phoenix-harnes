@@ -47,6 +47,7 @@
         "headless-agent/tests/fixtures/subagent-settlement-fence.ts",
         "headless-agent/tests/fixtures/workspace-context-resume-agent.ts",
         "headless-agent/tests/fixtures/goal-domain/seed-goal.ts",
+        "headless-agent/tests/fixtures/connector-inventory.ts",
         "headless-agent/tests/fixtures/time-context-driver.ts",
         "headless-agent/tests/fixtures/time-context-mock-llm.ts",
         "headless-agent/tests/fixtures/session-telemetry-otel-driver.ts",
@@ -77,13 +78,14 @@
         "**/*.ts"
       ],
       "ignoreDependencies": [
-        "@deepseek-ai/.+"
+        "@deepseek-ai/.+",
+        "@phoenix-ai/.+"
       ]
     },
     "packages/host/directory-picker-auto": {
       "ignoreDependencies": [
-        "@deepseek-ai/dsh-client-ui-directory-picker-browse",
-        "@deepseek-ai/dsh-client-ui-directory-picker-native"
+        "@phoenix-ai/dsh-client-ui-directory-picker-browse",
+        "@phoenix-ai/dsh-client-ui-directory-picker-native"
       ]
     },
     "packages/extensions/cordis-host-runner": {
@@ -117,7 +119,7 @@
         "tests/**/*.ts"
       ],
       "ignoreDependencies": [
-        "@deepseek-ai/dsh-api-gateway"
+        "@phoenix-ai/dsh-api-gateway"
       ]
     },
     "packages/client/ui-primitives": {
@@ -625,8 +627,8 @@
         "tests/**/*.ts"
       ],
       "ignoreDependencies": [
-        "@deepseek-ai/dsh-client-ui-primitives",
-        "@deepseek-ai/dsh-client-ui-slots",
+        "@phoenix-ai/dsh-client-ui-primitives",
+        "@phoenix-ai/dsh-client-ui-slots",
         "@types/react",
         "@types/react-dom",
         "react",
@@ -644,7 +646,7 @@
         "tests/**/*.ts"
       ],
       "ignoreDependencies": [
-        "@deepseek-ai/.+"
+        "@phoenix-ai/.+"
       ]
     },
     "packages/subagent/subagent-dsh-sdk": {
@@ -659,17 +661,18 @@
     },
     "packages/bundle/base": {
       "ignoreDependencies": [
-        "@deepseek-ai/.+"
+        "@deepseek-ai/.+",
+        "@phoenix-ai/.+"
       ]
     },
     "packages/bundle/headless": {
       "ignoreDependencies": [
-        "@deepseek-ai/dsh-code-runtime-worker-thread"
+        "@phoenix-ai/dsh-code-runtime-worker-thread"
       ]
     },
     "packages/bundle/web-app": {
       "ignoreDependencies": [
-        "@deepseek-ai/.+"
+        "@phoenix-ai/.+"
       ]
     }
   }

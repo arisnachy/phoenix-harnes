@@ -1,4 +1,4 @@
-# `@deepseek-ai/dsh-hardness`
+# `@phoenix-ai/dsh-hardness`
 
 [English](README.md) | 中文
 

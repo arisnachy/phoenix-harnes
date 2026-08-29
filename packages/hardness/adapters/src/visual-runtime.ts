@@ -1,6 +1,6 @@
 /** Declarative visual renderer registry; it has no tool or permission authority. */
 
-import type { CapabilityModality, CapabilitySurface } from '@deepseek-ai/dsh-hardness'
+import type { CapabilityModality, CapabilitySurface } from '@phoenix-ai/dsh-hardness'
 
 /** Immutable presentation model generated for one visual capability surface. */
 export interface VisualRenderModel {

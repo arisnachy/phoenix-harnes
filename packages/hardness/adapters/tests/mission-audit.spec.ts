@@ -1,5 +1,5 @@
-import { CallId } from '@deepseek-ai/dsh-llm'
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import { CallId } from '@phoenix-ai/dsh-llm'
+import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import { describe, expect, it, vi } from 'vitest'
 import { createHardnessMissionAudit, replayHardnessMissionAudit } from '../src/mission-audit.ts'
 

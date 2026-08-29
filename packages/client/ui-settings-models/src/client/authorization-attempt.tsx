@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
+import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 

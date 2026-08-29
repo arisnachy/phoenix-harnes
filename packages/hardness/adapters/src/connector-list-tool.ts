@@ -2,13 +2,13 @@ import type {
   AuthorizationEntry,
   AuthorizationService,
   AuthorizationTelemetry,
-} from '@deepseek-ai/dsh-authorization'
-import type { McpConnectorEntry, McpConnectorRegistry } from '@deepseek-ai/dsh-mcp-connector-registry'
+} from '@phoenix-ai/dsh-authorization'
+import type { McpConnectorEntry, McpConnectorRegistry } from '@phoenix-ai/dsh-mcp-connector-registry'
 import {
   defineTool,
   type JsonValue,
   type ToolDefinition,
-} from '@deepseek-ai/dsh-tools'
+} from '@phoenix-ai/dsh-tools'
 
 type ConnectorListService = Pick<AuthorizationService, 'list' | 'inspect'>
 type McpConnectorListService = Pick<McpConnectorRegistry, 'list'>

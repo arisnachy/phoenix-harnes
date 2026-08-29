@@ -5,15 +5,15 @@
  * merge lives here. Live per-message state arrives through the `feedback`
  * hook (the framework standard kit binds it into `useFeedback`); inject
  * carries the two mutation verbs plus the lazy loader.
- * @module @deepseek-ai/dsh-client-ui-message-feedback/client/slots
+ * @module @phoenix-ai/dsh-client-ui-message-feedback/client/slots
  */
 
 import type {
   HostObservable, InjectFace, PropsLocale, PropsRuntime,
-} from '@deepseek-ai/dsh-client-ui-slots'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { MessageId } from '@deepseek-ai/dsh-client-connection/client'
-import type { MessageFeedbackRating } from '@deepseek-ai/dsh-message-feedback/types'
+} from '@phoenix-ai/dsh-client-ui-slots'
+import type {} from '@phoenix-ai/dsh-client-ui-conversation/client'
+import type { MessageId } from '@phoenix-ai/dsh-client-connection/client'
+import type { MessageFeedbackRating } from '@phoenix-ai/dsh-message-feedback/types'
 // Type-only: pulls this package's LocaleNamespaceMap merge (the 'feedback' seat).
 import type {} from './locales.ts'
 import type { MessageFeedbackActionResult, MessageFeedbackView } from './controller.ts'

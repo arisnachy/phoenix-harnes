@@ -2,12 +2,12 @@
  * Pure session projections for subagent identity (mode/label) and active-turn
  * duration.
  *
- * @module @deepseek-ai/dsh-subagent/projection
+ * @module @phoenix-ai/dsh-subagent/projection
  */
 
 import { z } from 'zod'
-import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import type { ProjectionDefinition } from '@phoenix-ai/dsh-session-projection'
+import type { SessionEvent } from '@phoenix-ai/dsh-session'
 import { foldSubagentDescriptor } from './descriptor.ts'
 import type { SubagentDescriptorData } from './descriptor.ts'
 import type {
@@ -49,7 +49,7 @@ const timingStateSchema: z.ZodType<TimingState> = z.object({
   descriptorSeen: z.boolean(),
 }).strict()
 
-declare module '@deepseek-ai/dsh-session-projection/types' {
+declare module '@phoenix-ai/dsh-session-projection/types' {
   interface SessionProjectionStateMap {
     subagentTiming: TimingState
     subagent: IdentityState

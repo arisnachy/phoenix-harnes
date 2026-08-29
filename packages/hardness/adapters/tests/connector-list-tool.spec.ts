@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AuthorizationEntry, AuthorizationTelemetry } from '@deepseek-ai/dsh-authorization'
-import type { McpConnectorEntry } from '@deepseek-ai/dsh-mcp-connector-registry'
-import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import type { AuthorizationEntry, AuthorizationTelemetry } from '@phoenix-ai/dsh-authorization'
+import type { McpConnectorEntry } from '@phoenix-ai/dsh-mcp-connector-registry'
+import { credentialKey } from '@phoenix-ai/dsh-credentials'
 import { createConnectorListTool } from '../src/connector-list-tool.ts'
 
 function service(overrides: Partial<{

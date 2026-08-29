@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { PhoenixUpdateSnapshot } from '@deepseek-ai/dsh-api-remotes/client'
+import type { PhoenixUpdateSnapshot } from '@phoenix-ai/dsh-api-remotes/client'
 import { PluginInventorySettingsTab } from '../src/client/PluginInventorySettingsTab.tsx'
 import type {
   PluginInventorySettingsTabInjected,
@@ -51,7 +51,7 @@ const SNAPSHOT = {
     { entryId: 'failed', moduleName: '@fixture/failed-name', enabled: true, fiberPhase: 'failed' },
     { entryId: 'unloading', moduleName: '@fixture/unloading-name', enabled: true, fiberPhase: 'unloading' },
     { entryId: 'unobserved', moduleName: '@fixture/unobserved-name', enabled: true, fiberPhase: null },
-    { entryId: 'disabled-entry', moduleName: '@deepseek-ai/dsh-host-directory-picker-native', enabled: false, fiberPhase: null },
+    { entryId: 'disabled-entry', moduleName: '@phoenix-ai/dsh-host-directory-picker-native', enabled: false, fiberPhase: null },
   ],
 } as unknown as Snapshot
 

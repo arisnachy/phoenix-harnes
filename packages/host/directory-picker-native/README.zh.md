@@ -1,4 +1,4 @@
-# @deepseek-ai/dsh-host-directory-picker-native
+# @phoenix-ai/dsh-host-directory-picker-native
 
 [English](README.md) | 中文
 

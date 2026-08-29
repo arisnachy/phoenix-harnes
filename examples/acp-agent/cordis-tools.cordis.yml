@@ -7,6 +7,6 @@
     patches:
       - insert:
           - id: cordis-host-runner
-            name: '@deepseek-ai/dsh-cordis-host-runner'
+            name: '@phoenix-ai/dsh-cordis-host-runner'
           - id: tool-cordis
-            name: '@deepseek-ai/dsh-tool-cordis'
+            name: '@phoenix-ai/dsh-tool-cordis'

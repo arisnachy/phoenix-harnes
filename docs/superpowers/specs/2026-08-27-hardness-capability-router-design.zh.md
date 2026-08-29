@@ -20,7 +20,7 @@ router 委托 HARDNESS resolver，并按请求偏好选择 modality；不会把 
 
 ## 生命周期与集成
 
-router 是 `@deepseek-ai/dsh-hardness` 中的普通消费者，根据当前 atlas 推导结果，不拥有独立持久化。
+router 是 `@phoenix-ai/dsh-hardness` 中的普通消费者，根据当前 atlas 推导结果，不拥有独立持久化。
 
 ## 边界
 

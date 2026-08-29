@@ -35,9 +35,9 @@ El modelo raíz conserva su propia selección y sus propios eventos. La ruta eje
 
 El preset estándar mantiene una ruta condicional de hijo basada en `whenProvider: openai-codex`. La ruta debe estar presente y ser consistente en:
 
-1. `@deepseek-ai/dsh-tool-subagent` con proveedor `spawn`.
-2. `@deepseek-ai/dsh-tool-subagent` con proveedor `fork`.
-3. `@deepseek-ai/dsh-workflow-worker-thread`.
+1. `@phoenix-ai/dsh-tool-subagent` con proveedor `spawn`.
+2. `@phoenix-ai/dsh-tool-subagent` con proveedor `fork`.
+3. `@phoenix-ai/dsh-workflow-worker-thread`.
 
 La configuración común es:
 

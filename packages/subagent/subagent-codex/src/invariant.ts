@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@deepseek-ai/dsh-subagent-codex`.
- * @module @deepseek-ai/dsh-subagent-codex/invariant
+ * Package-owned invariant companion for `@phoenix-ai/dsh-subagent-codex`.
+ * @module @phoenix-ai/dsh-subagent-codex/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
-import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-subagent-codex'
+const PACKAGE_NAME = '@phoenix-ai/dsh-subagent-codex'
 
 /** Cordis companion plugin name. */
 export const name = 'subagent-codex-invariant'

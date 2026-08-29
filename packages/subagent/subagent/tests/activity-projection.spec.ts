@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { CallId } from '@deepseek-ai/dsh-llm/brand'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import type { CallId } from '@phoenix-ai/dsh-llm/brand'
+import type { SessionEvent } from '@phoenix-ai/dsh-session'
 import {
   subagentActivityProjectionDefinition,
   type ActivityState,
