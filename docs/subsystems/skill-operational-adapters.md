@@ -1,5 +1,7 @@
 # Adaptadores operativos de skills en PHOENIX
 
+English | [中文](skill-operational-adapters.zh.md)
+
 PHOENIX aplica un preflight operativo a cada skill visible mediante `ctx.skills.list()`. Esto incluye skills bundled, de usuario, de proyecto, de plugins y OpenClaw. El adaptador se ejecuta en `tool-skill`, que es el punto común usado por cualquier modelo del harness.
 
 ## Flujo obligatorio

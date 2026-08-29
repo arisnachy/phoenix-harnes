@@ -7,6 +7,26 @@
     "docs/cordis-api/inherited.md",
     "docs/i18n/style-samples.md",
     "docs/i18n/terminology.md",
-    "docs/i18n/translation-prompt.md"
+    "docs/i18n/translation-prompt.md",
+    "docs/superpowers/evidence/canvas2d-accessibility-live-audit.md",
+    "docs/superpowers/plans/2026-08-27-failure-learning-core.md",
+    "docs/superpowers/plans/2026-08-27-inline-ui-cards-plan.md",
+    "docs/superpowers/plans/2026-08-27-openclaw-skills-integration-plan.md",
+    "docs/superpowers/plans/2026-08-27-phoenix-skill-operational-adapters-plan.md",
+    "docs/superpowers/plans/2026-08-28-canvas-scatterplot-demo-plan.md",
+    "docs/superpowers/plans/2026-08-28-microsoft-graph-mcp.md",
+    "docs/superpowers/plans/2026-08-28-phoenix-promotional-landing.md",
+    "docs/superpowers/plans/2026-08-28-phoenix-skill-english-translation-plan.md",
+    "docs/superpowers/plans/2026-08-28-phoenix-technical-report.md",
+    "docs/superpowers/specs/2026-08-27-failure-learning-core-design.md",
+    "docs/superpowers/specs/2026-08-27-openclaw-skill-adapters-design.md",
+    "docs/superpowers/specs/2026-08-27-phoenix-skill-operational-adapters-design.md",
+    "docs/superpowers/specs/2026-08-28-canvas-scatterplot-demo-design.md",
+    "docs/superpowers/specs/2026-08-28-microsoft-graph-mcp-design.md",
+    "docs/superpowers/specs/2026-08-28-phoenix-promotional-landing-design.md",
+    "docs/superpowers/specs/2026-08-28-phoenix-technical-report-design.md",
+    "docs/subsystems/skill-english-overlays.md",
+    "docs/subsystems/skill-operational-adapters-by-category.md",
+    "docs/subsystems/skill-operational-adapters-report.md"
   ]
 }

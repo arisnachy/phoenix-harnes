@@ -36,6 +36,8 @@ One page per subsystem of the PHOENIX: what it is, the data structures it moves,
 | [filesystem.md](filesystem.md) | the filesystem seam: `FsTarget`, read/write/edit outcomes, observed-file state, `FsErrorCode` |
 | [lsp.md](lsp.md) | the LSP navigation seam: `LspQueryRequest`/`Result`, `LspProvider`/`Service`, four operations, `LspError` |
 | [skills.md](skills.md) | the skill service: discovery priority, `SkillSummary`/`SkillDefinition`, session-prefix catalog, model-facing `skill` loading |
+| [openclaw-skills.md](openclaw-skills.md) | the OpenClaw skill bridge: audited source, isolated sync, exact aliases, signal markers, and per-skill verification |
+| [skill-operational-adapters.md](skill-operational-adapters.md) | the common skill preflight: required loading sequence, execution modes, external requirements, language policy, and verification outputs |
 | [compaction.md](compaction.md) | the compaction seam: the `compaction/*` session events, `CompactionResult`, the `CompactionEngine` interface |
 | [subagent.md](subagent.md) | the subagent seam: the named-provider registry, `SubagentStartRequest`/`Result`/`Run`, the start-time-vs-runtime capability split |
 | [agent-team.md](agent-team.md) | Agent Teams: implicit Lead identity, named continuable teammates, durable peer mailbox, and shared task DAG |

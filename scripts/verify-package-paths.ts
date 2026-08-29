@@ -29,9 +29,13 @@ const PATTERNS = [
   'examples/**/*.ts',
 ]
 
-/** Paths excluded from the scan: built output and vendored upstream source. */
+/** Paths excluded from the scan: transient workflow artifacts, built output, and vendored upstream source. */
 const isExcluded = (p: string): boolean =>
-  isArchivedAgentNotePath(p) || p.includes('/lib/') || p.endsWith('.d.ts') || p.startsWith('vendor/')
+  isArchivedAgentNotePath(p)
+  || p.replaceAll('\\', '/').startsWith('docs/superpowers/plans/')
+  || p.replaceAll('\\', '/').startsWith('docs/superpowers/specs/')
+  || p.replaceAll('\\', '/').startsWith('docs/superpowers/evidence/')
+  || p.includes('/lib/') || p.endsWith('.d.ts') || p.startsWith('vendor/')
 
 /**
  * Directory names of every real package, `packages/<group>/<pkg>`. A broken

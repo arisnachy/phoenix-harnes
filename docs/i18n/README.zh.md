@@ -53,6 +53,8 @@
 - `docs/AGENTS.md`、`.agents/notes/**/AGENTS.md` 以及指向它们的 `CLAUDE.md` 指令符号链接：agent 指令，与根 `AGENTS.md` 一样只以英文维护。
 - `docs/i18n/terminology.md` 与 [style-samples.md](style-samples.md)：二者本身即为中英对照文档。
 - [translation-prompt.md](translation-prompt.md)：自动翻译流水线的提示词模板；正文逐字进入模型请求，配对翻译会改变流水线行为。
+- `docs/subsystems/skill-english-overlays.md`、`skill-operational-adapters-by-category.md` 和 `skill-operational-adapters-report.md`：没有经过审阅中文对侧的生成验证报告；所属命令会重新生成英文文件，在存在经过审阅的对侧之前，这些报告不进入发布的子系统索引。
+- 明确列出的 `docs/superpowers/plans/`、`docs/superpowers/specs/` 和 `docs/superpowers/evidence/` 文件：由所属工作流维护的临时实现计划、设计输入和生成审计证据，不属于持久的双语参考文档；这些目录中的其他配对文件仍在范围内。
 - `.agents/notes/archived/`：冻结的历史三文件配对。[`verify-archived-agent-notes`](../../scripts/verify-archived-agent-notes.ts) 校验其完整性和内容封存记录；翻译维护绝不能重写这些文件。
 
 **统一要求**：当前及今后纳入范围的每篇文档，合并时都必须构成完整的双语配对。[scripts/translation-pairing.manifest.json](../../scripts/translation-pairing.manifest.json) 只包含显式排除项；不存在逐文件推进清单、日期分界或 README 专用政策类别。

@@ -28,6 +28,14 @@ const PATTERNS = [
   'packages/AGENTS.md',
 ]
 
+/** Working artifacts whose prose is validated by their owning workflow, not the durable doc convention. */
+function isWorkingArtifact(absPath: string): boolean {
+  const file = relative(root, absPath).replaceAll('\\', '/')
+  return file.startsWith('docs/superpowers/plans/')
+    || file.startsWith('docs/superpowers/specs/')
+    || file.startsWith('docs/superpowers/evidence/')
+}
+
 /** A located hard-wrap: a prose paragraph spanning more than one source line. */
 interface Violation {
   file: string
@@ -69,7 +77,7 @@ function findViolations(absPath: string): Violation[] {
   return out
 }
 
-const files = uniqueRepoFiles(root, PATTERNS, isArchivedAgentNotePath)
+const files = uniqueRepoFiles(root, PATTERNS, p => isArchivedAgentNotePath(p) || isWorkingArtifact(p))
 const all = files.flatMap(file => findViolations(file.abs))
 const checked = files.length
 

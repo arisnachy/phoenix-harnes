@@ -1,5 +1,7 @@
 # Informe técnico de PHOENIX
 
+English | [中文](README.zh.md)
+
 Este directorio contiene la fuente HTML y el PDF regenerable del informe “PHOENIX — Uso, arquitectura y controles operativos”. El documento describe el checkout inspeccionado el 28 de agosto de 2026 para una audiencia técnica.
 
 ## Regenerar

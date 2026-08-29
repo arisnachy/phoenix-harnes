@@ -1,5 +1,7 @@
 # Skills OpenClaw en PHOENIX
 
+English | [中文](openclaw-skills.zh.md)
+
 PHOENIX integra el directorio oficial [`openclaw/openclaw/skills`](https://github.com/openclaw/openclaw/tree/main/skills) mediante el puente `dsh openclaw-skills`. La fuente auditada usa licencia MIT (commit `629a47e3cc20a9f8b6d19c105f840b8a693ec4aa`). La licencia hace gratuitas la descarga, las instrucciones y los recursos; no hace gratuitas las cuentas, APIs, dispositivos, CLIs o servicios externos descritos por algunas skills.
 
 ## Instalación y actualización
