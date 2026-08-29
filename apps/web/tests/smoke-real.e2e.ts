@@ -392,7 +392,7 @@ describe('dsh web keyless CLI smoke', () => {
         turn: 1,
         step: 1,
         retry: 1,
-        maxRetries: 5,
+        maxRetries: 2,
         failure: { code: 'TRANSPORT' },
       })
       expect(JSON.stringify(page.events)).toContain('WEB_RETRY_DISCARDED')
