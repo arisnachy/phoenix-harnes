@@ -35,16 +35,18 @@ const FILE_REFERENCE_PROMPT = fileURLToPath(new URL(
  */
 const EXPECTED_TOOLS = [
   'ask_user_question',
-  'bash',
+  ...(process.platform === 'win32' ? [] : ['bash']),
   'create_goal',
   'edit',
   'exit_plan_mode',
   'get_goal',
+  'hardness_run',
   'interrupt_agent',
   'job_kill',
   'job_list',
   'job_output',
   'list_agents',
+  ...(process.platform === 'win32' ? ['pwsh'] : []),
   'ralph',
   'read',
   'read_image',
@@ -82,7 +84,7 @@ it('assembles the shipped Web catalog, file-reference guidance, retry policy, an
       "initialDelayMs": 500,
       "jitterRatio": 0.1,
       "maxDelayMs": 10000,
-      "maxRetries": 5,
+      "maxRetries": 2,
       "mode": "normal",
       "retryableCodes": [
         "EMPTY_RESPONSE",
@@ -115,7 +117,7 @@ it('assembles the shipped Web catalog, file-reference guidance, retry policy, an
       "initialDelayMs": 500,
       "jitterRatio": 0.1,
       "maxDelayMs": 10000,
-      "maxRetries": 5,
+      "maxRetries": 2,
       "mode": "normal",
       "retryableCodes": [
         "EMPTY_RESPONSE",
@@ -135,11 +137,10 @@ it('assembles the shipped Web catalog, file-reference guidance, retry policy, an
     }
   `)
   // The catalog belongs to an AGENT, not to the process: every model-facing row
-  // now lives in a preset mounted under one session's scope, so the global
-  // layer holds nothing and a caller must name the agent to see anything. This
-  // composes from the deployment default — what a session that names no preset
-  // gets — which is the shape this test has always been about.
-  expect(ctx.tools.schemas().map(schema => schema.name)).toEqual([])
+  // now lives in a preset mounted under one session's scope, except for the
+  // host-level HARDNESS auditor, which must remain available to inspect and
+  // govern any session. The session still supplies the coding catalog below.
+  expect(ctx.tools.schemas().map(schema => schema.name)).toEqual(['hardness_run'])
   const handle = await ctx.agents.create({
     sessionId: SessionId('shipped-composition'),
     setup: agentCtx => ctx.agentPresets.mount(agentCtx).then(() => undefined),
@@ -167,6 +168,10 @@ it('assembles the shipped Web catalog, file-reference guidance, retry policy, an
   expect(scaffold.ctx.sandboxPolicy.defaultMode).toBe('workspace-write')
   expect(scaffold.ctx.approval.config.policy).toBe('ask')
   expect(scaffold.ctx.permissionPresets.defaultPreset).toBe('workspace-write')
+  expect(scaffold.ctx.permissionPresets.resolve('danger-full-access')).toMatchObject({
+    sandbox: 'danger-full-access',
+    approval: 'never',
+  })
 
   const commandHandle = await scaffold.ctx.agents.create({
     sessionId: SessionId('shipped-command-catalog'),
@@ -187,6 +192,8 @@ it('assembles the shipped Web catalog, file-reference guidance, retry policy, an
 it('lets a preset producer reach the background-job registry', async () => {
   scaffold = await launchWebScaffold()
   const ctx = scaffold.ctx
+  const shellTool = process.platform === 'win32' ? 'pwsh' : 'bash'
+  const jobId = `${shellTool}-1`
   const handle = await ctx.agents.create({
     sessionId: SessionId('shipped-background-job'),
     meta: { cwd: scaffold.workspaceCwd },
@@ -194,23 +201,23 @@ it('lets a preset producer reach the background-job registry', async () => {
   })
   try {
     const signal = new AbortController().signal
-    // `tool-bash` is a preset row and `tasks` is a host registry; the producer
-    // resolves it with `ctx.get`, so a registry hidden behind a preset realm
-    // fails here — with every task control still listed in the catalog above.
+    // The platform shell tool is a preset row and `jobs` is a host registry;
+    // the producer resolves it with `ctx.get`, so a registry hidden behind a
+    // preset realm fails here — with every task control still listed above.
     const started = await ctx.tools.execute({
       signal,
-      callId: CallId('shipped-bash-background'),
-      name: 'bash',
+      callId: CallId('shipped-shell-background'),
+      name: shellTool,
       arguments: {
-        command: 'printf SHIPPED_BACKGROUND_OK',
-        description: 'shipped background probe',
+        command: process.platform === 'win32' ? 'Write-Output SHIPPED_BACKGROUND_OK' : 'printf SHIPPED_BACKGROUND_OK',
+        description: 'run a shipped background probe',
         run_in_background: true,
       },
       agent: handle.agent,
     })
     expect({ isError: started.isError, content: started.content }).toEqual({
       isError: false,
-      content: [{ type: 'text', text: 'started background job bash-1' }],
+      content: [{ type: 'text', text: `started background job ${jobId}` }],
     })
 
     // The controller reads what the producer started: same registry, one
@@ -224,7 +231,7 @@ it('lets a preset producer reach the background-job registry', async () => {
     })
     expect(listed.isError).toBe(false)
     expect(listed.content).toEqual([
-      { type: 'text', text: expect.stringContaining('bash-1 [bash]') as unknown as string },
+      { type: 'text', text: expect.stringContaining(`${jobId} [${shellTool}]`) as unknown as string },
     ])
 
     // The full round trip: the output a host-plane producer wrote is collected
@@ -233,7 +240,7 @@ it('lets a preset producer reach the background-job registry', async () => {
       signal,
       callId: CallId('shipped-task-output'),
       name: 'job_output',
-      arguments: { job_id: 'bash-1', wait: true },
+      arguments: { job_id: jobId, wait: true },
       agent: handle.agent,
     })
     expect(collected.isError).toBe(false)

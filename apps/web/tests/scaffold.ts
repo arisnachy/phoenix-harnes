@@ -506,15 +506,22 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
         { id: 'tool-cordis', name: '@deepseek-ai/dsh-tool-cordis' },
       ] }]
       : [],
+    // A scenario that supplies the DeepSeek search backend must also select
+    // its stable provider id; registering an extra provider does not override
+    // the shipped Web default (OpenRouter).
     ...options.deepSeekSearch === undefined
       ? []
-      : [{
+      : [{ id: 'web', config: { searchProvider: 'deepseek-official', searchFallbackProviders: ['free-html'] } }],
+    ...options.deepSeekSearch === undefined
+      ? []
+      : [{ insert: [{
         id: 'web-search-deepseek',
+        name: '@deepseek-ai/dsh-web-search-deepseek',
         config: {
           apiKeyEnv: options.deepSeekSearch.apiKeyEnv,
           baseURL: options.deepSeekSearch.baseURL,
         },
-      }],
+      }] }],
     ...mode === 'record' || options.deepSeekMissingCredential === true
       ? []
       : [{ id: 'llm-deepseek', disabled: true }],

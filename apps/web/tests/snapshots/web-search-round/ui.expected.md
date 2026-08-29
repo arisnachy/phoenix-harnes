@@ -9,17 +9,22 @@
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
-- text: Use web_search once with queries ["PHOENIX snapshot search","PHOENIX multi-query search"]. Then reply exactly SEARCH_DONE and stop. {{clock}}
+- paragraph: Use web_search once with queries ["PHOENIX snapshot search","PHOENIX multi-query search"]. Then reply exactly SEARCH_DONE and stop.
+- text: {{clock}}
 - button "Copy":
   - img
-- button "Context injection @deepseek-ai/dsh-system-prompt":
+- button "Context injection System internal":
   - img
   - img
-  - text: Context injection @deepseek-ai/dsh-system-prompt
+  - text: Context injection System internal
 - button "Search PHOENIX snapshot search, PHOENIX multi-query search":
   - img
   - img
   - text: Search PHOENIX snapshot search, PHOENIX multi-query search
+- button "Context injection agent-loop":
+  - img
+  - img
+  - text: Context injection agent-loop
 - paragraph: SEARCH_DONE
 - button "Copy":
   - img

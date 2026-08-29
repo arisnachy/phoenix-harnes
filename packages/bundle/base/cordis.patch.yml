@@ -222,8 +222,8 @@
     - id: approval
       name: '@deepseek-ai/dsh-user-approval'
       config:
-        # Full access removes the file fence, but never removes the user's
-        # approval boundary. PHOENIX must still justify destructive actions.
+        # Full access is already the user's explicit permission choice; a
+        # second approval escalation would contradict that selected mode.
         policy: ask
 
     - id: permission
@@ -238,7 +238,7 @@
             approval: ask
           danger-full-access:
             sandbox: danger-full-access
-            approval: ask
+            approval: never
 
     - id: shell-env
       name: '@deepseek-ai/dsh-shell-env'
