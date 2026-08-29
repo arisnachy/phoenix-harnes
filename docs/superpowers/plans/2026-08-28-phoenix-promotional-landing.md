@@ -4,7 +4,7 @@
 
 **Goal:** Implementar una landing promocional responsive y dinámica para PHOENIX, accesible desde `website/public/phoenix/`, con demo interactiva, CTA local y QA de navegador.
 
-**Architecture:** La superficie será una página estática independiente servida por VitePress como `/phoenix/`. `index.html` definirá el contenido semántico, `styles.css` contendrá los tokens Local Clarity y layout responsive, y `main.js` manejará únicamente el menú móvil, los tres estados del demo, el copiado del comando y las revelaciones por scroll. No se tocarán `apps/web/src/main.ts`, el runtime, autenticación, rutas operativas ni paquetes del producto.
+**Architecture:** La superficie será una página estática independiente servida por VitePress como `/phoenix/index.html`. `index.html` definirá el contenido semántico, `styles.css` contendrá los tokens Local Clarity y layout responsive, y `main.js` manejará únicamente el menú móvil, los tres estados del demo, el copiado del comando y las revelaciones por scroll. No se tocarán `apps/web/src/main.ts`, el runtime, autenticación, rutas operativas ni paquetes del producto.
 
 **Tech Stack:** HTML semántico, CSS moderno, JavaScript de navegador sin framework ni dependencias nuevas, VitePress existente, Playwright CLI para verificación y capturas.
 
@@ -63,7 +63,7 @@
 
 - [ ] **Step 2: Añadir nota editorial y fuentes**
 
-  Crear `website/public/phoenix/README.md` con el propósito de la landing, URL local `/phoenix/`, fuentes `README.md`, `docs/architecture.md`, `docs/phoenix-windows.md` y `SECURITY.md`, y la advertencia de que PHOENIX está en desarrollo activo.
+  Crear `website/public/phoenix/README.md` con el propósito de la landing, URL local `/phoenix/index.html`, fuentes `README.md`, `docs/architecture.md`, `docs/phoenix-windows.md` y `SECURITY.md`, y la advertencia de que PHOENIX está en desarrollo activo.
 
 - [ ] **Step 3: Revisar accesibilidad estática**
 
@@ -87,11 +87,11 @@
 
 - [ ] **Step 2: Servir la documentación local**
 
-  Ejecutar `pnpm --dir website run dev` en un job gestionado, registrar el job id y usar la URL exacta `http://127.0.0.1:5173/phoenix/`. No iniciar ni reemplazar el servidor operativo de PHOENIX.
+  Ejecutar `pnpm --dir website run dev` en un job gestionado, registrar el job id y usar la URL exacta `http://127.0.0.1:5173/phoenix/index.html`. No iniciar ni reemplazar el servidor operativo de PHOENIX.
 
 - [ ] **Step 3: Smoke test de navegación**
 
-  Abrir `http://127.0.0.1:5173/phoenix/` en el navegador de QA y comprobar que el título contiene `PHOENIX`, el hero contiene el `h1`, los enlaces de navegación llegan a `#como-funciona`, `#capacidades` y `#confianza`, y el CTA local apunta al comando/documentación definida.
+  Abrir `http://127.0.0.1:5173/phoenix/index.html` en el navegador de QA y comprobar que el título contiene `PHOENIX`, el hero contiene el `h1`, los enlaces de navegación llegan a `#como-funciona`, `#capacidades` y `#confianza`, y el CTA local apunta al comando/documentación definida.
 
 ### Task 4: QA de interacción, responsive y visual
 
@@ -127,12 +127,12 @@
 ### Task 5: Verificación final y presentación
 
 **Files:**
-- Verify: `website/.vitepress/dist/phoenix/index.html`
+- Verify: `website/.dist/phoenix/index.html`
 - Verify: `website/public/phoenix/qa/qa-report.md`
 
 - [ ] **Step 1: Repetir build y smoke checks**
 
-  Ejecutar `pnpm --dir website run build` y repetir el smoke test tras el build para demostrar que la superficie publicada conserva la ruta `/phoenix/`.
+  Ejecutar `pnpm --dir website run build` y repetir el smoke test tras el build para demostrar que la superficie publicada conserva la ruta `/phoenix/index.html`.
 
 - [ ] **Step 2: Revisar diff y cambios preexistentes**
 

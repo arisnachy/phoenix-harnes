@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f4ee">
+  <meta name="description" content="PHOENIX: tu IA, tu espacio, tu ritmo. Una experiencia local-first para elegir, coordinar y conservar tu trabajo con IA.">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>PHOENIX — Tu IA. Tu espacio. Tu ritmo.</title>
+</head>
+<body>
+  <header class="site-header" data-header>
+    <a class="brand" href="#inicio" aria-label="PHOENIX, volver al inicio">
+      <img src="../wordmark.svg" alt="PHOENIX" width="188" height="32">
+    </a>
+    <button class="menu-toggle" id="mobile-menu-toggle" type="button" aria-expanded="false" aria-controls="mobile-menu">
+      <span class="sr-only">Abrir menú</span>
+      <span class="menu-icon" aria-hidden="true"><i></i><i></i></span>
+    </button>
+    <nav class="desktop-nav" aria-label="Navegación principal">
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#capacidades">Capacidades</a>
+      <a href="#confianza">Confianza</a>
+      <a class="nav-cta" href="#probar">Probar localmente <span aria-hidden="true">↗</span></a>
+    </nav>
+    <nav class="mobile-nav" id="mobile-menu" aria-label="Navegación móvil">
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#capacidades">Capacidades</a>
+      <a href="#confianza">Confianza</a>
+      <a class="nav-cta" href="#probar">Probar localmente <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main id="inicio">
+    <section class="hero section-shell">
+      <div class="hero-copy">
+        <p class="hero-kicker"><span class="pulse-dot" aria-hidden="true"></span> Un espacio más claro para trabajar con IA</p>
+        <h1>Tu IA.<br><em>Tu espacio.</em><br>Tu ritmo.</h1>
+        <p class="hero-lede">PHOENIX reúne modelos, herramientas y contexto en una experiencia que se siente tuya: local, flexible y lista para seguir el hilo.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#probar">Probar PHOENIX <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href="#como-funciona">Ver cómo funciona <span aria-hidden="true">↓</span></a>
+        </div>
+        <p class="hero-note"><span aria-hidden="true">⌁</span> Desarrollo activo · control local por defecto</p>
+      </div>
+      <div class="hero-visual" aria-label="Vista previa de una sesión PHOENIX">
+        <div class="orbit orbit-one" aria-hidden="true"></div>
+        <div class="orbit orbit-two" aria-hidden="true"></div>
+        <div class="hero-orb" aria-hidden="true"><span></span><b>✦</b></div>
+        <div class="session-card glass-card">
+          <div class="session-top"><span class="status-live"><i></i> Sesión activa</span><span class="session-id">PHX / 001</span></div>
+          <div class="session-line"><span class="line-dot teal"></span><span>contexto local</span><strong>listo</strong></div>
+          <div class="session-line"><span class="line-dot amber"></span><span>modelo flexible</span><strong>elegido</strong></div>
+          <div class="session-line"><span class="line-dot green"></span><span>continuidad</span><strong>guardada</strong></div>
+          <div class="session-prompt"><span class="prompt-mark">›</span><span class="typing-text">Dale forma a tu próxima idea</span><span class="cursor" aria-hidden="true"></span></div>
+        </div>
+        <div class="float-chip chip-top"><span class="chip-icon">◌</span> sin perder el hilo</div>
+        <div class="float-chip chip-bottom"><span class="chip-icon">⌘</span> tú eliges el modelo</div>
+      </div>
+    </section>
+
+    <section class="benefit-strip" aria-label="Beneficios principales">
+      <div class="strip-inner">
+        <span class="strip-label">PHOENIX te da</span>
+        <div class="benefit-item"><span class="benefit-symbol">◒</span><span>Control local</span></div>
+        <div class="benefit-item"><span class="benefit-symbol">↗</span><span>Libertad de proveedor</span></div>
+        <div class="benefit-item"><span class="benefit-symbol">⟳</span><span>Continuidad real</span></div>
+        <div class="benefit-item"><span class="benefit-symbol">✦</span><span>Espacio para pensar</span></div>
+      </div>
+    </section>
+
+    <section class="content-section section-shell" id="como-funciona">
+      <div class="section-heading reveal">
+        <p class="eyebrow">01 · Cómo funciona</p>
+        <h2>Menos configuración.<br><span>Más momento.</span></h2>
+        <p class="heading-aside">La potencia está debajo. La experiencia se mantiene humana.</p>
+      </div>
+      <div class="steps-grid">
+        <article class="step-card reveal"><div class="step-number">01</div><div class="step-icon icon-config" aria-hidden="true"><span></span><span></span><span></span></div><h3>Configura tu espacio</h3><p>Elige tu proveedor y tu modelo desde un solo lugar. Sin empezar de cero cada vez.</p><a href="#demo" class="step-link" data-demo-link="configurar">Ver configuración <span aria-hidden="true">↗</span></a></article>
+        <article class="step-card reveal"><div class="step-number">02</div><div class="step-icon icon-chat" aria-hidden="true"><span>›</span><i></i></div><h3>Conversa con intención</h3><p>Tu agente coordina herramientas y contexto para que puedas concentrarte en la idea.</p><a href="#demo" class="step-link" data-demo-link="conversar">Ver la sesión <span aria-hidden="true">↗</span></a></article>
+        <article class="step-card reveal"><div class="step-number">03</div><div class="step-icon icon-save" aria-hidden="true"><span>↗</span><i></i></div><h3>Conserva el hilo</h3><p>La sesión queda localmente disponible para revisar, continuar y entender qué ocurrió.</p><a href="#demo" class="step-link" data-demo-link="conservar">Ver continuidad <span aria-hidden="true">↗</span></a></article>
+      </div>
+    </section>
+
+    <section class="demo-section section-shell" id="demo">
+      <div class="demo-intro reveal"><p class="eyebrow">02 · Una vista por dentro</p><h2>La claridad también<br><span>puede ser poderosa.</span></h2><p>Explora una sesión PHOENIX en tres momentos. Cambia de estado y mira cómo se mantiene el hilo.</p></div>
+      <div class="demo-window reveal" id="demo-output" aria-live="polite">
+        <div class="window-bar"><div class="window-dots"><i></i><i></i><i></i></div><span>phoenix / sesión local</span><span class="window-secure">⌁ privado por defecto</span></div>
+        <div class="demo-body">
+          <div class="demo-tabs" role="tablist" aria-label="Estados de la sesión">
+            <button class="demo-tab is-active" type="button" data-demo-state="configurar" aria-pressed="true">Configurar</button>
+            <button class="demo-tab" type="button" data-demo-state="conversar" aria-pressed="false">Conversar</button>
+            <button class="demo-tab" type="button" data-demo-state="conservar" aria-pressed="false">Conservar</button>
+          </div>
+          <div class="demo-content">
+            <div class="demo-status"><span class="demo-status-dot"></span><span data-demo-label>Configurando tu espacio</span></div>
+            <div class="demo-grid"><div><p class="demo-overline">Tu sesión</p><h3 data-demo-detail>Elige modelo, credencial y políticas desde un solo lugar.</h3><div class="demo-progress"><span></span><span></span><span></span><span></span></div></div><div class="demo-metric"><p class="demo-overline">Estado</p><strong data-demo-metric>Proveedor listo</strong><span>actualizado ahora</span></div></div>
+            <div class="demo-footer"><span><i class="mini-check">✓</i> contexto bajo tu control</span><span><i class="mini-check">✓</i> sesión reconstruible</span><span class="demo-code">session.local</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="capabilities-section section-shell" id="capacidades">
+      <div class="section-heading split-heading reveal"><div><p class="eyebrow">03 · Capacidades</p><h2>Todo lo que necesitas.<br><span>Nada que estorbe.</span></h2></div><p class="heading-aside">Diseñado para que la complejidad trabaje a tu favor.</p></div>
+      <div class="capability-grid">
+        <article class="capability-card capability-wide reveal"><div class="capability-icon teal-icon">◎</div><div><h3>Elige cómo piensa</h3><p>Conecta el proveedor que prefieras y cambia de modelo desde la misma experiencia.</p><span class="capability-meta">OpenRouter · ChatGPT / Codex · más por venir</span></div><span class="card-arrow" aria-hidden="true">↗</span></article>
+        <article class="capability-card reveal"><div class="capability-icon amber-icon">✦</div><h3>Herramientas que ayudan</h3><p>Agentes y herramientas aparecen cuando aportan algo, no para llenar la pantalla.</p><span class="capability-meta">contexto · tools · skills</span></article>
+        <article class="capability-card reveal"><div class="capability-icon green-icon">⟳</div><h3>Vuelve a donde estabas</h3><p>Tu historia local mantiene el contexto cerca de ti y lista para continuar.</p><span class="capability-meta">durable · local · auditable</span></article>
+      </div>
+    </section>
+
+    <section class="trust-section section-shell" id="confianza">
+      <div class="trust-panel reveal"><div class="trust-copy"><p class="eyebrow">04 · Confianza</p><h2>La confianza no se declara.<br><span>Se demuestra.</span></h2><p>PHOENIX mantiene las decisiones importantes visibles: dónde vive tu sesión, qué credenciales usa y qué límites siguen aplicando.</p><a class="text-link light-link" href="https://github.com/arisnachy/phoenix-harnes/blob/main/SECURITY.md" target="_blank" rel="noreferrer">Leer la política de seguridad <span aria-hidden="true">↗</span></a></div><div class="trust-list"><div class="trust-item"><span class="trust-check">✓</span><div><strong>Sesiones locales por defecto</strong><span>Tu historial no se sube automáticamente.</span></div></div><div class="trust-item"><span class="trust-check">✓</span><div><strong>Credenciales separadas</strong><span>API keys y OAuth de ChatGPT no se mezclan.</span></div></div><div class="trust-item"><span class="trust-check">✓</span><div><strong>Límites honestos</strong><span>Lo que aún no está listo se dice con claridad.</span></div></div></div></div>
+    </section>
+
+    <section class="cta-section section-shell" id="probar">
+      <div class="cta-orbit" aria-hidden="true"></div><div class="cta-content reveal"><p class="eyebrow">Tu próximo espacio de trabajo</p><h2>Haz que la IA<br><em>se sienta tuya.</em></h2><p>Empieza localmente. Elige tu modelo. Conserva tu ritmo.</p><div class="install-command"><code id="install-command">irm https://raw.githubusercontent.com/arisnachy/phoenix-harnes/main/install-phoenix.ps1 | iex</code><button id="copy-command" type="button"><span class="sr-only">Copiar comando de instalación</span><span aria-hidden="true">⧉</span><span class="copy-label">Copiar</span></button></div><div class="cta-links"><a class="button button-primary" href="https://github.com/arisnachy/phoenix-harnes" target="_blank" rel="noreferrer">Explorar PHOENIX <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/arisnachy/phoenix-harnes#readme" target="_blank" rel="noreferrer">Leer la documentación <span aria-hidden="true">↗</span></a></div></div></section>
+  </main>
+
+  <footer class="site-footer"><div class="footer-inner"><a class="brand" href="#inicio" aria-label="PHOENIX, volver al inicio"><img src="../wordmark.svg" alt="PHOENIX" width="188" height="32"></a><p>Un espacio local-first para trabajar con IA<br><span>Desarrollo activo · construido con cuidado</span></p><div class="footer-links"><a href="https://github.com/arisnachy/phoenix-harnes" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://github.com/arisnachy/phoenix-harnes/discussions" target="_blank" rel="noreferrer">Comunidad ↗</a></div></div><div class="footer-bottom"><span>© <span data-year>2026</span> PHOENIX</span><span>Una evolución downstream sobre DeepSeek Harness</span><a href="#inicio">Volver arriba ↑</a></div></footer>
+  <script src="./main.js" defer></script>
+</body>
+</html>
