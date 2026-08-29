@@ -104,6 +104,7 @@
     "verify-package-readme-limitations": "tsx scripts/verify-package-readme-limitations.ts",
     "prepare:change": "pnpm run gen-cordis-catalog && pnpm run gen-client-catalog && pnpm run gen-config-catalog && pnpm run gen-doc-graphs && pnpm run gen-module-graph && pnpm run gen-scoped-events && pnpm run gen-persistence-catalog && pnpm run gen-third-party-notices",
     "verify-phoenix-branding": "tsx scripts/verify-phoenix-branding.ts",
+    "verify-phoenix-namespace": "tsx scripts/verify-phoenix-namespace.ts",
     "verify-node-next-types": "tsx scripts/verify-node-next-types.ts",
     "verify-optional-dependency-imports": "tsx scripts/verify-optional-dependency-imports.ts",
     "verify-runtime-closure": "tsx scripts/verify-runtime-closure.ts",

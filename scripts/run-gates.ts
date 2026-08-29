@@ -279,6 +279,7 @@ function ciSharedStaticGates(): Gate[] {
     pnpmScript('constraints', 'constraints'),
     pnpmScript('dsh-package-licenses', 'verify-dsh-package-licenses', { label: 'DSH package licenses' }),
     pnpmScript('package-invariants', 'verify-package-invariants', { label: 'package invariants' }),
+    pnpmScript('phoenix-namespace', 'verify-phoenix-namespace', { label: 'PHOENIX namespace' }),
     pnpmScript('phoenix-branding', 'verify-phoenix-branding', { label: 'PHOENIX branding' }),
     pnpmScript('cordis-config', 'verify-cordis-config', { label: 'Cordis config' }),
     pnpmScript('optional-dependency-imports', 'verify-optional-dependency-imports', {
