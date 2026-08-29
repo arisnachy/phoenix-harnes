@@ -120,6 +120,10 @@ describe('SidebarRoot shell', () => {
     expect(brandName).toContain('font-weight: 650')
     expect(brandName).toContain('letter-spacing: -0.03em')
     expect(brandName).toContain('white-space: nowrap')
+
+    const officialBrandName = css.match(/\.brandName\s*>\s*\[role=['"]img['"]\]\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
+    expect(officialBrandName).toContain('letter-spacing: -0.03em !important')
+    expect(officialBrandName).toContain('font-size: inherit !important')
   })
 
   it('hands the region its wide flag and clamps expandSidebar to the collapsed state', () => {
