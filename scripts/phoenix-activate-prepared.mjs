@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -85,7 +86,7 @@ function clearFile(path) {
 }
 
 function writeState(root, state) {
-  writeFileSync(durablePath(root, STATE_FILE), `${JSON.stringify({ schema: 1, ...state, at: new Date().toISOString() }, null, 2)}\n`, 'utf8')
+  writePhoenixUpdateState(durablePath(root, STATE_FILE), { schema: 1, ...state, at: new Date().toISOString() })
 }
 
 function stageDirectory() {

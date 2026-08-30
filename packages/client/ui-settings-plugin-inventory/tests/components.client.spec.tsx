@@ -152,7 +152,7 @@ describe('PluginInventorySettingsTab', () => {
 describe('UpdateFooterAction', () => {
   it.each([
     [{ status: 'idle' }, undefined],
-    [{ status: 'checking' }, undefined],
+    [{ status: 'checking' }, 'updateChecking'],
     [{ status: 'current' }, undefined],
     [{ status: 'updated' }, undefined],
     [{ status: 'off' }, undefined],
@@ -229,7 +229,8 @@ describe('UpdateFooterAction', () => {
 
   it('contains Remote read and restart failures without exposing transport detail', async () => {
     const failedRead = render(<UpdateFooterAction {...updateProps(async () => { throw new Error('private read detail') })} />)
-    expect(await screen.findByRole('status', { name: en.updateError })).toBeTruthy()
+    expect(await screen.findByRole('status', { name: en.updateChecking })).toBeTruthy()
+    expect(screen.queryByText(en.updateError)).toBeNull()
     expect(screen.queryByText('private read detail')).toBeNull()
     failedRead.unmount()
 
@@ -239,6 +240,29 @@ describe('UpdateFooterAction', () => {
     fireEvent.click(await screen.findByRole('button', { name: en.updateRestart }))
     expect(await screen.findByRole('status', { name: en.updateError })).toBeTruthy()
     expect(screen.queryByText('private restart detail')).toBeNull()
+  })
+
+  it('lets the user immediately retry a durable updater error', async () => {
+    const readUpdateState = vi.fn<UpdateFooterActionInjected['readUpdateState']>()
+      .mockResolvedValueOnce({ status: 'error', phase: 'prepare' })
+      .mockResolvedValueOnce({ status: 'ready', target: 'c'.repeat(40) })
+    render(<UpdateFooterAction {...updateProps(readUpdateState)} />)
+
+    expect(await screen.findByRole('status', { name: en.updateError })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.updateRetry }))
+    expect(await screen.findByRole('button', { name: en.updateRestart })).toBeTruthy()
+    expect(readUpdateState).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders the stable update as a progress card with a short target identifier', async () => {
+    const target = 'b'.repeat(40)
+    render(<UpdateFooterAction {...updateProps(async () => ({ status: 'ready', target }))} />)
+
+    const card = await screen.findByTestId('phoenix-update-card')
+    expect(card.getAttribute('data-update-status')).toBe('ready')
+    expect(card.querySelector('[data-update-progress]')?.getAttribute('aria-valuenow')).toBe('100')
+    expect(screen.getByText('bbbbbbbbbbbb')).toBeTruthy()
+    expect(screen.getByText(en.updateChannel)).toBeTruthy()
   })
 
   it('uses a compact accessible action on the collapsed rail and ignores late reads after unmount', async () => {

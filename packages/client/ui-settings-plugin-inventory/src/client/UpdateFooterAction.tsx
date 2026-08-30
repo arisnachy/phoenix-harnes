@@ -63,12 +63,12 @@ function clearRestartReconnectGrace(): void {
 export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventoryLocaleKey | undefined {
   switch (snapshot.status) {
     case 'idle':
-    case 'checking':
     case 'current':
     case 'updated':
     case 'paused':
     case 'off':
       return undefined
+    case 'checking': return 'updateChecking'
     case 'available': return 'updateAvailable'
     case 'preparing':
       switch (snapshot.phase) {
@@ -85,6 +85,39 @@ export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventory
     case 'rolled-back': return 'updateRolledBack'
     case 'error':
     case 'rollback-failed': return 'updateError'
+    /* v8 ignore next 2 -- compile-time exhaustiveness guard for future statuses. */
+    default: {
+      const unreachable: never = snapshot.status
+      return unreachable
+    }
+  }
+}
+
+/** Return a deterministic visual progress value for the updater lifecycle. */
+function updateProgress(snapshot: PhoenixUpdateSnapshot): number {
+  switch (snapshot.status) {
+    case 'checking': return 12
+    case 'available': return 20
+    case 'preparing':
+      switch (snapshot.phase) {
+        case 'source': return 34
+        case 'dependencies': return 48
+        case 'build': return 68
+        case 'smoke': return 86
+        default: return 42
+      }
+    case 'ready': return 100
+    case 'restarting': return 100
+    case 'applying': return 92
+    case 'rolling-back': return 60
+    case 'rolled-back': return 100
+    case 'error':
+    case 'rollback-failed': return 0
+    case 'idle':
+    case 'current':
+    case 'updated':
+    case 'paused':
+    case 'off': return 0
     /* v8 ignore next 2 -- compile-time exhaustiveness guard for future statuses. */
     default: {
       const unreachable: never = snapshot.status
@@ -115,7 +148,7 @@ function UpdateGlyph({ spinning }: { spinning: boolean }) {
 /**
  * Render the compact stable-update status immediately above Settings.
  * @param props - sidebar geometry, locale seat and updater Remote callbacks.
- * @returns nothing while current, otherwise a compact progress row or restart action.
+ * @returns nothing while current, otherwise a compact progress card or restart action.
  */
 export function UpdateFooterAction({
   wide,
@@ -133,14 +166,23 @@ export function UpdateFooterAction({
     setSnapshot(next)
   }, [])
 
-  const reportReadFailure = useCallback((error: unknown) => {
+  const reportReadFailure = useCallback((_error: unknown) => {
     // The Host intentionally disappears during an accepted restart. Treat that
     // transport gap as part of the restart instead of inventing an updater error.
     if (restartReconnectGraceActive()) return
+    // A transient RPC/network failure is not evidence that an update failed.
+    // Keep polling and expose a reconnecting state until the durable Host state
+    // can be read again.
     setSnapshot({
-      status: 'error',
-      detail: error instanceof Error ? error.message : String(error),
+      status: 'checking',
+      phase: 'reconnect',
     })
+  }, [])
+
+  const reportRestartFailure = useCallback(() => {
+    // A failed restart request is an actionable updater operation failure,
+    // unlike a background read that may only be a transient transport gap.
+    setSnapshot({ status: 'error' })
   }, [])
 
   const refresh = useCallback(async () => {
@@ -180,7 +222,15 @@ export function UpdateFooterAction({
   const busy = requesting || isBusy(snapshot)
   const label = t(labelKey)
   const actionLabel = ready ? t('updateRestart') : label
-  const className = `${ready ? css.action : css.status}${wide ? '' : ` ${css.rail}`}`
+  const errorState = snapshot.status === 'error' || snapshot.status === 'rollback-failed'
+  const tone = ready
+    ? css.ready
+    : errorState
+      ? css.error
+      : busy
+        ? css.busy
+        : css.neutral
+  const className = `${ready ? css.action : css.status} ${tone}${wide ? '' : ` ${css.rail}`}`
 
   const onRestart = async (): Promise<void> => {
     if (requesting) return
@@ -193,20 +243,56 @@ export function UpdateFooterAction({
         return
       }
       await refresh()
-    } catch (error) {
-      reportReadFailure(error)
+    } catch {
+      reportRestartFailure()
     } finally {
       setRequesting(false)
     }
   }
 
+  const onRetry = async (): Promise<void> => {
+    if (requesting) return
+    setRequesting(true)
+    try {
+      await refresh()
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  const progress = updateProgress(snapshot)
+  const target = snapshot.target?.slice(0, 12)
   const content = (
     <>
       <UpdateGlyph spinning={busy} />
       {wide && (
         <span className={css.copy}>
-          <span className={css.title}>{label}</span>
-          {ready && <span className={css.detail}>{t('updateRestart')}</span>}
+          <span className={css.heading}>
+            <span className={css.eyebrow}>{t('updateChannel')}</span>
+            <span className={css.title}>{label}</span>
+          </span>
+          <span className={css.progressTrack} aria-hidden="true">
+            <span className={css.progressValue} style={{ width: `${String(progress)}%` }} />
+          </span>
+          <span className={css.metadata}>
+            {target !== undefined && <code className={css.target}>{target}</code>}
+            {ready ? <span className={css.detail}>{t('updateRestart')}</span> : null}
+            {snapshot.status === 'checking' ? <span className={css.detail}>{t('updateAutoRetry')}</span> : null}
+            {errorState ? (
+              <>
+                <span className={css.detail}>{t('updateErrorHint')}</span>
+                <button
+                  type="button"
+                  className={css.retryButton}
+                  aria-label={t('updateRetry')}
+                  disabled={requesting}
+                  onClick={() => { void onRetry() }}
+                >
+                  {t('retry')}
+                </button>
+              </>
+            ) : null}
+          </span>
         </span>
       )}
     </>
@@ -220,8 +306,19 @@ export function UpdateFooterAction({
           className={className}
           aria-label={actionLabel}
           disabled={requesting}
+          data-testid="phoenix-update-card"
+          data-update-status={snapshot.status}
           onClick={() => { void onRestart() }}
         >
+          <span
+            className={css.visuallyHidden}
+            data-update-progress
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+            aria-label={label}
+          />
           {content}
         </button>
       </Tooltip>
@@ -230,7 +327,23 @@ export function UpdateFooterAction({
 
   return (
     <Tooltip label={label} delayMs={500} disabled={wide}>
-      <div className={className} role="status" aria-live="polite" aria-label={label}>
+      <div
+        className={className}
+        role="status"
+        aria-live="polite"
+        aria-label={label}
+        data-testid="phoenix-update-card"
+        data-update-status={snapshot.status}
+      >
+        <span
+          className={css.visuallyHidden}
+          data-update-progress
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress}
+          aria-label={label}
+        />
         {content}
       </div>
     </Tooltip>

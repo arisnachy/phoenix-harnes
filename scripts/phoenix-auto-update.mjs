@@ -16,11 +16,12 @@
 
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync,
+  existsSync, mkdirSync, readFileSync, unlinkSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -220,11 +221,11 @@ function recoveryRef(root, commit) {
 
 function writeState(root, state) {
   try {
-    writeFileSync(statePath(root), `${JSON.stringify({
+    writePhoenixUpdateState(statePath(root), {
       schema: 1,
       ...state,
       at: state.at ?? new Date().toISOString(),
-    }, null, 2)}\n`, 'utf8')
+    })
   } catch (error) {
     console.error(`[PHOENIX UPDATE] warning: could not persist update state: ${error instanceof Error ? error.message : String(error)}`)
   }
@@ -314,6 +315,20 @@ function ensureStagingWorktree(root, target) {
   return stage
 }
 
+function recoverStaleStagingIndexLock(root) {
+  const stage = stageDirectory()
+  if (!sameRepositoryWorktree(root, stage)) return
+  const stageGit = gitDirectory(stage)
+  const lock = join(stageGit, 'index.lock')
+  if (!existsSync(lock)) return
+  try {
+    unlinkSync(lock)
+    console.error(`[PHOENIX UPDATE] recovered stale staging lock: ${lock}`)
+  } catch (error) {
+    console.error(`[PHOENIX UPDATE] warning: could not recover stale staging lock: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 function readPrepared(root) {
   const path = preparedPath(root)
   if (!existsSync(path)) return undefined
@@ -329,14 +344,14 @@ function readPrepared(root) {
 }
 
 function writePrepared(root, inspection, plan) {
-  writeFileSync(preparedPath(root), `${JSON.stringify({
+  writePhoenixUpdateState(preparedPath(root), {
     schema: 1,
     target: inspection.target,
     base: inspection.current,
     mode: plan.mode,
     files: plan.files,
     preparedAt: new Date().toISOString(),
-  }, null, 2)}\n`, 'utf8')
+  })
 }
 
 function clearPrepared(root) {
@@ -644,6 +659,7 @@ async function watch(root, parentPid) {
   let announcedTarget
   let pending
   let preparedTarget
+  recoverStaleStagingIndexLock(root)
   writeState(root, {
     status: 'checking',
     phase: 'channel',
@@ -651,8 +667,23 @@ async function watch(root, parentPid) {
   })
 
   while (parentAlive(parentPid)) {
+    let inspection
     try {
-      const inspection = inspectUpdate(root)
+      inspection = inspectUpdate(root)
+    } catch (error) {
+      // Channel/network failures are temporary check failures. They must not
+      // be presented as a failed update, because no candidate was applied.
+      console.error(`[PHOENIX UPDATE] watcher check failed; retrying automatically: ${error instanceof Error ? error.message : String(error)}`)
+      writeState(root, {
+        status: 'checking',
+        phase: 'retry',
+        detail: 'The stable channel is temporarily unavailable. PHOENIX will retry automatically.',
+      })
+      await waitForPollOrParentExit(parentPid, pollInterval())
+      continue
+    }
+
+    try {
       switch (inspection.status) {
         case 'upgrade':
           pending = inspection

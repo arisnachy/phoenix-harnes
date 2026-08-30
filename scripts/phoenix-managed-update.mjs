@@ -18,6 +18,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -165,7 +166,7 @@ function stageCandidate(root, target) {
 
 function writeState(root, state) {
   try {
-    writeFileSync(join(gitDirectory(root), 'phoenix-update-state.json'), `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+    writePhoenixUpdateState(join(gitDirectory(root), 'phoenix-update-state.json'), state)
   } catch (error) {
     console.error(`[PHOENIX STABLE] warning: could not persist update state: ${error instanceof Error ? error.message : String(error)}`)
   }
@@ -226,7 +227,8 @@ function applyStable(root, current, target, manifest, state) {
     buildAndSmoke(root, `live stable ${target.slice(0, 12)}`)
     git(root, ['update-ref', 'refs/phoenix/recovery/last-good', target])
     writeState(root, {
-      status: state === 'ahead' ? 'realigned-stable' : 'updated',
+      status: 'updated',
+      phase: state === 'ahead' ? 'realigned' : 'complete',
       previous: current,
       current: target,
       channelPublishedAt: manifest.publishedAt,

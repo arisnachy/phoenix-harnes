@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -50,6 +50,19 @@ describe('PHOENIX updater state bridge', () => {
     expect(parsePhoenixUpdateSnapshot([]).status).toBe('error')
     expect(parsePhoenixUpdateSnapshot({ status: 42 }).status).toBe('error')
     expect(parsePhoenixUpdateSnapshot({ status: 'invented' }).status).toBe('error')
+  })
+
+  it('normalizes the legacy managed realignment result instead of showing an update error', () => {
+    const target = 'b'.repeat(40)
+    expect(parsePhoenixUpdateSnapshot({
+      status: 'realigned-stable',
+      previous: 'a'.repeat(40),
+      current: target,
+    })).toEqual({
+      status: 'updated',
+      previous: 'a'.repeat(40),
+      current: target,
+    })
   })
 
   it('sanitizes every browser-visible field and drops malformed commit ids', () => {
@@ -161,6 +174,8 @@ describe('PHOENIX updater state bridge', () => {
       target,
     })
     expect(new Date(state.at ?? '').toString()).not.toBe('Invalid Date')
+    expect(readdirSync(join(repo, '.git')).filter(name => name.endsWith('.tmp'))).toEqual([])
+    expect(readdirSync(join(repo, '.git')).filter(name => name.includes('phoenix-update-restart-request.json.') && name.endsWith('.tmp'))).toEqual([])
   })
 
   it('fails a restart request closed when Git identity disappears between reads', () => {

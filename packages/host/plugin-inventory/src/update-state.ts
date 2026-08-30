@@ -1,7 +1,8 @@
 /** Local bridge between the stable updater's Git-owned state and trusted Host RPCs. */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import type {
   PhoenixUpdateRestartReceipt,
@@ -12,6 +13,10 @@ import type {
 const STATE_FILE = 'phoenix-update-state.json'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const SHA_PATTERN = /^[0-9a-f]{40}$/i
+const STATE_READ_ATTEMPTS = 3
+const STATE_READ_RETRY_MS = 12
+const STATE_WRITE_ATTEMPTS = 4
+const STATE_WRITE_RETRY_MS = 20
 const STATUSES: ReadonlySet<PhoenixUpdateStatus> = new Set([
   'idle', 'checking', 'current', 'available', 'preparing', 'ready', 'restarting',
   'applying', 'rolling-back', 'updated', 'rolled-back', 'paused', 'error',
@@ -50,6 +55,49 @@ function commitField(record: Record<string, unknown>, key: string): string | und
   return value !== undefined && SHA_PATTERN.test(value) ? value : undefined
 }
 
+/** Read a state document again when a watcher write races the Host read. */
+function readStateJson(path: string): unknown {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= STATE_READ_ATTEMPTS; attempt += 1) {
+    try {
+      return JSON.parse(readFileSync(path, 'utf8'))
+    } catch (error) {
+      lastError = error
+      if (attempt < STATE_READ_ATTEMPTS) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, STATE_READ_RETRY_MS)
+      }
+    }
+  }
+  throw lastError
+}
+
+/** Replace one updater JSON document without exposing a partial write to readers. */
+function writeStateJson(path: string, value: unknown): void {
+  const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`
+  let lastError: unknown
+  try {
+    writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+    for (let attempt = 1; attempt <= STATE_WRITE_ATTEMPTS; attempt += 1) {
+      try {
+        renameSync(temporaryPath, path)
+        return
+      } catch (error) {
+        lastError = error
+        const code = (error as NodeJS.ErrnoException).code
+        if (!['EACCES', 'EBUSY', 'EPERM'].includes(code ?? '') || attempt === STATE_WRITE_ATTEMPTS) throw error
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, STATE_WRITE_RETRY_MS)
+      }
+    }
+    throw lastError
+  } finally {
+    try {
+      unlinkSync(temporaryPath)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  }
+}
+
 /**
  * Parse the updater's durable JSON into the narrow browser-visible vocabulary.
  * @param value - decoded JSON from the repository-owned updater state file.
@@ -60,7 +108,10 @@ export function parsePhoenixUpdateSnapshot(value: unknown): PhoenixUpdateSnapsho
     return { status: 'error', detail: 'PHOENIX update state is invalid.' }
   }
   const record = value as Record<string, unknown>
-  const status = record.status
+  // Older managed installations used a more specific completion label. Keep
+  // that durable state readable so a successful realignment is not presented
+  // as an update failure after the Host restarts.
+  const status = record.status === 'realigned-stable' ? 'updated' : record.status
   if (typeof status !== 'string' || !STATUSES.has(status as PhoenixUpdateStatus)) {
     return { status: 'error', detail: 'PHOENIX update state has an unknown status.' }
   }
@@ -98,7 +149,7 @@ export function readPhoenixUpdateSnapshot(root: string = runtimeRoot()): Phoenix
   const path = join(gitDir, STATE_FILE)
   if (!existsSync(path)) return { status: 'idle' }
   try {
-    return parsePhoenixUpdateSnapshot(JSON.parse(readFileSync(path, 'utf8')))
+    return parsePhoenixUpdateSnapshot(readStateJson(path))
   } catch {
     return { status: 'error', detail: 'PHOENIX update state could not be read.' }
   }
@@ -120,17 +171,17 @@ export function requestPhoenixUpdateRestart(root: string = runtimeRoot()): Phoen
   if (gitDir === undefined) return { accepted: false, status: 'error' }
 
   const at = new Date().toISOString()
-  writeFileSync(join(gitDir, RESTART_REQUEST_FILE), `${JSON.stringify({
+  writeStateJson(join(gitDir, RESTART_REQUEST_FILE), {
     schema: 1,
     target: snapshot.target,
     requestedAt: at,
-  }, null, 2)}\n`, 'utf8')
-  writeFileSync(join(gitDir, STATE_FILE), `${JSON.stringify({
+  })
+  writeStateJson(join(gitDir, STATE_FILE), {
     schema: 1,
     ...snapshot,
     status: 'restarting',
     phase: 'restart',
     at,
-  }, null, 2)}\n`, 'utf8')
+  })
   return { accepted: true, status: 'restarting' }
 }
