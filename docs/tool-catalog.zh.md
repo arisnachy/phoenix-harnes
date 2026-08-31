@@ -62,7 +62,7 @@
   "properties": {
     "questions": {
       "type": "array",
-      "description": "Questions to ask the user before continuing.",
+      "description": "Questions to ask the user before continuing. The answer resolves this decision only; it is never a mission-completion signal.",
       "items": {
         "type": "object",
         "additionalProperties": true,
