@@ -4,6 +4,8 @@
 
 PHOENIX 源码安装使用经过审查的稳定通道，而不是盲目拉取 GitHub 上的每一个 branch。
 
+Codex plugin 与 OpenClaw skill 更新使用[PHOENIX Codex 与 OpenClaw 更新接收](PHOENIX_UPSTREAM_INTAKE.zh.md)中描述的独立 staged intake；它们不会修改 PHOENIX source files。
+
 ## 发布路径
 
 ```text

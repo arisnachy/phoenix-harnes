@@ -13,6 +13,7 @@
 | `dsh web` | `--profile web` 的别名。 |
 | `dsh plugin --profile <name> <pnpm args>` | 通过在 profile 目录中转发给 pnpm 来管理该 profile 的插件。 |
 | `dsh chatgpt-web <start\|status\|stop>` | 启动、检查或停止显式配置的本地 ChatGPT Web Responses 网桥。 |
+| `dsh upstream-update --check` / `--apply` / `--doctor` | 检查或安全接收已初始化的 Codex plugin 与 OpenClaw skill bridge 更新。 |
 
 运行命令时所在的目录将作为默认 workspace 根目录。`web` 和 `headless` profile 在首次使用时会从随附模板自动初始化；其他任何 profile 都必须通过 `dsh plugin` 创建。
 
@@ -28,6 +29,10 @@ dsh chatgpt-web status
 ```
 
 只接受 loopback 端点。生命周期记录只保存进程 id 和端点，不保存命令行 secret。`dsh doctor` 可以检查已配置的网桥，但不会启动或修改它。
+
+## Codex 与 OpenClaw upstream intake
+
+Intake watcher 将已初始化 bridge 的 state 与 official `main` heads 比较，在独立的 DSH home 中暂存 candidate，运行原生 bridge verification，并且只激活通过 journal transaction 的 candidate。`PHOENIX_UPSTREAM_UPDATE_MODE=auto` 会应用已验证的 candidate，`notify` 会记录可用性，`off` 会禁用 watcher。未配置的 bridge 会保持 idle。参见 [upstream intake reference](../../docs/evolution/PHOENIX_UPSTREAM_INTAKE.zh.md)。
 
 ## 应用参数
 

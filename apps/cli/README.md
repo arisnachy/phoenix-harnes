@@ -13,6 +13,7 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 | `dsh web` | Alias of `--profile web`. |
 | `dsh plugin --profile <name> <pnpm args>` | Manage a profile's plugins by forwarding to pnpm in the profile directory. |
 | `dsh chatgpt-web <start\|status\|stop>` | Start, inspect, or stop an explicitly configured local ChatGPT Web Responses bridge. |
+| `dsh upstream-update --check` / `--apply` / `--doctor` | Check or safely receive initialized Codex plugin and OpenClaw skill bridge updates. |
 
 The invoking directory is the default workspace root. The `web` and `headless` profiles auto-initialize on first use from shipped templates; any other profile must be created through `dsh plugin`.
 
@@ -28,6 +29,10 @@ dsh chatgpt-web status
 ```
 
 Only loopback endpoints are accepted. The lifecycle record stores the process id and endpoint, never command-line secrets. `dsh doctor` checks a configured bridge without starting or modifying it.
+
+## Codex and OpenClaw upstream intake
+
+The intake watcher compares initialized bridge states with the official `main` heads, stages candidates in a separate DSH home, runs native bridge verification, and activates only a journaled transaction that passes. `PHOENIX_UPSTREAM_UPDATE_MODE=auto` applies verified candidates, `notify` records availability, and `off` disables the watcher. An unconfigured bridge remains idle. See [the upstream intake reference](../../docs/evolution/PHOENIX_UPSTREAM_INTAKE.md).
 
 ## App arguments
 

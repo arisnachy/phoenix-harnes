@@ -56,4 +56,21 @@ describe('dsh SOURCE launcher (node --import tsx/esm)', () => {
     expect(result.stdout).toContain('dsh codex-plugin sync')
     expect(result.stderr).toBe('')
   }, 30_000)
+
+  it('loads the isolated upstream update command without booting a profile', async () => {
+    const result = await execa(process.execPath, ['--import', 'tsx/esm', dshSourceBin, 'upstream-update', '--help'], {
+      cwd: repoRoot,
+      input: '',
+      timeout: 25_000,
+      killSignal: 'SIGKILL',
+      reject: false,
+    })
+    if (result.timedOut) {
+      throw new Error(`dsh upstream-update help did not exit within 25s. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+    }
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain('PHOENIX upstream update intake')
+    expect(result.stdout).toContain('PHOENIX_UPSTREAM_UPDATE_MODE=auto|notify|off')
+    expect(result.stderr).toBe('')
+  }, 30_000)
 })

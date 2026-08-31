@@ -52,6 +52,8 @@ Automatic installation requires an official `origin`, branch `main`, a clean wor
 
 Set `PHOENIX_UPDATE_MODE=notify` for notifications without installation or `PHOENIX_UPDATE_MODE=off` to disable checking. See [PHOENIX Stable Auto-Update](docs/evolution/PHOENIX_AUTO_UPDATE.md) for the complete release, recovery, and trust contract.
 
+Codex plugin and OpenClaw skill updates use the isolated [upstream intake](docs/evolution/PHOENIX_UPSTREAM_INTAKE.md), which stages and verifies candidates before changing initialized bridges.
+
 ### Configure OpenRouter on Windows
 
 PHOENIX starts with the `openrouter/free` model route selected. Create an [OpenRouter API key](https://openrouter.ai/settings/keys), then configure it inside PHOENIX:

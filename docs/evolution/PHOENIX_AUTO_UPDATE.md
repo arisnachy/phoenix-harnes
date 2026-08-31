@@ -4,6 +4,8 @@ English | [中文](PHOENIX_AUTO_UPDATE.zh.md)
 
 PHOENIX source installations use a reviewed stable channel instead of blindly pulling every GitHub branch.
 
+Codex plugin and OpenClaw skill updates use the separate staged intake described in [PHOENIX Codex and OpenClaw Update Intake](PHOENIX_UPSTREAM_INTAKE.md); they never modify PHOENIX source files.
+
 ## Release path
 
 ```text

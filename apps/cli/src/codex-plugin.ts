@@ -102,7 +102,8 @@ function jsonFile(path: string): unknown {
 }
 
 function run(bin: string, args: string[], cwd?: string): string {
-  const result = spawnSync(bin, args, {
+  const commandArgs = bin === 'git' ? ['-c', 'core.longpaths=true', ...args] : args
+  const result = spawnSync(bin, commandArgs, {
     cwd,
     encoding: 'utf8',
     windowsHide: true,
@@ -115,7 +116,7 @@ function run(bin: string, args: string[], cwd?: string): string {
   }
   if ((result.status ?? 1) !== 0) {
     const diagnostic = typeof result.stderr === 'string' ? result.stderr.trim() : ''
-    throw new Error(`${bin} ${args.join(' ')} failed${diagnostic.length > 0 ? `: ${diagnostic}` : ''}`)
+    throw new Error(`${bin} ${commandArgs.join(' ')} failed${diagnostic.length > 0 ? `: ${diagnostic}` : ''}`)
   }
   return typeof result.stdout === 'string' ? result.stdout.trim() : ''
 }
@@ -453,6 +454,67 @@ function setEnabled(name: string, enabled: boolean): number {
   return 0
 }
 
+function verify(): number {
+  const p = paths()
+  const state = readState(p.state)
+  if (state === undefined) throw new Error('arsenal state is missing or has an unsupported schema')
+  let failures = 0
+  const pluginNames = new Set<string>()
+  for (const plugin of state.plugins) {
+    if (pluginNames.has(plugin.name)) {
+      process.stdout.write(`FAIL duplicate plugin ${plugin.name}\n`)
+      failures += 1
+    }
+    pluginNames.add(plugin.name)
+    for (const alias of plugin.skillAliases) {
+      if (!/^codex-[a-z0-9-]+$/.test(alias)) {
+        process.stdout.write(`FAIL ${plugin.name}: invalid skill alias ${alias}\n`)
+        failures += 1
+        continue
+      }
+      if (!existsSync(join(p.skills, alias)) && !existsSync(join(p.skills, `${alias}.md`))) {
+        process.stdout.write(`FAIL ${plugin.name}: mirrored skill is missing: ${alias}\n`)
+        failures += 1
+      }
+    }
+  }
+
+  const managed = new Set<string>()
+  for (const entry of state.managedSkills) {
+    if (!/^codex-[a-z0-9-]+(?:\.md)?$/.test(entry) || managed.has(entry)) {
+      process.stdout.write(`FAIL invalid or duplicate managed skill ${entry}\n`)
+      failures += 1
+      continue
+    }
+    managed.add(entry)
+    if (!existsSync(join(p.skills, entry))) {
+      process.stdout.write(`FAIL managed skill is missing: ${entry}\n`)
+      failures += 1
+    }
+  }
+
+  const mcpPlugins = new Set(state.plugins.filter(plugin => plugin.mcpServers.length > 0).map(plugin => plugin.name))
+  for (const enabled of state.enabledMcpPlugins) {
+    if (!mcpPlugins.has(enabled)) {
+      process.stdout.write(`FAIL enabled MCP plugin is unavailable: ${enabled}\n`)
+      failures += 1
+    }
+  }
+  if (!/^[0-9a-f]{40}$/i.test(state.sourceCommit) || state.sourceRepository !== SOURCE_REPOSITORY) {
+    process.stdout.write('FAIL source identity is invalid\n')
+    failures += 1
+  }
+  if (existsSync(p.enabledPatch)) {
+    const patch = readFileSync(p.enabledPatch, 'utf8')
+    if (/@deepseek-ai\//i.test(patch) || /(?:api[_-]?key|bearer|secret|token)\s*:\s*[^$!\s][^\n]*/i.test(patch)) {
+      process.stdout.write('FAIL generated MCP patch contains a legacy namespace or literal credential\n')
+      failures += 1
+    }
+  }
+  process.stdout.write(`${NAME}: ${failures === 0 ? 'PASS' : 'FAIL'} structural bridge verification (${state.plugins.length} plugins, ${state.managedSkills.length} skills)\n`)
+  return failures === 0 ? 0 : 1
+}
+
 function doctor(): number {
   const p = paths()
   const state = readState(p.state)
@@ -486,7 +548,7 @@ function doctor(): number {
 }
 
 function printHelp(): number {
-  process.stdout.write('PHOENIX Codex plugin arsenal\n\nCommands:\n  dsh codex-plugin sync\n  dsh codex-plugin list\n  dsh codex-plugin inspect <name>\n  dsh codex-plugin enable <name>\n  dsh codex-plugin disable <name>\n  dsh codex-plugin doctor\n  dsh codex-plugin path\n\n')
+  process.stdout.write('PHOENIX Codex plugin arsenal\n\nCommands:\n  dsh codex-plugin sync\n  dsh codex-plugin list\n  dsh codex-plugin inspect <name>\n  dsh codex-plugin enable <name>\n  dsh codex-plugin disable <name>\n  dsh codex-plugin verify\n  dsh codex-plugin doctor\n  dsh codex-plugin path\n\n')
   process.stdout.write('sync installs the official openai/plugins catalog under $DSH_HOME, exposes skills natively, and prepares MCP patches without copying secrets.\n')
   return 0
 }
@@ -507,6 +569,7 @@ export function runCodexPlugin(args: readonly string[]): number {
       case 'disable':
         if (name === undefined) throw new Error('disable requires a plugin name')
         return setEnabled(name, false)
+      case 'verify': return verify()
       case 'doctor': return doctor()
       case 'path':
         process.stdout.write(`${paths().codex}\n`)

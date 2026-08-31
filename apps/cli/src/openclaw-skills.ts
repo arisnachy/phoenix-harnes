@@ -61,7 +61,8 @@ function paths() {
 }
 
 function run(bin: string, args: string[], cwd?: string): string {
-  const result = spawnSync(bin, args, {
+  const commandArgs = bin === 'git' ? ['-c', 'core.longpaths=true', ...args] : args
+  const result = spawnSync(bin, commandArgs, {
     cwd,
     encoding: 'utf8',
     windowsHide: true,
@@ -74,7 +75,7 @@ function run(bin: string, args: string[], cwd?: string): string {
   }
   if ((result.status ?? 1) !== 0) {
     const diagnostic = typeof result.stderr === 'string' ? result.stderr.trim() : ''
-    throw new Error(`${bin} ${args.join(' ')} failed${diagnostic.length > 0 ? `: ${diagnostic}` : ''}`)
+    throw new Error(`${bin} ${commandArgs.join(' ')} failed${diagnostic.length > 0 ? `: ${diagnostic}` : ''}`)
   }
   return typeof result.stdout === 'string' ? result.stdout.trim() : ''
 }

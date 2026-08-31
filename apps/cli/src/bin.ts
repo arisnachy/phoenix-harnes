@@ -9,6 +9,8 @@
 /* v8 ignore file -- built-bin acceptance exercises this self-executing dispatch. */
 
 import { existsSync, readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadLayeredEnv } from '@phoenix-ai/dsh-app-boot'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
@@ -41,6 +43,19 @@ if (rawArgs[0] === 'codex-plugin') {
 if (rawArgs[0] === 'openclaw-skills') {
   const { runOpenClawSkills } = await import('./openclaw-skills.ts')
   process.exit(runOpenClawSkills(rawArgs.slice(1)))
+}
+
+// Upstream intake is deliberately a separate process: a failed network fetch,
+// bridge sync, or rollback cannot become a PHOENIX boot failure.
+if (rawArgs[0] === 'upstream-update') {
+  const script = resolve(fileURLToPath(new URL('../../../scripts/phoenix-upstream-update.mjs', import.meta.url)))
+  const result = spawnSync(process.execPath, [script, ...rawArgs.slice(1)], {
+    cwd: resolve(script, '..', '..'),
+    env: process.env,
+    stdio: 'inherit',
+    windowsHide: true,
+  })
+  process.exit(result.status ?? 1)
 }
 
 if (rawArgs[0] === 'doctor') {

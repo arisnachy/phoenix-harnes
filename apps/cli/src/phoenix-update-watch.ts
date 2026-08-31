@@ -11,7 +11,6 @@ import { resolve } from 'node:path'
 
 /** Start one best-effort watcher for the lifetime of this PHOENIX process. */
 export function startPhoenixUpdateWatcher(): void {
-  if ((process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase() === 'off') return
   // phoenix-windows-supervisor.mjs already owns the one authoritative watcher.
   // Starting a second host-bound watcher here creates a shutdown race where the
   // legacy parent-exit activation can compete with the supervised activator.
@@ -26,9 +25,19 @@ export function startPhoenixUpdateWatcher(): void {
   const root = resolve(rootResult.stdout.trim())
   if (root.length === 0) return
 
-  const worker = resolve(root, 'scripts', 'phoenix-auto-update.mjs')
-  if (!existsSync(worker)) return
+  const stableWorker = resolve(root, 'scripts', 'phoenix-auto-update.mjs')
+  if ((process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase() !== 'off' && existsSync(stableWorker)) {
+    startWatcher(root, stableWorker, 'PHOENIX UPDATE')
+  }
 
+  const upstreamMode = (process.env.PHOENIX_UPSTREAM_UPDATE_MODE ?? 'auto').trim().toLowerCase()
+  const upstreamWorker = resolve(root, 'scripts', 'phoenix-upstream-update.mjs')
+  if (upstreamMode !== 'off' && existsSync(upstreamWorker)) {
+    startWatcher(root, upstreamWorker, 'PHOENIX UPSTREAM UPDATE')
+  }
+}
+
+function startWatcher(root: string, worker: string, label: string): void {
   try {
     const child = spawn(process.execPath, [worker, '--watch', '--parent-pid', String(process.pid)], {
       cwd: root,
@@ -37,12 +46,12 @@ export function startPhoenixUpdateWatcher(): void {
       windowsHide: true,
     })
     child.once('error', (error) => {
-      console.error(`[PHOENIX UPDATE] watcher could not start: ${error.message}`)
+      console.error(`[${label}] watcher could not start: ${error.message}`)
     })
     // The watcher observes this pid and owns no authority over shutdown. If the
     // host decides to exit, an updater child must never keep it alive.
     child.unref()
   } catch (error) {
-    console.error(`[PHOENIX UPDATE] watcher could not start: ${error instanceof Error ? error.message : String(error)}`)
+    console.error(`[${label}] watcher could not start: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
