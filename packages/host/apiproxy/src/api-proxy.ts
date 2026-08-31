@@ -105,9 +105,9 @@ import { questionResponsePayloadSchema } from './api/questions.schema.ts'
 import type { ClientResponse, RpcError, RpcReceipt, RpcRequest, RpcResponse } from './api/rpc.ts'
 import { RpcId } from './api/rpc.ts'
 import type {
-  AskUserQuestionAnswer, AskUserQuestionItem, AskUserQuestionRequest,
+  AskUserQuestionAnswer, AskUserQuestionItem, AskUserQuestionRequest, QuestionDeadline,
 } from '@phoenix-ai/dsh-user-questions'
-import { UserQuestionError } from '@phoenix-ai/dsh-user-questions'
+import { automaticAnswerForQuestions, UserQuestionError } from '@phoenix-ai/dsh-user-questions'
 import { DirectoryPickerError } from '@phoenix-ai/dsh-host-directory-picker'
 import {
   ApiRemoteSessionNotFound as SessionNotFound,
@@ -735,10 +735,12 @@ interface PendingQuestion {
   rpcId: RpcId
   sessionId: SessionId
   questions: AskUserQuestionItem[]
+  deadline?: QuestionDeadline
   resolve: (answer: AskUserQuestionAnswer) => void
   reject: (error: UserQuestionError) => void
   signal?: AbortSignal
   onAbort?: () => void
+  timer?: ReturnType<typeof setTimeout>
 }
 
 /** Validate one answer batch against the exact question request it resolves. */
@@ -1396,6 +1398,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   /** Remove a wait before settling it: synchronous deletion makes the first claimant win. */
   function claimQuestion(pending: PendingQuestion, outcome: 'answered' | 'cancelled'): void {
     pendingQuestions.delete(pending.rpcId)
+    if (pending.timer !== undefined) clearTimeout(pending.timer)
     if (pending.signal !== undefined && pending.onAbort !== undefined) {
       pending.signal.removeEventListener('abort', pending.onAbort)
     }
@@ -1416,6 +1419,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const rpcId = RpcId(randomUUID())
         const pending: PendingQuestion = {
           rpcId, sessionId, questions: request.questions, resolve, reject,
+          ...request.deadline === undefined ? {} : { deadline: request.deadline },
           ...(request.signal === undefined ? {} : { signal: request.signal }),
         }
         const onAbort = (): void => {
@@ -1426,9 +1430,19 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         pending.onAbort = onAbort
         pendingQuestions.set(rpcId, pending)
         request.signal?.addEventListener('abort', onAbort, { once: true })
+        if (request.deadline !== undefined) {
+          pending.timer = setTimeout(() => {
+            if (pendingQuestions.get(rpcId) !== pending) return
+            claimQuestion(pending, 'answered')
+            pending.resolve(automaticAnswerForQuestions(request.questions))
+          }, Math.max(0, request.deadline.expiresAt - Date.now()))
+        }
         const envelope: RpcRequest<MuxFrame> = {
           rpcId,
-          payload: { type: 'question/requested', sessionId, questions: request.questions },
+          payload: {
+            type: 'question/requested', sessionId, questions: request.questions,
+            ...request.deadline === undefined ? {} : { deadline: request.deadline },
+          },
         }
         for (const queue of muxQueues) queue.push(envelope)
       })
@@ -3842,6 +3856,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             payload: {
               type: 'question/requested', sessionId: pending.sessionId,
               questions: pending.questions,
+              ...pending.deadline === undefined ? {} : { deadline: pending.deadline },
             },
           })
         }

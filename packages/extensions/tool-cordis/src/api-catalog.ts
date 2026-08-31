@@ -3142,11 +3142,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AskUserQuestionOption',
-    declaration: 'export interface AskUserQuestionOption {\n    label: string;\n    description?: string;\n}',
+    declaration: 'export interface AskUserQuestionOption {\n    label: string;\n    description?: string;\n    recommended?: boolean;\n}',
   },
   {
     name: 'AskUserQuestionRequest',
-    declaration: 'export interface AskUserQuestionRequest {\n    questions: AskUserQuestionItem[];\n    agent?: Agent;\n    signal?: AbortSignal;\n}',
+    declaration: 'export interface AskUserQuestionRequest {\n    questions: AskUserQuestionItem[];\n    agent?: Agent;\n    signal?: AbortSignal;\n    deadline?: QuestionDeadline;\n}',
   },
   {
     name: 'AssembleContext',
@@ -4251,6 +4251,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PruneResult',
     declaration: 'export interface PruneResult {\n    readonly pruned: readonly PrunedEntry[];\n    readonly charsRemoved: number;\n}',
+  },
+  {
+    name: 'QuestionDeadline',
+    declaration: 'export interface QuestionDeadline {\n    readonly requestedAt: number;\n    readonly expiresAt: number;\n}',
   },
   {
     name: 'ReadFileLine',

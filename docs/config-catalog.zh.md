@@ -3260,6 +3260,20 @@ export type ApprovalPolicy = 'ask' | 'never'
 
 Source: [`packages/interaction/user-approval/src/index.ts:177`](../packages/interaction/user-approval/src/index.ts)
 
+<a id="phoenix-aidsh-user-questions"></a>
+
+## `@phoenix-ai/dsh-user-questions`
+
+```ts config-catalog
+/** Plugin configuration for the bounded human-interaction window. */
+export interface Config {
+  /** Milliseconds before the safe recommendation is applied. */
+  readonly timeoutMs?: number
+}
+```
+
+Source: [`packages/interaction/user-questions/src/index.ts:110`](../packages/interaction/user-questions/src/index.ts)
+
 <a id="phoenix-aidsh-web"></a>
 
 ## `@phoenix-ai/dsh-web`
@@ -3575,7 +3589,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@phoenix-ai/dsh-tool-home-gateway` — requires `tools` · `home` · `systemPrompt` ([`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts))
 - `@phoenix-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
 - `@phoenix-ai/dsh-user-profile` — requires `settings` · `systemPrompt` ([`packages/profile/user-profile/src/index.ts`](../packages/profile/user-profile/src/index.ts))
-- `@phoenix-ai/dsh-user-questions` ([`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts))
 - `@phoenix-ai/dsh-workspace` — requires `storageDomain` · `sessionPersistence` ([`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts))
 
 ## Seam packages (not directly loadable)

@@ -72,6 +72,34 @@ function answeredEnvelope(rpcId: string, answers: object[]) {
 }
 
 describe('QuestionComposer', () => {
+  it('automatically submits the safest unanswered choice when its one-minute deadline expires', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+    try {
+      const respond = vi.fn(() => Promise.resolve<RpcReceipt>({ accepted: true }))
+      const carrier = new PendingWait(
+        'question', RpcId('auto-choice'), SID,
+        {
+          questions: [{
+            id: 'power', question: 'Turn off the TV?',
+            options: [{ label: 'Confirm turn off' }, { label: 'Cancel' }],
+          }],
+          deadline: { requestedAt: 1_000, expiresAt: 61_000 },
+        },
+        respond,
+      )
+      render(<QuestionComposer matched={carrier} interactions={[carrier]} {...kit} t={seatOver(en, commonEn)} />)
+
+      expect(screen.getByLabelText(/60 seconds remaining/i)).toBeTruthy()
+      vi.advanceTimersByTime(60_000)
+      expect(respond).toHaveBeenCalledWith(answeredEnvelope('auto-choice', [
+        { id: 'power', selected: ['Cancel'] },
+      ]))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('collects single, custom, and multi-select answers before one batch submit', () => {
     const { carrier, respond } = wait()
     render(<QuestionComposer matched={carrier} interactions={[carrier]} {...kit} />)

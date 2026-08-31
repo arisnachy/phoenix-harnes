@@ -13,9 +13,11 @@
 // a labelled button because in a two-outcome decision it is the third real
 // answer, not an escape hatch.
 
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Button, IconEditOutline16, MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
+import { automaticAnswerForQuestion } from '@phoenix-ai/dsh-user-questions'
 import type { PendingQuestion, PlanReview, QuestionComposerProps } from './contract/slots.ts'
+import { QuestionCountdown } from './QuestionCountdown.tsx'
 import css from './PlanReviewPanel.module.css'
 
 /** The panel's own props: the question domain face, the narrowed review, and the locale seat. */
@@ -46,18 +48,26 @@ export function PlanReviewPanel({ pending, review, t }: PlanReviewPanelProps) {
   // shows why, since nothing else would tell the user the click was lost.
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const settle = (send: () => Promise<void>): void => {
+  const decline = review.decline
+  const automaticAnswer = useMemo(() => automaticAnswerForQuestion({
+    id: review.id,
+    question: review.question,
+    options: [review.approve, ...(decline === undefined ? [] : [decline])],
+  }), [decline, review.approve, review.id, review.question])
+  const settle = useCallback((send: () => Promise<void>): void => {
     setBusy(true)
     setError(null)
     void send().catch((cause: unknown) => {
       setBusy(false)
       setError(cause instanceof Error ? cause.message : String(cause))
     })
-  }
+  }, [])
   const decide = (label: string): void => {
     settle(() => pending.answer({ answers: [{ id: review.id, selected: [label] }] }))
   }
-  const decline = review.decline
+  const expire = useCallback((): void => {
+    settle(() => pending.answer({ answers: [automaticAnswer] }))
+  }, [automaticAnswer, pending, settle])
 
   return (
     <div className={css.frame} data-plan-review-key={pending.key}>
@@ -70,6 +80,14 @@ export function PlanReviewPanel({ pending, review, t }: PlanReviewPanelProps) {
           <MarkdownText text={review.plan} />
         </div>
         <div className={css.footer}>
+          {pending.deadline !== undefined && (
+            <QuestionCountdown
+              deadline={pending.deadline}
+              recommendation={automaticAnswer.selected[0] ?? t('automatic.none')}
+              onExpire={expire}
+              labels={{ automatic: t('automatic.choice'), seconds: t('automatic.seconds') }}
+            />
+          )}
           <div className={css.feedback} role="status">{error}</div>
           <div className={css.actions}>
             <Button

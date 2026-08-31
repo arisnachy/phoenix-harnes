@@ -8,7 +8,7 @@
 
 ## 问题选项
 
-`AskUserQuestionOption` 包含一个可供选择的选项。`label` 是面向用户的选项文字，同时也是面向模型的选中值；`description` 是可选的 UI 帮助文本。
+`AskUserQuestionOption` 包含一个可供选择的选项。`label` 是面向用户的选项文字，同时也是面向模型的选中值；`description` 是可选的 UI 帮助文本；`recommended` 标记请求到期时自动采用的选项。
 
 ```ts type-equiv
 /** One selectable answer offered to the user. */
@@ -17,6 +17,22 @@ interface AskUserQuestionOption {
   label: string
   /** Optional extra context rendered by capable UIs. */
   description?: string
+  /** Explicit system recommendation used when the user does not answer in time. */
+  recommended?: boolean
+}
+```
+
+## 问题截止时间
+
+`QuestionDeadline` 是提供方、host 和浏览器共享的绝对时间窗口。用户交互服务默认使用 60 秒；主机在 `expiresAt` 到达时应用自动回答，包括重新连接之后。
+
+```ts type-equiv
+/** Durable wall-clock window shared by the host and every question surface. */
+interface QuestionDeadline {
+  /** Wall-clock time when the question became answerable. */
+  readonly requestedAt: number
+  /** Wall-clock time when the automatic answer is applied. */
+  readonly expiresAt: number
 }
 ```
 
@@ -70,7 +86,7 @@ interface AskUserQuestionItem {
 
 ## 提问请求
 
-`AskUserQuestionRequest` 是跨包请求。`questions` 是数组，这样 UI 可以在一个流程中呈现相关提示，同时保持每个回答有稳定的 id。如提供 `agent`，它必须与存活调用方是同一实例；只有当当前注册表将该实例识别为运行时根时，交互 seam 才会接纳该 agent。
+`AskUserQuestionRequest` 是跨包请求。`questions` 是数组，这样 UI 可以在一个流程中呈现相关提示，同时保持每个回答有稳定的 id。`deadline` 由 `ask()` 注入并携带 60 秒自动回答窗口。如提供 `agent`，它必须与存活调用方是同一实例；只有当当前注册表将该实例识别为运行时根时，交互 seam 才会接纳该 agent。
 
 ```ts type-equiv
 /** Request for a human answer. */
@@ -81,6 +97,8 @@ interface AskUserQuestionRequest {
   agent?: Agent
   /** Abort signal for the owning tool/step. */
   signal?: AbortSignal
+  /** Host-issued deadline; callers should let the service populate it. */
+  deadline?: QuestionDeadline
 }
 ```
 

@@ -11,6 +11,16 @@ export interface AskUserQuestionOption {
   label: string
   /** Optional extra context rendered by capable UIs. */
   description?: string
+  /** Explicit system recommendation used when the user does not answer in time. */
+  recommended?: boolean
+}
+
+/** Durable wall-clock window shared by the host and every question surface. */
+export interface QuestionDeadline {
+  /** Wall-clock time when the question became answerable. */
+  readonly requestedAt: number
+  /** Wall-clock time when the automatic answer is applied. */
+  readonly expiresAt: number
 }
 
 /**

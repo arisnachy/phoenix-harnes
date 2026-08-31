@@ -18,7 +18,11 @@ function scope() {
   const speak = vi.fn<(utterance: SpeechSynthesisUtteranceLike) => void>()
   const cancel = vi.fn()
   const value: SpeechOutputScope = {
-    speechSynthesis: { speak, cancel },
+    speechSynthesis: {
+      speak,
+      cancel,
+      getVoices: () => [{ name: 'Natural Spanish', lang: 'es-ES', localService: true }],
+    },
     SpeechSynthesisUtterance: FakeUtterance,
   }
   return { value, speak, cancel }
@@ -45,6 +49,20 @@ describe('speech output adapter', () => {
     expect(states).toEqual(['speaking'])
     utterance?.onend?.()
     expect(states).toEqual(['speaking', 'idle'])
+  })
+
+  it('speaks cleaned conversational text with the best matching natural voice and cadence', () => {
+    const { value, speak } = scope()
+    const output = createSpeechOutput(() => {}, 'es-DO', value)
+
+    output.speak('# Hola **Phoenix**. [Abre el panel](https://example.com)')
+
+    const utterance = speak.mock.calls[0]?.[0]
+    expect(utterance?.text).toBe('Hola Phoenix. Abre el panel')
+    expect(utterance?.voice?.name).toBe('Natural Spanish')
+    expect(utterance?.rate).toBe(0.96)
+    expect(utterance?.pitch).toBe(1.02)
+    expect(utterance?.volume).toBe(0.98)
   })
 
   it('stops active speech, ignores blank text, and is safe without browser support', () => {

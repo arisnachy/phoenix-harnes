@@ -50,7 +50,7 @@ This table connects model-visible tool names to the plugin package and service s
 
 ### `ask_user_question`
 
-Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Send one or more questions, each with a stable id that will be echoed in the answer.
+Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Send one or more questions, each with a stable id that will be echoed in the answer. If the user does not answer within one minute, Phoenix applies the safest recommended option; mark that option with recommended=true.
 
 ```json
 {
@@ -89,6 +89,10 @@ Ask the user a concise question when you need confirmation, a choice, or missing
                 "description": {
                   "type": "string",
                   "description": "One sentence explaining the tradeoff or impact."
+                },
+                "recommended": {
+                  "type": "boolean",
+                  "description": "Whether Phoenix should choose this option automatically after the one-minute deadline. Mark at most one for single-select questions."
                 }
               },
               "required": [

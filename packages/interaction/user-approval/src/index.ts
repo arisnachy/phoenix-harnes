@@ -98,7 +98,7 @@ export type ApprovalPolicy = 'ask' | 'never'
 export const APPROVAL_POLICIES: readonly ApprovalPolicy[] = ['ask', 'never']
 
 /** Default time available to answer an interactive request. */
-const DEFAULT_TIMEOUT_MS = 15_000
+const DEFAULT_TIMEOUT_MS = 60_000
 
 /**
  * Select the automatic outcome for a request without inventing permission for risky work.

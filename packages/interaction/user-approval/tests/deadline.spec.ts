@@ -17,6 +17,12 @@ function agent(): Agent {
 }
 
 describe('bounded approval deadlines', () => {
+  it('uses a one-minute default window for unanswered approvals', async () => {
+    const ctx = new Context()
+    await ctx.plugin(ApprovalService)
+    expect(ctx.approval.config.timeoutMs).toBe(60_000)
+  })
+
   it('chooses allow for low-risk reversible work and reject for high-risk work', () => {
     expect(approvalRecommendationFor({ risk: 'low', reversible: true })).toBe('allowed-once')
     expect(approvalRecommendationFor({ risk: 'high', reversible: false })).toBe('rejected')

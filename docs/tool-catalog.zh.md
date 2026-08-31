@@ -54,7 +54,7 @@
 
 ### `ask_user_question`
 
-继续操作前，如果需要确认、选择或缺失的信息，请向用户提出简明问题。发送一个或多个问题，每个问题都带一个稳定 id，该 id 会在答案中原样返回。
+继续操作前，如果需要确认、选择或缺失的信息，请向用户提出简明问题。发送一个或多个问题，每个问题都带一个稳定 id，该 id 会在答案中原样返回。如果用户在一分钟内没有回答，Phoenix 会采用最安全的推荐选项；请使用 `recommended=true` 标记该选项。
 
 ```json
 {
@@ -93,6 +93,10 @@
                 "description": {
                   "type": "string",
                   "description": "One sentence explaining the tradeoff or impact."
+                },
+                "recommended": {
+                  "type": "boolean",
+                  "description": "Whether Phoenix should choose this option automatically after the one-minute deadline. Mark at most one for single-select questions."
                 }
               },
               "required": [

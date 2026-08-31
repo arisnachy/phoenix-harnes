@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
+import { useCallback, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import clsx from 'clsx'
 import {
   Button, IconCheckOutline14, IconChevronDownOutline14, IconChevronLeftOutline14,
@@ -9,7 +9,9 @@ import {
   PendingQuestion, planReviewOf,
   type QuestionAnswer, type QuestionComposerProps,
 } from './contract/slots.ts'
+import { automaticAnswerForQuestion, automaticAnswerForQuestions } from '@phoenix-ai/dsh-user-questions'
 import { PlanReviewPanel } from './PlanReviewPanel.tsx'
+import { QuestionCountdown } from './QuestionCountdown.tsx'
 import css from './QuestionComposer.module.css'
 
 interface DraftAnswer {
@@ -145,6 +147,9 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
   const draft = drafts[index]!
   const hasOptions = (question.options?.length ?? 0) > 0
 
+  const automaticAnswer = useMemo(() => automaticAnswerForQuestion(question), [question])
+  const automaticChoice = automaticAnswer.selected[0] ?? t('automatic.none')
+
   const cancelFlow = (): void => {
     setBusy('cancel')
     setError(null)
@@ -205,6 +210,16 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
       setError({ text: cause instanceof Error ? cause.message : String(cause) })
     })
   }
+
+  const expire = useCallback((): void => {
+    if (busy !== null) return
+    setBusy('answer')
+    setError(null)
+    void pending.answer(automaticAnswerForQuestions(questions)).catch((cause: unknown) => {
+      setBusy(null)
+      setError({ text: cause instanceof Error ? cause.message : String(cause) })
+    })
+  }, [busy, pending, questions])
 
   const continueFlow = (): void => {
     if (!answered(draft)) {
@@ -320,7 +335,7 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
                       <span className={css.optionCopy}>
                         <span className={css.optionLine}>
                           <span className={css.optionLabel}>{display.label}</span>
-                          {display.recommended && (
+                          {(display.recommended || option.recommended === true) && (
                             <span className={css.badge}>{t('option.recommended')}</span>
                           )}
                           {option.description !== undefined && (
@@ -375,6 +390,14 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
             </div>
 
             <footer className={css.footer}>
+              {pending.deadline !== undefined && (
+                <QuestionCountdown
+                  deadline={pending.deadline}
+                  recommendation={automaticChoice}
+                  onExpire={expire}
+                  labels={{ automatic: t('automatic.choice'), seconds: t('automatic.seconds') }}
+                />
+              )}
               <div className={css.pager}>
                 <button
                   type="button" className={css.iconButton} aria-label={t('nav.prev')}

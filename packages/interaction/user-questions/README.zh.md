@@ -13,8 +13,9 @@
 
 ### 关键类型
 
-- `AskUserQuestionRequest`：`{ questions: [{ id, question, detail?, header?, options?, multiSelect?, intent? }], agent?, signal? }`；`detail` 提供辅助文本，提供方会将其随问题一起渲染，而不会将其变成选项标签。如提供 `agent`，它必须与注册表中的存活运行时根 agent（智能体）是同一对象。
-- `AskUserQuestionOption`：`{ label, description? }`。
+- `AskUserQuestionRequest`：`{ questions: [{ id, question, detail?, header?, options?, multiSelect?, intent? }], agent?, signal?, deadline? }`；`detail` 提供辅助文本，提供方会将其随问题一起渲染，而不会将其变成选项标签。`deadline` 由 `ask()` 注入，默认在 60 秒后到期。如提供 `agent`，它必须与注册表中的存活运行时根 agent（智能体）是同一对象。
+- `AskUserQuestionOption`：`{ label, description?, recommended? }`；`recommended: true` 指定请求到期时自动采用的选项。
+- `QuestionDeadline`：`{ requestedAt, expiresAt }`，由提供方与浏览器共享的绝对毫秒截止时间。
 - `AskUserQuestionIntent`：`{ kind: 'plan-review', approve }`；即下文的带标签呈现意图。
 - `AskUserQuestionAnswer`：`{ answers: [{ id, selected, custom? }] }`。
 - `UserQuestionProvider`：包含 `ask(request)` 的 UI 实现。
@@ -23,6 +24,8 @@
 对于单选题，`custom` 会覆盖选中的选项，且 `selected` 为空。对于多选题，`custom` 可以补充 `selected` 中的标签。UI 可以把跳过的条目保留为 `{ id, selected: [] }`，既维持现有回答形态，也保留该批次中的其他回答。
 
 请求包含 agent 时，`ask()` 会通过当前 `AgentRegistry` 验证该 agent 与注册表中的存活实例是同一对象，并且只允许运行时根调用。持久谱系不构成权限依据：带有历史委托深度的会话恢复为新的运行时根后可以提问；归属于另一个 agent 的存活子级即使持久化记录的委托深度为零也会被拒绝。不含 agent 的程序化请求继续沿用现有提供方路径。
+
+请求在截止时间到达时会自动处理。显式的 `recommended` 选项优先；为了兼容模型生成的请求，仍支持 `(recommended)` 等推荐后缀。没有显式推荐的单选确认会优先选择 Cancel、No、Reject、Refuse、Stop 或 Read-only 等保守标签，否则选择第一个选项。多选只选择显式推荐的选项，否则使用空集合。主机拥有计时器，在重新连接或浏览器关闭后仍会应用同一个确定性回答。
 
 ### 呈现意图
 

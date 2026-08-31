@@ -847,6 +847,11 @@
     },
     {
       "doc": "docs/subsystems/user-questions.md",
+      "symbol": "QuestionDeadline",
+      "source": "packages/interaction/user-questions/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/user-questions.md",
       "symbol": "AskUserQuestionIntent",
       "source": "packages/interaction/user-questions/src/types.ts"
     },

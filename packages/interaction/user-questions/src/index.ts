@@ -8,6 +8,7 @@
  */
 
 import { Context, Service } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { HarnessError } from '@phoenix-ai/dsh-llm'
 
@@ -17,12 +18,76 @@ declare module '@phoenix-ai/cordis' {
   }
 }
 
-import type { AskUserQuestionAnswer, AskUserQuestionItem } from './types.ts'
+import type {
+  AskUserQuestionAnswer, AskUserQuestionAnswerItem, AskUserQuestionItem, AskUserQuestionOption, QuestionDeadline,
+} from './types.ts'
 
 export type {
   AskUserQuestionAnswer, AskUserQuestionAnswerItem, AskUserQuestionIntent, AskUserQuestionItem,
-  AskUserQuestionOption,
+  AskUserQuestionOption, QuestionDeadline,
 } from './types.ts'
+
+/** Default time before an unanswered question receives its automatic answer. */
+const DEFAULT_TIMEOUT_MS = 60_000
+
+/** A recommendation marker accepted from model-authored option labels. */
+const RECOMMENDED_SUFFIX = /\s*(?:\((?:recommended|recomendada?|推荐)\)|（(?:recommended|recomendada?|推荐)）)\s*$/i
+
+/** Conservative labels that must win when a confirmation has no explicit recommendation. */
+const CONSERVATIVE_OPTION = new RegExp(
+  `\\b(?:${[
+    'cancel(?:l|ar|ación|ation)?', 'no', 'not now', 'later', 'reject(?:ed|ion)?', 'deny', 'decline', 'refuse',
+    'stop', 'skip', 'keep', "don't", 'do not', 'never', 'safe', 'read[ -]?only', 'cancelar', 'ahora no',
+    'más tarde', 'rechazar', 'denegar', 'omitir', 'detener', 'mantener', 'nunca', 'solo lectura',
+  ].join('|')})\\b`,
+  'i',
+)
+
+/**
+ * Build a finite question deadline for the provider and UI.
+ * @param input - Start time and configured timeout in milliseconds.
+ * @returns The absolute question deadline shared by host and clients.
+ */
+export function createQuestionDeadline(input: { now: number; timeoutMs: number }): QuestionDeadline {
+  if (!Number.isFinite(input.now) || !Number.isFinite(input.timeoutMs) || input.timeoutMs <= 0) {
+    throw new RangeError('question deadline requires a finite positive timeout')
+  }
+  return { requestedAt: input.now, expiresAt: input.now + input.timeoutMs }
+}
+
+/** Find the option the model or the safe fallback designated for expiry. */
+function recommendedOption(question: AskUserQuestionItem): AskUserQuestionOption | undefined {
+  const options = question.options ?? []
+  return options.find(option => option.recommended === true)
+    ?? options.find(option => RECOMMENDED_SUFFIX.test(option.label))
+    ?? (question.multiSelect === true ? undefined : options.find(option => CONSERVATIVE_OPTION.test(option.label)))
+    ?? (question.multiSelect === true ? undefined : options[0])
+}
+
+/**
+ * Return one deterministic answer for a question that reached its deadline.
+ * @param question - Question whose options determine the automatic answer.
+ * @returns The structured answer for the expired question.
+ */
+export function automaticAnswerForQuestion(question: AskUserQuestionItem): AskUserQuestionAnswerItem {
+  if (question.multiSelect === true) {
+    const selected = (question.options ?? [])
+      .filter(option => option.recommended === true || RECOMMENDED_SUFFIX.test(option.label))
+      .map(option => option.label)
+    return { id: question.id, selected }
+  }
+  const option = recommendedOption(question)
+  return option === undefined ? { id: question.id, selected: [] } : { id: question.id, selected: [option.label] }
+}
+
+/**
+ * Return the complete structured answer applied when a question batch expires.
+ * @param questions - Questions in the pending interaction.
+ * @returns Structured answers for every expired question.
+ */
+export function automaticAnswerForQuestions(questions: readonly AskUserQuestionItem[]): AskUserQuestionAnswer {
+  return { answers: questions.map(automaticAnswerForQuestion) }
+}
 
 /** Request for a human answer. */
 export interface AskUserQuestionRequest {
@@ -32,11 +97,19 @@ export interface AskUserQuestionRequest {
   agent?: Agent
   /** Abort signal for the owning tool/step. */
   signal?: AbortSignal
+  /** Host-issued deadline; callers should let the service populate it. */
+  deadline?: QuestionDeadline
 }
 
 /** UI-side provider for user questions. */
 export interface UserQuestionProvider {
   ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>
+}
+
+/** Plugin configuration for the bounded human-interaction window. */
+export interface Config {
+  /** Milliseconds before the safe recommendation is applied. */
+  readonly timeoutMs?: number
 }
 
 /** Stable error taxonomy for user-questions failures. */
@@ -51,7 +124,11 @@ export class UserQuestionError extends HarnessError {
 export class UserQuestionService extends Service {
   private provider: UserQuestionProvider | undefined
 
-  constructor(ctx: Context) {
+  static Config: z<Config> = z.object({
+    timeoutMs: z.number().step(1).min(1).default(DEFAULT_TIMEOUT_MS),
+  })
+
+  constructor(ctx: Context, public config: Config) {
     super(ctx, 'userQuestions')
   }
 
@@ -136,7 +213,11 @@ export class UserQuestionService extends Service {
     if (this.provider === undefined) {
       throw new UserQuestionError('no user-questions provider is registered', 'NO_PROVIDER')
     }
-    return this.provider.ask(request)
+    const deadline = createQuestionDeadline({
+      now: Date.now(),
+      timeoutMs: this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    })
+    return this.provider.ask({ ...request, deadline })
   }
 }
 

@@ -8,7 +8,7 @@ Source: [`packages/interaction/user-questions/src/index.ts`](../../packages/inte
 
 ## Question options
 
-`AskUserQuestionOption` contains one selectable choice. `label` is the user-facing option text and also the model-facing selected value; `description` is optional UI help text.
+`AskUserQuestionOption` contains one selectable choice. `label` is the user-facing option text and also the model-facing selected value; `description` is optional UI help text; `recommended` marks the choice applied when the request expires.
 
 ```ts type-equiv
 /** One selectable answer offered to the user. */
@@ -17,6 +17,22 @@ interface AskUserQuestionOption {
   label: string
   /** Optional extra context rendered by capable UIs. */
   description?: string
+  /** Explicit system recommendation used when the user does not answer in time. */
+  recommended?: boolean
+}
+```
+
+## Question deadline
+
+`QuestionDeadline` is the absolute wall-clock window shared by the provider, host, and browser. The user-question service defaults to 60 seconds; the host applies the automatic answer when `expiresAt` is reached, including after reconnect.
+
+```ts type-equiv
+/** Durable wall-clock window shared by the host and every question surface. */
+interface QuestionDeadline {
+  /** Wall-clock time when the question became answerable. */
+  readonly requestedAt: number
+  /** Wall-clock time when the automatic answer is applied. */
+  readonly expiresAt: number
 }
 ```
 
@@ -70,7 +86,7 @@ interface AskUserQuestionItem {
 
 ## Ask request
 
-`AskUserQuestionRequest` is the cross-package request. `questions` is an array so a UI can present related prompts in one flow while preserving a stable id per answer. When present, `agent` is the exact live caller; the interaction seam admits it only while the live registry identifies that instance as a runtime root.
+`AskUserQuestionRequest` is the cross-package request. `questions` is an array so a UI can present related prompts in one flow while preserving a stable id per answer. `deadline` is supplied by `ask()` and carries the 60-second automatic-answer window. When present, `agent` is the exact live caller; the interaction seam admits it only while the live registry identifies that instance as a runtime root.
 
 ```ts type-equiv
 /** Request for a human answer. */
@@ -81,6 +97,8 @@ interface AskUserQuestionRequest {
   agent?: Agent
   /** Abort signal for the owning tool/step. */
   signal?: AbortSignal
+  /** Host-issued deadline; callers should let the service populate it. */
+  deadline?: QuestionDeadline
 }
 ```
 

@@ -12,6 +12,21 @@ export interface SpeechSynthesisUtteranceLike {
   onend: (() => void) | null
   /** Called when the browser cannot synthesize the utterance. */
   onerror: (() => void) | null
+  /** Browser speech rate; a slightly slower cadence sounds less mechanical. */
+  rate?: number
+  /** Browser pitch; a small lift keeps the voice conversational. */
+  pitch?: number
+  /** Browser output volume. */
+  volume?: number
+  /** Best matching installed voice, when the browser exposes its voice list. */
+  voice?: SpeechSynthesisVoiceLike
+}
+
+/** Minimal installed voice metadata used to choose a natural local voice. */
+export interface SpeechSynthesisVoiceLike {
+  readonly name: string
+  readonly lang: string
+  readonly localService?: boolean
 }
 
 /** Minimal browser synthesis service surface. */
@@ -20,6 +35,8 @@ export interface SpeechSynthesisLike {
   cancel(): void
   /** Queue one utterance. */
   speak(utterance: SpeechSynthesisUtteranceLike): void
+  /** Installed voices; browsers may return an empty list until voices load. */
+  getVoices?: () => readonly SpeechSynthesisVoiceLike[]
 }
 
 /** Browser globals required to construct local speech output. */
@@ -46,6 +63,40 @@ function defaultScope(): SpeechOutputScope | undefined {
 function defaultLanguage(): string {
   if (typeof navigator === 'undefined' || navigator.language.trim() === '') return 'en-US'
   return navigator.language
+}
+
+/**
+ * Remove formatting that should not be read aloud as punctuation or markup.
+ * @param text - Assistant text before speech normalization.
+ * @returns Plain conversational text suitable for speech synthesis.
+ */
+export function conversationalSpeechText(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/^\s*#{1,6}\s*/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/[>*_~`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Choose the closest installed voice, preferring language and local natural voices. */
+function bestVoice(synthesis: SpeechSynthesisLike, language: string): SpeechSynthesisVoiceLike | undefined {
+  const voices = synthesis.getVoices?.() ?? []
+  const target = language.toLowerCase()
+  const base = target.split('-')[0]
+  let best: { voice: SpeechSynthesisVoiceLike; score: number } | undefined
+  for (const voice of voices) {
+    const voiceLanguage = voice.lang.toLowerCase()
+    const voiceBase = voiceLanguage.split('-')[0]
+    if (voiceBase !== base) continue
+    const natural = /natural|neural|premium|enhanced|aria|samantha|sofia|jenny/i.test(voice.name) ? 4 : 0
+    const score = (voiceLanguage === target ? 20 : 10) + (voice.localService === true ? 3 : 0) + natural
+    if (best === undefined || score > best.score) best = { voice, score }
+  }
+  return best?.voice
 }
 
 function resolveScope(scope: SpeechOutputScope | undefined): SpeechOutputScope | undefined {
@@ -102,7 +153,7 @@ export function createSpeechOutput(
 
   return {
     speak(text: string): void {
-      const transcript = text.trim()
+      const transcript = conversationalSpeechText(text)
       if (transcript === '') return
       if (synthesis === undefined || Utterance === undefined) {
         onState('unsupported')
@@ -111,7 +162,13 @@ export function createSpeechOutput(
       synthesis.cancel()
       const current = ++epoch
       const utterance = new Utterance(transcript)
-      utterance.lang = language?.trim() || defaultLanguage()
+      const selectedLanguage = language?.trim() || defaultLanguage()
+      utterance.lang = selectedLanguage
+      utterance.rate = 0.96
+      utterance.pitch = 1.02
+      utterance.volume = 0.98
+      const voice = bestVoice(synthesis, selectedLanguage)
+      if (voice !== undefined) utterance.voice = voice
       utterance.onend = () => { finish(current) }
       utterance.onerror = () => { finish(current) }
       active = true

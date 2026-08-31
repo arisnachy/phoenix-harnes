@@ -6,7 +6,7 @@
  * signal is a local stream-control parameter, independent of the request (never on the wire).
  */
 
-import type { AskUserQuestionItem } from '@phoenix-ai/dsh-user-questions/types'
+import type { AskUserQuestionItem, QuestionDeadline } from '@phoenix-ai/dsh-user-questions/types'
 import type { ApprovalDeadline, ApprovalOutcome, ApprovalRequestId } from '@phoenix-ai/dsh-user-approval/types'
 import type { Message } from '@phoenix-ai/dsh-llm/types'
 import type { MessageId } from '@phoenix-ai/dsh-llm/brand'
@@ -71,7 +71,7 @@ export type MuxFrame =
   | { type: 'session/subscribed'; sessionId: SessionId; lastSeq: number }
   | { type: 'approval/requested'; sessionId: SessionId; approvalId: ApprovalRequestId; toolName: string; callId?: CallId; reason?: string; deadline?: ApprovalDeadline }
   | { type: 'approval/resolved'; sessionId: SessionId; approvalId: ApprovalRequestId; outcome: ApprovalOutcome }
-  | { type: 'question/requested'; sessionId: SessionId; questions: AskUserQuestionItem[] }
+  | { type: 'question/requested'; sessionId: SessionId; questions: AskUserQuestionItem[]; deadline?: QuestionDeadline }
   | { type: 'question/resolved'; sessionId: SessionId; questionRpcId: RpcId; outcome: 'answered' | 'cancelled' }
   /**
    * Complete transient inbox state after every enqueue, mutation, claim, or

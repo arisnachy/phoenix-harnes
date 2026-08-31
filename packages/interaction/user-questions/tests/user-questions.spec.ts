@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import AgentRegistry, { type Agent } from '@phoenix-ai/dsh-agent'
 import UserQuestionService, {
+  automaticAnswerForQuestion,
+  automaticAnswerForQuestions,
+  createQuestionDeadline,
   UserQuestionError,
   type AskUserQuestionRequest,
   type UserQuestionProvider,
@@ -27,6 +30,20 @@ function stubAgent(id: string, delegationDepth = 0): Agent {
 }
 
 describe('UserQuestionService', () => {
+  it('creates a one-minute deadline and chooses a safe fallback for an unanswered confirmation', () => {
+    expect(createQuestionDeadline({ now: 1_000, timeoutMs: 60_000 })).toEqual({
+      requestedAt: 1_000,
+      expiresAt: 61_000,
+    })
+    expect(automaticAnswerForQuestion({
+      id: 'power', question: 'Turn off the TV?',
+      options: [{ label: 'Confirm turn off' }, { label: 'Cancel' }],
+    })).toEqual({ id: 'power', selected: ['Cancel'] })
+    expect(automaticAnswerForQuestions([
+      { id: 'mode', question: 'Choose a mode', options: [{ label: 'Fast', recommended: true }, { label: 'Safe' }] },
+    ])).toEqual({ answers: [{ id: 'mode', selected: ['Fast'] }] })
+  })
+
   it('delegates ask requests to the registered provider', async () => {
     const ctx = new Context()
     await ctx.plugin(UserQuestionService)
@@ -36,7 +53,12 @@ describe('UserQuestionService', () => {
     const result = await ctx.userQuestions.ask({ questions: [{ id: 'confirm', question: 'Proceed?' }] })
 
     expect(result).toEqual({ answers: [{ id: 'confirm', selected: ['yes'] }] })
-    expect(p.seen).toEqual([{ questions: [{ id: 'confirm', question: 'Proceed?' }] }])
+    expect(p.seen).toHaveLength(1)
+    expect(p.seen[0]?.questions).toEqual([{ id: 'confirm', question: 'Proceed?' }])
+    const deadline = p.seen[0]?.deadline
+    if (deadline === undefined) throw new Error('question deadline was not passed to the provider')
+    expect(Number.isFinite(deadline.requestedAt)).toBe(true)
+    expect(deadline.expiresAt - deadline.requestedAt).toBe(60_000)
   })
 
   it('rejects ask requests when no provider is registered', async () => {

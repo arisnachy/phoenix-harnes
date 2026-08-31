@@ -14,7 +14,8 @@ export const name = 'tool-ask-user'
 export const inject = ['tools', 'userQuestions']
 
 const description = 'Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. '
-  + 'Send one or more questions, each with a stable id that will be echoed in the answer.'
+  + 'Send one or more questions, each with a stable id that will be echoed in the answer. '
+  + 'If the user does not answer within one minute, Phoenix applies the safest recommended option; mark that option with recommended=true.'
 
 export function apply(ctx: Context): void {
   ctx.tools.register(defineTool({
@@ -44,6 +45,10 @@ export function apply(ctx: Context): void {
                 properties: {
                   label: { type: 'string', required: true, description: 'Short user-facing option label.' },
                   description: { type: 'string', description: 'One sentence explaining the tradeoff or impact.' },
+                  recommended: {
+                    type: 'boolean',
+                    description: 'Whether Phoenix should choose this option automatically after the one-minute deadline. Mark at most one for single-select questions.',
+                  },
                 },
               },
             },

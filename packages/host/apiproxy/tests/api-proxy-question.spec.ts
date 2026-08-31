@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import AgentRegistry, { type Agent } from '@phoenix-ai/dsh-agent'
 import SessionStore from '@phoenix-ai/dsh-session'
@@ -70,6 +70,34 @@ function answer(
 }
 
 describe('question response validation', () => {
+  it('publishes the deadline and resolves an unanswered confirmation with the safe option', async () => {
+    vi.useFakeTimers()
+    try {
+      const { ctx, api } = await harness()
+      const abort = new AbortController()
+      const mux = openMux(api, abort)
+      const asked = ctx.userQuestions.ask({
+        agent: agent(ctx),
+        questions: [{
+          id: 'power', question: 'Turn off the TV?',
+          options: [{ label: 'Confirm turn off' }, { label: 'Cancel' }],
+        }],
+      })
+      const envelope = await mux.waitForQuestion()
+
+      const deadline = envelope.payload.deadline
+      expect(deadline).toBeDefined()
+      if (deadline === undefined) throw new Error('question deadline was not published')
+      expect(deadline.expiresAt).toBe(deadline.requestedAt + 60_000)
+      await vi.advanceTimersByTimeAsync(60_000)
+      await expect(asked).resolves.toEqual({ answers: [{ id: 'power', selected: ['Cancel'] }] })
+      expect(mux.envelopes.some(item => item.payload.type === 'question/resolved')).toBe(true)
+      abort.abort()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('accepts selected options with custom text for multi-select questions', async () => {
     const { ctx, api } = await harness()
     const abort = new AbortController()

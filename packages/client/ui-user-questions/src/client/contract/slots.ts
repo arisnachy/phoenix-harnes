@@ -107,6 +107,11 @@ export class PendingQuestion {
     return this.wait.payload.questions
   }
 
+  /** Host-issued deadline shared by the question card and automatic resolver. */
+  get deadline(): QuestionWait['payload']['deadline'] {
+    return this.wait.payload.deadline
+  }
+
   /**
    * Deliver the whole answer batch; a rejected carrier receipt throws.
    * @param answer - complete structured answer batch.

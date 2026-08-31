@@ -17,6 +17,9 @@ export const zh = {
   'plan.approve': '确认执行',
   'plan.decline': '拒绝',
   'plan.discuss': '去聊天里说',
+  'automatic.choice': '自动选择',
+  'automatic.none': '不选择任何选项',
+  'automatic.seconds': '秒后自动处理',
 } satisfies Record<string, string>
 
 /** The question namespace key union. */
@@ -39,4 +42,7 @@ export const en = {
   'plan.approve': 'Approve',
   'plan.decline': 'Refuse',
   'plan.discuss': 'Chat about it',
+  'automatic.choice': 'Automatic choice',
+  'automatic.none': 'No option selected',
+  'automatic.seconds': 'seconds remaining',
 } satisfies Record<QuestionKey, string>

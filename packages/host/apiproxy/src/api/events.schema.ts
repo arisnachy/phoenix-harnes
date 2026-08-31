@@ -22,7 +22,7 @@ export const askUserQuestionItemSchema = z.object({
   question: z.string(),
   header: z.string().optional(),
   detail: z.string().optional(),
-  options: z.array(z.object({ label: z.string(), description: z.string().optional() })).optional(),
+  options: z.array(z.object({ label: z.string(), description: z.string().optional(), recommended: z.boolean().optional() })).optional(),
   multiSelect: z.boolean().optional(),
   // Presentation intent: a tagged union on the wire, so an unknown tag is a
   // rejected frame rather than a silently generic render.
@@ -43,12 +43,16 @@ const messageSchema = z.object({
 export const muxFrameSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session/event'), sessionId: sessionIdSchema, event: sessionEventSchema, view: toolEventViewSchema.optional() }),
   z.object({ type: z.literal('session/subscribed'), sessionId: sessionIdSchema, lastSeq: z.number().int() }),
-  z.object({ type: z.literal('approval/requested'), sessionId: sessionIdSchema, approvalId: approvalRequestIdSchema, toolName: z.string(), callId: z.string().optional(), reason: z.string().optional(), deadline: z.object({ requestedAt: z.number().finite(), expiresAt: z.number().finite(), risk: z.union([z.literal('low'), z.literal('medium'), z.literal('high')]), recommendation: z.union([z.literal('allowed-once'), z.literal('rejected')]), policyRevision: z.number().int().nonnegative() }).optional() }),
+  z.object({ type: z.literal('approval/requested'), sessionId: sessionIdSchema, approvalId: approvalRequestIdSchema, toolName: z.string(), callId: z.string().optional(), reason: z.string().optional(), deadline: z.object({ requestedAt: z.number(), expiresAt: z.number(), risk: z.union([z.literal('low'), z.literal('medium'), z.literal('high')]), recommendation: z.union([z.literal('allowed-once'), z.literal('rejected')]), policyRevision: z.number().int().nonnegative() }).optional() }),
   z.object({ type: z.literal('approval/resolved'), sessionId: sessionIdSchema, approvalId: approvalRequestIdSchema, outcome: z.union([z.literal('allowed-once'), z.literal('rejected'), z.literal('cancelled'), z.literal('unavailable')]) }),
   // Non-empty by wire contract: the user-questions service rejects empty
   // batches at ask() (EMPTY_QUESTIONS), so an empty frame is host breakage
   // and must fail loud here, not reach the composer.
-  z.object({ type: z.literal('question/requested'), sessionId: sessionIdSchema, questions: z.array(askUserQuestionItemSchema).min(1) }),
+  z.object({
+    type: z.literal('question/requested'), sessionId: sessionIdSchema,
+    questions: z.array(askUserQuestionItemSchema).min(1),
+    deadline: z.object({ requestedAt: z.number(), expiresAt: z.number() }).optional(),
+  }),
   z.object({ type: z.literal('question/resolved'), sessionId: sessionIdSchema, questionRpcId: rpcIdSchema, outcome: z.union([z.literal('answered'), z.literal('cancelled')]) }),
   z.object({
     type: z.literal('session/queue'),
