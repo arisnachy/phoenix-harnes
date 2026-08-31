@@ -50,7 +50,7 @@ This table connects model-visible tool names to the plugin package and service s
 
 ### `ask_user_question`
 
-Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Send one or more questions, each with a stable id that will be echoed in the answer. If the user does not answer within one minute, Phoenix applies the safest recommended option; mark that option with recommended=true.
+Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Send one or more questions, each with a stable id that will be echoed in the answer. If the user does not answer within one minute, Phoenix applies the safest recommended option; mark that option with recommended=true. An automatic answer is only a decision for this step: it never completes, cancels, or blocks an active mission. Use it, change strategy when needed, and continue until the requested deliverable is verified.
 
 ```json
 {
@@ -58,7 +58,7 @@ Ask the user a concise question when you need confirmation, a choice, or missing
   "properties": {
     "questions": {
       "type": "array",
-      "description": "Questions to ask the user before continuing.",
+      "description": "Questions to ask the user before continuing. The answer resolves this decision only; it is never a mission-completion signal.",
       "items": {
         "type": "object",
         "additionalProperties": true,

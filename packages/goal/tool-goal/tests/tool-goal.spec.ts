@@ -443,7 +443,8 @@ describe('goal tool state transitions', () => {
       action: 'complete',
     }, root.agent)
 
-    expect(complete.error?.info?.code).toBe('GOAL_JUDGE_UNAVAILABLE')
+    expect(complete.error).toBeUndefined()
+    expect(resultJson(complete).judge).toMatchObject({ verdict: 'blocked' })
     expect(ctx.goals.get(root.agent)).toMatchObject({ phase: 'active', revision: created.revision })
   })
 

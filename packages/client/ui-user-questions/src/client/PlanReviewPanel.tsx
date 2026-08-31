@@ -66,7 +66,7 @@ export function PlanReviewPanel({ pending, review, t }: PlanReviewPanelProps) {
     settle(() => pending.answer({ answers: [{ id: review.id, selected: [label] }] }))
   }
   const expire = useCallback((): void => {
-    settle(() => pending.answer({ answers: [automaticAnswer] }))
+    settle(() => pending.answer({ answers: [automaticAnswer], automatic: true }))
   }, [automaticAnswer, pending, settle])
 
   return (

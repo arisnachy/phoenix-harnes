@@ -123,8 +123,12 @@ interface AskUserQuestionAnswerItem {
 interface AskUserQuestionAnswer {
   /** Structured answers keyed by question id. */
   answers: AskUserQuestionAnswerItem[]
+  /** True only when Phoenix chose the recommendation after the deadline. */
+  automatic?: boolean
 }
 ```
+
+`automatic: true` is a decision marker, not a completion marker. The model and mission supervisor must continue the active objective after using the selected recommendation.
 
 ## Provider
 

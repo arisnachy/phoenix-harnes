@@ -15,7 +15,7 @@ Model-facing `ask_user_question` tool over `ctx.userQuestions`. It lets the mode
 - `options` — optional choices with `label` and `description`. If recommending a choice, put it first and append `(Recommended)` to that label.
 - `multi_select` — whether that question may return more than one selected option.
 
-The tool calls `ctx.userQuestions.ask()` and returns canonical `{ answers: [{ id, selected, custom? }] }`. `selected` contains option labels; `custom` carries a free-form answer, supplementing `selected` for a multi-select question and overriding it for a single-select question. The Native renderer preserves the compact JSON text shape `{ "answers": [{ "id": "...", "selected": ["..."], "custom": "..." }] }`.
+The tool calls `ctx.userQuestions.ask()` and returns canonical `{ answers: [{ id, selected, custom? }], automatic? }`. `selected` contains option labels; `custom` carries a free-form answer, supplementing `selected` for a multi-select question and overriding it for a single-select question. `automatic: true` is present only when the deadline selected the recommendation; it resolves the current decision and never signals mission completion. The Native renderer preserves the compact JSON text shape `{ "answers": [{ "id": "...", "selected": ["..."], "custom": "..." }], "automatic": true }` when applicable.
 
 ## Role
 
@@ -41,7 +41,7 @@ Prefix-stable while the definition and visibility are unchanged. Plugin lifecycl
 
 #### What the model sees
 
-The model's full questions remain in the assistant tool-call arguments. After the human answers, the next step sees compact JSON in the exact shape `{"answers":[{"id":"<id>","selected":["<label>"],"custom":"<text>"}]}`; `custom` is omitted when unused and `selected` can contain zero, one, or several labels. UI interaction while the call is pending is not model context.
+The model's full questions remain in the assistant tool-call arguments. After the human answers, the next step sees compact JSON in the exact shape `{"answers":[{"id":"<id>","selected":["<label>"],"custom":"<text>"}]}`; after a deadline it additionally sees `"automatic":true`. `custom` is omitted when unused and `selected` can contain zero, one, or several labels. An automatic result is a step decision, not a completion, cancellation, or blocker; the active mission must continue. UI interaction while the call is pending is not model context.
 
 #### Token effect
 

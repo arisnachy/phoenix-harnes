@@ -15,7 +15,7 @@ export const zh = {
   'count.running.other': '{count} 个运行中',
   'status.running': '运行中',
   'status.idle': '已结束',
-  'empty.label': '当前会话没有已部署的子代理',
+  'empty.label': '当前会话没有运行中的子代理',
   'team.aria': '当前会话的 KIRA 团队',
 } as const
 
@@ -34,7 +34,7 @@ export const en: Record<KiraTeamsKey, string> = {
   'count.running.other': '{count} running',
   'status.running': 'running',
   'status.idle': 'done',
-  'empty.label': 'No deployed subagents for this session',
+  'empty.label': 'No active subagents for this session',
   'team.aria': 'KIRA team for the current session',
 }
 
@@ -50,6 +50,6 @@ export const es: Record<KiraTeamsKey, string> = {
   'count.running.other': '{count} en marcha',
   'status.running': 'en marcha',
   'status.idle': 'terminó',
-  'empty.label': 'Sin subagentes desplegados en esta sesión',
+  'empty.label': 'Sin subagentes activos en esta sesión',
   'team.aria': 'Equipo KIRA de la sesión actual',
 }

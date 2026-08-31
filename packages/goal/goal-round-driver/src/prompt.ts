@@ -38,6 +38,9 @@ export function renderGoalRoundPrompt(
       + '`exit_plan_mode` unless plan mode is explicitly active, and do not ask for a new approval '
       + 'for routine work. If a tool fails, record the exact failure, inspect alternatives, change '
       + 'strategy, and immediately continue; do not stop or ask the user to approve the recovery. '
+      + 'If `ask_user_question` returns after its deadline, treat the selected recommendation as an '
+      + 'automatic decision for this step, never as mission completion, cancellation, or a blocker; '
+      + 'continue the mission and change strategy if that decision is not sufficient. '
       + 'Before '
       + (round === 1
         ? 'starting execution, keep one complete master plan; do not split it into mini-plans or ask for routine step-by-step confirmation. '

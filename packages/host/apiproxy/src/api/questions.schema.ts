@@ -17,6 +17,7 @@ export const askUserQuestionAnswerSchema = z.object({
     selected: z.array(z.string()),
     custom: z.string().optional(),
   })),
+  automatic: z.boolean().optional(),
 }) satisfies z.ZodType<Wire<AskUserQuestionAnswer>>
 
 /** Question answer payload (the result.value slot of a client-response). */

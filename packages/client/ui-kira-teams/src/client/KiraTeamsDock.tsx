@@ -57,6 +57,18 @@ export function activityOf(summary: SessionSummary): SubagentActivityProjection 
   return summary.projectionValues?.subagentActivity
 }
 
+/** Resolve the compact model name shown beside an active team member. */
+export function agentNameOf(summary: SessionSummary): string {
+  const model = activityOf(summary)?.model
+  if (model !== undefined && model.trim().length > 0) {
+    const modelId = model.split('/').at(-1) ?? model
+    const persona = modelId.match(/(?:^|-)(luna|sol|terra)(?:$|-)/i)?.[1]
+    if (persona !== undefined) return persona.charAt(0).toUpperCase() + persona.slice(1).toLowerCase()
+    return modelId
+  }
+  return summary.agentPreset ?? 'Phoenix'
+}
+
 export function lineageMembers(state: SessionListState): {
   root: SessionSummary | undefined
   rows: MemberRow[]
@@ -102,7 +114,8 @@ export function lineageMembers(state: SessionListState): {
 /**
  * Frame-wide overlay dock: the always-visible board of the subagents the
  * current lineage has deployed — the Codex-style side view of a KIRA team.
- * Renders nothing until the lineage actually has members; pops itself open
+ * Settled children are removed from the visible roster; only active members
+ * remain. Renders nothing until the lineage actually has members; pops itself open
  * whenever a new member starts running so deployments are never silent.
  * @param props - Overlay standard props, injected sessions face, and copy.
  * @returns The dock element, or null while the lineage has no subagents.
@@ -215,11 +228,9 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
                 pending={summary.pendingInteraction !== undefined}
               />
               <span className={css.name}>{summary.displayTitle}</span>
-              {summary.agentPreset !== undefined && (
-                <span className={css.tag}>{summary.agentPreset}</span>
-              )}
+              <span className={css.agentName}>{agentNameOf(summary)}</span>
               <span className={css.status}>
-                {t(summary.running ? 'status.running' : 'status.idle')}
+                {t('status.running')}
               </span>
             </button>
           ))}

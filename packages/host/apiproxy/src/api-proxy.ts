@@ -1434,7 +1434,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           pending.timer = setTimeout(() => {
             if (pendingQuestions.get(rpcId) !== pending) return
             claimQuestion(pending, 'answered')
-            pending.resolve(automaticAnswerForQuestions(request.questions))
+            pending.resolve({ ...automaticAnswerForQuestions(request.questions), automatic: true })
           }, Math.max(0, request.deadline.expiresAt - Date.now()))
         }
         const envelope: RpcRequest<MuxFrame> = {
@@ -4149,6 +4149,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             selected: answer.selected,
             ...(answer.custom === undefined ? {} : { custom: answer.custom }),
           })),
+          ...parsed.data.answer.automatic === true ? { automatic: true } : {},
         },
       }
       if (!matchesQuestions(payload, pending)) {

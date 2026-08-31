@@ -90,7 +90,7 @@ describe('question response validation', () => {
       if (deadline === undefined) throw new Error('question deadline was not published')
       expect(deadline.expiresAt).toBe(deadline.requestedAt + 60_000)
       await vi.advanceTimersByTimeAsync(60_000)
-      await expect(asked).resolves.toEqual({ answers: [{ id: 'power', selected: ['Cancel'] }] })
+      await expect(asked).resolves.toEqual({ answers: [{ id: 'power', selected: ['Cancel'] }], automatic: true })
       expect(mux.envelopes.some(item => item.payload.type === 'question/resolved')).toBe(true)
       abort.abort()
     } finally {

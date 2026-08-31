@@ -123,8 +123,12 @@ interface AskUserQuestionAnswerItem {
 interface AskUserQuestionAnswer {
   /** Structured answers keyed by question id. */
   answers: AskUserQuestionAnswerItem[]
+  /** True only when Phoenix chose the recommendation after the deadline. */
+  automatic?: boolean
 }
 ```
+
+`automatic: true` 只是决定标记，不是完成标记。模型和任务监督器使用推荐项后必须继续执行当前目标。
 
 ## 提供方
 

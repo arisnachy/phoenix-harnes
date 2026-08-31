@@ -5,6 +5,7 @@ import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { GoalJudgeAuditEntry } from '@phoenix-ai/dsh-goal'
 import type { Session } from '@phoenix-ai/dsh-session'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
+import { resolveStructuredProvider } from '@phoenix-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
 
 /** Structured decision produced by the independent goal judge. */
@@ -31,6 +32,8 @@ export const GOAL_JUDGE_OUTPUT_SCHEMA: ObjectJsonSchema = {
 const READ_ONLY_TOOLS = ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] as const
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 12
+type GoalJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
+  & Partial<Pick<SubagentRuntime, 'list'>>
 
 function normalizedText(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value === value.trim() && value.length <= MAX_TEXT
@@ -60,8 +63,10 @@ function readStructured(value: unknown): GoalJudgeResult | undefined {
   return result
 }
 
-function unavailable(summary: string): GoalJudgeResult {
-  return { verdict: 'blocked', summary, findings: [], requiredChanges: [] }
+const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
+
+function unavailable(): GoalJudgeResult {
+  return { verdict: 'blocked', summary: WAITING_SUMMARY, findings: [], requiredChanges: [] }
 }
 
 /**
@@ -70,18 +75,20 @@ function unavailable(summary: string): GoalJudgeResult {
  * @returns Structured pass, repair, or blocked verdict.
  */
 export async function judgeGoalCompletion(input: {
-  readonly subagents: Pick<SubagentRuntime, 'getProvider' | 'start'>
+  readonly subagents: GoalJudgeRuntime | undefined
   readonly provider: string
   readonly parent: Agent
   readonly objective: string
   readonly round: number
   readonly signal: AbortSignal
 }): Promise<GoalJudgeResult> {
-  const provider = input.subagents.getProvider(input.provider)
-  if (provider === undefined) return unavailable(`goal judge provider "${input.provider}" is not registered`)
-  if (!provider.capabilities.outputSchema || !provider.capabilities.toolFilter) {
-    return unavailable(`goal judge provider "${input.provider}" lacks structured read-only review capability`)
-  }
+  const subagents = input.subagents
+  if (subagents === undefined) return unavailable()
+  const resolved = resolveStructuredProvider({
+    getProvider: name => subagents.getProvider(name),
+    list: () => subagents.list?.() ?? [],
+  }, input.provider)
+  if (resolved === undefined) return unavailable()
   const prompt: ContentBlock[] = [{
     type: 'text',
     text: '<goal_judge>\n'
@@ -99,7 +106,7 @@ export async function judgeGoalCompletion(input: {
   }]
   let run
   try {
-    run = await input.subagents.start(input.provider, {
+    run = await subagents.start(resolved.name, {
       label: 'goal-completion-judge',
       prompt,
       parent: input.parent,
@@ -108,10 +115,10 @@ export async function judgeGoalCompletion(input: {
       toolFilter: { allow: [...READ_ONLY_TOOLS] },
     })
     const result = await run.result
-    if (result.stopReason !== 'completed') return unavailable('goal judge did not complete its review')
-    return readStructured(result.structured) ?? unavailable('goal judge returned an invalid structured verdict')
+    if (result.stopReason !== 'completed') return unavailable()
+    return readStructured(result.structured) ?? unavailable()
   } catch {
-    return unavailable('goal judge could not be started')
+    return unavailable()
   } finally {
     if (run !== undefined) await run.dispose()
   }

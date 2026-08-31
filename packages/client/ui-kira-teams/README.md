@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Browser dock for the deployed KIRA subagents in the current session. It projects the host-owned roster into a compact, refreshable panel and keeps each team's running or completed state visible beside the conversation.
+Browser dock for the active KIRA subagents in the current session. It projects the host-owned roster into a compact, refreshable panel, removes settled agents from the visible team, and shows each active agent's model name beside its task label.
 
 ## Model Experience
 
@@ -22,4 +22,4 @@ This package does not assemble or send provider requests, so it does not affect 
 
 ## Known Limitations and Deferred Work
 
-- The dock can show only subagents published by the current host session; remote or historical teams are not included.
+- The dock can show only active subagents published by the current host session; settled, remote, or historical teams are not included.

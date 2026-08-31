@@ -15,7 +15,9 @@ export const inject = ['tools', 'userQuestions']
 
 const description = 'Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. '
   + 'Send one or more questions, each with a stable id that will be echoed in the answer. '
-  + 'If the user does not answer within one minute, Phoenix applies the safest recommended option; mark that option with recommended=true.'
+  + 'If the user does not answer within one minute, Phoenix applies the safest recommended option; mark that option with recommended=true. '
+  + 'An automatic answer is only a decision for this step: it never completes, cancels, or blocks an active mission. '
+  + 'Use it, change strategy when needed, and continue until the requested deliverable is verified.'
 
 export function apply(ctx: Context): void {
   ctx.tools.register(defineTool({
@@ -25,7 +27,7 @@ export function apply(ctx: Context): void {
       questions: {
         type: 'array',
         required: true,
-        description: 'Questions to ask the user before continuing.',
+        description: 'Questions to ask the user before continuing. The answer resolves this decision only; it is never a mission-completion signal.',
         items: {
           type: 'object',
           additionalProperties: true,
@@ -78,6 +80,10 @@ export function apply(ctx: Context): void {
               },
             },
           },
+          automatic: {
+            type: 'boolean',
+            description: 'True when Phoenix selected the recommendation after the deadline; this resolves the decision only and never completes the mission.',
+          },
         },
       },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
@@ -94,13 +100,14 @@ export function apply(ctx: Context): void {
         ...exec.agent !== undefined ? { agent: exec.agent } : {},
         signal: exec.signal,
       })
-      return {
+      const output = {
         answers: result.answers.map(answer => ({
           id: answer.id,
           selected: [...answer.selected],
           ...answer.custom !== undefined ? { custom: answer.custom } : {},
         })),
       }
+      return result.automatic === true ? { ...output, automatic: true } : output
     },
   }))
 }

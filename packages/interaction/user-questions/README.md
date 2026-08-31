@@ -17,7 +17,7 @@ User-interaction Service Definition. It owns `ctx.userQuestions`, the service a 
 - `AskUserQuestionOption` — `{ label, description?, recommended? }`; `recommended: true` identifies the choice applied when the request expires.
 - `QuestionDeadline` — `{ requestedAt, expiresAt }`, the host-visible absolute millisecond deadline shared by the provider and the browser.
 - `AskUserQuestionIntent` — `{ kind: 'plan-review', approve }`; the tagged presentation intent below.
-- `AskUserQuestionAnswer` — `{ answers: [{ id, selected, custom? }] }`.
+- `AskUserQuestionAnswer` — `{ answers: [{ id, selected, custom? }], automatic? }`; `automatic: true` means Phoenix chose the recommendation after the deadline.
 - `UserQuestionProvider` — UI implementation with `ask(request)`.
 - `UserQuestionError` — `HarnessError` subclass with codes such as `EMPTY_QUESTIONS`, `BAD_INTENT`, `NO_PROVIDER`, `DUPLICATE_PROVIDER`, `ASK_ABORTED`, `CALLER_NOT_LIVE`, and `DELEGATED_CALLER`.
 
@@ -26,6 +26,8 @@ For a single-select question, `custom` overrides the selected choice and `select
 When a request carries an agent, `ask()` authenticates its exact identity through the live `AgentRegistry` and admits only a runtime root. Durable lineage is not authority: a session with historical delegation depth may ask after it is resumed as a new runtime root, while a live child owned by another agent is rejected even if its durable depth is zero. Agentless programmatic requests retain the existing provider path.
 
 The request is resolved automatically when its deadline expires. An explicit `recommended` option wins; a recommendation suffix such as `(recommended)` remains supported for model-authored compatibility. For single-select confirmations without an explicit recommendation, conservative labels such as Cancel, No, Reject, Refuse, Stop, or Read-only win; otherwise the first option wins. Multi-select requests select only explicitly recommended options, or an empty set. The host owns the timer and applies the same deterministic answer after reconnect or browser closure.
+
+An automatic answer resolves only the current decision. It is returned with `automatic: true` so the model and mission supervisor continue execution, change strategy when necessary, and never interpret the expired question as mission completion, cancellation, or a blocker.
 
 ### Presentation intent
 

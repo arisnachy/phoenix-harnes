@@ -7,7 +7,7 @@ import {
   type SessionSummary, type SubagentAddress,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { apply as applyLocale, inject as localeInject } from '@phoenix-ai/dsh-client-locale/client'
-import { activityOf, KiraTeamsDock, lineageMembers } from '../src/client/KiraTeamsDock.tsx'
+import { activityOf, agentNameOf, KiraTeamsDock, lineageMembers } from '../src/client/KiraTeamsDock.tsx'
 import { apply, inject } from '../src/client/index.ts'
 
 function summary(partial: Partial<SessionSummary> & { id: SessionId }): SessionSummary {
@@ -102,6 +102,7 @@ describe('lineageMembers', () => {
       model: 'gpt-5.6-luna',
       phase: 'running-tools',
     })
+    expect(agentNameOf(child)).toBe('Luna')
   })
 
   it('collects only the current lineage subagents with depths, root-walking through children', () => {
@@ -110,8 +111,8 @@ describe('lineageMembers', () => {
       sessionsWith(FAMILY, sid('g1')).list.getSnapshot(),
     )
     expect(root?.id).toBe(sid('root'))
-    expect(rows.map(row => row.summary.id)).toEqual([sid('c1'), sid('c2'), sid('g1')])
-    expect(rows.map(row => row.depth)).toEqual([1, 1, 2])
+    expect(rows.map(row => row.summary.id)).toEqual([sid('c1')])
+    expect(rows.map(row => row.depth)).toEqual([1])
   })
 
   it('returns nothing without a current session', () => {

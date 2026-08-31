@@ -73,6 +73,8 @@ export interface AskUserQuestionAnswerItem {
 export interface AskUserQuestionAnswer {
   /** Structured answers keyed by question id. */
   answers: AskUserQuestionAnswerItem[]
+  /** True only when Phoenix chose the recommendation after the deadline. */
+  automatic?: boolean
 }
 
 /** A recommendation marker accepted from model-authored option labels. */

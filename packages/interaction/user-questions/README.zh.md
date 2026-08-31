@@ -17,7 +17,7 @@
 - `AskUserQuestionOption`：`{ label, description?, recommended? }`；`recommended: true` 指定请求到期时自动采用的选项。
 - `QuestionDeadline`：`{ requestedAt, expiresAt }`，由提供方与浏览器共享的绝对毫秒截止时间。
 - `AskUserQuestionIntent`：`{ kind: 'plan-review', approve }`；即下文的带标签呈现意图。
-- `AskUserQuestionAnswer`：`{ answers: [{ id, selected, custom? }] }`。
+- `AskUserQuestionAnswer`：`{ answers: [{ id, selected, custom? }], automatic? }`；`automatic: true` 表示 Phoenix 在截止时间后选择了推荐项。
 - `UserQuestionProvider`：包含 `ask(request)` 的 UI 实现。
 - `UserQuestionError`：`HarnessError` 的子类，包含 `EMPTY_QUESTIONS`、`BAD_INTENT`、`NO_PROVIDER`、`DUPLICATE_PROVIDER`、`ASK_ABORTED`、`CALLER_NOT_LIVE` 和 `DELEGATED_CALLER` 等代码。
 
@@ -25,7 +25,7 @@
 
 请求包含 agent 时，`ask()` 会通过当前 `AgentRegistry` 验证该 agent 与注册表中的存活实例是同一对象，并且只允许运行时根调用。持久谱系不构成权限依据：带有历史委托深度的会话恢复为新的运行时根后可以提问；归属于另一个 agent 的存活子级即使持久化记录的委托深度为零也会被拒绝。不含 agent 的程序化请求继续沿用现有提供方路径。
 
-请求在截止时间到达时会自动处理。显式的 `recommended` 选项优先；为了兼容模型生成的请求，仍支持 `(recommended)` 等推荐后缀。没有显式推荐的单选确认会优先选择 Cancel、No、Reject、Refuse、Stop 或 Read-only 等保守标签，否则选择第一个选项。多选只选择显式推荐的选项，否则使用空集合。主机拥有计时器，在重新连接或浏览器关闭后仍会应用同一个确定性回答。
+请求在截止时间到达时会自动处理。显式的 `recommended` 选项优先；为了兼容模型生成的请求，仍支持 `(recommended)` 等推荐后缀。没有显式推荐的单选确认会优先选择 Cancel、No、Reject、Refuse、Stop 或 Read-only 等保守标签，否则选择第一个选项。多选只选择显式推荐的选项，否则使用空集合。主机拥有计时器，在重新连接或浏览器关闭后仍会应用同一个确定性回答。自动回答只解决当前决定，并带有 `automatic: true`，让模型和任务监督器继续执行；过期问题不会被解释为任务完成、取消或阻塞。
 
 ### 呈现意图
 

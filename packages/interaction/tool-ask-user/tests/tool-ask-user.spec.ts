@@ -71,7 +71,7 @@ describe('ask_user_question tool', () => {
       description: { type: 'string' },
     })
     expect(parameters.properties.questions.items.properties.options.items.properties).not.toHaveProperty('value')
-    expect(parameters.properties.questions.items.properties.options.items.properties).not.toHaveProperty('recommended')
+    expect(parameters.properties.questions.items.properties.options.items.properties).toHaveProperty('recommended')
     expect(parameters.properties.questions.items.properties.options.items.properties).not.toHaveProperty('preview')
   })
 
@@ -141,6 +141,31 @@ describe('ask_user_question tool', () => {
       { label: 'pnpm (Recommended)' },
       { label: 'npm' },
     ])
+  })
+
+  it('preserves the automatic-decision marker without turning it into completion', async () => {
+    const ctx = await setup()
+    ctx.userQuestions.registerProvider({
+      async ask() {
+        return { answers: [{ id: 'mode', selected: ['Safe'] }], automatic: true }
+      },
+    })
+
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('ask-automatic'),
+      name: 'ask_user_question',
+      arguments: {
+        questions: [{ id: 'mode', question: 'Which mode?', options: [{ label: 'Safe' }] }],
+      },
+    })
+
+    expect(result).toMatchObject({
+      isError: false,
+      value: { answers: [{ id: 'mode', selected: ['Safe'] }], automatic: true },
+    })
+    if (result.isError) throw new Error('expected ask_user_question success')
+    expect(result.concludesTurn).toBeUndefined()
   })
 
   it('projects custom answers and multi-select choices', async () => {

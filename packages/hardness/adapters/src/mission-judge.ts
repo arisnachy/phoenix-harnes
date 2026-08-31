@@ -4,6 +4,7 @@ import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { ObjectJsonSchema, ToolRestriction } from '@phoenix-ai/dsh-tools'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
+import { resolveStructuredProvider } from '@phoenix-ai/dsh-subagent'
 import type { HardnessMissionJudge, HardnessMissionJudgeInput } from './mission-orchestrator.ts'
 import type { MissionJudgeDecision } from './mission-kernel.ts'
 
@@ -59,6 +60,8 @@ export const MISSION_JUDGE_READ_ONLY_TOOLS = [
 
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 8
+type MissionJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
+  & Partial<Pick<SubagentRuntime, 'list'>>
 
 function text(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value === value.trim() && value.length <= MAX_TEXT
@@ -68,9 +71,11 @@ function list(value: unknown): value is string[] {
   return Array.isArray(value) && value.length <= MAX_ITEMS && value.every(text)
 }
 
-function unavailable(summary: string): MissionJudgeDecision {
-  return { verdict: 'blocked', summary, evidence: [], requiredChanges: [], criteria: [],
-    quality: { verdict: 'fail', summary: 'Judge unavailable', evidence: [], findings: [summary] } }
+const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
+
+function unavailable(): MissionJudgeDecision {
+  return { verdict: 'blocked', summary: WAITING_SUMMARY, evidence: [], requiredChanges: [], criteria: [],
+    quality: { verdict: 'fail', summary: 'Verification pending', evidence: [], findings: [] } }
 }
 
 function criterion(value: unknown): MissionJudgeDecision['criteria'][number] | undefined {
@@ -153,21 +158,21 @@ function prompt(input: HardnessMissionJudgeInput): ContentBlock[] {
  * @returns judge that produces a structured completion decision.
  */
 export function createSubagentMissionJudge(input: {
-  readonly subagents: Pick<SubagentRuntime, 'getProvider' | 'start'>
+  readonly subagents: MissionJudgeRuntime
   readonly provider: string
 }): HardnessMissionJudge {
   return async (mission: HardnessMissionJudgeInput): Promise<MissionJudgeDecision> => {
-    const provider = input.subagents.getProvider(input.provider)
-    if (provider === undefined) return unavailable(`HARDNESS judge provider "${input.provider}" is not registered`)
-    if (!provider.capabilities.outputSchema || !provider.capabilities.toolFilter) {
-      return unavailable(`HARDNESS judge provider "${input.provider}" lacks structured read-only review capability`)
-    }
+    const resolved = resolveStructuredProvider({
+      getProvider: name => input.subagents.getProvider(name),
+      list: () => input.subagents.list?.() ?? [],
+    }, input.provider)
+    if (resolved === undefined) return unavailable()
     const parent: Agent | undefined = mission.context.agent
-    if (parent === undefined) return unavailable('HARDNESS judge requires a live parent agent')
+    if (parent === undefined) return unavailable()
     const toolFilter: ToolRestriction = { allow: [...MISSION_JUDGE_READ_ONLY_TOOLS] }
     let run: Awaited<ReturnType<typeof input.subagents.start>> | undefined
     try {
-      run = await input.subagents.start(input.provider, {
+      run = await input.subagents.start(resolved.name, {
         label: 'hardness-mission-judge',
         prompt: prompt(mission),
         parent,
@@ -176,10 +181,10 @@ export function createSubagentMissionJudge(input: {
         toolFilter,
       })
       const result = await run.result
-      if (result.stopReason !== 'completed') return unavailable('HARDNESS judge did not complete its review')
-      return readDecision(result.structured) ?? unavailable('HARDNESS judge returned an invalid structured verdict')
+      if (result.stopReason !== 'completed') return unavailable()
+      return readDecision(result.structured) ?? unavailable()
     } catch {
-      return unavailable('HARDNESS judge could not be started')
+      return unavailable()
     } finally {
       if (run !== undefined) await run.dispose()
     }

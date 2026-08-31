@@ -407,9 +407,6 @@ export function apply(ctx: Context, config: Config): void {
       let judge: GoalJudgeResult | undefined
       if (args.action === 'complete' && resolved.requireJudge) {
         const subagents = ctx.get('subagents')
-        if (subagents === undefined) {
-          throw new HarnessError('goal completion requires the subagent judge service', 'GOAL_JUDGE_UNAVAILABLE')
-        }
         const currentGoal = ctx.goals.get(execution.agent)
         if (currentGoal === undefined || currentGoal.id !== ref.id || currentGoal.revision !== ref.revision) {
           throw new HarnessError('goal completion judge requires the current goal revision', 'GOAL_TOOL_STALE_REVISION')
@@ -583,7 +580,6 @@ export function apply(ctx: Context, config: Config): void {
         const forge = ledger.get(execution.agent, forgeId)
         if (forge === undefined) throw new HarnessError(`Forge not found: ${forgeId}`, 'FORGE_NOT_FOUND')
         const subagents = ctx.get('subagents')
-        if (subagents === undefined) throw new HarnessError('Forge completion requires the independent judge service', 'FORGE_JUDGE_UNAVAILABLE')
         const judge = await judgeGoalCompletion({
           subagents,
           provider: resolved.judgeProvider,
@@ -682,9 +678,6 @@ export function apply(ctx: Context, config: Config): void {
       if (current === undefined) throw new HarnessError(`specialist not found: ${id}`, 'SPECIALIST_INVALID_REQUEST')
       if (resolved.requireJudge) {
         const subagents = ctx.get('subagents')
-        if (subagents === undefined) {
-          throw new HarnessError('specialist evaluation requires the subagent judge service', 'SPECIALIST_JUDGE_UNAVAILABLE')
-        }
         const judge = await judgeGoalCompletion({
           subagents,
           provider: resolved.judgeProvider,

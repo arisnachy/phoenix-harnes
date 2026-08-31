@@ -43,7 +43,6 @@ export function parseRecommendedLabel(label: string): { label: string; recommend
 /** Return whether a text-field key event belongs to an active IME composition. */
 function isComposing(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
   // keyCode 229 is the legacy IME-composition signal engines emit without isComposing.
-  // oxlint-disable-next-line typescript/no-deprecated
   return event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229
 }
 
@@ -215,7 +214,7 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
     if (busy !== null) return
     setBusy('answer')
     setError(null)
-    void pending.answer(automaticAnswerForQuestions(questions)).catch((cause: unknown) => {
+    void pending.answer({ ...automaticAnswerForQuestions(questions), automatic: true }).catch((cause: unknown) => {
       setBusy(null)
       setError({ text: cause instanceof Error ? cause.message : String(cause) })
     })

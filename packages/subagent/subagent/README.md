@@ -6,6 +6,8 @@ The subagent seam lets one agent delegate work to a child through a named provid
 
 The [subagent family overview](../README.md) maps implementations and model-facing consumers. This package owns the provider registry, shared request and result contracts, durable descriptors, and continuable-child orchestration. Multiple named providers may coexist behind that contract.
 
+Independent structured reviews use `resolveStructuredProvider()`. It keeps the configured provider first, then falls back to a registered provider that supports both structured output and tool filtering. Fresh providers are preferred over providers that inherit the parent's conversation, so a temporary provider alias failure does not turn a recoverable review into a terminal mission failure.
+
 ## Service API
 
 `SubagentRuntime` has these operations:

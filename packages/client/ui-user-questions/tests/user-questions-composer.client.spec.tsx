@@ -92,9 +92,16 @@ describe('QuestionComposer', () => {
 
       expect(screen.getByLabelText(/60 seconds remaining/i)).toBeTruthy()
       vi.advanceTimersByTime(60_000)
-      expect(respond).toHaveBeenCalledWith(answeredEnvelope('auto-choice', [
-        { id: 'power', selected: ['Cancel'] },
-      ]))
+      expect(respond).toHaveBeenCalledWith({
+        type: 'client-response', rpcId: RpcId('auto-choice'),
+        result: {
+          ok: true,
+          value: {
+            sessionId: SID,
+            answer: { answers: [{ id: 'power', selected: ['Cancel'] }], automatic: true },
+          },
+        },
+      })
     } finally {
       vi.useRealTimers()
     }

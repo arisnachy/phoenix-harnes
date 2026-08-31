@@ -132,6 +132,20 @@
   opacity: 0.85;
 }
 
+.agentName {
+  flex: none;
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 16px;
+  padding-inline: 6px;
+  border-radius: 999px;
+  color: var(--dsh-color-accent, var(--accent, #2f6fed));
+  background: color-mix(in srgb, var(--dsh-color-accent, #2f6fed) 12%, transparent);
+}
+
 .status {
   flex: none;
   font-size: 10px;

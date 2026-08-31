@@ -76,6 +76,54 @@ describe('goal completion judge', () => {
     expect(result.requiredChanges).toEqual(['Add and run the assembled acceptance test.'])
   })
 
+  it('falls back to an available structured provider when the configured alias is absent', async () => {
+    const start = vi.fn(async (name: string) => ({
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed' as const,
+        structured: {
+          verdict: 'pass',
+          summary: 'The objective is verified.',
+          findings: [],
+          required_changes: [],
+        },
+      }),
+      dispose: vi.fn(async () => {}),
+      name,
+    }))
+    const result = await judgeGoalCompletion({
+      subagents: {
+        getProvider: name => name === 'luna' ? provider() as never : undefined,
+        list: () => ['luna'],
+        start: start as never,
+      },
+      provider: 'spawn',
+      parent,
+      objective: 'Finish the feature',
+      round: 2,
+      signal: new AbortController().signal,
+    })
+
+    expect(result.verdict).toBe('pass')
+    expect(start).toHaveBeenCalledWith('luna', expect.anything())
+  })
+
+  it('keeps verification pending without exposing provider details when no judge service is mounted', async () => {
+    const result = await judgeGoalCompletion({
+      subagents: undefined,
+      provider: 'spawn',
+      parent,
+      objective: 'Finish the feature',
+      round: 2,
+      signal: new AbortController().signal,
+    })
+
+    expect(result).toMatchObject({
+      verdict: 'blocked',
+      summary: 'Independent verification is not ready yet; the mission remains active and will continue automatically.',
+    })
+  })
+
   it('fails closed for an unavailable judge and persists a bounded audit row', () => {
     const session = Session.create(SessionId('goal-judge-session'))
     recordGoalJudge(session, {
