@@ -1,5 +1,5 @@
 /** Registers the conversation components, shared store, and service callbacks. */
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
 import { resolveSlotLabel, type BoundActions } from '@phoenix-ai/dsh-client-ui-slots'
 import {

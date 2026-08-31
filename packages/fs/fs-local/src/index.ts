@@ -4,11 +4,11 @@
  * @module @phoenix-ai/dsh-fs-local
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { constants as bufferConstants } from 'node:buffer'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import z from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
 import { FileSystem, FsError, FsVersion } from '@phoenix-ai/dsh-fs'
 import type {
   FsDirEntry,

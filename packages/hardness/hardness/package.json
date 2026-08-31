@@ -3,7 +3,7 @@
   "description": "Provider-neutral HARDNESS capability registry and Tool Atlas service",
   "version": "0.1.1-rc.2",
   "publishConfig": { "access": "public" },
-  "repository": { "type": "git", "url": "git+https://github.com/deepseek-ai/deepseek-harness.git", "directory": "packages/hardness/hardness" },
+  "repository": { "type": "git", "url": "git+https://github.com/arisnachy/phoenix-harnes.git", "directory": "packages/hardness/hardness" },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -17,11 +17,11 @@
   "files": ["lib/index.js", "lib/invariant.js", "lib/types/**/*.js", "lib/types/**/*.d.ts"],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^"
   }
 }

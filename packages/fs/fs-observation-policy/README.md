@@ -5,7 +5,7 @@ English | [中文](README.zh.md)
 The **fs-observation-policy plugin**: it records observed presence or absence and adds read-before-edit plus guarded write/edit on top of the `ctx.fs` provider contract ([`@phoenix-ai/dsh-fs`](../fs)) — through the `fs/*` event gate, **NOT** through a method service. This plugin registers **no** `ctx.fsPolicy` service and has no public `read`/`write`/`edit`/`resolve` methods. It is the policy third of the filesystem stack: not a swappable seam, but the policy that does not belong on the `FileSystem` provider base class.
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import * as FsPolicy from '@phoenix-ai/dsh-fs-observation-policy'
 
 declare const ctx: Context

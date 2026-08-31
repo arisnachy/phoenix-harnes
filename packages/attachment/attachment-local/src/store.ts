@@ -9,9 +9,13 @@ import {
   AttachmentId,
 } from '@phoenix-ai/dsh-attachment'
 import type {
+  FileAttachmentLimits,
+  FileAttachmentRef,
   ImageAttachmentLimits,
   ImageAttachmentRef,
   SaveImageAttachment,
+  SaveFileAttachment,
+  StoredFileAttachment,
   StoredImageAttachment,
 } from '@phoenix-ai/dsh-attachment'
 import { normalizeImage } from './normalization.ts'
@@ -40,7 +44,7 @@ function objectPath(root: string, sha256: string): string {
   return join(root, 'objects', sha256.slice(0, 2), sha256)
 }
 
-function ensureReference(ref: ImageAttachmentRef): string {
+function ensureReference(ref: { attachmentId: AttachmentId }): string {
   const match = ID_PATTERN.exec(String(ref.attachmentId))
   if (match?.[1] === undefined) throw new AttachmentError('Attachment reference is invalid.', 'INVALID_ATTACHMENT_REF')
   return match[1]
@@ -290,6 +294,146 @@ export async function readImageFile(
   signal?.throwIfAborted()
   if (metadata.mediaType !== ref.mediaType || data.byteLength !== ref.bytes
     || metadata.width !== ref.width || metadata.height !== ref.height) {
+    throw new AttachmentError('Stored attachment metadata does not match its reference.', 'ATTACHMENT_CORRUPT')
+  }
+  return { ref, data }
+}
+
+/** Fully prepared arbitrary-file bytes, verified before publication. */
+export interface PreparedFileAttachment {
+  /** Immutable bytes whose digest is {@link ref.attachmentId}. */
+  data: Uint8Array
+  /** Durable reference describing {@link data}. */
+  ref: FileAttachmentRef
+}
+
+/**
+ * Validate and prepare one arbitrary file without touching storage.
+ * @param input - encoded file metadata and content supplied by the caller.
+ * @param limits - admission limits applied to the file.
+ * @returns validated file data ready for an atomic commit.
+ */
+export function prepareFileAttachment(
+  input: SaveFileAttachment,
+  limits: FileAttachmentLimits,
+): PreparedFileAttachment {
+  if (input.data.byteLength === 0) throw new AttachmentError('File is empty.', 'INVALID_FILE')
+  if (input.data.byteLength > limits.maxFileBytes) {
+    throw new AttachmentError('File exceeds the configured byte limit.', 'FILE_TOO_LARGE')
+  }
+  const mediaType = input.mediaType.trim().toLowerCase()
+  if (mediaType === '') throw new AttachmentError('File MIME type is empty.', 'UNSUPPORTED_FILE_TYPE')
+  const data = new Uint8Array(input.data)
+  const sha256 = digest(data)
+  const name = displayName(input.name)
+  return {
+    data,
+    ref: {
+      attachmentId: AttachmentId(`sha256:${sha256}`),
+      mediaType,
+      bytes: data.byteLength,
+      ...(name !== undefined ? { name } : {}),
+    },
+  }
+}
+
+/**
+ * Publish one prepared arbitrary file through the same durable object store as images.
+ * @param root - attachment store directory.
+ * @param prepared - validated file prepared by {@link prepareFileAttachment}.
+ * @returns durable reference to the committed file.
+ */
+export async function commitPreparedFileAttachment(
+  root: string,
+  prepared: PreparedFileAttachment,
+): Promise<FileAttachmentRef> {
+  const sha256 = ensureReference(prepared.ref)
+  if (digest(prepared.data) !== sha256 || prepared.data.byteLength !== prepared.ref.bytes) {
+    throw new AttachmentError('Prepared attachment bytes do not match their reference.', 'ATTACHMENT_CORRUPT')
+  }
+  const bucket = join(root, 'objects', sha256.slice(0, 2))
+  const staging = join(root, 'tmp')
+  const boundary = await ensureDurableHome(dirname(dirname(resolve(root))))
+  await ensureDurableDirectory(bucket, boundary)
+  await ensureDurableDirectory(staging, boundary)
+  const temporary = join(staging, randomUUID())
+  const target = objectPath(root, sha256)
+  let handle
+  try {
+    handle = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600)
+    await handle.writeFile(prepared.data)
+    await handle.sync()
+    await handle.close()
+    handle = undefined
+    try {
+      await link(temporary, target)
+    } catch (error) {
+      /* v8 ignore next -- Private same-filesystem directories make EEXIST the only recoverable link race. */
+      if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
+      const existing = new Uint8Array(await readFile(target))
+      if (digest(existing) !== sha256) throw new AttachmentError('Stored attachment failed integrity verification.', 'ATTACHMENT_CORRUPT')
+    }
+    await syncDirectory(bucket)
+    await syncDirectory(join(root, 'objects'))
+    await unlink(temporary)
+  } catch (error) {
+    /* v8 ignore next -- A descriptor can remain open only when the underlying write/sync/close operation fails. */
+    if (handle !== undefined) await handle.close().catch(
+      /* v8 ignore next -- Close failure is superseded by the storage operation that entered cleanup. */
+      () => {},
+    )
+    await unlink(temporary).catch(
+      /* v8 ignore next -- Cleanup is best-effort only for a staging file already removed by a failed operation. */
+      (cleanupError: unknown) => {
+        /* v8 ignore next -- Cleanup failure is irrelevant when the temporary file was already removed. */
+        if (!(cleanupError instanceof Error && 'code' in cleanupError && cleanupError.code === 'ENOENT')) throw cleanupError
+      },
+    )
+    if (error instanceof AttachmentError) throw error
+    throw new AttachmentError('Unable to persist file attachment.', 'ATTACHMENT_WRITE_FAILED', { cause: error })
+  }
+  return prepared.ref
+}
+
+/**
+ * Validate, prepare, and durably publish one arbitrary file.
+ * @param root - attachment store directory.
+ * @param input - encoded file metadata and content.
+ * @param limits - admission limits applied to the file.
+ * @returns durable reference to the committed file.
+ */
+export async function saveFileAttachment(
+  root: string,
+  input: SaveFileAttachment,
+  limits: FileAttachmentLimits,
+): Promise<FileAttachmentRef> {
+  return commitPreparedFileAttachment(root, prepareFileAttachment(input, limits))
+}
+
+/**
+ * Read and verify one content-addressed arbitrary file.
+ * @param root - attachment store directory.
+ * @param ref - durable file reference to read.
+ * @param signal - optional cancellation signal.
+ * @returns stored file metadata and content stream.
+ */
+export async function readFileAttachment(
+  root: string,
+  ref: FileAttachmentRef,
+  signal?: AbortSignal,
+): Promise<StoredFileAttachment> {
+  signal?.throwIfAborted()
+  const sha256 = ensureReference(ref)
+  let data: Uint8Array
+  try {
+    data = new Uint8Array(await readFile(objectPath(root, sha256), { signal }))
+  } catch (error) {
+    signal?.throwIfAborted()
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') throw new AttachmentError('Attachment object is missing.', 'ATTACHMENT_NOT_FOUND')
+    throw new AttachmentError('Unable to read file attachment.', 'ATTACHMENT_READ_FAILED', { cause: error })
+  }
+  signal?.throwIfAborted()
+  if (digest(data) !== sha256 || data.byteLength !== ref.bytes) {
     throw new AttachmentError('Stored attachment metadata does not match its reference.', 'ATTACHMENT_CORRUPT')
   }
   return { ref, data }

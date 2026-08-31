@@ -4,8 +4,8 @@
  * point after every client entry activates.
  * @module @phoenix-ai/dsh-client-web/src/boot
  */
-import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import { Context } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import type {
   BootManifest, ClientModuleCreateOptions, ClientModuleSystem, DshWindow,
 } from '@phoenix-ai/dsh-client-modules/client'

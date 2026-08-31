@@ -1,6 +1,6 @@
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import { describe, expect, it } from 'vitest'
-import { Context, symbols, type EffectMeta, type Fiber } from '@deepseek-ai/cordis'
+import { Context, symbols, type EffectMeta, type Fiber } from '@phoenix-ai/cordis'
 import LlmRuntime from '@phoenix-ai/dsh-llm'
 import SessionStore, { SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'

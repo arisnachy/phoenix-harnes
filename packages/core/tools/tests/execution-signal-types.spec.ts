@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/phoenix-windows.md
-phoenix-windows.md: 37c5fc20d5554680fb58ad659cf57ff01347da04
-phoenix-windows.zh.md: 8b3afee4acbee5006ce1b7e4719d81744cd84136
+phoenix-windows.md: eef1ae0d003ba20580914d6fd4fcb79c56503467
+phoenix-windows.zh.md: f43b93d43f8722356ea98c26487bb4e6278e7613

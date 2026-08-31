@@ -8,7 +8,7 @@
 
 import { globSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { ToolSchema } from '@phoenix-ai/dsh-llm'
 import AgentRegistry from '@phoenix-ai/dsh-agent'
 import type { Agent } from '@phoenix-ai/dsh-agent'
@@ -52,11 +52,15 @@ import * as ToolStrReplaceEditor from '@phoenix-ai/dsh-tool-str-replace-editor'
 import TerminalSessionService from '@phoenix-ai/dsh-terminal'
 import * as ToolPty from '@phoenix-ai/dsh-tool-terminal'
 import * as ToolGoal from '@phoenix-ai/dsh-tool-goal'
+import HomeAssistantGatewayService from '@phoenix-ai/dsh-home-gateway'
+import * as ToolHomeGateway from '@phoenix-ai/dsh-tool-home-gateway'
 import * as ToolSchedule from '@phoenix-ai/dsh-schedule'
 import Lsp from '@phoenix-ai/dsh-lsp'
 import * as ToolLsp from '@phoenix-ai/dsh-tool-lsp'
 import * as ToolSkill from '@phoenix-ai/dsh-tool-skill'
 import * as ToolSessionQuery from '@phoenix-ai/dsh-tool-session-query'
+import * as ToolSessionLearning from '@phoenix-ai/dsh-tool-session-learning'
+import LearningMemoryService from '@phoenix-ai/dsh-session-learning'
 import * as ToolTasks from '@phoenix-ai/dsh-tool-jobs'
 import type TeamService from '@phoenix-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@phoenix-ai/dsh-experimental-tool-agent-team'
@@ -373,6 +377,25 @@ const TOOL_PACKAGES: ToolPackage[] = [
       'create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds.',
   },
   {
+    pkg: '@phoenix-ai/dsh-tool-home-gateway',
+    dir: 'tool-home-gateway',
+    source: 'packages/home/tool-home-gateway/src/index.ts',
+    requires: ['ctx.tools', 'ctx.home', 'ctx.systemPrompt'],
+    writes: ['tool/call', 'tool/result', 'Home Assistant request at execution time'],
+    async mount(ctx) {
+      await ctx.plugin(HomeAssistantGatewayService, {
+        baseUrl: 'http://homeassistant.local:8123',
+        tokenEnv: 'TOOL_CATALOG_HOME_TOKEN',
+        allowedEntities: ['light.office'],
+        allowedServices: ['light.turn_on'],
+        requestTimeoutMs: 2_000,
+      })
+      await ctx.plugin(ToolHomeGateway)
+    },
+    note:
+      'The schema harvest uses a private fake endpoint and never performs a request. Live deployments remain disabled until the operator supplies a private endpoint, token variable, and both allowlists.',
+  },
+  {
     pkg: '@phoenix-ai/dsh-schedule',
     dir: 'schedule',
     source: 'packages/schedule/schedule/src/tools.ts',
@@ -437,6 +460,20 @@ const TOOL_PACKAGES: ToolPackage[] = [
       })
       await ctx.plugin(ToolSkill)
     },
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-session-learning',
+    dir: 'tool-session-learning',
+    source: 'packages/session-learning/tool-session-learning/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.learningMemory'],
+    writes: ['tool/call', 'tool/result', 'bounded learning context'],
+    async mount(ctx) {
+      await ctx.plugin(SessionStore)
+      await ctx.plugin(LearningMemoryService, { path: resolve(root, '.tmp/tool-catalog/.dsh/learning.jsonl') })
+      await ctx.plugin(ToolSessionLearning)
+    },
+    note:
+      'memory_search and memory_remember expose only bounded, provenance-preserving learning records; they never grant permissions or modify trusted instructions.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-session-query',

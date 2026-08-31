@@ -15,7 +15,7 @@ describe('OpenClaw HARDNESS projection', () => {
     expect(descriptors.find(item => item.id === 'openclaw:a2a')).toMatchObject({
       kind: 'agent-protocol',
       location: 'extensions/a2a',
-      version: '2026.8.1',
+      version: '2026.8.2',
     })
     expect(descriptors.find(item => item.id === 'openclaw:ollama')?.kind).toBe('local-inference')
     expect(descriptors.find(item => item.id === 'openclaw:workboard')?.kind).toBe('work')

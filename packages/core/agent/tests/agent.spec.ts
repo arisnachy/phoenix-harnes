@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { Context, Service, symbols } from '@deepseek-ai/cordis'
+import { Context, Service, symbols } from '@phoenix-ai/cordis'
 import { createUserMessage, freezeMessage } from '@phoenix-ai/dsh-llm'
 import { Session, SessionId, type UserMessage } from '@phoenix-ai/dsh-session'
 import AgentRegistry, {

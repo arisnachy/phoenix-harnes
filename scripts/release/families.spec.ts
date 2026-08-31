@@ -70,7 +70,7 @@ describe('release families', () => {
     const dsh = releaseFamily('dsh')
     const vendor = releaseFamily('vendor')
     const cli = member('apps/cli', '@phoenix-ai/dsh')
-    const cordis = { ...member('vendor/cordis', '@deepseek-ai/cordis'), version: '4.0.1' }
+    const cordis = { ...member('vendor/cordis', '@phoenix-ai/cordis'), version: '4.0.1' }
 
     expect(dsh.tagFor(cli)).toBe('dsh-v0.0.1')
     expect(vendor.tagFor(cordis)).toBe('vendor-cordis-v4.0.1')
@@ -91,8 +91,8 @@ describe('release families', () => {
   it('accepts independent vendored versions and rejects an unpublishable one', () => {
     const vendor = releaseFamily('vendor')
     const members = [
-      { ...member('vendor/cordis', '@deepseek-ai/cordis'), version: '4.0.1' },
-      { ...member('vendor/cosmokit', '@deepseek-ai/cosmokit'), version: '1.8.2' },
+      { ...member('vendor/cordis', '@phoenix-ai/cordis'), version: '4.0.1' },
+      { ...member('vendor/cosmokit', '@phoenix-ai/cosmokit'), version: '1.8.2' },
     ]
 
     expect(() => { vendor.verifyVersions(members) }).not.toThrow()
@@ -209,7 +209,7 @@ describe('release families', () => {
     // would order this, and the traversal drops the install edge instead. That
     // order would publish charlie before the alpha it installs, so it is refused
     // here rather than published.
-    expect(() => { dsh.publishOrder(members) }).toThrow(/no publish order honours @deepseek-ai\/dsh-charlie -> @deepseek-ai\/dsh-alpha/)
+    expect(() => { dsh.publishOrder(members) }).toThrow(/no publish order honours @phoenix-ai\/dsh-charlie -> @phoenix-ai\/dsh-alpha/)
   })
 
   it('ignores devDependencies when ordering', () => {
@@ -231,7 +231,7 @@ describe('release families', () => {
     const dsh = releaseFamily('dsh')
     const vendor = releaseFamily('vendor')
     const harness = member('packages/a/library', '@phoenix-ai/dsh-library')
-    const vendored = member('vendor/cordis', '@deepseek-ai/cordis')
+    const vendored = member('vendor/cordis', '@phoenix-ai/cordis')
 
     expect(() => { dsh.validatePayload(harness, ['package/lib/index.js', 'package/src/index.ts']) })
       .toThrow(/publishes source file/)
@@ -295,10 +295,10 @@ describe('version precedence', () => {
 })
 
 describe('payload change judgement', () => {
-  const sourceShipping = member('vendor/cosmokit', '@deepseek-ai/cosmokit', {
+  const sourceShipping = member('vendor/cosmokit', '@phoenix-ai/cosmokit', {
     files: ['lib/index.js', 'lib/types/**/*.d.ts', 'src'],
   })
-  const buildOutputOnly = member('vendor/cordis', '@deepseek-ai/cordis', {
+  const buildOutputOnly = member('vendor/cordis', '@phoenix-ai/cordis', {
     files: ['lib/index.js', 'lib/types/**/*.d.ts', 'bin.js'],
   })
 

@@ -5,8 +5,8 @@
  * @module @phoenix-ai/dsh-web-search-deepseek
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-agent'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import { installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'

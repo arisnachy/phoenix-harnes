@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import type { Events } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
+import type { Events } from '@phoenix-ai/cordis'
 import { bindScopeParent, createScope } from '@phoenix-ai/dsh-scope'
 import type { Scope } from '@phoenix-ai/dsh-scope'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'

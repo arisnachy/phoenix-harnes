@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-agent-presets/invariant
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 // Type-only: resolves the `system-prompt/assemble` waterfall this companion
 // joins, and the `agent` field `dsh-agent` merges into its context.

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import { SpillLocator, SpillStore } from '@phoenix-ai/dsh-spill'

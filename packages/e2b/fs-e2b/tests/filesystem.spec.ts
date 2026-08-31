@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { dirname, posix } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import {
   CommandExitError,
   FileNotFoundError,

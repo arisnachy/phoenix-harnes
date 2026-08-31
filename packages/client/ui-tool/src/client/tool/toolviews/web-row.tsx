@@ -9,7 +9,7 @@
 // no web card (the tools keep a generic pending view), so a running row is the
 // summary line alone.
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { IconBrowseOutline16, IconGlobeOutline14 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'

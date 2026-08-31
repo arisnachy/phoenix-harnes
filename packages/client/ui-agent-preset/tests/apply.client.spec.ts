@@ -5,7 +5,7 @@
  * that are already showing, so a default set from one converges the other.
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveSlotLabel } from '@phoenix-ai/dsh-client-ui-slots'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'

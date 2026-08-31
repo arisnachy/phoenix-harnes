@@ -22,7 +22,7 @@ English | [中文](2026-08-27-hardness-capability-router.zh.md)
 
 Add tests that construct a verified descriptor with `modalities: ['native', 'visual']` and assert a requested `visual` route returns the capability, modality, required permissions, and original need. Add assertions that a request for `workspace` returns `missing`, an unknown kind returns `unknown`, and no result includes an execution callback.
 
-```ts
+```ts ignore-check
 expect(result).toMatchObject({ kind: 'route', route: { modality: 'visual', capability: { id } } })
 expect(result.kind).toBe('missing')
 expect(result.kind).toBe('unknown')
@@ -41,7 +41,7 @@ Add extensible `CapabilityModality`, initial modality literals, `CapabilityRoute
 
 `CapabilityRouteResult` must discriminate as:
 
-```ts
+```ts ignore-check
 type CapabilityRouteResult =
   | { readonly kind: 'route'; readonly route: CapabilityRoute }
   | { readonly kind: 'missing'; readonly considered: readonly string[]; readonly reasons: readonly string[] }

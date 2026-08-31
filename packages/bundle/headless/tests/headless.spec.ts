@@ -1,7 +1,7 @@
 /** Direct one-shot Agent driving, durable aggregation, flushing, and exit mapping. */
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import AgentRegistry, { Inbox } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentHandle, CreateAgentOptions } from '@phoenix-ai/dsh-agent'
 import AgentDefaultModelConfig from '@phoenix-ai/dsh-agent-default-model'

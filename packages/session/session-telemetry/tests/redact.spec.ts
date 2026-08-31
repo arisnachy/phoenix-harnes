@@ -6,7 +6,7 @@ import { createUserMessage } from '@phoenix-ai/dsh-llm'
  */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'
 import {
   SessionTelemetryCoordinator,

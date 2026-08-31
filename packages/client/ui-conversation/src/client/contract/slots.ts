@@ -1,6 +1,6 @@
 /** Conversation slot declarations and their composed component props. */
 import type { ReactNode, RefObject } from 'react'
-import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type { FileAttachmentLimits, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type {
   InjectFace, MaybeSnapshotSelectorHook, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
   SlotHookFactory, SnapshotSelectorHook,
@@ -24,10 +24,10 @@ import type { CallId, SelectionTarget, ViewTab } from './views.ts'
 
 /** Browser-owned image that has not crossed the durable host boundary. */
 export interface ComposerAttachment {
-  kind: 'image'
+  kind: 'image' | 'file'
   id: DraftAttachmentId
   file: File
-  previewUrl: string
+  previewUrl?: string
 }
 
 /** Input state handed to the optional attachment presentation plugin. */
@@ -42,6 +42,8 @@ export interface ComposerAttachmentsOwnerProps {
   onRemoveImage: (id: DraftAttachmentId) => void
   /** Display-ready limits for the drop invitation. */
   dropLimits?: { readonly count: number; readonly size: string } | undefined
+  /** Arbitrary-file limits used by the generic attachment intake. */
+  fileLimits?: FileAttachmentLimits | undefined
 }
 
 /** Historical image group handed to the optional attachment presentation plugin. */
@@ -371,7 +373,7 @@ export interface ChatFileMentions {
   forWorkspace(owner: ChatWorkspaceFileMentionOwner): MarkdownFileMentions | undefined
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     /** Prose file-mention provider (ui-deliverables); reach via ctx.get — optional. */
     chatFileMentions: ChatFileMentions
@@ -428,6 +430,7 @@ export interface ChatNodeOwnerProps {
   /** Execute a code artifact through the host's isolated HARDNESS runtime. */
   runArtifact?: (artifact: {
     readonly id: string
+    readonly callId: string
     readonly mime: string
     readonly data: string
     readonly language?: string
@@ -784,6 +787,7 @@ export interface ChatViewInjected {
   /** Execute a code artifact through the host's isolated HARDNESS runtime. */
   runArtifact?: (artifact: {
     readonly id: string
+    readonly callId: string
     readonly mime: string
     readonly data: string
     readonly language?: string

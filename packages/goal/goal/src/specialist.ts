@@ -60,7 +60,11 @@ function profileFromEvent(event: SessionEvent): SpecialistProfile | undefined {
   return value.specialist
 }
 
-/** Replay all specialist laboratories from durable session events. */
+/**
+ * Replay all specialist laboratories from durable session events.
+ * @param events - Session events to fold.
+ * @returns Latest profile for each specialist identity.
+ */
 export function foldSpecialists(events: readonly SessionEvent[]): ReadonlyMap<string, SpecialistProfile> {
   const profiles = new Map<string, SpecialistProfile>()
   for (const event of events) {
@@ -84,14 +88,24 @@ function nextPhase(operation: SpecialistChange['operation']): SpecialistPhase {
 export class SpecialistLedger {
   private readonly caches = new WeakMap<Session, Map<string, SpecialistProfile>>()
 
-  /** Read one specialist after replaying any events appended since the last read. */
+  /**
+   * Read one specialist after replaying any events appended since the last read.
+   * @param agent - Agent whose session owns the laboratory.
+   * @param specialistId - Specialist identity to read.
+   * @returns The latest profile, when present.
+   */
   get(agent: Agent, specialistId: string): SpecialistProfile | undefined {
     const profiles = this.cache(agent.session)
     this.sync(agent.session, profiles)
     return profiles.get(specialistId)
   }
 
-  /** Start a specialist laboratory with explicit success criteria and an iteration cap. */
+  /**
+   * Start a specialist laboratory with explicit success criteria and an iteration cap.
+   * @param agent - Agent whose session owns the laboratory.
+   * @param request - Topic, objective, criteria, and iteration limit.
+   * @returns The persisted specialist profile.
+   */
   start(agent: Agent, request: StartSpecialistRequest): SpecialistProfile {
     const profiles = this.cache(agent.session)
     this.sync(agent.session, profiles)
@@ -111,7 +125,13 @@ export class SpecialistLedger {
     return this.commit(agent, profiles, 'start', profile)
   }
 
-  /** Add one traceable source and move the lab into its research phase. */
+  /**
+   * Add one traceable source and move the lab into its research phase.
+   * @param agent - Agent whose session owns the laboratory.
+   * @param specialistId - Specialist identity to update.
+   * @param request - Source title and locator.
+   * @returns The updated specialist profile.
+   */
   addSource(agent: Agent, specialistId: string, request: AddSpecialistSourceRequest): SpecialistProfile {
     const current = this.require(agent, specialistId)
     const source: SpecialistSource = {
@@ -125,7 +145,13 @@ export class SpecialistLedger {
     })
   }
 
-  /** Add one falsifiable hypothesis and move the lab into hypothesis work. */
+  /**
+   * Add one falsifiable hypothesis and move the lab into hypothesis work.
+   * @param agent - Agent whose session owns the laboratory.
+   * @param specialistId - Specialist identity to update.
+   * @param hypothesis - Hypothesis to persist.
+   * @returns The updated specialist profile.
+   */
   addHypothesis(agent: Agent, specialistId: string, hypothesis: string): SpecialistProfile {
     const current = this.require(agent, specialistId)
     return this.commit(agent, this.cache(agent.session), 'hypothesis', {
@@ -134,7 +160,13 @@ export class SpecialistLedger {
     })
   }
 
-  /** Add one reproducible experiment and move the lab into experiment work. */
+  /**
+   * Add one reproducible experiment and move the lab into experiment work.
+   * @param agent - Agent whose session owns the laboratory.
+   * @param specialistId - Specialist identity to update.
+   * @param request - Experiment name and dataset locator.
+   * @returns The updated specialist profile.
+   */
   addExperiment(agent: Agent, specialistId: string, request: AddSpecialistExperimentRequest): SpecialistProfile {
     const current = this.require(agent, specialistId)
     const experiment: SpecialistExperiment = {
@@ -149,7 +181,13 @@ export class SpecialistLedger {
     })
   }
 
-  /** Record a judge result; failed reviews create an improving checkpoint and never claim readiness. */
+  /**
+   * Record a judge result; failed reviews create an improving checkpoint and never claim readiness.
+   * @param agent - Agent whose session owns the laboratory.
+   * @param specialistId - Specialist identity to update.
+   * @param request - Judge score, verdict inputs, and required changes.
+   * @returns The updated specialist profile.
+   */
   evaluate(agent: Agent, specialistId: string, request: EvaluateSpecialistRequest): SpecialistProfile {
     const current = this.require(agent, specialistId)
     if (!Number.isFinite(request.score) || request.score < 0 || request.score > 1) throw new TypeError('score must be between 0 and 1')

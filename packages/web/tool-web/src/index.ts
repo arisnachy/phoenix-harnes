@@ -6,8 +6,8 @@
  * @module @phoenix-ai/dsh-tool-web
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-web'
 import { applyWebSearchTool, WEB_SEARCH_MAX_QUERIES, WEB_SEARCH_MAX_RESULTS } from './search.ts'
 import { applyWebFetchTool } from './fetch.ts'

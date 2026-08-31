@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { SessionEvent, SessionHeader, SessionId } from '@phoenix-ai/dsh-session'
 import { SubagentError } from '@phoenix-ai/dsh-subagent'
 import { RpcId } from '../src/api/rpc.ts'

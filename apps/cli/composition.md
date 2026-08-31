@@ -8,9 +8,9 @@ The dsh-base bundle patch every profile applies first; mode bundles (dsh-web-app
 ```mermaid
 flowchart LR
   cfg["packages/bundle/base/cordis.patch.yml<br/>cordis.yml"]
-  plugin_dsh_base_timer["timer<br/>@deepseek-ai/cordis-plugin-timer"]
+  plugin_dsh_base_timer["timer<br/>@phoenix-ai/cordis-plugin-timer"]
   cfg --> plugin_dsh_base_timer
-  plugin_dsh_base_hmr["hmr<br/>@deepseek-ai/cordis-plugin-hmr"]
+  plugin_dsh_base_hmr["hmr<br/>@phoenix-ai/cordis-plugin-hmr"]
   cfg --> plugin_dsh_base_hmr
   plugin_dsh_base_llm["llm<br/>@phoenix-ai/dsh-llm"]
   cfg --> plugin_dsh_base_llm
@@ -50,6 +50,8 @@ flowchart LR
   cfg --> plugin_dsh_base_llm_pi_ai
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@phoenix-ai/dsh-session-persistence-jsonl"]
   cfg --> plugin_dsh_base_session_persistence_jsonl
+  plugin_dsh_base_session_learning["session-learning<br/>@phoenix-ai/dsh-session-learning"]
+  cfg --> plugin_dsh_base_session_learning
   plugin_dsh_base_attachment_local["attachment-local<br/>@phoenix-ai/dsh-attachment-local"]
   cfg --> plugin_dsh_base_attachment_local
   plugin_dsh_base_session_query_sqlite["session-query-sqlite<br/>@phoenix-ai/dsh-session-query-sqlite"]
@@ -148,6 +150,10 @@ flowchart LR
   cfg --> plugin_dsh_base_tool_todo
   plugin_dsh_base_tool_goal["tool-goal<br/>@phoenix-ai/dsh-tool-goal"]
   cfg --> plugin_dsh_base_tool_goal
+  plugin_dsh_base_home_gateway["home-gateway<br/>@phoenix-ai/dsh-home-gateway"]
+  cfg --> plugin_dsh_base_home_gateway
+  plugin_dsh_base_tool_home_gateway["tool-home-gateway<br/>@phoenix-ai/dsh-tool-home-gateway"]
+  cfg --> plugin_dsh_base_tool_home_gateway
   plugin_dsh_base_tool_ralph["tool-ralph<br/>@phoenix-ai/dsh-tool-ralph"]
   cfg --> plugin_dsh_base_tool_ralph
   plugin_dsh_base_tool_str_replace_editor["tool-str-replace-editor<br/>@phoenix-ai/dsh-tool-str-replace-editor"]
@@ -162,6 +168,8 @@ flowchart LR
   cfg --> plugin_dsh_base_web_search_free
   plugin_dsh_base_tool_web["tool-web<br/>@phoenix-ai/dsh-tool-web"]
   cfg --> plugin_dsh_base_tool_web
+  plugin_dsh_base_mcp_connector_registry["mcp-connector-registry<br/>@phoenix-ai/dsh-mcp-connector-registry"]
+  cfg --> plugin_dsh_base_mcp_connector_registry
   plugin_dsh_base_tools["tools<br/>@phoenix-ai/dsh-tools"]
   cfg --> plugin_dsh_base_tools
   plugin_dsh_base_hardness["hardness<br/>@phoenix-ai/dsh-hardness"]
@@ -180,8 +188,8 @@ flowchart LR
 
 | Plugin id | Package / module |
 | --- | --- |
-| `timer` | `@deepseek-ai/cordis-plugin-timer` |
-| `hmr` | `@deepseek-ai/cordis-plugin-hmr` |
+| `timer` | `@phoenix-ai/cordis-plugin-timer` |
+| `hmr` | `@phoenix-ai/cordis-plugin-hmr` |
 | `llm` | `@phoenix-ai/dsh-llm` |
 | `session` | `@phoenix-ai/dsh-session` |
 | `typert` | `@phoenix-ai/dsh-typert-registry` |
@@ -201,6 +209,7 @@ flowchart LR
 | `authorization-google` | `@phoenix-ai/dsh-authorization/google` |
 | `llm-pi-ai` | `@phoenix-ai/dsh-llm-pi-ai` |
 | `session-persistence-jsonl` | `@phoenix-ai/dsh-session-persistence-jsonl` |
+| `session-learning` | `@phoenix-ai/dsh-session-learning` |
 | `attachment-local` | `@phoenix-ai/dsh-attachment-local` |
 | `session-query-sqlite` | `@phoenix-ai/dsh-session-query-sqlite` |
 | `session-projection` | `@phoenix-ai/dsh-session-projection` |
@@ -250,6 +259,8 @@ flowchart LR
 | `tool-result-pruner` | `@phoenix-ai/dsh-compaction-tool-result-pruner` |
 | `tool-todo` | `@phoenix-ai/dsh-tool-todo` |
 | `tool-goal` | `@phoenix-ai/dsh-tool-goal` |
+| `home-gateway` | `@phoenix-ai/dsh-home-gateway` |
+| `tool-home-gateway` | `@phoenix-ai/dsh-tool-home-gateway` |
 | `tool-ralph` | `@phoenix-ai/dsh-tool-ralph` |
 | `tool-str-replace-editor` | `@phoenix-ai/dsh-tool-str-replace-editor` |
 | `repeat-tool-reminder` | `@phoenix-ai/dsh-repeat-tool-reminder` |
@@ -257,6 +268,7 @@ flowchart LR
 | `web-search-openrouter` | `@phoenix-ai/dsh-web-search-openrouter` |
 | `web-search-free` | `@phoenix-ai/dsh-web-search-free` |
 | `tool-web` | `@phoenix-ai/dsh-tool-web` |
+| `mcp-connector-registry` | `@phoenix-ai/dsh-mcp-connector-registry` |
 | `tools` | `@phoenix-ai/dsh-tools` |
 | `hardness` | `@phoenix-ai/dsh-hardness` |
 | `hardness-adapters` | `@phoenix-ai/dsh-hardness-adapters` |

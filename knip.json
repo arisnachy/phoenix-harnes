@@ -78,7 +78,7 @@
         "**/*.ts"
       ],
       "ignoreDependencies": [
-        "@deepseek-ai/.+",
+        "@phoenix-ai/.+",
         "@phoenix-ai/.+"
       ]
     },
@@ -661,7 +661,7 @@
     },
     "packages/bundle/base": {
       "ignoreDependencies": [
-        "@deepseek-ai/.+",
+        "@phoenix-ai/.+",
         "@phoenix-ai/.+"
       ]
     },

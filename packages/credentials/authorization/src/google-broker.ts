@@ -16,7 +16,7 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialKey, type CredentialKey } from '@phoenix-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
 

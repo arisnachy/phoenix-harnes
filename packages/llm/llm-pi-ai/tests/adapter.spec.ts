@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { AttachmentId, AttachmentStore, ImageVariantId } from '@phoenix-ai/dsh-attachment'
 import type {
   ImageAttachmentLimits,

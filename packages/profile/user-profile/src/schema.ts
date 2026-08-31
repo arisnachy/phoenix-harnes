@@ -1,6 +1,6 @@
 /** Validation and projection helpers for the private user-profile namespace. */
 
-import z from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
 import type { UserProfileConsent, UserProfileFamilyMember, UserProfileSettings, UserProfileUpdate } from './types.ts'
 
 /** Settings namespace stored in the Harness-home settings document. */

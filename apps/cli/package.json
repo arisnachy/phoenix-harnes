@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "apps/cli"
   },
   "type": "module",
@@ -20,10 +20,11 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@deepseek-ai/cordis-plugin-hmr": "workspace:^",
-    "@deepseek-ai/cordis-plugin-include": "workspace:^",
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
-    "@deepseek-ai/cordis-plugin-timer": "workspace:^",
+    "@phoenix-ai/dsh-atomic-write": "workspace:^",
+    "@phoenix-ai/cordis-plugin-hmr": "workspace:^",
+    "@phoenix-ai/cordis-plugin-include": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-timer": "workspace:^",
     "@phoenix-ai/dsh-agent-tool-presentation": "workspace:^",
     "@phoenix-ai/dsh-app-boot": "workspace:^",
     "@phoenix-ai/dsh-base": "workspace:^",
@@ -68,6 +69,7 @@
     "@phoenix-ai/dsh-tool-ralph": "workspace:^",
     "@phoenix-ai/dsh-schedule": "workspace:^",
     "@phoenix-ai/dsh-tool-skill": "workspace:^",
+    "@phoenix-ai/dsh-tool-session-learning": "workspace:^",
     "@phoenix-ai/dsh-tool-str-replace-editor": "workspace:^",
     "@phoenix-ai/dsh-tool-subagent": "workspace:^",
     "@phoenix-ai/dsh-tool-subagent-control": "workspace:^",
@@ -79,7 +81,7 @@
     "@phoenix-ai/dsh-workflow-worker-thread": "workspace:^",
     "@phoenix-ai/dsh-agent-instructions": "workspace:^",
     "commander": "^15.0.0",
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "js-yaml": "^4.2.0",
     "node-addon-require-builtin": "^0.1.4"
   },

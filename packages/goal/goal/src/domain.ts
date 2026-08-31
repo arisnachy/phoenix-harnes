@@ -17,6 +17,7 @@ export type GoalOperation =
   | 'edit'
   | 'pause'
   | 'resume'
+  | 'continue'
   | 'complete'
   | 'block'
   | 'clear'
@@ -48,6 +49,8 @@ export type GoalChangeMeta = GoalSnapshotChangeMeta | GoalClearChangeMeta
 export interface GoalJudgeAuditEntry {
   readonly callId: CallId
   readonly goalId: string
+  /** Exact goal revision reviewed; a later edit invalidates this verdict. */
+  readonly revision: number
   readonly round: number
   readonly verdict: 'pass' | 'needs_changes' | 'blocked'
   readonly summary: string
@@ -64,6 +67,14 @@ export interface GoalSupervisorCheckpoint {
   readonly nextAction: 'continue' | 'resume' | 'review' | 'blocked' | 'none'
   readonly attempts: number
   readonly lastError?: string
+}
+
+/** Durable record of one automatic continuation window opened at a round cap. */
+export interface GoalContinuationWindow {
+  readonly goalId: string
+  readonly revision: number
+  readonly previousRounds: number
+  readonly reason: 'round-limit' | 'attempt-failed' | 'token-limit'
 }
 
 /** Durable choice of the next bounded recovery strategy. */
@@ -157,6 +168,8 @@ declare module '@phoenix-ai/dsh-session/types' {
     'goal/supervisor': GoalSupervisorCheckpoint
     /** Strategy selected before one continuation prompt is admitted. */
     'goal/strategy': GoalStrategySelection
+    /** Automatic continuation window; a round cap never completes a goal. */
+    'goal/continuation': GoalContinuationWindow
     /** Full replayable specialist-laboratory snapshot. */
     'specialist/change': SpecialistChange
   }
@@ -195,8 +208,9 @@ export type GoalErrorCode =
   | 'GOAL_INVALID_BLOCK_REASON'
   | 'GOAL_INVALID_EDIT'
   | 'GOAL_INVALID_TRANSITION'
+  | 'GOAL_COMPLETION_NOT_VERIFIED'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Events {
     /**
      * Goal mutation accepted by one live agent. The matching `goal/change`

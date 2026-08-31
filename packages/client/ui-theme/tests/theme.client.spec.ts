@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { stubSettingsScope, type StubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
 import type {
   ThemeSettings,

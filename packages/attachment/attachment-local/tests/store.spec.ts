@@ -6,9 +6,11 @@ import { dirname, join, parse, resolve } from 'node:path'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import sharp from 'sharp'
-import type { ImageAttachmentLimits } from '@phoenix-ai/dsh-attachment'
+import type { FileAttachmentLimits, ImageAttachmentLimits } from '@phoenix-ai/dsh-attachment'
 import type { NormalizationPolicy } from '../src/normalization.ts'
-import { commitPreparedImageFile, prepareImageFile, readImageFile, saveImageFile } from '../src/store.ts'
+import {
+  commitPreparedImageFile, prepareImageFile, readFileAttachment, readImageFile, saveFileAttachment, saveImageFile,
+} from '../src/store.ts'
 
 const fsControl = vi.hoisted(() => ({
   readSignals: [] as AbortSignal[],
@@ -50,6 +52,14 @@ const LIMITS: ImageAttachmentLimits = {
   mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
 }
 
+const FILE_LIMITS: FileAttachmentLimits = {
+  maxFileBytes: 1024,
+  maxFilesPerMessage: 4,
+  maxMessageFileBytes: 2048,
+}
+
+const TEXT_FILE = Uint8Array.from(Buffer.from('name,value\nPhoenix,ready\n', 'utf8'))
+
 const roots: string[] = []
 
 async function root(): Promise<string> {
@@ -74,6 +84,30 @@ afterEach(async () => {
 })
 
 describe('local attachment store', () => {
+  it('persists and verifies arbitrary file bytes without exposing the source path', async () => {
+    const storageRoot = await root()
+
+    const ref = await saveFileAttachment(storageRoot, {
+      data: TEXT_FILE, mediaType: 'text/csv', name: 'C:\\private\\report.csv',
+    }, FILE_LIMITS)
+
+    expect(ref).toMatchObject({
+      mediaType: 'text/csv',
+      bytes: TEXT_FILE.byteLength,
+      name: 'report.csv',
+    })
+    expect(String(ref.attachmentId)).toMatch(/^sha256:[a-f0-9]{64}$/)
+    await expect(readFileAttachment(storageRoot, ref)).resolves.toEqual({ ref, data: TEXT_FILE })
+  })
+
+  it('rejects an arbitrary file that exceeds the configured byte cap', async () => {
+    const storageRoot = await root()
+
+    await expect(saveFileAttachment(storageRoot, {
+      data: new Uint8Array(1025), mediaType: 'application/octet-stream',
+    }, FILE_LIMITS)).rejects.toMatchObject({ code: 'FILE_TOO_LARGE' })
+  })
+
   it.skipIf(process.platform === 'win32')('syncs every object ancestor up to the durable boundary before returning', async () => {
     const storageRoot = await root()
     const base = join(storageRoot, '..', '..')

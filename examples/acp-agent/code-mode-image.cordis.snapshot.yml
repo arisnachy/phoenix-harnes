@@ -2,7 +2,7 @@
 # image-capable replay route. The scenario generates its tiny PNG inside the
 # run_code program, then exercises read_image as a nested dispatch.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

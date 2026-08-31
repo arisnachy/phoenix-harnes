@@ -10,8 +10,8 @@
  */
 import { statSync } from 'node:fs'
 import type { ServerResponse } from 'node:http'
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 // Empty type imports carry the clientModuleHost/webServer Context merges.
 import type {} from '@phoenix-ai/dsh-client-modules'
 import type {} from '@phoenix-ai/dsh-host-webserver'

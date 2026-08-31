@@ -16,7 +16,7 @@
  * @module @phoenix-ai/dsh-subagent
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Session, SessionEvent, SessionHeader, SessionId } from '@phoenix-ai/dsh-session'
 import type { SessionPersistence } from '@phoenix-ai/dsh-session-persistence'
 import type { SessionProjectionRegistry } from '@phoenix-ai/dsh-session-projection'

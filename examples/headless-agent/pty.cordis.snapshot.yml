@@ -1,6 +1,6 @@
 # Keyless opt-in PTY composition for the headless stream-json snapshot.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

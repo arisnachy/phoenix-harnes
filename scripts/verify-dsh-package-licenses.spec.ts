@@ -36,7 +36,7 @@ describe('DSH package license gate', () => {
       license: 'BSD-3-Clause',
     })
     writeManifest(root, 'vendor/cordis/package.json', {
-      name: '@deepseek-ai/cordis',
+      name: '@phoenix-ai/cordis',
       license: 'BSD-3-Clause',
     })
 

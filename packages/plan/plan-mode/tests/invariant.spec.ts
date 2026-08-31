@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { Session, SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'
 import * as PlanModeInvariant from '@phoenix-ai/dsh-plan-mode/invariant'
 import InvariantRegistry from '@phoenix-ai/dsh-invariants'

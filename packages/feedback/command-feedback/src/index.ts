@@ -6,7 +6,7 @@
  * @module @phoenix-ai/dsh-command-feedback
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@phoenix-ai/dsh-commands'
 import type { SessionTelemetryBackend, SessionTelemetrySharingStatus } from '@phoenix-ai/dsh-session-telemetry'
 import type { Session } from '@phoenix-ai/dsh-session'

@@ -36,7 +36,18 @@
       Before invoking one or more tools, write one concise user-facing sentence in the user's language
       describing what you will inspect, change, or verify. During multi-step work, report the next phase
       after each meaningful result, grouping small calls and never exposing private reasoning, credentials,
-      or raw payloads. Finish with IMPLEMENTADO, PROBADO, VERIFICADO, and PENDIENTE when applicable.
+      or raw payloads.
+
+      <mission_completion_contract>
+      A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure.
+      Do not label a response final or emit a completion report while any mandatory deliverable,
+      acceptance criterion, integration, or verification remains. Continue with root-cause analysis
+      and a materially different strategy. If an external dependency requires a physical or human
+      action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition,
+      keep testing safe alternatives, and resume automatically when that condition changes; ask only
+      for the minimal required action. Only close the mission after the independent judge returns PASS
+      with evidence, or after the user explicitly cancels it.
+      </mission_completion_contract>
 
 - id: agent-instructions
   name: '@phoenix-ai/dsh-agent-instructions'
@@ -107,6 +118,10 @@
 # session. What a preset chooses is whether its agent can call the goal tool.
 - id: tool-goal
   name: '@phoenix-ai/dsh-tool-goal'
+  config:
+    # A goal cannot be completed from the executor's claim alone.
+    requireJudge: true
+    judgeProvider: spawn
 
 # ── plan mode ───────────────────────────────────────────────────────────────
 
@@ -255,6 +270,14 @@
   config:
     fetch: false
     searchTimeoutMs: 60000
+
+# Keep HARDNESS available to Code Mode's runtime and generated SDK while its
+# presentation layer still decides which model-facing tool is exposed.
+- id: hardness-model-tools
+  name: '@phoenix-ai/dsh-hardness-adapters'
+  config:
+    judgeProvider: spawn
+    modelTools: true
 
 # ── presentation ────────────────────────────────────────────────────────────
 

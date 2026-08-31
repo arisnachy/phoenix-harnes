@@ -7,11 +7,11 @@
  * @module @phoenix-ai/dsh-user-questions
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { HarnessError } from '@phoenix-ai/dsh-llm'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     userQuestions: UserQuestionService
   }

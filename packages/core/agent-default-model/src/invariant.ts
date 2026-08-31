@@ -8,7 +8,7 @@
  * @module @phoenix-ai/dsh-agent-default-model/invariant
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
 const PACKAGE_NAME = '@phoenix-ai/dsh-agent-default-model'

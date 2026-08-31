@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import Storage, { storageBackendServiceKey } from '@phoenix-ai/dsh-storage'
 import InvariantRegistry from '@phoenix-ai/dsh-invariants'
 import { runKvBackendContract } from '../../storage/tests/contract.ts'

@@ -41,6 +41,7 @@ import type {
 } from '@earendil-works/pi-ai'
 import {
   attributionHeaders,
+  contentHasFile,
   contentHasImage,
   LlmAdapter,
   LlmError,
@@ -376,12 +377,13 @@ export class PiAiAdapter extends LlmAdapter {
 
     try {
       const containsImage = options.messages.some(message => contentHasImage(message.content))
+      const containsFile = options.messages.some(message => contentHasFile(message.content))
       if (containsImage && !model.input.includes('image')) {
         throw new LlmError(`pi-ai model "${model.id}" does not support image input`, 'UNSUPPORTED_CONTENT')
       }
-      const attachments = containsImage ? this.config.resolveAttachments?.() : undefined
-      if (containsImage && attachments === undefined) {
-        throw new LlmError('pi-ai image input requires the durable attachment service', 'UNSUPPORTED_CONTENT')
+      const attachments = containsImage || containsFile ? this.config.resolveAttachments?.() : undefined
+      if ((containsImage || containsFile) && attachments === undefined) {
+        throw new LlmError('pi-ai attachment input requires the durable attachment service', 'UNSUPPORTED_CONTENT')
       }
       const onReplayDegrade = (reason: string): void => {
         this.config.onReplayDegrade?.({ provider: options.provider, model: options.model, reason })
@@ -391,7 +393,7 @@ export class PiAiAdapter extends LlmAdapter {
         : await toPiContext({ ...options, signal: watchdog.signal }, attachments, onReplayDegrade, profile.maxRequestImageBytes, {
           maxPixels: profile.requestImagePixelBudget,
           maxBytes: profile.requestImageMaxBytes,
-        })
+        }, profile.maxInlineFileBytes)
       const streamOptions: SimpleStreamOptions = {
         ...profileOptions(profile, reasoning, apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },

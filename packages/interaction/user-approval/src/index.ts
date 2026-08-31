@@ -5,8 +5,8 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { Context, Service } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { createUserMessage, type CallId } from '@phoenix-ai/dsh-llm'
 import { scopeTarget } from '@phoenix-ai/dsh-scope'
@@ -14,7 +14,7 @@ import type { Scoped } from '@phoenix-ai/dsh-scope'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     approval: ApprovalService
   }
@@ -100,12 +100,20 @@ export const APPROVAL_POLICIES: readonly ApprovalPolicy[] = ['ask', 'never']
 /** Default time available to answer an interactive request. */
 const DEFAULT_TIMEOUT_MS = 15_000
 
-/** Select the automatic outcome for a request without inventing permission for risky work. */
+/**
+ * Select the automatic outcome for a request without inventing permission for risky work.
+ * @param input - Risk and reversibility of the requested action.
+ * @returns The recommended approval outcome.
+ */
 export function approvalRecommendationFor(input: { risk: ApprovalRisk; reversible: boolean }): ApprovalRecommendation {
   return input.risk === 'low' && input.reversible ? 'allowed-once' : 'rejected'
 }
 
-/** Build the finite, wire-safe deadline used by host and client. */
+/**
+ * Build the finite, wire-safe deadline used by host and client.
+ * @param input - Clock, timeout, risk, reversibility, and policy revision.
+ * @returns The validated approval deadline.
+ */
 export function createApprovalDeadline(input: {
   now: number
   timeoutMs: number

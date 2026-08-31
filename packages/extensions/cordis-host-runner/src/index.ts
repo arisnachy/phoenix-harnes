@@ -4,9 +4,9 @@
  * @module @phoenix-ai/dsh-cordis-host-runner
  */
 
-import { Context } from '@deepseek-ai/cordis'
-import type { Fiber } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import type { Fiber } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { JsonValue } from '@phoenix-ai/dsh-session/types'
@@ -77,7 +77,7 @@ export function ApprovalRequestId(id: string): ApprovalRequestId {
   return id as ApprovalRequestId
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     /** Process-local dynamic Plugin registry and lifecycle service. */
     dynamicCordisRunner: DynamicCordisRunnerService

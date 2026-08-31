@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/code-runtime/code-runtime-python"
   },
   "type": "module",
@@ -31,12 +31,17 @@
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
+  "dependencies": {
+    "@phoenix-ai/dsh-code-runtime": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^"
+  },
   "peerDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

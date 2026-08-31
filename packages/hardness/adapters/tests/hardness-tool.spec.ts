@@ -34,6 +34,9 @@ describe('hardness_run tool adapter', () => {
     const tool = createHardnessTool(runner)
 
     expect(tool.name).toBe('hardness_run')
+    expect(tool.description).toContain('A blocked result is non-terminal')
+    expect(tool.description).toContain('mission_status')
+    expect(tool.description).toContain('next_action')
     expect(tool.parameters).toEqual({
       type: 'object',
       properties: {
@@ -64,8 +67,10 @@ describe('hardness_run tool adapter', () => {
           properties: {
             kind: { type: 'string', const: 'blocked' },
             reason: { type: 'string' },
+            mission_status: { type: 'string', enum: ['ACTIVE', 'RECOVERING', 'WAITING_EXTERNAL'] },
+            next_action: { type: 'string', enum: ['repair_and_replan', 'retry_with_alternative', 'wait_for_dependency'] },
           },
-          required: ['kind', 'reason'],
+          required: ['kind', 'reason', 'mission_status', 'next_action'],
         },
         {
           type: 'object',
@@ -116,12 +121,28 @@ describe('hardness_run tool adapter', () => {
     expect(JSON.stringify(projected)).not.toContain('must-not-leak')
   })
 
-  it('projects a blocked mission with its reason only', async () => {
-    const { runner, run } = runnerReturning({ kind: 'blocked', reason: 'approval required' })
+  it('projects a blocked mission as recoverable state and leaves a durable recovery instruction', async () => {
+    const { runner, run } = runnerReturning({
+      kind: 'blocked',
+      reason: 'approval required',
+      status: 'RECOVERING',
+      nextAction: 'retry_with_alternative',
+      retryable: true,
+    })
     const tool = createHardnessTool(runner)
+    const exec = execution()
 
-    await expect(tool.execute({ need: { kind: 'web-search' }, arguments: { query: 'phoenix' } }, execution()))
-      .resolves.toEqual({ kind: 'blocked', reason: 'approval required' })
+    await expect(tool.execute({ need: { kind: 'web-search' }, arguments: { query: 'phoenix' } }, exec))
+      .resolves.toEqual({
+        kind: 'blocked',
+        reason: 'approval required',
+        mission_status: 'RECOVERING',
+        next_action: 'retry_with_alternative',
+      })
+    expect(exec.deferContext).toHaveBeenCalledWith(expect.objectContaining({
+      source: expect.objectContaining({ plugin: 'hardness-adapters' }),
+      content: [expect.objectContaining({ type: 'text', text: expect.stringContaining('Do not treat this blocked result as mission completion') })],
+    }))
     expect(run).toHaveBeenCalledOnce()
   })
 
@@ -140,7 +161,12 @@ describe('hardness_run tool adapter', () => {
     const tool = createHardnessTool(runner)
 
     await expect(tool.execute({ need: { kind: 'web-search' }, arguments: {} }, execution()))
-      .resolves.toEqual({ kind: 'blocked', reason: 'mission produced an unsafe model-facing rendering' })
+      .resolves.toEqual({
+        kind: 'blocked',
+        reason: 'mission produced an unsafe model-facing rendering',
+        mission_status: 'ACTIVE',
+        next_action: 'repair_and_replan',
+      })
   })
 
   it('passes the call id, signal, and optional agent through unchanged', async () => {

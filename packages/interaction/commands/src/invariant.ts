@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-commands/invariant
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 

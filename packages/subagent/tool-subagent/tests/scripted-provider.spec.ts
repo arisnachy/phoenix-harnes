@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { type Agent } from '@phoenix-ai/dsh-agent'
 import SubagentRuntime, { type SubagentStartRequest } from '@phoenix-ai/dsh-subagent'
 import { SessionId } from '@phoenix-ai/dsh-session'

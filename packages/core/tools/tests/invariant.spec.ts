@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { scopeTarget } from '@phoenix-ai/dsh-scope'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@phoenix-ai/dsh-session'

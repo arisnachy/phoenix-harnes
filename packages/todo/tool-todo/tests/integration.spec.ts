@@ -1,6 +1,6 @@
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'

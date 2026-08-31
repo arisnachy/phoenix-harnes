@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
-import Include from '@deepseek-ai/cordis-plugin-include'
+import { Context } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
+import Include from '@phoenix-ai/cordis-plugin-include'
 import LlmRuntime from '@phoenix-ai/dsh-llm'
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
@@ -19,7 +19,7 @@ import type { Config } from '@phoenix-ai/dsh-agent-presets'
 import type {} from '@phoenix-ai/dsh-agent-presets/types'
 import { bindScopeParent, createScope, scopeOf } from '@phoenix-ai/dsh-scope'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     /** Published by the `isolated` fixture preset behind an entry-local realm. */
     fixtureIsolatedSvc: { label: string }

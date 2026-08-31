@@ -3,7 +3,7 @@
  * @module subagent-settlement-fence
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-agent-loop'
 import type {} from '@phoenix-ai/dsh-subagent'
 

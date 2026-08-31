@@ -8,9 +8,9 @@
  * @module @phoenix-ai/dsh-web-search-exa
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
-import z from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-web'
 import {
   ExaSearchProvider,

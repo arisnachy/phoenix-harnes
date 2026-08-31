@@ -9,7 +9,7 @@ PHOENIX 通过 `ctx.skills.list()` 为每个可见 skill（技能）执行操作
 当任务与某个 skill 匹配时：
 
 ```text
-skill({ name: "nombre-exacto-de-la-skill" })
+skill({ name: "exact-skill-name" })
 ```
 
 结果首先包含 `<phoenix_operational_preflight>`，然后才是 skill 内容。模型必须：

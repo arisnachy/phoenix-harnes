@@ -15,7 +15,7 @@ export type SettingsNamespace = Branded<'SettingsNamespace'>
 /** Origin of one committed settings change. */
 export type SettingsUpdateSource = 'update' | 'provider'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Events {
     /**
      * Committed change to one registered namespace's resolved value. Emitted

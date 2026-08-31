@@ -22,6 +22,7 @@ import type { DraftAttachmentId } from '../src/client/input/contract.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
+import type { VoiceRecognitionLike } from '../src/client/voice.ts'
 
 afterEach(cleanup)
 
@@ -234,6 +235,19 @@ function attachmentOwner(slotCalls: readonly { key: string; owner: unknown }[]):
 }
 
 describe('image draft rail', () => {
+  it('offers a visible file picker for arbitrary attachments', () => {
+    const addImages = vi.fn(() => null)
+    const result = bench({ addImages })
+    const picker = result.view.container.querySelector<HTMLInputElement>('input[type="file"]')
+    expect(picker).not.toBeNull()
+    const file = new File(['name,value\nPhoenix,1'], 'report.csv', { type: 'text/csv' })
+
+    fireEvent.change(picker!, { target: { files: [file] } })
+
+    expect(addImages).toHaveBeenCalledWith([file])
+    expect(picker?.value).toBe('')
+  })
+
   it('collects clipboard files while preserving text from a mixed paste', () => {
     const addImages = vi.fn(() => null)
     const { textarea, shell } = bench({ addImages })
@@ -1641,5 +1655,42 @@ describe('command launcher chrome and control seats', () => {
     cleanup()
     const live = bench({ running: true, permissions })
     expect((live.view.getByLabelText(/^访问模式/) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('submits each final browser speech fragment automatically in assistant mode', async () => {
+    class FakeRecognition implements VoiceRecognitionLike {
+      static instance: FakeRecognition | undefined
+      lang = ''
+      continuous = false
+      interimResults = true
+      maxAlternatives = 0
+      onstart: (() => void) | null = null
+      onend: (() => void) | null = null
+      onerror: VoiceRecognitionLike['onerror'] = null
+      onresult: VoiceRecognitionLike['onresult'] = null
+      constructor() { FakeRecognition.instance = this }
+      start(): void {}
+      stop(): void { this.onend?.() }
+      abort(): void {}
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'SpeechRecognition')
+    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: FakeRecognition })
+    try {
+      const { view, sink } = bench({ draft: 'Hola' })
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => {
+        FakeRecognition.instance?.onstart?.()
+        FakeRecognition.instance?.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal: false, 0: { transcript: 'ignored' } }, { isFinal: true, 0: { transcript: 'mundo' } }],
+        })
+      })
+      expect(sink).toHaveBeenCalledWith('Hola mundo', [], 'queue', expect.any(AbortSignal))
+      expect(view.getByRole('button', { name: '停止语音助手' })).toBeTruthy()
+    } finally {
+      cleanup()
+      if (descriptor === undefined) delete (window as Window & { SpeechRecognition?: unknown }).SpeechRecognition
+      else Object.defineProperty(window, 'SpeechRecognition', descriptor)
+    }
   })
 })

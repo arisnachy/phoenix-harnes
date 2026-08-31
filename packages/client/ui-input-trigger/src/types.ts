@@ -270,7 +270,7 @@ export interface InsertTextRequest {
   readonly continue?: boolean
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Events {
     /**
      * Applies one command claim to the scoped Input. Dispatched with the

@@ -40,15 +40,15 @@ vendor 九包加了 scope 之后与上游脱钩，但保留各自的版本线。
 
 | 包 | 上游版本 | 首发版本 |
 |---|---|---|
-| `@deepseek-ai/cordis` | 4.0.0-rc.7 | 4.0.1 |
-| `@deepseek-ai/cordis-plugin-loader` | 1.0.0-rc.5 | 1.0.1 |
-| `@deepseek-ai/cosmokit` | 1.8.1 | 1.8.2 |
-| `@deepseek-ai/schemastery` | 3.18.0 | 3.18.1 |
-| `@deepseek-ai/cordis-plugin-hmr` | 1.0.15 | 1.0.16 |
-| `@deepseek-ai/cordis-plugin-include` | 1.0.4 | 1.0.5 |
-| `@deepseek-ai/cordis-plugin-timer` | 1.1.2 | 1.1.3 |
-| `@deepseek-ai/cordis-plugin-group` | 1.0.0 | 1.0.1 |
-| `@deepseek-ai/cordis-plugin-logger-console` | 1.0.0 | 1.0.1 |
+| `@phoenix-ai/cordis` | 4.0.0-rc.7 | 4.0.1 |
+| `@phoenix-ai/cordis-plugin-loader` | 1.0.0-rc.5 | 1.0.1 |
+| `@phoenix-ai/cosmokit` | 1.8.1 | 1.8.2 |
+| `@phoenix-ai/schemastery` | 3.18.0 | 3.18.1 |
+| `@phoenix-ai/cordis-plugin-hmr` | 1.0.15 | 1.0.16 |
+| `@phoenix-ai/cordis-plugin-include` | 1.0.4 | 1.0.5 |
+| `@phoenix-ai/cordis-plugin-timer` | 1.1.2 | 1.1.3 |
+| `@phoenix-ai/cordis-plugin-group` | 1.0.0 | 1.0.1 |
+| `@phoenix-ai/cordis-plugin-logger-console` | 1.0.0 | 1.0.1 |
 
 以「上次发布版本」为基线才扛得住重同步：本仓发过 `4.0.1` 之后上游把版本恢复成 `4.0.0-rc.8`，只看 manifest 会再算出 `4.0.1` 并撞上已发版本。加 `--prerelease rc.1` 则发一次排练版：它进 `--tag next`，而且不占用那组数字——预发布的优先级低于它所先行的正式版，所以 `4.0.1` 仍然接在 `4.0.1-rc.1` 之后。这个次序由脚本自己算，不读 `git tag --sort=v:refname`——git 会把预发布排在正式版之前。
 

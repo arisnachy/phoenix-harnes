@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/compaction/compaction"
   },
   "type": "module",
@@ -46,7 +46,7 @@
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-brand": "workspace:^",
@@ -54,6 +54,6 @@
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

@@ -2,7 +2,7 @@
 /** Section, setup-card, and hand-written editor behavior over a scripted wire face. */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import Schema from '@deepseek-ai/schemastery'
+import Schema from '@phoenix-ai/schemastery'
 import { bindSnapshotSelector } from '@phoenix-ai/dsh-client-test-runtime'
 import type { RpcResponse, SettingsNamespaceView } from '@phoenix-ai/dsh-api-remotes/client'
 import {

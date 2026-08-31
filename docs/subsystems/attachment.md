@@ -1,12 +1,42 @@
-# Durable Image Attachments
+# Durable Attachments
 
 English | [中文](attachment.zh.md)
 
-The attachment seam separates binary image ownership from the session log. A producer gives validated encoded bytes to [`ctx.attachments`](#ctxattachments--attachmentstore-abstract-seam); the service publishes an immutable content-addressed reference only after the object is durable. Session events and model-visible `ImageBlock`s contain that reference and metadata, never a browser object URL, host temporary path, provider URL, or base64 payload.
+The attachment seam separates binary image and file ownership from the session log. A producer gives validated encoded bytes to [`ctx.attachments`](#ctxattachments--attachmentstore-abstract-seam); the service publishes an immutable content-addressed reference only after the object is durable. Session events and model-visible `ImageBlock`/`FileBlock`s contain that reference and metadata, never a browser object URL, host temporary path, provider URL, or base64 payload.
 
 Unsent browser drafts may stay in memory and native clients may stage them in operating-system temporary storage. Once the host accepts a user message, its images move below `<DSH_HOME>/attachments/v1` before the user event is appended. Structured model image output follows the same persist-before-event rule.
 
 Source: [`packages/attachment/attachment/src/types.ts`](../../packages/attachment/attachment/src/types.ts)
+
+```ts type-equiv
+/** MIME value recorded for a non-image upload. The bytes remain opaque. */
+type FileMediaType = string
+```
+
+```ts type-equiv
+/** Durable, serializable reference to one immutable arbitrary file. */
+interface FileAttachmentRef {
+  /** Opaque storage identifier; never a filesystem path or bearer URL. */
+  attachmentId: AttachmentId
+  /** Caller-declared MIME value, normalized by the admitting provider. */
+  mediaType: FileMediaType
+  /** Exact stored byte length. */
+  bytes: number
+  /** Optional display name stripped of local path information. */
+  name?: string
+}
+```
+
+```ts type-equiv
+/** Deployment-resolved limits for arbitrary file uploads. */
+interface FileAttachmentLimits {
+  maxFileBytes: number
+  maxFilesPerMessage: number
+  maxMessageFileBytes: number
+}
+```
+
+The local provider defaults to 25 MiB per file, 20 files per message, and 100 MiB per message. It strips local path components from names and verifies content-addressed digest and byte length on every read. Text-capable files are projected to providers with an explicit per-attachment byte limit; binary files remain durable and exportable without being copied into a text prompt.
 
 ## Identity and verified metadata
 
@@ -142,6 +172,35 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 Immutable binary attachment service. Implementations validate bytes before publishing a reference.
 
 ```ts cordis-catalog
+/**
+ * Validate one arbitrary file without persisting it.
+ * @param _input - arbitrary file bytes and declared metadata.
+ * @returns completion after validation.
+ */
+validateFile(_input: SaveFileAttachment): Promise<void>
+
+/**
+ * Validate and durably commit an ordered arbitrary-file batch.
+ * @param inputs - arbitrary files in message order.
+ * @returns durable references in input order.
+ */
+async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]>
+
+/**
+ * Validate and durably commit one arbitrary file.
+ * @param _input - arbitrary file bytes and declared metadata.
+ * @returns the durable file reference.
+ */
+saveFile(_input: SaveFileAttachment): Promise<FileAttachmentRef>
+
+/**
+ * Read one arbitrary file and verify its durable reference.
+ * @param _ref - durable file reference to read.
+ * @param _signal - optional cancellation signal.
+ * @returns stored bytes with verified reference metadata.
+ */
+readFile(_ref: FileAttachmentRef, _signal?: AbortSignal): Promise<StoredFileAttachment>
+
 /**
  * Validate one image without persisting it.
  * Batch callers validate every member before saving any member.

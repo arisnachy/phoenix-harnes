@@ -9,7 +9,7 @@
  * @module @phoenix-ai/dsh-agent-instructions
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { isDeepStrictEqual } from 'node:util'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'

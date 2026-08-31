@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-tool-session-query/service-boundary
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { HarnessError } from '@phoenix-ai/dsh-llm'
 import {
   SessionQueryError,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
 import { agentEvents } from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
@@ -142,6 +142,19 @@ async function waitForRequests(adapter: ScriptedAdapter, count: number): Promise
   })
 }
 
+/** Observe a new execution window and stop its next automatic drive pass. */
+function stopAfterContinuation(ctx: Context, agent: Agent): Promise<GoalView | undefined> {
+  return new Promise((resolve) => {
+    const stop = ctx.on('session/event', (session, event) => {
+      if (session !== agent.session || event.type !== 'goal/continuation') return
+      stop()
+      const current = ctx.goals.get(agent)
+      if (current?.phase === 'active' && current.activation === 'armed') ctx.goals.disarm(agent)
+      resolve(ctx.goals.get(agent))
+    })
+  })
+}
+
 describe('goal-round outcome policy', () => {
   it('renders the objective, round budget, authority boundary, and completion protocol', () => {
     const goal: GoalView = {
@@ -163,6 +176,26 @@ describe('goal-round outcome policy', () => {
       /<goal_round>\nObjective: "Ship verified support"\nRound: 3\/9[\s\S]*current workspace[\s\S]*verify[\s\S]*mark it complete/,
     )
     expect(block.text).toContain('If this is not the first round, use a materially different strategy')
+  })
+
+  it('keeps execution rounds out of plan mode and recovers tool failures without new approval', () => {
+    const goal: GoalView = {
+      id: GoalId('goal-execution-protocol'),
+      revision: 1,
+      objective: 'Deliver the requested artifact',
+      phase: 'active',
+      maxGoalRounds: 3,
+      roundsStarted: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      activation: 'armed',
+    }
+    const block = goalSession.renderGoalRoundPrompt(goal, 1)[0]
+    if (block?.type !== 'text') throw new Error('expected a text goal-round prompt')
+    expect(block.text).toContain('This execution round is not plan mode')
+    expect(block.text).toContain('Do not call `exit_plan_mode` unless plan mode is explicitly active')
+    expect(block.text).toContain('If a tool fails, record the exact failure, inspect alternatives, change strategy, and immediately continue')
+    expect(block.text).toContain('do not ask for a new approval for routine work')
   })
 
   it('quotes multiline or tag-like objective text as one unambiguous data value', () => {
@@ -211,15 +244,12 @@ describe('goal-round outcome policy', () => {
 describe('same-session goal driving', () => {
   it('admits exact numbered rounds until the durable round cap', async () => {
     const test = await harness([textResponse('round one'), textResponse('round two')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     const created = test.ctx.goals.create(test.agent, { objective: 'finish twice', maxGoalRounds: 2 })
 
-    const final = await waitForGoal(test.ctx, test.agent, goal => goal?.phase === 'blocked')
+    const final = await continued
 
-    expect(final).toMatchObject({ id: created.id, roundsStarted: 2, activation: 'disarmed' })
-    expect(final?.blockedReason).toEqual({
-      code: 'round-limit',
-      message: 'Goal reached its configured limit of 2 rounds.',
-    })
+    expect(final).toMatchObject({ id: created.id, revision: 2, roundsStarted: 0, phase: 'active', activation: 'disarmed' })
     expect(test.adapter.requests).toHaveLength(2)
     const rounds: number[] = []
     for (const event of test.agent.session.events) {
@@ -236,10 +266,12 @@ describe('same-session goal driving', () => {
 
   it('includes a persisted non-passing judge result in the next round', async () => {
     const test = await harness([textResponse('repair round')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     const created = test.ctx.goals.create(test.agent, { objective: 'repair reviewed work', maxGoalRounds: 1 })
     test.agent.session.append('goal/judge', {
       callId: 'judge-1' as never,
       goalId: created.id,
+      revision: created.revision,
       round: 0,
       verdict: 'needs_changes',
       summary: 'The result needs one more check.',
@@ -249,6 +281,7 @@ describe('same-session goal driving', () => {
 
     await waitForRequests(test.adapter, 1)
     expect(requestText(test.adapter.requests[0]!)).toContain('Run the missing verification.')
+    await continued
     await test.agent.whenIdle()
   })
 
@@ -268,24 +301,38 @@ describe('same-session goal driving', () => {
     expect(ctx.goals.get(agent)).toMatchObject({ phase: 'active', activation: 'disarmed', revision: 1 })
     expect(adapter.requests).toHaveLength(0)
 
+    const continued = stopAfterContinuation(ctx, agent)
     ctx.goals.resume(agent, created)
-    await waitForGoal(ctx, agent, goal => goal?.phase === 'blocked')
+    await continued
     expect(adapter.requests).toHaveLength(1)
+  })
+
+  it('treats a max-token turn as an unfinished attempt and continues the mission', async () => {
+    const test = await harness([maxTokensResponse('unfinished'), textResponse('recovered')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
+    test.ctx.goals.create(test.agent, { objective: 'deliver the final product', maxGoalRounds: 2 })
+
+    const goal = await continued
+
+    expect(goal).toMatchObject({ roundsStarted: 0, revision: 2, phase: 'active', activation: 'disarmed' })
+    expect(test.adapter.requests).toHaveLength(2)
+    expect(requestText(test.adapter.requests[1]!)).toContain('Round: 2/2')
   })
 
   it.each([
     ['rate limit', new LlmError('slow down', 'RATE_LIMIT')],
     ['request error', new Error('provider broke')],
-    ['max tokens', maxTokensResponse('unfinished')],
-  ] as const)('disarms automatic continuation after a %s', async (_label, response) => {
-    const test = await harness([response])
-    test.ctx.goals.create(test.agent, { objective: 'stop safely', maxGoalRounds: 8 })
+    ['prompt assembly error', new Error('malformed prompt variable reference at "{{A=3;while(A!=3…"')],
+  ] as const)('keeps an active goal armed and retries a %s with a recovery round', async (_label, response) => {
+    const test = await harness([response, textResponse('recovered')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
+    test.ctx.goals.create(test.agent, { objective: 'deliver the final product', maxGoalRounds: 2 })
 
-    const goal = await waitForGoal(test.ctx, test.agent, current =>
-      current?.phase === 'active' && current.activation === 'disarmed')
-
-    expect(goal).toMatchObject({ roundsStarted: 1, activation: 'disarmed' })
-    expect(test.adapter.requests).toHaveLength(1)
+    await waitForRequests(test.adapter, 2)
+    expect(requestText(test.adapter.requests[1]!)).toContain('Round: 2/2')
+    expect(requestText(test.adapter.requests[1]!)).toContain('materially different strategy')
+    await continued
+    expect(test.ctx.goals.get(test.agent)).toMatchObject({ roundsStarted: 0, revision: 2, phase: 'active', activation: 'disarmed' })
   })
 
   it('maps a downstream step rejection to blocked without entering the round', async () => {
@@ -359,10 +406,11 @@ describe('same-session goal driving', () => {
 
   it('lets already-queued human work finish before reserving the next round', async () => {
     const test = await harness([textResponse('human answer'), textResponse('goal answer')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     test.ctx.goals.create(test.agent, { objective: 'continue after the human', maxGoalRounds: 1 })
     test.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'human goes first' }], source: { kind: 'user' } }))
 
-    await waitForGoal(test.ctx, test.agent, goal => goal?.phase === 'blocked')
+    await continued
 
     expect(test.adapter.requests).toHaveLength(2)
     expect(requestText(test.adapter.requests[0]!)).toContain('human goes first')
@@ -372,6 +420,7 @@ describe('same-session goal driving', () => {
 
   it('makes a reserved round stale when a listener queues human work behind it', async () => {
     const test = await harness([textResponse('human batch'), textResponse('later goal')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     let inserted = false
     onInboxMessage(test.ctx, test.agent, (message) => {
       if (message.source.kind !== 'goal' || inserted) return
@@ -380,7 +429,7 @@ describe('same-session goal driving', () => {
     })
     test.ctx.goals.create(test.agent, { objective: 'yield to nested human input', maxGoalRounds: 1 })
 
-    await waitForGoal(test.ctx, test.agent, goal => goal?.phase === 'blocked')
+    await continued
 
     expect(test.adapter.requests).toHaveLength(2)
     expect(requestText(test.adapter.requests[0]!)).toContain('human joined the pending batch')
@@ -390,6 +439,7 @@ describe('same-session goal driving', () => {
 
   it('blocks a queued reservation made stale by a goal edit and continues the new revision', async () => {
     const test = await harness([textResponse('new revision')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     let edited = false
     onInboxMessage(test.ctx, test.agent, (message) => {
       if (message.source.kind !== 'goal' || edited) return
@@ -400,9 +450,9 @@ describe('same-session goal driving', () => {
     })
     test.ctx.goals.create(test.agent, { objective: 'old objective', maxGoalRounds: 1 })
 
-    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    const goal = await continued
 
-    expect(goal).toMatchObject({ revision: 3, objective: 'new objective', roundsStarted: 1 })
+    expect(goal).toMatchObject({ revision: 3, objective: 'new objective', roundsStarted: 0 })
     const admitted = test.agent.session.events.find(event => event.type === 'user/message'
       && event.data.source.kind === 'goal' && event.data.source.round > 0)
     expect(admitted?.type === 'user/message' && admitted.data.source.kind === 'goal'
@@ -412,6 +462,7 @@ describe('same-session goal driving', () => {
 
   it('rechecks revision after downstream prompt hooks before admitting', async () => {
     const test = await harness([textResponse('new revision')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     let edited = false
     test.ctx.on('agent/pre-step', ({ agent, messages }, next) => {
       if (messages[0]?.source.kind === 'goal' && !edited) {
@@ -424,9 +475,9 @@ describe('same-session goal driving', () => {
     })
     test.ctx.goals.create(test.agent, { objective: 'edit during pre-step', maxGoalRounds: 1 })
 
-    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    const goal = await continued
 
-    expect(goal).toMatchObject({ objective: 'edited downstream', roundsStarted: 1 })
+    expect(goal).toMatchObject({ objective: 'edited downstream', roundsStarted: 0 })
     expect(test.adapter.requests).toHaveLength(1)
   })
 
@@ -451,6 +502,7 @@ describe('same-session goal driving', () => {
 
   it('restores non-goal step context when a claimed reservation becomes stale', async () => {
     const test = await harness([textResponse('side contexts'), textResponse('revised goal')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     const claimedContext = createUserMessage({
       content: [{ type: 'text', text: 'claimed context to restore' }],
       source: { kind: 'plugin', plugin: 'test' },
@@ -491,10 +543,10 @@ describe('same-session goal driving', () => {
     })
     test.ctx.goals.create(test.agent, { objective: 'stale before admission', maxGoalRounds: 1 })
 
-    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    const goal = await continued
     stopInserted()
 
-    expect(goal).toMatchObject({ objective: 'revised after claim', roundsStarted: 1 })
+    expect(goal).toMatchObject({ objective: 'revised after claim', roundsStarted: 0 })
     expect(test.adapter.requests).toHaveLength(2)
     expect(requestText(test.adapter.requests[0]!)).toContain('claimed context to restore')
     expect(requestText(test.adapter.requests[0]!)).toContain('context already queued for the next step')
@@ -538,14 +590,14 @@ describe('same-session goal driving', () => {
 
   it('reserves the next round only after the settled round checkpoint succeeds', async () => {
     const test = await harness([textResponse('round one'), textResponse('round two')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     const flushes: number[] = []
     test.ctx.on('session/flush', () => { flushes.push(test.adapter.requests.length) })
     test.ctx.goals.create(test.agent, { objective: 'checkpoint between rounds', maxGoalRounds: 2 })
 
-    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    const goal = await continued
 
-    expect(goal?.blockedReason?.code).toBe('round-limit')
-    expect(goal?.roundsStarted).toBe(2)
+    expect(goal).toMatchObject({ phase: 'active', activation: 'disarmed', roundsStarted: 0, revision: 2 })
     expect(test.adapter.requests).toHaveLength(2)
     // A flush was observed after round one settled and before round two
     // dispatched (recorded request count 1 at flush time).
@@ -580,14 +632,12 @@ describe('same-session goal driving', () => {
         return { kind: 'retry' }
       }
     })
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     test.ctx.goals.create(test.agent, { objective: 'survive a transient failure', maxGoalRounds: 1 })
 
-    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    const goal = await continued
 
-    // The retry turn's completed outcome settles the round: round-limit, not
-    // the failed original turn's turn-error.
-    expect(goal?.blockedReason?.code).toBe('round-limit')
-    expect(goal?.roundsStarted).toBe(1)
+    expect(goal).toMatchObject({ phase: 'active', activation: 'disarmed', roundsStarted: 0, revision: 2 })
     expect(test.adapter.requests).toHaveLength(2)
   })
 
@@ -616,8 +666,9 @@ describe('same-session goal driving', () => {
     expect(test.ctx.goals.get(test.agent)).toMatchObject({ phase: 'paused' })
   })
 
-  it('fails closed when a downstream pre-step hook throws', async () => {
-    const test = await harness([])
+  it('keeps the goal active and retries when a downstream pre-step hook throws', async () => {
+    const test = await harness([textResponse('recovered after hook failure')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     // Registered after goal-round-driver's own listener: the throw propagates back
     // through goal-round-driver's next() await, dropping the whole step proposal.
     let threw = false
@@ -628,11 +679,11 @@ describe('same-session goal driving', () => {
       }
       return next()
     })
-    test.ctx.goals.create(test.agent, { objective: 'survive a throwing hook', maxGoalRounds: 1 })
+    test.ctx.goals.create(test.agent, { objective: 'survive a throwing hook', maxGoalRounds: 2 })
 
-    const goal = await waitForGoal(test.ctx, test.agent, current => current?.activation === 'disarmed')
-    expect(goal).toMatchObject({ phase: 'active', roundsStarted: 0 })
-    expect(test.adapter.requests).toHaveLength(0)
+    const goal = await continued
+    expect(goal).toMatchObject({ phase: 'active', activation: 'disarmed', revision: 2, roundsStarted: 0 })
+    expect(test.adapter.requests).toHaveLength(2)
     expect(test.agent.inbox.nextTurn).toHaveLength(0)
   })
 
@@ -652,12 +703,12 @@ describe('same-session goal driving', () => {
     // A human prompt fails and retries while a goal is armed but its round
     // is not yet reserved: the retry trigger must not adopt or clear
     // anything (the attempt is absent), and the goal proceeds normally.
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     test.ctx.goals.create(test.agent, { objective: 'ignore foreign retries', maxGoalRounds: 1 })
     test.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'human work' }], source: { kind: 'user' } }))
 
-    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
-    expect(goal?.blockedReason?.code).toBe('round-limit')
-    expect(goal?.roundsStarted).toBe(1)
+    const goal = await continued
+    expect(goal).toMatchObject({ phase: 'active', activation: 'disarmed', revision: 2, roundsStarted: 0 })
   })
 
   it('blocks the goal when a custom agent rejects the otherwise valid follow-up', async () => {
@@ -703,10 +754,11 @@ describe('same-session goal driving', () => {
 
   it('contains a mutation failure inside the scheduler loop and fails closed', async () => {
     const test = await harness([textResponse('the only round')])
-    // The only ctx.goals.block call in a completing one-round run is the
-    // driver's round-limit stop, so the mock fails exactly that drive pass.
-    vi.spyOn(test.ctx.goals, 'block').mockImplementationOnce(() => {
-      throw new Error('round-limit block failed')
+    // The continuation call is the durable window boundary. If it fails, the
+    // driver must contain the mutation error and disarm without claiming the
+    // mission is complete.
+    vi.spyOn(test.ctx.goals, 'continueWindow').mockImplementationOnce(() => {
+      throw new Error('continuation failed')
     })
     test.ctx.goals.create(test.agent, { objective: 'contain a driver failure', maxGoalRounds: 1 })
 
@@ -745,6 +797,7 @@ describe('same-session goal driving', () => {
 
   it('fails an initial pre-step read closed even when the first disarm attempt throws', async () => {
     const test = await harness([textResponse('retry after containment')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     let armed = true
     onClaimedMessage(test.ctx, test.agent, (message) => {
       if (message.source.kind !== 'goal' || message.source.round <= 0 || !armed) return
@@ -758,7 +811,7 @@ describe('same-session goal driving', () => {
     })
     test.ctx.goals.create(test.agent, { objective: 'retry stale pre-step', maxGoalRounds: 1 })
 
-    await waitForGoal(test.ctx, test.agent, goal => goal?.phase === 'blocked')
+    await continued
 
     expect(test.adapter.requests).toHaveLength(1)
   })
@@ -906,37 +959,31 @@ describe('same-session goal driving', () => {
     expect(test.adapter.requests).toHaveLength(0)
   })
 
-  it('resets process-local scheduling state at a session-start edge', async () => {
+  it('rearms an active goal and restores scheduling state at a session-start edge', async () => {
     const test = await harness([textResponse('after explicit resume')])
-    const created = test.ctx.goals.create(test.agent, { objective: 'restart safely', maxGoalRounds: 1 })
+    test.ctx.goals.create(test.agent, { objective: 'restart safely', maxGoalRounds: 1 })
     agentEvents(test.ctx, test.agent).emit('agent/session-start', { source: 'resume' })
     await Promise.resolve()
 
-    expect(test.ctx.goals.get(test.agent)).toMatchObject({ activation: 'disarmed', roundsStarted: 0 })
+    expect(test.ctx.goals.get(test.agent)).toMatchObject({ activation: 'armed', roundsStarted: 0 })
     expect(test.adapter.requests).toHaveLength(0)
-
-    test.ctx.goals.resume(test.agent, created)
-    await waitForGoal(test.ctx, test.agent, goal => goal?.phase === 'blocked')
-    expect(test.adapter.requests).toHaveLength(1)
   })
 
-  it('disarms when a round turn/end cannot commit', async () => {
+  it('keeps the mission recoverable when a round turn/end cannot commit', async () => {
     const test = await harness([textResponse('round ran')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
     test.ctx.on('internal/dispatch', (_mode, name, args) => {
       if (name !== 'session/event') return
       const event = args[1] as { type: string }
       if (event.type === 'turn/end') throw new Error('turn close permanently rejected')
     })
-    test.ctx.goals.create(test.agent, { objective: 'survive a lost turn end' })
+    test.ctx.goals.create(test.agent, { objective: 'survive a lost turn end', maxGoalRounds: 1 })
     await waitForRequests(test.adapter, 1)
     await test.agent.whenIdle()
     await new Promise((resolve) => { setImmediate(resolve) })
 
     expect(test.adapter.requests).toHaveLength(1)
-    expect(test.ctx.goals.get(test.agent)).toMatchObject({
-      phase: 'active',
-      activation: 'disarmed',
-    })
+    expect(await continued).toMatchObject({ phase: 'active', activation: 'disarmed', roundsStarted: 0, revision: 2 })
   })
 
   it('disarms instead of continuing when a plugin reports a post-turn persistence failure', async () => {
@@ -974,32 +1021,16 @@ describe('same-session goal driving', () => {
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('goal-round-driver'))
   })
 
-  it('keeps terminal agent failure disarmed and defers queued human work until another wakeup', async () => {
-    const test = await harness([new Error('round one broke'), textResponse('human answer')])
-    let queued = false
-    test.ctx.on('session/event', (session, event) => {
-      if (session !== test.agent.session || queued) return
-      if (event.type === 'user/message' && event.data.source.kind === 'goal') {
-        queued = true
-        queueMicrotask(() => {
-          test.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'human interleaved' }], source: { kind: 'user' } }))
-        })
-      }
-    })
-    test.ctx.goals.create(test.agent, { objective: 'survive a stale failure', maxGoalRounds: 1 })
+  it('does not complete a goal after a terminal agent failure', async () => {
+    const test = await harness([new Error('round one broke'), textResponse('recovered')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
+    test.ctx.goals.create(test.agent, { objective: 'survive a stale failure', maxGoalRounds: 2 })
 
-    await waitForGoal(test.ctx, test.agent, current =>
-      current?.phase === 'active' && current.activation === 'disarmed')
-
-    expect(test.adapter.requests).toHaveLength(1)
-    expect(test.agent.inbox.nextTurn).toHaveLength(1)
-
-    test.agent.steer(createUserMessage({ content: [{ type: 'text', text: 'resume after failure' }], source: { kind: 'user' } }))
+    await waitForRequests(test.adapter, 2)
     await test.agent.whenIdle()
 
     expect(test.adapter.requests).toHaveLength(2)
-    expect(requestText(test.adapter.requests[1]!)).toContain('human interleaved')
-    expect(requestText(test.adapter.requests[1]!)).toContain('resume after failure')
+    expect(await continued).toMatchObject({ phase: 'active', activation: 'disarmed', revision: 2, roundsStarted: 0 })
   })
 
   it('waits for work queued by a pause observer before considering the next round', async () => {

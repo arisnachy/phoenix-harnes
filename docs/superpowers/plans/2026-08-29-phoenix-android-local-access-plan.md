@@ -6,7 +6,7 @@
 
 **Architecture:** PHOENIX expone un plugin local independiente del puente `/api`, enlazado únicamente a interfaces privadas y protegido por TLS con huella fijada, invitaciones de un solo uso y claves por dispositivo. Settings consume el estado del plugin y muestra QR, permisos y revocación; Android usa Kotlin/Compose, Android Keystore y un protocolo JSON versionado con firmas y contadores anti-replay.
 
-**Tech Stack:** TypeScript estricto, Cordis, `node:http`/WebSocket existente, `@deepseek-ai/schemastery`, React/CSS Modules, Kotlin, Jetpack Compose, Android Keystore, `MediaProjection` solo para la superficie autorizada y notificaciones locales mediante servicio en primer plano opcional.
+**Tech Stack:** TypeScript estricto, Cordis, `node:http`/WebSocket existente, `@phoenix-ai/schemastery`, React/CSS Modules, Kotlin, Jetpack Compose, Android Keystore, `MediaProjection` solo para la superficie autorizada y notificaciones locales mediante servicio en primer plano opcional.
 
 ---
 
@@ -39,7 +39,7 @@ Añadir `packages/interaction/mobile-access/README.md`, `packages/client/ui-sett
 
 - [ ] **Step 1: Write the failing tests for private-address and command policy**
 
-```ts
+```ts ignore-check
 it('accepts only private LAN addresses and rejects public, loopback, wildcard, and link-local addresses', () => {
   expect(isPrivateLanAddress('192.168.1.44')).toBe(true)
   expect(isPrivateLanAddress('10.0.0.8')).toBe(true)
@@ -97,7 +97,7 @@ If repository hooks inspect unrelated pre-staged files and fail, do not modify o
 
 - [ ] **Step 1: Write failing server-boundary tests**
 
-```ts
+```ts ignore-check
 it('does not bind wildcard or public interfaces', async () => {
   await expect(startLocalMobileServer({ addresses: ['0.0.0.0'], port: 0 })).rejects.toThrow(/private/i)
   await expect(startLocalMobileServer({ addresses: ['8.8.8.8'], port: 0 })).rejects.toThrow(/private/i)

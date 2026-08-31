@@ -1,7 +1,7 @@
 /** Event-level policy tests; no filesystem provider is needed because the plugin performs no I/O. */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { FsTargetKey, FsVersion } from '@phoenix-ai/dsh-fs'
 import type { FsObservation, FsTarget, FsWriteIntent } from '@phoenix-ai/dsh-fs'
 import * as FsPolicy from '@phoenix-ai/dsh-fs-observation-policy'

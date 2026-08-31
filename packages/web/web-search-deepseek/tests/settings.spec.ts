@@ -1,8 +1,8 @@
 /** The `web-search-deepseek` settings section layered over the composition entry. */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import type { Fiber } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
+import type { Fiber } from '@phoenix-ai/cordis'
 import { SettingsProvider } from '@phoenix-ai/dsh-settings'
 import type { SettingsNamespace } from '@phoenix-ai/dsh-settings'
 import WebRuntime from '@phoenix-ai/dsh-web'

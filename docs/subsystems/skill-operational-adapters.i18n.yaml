@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/skill-operational-adapters.md
-skill-operational-adapters.md: 16d16583cb2a95ec3a343376f6faeb745a2cc10d
-skill-operational-adapters.zh.md: d2adc605281450ad02b879f0f543b7a9726c9e62
+skill-operational-adapters.md: 7cdbfd84aba6a57d5aa22c6dc8709df854098536
+skill-operational-adapters.zh.md: d62c14781ae4829ada6370e023d6f11120cfeade

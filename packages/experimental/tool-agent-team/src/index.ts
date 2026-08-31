@@ -1,7 +1,7 @@
 /** Scoped model-facing tools for the opt-in Agent Teams runtime. */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
 import { TeamTaskId } from '@phoenix-ai/dsh-experimental-agent-team'
 import type { TeamMemberView } from '@phoenix-ai/dsh-experimental-agent-team'

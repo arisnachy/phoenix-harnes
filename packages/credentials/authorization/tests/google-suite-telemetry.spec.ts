@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import AuthorizationService from '@phoenix-ai/dsh-authorization'
 import GoogleApiBroker, { GOOGLE_ACCOUNT_KEY, internals } from '@phoenix-ai/dsh-authorization/google'
 import { MemoryCredentials } from './memory.ts'

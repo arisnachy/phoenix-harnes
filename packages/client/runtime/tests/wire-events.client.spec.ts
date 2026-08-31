@@ -4,7 +4,7 @@
  * api-gateway's own coverage); each established connection generation emits
  * `connection/reset` for generation-scoped cache invalidation.
  */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import type { ConnectionHandle, ConnectionSinks } from '@phoenix-ai/dsh-api-remotes/client'
 import TypertRegistry from '@phoenix-ai/dsh-typert-registry'

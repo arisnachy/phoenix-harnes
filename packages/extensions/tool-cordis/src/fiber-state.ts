@@ -5,7 +5,7 @@
  * @module @phoenix-ai/dsh-tool-cordis/fiber-state
  */
 
-import type { FiberState as FiberStateEnum } from '@deepseek-ai/cordis'
+import type { FiberState as FiberStateEnum } from '@phoenix-ai/cordis'
 
 /** Value mirror of the cordis `FiberState` const enum (see the module doc for why a mirror exists). */
 export const FiberState = {

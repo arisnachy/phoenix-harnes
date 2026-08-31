@@ -5,8 +5,8 @@
  * @module @phoenix-ai/dsh-storage-sqlite
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { DatabaseSync } from 'node:sqlite'
 import { StorageError, UNIT_NAME_RE, storageBackendServiceKey } from '@phoenix-ai/dsh-storage'
 import type { KvFacet, KvUnit, KvUnitDescriptor, StorageBackend } from '@phoenix-ai/dsh-storage'

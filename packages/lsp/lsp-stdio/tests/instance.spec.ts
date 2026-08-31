@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile, realpath } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import LocalFileSystem from '@phoenix-ai/dsh-fs-local'
 import { LspInstance, readHostSource } from '@phoenix-ai/dsh-lsp-stdio'
 import { encodeMessage } from '@phoenix-ai/dsh-lsp-stdio'

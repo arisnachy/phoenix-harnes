@@ -11,8 +11,11 @@ import { createUserApprovalBroker } from './user-approval-broker.ts'
 import type { CapabilityApproval, CapabilityExecutor } from './execution-bridge.ts'
 import { ArtifactRuntime } from './artifact-runtime.ts'
 import { runHardnessMission, type HardnessMissionResult } from './mission-orchestrator.ts'
+import type { HardnessMissionJudge } from './mission-orchestrator.ts'
+import { createSubagentMissionJudge } from './mission-judge.ts'
 import { createHardnessMissionAudit } from './mission-audit.ts'
 import type { OpenClawCapabilityBroker } from './openclaw/broker.ts'
+import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 
 /** Wire payload accepted by the loopback HARDNESS mission RPC. */
 export interface HardnessMissionRpcPayload {
@@ -43,8 +46,16 @@ export interface HardnessMissionRuntimeDependencies {
   readonly tools: Pick<ToolRuntime, 'execute'>
   readonly acquisition: AcquisitionRegistry
   readonly executor?: CapabilityExecutor
+  /** Optional subagent registry used by the independent completion judge. */
+  readonly subagents?: Pick<SubagentRuntime, 'getProvider' | 'start'>
+  /** Structured subagent provider selected for mission judging. */
+  readonly judgeProvider?: string
+  /** Explicit judge override used by tests and alternate deployments. */
+  readonly judge?: HardnessMissionJudge
   /** Optional isolated code runtime used by the universal artifact surface. */
   readonly codeRuntime?: CodeRuntime
+  /** Optional CPython runtime used when an artifact declares `python`. */
+  readonly pythonCodeRuntime?: CodeRuntime
 }
 
 function failure(message: string): RpcResult<never> {
@@ -62,6 +73,8 @@ function payload(value: unknown): HardnessMissionRpcPayload | undefined {
 
 interface ArtifactExecutionRpcPayload {
   readonly sessionId: string
+  readonly artifactId: string
+  readonly callId: string
   readonly program: string
   readonly language: string
 }
@@ -69,12 +82,22 @@ interface ArtifactExecutionRpcPayload {
 function artifactPayload(value: unknown): ArtifactExecutionRpcPayload | undefined {
   if (!isRecord(value)
     || typeof value.sessionId !== 'string'
+    || typeof value.artifactId !== 'string'
+    || typeof value.callId !== 'string'
     || typeof value.program !== 'string'
     || typeof value.language !== 'string'
     || value.sessionId.trim() === ''
+    || value.artifactId.trim() === ''
+    || value.callId.trim() === ''
     || value.program.trim() === ''
     || value.language.trim() === '') return undefined
-  return { sessionId: value.sessionId, program: value.program, language: value.language }
+  return {
+    sessionId: value.sessionId,
+    artifactId: value.artifactId,
+    callId: value.callId,
+    program: value.program,
+    language: value.language,
+  }
 }
 
 function createArtifacts(): ArtifactRuntime {
@@ -112,6 +135,10 @@ function createApproval(deps: Pick<HardnessMissionRuntimeDependencies, 'approval
 export function createHardnessMissionRunner(deps: Omit<HardnessMissionRuntimeDependencies, 'connection' | 'agents'>): HardnessMissionRunner {
   const artifacts = createArtifacts()
   const approval = createApproval(deps)
+  const judge = deps.judge ?? (deps.subagents === undefined ? undefined : createSubagentMissionJudge({
+    subagents: deps.subagents,
+    provider: deps.judgeProvider ?? 'spawn',
+  }))
   return {
     run: input => runHardnessMission({
       hardness: deps.hardness,
@@ -123,6 +150,7 @@ export function createHardnessMissionRunner(deps: Omit<HardnessMissionRuntimeDep
         ? { audit: createHardnessMissionAudit(input.context.agent.session) }
         : {},
       ...(deps.executor === undefined ? {} : { executor: deps.executor }),
+      ...(judge === undefined ? {} : { judge }),
       need: input.need,
       args: input.args,
       context: input.context,
@@ -141,14 +169,19 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
     if (endpoint === 'artifact/run') {
       const input = artifactPayload(raw)
       if (input === undefined) return failure('HARDNESS artifact execution requires sessionId, language and program')
-      if (deps.codeRuntime === undefined) return failure('HARDNESS artifact execution has no isolated code runtime')
       const agent = deps.agents.get(input.sessionId as SessionId)
       if (agent === undefined) return failure(`HARDNESS session is not active: ${input.sessionId}`)
-      if (input.language !== deps.codeRuntime.language && !(input.language === 'javascript' && deps.codeRuntime.language === 'typescript')) {
-        return failure(`HARDNESS code runtime does not support language: ${input.language}`)
-      }
+      const runtime = input.language === 'python' ? deps.pythonCodeRuntime : deps.codeRuntime
+      if (runtime === undefined) return failure(`HARDNESS artifact execution has no runtime for language: ${input.language}`)
+      if (input.language !== runtime.language && !(input.language === 'javascript' && runtime.language === 'typescript')) return failure(`HARDNESS code runtime does not support language: ${input.language}`)
       try {
-        const result: CodeRunResult = await deps.codeRuntime.run({ program: input.program, bindings: [], signal })
+        const result: CodeRunResult = await runtime.run({ program: input.program, bindings: [], signal })
+        agent.session.append('hardness/artifact', {
+          artifactId: input.artifactId,
+          callId: input.callId,
+          language: input.language,
+          result,
+        })
         return { ok: true, value: { kind: 'execution', result } as never }
       } catch (error) {
         return failure(error instanceof Error ? error.message : String(error))

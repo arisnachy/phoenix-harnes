@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/client/ui-plan"
   },
   "type": "module",
@@ -51,7 +51,7 @@
     "@phoenix-ai/dsh-client-ui-conversation": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-plan-mode": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-api-remotes": "workspace:^",
@@ -64,7 +64,7 @@
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-plan-mode": "workspace:^",
     "@types/react": "~18.3.1",
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "react": "^18.2.0"
   },
   "files": [

@@ -8,9 +8,9 @@
  * @module @phoenix-ai/dsh-spill-local
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { resolve } from 'node:path'
-import z from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
 import { SpillLocator, SpillStore } from '@phoenix-ai/dsh-spill'
 import type { SaveTextSpill, SpillRef } from '@phoenix-ai/dsh-spill'
 import { privateRoot, saveTextFile } from './store.ts'

@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/extensions/cordis-host-runner"
   },
   "type": "module",
@@ -49,11 +49,11 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@deepseek-ai/schemastery": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-brand": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
@@ -64,8 +64,8 @@
     "@phoenix-ai/dsh-typert-protocol": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/cordis-plugin-timer": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis-plugin-timer": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-brand": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",

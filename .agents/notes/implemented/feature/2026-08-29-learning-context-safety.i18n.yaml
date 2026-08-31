@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-29-learning-context-safety.md
+2026-08-29-learning-context-safety.md: 99e8350d8ac08bc46239d0e65c82e27b9bc2c9cd
+2026-08-29-learning-context-safety.zh.md: dee1c99a9e8354425e17b7ded1b7835fdb92a8ee

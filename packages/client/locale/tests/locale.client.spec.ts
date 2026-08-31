@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { stubSettingsScope, type StubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
 import type { LocaleSettings, LocaleSnapshot } from '@phoenix-ai/dsh-client-locale/client'
 import { FALLBACK_LOCALE, LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'

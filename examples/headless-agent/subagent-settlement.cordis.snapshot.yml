@@ -4,7 +4,7 @@
 # the parent turn without list_agents, send_message, or a Task collector.
 
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

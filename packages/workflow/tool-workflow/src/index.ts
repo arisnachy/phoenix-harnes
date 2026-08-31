@@ -10,8 +10,8 @@
  * @module @phoenix-ai/dsh-tool-workflow
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { ToolCallView, ToolResultView } from '@phoenix-ai/dsh-tools'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'

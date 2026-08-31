@@ -1,6 +1,6 @@
 /** Host BFF policy for resolving Remote Agent and Session identities. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, AgentOptions, AgentSetup } from '@phoenix-ai/dsh-agent'
 import type { Session, SessionEvent, SessionHeader, SessionId } from '@phoenix-ai/dsh-session'
 import type {} from '@phoenix-ai/dsh-session-persistence'

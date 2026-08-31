@@ -6,8 +6,8 @@
 
 import { randomUUID } from 'node:crypto'
 import { posix } from 'node:path'
-import { Context, Service } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { FileType, Sandbox, SandboxNotFoundError } from 'e2b'
 
 export {
@@ -60,7 +60,7 @@ interface SchemaResolvedConfig extends Config {
   timeoutMs: number
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     e2b: E2BRuntime
   }

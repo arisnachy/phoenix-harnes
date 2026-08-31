@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-workspace/invariant
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { DomainChanged } from '@phoenix-ai/dsh-storage-domain'
 import { WorkspaceId } from '@phoenix-ai/dsh-workspace'

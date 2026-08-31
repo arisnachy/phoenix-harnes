@@ -3,8 +3,8 @@
  * @module @phoenix-ai/dsh-session-title
  */
 
-import { Context, FiberState, Service, type Fiber } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, FiberState, Service, type Fiber } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { z as zod } from 'zod'
 import type { Branded } from '@phoenix-ai/dsh-brand'
 import { assertNever, deepFreeze, isAgentLoopRequest } from '@phoenix-ai/dsh-llm'
@@ -85,7 +85,7 @@ export interface Config {
   readonly maxTitleBytes: number
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     sessionTitle: SessionTitleService
   }

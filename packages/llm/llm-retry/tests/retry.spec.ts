@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import type { Fiber } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
+import type { Fiber } from '@phoenix-ai/cordis'
 import LlmRuntime, { createUserMessage, CallId, EMPTY_RESPONSE_CODE, LlmAdapter, LlmError, resolveRetryPolicy  } from '@phoenix-ai/dsh-llm'
 import type {
   AlwaysRetryPolicyConfig,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SystemPrompt, { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntimePlugin from '@phoenix-ai/dsh-tools'
 import SkillRegistryPlugin from '@phoenix-ai/dsh-skill'
@@ -21,7 +21,7 @@ describe('HARDNESS source adapters', () => {
     context.provide('agents', { get: () => undefined } as never)
     context.provide('approval', { request: vi.fn() } as never)
 
-    const dispose = await apply(context)
+    const dispose = await apply(context, { judgeProvider: 'spawn' })
     expect(context.tools.get('hardness_run')).toBeDefined()
     expect(hardness.get('tool:hardness_run' as never)).toBeUndefined()
     const assembly = await context.systemPrompt.assemble()
@@ -42,7 +42,7 @@ describe('HARDNESS source adapters', () => {
     context.provide('approval', { request: vi.fn() } as never)
 
     const handle = vi.fn(() => async () => {})
-    const dispose = await apply(context)
+    const dispose = await apply(context, { judgeProvider: 'spawn' })
     expect(context.tools.get('hardness_run')).toBeDefined()
     expect(handle).not.toHaveBeenCalled()
 
@@ -71,9 +71,11 @@ describe('HARDNESS source adapters', () => {
       inspect: async () => undefined,
     } as never)
 
-    const dispose = await apply(context)
+    const dispose = await apply(context, { judgeProvider: 'spawn' })
     expect(context.tools.get('connector_list')).toBeDefined()
-    expect((context.get('hardness') as HardnessService).get('tool:connector_list' as never)).toBeDefined()
+    // The connector inventory is a scoped model tool. Its host-side
+    // capability index is intentionally not mutated by a preset mount.
+    expect((context.get('hardness') as HardnessService).get('tool:connector_list' as never)).toBeUndefined()
 
     dispose()
     expect(context.tools.get('connector_list')).toBeUndefined()
@@ -89,7 +91,7 @@ describe('HARDNESS source adapters', () => {
     context.provide('agents', { get: () => undefined } as never)
     context.provide('approval', { request: vi.fn() } as never)
     context.provide('mcpConnectors', { list: () => [] } as never)
-    const dispose = await apply(context)
+    const dispose = await apply(context, { judgeProvider: 'spawn' })
     expect(context.tools.get('connector_list')).toBeDefined()
     dispose()
     await context.fiber.dispose()

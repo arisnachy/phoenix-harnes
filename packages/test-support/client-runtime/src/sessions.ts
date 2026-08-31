@@ -1,5 +1,5 @@
 /** Test-owned sessions face: the SlotRegistry host contract over declarative fixtures. */
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { AttachmentIdType } from '@phoenix-ai/dsh-attachment'
 import { createScope, scopeOf, SessionProvideChannel } from '@phoenix-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
@@ -185,7 +185,7 @@ export class TestSessions implements ISessions {
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'search' | 'fork'
+      | 'clear' | 'search' | 'fork' | 'delete'
     args: unknown[]
   }[] = []
 
@@ -487,6 +487,12 @@ export class TestSessions implements ISessions {
   fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId> {
     this.calls.push({ method: 'fork', args: [opts] })
     return Promise.resolve(opts.sessionId)
+  }
+
+  /** Recorded physical-delete stub for UI contract tests. */
+  delete(sessionId: SessionId): ReturnType<ISessions['delete']> {
+    this.calls.push({ method: 'delete', args: [sessionId] })
+    return Promise.resolve({ ok: true, value: { deleted: true } })
   }
 
   /**

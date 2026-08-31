@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { createUserMessage, CallId } from '@phoenix-ai/dsh-llm'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime, { RUN_CODE_NAME, defineContentToolFixture } from '@phoenix-ai/dsh-tools'
@@ -137,7 +137,8 @@ function expectPlanCodeSdkBindings(sdk: string): void {
   expect(sdk).toContain('read: Record<string, JsonValue>;')
   expect(sdk).toContain('write: Record<string, JsonValue>;')
   expect(sdk).toContain('interface ToolOutputMap {')
-  expect(sdk).toContain('exit_plan_mode: {\n    approved: true;\n  };')
+  expect(sdk).toContain('approved: true;')
+  expect(sdk).toContain('outcome: "ignored";')
   expect(sdk).toContain('[K in ToolName]: (args: ToolArgsMap[K]) => Promise<ToolOutputMap[K]>;')
 }
 
@@ -759,7 +760,7 @@ describe('exit_plan_mode', () => {
     const ctx = await setup()
     const schema = ctx.tools.schemas().find(entry => entry.name === EXIT_PLAN_MODE)
     const parameters = schema?.parameters as { required?: string[]; properties?: Record<string, unknown> }
-    expect(schema?.description).toMatch(/^Use only in plan mode\./)
+    expect(schema?.description).toMatch(/^Use in plan mode/)
     expect(Object.keys(parameters.properties ?? {})).toEqual(['plan'])
     expect(parameters.required).toEqual(['plan'])
   })
@@ -771,13 +772,22 @@ describe('exit_plan_mode', () => {
     expect(result.content).toEqual([{ type: 'text', text: 'Error: exit_plan_mode requires a calling agent (no session to switch)' }])
   })
 
-  it('rejects a call outside plan mode while remaining advertised', async () => {
+  it('turns a stale outside-plan call into a non-terminal continue result', async () => {
     const ctx = await setup()
     const agent = await agentWithSession(ctx)
     expect(ctx.tools.schemas().map(tool => tool.name)).toContain(EXIT_PLAN_MODE)
     const result = await callExit(ctx, agent)
-    expect(result.isError).toBe(true)
-    expect(result.content).toEqual([{ type: 'text', text: 'Error: exit_plan_mode is only available in plan mode' }])
+    expect(result.isError).toBe(false)
+    if (result.isError) throw new Error('expected stale exit to be recoverable')
+    expect(result.value).toEqual({
+      approved: false,
+      outcome: 'ignored',
+      reason: 'plan mode is already inactive; continue execution without another plan review',
+    })
+    expect(result.content).toEqual([{
+      type: 'text',
+      text: 'Plan mode is already inactive; continue execution without another plan review.',
+    }])
   })
 
   it('rejects an empty or heading-less plan before asking the reviewer', async () => {

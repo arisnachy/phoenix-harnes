@@ -4,7 +4,11 @@
 
 [`@phoenix-ai/dsh-code-runtime`](../code-runtime/README.zh.md) seam 的 CPython 子进程实现。与 [`@phoenix-ai/dsh-code-runtime-worker-thread`](../code-runtime-worker-thread/README.zh.md) 配套；以全新的 `python3` 子进程取代 Node worker 线程，让模型代码从 TypeScript 换成 Python。
 
-本包持有该 seam 的 wire protocol：host 侧的帧编解码，以及 Python 侧对同一套消息词汇的镜像。
+本包持有该 seam 的 wire protocol 和生产实现：host 侧的帧编解码、Python 侧对同一套消息词汇的镜像，以及注册为 `ctx.pythonCodeRuntime` 的 `PythonCodeRuntime`。
+
+## 提供者
+
+`PythonCodeRuntime` 为每次运行启动全新的 CPython 进程。它支持 `return`、`await tools.name(args)`、stdout/stderr 捕获、带类型的绑定错误、取消、墙钟超时、输出限制，以及在主机提供时启用 POSIX CPU/地址空间限制。进程接收空环境，并通过私有 fd-3 通道通信。它是隔离措施而不是安全边界；消费者仍必须在执行前应用产品 sandbox 和审批策略。
 
 ## Wire protocol
 
@@ -23,7 +27,8 @@ host 与 CPython 子进程在子进程的 fd 3 上交换一个无版本号的 JS
 
 无直接失效；具名消费者拥有任何请求前缀的变更。
 
-## Known Limitations and Deferred Work
+## 已知限制与延期工作
 
 - **跨语言 guard 覆盖运行时执行的面与帧字段形状** —— `tests/protocol-mirror.e2e.ts` 启动一个真实 `python3`，对照 `src/protocol.ts` 断言 `PROTOCOL_FD` / 日志截断标记文本，以及 `py/protocol.py` 中每个 `TypedDict` 的必填/可选 wire 字段集。它不比较字段的*类型*（例如 `cpuSeconds` 两侧都是 `int`）：跨 TypeScript 与 Python 比较类型声明在此无机械等价物，故类型级漂移仍由 review 加后端真子进程套件捕获，而非本包的测试。
-- **`src/index.ts` 只导出协议词汇** —— 本包不含子进程执行路径，也不含 Python 侧的 JSON codec，因此除 mirror 测试之外没有任何地方会启动 `python3`。
+- **Python 提供者需要已安装的 CPython** —— `pythonCommand` 可配置，Windows 默认使用 `python`，其他平台默认使用 `python3`。如果解释器不存在，提供者报告子进程失败，不会静默回退到 TypeScript。
+- **子进程是隔离措施而不是安全边界** —— 模型代码仍可使用 Python 标准库，因此执行前必须由产品 sandbox 和审批策略治理。

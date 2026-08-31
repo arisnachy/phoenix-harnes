@@ -1,7 +1,7 @@
 /** Session-fork boundaries, lineage, and inherited model routing. */
 
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import AgentRegistry, { agentEvents } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentHandle, CreateAgentOptions } from '@phoenix-ai/dsh-agent'
 import { createUserMessage, ReasoningEffortId } from '@phoenix-ai/dsh-llm'

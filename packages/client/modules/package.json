@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/client/modules"
   },
   "type": "module",
@@ -42,10 +42,10 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-host-webserver": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "files": [
     "lib/index.js",
@@ -55,8 +55,8 @@
   ],
   "peerDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-host-webserver": "workspace:^"
   }
 }

@@ -14,7 +14,7 @@
  * tears its scope down immediately unless it is the staged one, whose scope
  * survives frozen (read-only view) until the stage moves on.
  */
-import type { Context, Fiber } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@phoenix-ai/cordis'
 import type {
   IApiClient, RpcError, RpcResult, SessionId, SubagentAddress, JobView, WorkspaceId,
 } from '@phoenix-ai/dsh-api-remotes/client'
@@ -529,6 +529,11 @@ export class SessionRuntime implements ISessions {
       if (!renamed.ok) throw new Error(`fork child rename failed: ${renamed.error.code}: ${renamed.error.message}`)
     }
     return childId
+  }
+
+  /** Physically delete a cold session through the host and update selection. */
+  async delete(sessionId: SessionId): Promise<RpcResult<{ deleted: true }>> {
+    return this.manager.delete(sessionId)
   }
 
   /**

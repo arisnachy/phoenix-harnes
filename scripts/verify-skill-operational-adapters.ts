@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { resolveDshHome } from '@phoenix-ai/dsh-home-paths'
 import SkillRegistry, {
   adaptSkillDefinition,
@@ -100,23 +100,23 @@ await writeFile(evidencePath, `${JSON.stringify({
 }, null, 2)}\n`, 'utf8')
 
 const report = [
-  '# Informe individual de skills operativas',
+  '# Individual skill operational adapter report',
   '',
-  `Catálogo visible en este runtime: **${rows.length}** skills model-invocable. Resultado de carga: **${passed}/${rows.length}**.`,
+  `Visible catalog in this runtime: **${rows.length}** model-invocable skills. Load result: **${passed}/${rows.length}**.`,
   '',
-  'Cada fila fue cargada con `ctx.skills.get()`, adaptada con el perfil operativo y revisada por higiene de idioma. `executionMode` no significa que un servicio externo esté configurado.',
+  'Each row was loaded with `ctx.skills.get()`, adapted with the operational profile, and checked for language hygiene. `executionMode` does not mean that an external service is configured.',
   '',
-  '| Skill | Para qué sirve | Cómo cargarla | Entradas | Modo | Requisitos externos | Prueba |',
+  '| Skill | Purpose | How to load | Inputs | Mode | External requirements | Test |',
   '|---|---|---|---|---|---|---|',
-  ...rows.map(row => `| \`${row.name}\` | ${escapeCell(row.purpose)} | \`skill({ name: "${row.name}" })\` | ${row.requiredInputs.length > 0 ? row.requiredInputs.join(', ') : 'según la guía'} | ${row.executionMode} | ${row.externalRequirements.length > 0 ? escapeCell(row.externalRequirements.join('; ')) : 'ninguno detectado'} | ${row.loaded ? 'PASS' : `FAIL: ${escapeCell(row.error ?? 'error')}`} |`),
+  ...rows.map(row => `| \`${row.name}\` | ${escapeCell(row.purpose)} | \`skill({ name: "${row.name}" })\` | ${row.requiredInputs.length > 0 ? row.requiredInputs.join(', ') : 'see skill guide'} | ${row.executionMode} | ${row.externalRequirements.length > 0 ? escapeCell(row.externalRequirements.join('; ')) : 'none detected'} | ${row.loaded ? 'PASS' : `FAIL: ${escapeCell(row.error ?? 'error')}`} |`),
   '',
-  '## Regla de uso',
+  '## Usage rule',
   '',
-  'El modelo debe cargar la skill exacta antes de actuar, leer su preflight, pedir datos ambiguos y usar únicamente herramientas presentes en el runtime. Las skills `conditional` requieren sus dependencias; las `instruction-only` se pueden explicar, pero no se deben presentar como ejecutadas.',
+  'The model must load the exact skill before acting, read its preflight, request ambiguous data, and use only tools present in the runtime. `conditional` skills require their dependencies; `instruction-only` skills may be explained but must not be presented as executed.',
   '',
 ].join('\n')
 await mkdir(join(root, 'docs', 'subsystems'), { recursive: true })
-await writeFile(reportPath, `${report}\n`, 'utf8')
+await writeFile(reportPath, `${report.trimEnd()}\n`, 'utf8')
 const byCategory = new Map<string, VerificationRow[]>()
 for (const row of rows) {
   const category = categoryFor(row.name)
@@ -125,20 +125,20 @@ for (const row of rows) {
   byCategory.set(category, entries)
 }
 const categoryReport = [
-  '# Skills por categoría',
+  '# Skills by category',
   '',
-  `Catálogo visible: **${rows.length}** skills. Cada categoría conserva el nombre exacto y el propósito de cada skill.`,
+  `Visible catalog: **${rows.length}** skills. Each category preserves the exact name and purpose of every skill.`,
   '',
   ...[...byCategory.entries()].sort(([left], [right]) => left.localeCompare(right)).flatMap(([category, entries]) => [
     `## ${category} (${entries.length})`,
     '',
-    '| Skill | Qué hace | Modo | Prueba |',
+    '| Skill | Purpose | Mode | Test |',
     '|---|---|---|---|',
     ...entries.sort((left, right) => left.name.localeCompare(right.name)).map(row => `| \`${row.name}\` | ${escapeCell(row.purpose)} | ${row.executionMode} | ${row.loaded ? 'PASS' : 'FAIL'} |`),
     '',
   ]),
 ].join('\n')
-await writeFile(categoryReportPath, `${categoryReport}\n`, 'utf8')
+await writeFile(categoryReportPath, `${categoryReport.trimEnd()}\n`, 'utf8')
 process.stdout.write(`Skill operational adapters: ${passed}/${rows.length} passed\n`)
 if (failed > 0) process.exitCode = 1
 

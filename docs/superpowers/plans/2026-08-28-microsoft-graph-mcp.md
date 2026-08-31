@@ -70,7 +70,7 @@ Crear un fixture con `clientId`, `tenant: 'common'` y scopes delegados. Sustitui
 
 Las primeras pruebas deben cubrir:
 
-```ts
+```ts ignore-check
 it('normaliza configuración y rechaza scopes duplicados o vacíos', () => {})
 it('construye autorización Microsoft con PKCE, state y tenant common', async () => {})
 it('persiste únicamente { kind: api-key }', async () => {})
@@ -107,7 +107,7 @@ git commit -m "test: define Microsoft Graph OAuth boundary"
 
 Exportar:
 
-```ts
+```ts ignore-check
 export const MICROSOFT_ACCOUNT_KEY = credentialKey('authorization-microsoft', 'account')
 export interface MicrosoftConfig {
   clientId?: string

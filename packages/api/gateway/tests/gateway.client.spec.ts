@@ -1,5 +1,5 @@
-import { Context, Service } from '@deepseek-ai/cordis'
-import type { Fiber } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
+import type { Fiber } from '@phoenix-ai/cordis'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 import type { ConnectionHandle } from '@phoenix-ai/dsh-client-connection/client'
@@ -15,7 +15,7 @@ import TypertRegistry from '@phoenix-ai/dsh-typert-registry'
 import type { ClientRemote } from '../src/client/index.ts'
 import { apply, inject } from '../src/client/index.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Events {
     /**
      * Test-only forwarded Host event.

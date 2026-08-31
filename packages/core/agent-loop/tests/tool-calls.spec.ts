@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { createUserMessage, CallId, StreamChunk  } from '@phoenix-ai/dsh-llm'
 import SessionStore, { SessionEvent, SessionId } from '@phoenix-ai/dsh-session'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
@@ -12,7 +12,7 @@ import LlmRuntime from '@phoenix-ai/dsh-llm'
 import ToolRuntime, { defineContentToolFixture, TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER, type PostToolDecision, type PreToolDecision } from '@phoenix-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@phoenix-ai/dsh-agent'
 import AgentLoop, { DEFAULT_MAX_PARALLEL_TOOL_CALLS } from '@phoenix-ai/dsh-agent-loop'
-import { MockAdapter, textResponse } from './mock-adapter.ts'
+import { MockAdapter, textResponse, toolCallResponse } from './mock-adapter.ts'
 import { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'
 import type { CodeRunRequest, CodeRunResult } from '@phoenix-ai/dsh-code-runtime'
 
@@ -97,6 +97,40 @@ async function until(predicate: () => boolean): Promise<void> {
 }
 
 describe('tool-call scheduler: grouping and barriers', () => {
+  it('adds a durable recovery instruction after an invalid exit_plan_mode call', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'failing', { id: '1' }),
+      textResponse('continued after recovery'),
+    ])
+    const ctx = await harness(adapter)
+    ctx.tools.register(defineContentToolFixture({
+      name: 'exit_plan_mode',
+      description: 'only works while plan mode is active',
+      parameters: { id: { type: 'string', required: true } },
+      async execute() { throw new Error('exit_plan_mode is only available in plan mode') },
+    }))
+    const agent = ctx.agentLoop.create(SessionId('recovery'), { provider: 'mock', model: 'mock' })
+
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'finish the task' }], source: { kind: 'user' } }))
+    await until(() => adapter.requests.length === 2)
+    await agent.whenIdle()
+
+    expect(adapter.requests).toHaveLength(2)
+    const recoveryMessage = adapter.requests[1]!.messages.find(message => message.content[0]?.type === 'text'
+      && message.content[0].text.includes('Do not treat this tool failure as mission failure'))
+    expect(recoveryMessage?.content[0]).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('Do not treat this tool failure as mission failure'),
+    })
+    expect(recoveryMessage?.content[0]).toMatchObject({
+      text: expect.stringContaining('change strategy and continue'),
+    })
+    expect(events(agent).some(event => event.type === 'user/message'
+      && event.data.source.kind === 'plugin'
+      && event.data.content[0]?.type === 'text'
+      && event.data.content[0].text.includes('Do not treat this tool failure as mission failure'))).toBe(true)
+  })
+
   it('runs parallel-safe siblings concurrently (all start before any completes)', async () => {
     const adapter = new MockAdapter([
       multiCall([{ id: 'c1', name: 'p', args: { id: '1' } }, { id: 'c2', name: 'p', args: { id: '2' } }, { id: 'c3', name: 'p', args: { id: '3' } }]),
@@ -412,7 +446,10 @@ describe('tool-call scheduler: ordered middleware and additional contexts', () =
     const log = events(agent)
     const contextTexts = log.filter(e => e.type === 'user/message' && e.data.source.kind === 'plugin')
       .map(e => ((e.data as { content: { text: string }[] }).content[0]!).text)
-    expect(contextTexts).toEqual(['ctx-c1', 'ctx-c2'])
+    expect(contextTexts.slice(0, 2)).toEqual(['ctx-c1', 'ctx-c2'])
+    expect(contextTexts.slice(2)).toEqual([
+      expect.stringContaining('Before calling more tools, send the user a brief progress update'),
+    ])
     const lastResult = log.findLastIndex(e => e.type === 'tool/result')
     const firstContext = log.findIndex(e => e.type === 'user/message' && e.data.source.kind === 'plugin')
     expect(lastResult).toBeLessThan(firstContext)
@@ -573,6 +610,7 @@ describe('tool-call scheduler: abort handling', () => {
       .toEqual([
         { type: 'text', text: 'ctx-c1' },
         { type: 'text', text: 'ctx-c2' },
+        { type: 'text', text: expect.stringContaining('Before calling more tools, send the user a brief progress update') },
       ])
 
     const idle = waitForIdle(ctx, agent)
@@ -585,7 +623,11 @@ describe('tool-call scheduler: abort handling', () => {
         && e.data.content[0]?.type === 'text'
         ? [e.data.content[0].text]
         : []))
-      .toEqual(['ctx-c1', 'ctx-c2'])
+      .toEqual([
+        'ctx-c1',
+        'ctx-c2',
+        expect.stringContaining('Before calling more tools, send the user a brief progress update'),
+      ])
   })
 
   it('does not run an exclusive barrier after a parallel group aborts', async () => {

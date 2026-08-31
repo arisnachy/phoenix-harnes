@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import { Context } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import CommandRuntime, { type CommandResult } from '@phoenix-ai/dsh-commands'
 import {

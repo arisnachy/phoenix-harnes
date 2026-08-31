@@ -1,6 +1,6 @@
 /** First-party Host inspect providers registered by the Cordis tool package. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { HOST_BUILTIN_INSPECTION } from '@phoenix-ai/dsh-cordis-host-runner'
 import type { HostCordisInspectProviderRegistration } from '@phoenix-ai/dsh-cordis-host-runner'
 import type { JsonValue } from '@phoenix-ai/dsh-session'

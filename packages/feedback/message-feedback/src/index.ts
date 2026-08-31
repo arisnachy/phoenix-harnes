@@ -5,8 +5,8 @@
 
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
-import { Context, Service } from '@deepseek-ai/cordis'
-import s from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import s from '@phoenix-ai/schemastery'
 import { deriveEventMessage, isAppendSurfaceEvent } from '@phoenix-ai/dsh-session/surface'
 import type { SessionHeader, SessionId } from '@phoenix-ai/dsh-session/types'
 import type { SessionInspection } from '@phoenix-ai/dsh-session-persistence'
@@ -51,7 +51,7 @@ export interface Config {
   readonly maxNoteBytes: number
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     messageFeedback: MessageFeedbackService
   }

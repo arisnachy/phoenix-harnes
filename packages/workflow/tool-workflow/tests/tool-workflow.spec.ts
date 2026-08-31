@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import { Context } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH } from '@phoenix-ai/dsh-tools'
 import type { ToolExecutionResult, ToolExecutionToken } from '@phoenix-ai/dsh-tools'

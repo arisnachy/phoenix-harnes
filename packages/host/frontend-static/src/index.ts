@@ -14,8 +14,8 @@
 import type { ServerResponse } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-host-webserver'
 
 /** Stable Cordis plugin name. */
@@ -92,7 +92,15 @@ export async function serveStatic(
     res.end()
     return
   }
-  res.writeHead(200, { 'content-type': type })
+  const shell = target === distRoot || target === distIndex
+  res.writeHead(200, {
+    'content-type': type,
+    ...(shell ? {
+      'cache-control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      pragma: 'no-cache',
+      expires: '0',
+    } : {}),
+  })
   res.end(body)
 }
 

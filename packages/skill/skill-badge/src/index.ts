@@ -6,7 +6,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import {
   BUNDLED_SKILL_RANK,
   type SkillCandidate,

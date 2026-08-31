@@ -17,7 +17,7 @@ Services normally extend `TypertRemoteService` so the constructor explicitly bin
 ```ts
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { TypertRemoteService, Remote, RemoteScope } from '@phoenix-ai/dsh-typert-protocol'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 
 export interface CreateGoalRequest {
   objective: string
@@ -60,7 +60,7 @@ The Client uses concrete functions on ordinary objects, not a JavaScript Proxy. 
 ```ts ignore-check
 import type { SessionId } from '@phoenix-ai/dsh-session/types'
 import type { AgentContext } from '@phoenix-ai/dsh-client-runtime/client'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-api-remotes/client'
 
 export const inject = ['remote', 'remote.goals']

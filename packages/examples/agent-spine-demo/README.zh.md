@@ -11,7 +11,7 @@
 `apply(ctx, config)` 将以下每个插件挂载为组合包 fiber 的子节点：
 
 ```
-@deepseek-ai/cordis-plugin-timer  timer service (writes nothing to stdout)
+@phoenix-ai/cordis-plugin-timer  timer service (writes nothing to stdout)
 @phoenix-ai/dsh-llm              abstract LLM service + content-block vocabulary
 @phoenix-ai/dsh-session          event-sourced session log + store
 @phoenix-ai/dsh-session-title    log-backed title service + deterministic fallback

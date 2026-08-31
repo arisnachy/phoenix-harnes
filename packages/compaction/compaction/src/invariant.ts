@@ -1,6 +1,6 @@
 /** Package-owned compaction log-stream invariants. @module @phoenix-ai/dsh-compaction/invariant */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { isReplacementSurfaceEvent } from '@phoenix-ai/dsh-session'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'

@@ -1,5 +1,5 @@
 /** Browser runtime services for slots, sessions, workspaces, and connection-stream delivery. */
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { ConnectionHandle, SessionId } from '@phoenix-ai/dsh-api-remotes/client'
 // Type-only: the ctx.remote merge. Deliberately the gateway's Client half rather
 // than api-remotes': that face imports a Host-tsdown-generated artifact, and this
@@ -150,7 +150,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
   }
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Events {
     /**
      * A slot's definition or registration set changed.

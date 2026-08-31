@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import type { ChatNodeViewProps } from '../contract/slots.ts'
 import { normalizeHardnessArtifact } from '../conversation-nodes/hardness-artifact.ts'
 import { UniversalArtifactSurface } from './UniversalArtifactSurface.tsx'
@@ -9,7 +9,10 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
   node, runArtifact,
 }: ChatNodeViewProps<'hardness-artifact'>) {
   const artifact = node.data
-  const [result, setResult] = useState<Readonly<Record<string, unknown>> | undefined>(undefined)
+  const [result, setResult] = useState<Readonly<Record<string, unknown>> | undefined>(artifact.result)
+  useEffect(() => {
+    if (artifact.result !== undefined) setResult(artifact.result)
+  }, [artifact.result])
   const universal = normalizeHardnessArtifact({
     id: artifact.artifactId,
     title: artifact.title,
@@ -33,6 +36,7 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
             ? { onRun: async (signal) => {
               const value = await runArtifact({
                 id: universal.id, mime: universal.mime, data: code,
+                callId: artifact.callId,
                 ...universal.language === undefined ? {} : { language: universal.language },
               }, signal)
               setResult(typeof value === 'object' && value !== null && !Array.isArray(value)

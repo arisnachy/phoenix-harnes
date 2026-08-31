@@ -73,6 +73,10 @@ interface ApprovalRequest {
   readonly callId?: CallId
   /** The asker's human-readable explanation of WHY it is asking. */
   readonly reason?: string
+  /** Risk class used for the no-answer recommendation. */
+  readonly risk?: ApprovalRisk
+  /** Whether the requested action can be undone without external side effects. */
+  readonly reversible?: boolean
   /**
    * Aborting withdraws the question: the request settles `'cancelled'`
    * immediately and a late answer from a still-pending answerer is discarded.

@@ -4,8 +4,8 @@
  * @module @phoenix-ai/dsh-compaction-basic
  */
 
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { CompactionEngine, ManualCompactionError } from '@phoenix-ai/dsh-compaction'
 import type { CompactionResult, CompactionTrigger } from '@phoenix-ai/dsh-compaction'
 import type { TokenMeter } from '@phoenix-ai/dsh-token-meter'

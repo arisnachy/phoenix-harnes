@@ -65,6 +65,16 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+.action svg {
+  width: 16px;
+  height: 16px;
+}
+
+.action[data-speaking] {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 /* Unavailable stays focusable and hoverable so Tooltip can explain why. */
 .action[data-unavailable] {
   cursor: default;

@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { McpConnectorRegistry } from '@phoenix-ai/dsh-mcp-connector-registry'
 
 export const name = 'connector-inventory-fixture'

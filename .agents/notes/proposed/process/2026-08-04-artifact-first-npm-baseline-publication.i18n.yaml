@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/process/2026-08-04-artifact-first-npm-baseline-publication.md
-2026-08-04-artifact-first-npm-baseline-publication.md: f41616aeeeb402c88bb910253d3437dfd02056d0
-2026-08-04-artifact-first-npm-baseline-publication.zh.md: 36348464bf5378ed906eae49cfacff9522f5900d
+2026-08-04-artifact-first-npm-baseline-publication.md: 857f725f1831be2cdafb284dd2769002f5182418
+2026-08-04-artifact-first-npm-baseline-publication.zh.md: 4d94c60e440d55df6120e96d127bc958f2c0d6e4

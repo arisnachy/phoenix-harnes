@@ -12,8 +12,22 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 | `dsh --profile headless "job"` | Run one fresh persisted session, print the final answer, and exit. |
 | `dsh web` | Alias of `--profile web`. |
 | `dsh plugin --profile <name> <pnpm args>` | Manage a profile's plugins by forwarding to pnpm in the profile directory. |
+| `dsh chatgpt-web <start\|status\|stop>` | Start, inspect, or stop an explicitly configured local ChatGPT Web Responses bridge. |
 
 The invoking directory is the default workspace root. The `web` and `headless` profiles auto-initialize on first use from shipped templates; any other profile must be created through `dsh plugin`.
+
+## ChatGPT Web bridge
+
+PHOENIX can use the local [codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) bridge as the `chatgpt-web` model route. The bridge owns browser login and cookies; PHOENIX never imports or stores them. Configure its executable as a JSON argv array so no shell is involved:
+
+```powershell
+$env:PHOENIX_CHATGPT_WEB_COMMAND = '["node","C:\\path\\to\\codex-chatgpt-web\\server.mjs"]'
+$env:PHOENIX_CHATGPT_WEB_URL = 'http://127.0.0.1:17841/v1'
+dsh chatgpt-web start
+dsh chatgpt-web status
+```
+
+Only loopback endpoints are accepted. The lifecycle record stores the process id and endpoint, never command-line secrets. `dsh doctor` checks a configured bridge without starting or modifying it.
 
 ## App arguments
 

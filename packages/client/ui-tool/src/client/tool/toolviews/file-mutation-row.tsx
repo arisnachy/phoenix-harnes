@@ -8,7 +8,7 @@
 // `result.isError`) keeps the model-facing error text on ToolRow's Output
 // section, its first line in the collapsed summary.
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { IconEditOutline16 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'

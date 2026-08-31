@@ -80,10 +80,11 @@ export function ComposerAttachments({
 
   const railItems = useMemo<ComposerRailItem[]>(() => attachments.map(attachment => ({
     id: attachment.id,
-    previewUrl: attachment.previewUrl,
-    alt: attachment.file.name || t('image.pending'),
-    removeLabel: t('image.remove', { name: attachment.file.name }),
+    kind: attachment.kind,
+    alt: attachment.file.name || t(attachment.kind === 'file' ? 'file.pending' : 'image.pending'),
+    removeLabel: t(attachment.kind === 'file' ? 'file.remove' : 'image.remove', { name: attachment.file.name }),
     attachment,
+    ...attachment.previewUrl === undefined ? {} : { previewUrl: attachment.previewUrl },
   })), [attachments, t])
 
   return (
@@ -91,7 +92,7 @@ export function ComposerAttachments({
       {dragActive && (
         <DropOverlay
           disabled={!canAcceptDrop}
-          labels={dropOverlayLabels(t, canAcceptDrop, dropLimits)}
+          labels={dropOverlayLabels(t, canAcceptDrop, dropLimits, attachments.some(attachment => attachment.kind === 'file'))}
         />
       )}
       {railItems.length > 0 && (
@@ -99,12 +100,16 @@ export function ComposerAttachments({
           <AttachmentRail
             items={railItems}
             labels={attachmentRailLabels(t)}
-            onOpen={(item) => { setPreview(item.attachment) }}
+            onOpen={(item) => {
+              if (item.attachment.kind === 'image' && item.attachment.previewUrl !== undefined) {
+                setPreview(item.attachment)
+              }
+            }}
             onRemove={(item) => { onRemoveImage(item.attachment.id) }}
           />
         </div>
       )}
-      {preview !== null && (
+      {preview?.kind === 'image' && preview.previewUrl !== undefined && (
         <ImageLightbox
           src={preview.previewUrl}
           alt={preview.file.name || t('image.original')}

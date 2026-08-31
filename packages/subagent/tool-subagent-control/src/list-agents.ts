@@ -7,7 +7,7 @@
  * @module @phoenix-ai/dsh-tool-subagent-control/list-agents
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { SessionId } from '@phoenix-ai/dsh-session'

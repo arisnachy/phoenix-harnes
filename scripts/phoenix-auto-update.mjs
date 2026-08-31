@@ -34,6 +34,7 @@ const FETCH_RETRY_MS = 750
 const STATE_FILE = 'phoenix-update-state.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
+const REFRESH_REQUEST_FILE = 'phoenix-update-refresh-request.json'
 const UPDATE_MODE = normalizeMode(process.env.PHOENIX_UPDATE_MODE ?? 'auto')
 
 function normalizeMode(value) {
@@ -108,6 +109,10 @@ function preparedPath(root) {
 
 function restartRequestPath(root) {
   return join(gitDirectory(root), RESTART_REQUEST_FILE)
+}
+
+function refreshRequestPath(root) {
+  return join(gitDirectory(root), REFRESH_REQUEST_FILE)
 }
 
 function remoteMatchesExpected(root) {
@@ -545,9 +550,10 @@ function parentAlive(pid) {
 
 const sleep = ms => new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 
-async function waitForPollOrParentExit(parentPid, waitMs) {
+async function waitForPollOrParentExit(root, parentPid, waitMs) {
   const deadline = Date.now() + waitMs
   while (parentAlive(parentPid) && Date.now() < deadline) {
+    if (existsSync(refreshRequestPath(root))) return
     await sleep(Math.min(500, Math.max(0, deadline - Date.now())))
   }
 }
@@ -577,6 +583,16 @@ function clearRestartRequest(root) {
   } catch (error) {
     if (error?.code !== 'ENOENT') {
       console.error(`[PHOENIX UPDATE] warning: could not clear restart request: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+}
+
+function clearRefreshRequest(root) {
+  try {
+    unlinkSync(refreshRequestPath(root))
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.error(`[PHOENIX UPDATE] warning: could not clear refresh request: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 }
@@ -660,6 +676,7 @@ async function watch(root, parentPid) {
   let pending
   let preparedTarget
   recoverStaleStagingIndexLock(root)
+  clearRefreshRequest(root)
   writeState(root, {
     status: 'checking',
     phase: 'channel',
@@ -667,6 +684,7 @@ async function watch(root, parentPid) {
   })
 
   while (parentAlive(parentPid)) {
+    clearRefreshRequest(root)
     let inspection
     try {
       inspection = inspectUpdate(root)
@@ -679,7 +697,7 @@ async function watch(root, parentPid) {
         phase: 'retry',
         detail: 'The stable channel is temporarily unavailable. PHOENIX will retry automatically.',
       })
-      await waitForPollOrParentExit(parentPid, pollInterval())
+      await waitForPollOrParentExit(root, parentPid, pollInterval())
       continue
     }
 
@@ -747,7 +765,7 @@ async function watch(root, parentPid) {
       })
     }
 
-    await waitForPollOrParentExit(parentPid, pollInterval())
+    await waitForPollOrParentExit(root, parentPid, pollInterval())
   }
 
   await finishAfterParentExit(root, pending, preparedTarget)

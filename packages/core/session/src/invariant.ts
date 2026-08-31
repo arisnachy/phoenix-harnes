@@ -5,7 +5,7 @@
  * @module @phoenix-ai/dsh-session/invariant
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { assertNever } from '@phoenix-ai/dsh-llm'
 import type { CallId } from '@phoenix-ai/dsh-llm'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'

@@ -49,7 +49,7 @@
 `BasicCompactionEngine` 需要 `ctx.llm`、`ctx.tokenMeter` 和 `ctx.sessions`。以下组合从其宿主接收 `ctx.llm`，并安装另外两项服务：
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { BasicCompactionEngine } from '@phoenix-ai/dsh-compaction-basic'
 import SessionStore from '@phoenix-ai/dsh-session'
 import TokenMeter from '@phoenix-ai/dsh-token-meter'

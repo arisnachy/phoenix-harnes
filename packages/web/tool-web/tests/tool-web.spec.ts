@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import TurndownService from 'turndown'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'

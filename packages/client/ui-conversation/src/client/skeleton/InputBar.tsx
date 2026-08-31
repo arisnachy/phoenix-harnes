@@ -6,11 +6,11 @@
  * region-slot content) ride the owner props. Session facts
  * (running/removed/promptError) are self-selected via useSession. */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
+  IconPaperclipOutline16, IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 // Type-only: the `plan` projection key merge (the TodoDock posture — the
 // composer reads a host-computed value; the domain owns the key).
@@ -30,6 +30,11 @@ import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
+import {
+  createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, setVoiceAssistantActive,
+  setVoiceAssistantListening, subscribeVoiceAssistant,
+  type VoiceInputState, type VoiceRecognitionLike,
+} from '../voice.ts'
 import css from './InputBar.module.css'
 
 /** Decoration product of the no-session state (no machine, empty draft). */
@@ -119,6 +124,7 @@ export function InputBar({
   // The deployment's image-intake limits (absent while no attachment service
   // is composed — the pre-check below then defers entirely to the host).
   const imageLimits = useProjection('imageLimits')
+  const fileLimits = useProjection('fileLimits')
   // Prompt failures are ordinary failures (no create/attach transaction exists
   // anymore): the toast announces promptError, the draft stays in the machine,
   // and the user resubmits. A remount over a session whose machine still holds
@@ -129,13 +135,14 @@ export function InputBar({
   useEffect(() => {
     if (promptError === null) return
     showToast(promptError.error.code === 'attachment-error'
-      ? attachmentErrorText(t, promptError.error.details.reason, imageLimits)
+      ? attachmentErrorText(t, promptError.error.details.reason, imageLimits, fileLimits)
       : `${promptError.error.message} (${promptError.error.code})`)
-  }, [promptError, showToast, t, imageLimits])
+  }, [promptError, showToast, t, imageLimits, fileLimits])
   useEffect(() => {
     if (notice?.level === 'error') showToast(notice.text)
   }, [notice, showToast])
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const cardRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
@@ -181,6 +188,97 @@ export function InputBar({
   const textareaDisabled = removed || (locked && !workspaceTrigger)
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
+
+  // Voice is an explicit browser capability. Hands-free mode keeps the browser
+  // recognizer alive across turns, submits each final transcript automatically,
+  // and lets the assistant tail speak the next completed response.
+  const [voiceState, setVoiceState] = useState<VoiceInputState>(() => (
+    hasVoiceRecognition() ? 'idle' : 'unsupported'
+  ))
+  const voiceAssistant = useSyncExternalStore(
+    subscribeVoiceAssistant,
+    getVoiceAssistantSnapshot,
+    getVoiceAssistantSnapshot,
+  )
+  const voiceEnabled = voiceAssistant.active
+  const voiceRef = useRef<VoiceRecognitionLike | null>(null)
+  const voiceSubmitPendingRef = useRef(false)
+  const appendVoiceText = useCallback((text: string): void => {
+    if (keyboard === undefined || locked || machineBusy) return
+    const current = keyboard.snapshot.draft
+    const separator = current !== '' && !/\s$/u.test(current) ? ' ' : ''
+    const next = `${current}${separator}${text}`
+    keyboard.setDraft(next, {
+      start: current.length,
+      end: current.length,
+      insertedLength: separator.length + text.length,
+    })
+    keyboard.track(next, next.length)
+    voiceSubmitPendingRef.current = true
+    requestAnimationFrame(() => { inputRef.current?.focus({ preventScroll: true }) })
+  }, [keyboard, locked, machineBusy])
+  const startVoiceRecognition = useCallback((): void => {
+    const recognition = voiceRef.current
+    if (recognition === null || voiceState === 'listening' || locked || machineBusy || running) return
+    try {
+      recognition.start()
+    } catch {
+      voiceRef.current = null
+      setVoiceAssistantActive(false)
+      setVoiceState('error')
+    }
+  }, [locked, machineBusy, running, voiceState])
+  useEffect(() => () => {
+    setVoiceAssistantActive(false)
+    voiceRef.current?.abort()
+    voiceRef.current = null
+  }, [])
+  const toggleVoice = useCallback((): void => {
+    if (locked || machineBusy) return
+    if (voiceEnabled) {
+      setVoiceAssistantActive(false)
+      voiceRef.current?.stop()
+      return
+    }
+    const recognition = createVoiceRecognition(
+      appendVoiceText,
+      (next) => {
+        setVoiceState(next)
+        setVoiceAssistantListening(next === 'listening')
+        if (next === 'permission-denied' || next === 'error') {
+          setVoiceAssistantActive(false)
+          voiceRef.current = null
+        }
+      },
+    )
+    if (recognition === undefined) {
+      setVoiceState('unsupported')
+      return
+    }
+    setVoiceAssistantActive(true)
+    voiceRef.current = recognition
+    startVoiceRecognition()
+  }, [appendVoiceText, locked, machineBusy, startVoiceRecognition, voiceEnabled])
+
+  // A final recognition fragment is a complete voice turn. Waiting for the
+  // machine's published draft avoids submitting the previous draft snapshot.
+  useEffect(() => {
+    if (!voiceSubmitPendingRef.current || input === undefined || keyboard === undefined) return
+    if (input.phase !== 'plain' || input.draft.trim() === '') return
+    voiceSubmitPendingRef.current = false
+    voiceRef.current?.stop()
+    keyboard.submit('queue')
+  }, [input?.draft, input?.phase, keyboard])
+
+  // Chrome/WebKit can end a recognition segment after a response or due to a
+  // browser timeout. Restart only while the user explicitly enabled hands-free
+  // mode, with a small delay that prevents an end/start busy loop.
+  useEffect(() => {
+    if (!voiceAssistant.active || voiceAssistant.phase === 'speaking' || voiceState !== 'idle'
+      || locked || machineBusy || running || voiceSubmitPendingRef.current || voiceRef.current === null) return
+    const timer = window.setTimeout(startVoiceRecognition, 250)
+    return () => { window.clearTimeout(timer) }
+  }, [locked, machineBusy, running, startVoiceRecognition, voiceAssistant.active, voiceAssistant.phase, voiceState])
 
   useEffect(() => {
     if (input === undefined || inputActions === undefined) return
@@ -510,29 +608,47 @@ export function InputBar({
   const intakeImages = useCallback((files: readonly File[]): void => {
     if (addImages === undefined || files.length === 0) return
     const rejected = ((): string | null => {
-      if (imageLimits !== undefined) {
-        // Format precedes limits (DeepSeek Chat's filter order): a batch with
-        // a non-image must announce the format problem, not a count or size
-        // it could never pass anyway — addImages rejects it authoritatively.
-        if (files.some(file => !(imageLimits.mediaTypes as readonly string[]).includes(file.type))) {
-          return addImages(files)
-        }
-        if (attachments.length + files.length > imageLimits.maxImagesPerMessage) {
+      const imageFiles = files.filter(file => (imageLimits?.mediaTypes as readonly string[] | undefined)?.includes(file.type) === true)
+      const genericFiles = files.filter(file => !imageFiles.includes(file))
+      const existingImages = attachments.filter(attachment => attachment.kind === 'image')
+      const existingFiles = attachments.filter(attachment => attachment.kind === 'file')
+      if (imageLimits !== undefined && imageFiles.length > 0) {
+        if (existingImages.length + imageFiles.length > imageLimits.maxImagesPerMessage) {
           return t('image.tooMany', { count: imageLimits.maxImagesPerMessage })
         }
-        if (files.some(file => file.size > imageLimits.maxImageBytes)) {
+        if (imageFiles.some(file => file.size > imageLimits.maxImageBytes)) {
           return t('image.fileTooLarge', { size: imageSizeText(imageLimits.maxImageBytes) })
         }
-        const total = attachments.reduce((sum, attachment) => sum + attachment.file.size, 0)
-          + files.reduce((sum, file) => sum + file.size, 0)
+        const total = existingImages.reduce((sum, attachment) => sum + attachment.file.size, 0)
+          + imageFiles.reduce((sum, file) => sum + file.size, 0)
         if (total > imageLimits.maxMessageImageBytes) {
           return t('image.totalTooLarge', { size: imageSizeText(imageLimits.maxMessageImageBytes) })
+        }
+      }
+      if (fileLimits !== undefined && genericFiles.length > 0) {
+        if (existingFiles.length + genericFiles.length > fileLimits.maxFilesPerMessage) {
+          return t('file.tooMany', { count: fileLimits.maxFilesPerMessage })
+        }
+        if (genericFiles.some(file => file.size > fileLimits.maxFileBytes)) {
+          return t('file.fileTooLarge', { size: imageSizeText(fileLimits.maxFileBytes) })
+        }
+        const total = existingFiles.reduce((sum, attachment) => sum + attachment.file.size, 0)
+          + genericFiles.reduce((sum, file) => sum + file.size, 0)
+        if (total > fileLimits.maxMessageFileBytes) {
+          return t('file.totalTooLarge', { size: imageSizeText(fileLimits.maxMessageFileBytes) })
         }
       }
       return addImages(files)
     })()
     if (rejected !== null) showToast(rejected)
-  }, [addImages, attachments, imageLimits, showToast, t])
+  }, [addImages, attachments, fileLimits, imageLimits, showToast, t])
+
+  const onFilesSelected = useCallback((event: ChangeEvent<HTMLInputElement>): void => {
+    intakeImages(Array.from(event.currentTarget.files ?? []))
+    // Allow selecting the same file again after removing it or correcting a
+    // validation error; browsers otherwise do not emit a second change event.
+    event.currentTarget.value = ''
+  }, [intakeImages])
 
   const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
 
@@ -712,10 +828,11 @@ export function InputBar({
           canAcceptDrop,
           onAddImages: intakeImages,
           onRemoveImage: (id) => { removeImage?.(id) },
-          dropLimits: imageLimits === undefined ? undefined : {
-            count: imageLimits.maxImagesPerMessage,
-            size: imageSizeText(imageLimits.maxImageBytes),
+          dropLimits: imageLimits === undefined && fileLimits === undefined ? undefined : {
+            count: fileLimits?.maxFilesPerMessage ?? imageLimits?.maxImagesPerMessage ?? 0,
+            size: imageSizeText(fileLimits?.maxFileBytes ?? imageLimits?.maxImageBytes ?? 0),
           },
+          fileLimits,
         })}
         {/* One scrollport, two text layers. The hidden mirror renders draft+'\n' and stretches the
             stack to the draft's FULL height (counting rows by '\n' cannot see soft wraps); the
@@ -783,6 +900,27 @@ export function InputBar({
                 <IconPlusOutline16 size={14} />
               </button>
             </Tooltip>
+            <Tooltip label={t('input.attachments')} side="top" delayMs={500}>
+              <button
+                type="button"
+                className={css.add}
+                aria-label={t('input.attachments')}
+                disabled={!canAcceptDrop}
+                onMouseDown={keepFocus}
+                onClick={() => { fileInputRef.current?.click() }}
+              >
+                <IconPaperclipOutline16 size={14} />
+              </button>
+            </Tooltip>
+            <input
+              ref={fileInputRef}
+              className={css.filePicker}
+              type="file"
+              multiple
+              tabIndex={-1}
+              aria-hidden="true"
+              onChange={onFilesSelected}
+            />
             <div className={css.modes}>
               {accessSelect}
               {renderSlot('conversation.input.plan', { locked })}
@@ -793,6 +931,28 @@ export function InputBar({
             {rightItems}
             {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
+            {voiceState !== 'unsupported' && (
+              <Tooltip
+                label={voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
+                side="top"
+                delayMs={500}
+              >
+                <button
+                  type="button"
+                  className={clsx(css.voice, voiceEnabled && css.voiceActive)}
+                  aria-label={voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
+                  aria-pressed={voiceEnabled}
+                  data-voice-state={voiceState}
+                  disabled={locked || machineBusy}
+                  onMouseDown={keepFocus}
+                  onClick={toggleVoice}
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4 6.5a4 4 0 0 0 8 0h1.5a5.5 5.5 0 0 1-4.75 5.44V15h-1.5v-1.56A5.5 5.5 0 0 1 2.5 8H4Z" fill="currentColor" />
+                  </svg>
+                </button>
+              </Tooltip>
+            )}
             {interruptible && (
               <Tooltip label={t('input.stop')} side="top" delayMs={500}>
                 <button

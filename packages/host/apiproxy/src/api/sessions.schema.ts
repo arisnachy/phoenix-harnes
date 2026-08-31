@@ -15,7 +15,9 @@ import type {
   ModelReasoningEffort, ModelSelection, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem, SessionSummary,
 } from './sessions.ts'
 import type { ToolEventView } from './events.ts'
-import type { AttachmentIdType, ImageAttachmentLimits, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type {
+  AttachmentIdType, FileAttachmentLimits, FileAttachmentRef, ImageAttachmentLimits, ImageAttachmentRef,
+} from '@phoenix-ai/dsh-attachment'
 import type { WorkspaceId } from './workspace.ts'
 import {
   SESSION_SEARCH_RESULT_LIMIT,
@@ -127,6 +129,16 @@ export const sessionRenameValueSchema = z.object({
   seq: z.number().int().nonnegative(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.rename'>>>
 
+/** session.delete request payload. */
+export const sessionDeleteRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'session.delete'>>>
+
+/** session.delete response value. */
+export const sessionDeleteValueSchema = z.object({
+  deleted: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'session.delete'>>>
+
 /** session.fork request payload (atSeq anchors the completed-turn cut). */
 export const sessionForkRequestSchema = z.object({
   sessionId: sessionIdSchema,
@@ -235,6 +247,13 @@ export const imageLimitsProjectionSchema = z.object({
   mediaTypes: z.array(z.string()),
 }) as unknown as z.ZodType<ImageAttachmentLimits>
 
+/** Host-side validation for arbitrary-file intake limits. */
+export const fileLimitsProjectionSchema = z.object({
+  maxFileBytes: z.number().int().positive(),
+  maxFilesPerMessage: z.number().int().positive(),
+  maxMessageFileBytes: z.number().int().positive(),
+}) as unknown as z.ZodType<FileAttachmentLimits>
+
 /** session.history response value (projections rides the tail page only). */
 export const sessionHistoryValueSchema: z.ZodType<Wire<ResponseValue<'session.history'>>> = z.object({
   events: z.array(historyEntrySchema),
@@ -283,6 +302,7 @@ export const imageMediaTypeSchema = z.union([
 export const promptContentPartSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), text: z.string() }),
   z.object({ type: z.literal('image'), mediaType: imageMediaTypeSchema, data: z.string(), name: z.string().optional() }),
+  z.object({ type: z.literal('file'), mediaType: z.string().min(1), data: z.string(), name: z.string().optional() }),
 ])
 
 /** session.prompt request payload, including optional browser-local request provenance. */
@@ -315,6 +335,14 @@ export const imageAttachmentRefSchema = z.object({
   name: z.string().optional(),
 }) as unknown as z.ZodType<ImageAttachmentRef>
 
+/** Durable arbitrary-file reference returned from an authenticated session lookup. */
+export const fileAttachmentRefSchema = z.object({
+  attachmentId: attachmentIdSchema,
+  mediaType: z.string().min(1),
+  bytes: z.number().int().positive(),
+  name: z.string().optional(),
+}) as unknown as z.ZodType<FileAttachmentRef>
+
 /** session.attachment request payload. */
 export const sessionAttachmentRequestSchema = z.object({
   sessionId: sessionIdSchema,
@@ -323,9 +351,9 @@ export const sessionAttachmentRequestSchema = z.object({
 
 /** session.attachment response value. */
 export const sessionAttachmentValueSchema = z.object({
-  attachment: imageAttachmentRefSchema,
+  attachment: z.union([imageAttachmentRefSchema, fileAttachmentRefSchema]),
   data: z.string(),
-}) satisfies z.ZodType<Wire<ResponseValue<'session.attachment'>>>
+}) as unknown as z.ZodType<Wire<ResponseValue<'session.attachment'>>>
 
 /** session.updateQueue request payload. */
 export const sessionUpdateQueueRequestSchema = z.object({

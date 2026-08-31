@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/hooks/hooks-claude-code"
   },
   "type": "module",
@@ -32,7 +32,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@phoenix-ai/schemastery": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
@@ -43,7 +43,7 @@
     "@phoenix-ai/dsh-session-persistence": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
@@ -60,6 +60,6 @@
     "@phoenix-ai/dsh-session-persistence-jsonl": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

@@ -5,7 +5,7 @@
 import { mkdtempSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WebBootGraph, ClientModuleRegistry } from '@phoenix-ai/dsh-client-modules'
 import type { WebRoute, WebServer } from '@phoenix-ai/dsh-host-webserver'

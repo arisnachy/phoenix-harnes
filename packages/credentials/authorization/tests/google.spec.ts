@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import AuthorizationService from '@phoenix-ai/dsh-authorization'
 import GoogleApiBroker, {
   GOOGLE_ACCOUNT_KEY,

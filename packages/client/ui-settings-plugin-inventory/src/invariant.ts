@@ -1,7 +1,7 @@
 /** Package-owned invariant companion. @module @phoenix-ai/dsh-client-ui-settings-plugin-inventory/invariant */
 
 /* jscpd:ignore-start */
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
 const PACKAGE_NAME = '@phoenix-ai/dsh-client-ui-settings-plugin-inventory'

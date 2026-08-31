@@ -5,7 +5,7 @@
  * never provider selection or network access.
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { GenericCallView, JsonValue, ToolResult, WebSearchResultView, WebSource } from '@phoenix-ai/dsh-tools'
 import type { WebSearchResult, WebSearchSource } from '@phoenix-ai/dsh-web'

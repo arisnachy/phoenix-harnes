@@ -1,5 +1,6 @@
 /** Compact native Codex quota for the Settings trigger trailing seat. */
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import type { IApiClient, SessionId } from '@phoenix-ai/dsh-api-remotes/client'
 import type { InjectFace } from '@phoenix-ai/dsh-client-ui-slots'
 import css from './CodexQuotaRemaining.module.css'
@@ -30,6 +31,8 @@ type QuotaState = {
   secondaryLimit?: RateLimitWindow
 }
 
+type QuotaMeterStyle = CSSProperties & { '--quota-progress': string }
+
 /** Registrant-owned faces needed by the OpenAI/Codex quota meter. */
 export interface CodexQuotaRemainingInjected {
   /** Native authorization catalog carrying account rate-limit telemetry. */
@@ -43,6 +46,7 @@ export type CodexQuotaRemainingProps = {
 } & InjectFace<CodexQuotaRemainingInjected>
 
 const QUOTA_REFRESH_MS = 60_000
+const QUOTA_STARTUP_RETRY_MS = 2_000
 
 function isOpenAI(value: string | undefined): boolean {
   if (value === undefined) return false
@@ -68,14 +72,16 @@ function remaining(limit: RateLimitWindow): number {
 /** Format the remaining time until a provider quota window resets. */
 export function formatResetCountdown(resetsAt: number, nowMs = Date.now()): string {
   const remainingMs = Math.max(0, resetsAt * 1000 - nowMs)
-  if (remainingMs === 0) return 'disponible'
-  const totalMinutes = Math.max(1, Math.ceil(remainingMs / 60_000))
-  const days = Math.floor(totalMinutes / (24 * 60))
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
-  const minutes = totalMinutes % 60
+  if (remainingMs === 0) return 'available'
+  const totalSeconds = Math.max(1, Math.ceil(remainingMs / 1_000))
+  const days = Math.floor(totalSeconds / (24 * 60 * 60))
+  const hours = Math.floor((totalSeconds % (24 * 60 * 60)) / (60 * 60))
+  const minutes = Math.floor((totalSeconds % (60 * 60)) / 60)
+  const seconds = totalSeconds % 60
   if (days > 0) return `${days}d ${hours}h`
   if (hours > 0) return `${hours}h ${minutes}m`
-  return `${minutes}m`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
 }
 
 function windowLabel(limit: RateLimitWindow, fallback: string): string {
@@ -94,7 +100,7 @@ function windowLabel(limit: RateLimitWindow, fallback: string): string {
  * @returns the compact quota chip or null.
  */
 export function CodexQuotaRemaining({
-  wide, sessionId, authorization,
+  wide, authorization,
 }: CodexQuotaRemainingProps) {
   const [quota, setQuota] = useState<QuotaState | undefined>()
   const [clockMs, setClockMs] = useState(() => Date.now())
@@ -102,16 +108,26 @@ export function CodexQuotaRemaining({
   authorizationRef.current = authorization
 
   useEffect(() => {
-    if (!wide || sessionId === undefined) {
+    if (!wide) {
       setQuota(undefined)
       return
     }
     let stale = false
+    let timer: number | undefined
+
+    const schedule = (delayMs: number): void => {
+      if (stale) return
+      timer = window.setTimeout(() => { void load() }, delayMs)
+    }
 
     const load = async (): Promise<void> => {
       try {
         const response = await authorizationRef.current.list({})
-        if (stale || !response.result.ok) return
+        if (stale) return
+        if (!response.result.ok) {
+          schedule(QUOTA_STARTUP_RETRY_MS)
+          return
+        }
         const telemetry = (response.result.value.entries as AuthorizationEntry[])
           .filter(isOpenAIAccount)
           .map(entry => entry.telemetry)
@@ -127,28 +143,32 @@ export function CodexQuotaRemaining({
           ...primaryLimit === undefined ? {} : { primaryLimit },
           ...secondaryLimit === undefined ? {} : { secondaryLimit },
         }
-        setQuota(Object.keys(nextQuota).length === 0 ? undefined : nextQuota)
+        const available = Object.keys(nextQuota).length !== 0
+        setQuota(available ? nextQuota : undefined)
+        schedule(available ? QUOTA_REFRESH_MS : QUOTA_STARTUP_RETRY_MS)
       } catch {
-        if (!stale) setQuota(undefined)
+        if (!stale) {
+          setQuota(undefined)
+          schedule(QUOTA_STARTUP_RETRY_MS)
+        }
       }
     }
 
     void load()
-    const timer = window.setInterval(() => { void load() }, QUOTA_REFRESH_MS)
     return () => {
       stale = true
-      window.clearInterval(timer)
+      if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [sessionId, wide])
+  }, [wide])
 
   useEffect(() => {
-    if (!wide || sessionId === undefined || quota === undefined) return
+    if (!wide || quota === undefined) return
     setClockMs(Date.now())
-    const timer = window.setInterval(() => { setClockMs(Date.now()) }, QUOTA_REFRESH_MS)
+    const timer = window.setInterval(() => { setClockMs(Date.now()) }, 1_000)
     return () => { window.clearInterval(timer) }
-  }, [quota, sessionId, wide])
+  }, [quota, wide])
 
-  if (!wide || sessionId === undefined || quota === undefined) return null
+  if (!wide || quota === undefined) return null
 
   const windows = [
     quota.primaryLimit === undefined ? undefined : {
@@ -173,7 +193,7 @@ export function CodexQuotaRemaining({
   } => window !== undefined)
 
   return (
-    <span className={css.root}>
+    <span className={css.root} role="group" aria-label="OpenAI Codex usage limits">
       {windows.map(window => (
         <span
           className={`${css.window} ${window.key === 'primary' ? css.primary : css.secondary}`}
@@ -181,14 +201,18 @@ export function CodexQuotaRemaining({
           title={`OpenAI Codex · ${window.label} · ${window.value}% remaining${window.resetText === undefined ? '' : ` · resets in ${window.resetText}`}`}
           aria-label={`Codex ${window.label} · ${window.value}% remaining${window.resetText === undefined ? '' : ` · resets in ${window.resetText}`}`}
         >
-          <span className={css.summary}>
-            <span className={css.label}>{window.label}</span>
+          <span
+            className={css.meter}
+            data-quota-meter={window.label}
+            style={{ '--quota-progress': `${String(window.value)}%` } as QuotaMeterStyle}
+            aria-hidden="true"
+          >
             <strong className={css.value}>{window.value}%</strong>
-            <span className={css.track}>
-              <span className={css.fill} style={{ width: `${window.value}%` }} />
-            </span>
           </span>
-          {window.resetText === undefined ? null : <span className={css.reset}>↻ {window.resetText}</span>}
+          <span className={css.copy}>
+            <span className={css.label}>{window.label}</span>
+            {window.resetText === undefined ? null : <span className={css.reset}>↻ {window.resetText}</span>}
+          </span>
         </span>
       ))}
     </span>

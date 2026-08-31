@@ -7,7 +7,7 @@
  * @module @phoenix-ai/dsh-compaction
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import type { Session } from '@phoenix-ai/dsh-session'
 import type { CommandId } from '@phoenix-ai/dsh-commands/brand'
 import type { CompactionResult } from './types.ts'
@@ -78,7 +78,7 @@ export interface ManualCompactAgentContext extends CompactionAgentContext {
   runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     compaction: CompactionEngine
   }

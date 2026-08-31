@@ -29,7 +29,7 @@ const platformPackageName = `@phoenix-ai/node-addon-landlock-run-linux-${process
 const WORKSPACE_CLOSURE = [
   'packages/sandbox/sandbox-local',
   // sandbox-local's win32 chain rung is a runtime dependency: a packed
-  // consumer resolves it like any other @deepseek-ai peer (koffi arrives
+  // consumer resolves it like any other @phoenix-ai peer (koffi arrives
   // from the registry).
   'packages/sandbox/sandbox-windows-acl',
   'packages/sandbox/sandbox',
@@ -42,7 +42,7 @@ const WORKSPACE_CLOSURE = [
   'packages/util/timeout',
   'packages/runtime-diagnostics/invariants',
   // The framework and the vendored packages the closure declares outright:
-  // rescoped into @deepseek-ai, so the consumer installs this repository's
+  // rescoped into @phoenix-ai, so the consumer installs this repository's
   // copies. Schemastery is a hard dependency of three members above, not a
   // peer, so npm resolves it while installing them.
   'vendor/cordis',
@@ -123,7 +123,7 @@ describe.skipIf(!packable)('sandbox-local: packed-tarball distribution (publish-
     writeFileSync(join(consumerDir, 'consumer.mjs'), `
       import { spawnSync } from 'node:child_process'
       import { existsSync } from 'node:fs'
-      import { Context } from '@deepseek-ai/cordis'
+      import { Context } from '@phoenix-ai/cordis'
       import { launcherPath } from '@phoenix-ai/node-addon-landlock-run'
       import { LocalSandboxProvider } from '@phoenix-ai/dsh-sandbox-local'
       const ctx = new Context()

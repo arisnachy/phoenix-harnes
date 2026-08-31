@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SystemPrompt, { PromptAssembly, TOOL_ORDER_REST } from '@phoenix-ai/dsh-system-prompt'
 import type { ToolSchema } from '@phoenix-ai/dsh-llm'
 

@@ -4,8 +4,8 @@
  */
 
 import { isDeepStrictEqual } from 'node:util'
-import { FiberState } from '@deepseek-ai/cordis'
-import type { Context } from '@deepseek-ai/cordis'
+import { FiberState } from '@phoenix-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
 import type { GoalJudgeAuditEntry, GoalMessageSource, GoalRef, GoalView } from '@phoenix-ai/dsh-goal'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
@@ -223,11 +223,12 @@ export function apply(ctx: Context): void {
     if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') return
     checkpoint(state, goal, 'active', 'continue')
     if (goal.roundsStarted >= goal.maxGoalRounds) {
-      checkpoint(state, goal, 'blocked', 'blocked')
-      ctx.goals.block(agent, goalRef(goal), {
-        code: 'round-limit',
-        message: `Goal reached its configured limit of ${goal.maxGoalRounds} rounds.`,
-      })
+      // The cap bounds one execution window, never the mission. Rotate the
+      // durable revision so stale prompts cannot re-enter and start a fresh
+      // window with the strategy selector forced to change approach.
+      checkpoint(state, goal, 'retrying', 'continue',
+        `Execution window reached ${goal.maxGoalRounds} rounds; opening a new window.`)
+      ctx.goals.continueWindow(agent, goalRef(goal))
       return
     }
 
@@ -314,9 +315,22 @@ export function apply(ctx: Context): void {
   // One composite effect keeps the step fence installed until this
   // plugin's own scheduling tasks settle.
   ctx.effect(function* () {
-    ctx.on('agent/error', ({ agent }) => {
+    ctx.on('agent/error', ({ agent, turn, step, error }) => {
       const state = stateFor(agent)
-      disarm(state)
+      const goal = currentGoal(state)
+      if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') {
+        disarm(state)
+        return
+      }
+      // A failed model turn is a disposable attempt, never a mission result.
+      // Release this driver's reservation so the idle transition can schedule
+      // the next bounded recovery round instead of pausing the goal.
+      if (state.attempt?.phase === 'queued' || state.attempt?.phase === 'claimed' || state.attempt?.phase === 'admitted') {
+        state.attempt = undefined
+      }
+      state.needsCheckpoint = true
+      checkpoint(state, goal, 'active', 'continue', `Turn ${String(turn)}, step ${String(step)} failed: ${renderThrown(error)}`)
+      requestDrive(state)
     })
 
     ctx.on('agent/created', ({ agent }) => { stateFor(agent) })
@@ -327,6 +341,13 @@ export function apply(ctx: Context): void {
       state.competingQueued = false
       state.needsCheckpoint = false
       state.supervisor = replayGoalSupervisor(agent.session.events, currentGoal(state)?.id ?? '')
+      // A durable ACTIVE goal survives a process restart. Re-arm only the
+      // process-local continuation authority; blocked goals remain waiting for
+      // their external condition or an explicit human resume.
+      if (currentGoal(state)?.phase === 'active') {
+        ctx.goals.activate(agent)
+        requestDrive(state)
+      }
     })
     ctx.on('agent/status', ({ agent, status }) => {
       const state = stateFor(agent)
@@ -394,7 +415,32 @@ export function apply(ctx: Context): void {
           return
         case 'turn/end':
           if (event.data.reason.kind === 'max-tokens') {
-            disarm(state)
+            const goal = currentGoal(state)
+            if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') return
+            // A token limit ends one model attempt, not the persistent mission.
+            // Release the reservation so idle scheduling can admit a bounded
+            // recovery round with a different strategy.
+            if (state.attempt?.phase === 'claimed' || state.attempt?.phase === 'admitted') {
+              state.attempt = undefined
+            }
+            state.needsCheckpoint = true
+            // `session/event` is emitted from Session.append; persist the
+            // failure after that append returns so the supervisor never
+            // re-enters the session log publisher.
+            queueMicrotask(() => {
+              const latest = currentGoal(state)
+              if (latest?.id === goal.id && latest.revision === goal.revision
+                && latest.phase === 'active' && latest.activation === 'armed') {
+                checkpoint(
+                  state,
+                  latest,
+                  'retrying',
+                  'continue',
+                  'The model turn reached its token limit before the mission was verified.',
+                )
+              }
+            })
+            requestDrive(state)
             return
           }
           if (event.data.reason.kind !== 'aborted') return

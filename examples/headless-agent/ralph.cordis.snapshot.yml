@@ -1,6 +1,6 @@
 # Replay counterpart to cordis.yml for the shipped Ralph-loop snapshot.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

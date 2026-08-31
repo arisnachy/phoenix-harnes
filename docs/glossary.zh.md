@@ -22,9 +22,9 @@ PHOENIX 的领域词汇为每个概念规定一个规范术语。各术语通过
 
 ## 目标
 
-- **目标**：附着在现有会话上的单个持久完成目标，带有按修订号演进的 `active` / `paused` / `blocked` / `complete` 阶段和 Goal Round 上限；`blocked` 保留策略代码与说明。目标是一种状态，不是调度器，也不是一段独立对话；会话日志仍是其真源。
+- **目标**：附着在现有会话上的单个持久完成目标，带有按修订号演进的 `active` / `paused` / `blocked` / `complete` 阶段和每个窗口的 Goal Round 上限；达到上限会轮换修订号，不会结束任务。`blocked` 保留策略代码与说明。目标是一种状态，不是调度器，也不是一段独立对话；会话日志仍是其真源。
 - **Goal Round**：为当前目标接纳的一次续行周期。同会话驱动器将 Goal Round 具体化为一个由目标触发的[轮次](#turn)，其中可包含零个或多个步骤；同一会话中无关的人类轮次不消耗 Goal Round 上限。<a id="goal-round"></a>
-- **目标激活**：续行消费方接纳下一个 Goal Round 的进程本地权限。激活态为 `armed` 或 `disarmed`；它有意不参与持久回放，因此在恢复或 fork 后，只有随后通过 `/goal` 或模型工具执行一次经人类授权的恢复变更，自动工作才能开始。
+- **目标激活**：续行消费方接纳下一个 Goal Round 的进程本地权限。激活态为 `armed` 或 `disarmed`；它有意不参与持久回放。驱动器加载到现有 agent 时从 disarmed 开始，而 `agent/session-start` 会重新激活持久的 active goal；blocked goal 等待外部条件或明确的 resume。
 
 ## 人类命令
 

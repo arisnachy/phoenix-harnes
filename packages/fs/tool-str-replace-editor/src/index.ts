@@ -4,8 +4,8 @@
  */
 
 import { isAbsolute } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { FsError } from '@phoenix-ai/dsh-fs'
 import type { FsInfo, FsTarget, FsWriteIntent } from '@phoenix-ai/dsh-fs'
 import { sandboxDenialMarker } from '@phoenix-ai/dsh-sandbox'

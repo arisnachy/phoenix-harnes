@@ -1,6 +1,6 @@
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import {
   GoalId,
   type GoalSnapshotChangeMeta,
@@ -105,6 +105,7 @@ describe('goal-round-driver prompt invariants', () => {
     const feedback = {
       callId: 'judge-call' as never,
       goalId: change.goal.id,
+      revision: change.goal.revision,
       round: 0,
       verdict: 'needs_changes' as const,
       summary: 'The result needs one more verification pass.',

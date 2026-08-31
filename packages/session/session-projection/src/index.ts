@@ -17,11 +17,11 @@
  * @module @phoenix-ai/dsh-session-projection
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import type { ZodType } from 'zod'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     sessionProjections: SessionProjectionRegistry
   }

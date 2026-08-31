@@ -7,7 +7,7 @@
  * [SessionsPort](./sessions-port.ts). Widening this interface is the
  * explicit act of widening what features may do to the sessions domain.
  */
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {
   RpcResult, SessionId, SubagentAddress,
 } from '@phoenix-ai/dsh-api-remotes/client'
@@ -95,6 +95,8 @@ export interface ISessions {
    * @throws when the fork fails, or when a requested child-title rename fails after creation.
    */
   fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId>
+  /** Physically remove a cold session and refresh the list projection. */
+  delete(sessionId: SessionId): Promise<RpcResult<{ deleted: true }>>
   /**
    * Register a per-session standard-props provider (hooks become `use<Name>`
    * selector hooks on the render side; props spread verbatim).

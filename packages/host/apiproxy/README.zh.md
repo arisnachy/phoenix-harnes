@@ -1,5 +1,7 @@
 # @phoenix-ai/dsh-host-apiproxy
 
+\`session.delete({ sessionId })\` RPC 是明确的物理删除路径：它拒绝活动会话，通过持久化协调器删除持久化会话记录，清理 Workspace/归档记账，并且不会删除 Workspace 目录。不支持物理删除的后端会明确失败。
+
 [English](README.md) | 中文
 
 所有客户端共用的 API 网关由三部分组成：TypeScript API 约定（`src/api/`，不依赖 Node，可从浏览器导入）、fetch 载体对（`src/fetch/`：宿主侧的 `toFetchHandler`，以及客户端侧的 `AbstractApiClient` 与平台子类）和宿主侧实现（`src/api-proxy.ts`：`createApiProxy` 加上默认导出的 `ApiProxyService` 网关插件，其配置为 `{nativeOpen?, sessionExportCompressionLevel?, coldBlankProbeMaxBytes?}`，提供 `ctx.apiProxy`）。该包不注册任何路由；HTTP 等载体自行包装 `ctx.apiProxy`。随发行版交付的 Web 组合位于 [`packages/bundle/web-app/cordis.patch.yml`](../../bundle/web-app/cordis.patch.yml)，其默认 Agent（智能体）模型选择属于 base 组合包中的 [`@phoenix-ai/dsh-agent-default-model`](../../core/agent-default-model/README.zh.md)。

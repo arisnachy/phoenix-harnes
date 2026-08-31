@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import AgentRegistry, { type Agent, type AgentHandle } from '@phoenix-ai/dsh-agent'
 
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'

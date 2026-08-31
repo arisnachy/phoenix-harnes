@@ -23,7 +23,7 @@
  * @module @phoenix-ai/dsh-plan-mode
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { z as zod } from 'zod'
 import type { ZodType } from 'zod'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
@@ -54,7 +54,7 @@ declare module '@phoenix-ai/dsh-session/types' {
   }
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     planMode: PlanModeController
   }
@@ -82,7 +82,8 @@ const APPROVE_LABEL = 'Approve'
 const KEEP_PLANNING_LABEL = 'Keep planning'
 
 const EXIT_DESCRIPTION
-  = 'Use only in plan mode. Present your plan for the user\'s review and, on approval, leave plan mode. '
+  = 'Use in plan mode to present your plan for the user\'s review and, on approval, leave plan mode. '
+  + 'If plan mode is already inactive, this call is ignored and execution should continue. '
   + 'Send the COMPLETE plan as markdown, starting with a # heading that names it. '
   + 'The user may approve (carry out the plan from your next step) or keep '
   + 'planning — their feedback comes back in the tool result; revise and present again.'
@@ -347,19 +348,38 @@ export class PlanModeController extends Service {
       },
       output: {
         schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            approved: { type: 'boolean', const: true, required: true },
-          },
+          oneOf: [
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                approved: { type: 'boolean', const: true, required: true },
+              },
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                approved: { type: 'boolean', const: false, required: true },
+                outcome: { type: 'string', const: 'ignored', required: true },
+                reason: { type: 'string', required: true },
+              },
+            },
+          ],
         },
-        render: () => [{ type: 'text', text: 'Plan approved — plan mode exited; carry out the plan starting with your next step.' }],
+        render: (_args, value) => value && typeof value === 'object' && 'outcome' in value
+          ? [{ type: 'text', text: 'Plan mode is already inactive; continue execution without another plan review.' }]
+          : [{ type: 'text', text: 'Plan approved — plan mode exited; carry out the plan starting with your next step.' }],
       },
       execute: async (args, exec) => {
         const agent = exec.agent
         if (agent === undefined) throw new Error(`${EXIT_PLAN_MODE} requires a calling agent (no session to switch)`)
         if (!foldPlanMode(agent.session.events)) {
-          throw new Error(`${EXIT_PLAN_MODE} is only available in plan mode`)
+          return {
+            approved: false,
+            outcome: 'ignored' as const,
+            reason: 'plan mode is already inactive; continue execution without another plan review',
+          }
         }
         if (!/^#\s+\S/.test(args.plan.trim())) {
           throw new Error(`${EXIT_PLAN_MODE} requires a non-empty markdown plan starting with a # heading`)

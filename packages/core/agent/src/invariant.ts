@@ -1,6 +1,6 @@
 /** Package-owned agent lifecycle invariants. @module @phoenix-ai/dsh-agent/invariant */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { Agent, AgentStatus } from '@phoenix-ai/dsh-agent'
 

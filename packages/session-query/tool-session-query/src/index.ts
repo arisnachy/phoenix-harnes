@@ -4,8 +4,8 @@
  * @module @phoenix-ai/dsh-tool-session-query
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'

@@ -33,7 +33,7 @@ Host 拥有 `agent-preset/selected`、`commands/change`、`credentials/reference
 type-meta 加一个**形状谓词**、一个**选择座位**和 `TypertClientRemote` 的**一个**成员；零运行时代码：
 
 ```ts
-import type { Events } from '@deepseek-ai/cordis'
+import type { Events } from '@phoenix-ai/cordis'
 
 /** Cordis events shaped for one-way remote delivery: no Scope binding, void return. */
 export type TypertForwardableEvent = {

@@ -10,7 +10,7 @@
  * @module @phoenix-ai/dsh-subagent-in-process-driver/structured
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { ToolSchema } from '@phoenix-ai/dsh-llm'
 import type { ToolExecution, ToolRunContext } from '@phoenix-ai/dsh-tools'
 import { ToolArgsError, validateJsonSchemaValue, type ObjectJsonSchema } from '@phoenix-ai/dsh-tools'

@@ -1,6 +1,6 @@
 /** Package-owned tool-pipeline invariants. @module @phoenix-ai/dsh-tools/invariant */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { ToolExecution, ToolExecutionResult } from './index.ts'

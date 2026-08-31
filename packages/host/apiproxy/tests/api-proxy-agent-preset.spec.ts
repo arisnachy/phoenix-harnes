@@ -8,7 +8,7 @@
 import { mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import AgentRegistry, { type AgentFactory } from '@phoenix-ai/dsh-agent'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import SessionStore, { SessionId, type Session } from '@phoenix-ai/dsh-session'

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { MessageId } from '@phoenix-ai/dsh-llm/brand'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
 import { remoteMethods } from '@phoenix-ai/dsh-typert-protocol'

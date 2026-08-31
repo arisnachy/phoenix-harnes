@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { normalizeSessionSnapshot, type NormalizeContext } from '@phoenix-ai/dsh-acp-snapshot'
 import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@phoenix-ai/dsh-loader-smoke'
 import { createUserMessage, CallId , createMessage } from '@phoenix-ai/dsh-llm'

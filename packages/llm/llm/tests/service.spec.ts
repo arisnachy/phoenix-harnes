@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { AttachmentId } from '@phoenix-ai/dsh-attachment'
 import LlmRuntime, {
   errorChain,

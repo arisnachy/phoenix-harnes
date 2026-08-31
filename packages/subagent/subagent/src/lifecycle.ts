@@ -15,7 +15,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import { foldConsumedWork } from '@phoenix-ai/dsh-agent'

@@ -357,7 +357,7 @@ export type DynamicCordisInvokeResult =
   | { ok: true; value: JsonValue }
   | ({ ok: false; code: 'plugin-not-running' | 'stale-run' | 'method-not-found' | 'handler-error' } & CordisErrorDetails)
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Events {
     /**
      * A Client-bearing activation needs a browser page, and may require a user decision.

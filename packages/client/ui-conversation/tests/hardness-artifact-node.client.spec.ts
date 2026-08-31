@@ -109,6 +109,27 @@ describe('HARDNESS inline artifact conversation node', () => {
     expect(node(value, 'hardness-artifact')).toBeUndefined()
   })
 
+  it('replays the latest durable sandbox result on the artifact node', () => {
+    const value = snapshot([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'tool/result', {
+        turn: 1,
+        step: 1,
+        message: toolResult('run-call', 'artifact ready'),
+        meta: { artifact: { id: 'app-1', mime: 'text/javascript', data: 'return 42', executable: true } },
+      }, { surfaceOp: 'append' }),
+      at(4, 'hardness/artifact', {
+        artifactId: 'app-1', callId: 'run-call', language: 'javascript',
+        result: { logs: ['42'], value: 42 },
+      }),
+    ])
+
+    expect(node(value, 'hardness-artifact')?.data as HardnessArtifactChatData).toMatchObject({
+      artifactId: 'app-1', result: { logs: ['42'], value: 42 },
+    })
+  })
+
   it('fails closed for malformed artifact metadata', () => {
     const value = snapshot([
       at(1, 'tool/result', {

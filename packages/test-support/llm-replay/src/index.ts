@@ -9,7 +9,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { delimiter as pathDelimiter } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-compaction'
 import { decodeStorageRecord, type SessionEvent } from '@phoenix-ai/dsh-session'
 import type {

@@ -21,7 +21,7 @@ Values do also reach `process.env` — a user's `--config` tree and third-party 
 Names match the way the platform matches them: exactly on POSIX, case-insensitively on Windows. A case-sensitive lookup there would rank the wrong layer — a shell's `deepseek_api_key` and a project `.env`'s `DEEPSEEK_API_KEY` are one variable to the OS, and treating them as two would let the project win.
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
 
 declare const ctx: Context

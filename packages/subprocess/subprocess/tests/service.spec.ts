@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PassThrough } from 'node:stream'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { scrubbedParentEnv, SubprocessRuntime } from '@phoenix-ai/dsh-subprocess'
 import type {
   SubprocessHandle,

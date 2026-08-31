@@ -34,17 +34,19 @@ export function messageImageLabels(t: TranslateNS<'conversation'>): MessageImage
  * @param t - conversation namespace translator.
  * @param accepting - whether the composer can accept dropped files.
  * @param limits - optional translated count and size values.
+ * @param genericFiles - whether the drop surface accepts arbitrary files.
  * @returns translated drop-overlay labels.
  */
 export function dropOverlayLabels(
   t: TranslateNS<'conversation'>,
   accepting: boolean,
   limits?: { readonly count: number; readonly size: string },
+  genericFiles = false,
 ): DropOverlayLabels {
-  if (!accepting) return { title: t('image.dropBlocked') }
+  if (!accepting) return { title: t(genericFiles ? 'file.dropTitle' : 'image.dropBlocked') }
   return {
-    title: t('image.dropTitle'),
-    desc: limits === undefined ? undefined : t('image.dropDesc', limits),
+    title: t(genericFiles ? 'file.dropTitle' : 'image.dropTitle'),
+    desc: limits === undefined ? undefined : t(genericFiles ? 'file.dropDesc' : 'image.dropDesc', limits),
   }
 }
 

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { dshHomePath, resolveDshHome } from '@phoenix-ai/dsh-home-paths'
 import SkillRegistry from '@phoenix-ai/dsh-skill'
 import * as SkillFileSystem from '@phoenix-ai/dsh-skill-filesystem'

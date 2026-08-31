@@ -2,7 +2,7 @@
 /** Model-list editing, endpoint interrogation, and hand-declared provider creation. */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import Schema from '@deepseek-ai/schemastery'
+import Schema from '@phoenix-ai/schemastery'
 import { bindSnapshotSelector } from '@phoenix-ai/dsh-client-test-runtime'
 import type { RpcResponse, SettingsNamespaceView } from '@phoenix-ai/dsh-api-remotes/client'
 import { ModelsSection, providerCopy } from '../src/client/ModelsSection.tsx'

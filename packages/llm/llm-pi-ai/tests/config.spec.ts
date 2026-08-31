@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertServiceable, Config } from '../src/config.ts'
+import { assertServiceable, Config, resolveProfiles } from '../src/config.ts'
 
 /** Validate one hand-declared route, with the caller's fields layered onto it. */
 const routeWith = (profile: Record<string, unknown>): (() => unknown) =>
@@ -85,5 +85,21 @@ describe('request image policy bounds', () => {
     expect(() => {
       assertServiceable(programmatic)
     }).toThrow(message)
+  })
+})
+
+describe('ChatGPT Web route defaults', () => {
+  it('materializes the dormant local bridge profile from one explicit route', () => {
+    const profile = resolveProfiles({ 'chatgpt-web': {} }).get('chatgpt-web')
+
+    expect(profile).toMatchObject({
+      displayName: 'ChatGPT Web',
+      api: 'openai-responses',
+      baseURL: 'http://127.0.0.1:17841/v1',
+    })
+    expect(profile?.piProvider.getModels().map(model => model.id)).toEqual([
+      'gpt-5.6-sol',
+      'gpt-5.6-luna',
+    ])
   })
 })

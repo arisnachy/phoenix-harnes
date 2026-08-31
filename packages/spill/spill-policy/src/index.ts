@@ -43,8 +43,8 @@
  * @module @phoenix-ai/dsh-spill-policy
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import { TextRetainer, describeOmitted } from '@phoenix-ai/dsh-output-retention'
 import type { Omitted } from '@phoenix-ai/dsh-output-retention'

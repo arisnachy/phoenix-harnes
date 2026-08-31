@@ -8,7 +8,7 @@
  * @module @phoenix-ai/dsh-fs
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import type { SandboxExecutionPolicy, SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import type {
   FsDirEntry,
@@ -41,7 +41,7 @@ export type {
   FsWriteOutcome,
 } from './types.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     fs: FileSystem
   }

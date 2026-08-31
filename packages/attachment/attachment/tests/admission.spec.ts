@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AttachmentStore } from '@phoenix-ai/dsh-attachment'
-import { admitEncodedImages } from '@phoenix-ai/dsh-attachment'
-import type { ImageAttachmentRef, SaveImageAttachment } from '@phoenix-ai/dsh-attachment/types'
+import { admitEncodedFiles, admitEncodedImages } from '@phoenix-ai/dsh-attachment'
+import type {
+  FileAttachmentRef, SaveFileAttachment, ImageAttachmentRef, SaveImageAttachment,
+} from '@phoenix-ai/dsh-attachment/types'
 
 const PNG = 'AAAA' // canonical base64, 3 bytes
 
@@ -62,5 +64,38 @@ describe('admitEncodedImages', () => {
     const refused = Object.assign(new Error('Image batch exceeds the configured image-count limit.'), { code: 'TOO_MANY_IMAGES' })
     mocks.saveImages.mockRejectedValueOnce(refused)
     await expect(admitEncodedImages(store, [{ mediaType: 'image/png', data: PNG }])).rejects.toBe(refused)
+  })
+})
+
+describe('admitEncodedFiles', () => {
+  it('decodes arbitrary files and delegates one ordered batch to saveFiles', async () => {
+    const saveFiles = vi.fn((inputs: readonly SaveFileAttachment[]) => Promise.resolve(inputs.map((input, index): FileAttachmentRef => ({
+      attachmentId: `file-${index + 1}` as FileAttachmentRef['attachmentId'],
+      mediaType: input.mediaType,
+      bytes: input.data.byteLength,
+      ...input.name === undefined ? {} : { name: input.name },
+    }))))
+    const store = { saveFiles } as unknown as AttachmentStore
+
+    const refs = await admitEncodedFiles(store, [
+      { mediaType: 'text/csv', data: PNG, name: 'report.csv' },
+      { mediaType: 'application/pdf', data: PNG, name: 'report.pdf' },
+    ])
+
+    expect(saveFiles).toHaveBeenCalledTimes(1)
+    const batch = saveFiles.mock.calls[0]?.[0] as readonly SaveFileAttachment[]
+    expect(batch.map(input => [input.name, input.mediaType, input.data.byteLength]))
+      .toEqual([['report.csv', 'text/csv', 3], ['report.pdf', 'application/pdf', 3]])
+    expect(refs.map(ref => ref.attachmentId)).toEqual(['file-1', 'file-2'])
+  })
+
+  it('rejects empty or non-canonical file base64 before touching the store', async () => {
+    const saveFiles = vi.fn()
+    const store = { saveFiles } as unknown as AttachmentStore
+    for (const data of ['', 'AAA', '!!!!']) {
+      await expect(admitEncodedFiles(store, [{ mediaType: 'text/plain', data }]))
+        .rejects.toMatchObject({ name: 'AttachmentError', code: 'INVALID_FILE_BASE64' })
+    }
+    expect(saveFiles).not.toHaveBeenCalled()
   })
 })

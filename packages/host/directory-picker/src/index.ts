@@ -11,7 +11,7 @@
  * @module @phoenix-ai/dsh-host-directory-picker
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 
 /** The native interaction: one OS directory chooser on the host display. */
 export interface DirectoryPickerNativeCapability {
@@ -115,7 +115,7 @@ export class DirectoryPickerError extends Error {
   }
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     directoryPicker: DirectoryPicker
   }

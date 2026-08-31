@@ -26,6 +26,20 @@ function image(bytes: number): ContentBlock {
 }
 
 describe('offloadRequestImages', () => {
+  it('keeps arbitrary file references as durable model content', () => {
+    const file = {
+      type: 'file' as const,
+      attachment: {
+        attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
+        mediaType: 'text/csv',
+        bytes: 24,
+        name: 'report.csv',
+      },
+    }
+    const message = createUserMessage({ content: [file], source })
+    expect(message.content).toEqual([file])
+  })
+
   it('preserves every image when no payload bound is configured', () => {
     const messages = [createUserMessage({ content: [image(300)], source })]
     expect(offloadRequestImages(messages, undefined)).toBe(messages)

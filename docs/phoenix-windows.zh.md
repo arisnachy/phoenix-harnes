@@ -4,7 +4,7 @@
 
 ## 安装与更新
 
-运行仓库 README 中的 PowerShell 单行安装命令。它会在 `%LOCALAPPDATA%\Programs\PHOENIX` 下安装专用 checkout，构建 `main` 的精确 revision，并创建 **PHOENIX HARDNESS** 开始菜单快捷方式。受管启动会获取 `origin/main`，并且只接受干净的快进更新；本地修改会停止更新，而不会被覆盖。设置 `PHOENIX_AUTO_UPDATE=0` 可以禁用启动时检查。
+运行仓库 README 中的 PowerShell 单行安装命令。它会在 `%LOCALAPPDATA%\Programs\PHOENIX` 下安装专用 checkout，构建 `main` 的精确 revision，并在开始菜单、Windows 启动文件夹和任务栏快捷方式存储位置创建 **PHOENIX HARDNESS** 快捷方式。如果 Windows 版本没有提供本地化的固定到任务栏操作，仍会创建可用于任务栏的快捷方式；从快捷方式上下文菜单固定一次即可。使用 `-NoStartup` 或 `-NoTaskbar` 可选择退出。受管启动会获取 `origin/main`，并且只接受干净的快进更新；本地修改会停止更新，而不会被覆盖。设置 `PHOENIX_AUTO_UPDATE=0` 可以禁用启动时检查。
 
 该引导程序可以运行，但尚未使用 Authenticode 签名。可信签名发布需要外部发布者证书，因此仍属于发布凭据 gate。
 

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AttachmentId, ImageVariantId } from '@phoenix-ai/dsh-attachment'
-import type { ImageAttachmentRef, ImageMediaType, RequestImageAttachment } from '@phoenix-ai/dsh-attachment'
+import type {
+  FileAttachmentRef, ImageAttachmentRef, ImageMediaType, RequestImageAttachment, StoredFileAttachment,
+} from '@phoenix-ai/dsh-attachment'
 import { createUserMessage, CallId, ReasoningEffortId, createMessage } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
 import {
@@ -343,6 +345,34 @@ describe('serializeRequest', () => {
 })
 
 describe('image serialization', () => {
+  it('includes a bounded text file attachment in the provider request', async () => {
+    const ref: FileAttachmentRef = {
+      attachmentId: AttachmentId(`sha256:${'f'.repeat(64)}`),
+      mediaType: 'text/csv',
+      bytes: new TextEncoder().encode('name,value\nPhoenix,ready\n').byteLength,
+      name: 'report.csv',
+    }
+    const stored: StoredFileAttachment = {
+      ref,
+      data: new TextEncoder().encode('name,value\nPhoenix,ready\n'),
+    }
+    const wire = await serializeRequestWithImages(request({
+      messages: [createUserMessage({
+        content: [{ type: 'file', attachment: ref }],
+        source: { kind: 'plugin', plugin: 'test' },
+      })],
+    }), {
+      ...imageOptions([]),
+      files: new Map([[ref.attachmentId, stored]]),
+      maxInlineFileBytes: 1024,
+    })
+
+    expect(wire.messages).toEqual([{
+      role: 'user',
+      content: expect.stringContaining('Phoenix,ready') as string,
+    }])
+  })
+
   it.each([
     'image/png',
     'image/jpeg',

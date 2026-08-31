@@ -907,6 +907,21 @@
     },
     {
       "doc": "docs/subsystems/attachment.md",
+      "symbol": "FileMediaType",
+      "source": "packages/attachment/attachment/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/attachment.md",
+      "symbol": "FileAttachmentRef",
+      "source": "packages/attachment/attachment/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/attachment.md",
+      "symbol": "FileAttachmentLimits",
+      "source": "packages/attachment/attachment/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/attachment.md",
       "symbol": "ImageAttachmentRef",
       "source": "packages/attachment/attachment/src/types.ts"
     },

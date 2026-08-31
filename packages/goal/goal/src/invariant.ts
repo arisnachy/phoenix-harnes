@@ -1,6 +1,6 @@
 /** Package-owned durable goal-stream invariants. @module @phoenix-ai/dsh-goal/invariant */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import { applyGoalEvent, emptyGoalFoldState } from './fold.ts'

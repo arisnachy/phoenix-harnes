@@ -10,7 +10,7 @@
  * pre-existing instance by providing it as `ctx.modules`.
  * @module @phoenix-ai/dsh-client-modules/client
  */
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { ClientModuleSystem } from './system.ts'
 import { parseBootManifest } from './manifest.ts'
 import type {

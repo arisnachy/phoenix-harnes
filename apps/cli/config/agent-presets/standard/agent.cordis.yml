@@ -33,8 +33,18 @@
       Antes de invocar una o más herramientas, escribe una introducción breve y clara en el idioma
       del usuario explicando qué vas a revisar, cambiar o comprobar. Durante una tarea de varios pasos,
       después de cada resultado importante comunica el siguiente estado en una frase corta; agrupa pasos
-      pequeños y no describas razonamiento interno, credenciales ni payloads. Termina separando
-      IMPLEMENTADO, PROBADO, VERIFICADO y PENDIENTE cuando corresponda.
+      pequeños y no describas razonamiento interno, credenciales ni payloads.
+
+      <mission_completion_contract>
+      A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure.
+      Do not label a response final or emit a completion report while any mandatory deliverable,
+      acceptance criterion, integration, or verification remains. Continue with root-cause analysis
+      and a materially different strategy. If an external dependency requires a physical or human
+      action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition,
+      keep testing safe alternatives, and resume automatically when that condition changes; ask only
+      for the minimal required action. Only close the mission after the independent judge returns PASS
+      with evidence, or after the user explicitly cancels it.
+      </mission_completion_contract>
 
 - id: agent-instructions
   name: '@phoenix-ai/dsh-agent-instructions'
@@ -95,6 +105,9 @@
 - id: tool-skill
   name: '@phoenix-ai/dsh-tool-skill'
 
+- id: tool-session-learning
+  name: '@phoenix-ai/dsh-tool-session-learning'
+
 # ── goals ───────────────────────────────────────────────────────────────────
 
 # Only the model-facing tool. The goal SERVICE, its session driver, and the
@@ -105,6 +118,10 @@
 # session. What a preset chooses is whether its agent can call the goal tool.
 - id: tool-goal
   name: '@phoenix-ai/dsh-tool-goal'
+  config:
+    # A goal cannot be completed from the executor's claim alone.
+    requireJudge: true
+    judgeProvider: spawn
 
 # ── plan mode ───────────────────────────────────────────────────────────────
 
@@ -205,7 +222,7 @@
           whenProvider: openai-codex
           provider: openai-codex
           model: gpt-5.6-luna
-          reasoningEffort: high
+          reasoningEffort: xhigh
 
     - id: tool-subagent-fork
       name: '@phoenix-ai/dsh-tool-subagent'
@@ -220,7 +237,7 @@
           whenProvider: openai-codex
           provider: openai-codex
           model: gpt-5.6-luna
-          reasoningEffort: high
+          reasoningEffort: xhigh
 
     # Production dsh does not install these optional providers. Install the
     # matching Bundle in this Profile and restart the Host, then copy this
@@ -254,7 +271,7 @@
           whenProvider: openai-codex
           provider: openai-codex
           model: gpt-5.6-luna
-          reasoningEffort: high
+          reasoningEffort: xhigh
 
     - id: tool-workflow
       name: '@phoenix-ai/dsh-tool-workflow'
@@ -282,3 +299,12 @@
   config:
     fetch: false
     searchTimeoutMs: 60000
+
+# HARDNESS is part of the full model-facing agent plane. The host owns the
+# registry and execution policy; this preset owns the projections and mission
+# tool so the minimal preset remains a two-tool composition.
+- id: hardness-model-tools
+  name: '@phoenix-ai/dsh-hardness-adapters'
+  config:
+    judgeProvider: spawn
+    modelTools: true

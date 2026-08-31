@@ -1,8 +1,8 @@
 /** The `bash` settings section layered over the executor's composition entry. */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import type { Fiber } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
+import type { Fiber } from '@phoenix-ai/cordis'
 import { SettingsProvider } from '@phoenix-ai/dsh-settings'
 import type { SettingsNamespace } from '@phoenix-ai/dsh-settings'
 import LocalSubprocessRuntime from '@phoenix-ai/dsh-subprocess-local'

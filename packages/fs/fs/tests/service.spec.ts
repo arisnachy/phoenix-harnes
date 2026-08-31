@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { FileSystem, FsError, FsTargetKey, FsVersion } from '@phoenix-ai/dsh-fs'
 import type {
   FsDirEntry,

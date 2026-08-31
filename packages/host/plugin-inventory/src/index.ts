@@ -1,16 +1,18 @@
 /** Read-only Loader inventory plus trusted PHOENIX update-control projection. */
 
-import type { Context, FiberState } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/cordis-plugin-loader'
+import type { Context, FiberState } from '@phoenix-ai/cordis'
+import type {} from '@phoenix-ai/cordis-plugin-loader'
 import { TypertRemoteService, Remote } from '@phoenix-ai/dsh-typert-protocol'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
 import {
   readPhoenixUpdateSnapshot,
+  requestPhoenixUpdateRefresh,
   requestPhoenixUpdateRestart,
 } from './update-state.ts'
 import type {
   PhoenixUpdateRestartReceipt,
+  PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
   PluginEntryId,
   PluginFiberPhase,
@@ -97,6 +99,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
       timer.unref()
     }
     return receipt
+  }
+
+  /**
+   * Wake the detached updater for a real stable-channel check.
+   * @returns Whether the request was durably queued for the watcher.
+   */
+  @Remote('refreshForUpdate')
+  refreshForUpdate(): PhoenixUpdateRefreshReceipt {
+    return requestPhoenixUpdateRefresh()
   }
 }
 

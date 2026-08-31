@@ -54,7 +54,14 @@ export function apply(ctx: ClientContext): void {
     }
     return result.value
   }
-  const updateInjected = (): UpdateFooterActionInjected => ({ readUpdateState, restartForUpdate })
+  const refreshForUpdate: UpdateFooterActionInjected['refreshForUpdate'] = async () => {
+    const result = await ctx.remote.pluginInventory.refreshForUpdate()
+    if (!result.ok) {
+      throw new Error(`pluginInventory.refreshForUpdate failed: ${result.error.code}: ${result.error.message}`)
+    }
+    return result.value
+  }
+  const updateInjected = (): UpdateFooterActionInjected => ({ readUpdateState, restartForUpdate, refreshForUpdate })
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',

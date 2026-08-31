@@ -6,9 +6,9 @@ Web **插件列表**设置标签页，加上 PHOENIX stable 更新的侧栏底�
 
 插件列表仍保持懒加载和只读。首次选择该标签页时，通过 [`api-remotes`](../../api/remotes/README.zh.md) 调用 `ctx.remote.pluginInventory.list()` 并渲染可搜索的 Loader 清单。加载、空结果、无匹配结果与通用失败状态只属于已挂载组件；读取失败可以重试，且不会暴露传输细节。
 
-更新操作会在 Web 打开期间轮询仓库本地的 `pluginInventory.updateState` Remote。PHOENIX 已是当前版本时，它不占用侧栏空间。检测到 stable 发布后，它会立即出现在 Settings 上方，以紧凑进度卡片展示 stable 频道、阶段、目标提交前缀和可访问的进度值，并跟随更新器真实生命周期：源码获取、依赖准备、构建、smoke 验证、ready、重启、激活以及 rollback／错误状态。卡片使用清晰的状态色调、进度条、目标标识和 stable 频道标签；折叠侧栏以图标和 tooltip 表示同一状态；展开侧栏显示本地化文本。状态按真实阶段报告，而不是虚构下载字节百分比。
+更新操作会在 Web 打开期间轮询仓库本地的 `pluginInventory.updateState` Remote。空闲、常规检查、已是当前版本、已完成、已禁用和开发分支状态不会占用侧栏空间。真实的 stable 发布、准备阶段、可操作故障或已准备重启会立即显示在 Settings 上方，采用紧凑的单行操作，包含状态图标、本地化阶段、可选的目标提交前缀，以及工作进行时的细进度指示器。折叠侧栏以图标和 tooltip 表示同一状态。进度仍按真实阶段报告，而不是虚构下载字节百分比。
 
-只有 `ready` 会变成重启操作。展开卡片显示 **Update ready** 与 **Restart now**；点击后调用 `pluginInventory.restartForUpdate`。Host 只会为分离 stable 更新器已经准备好的精确 target 接受该请求。请求被接受后，UI 进入重启状态，Host 退出，随后激活、失败时 rollback 与自动重新启动都由分离更新器负责。被拒绝或失败的重启请求不会关闭 PHOENIX，而是留在当前进程中刷新状态或显示通用更新失败。临时 Host/RPC 读取失败会显示为 **Checking for updates** 并自动重试，绝不会被标记为更新失败。持久 updater 错误会保留上一稳定版本，并提供安全的立即重试读取操作。
+只有 `ready` 会变成重启操作。紧凑行显示 **Update ready** 与 **Restart now**；点击后调用 `pluginInventory.restartForUpdate`。Host 只会为分离 stable 更新器已经准备好的精确 target 接受该请求。请求被接受后，UI 进入重启状态，Host 退出，随后激活、失败时 rollback 与自动重新启动都由分离更新器负责。被拒绝或失败的重启请求不会关闭 PHOENIX，而是留在当前进程中刷新状态或显示通用更新失败。临时 Host/RPC 读取失败保持不可见并继续轮询，绝不会被标记为更新失败。持久 updater 错误会保留上一稳定版本，提供立即安全重试，并在 15 秒后自动唤醒 updater；同一故障持续时使用指数延迟且最长为五分钟。开发分支暂停保持不可见，其他暂停状态仍以紧凑可操作状态显示。
 
 ## 模型体验
 

@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import Include from '@deepseek-ai/cordis-plugin-include'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import { Context } from '@phoenix-ai/cordis'
+import Include from '@phoenix-ai/cordis-plugin-include'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import HardnessRegistry from '../src/index.ts'
 
 let root: string | undefined

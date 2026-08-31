@@ -5,11 +5,11 @@
  */
 
 import type { Branded } from '@phoenix-ai/dsh-brand'
-import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { CallId, ProviderRequestId, ReasoningEffortId } from './brand.ts'
 import type { Message } from './message.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Events {
     /**
      * The provider topology changed: an adapter registered or unregistered
@@ -74,6 +74,13 @@ export interface ImageBlock {
   attachment: ImageAttachmentRef
 }
 
+/** A durable opaque file reference attached to model content. */
+export interface FileBlock {
+  type: 'file'
+  /** Immutable bytes and safe display metadata owned by the attachment service. */
+  attachment: FileAttachmentRef
+}
+
 /** A tool invocation requested by the model. */
 export interface ToolCallBlock {
   type: 'tool-call'
@@ -100,6 +107,7 @@ export interface ContentBlockMap {
   'text': TextBlock
   'reasoning': ReasoningBlock
   'image': ImageBlock
+  'file': FileBlock
   'tool-call': ToolCallBlock
   'tool-result': ToolResultBlock
 }

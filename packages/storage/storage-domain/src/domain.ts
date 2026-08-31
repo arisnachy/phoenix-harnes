@@ -9,7 +9,7 @@
  * @module @phoenix-ai/dsh-storage-domain/src/domain
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { KvUnit } from '@phoenix-ai/dsh-storage'
 import { DomainError } from './error.ts'
 import type { DomainSpec, DomainGlobalSpec, TableKeyOf, TableValueOf } from './spec.ts'

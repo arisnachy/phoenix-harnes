@@ -12,7 +12,7 @@
     "requireRollbackPlan": true
   },
   "sources": [
-    {"id":"deepseek-harness","kind":"source-upstream","repository":"https://github.com/deepseek-ai/deepseek-harness.git","ref":"main","intake":"merge-candidate","promotion":"tested-pr-only"},
+    {"id":"deepseek-harness","kind":"source-upstream","repository":"https://github.com/arisnachy/phoenix-harnes.git","ref":"main","intake":"merge-candidate","promotion":"tested-pr-only"},
     {"id":"openai-codex","kind":"capability-contract","repository":"https://github.com/openai/codex.git","ref":"main","intake":"observe-and-adapt","promotion":"adapter-conformance-only","notes":"ChatGPT/Codex subscription auth stays Codex-managed. Never depend on undocumented token claims. OpenAI API keys remain a separate provider path."},
     {"id":"anthropic-claude-code","kind":"capability-contract","repository":"https://github.com/anthropics/claude-code.git","ref":"main","intake":"observe-and-adapt","promotion":"adapter-conformance-only"}
   ]

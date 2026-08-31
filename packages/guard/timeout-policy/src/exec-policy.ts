@@ -10,7 +10,7 @@
  * @module @phoenix-ai/dsh-tool-call-timeout-policy/exec-policy
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { PreToolDecision } from '@phoenix-ai/dsh-tools'
 
 /** One monotonic command-policy outcome. */

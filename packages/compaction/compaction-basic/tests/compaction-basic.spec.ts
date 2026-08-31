@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { AttachmentId } from '@phoenix-ai/dsh-attachment'
 import BasicCompactionEngine from '@phoenix-ai/dsh-compaction-basic'
 import type { BasicCompactionConfig } from '@phoenix-ai/dsh-compaction-basic'

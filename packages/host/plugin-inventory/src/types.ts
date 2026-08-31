@@ -63,3 +63,8 @@ export interface PhoenixUpdateRestartReceipt {
   readonly accepted: boolean
   readonly status: PhoenixUpdateStatus
 }
+
+/** Result of waking the detached updater for an immediate channel check. */
+export interface PhoenixUpdateRefreshReceipt {
+  readonly accepted: boolean
+}

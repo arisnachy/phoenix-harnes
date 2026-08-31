@@ -1,5 +1,5 @@
 /** ui-subagent browser half: catalog actions and read-only composer routing. */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
 import { describe, expect, it } from 'vitest'
 import {

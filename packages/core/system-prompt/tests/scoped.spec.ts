@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { createScope, scopeOf } from '@phoenix-ai/dsh-scope'
 import type { Scope, ScopeKey } from '@phoenix-ai/dsh-scope'
 import SystemPrompt, { TOOL_ORDER_REST, renderContextSnapshot, renderPrompt } from '@phoenix-ai/dsh-system-prompt'

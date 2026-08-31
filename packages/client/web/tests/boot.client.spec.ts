@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import * as modulesClient from '@phoenix-ai/dsh-client-modules/client'
 import type {
   ClientBundleRegistration, ClientModuleCreateOptions, ClientModuleLoaderTarget, DshWindow,

@@ -7,9 +7,9 @@
 
 import { randomBytes } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { unzipSync, strFromU8 } from 'fflate'
-import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef, StoredFileAttachment } from '@phoenix-ai/dsh-attachment'
 import UserQuestionService from '@phoenix-ai/dsh-user-questions'
 import type { SessionHeader, SessionId } from '@phoenix-ai/dsh-session'
 import type { SessionLineageNode } from '@phoenix-ai/dsh-session-query'
@@ -54,6 +54,10 @@ function imageEventLine(id: string, mediaType: ImageAttachmentRef['mediaType'] =
   return `{"type":"user/message","seq":1,"time":1000,"data":{"content":[{"type":"image","attachment":{"attachmentId":"${id}","mediaType":"${mediaType}","bytes":4,"width":2,"height":2}}]}}`
 }
 
+function fileEventLine(id: string, mediaType = 'text/csv', name = 'report.csv', bytes = 24): string {
+  return `{"type":"user/message","seq":1,"time":1000,"data":{"content":[{"type":"file","attachment":{"attachmentId":"${id}","mediaType":"${mediaType}","bytes":${bytes},"name":"${name}"}}]}}`
+}
+
 async function buildApi(
   artifacts: Record<string, SessionRawArtifact>,
   descendants: SessionLineageNode[] = [],
@@ -61,6 +65,7 @@ async function buildApi(
     query?: boolean
     persistence?: boolean | 'throw' | 'unsupported'
     attachments?: boolean | ((ref: ImageAttachmentRef, signal?: AbortSignal) => Promise<ReturnType<typeof storedImage>>)
+    fileAttachments?: (ref: FileAttachmentRef, signal?: AbortSignal) => Promise<StoredFileAttachment>
     sessions?: {
       get(id: SessionId): { readonly id: SessionId } | undefined
       flush(session: { readonly id: SessionId }): Promise<boolean>
@@ -109,6 +114,7 @@ async function buildApi(
       validateImage: async () => {},
       saveImage: async () => { throw new Error('export never saves images') },
       readImage,
+      readFile: services.fileAttachments ?? (async () => { throw new Error('export test has no file') }),
     } as never)
   }
   if (services.sessions !== undefined) ctx.provide('sessions', services.sessions as never)
@@ -617,6 +623,29 @@ describe('session.export download endpoint', () => {
     const files = unzipSync(await responseBytes(response))
     expect(Object.keys(files).sort()).toEqual(['media/img-1.png', 'session.jsonl'])
     expect(files['media/img-1.png']).toEqual(storedImage('img-1').data)
+  })
+
+  it('includes arbitrary files referenced by the root log', async () => {
+    const data = new TextEncoder().encode('name,value\nPhoenix,ready\n')
+    const id = 'file-1'
+    const ref: FileAttachmentRef = {
+      attachmentId: sid(id) as never,
+      mediaType: 'text/csv',
+      bytes: data.byteLength,
+      name: 'report.csv',
+    }
+    const root = artifact('session-root', undefined, [
+      '{"type":"session","version":0,"id":"session-root","createdAt":1000}',
+      fileEventLine(id, ref.mediaType, ref.name, ref.bytes),
+    ].join('\n') + '\n')
+    const api = await buildApi({ 'session-root': root }, [], {
+      fileAttachments: async requested => ({ ref: requested, data }),
+    })
+    const response = await toFetchHandler(api).fetch(
+      new Request('http://host/api/session.export?sessionId=session-root'),
+    )
+    const files = unzipSync(await responseBytes(response))
+    expect(files['media/file-1.csv']).toEqual(data)
   })
 
   it('collects media referenced from nested tool results', async () => {

@@ -4,8 +4,8 @@
  * @module @phoenix-ai/dsh-session-title-llm
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { createUserMessage, BlockAssembler, deepFreeze } from '@phoenix-ai/dsh-llm'
 import type { FinishReason, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
 import { deadline, MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'

@@ -616,6 +616,54 @@ The backends that consume this contract are on [persistence.md](persistence.md).
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxlearningmemory--learningmemoryservice"></a>
+
+### `ctx.learningMemory` — `LearningMemoryService`
+
+Event-backed memory service. Every source event is deduplicated by the ledger, so hot reload and resumed sessions do not multiply memories.
+
+```ts cordis-catalog
+/** Wait until all queued learning writes have reached the ledger. */
+async ready(): Promise<void>
+
+/**
+ * Search active memories by words in their summary or provenance.
+ * @param query - Words to match against memory text.
+ * @param limit - Maximum number of records to return.
+ * @returns Matching active memory records.
+ */
+search(query: string = '', limit: number = 50): Promise<MemoryRecord[]>
+
+/**
+ * Read newest active records for bounded automatic model recall.
+ * @param limit - Maximum number of records to return.
+ * @returns Newest active memory records.
+ */
+recent(limit: number = 20): MemoryRecord[]
+
+/**
+ * Read bounded automatic continuity context, prioritizing durable memories.
+ * @param limit - Maximum number of records to return.
+ * @returns Durable high-confidence memories followed by recent evidence.
+ */
+recall(limit: number = 20): MemoryRecord[]
+
+/**
+ * Store an explicit, bounded lesson supplied by the model or user workflow.
+ * @param input - Memory record to persist.
+ * @returns The persisted memory record.
+ */
+remember(input: MemoryRecordInput): Promise<MemoryRecord>
+
+/**
+ * Forget one memory while preserving an auditable tombstone.
+ * @param id - Memory identity to forget.
+ */
+forget(id: MemoryId): Promise<void>
+```
+
+Source: [`packages/session/session-learning/src/index.ts`](../../packages/session/session-learning/src/index.ts)
+
 <a id="ctxsessions--sessionstore"></a>
 
 ### `ctx.sessions` — `SessionStore`

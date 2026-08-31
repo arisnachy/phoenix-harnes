@@ -1,5 +1,5 @@
 /** Sidebar shell slot registration and its plain runtime/layout callbacks. */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'

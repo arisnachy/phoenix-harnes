@@ -20,7 +20,7 @@ import type {
   ToolResultMessage,
   UserMessage,
 } from '@phoenix-ai/dsh-llm'
-import type { AttachmentIdType, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type { AttachmentIdType, FileAttachmentRef, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type {
   SessionEvent,
   SessionId,
@@ -256,7 +256,7 @@ const WEB_SEARCH_RESULT: Omit<Extract<ToolResultView, { card: 'web'; kind: 'sear
   answer: 'PHOENIX is a plugin-based agent harness on vendored Cordis where **every capability is a plugin**.',
   sources: [
     {
-      url: 'https://github.com/deepseek-ai/deepseek-harness',
+      url: 'https://github.com/arisnachy/phoenix-harnes',
       title: 'PHOENIX — plugin-based agent harness',
       snippet: 'Everything is a plugin: session, tools, agent-loop, and LLM adapters all mount on the same Cordis context.',
       publishedAt: '2026-07-01',
@@ -1534,7 +1534,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     session.sessionId,
     { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
   ]))
-  const attachments = new Map<string, { attachment: ImageAttachmentRef; data: string }>([[
+  const attachments = new Map<string, { attachment: ImageAttachmentRef | FileAttachmentRef; data: string }>([[
     String(FIXTURE_IMAGE_REF.attachmentId),
     { attachment: FIXTURE_IMAGE_REF, data: FIXTURE_IMAGE_DATA },
   ]])
@@ -2508,20 +2508,31 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         const userText = content.map(b => (b.type === 'text' ? b.text : '')).join('')
         const durable: ContentBlock[] = content.map((block) => {
           if (block.type === 'text') return block
-          const attachment: ImageAttachmentRef = {
+          const bytes = Math.max(
+            1,
+            Math.floor(block.data.length * 3 / 4)
+            - (block.data.endsWith('==') ? 2 : block.data.endsWith('=') ? 1 : 0),
+          )
+          if (block.type === 'image') {
+            const attachment = {
+              attachmentId: `fixture:${randomUuid()}` as AttachmentIdType,
+              mediaType: block.mediaType,
+              bytes,
+              width: 160,
+              height: 90,
+              ...block.name === undefined ? {} : { name: block.name },
+            } satisfies ImageAttachmentRef
+            attachments.set(String(attachment.attachmentId), { attachment, data: block.data })
+            return { type: 'image', attachment }
+          }
+          const attachment = {
             attachmentId: `fixture:${randomUuid()}` as AttachmentIdType,
             mediaType: block.mediaType,
-            bytes: Math.max(
-              1,
-              Math.floor(block.data.length * 3 / 4)
-              - (block.data.endsWith('==') ? 2 : block.data.endsWith('=') ? 1 : 0),
-            ),
-            width: 160,
-            height: 90,
+            bytes,
             ...block.name === undefined ? {} : { name: block.name },
-          }
+          } satisfies FileAttachmentRef
           attachments.set(String(attachment.attachmentId), { attachment, data: block.data })
-          return { type: 'image', attachment }
+          return { type: 'file', attachment }
         })
         if (mode === 'steer' && replays.has(id)) {
           // Steering: the durable user/message lands inside the current turn; the replay continues.
@@ -3206,6 +3217,12 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.models': return this.api.sessions.models(request)
       case 'session.selectModel': return this.api.sessions.selectModel(request)
       case 'session.rename': return this.api.sessions.rename(request)
+      case 'session.delete': {
+        const remove = this.api.sessions.delete
+        return remove === undefined
+          ? Promise.reject(new Error('session deletion is not configured'))
+          : remove(request)
+      }
       case 'session.fork': return this.api.sessions.fork(request)
       case 'session.prompt': return this.api.sessions.prompt(request)
       case 'session.attachment': return this.api.sessions.attachment(request)

@@ -5,7 +5,7 @@
  * @module @phoenix-ai/dsh-session-persistence
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { SessionPreparation } from '@phoenix-ai/dsh-session'
 import type { SessionEvent, SessionId, SessionHeader } from '@phoenix-ai/dsh-session'
 import type { SessionPersistenceRevision } from './revision.ts'
@@ -57,7 +57,7 @@ export type {
   StoredSuffix,
 } from './coordinator.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     sessionPersistence: SessionPersistence
   }
@@ -226,6 +226,16 @@ export abstract class SessionPersistence extends Service {
    * @returns one header per materialized session.
    */
   abstract list(signal?: AbortSignal): Promise<SessionHeader[]>
+
+  /**
+   * Physically remove one persisted session.
+    * @param id - session identity to remove.
+   * @returns whether a durable record was removed.
+   */
+  remove(id: SessionId): Promise<boolean> {
+    void id
+    return Promise.reject(new Error('this session persistence backend does not support physical deletion'))
+  }
 
   /**
    * List materialized sessions with cheap per-log change tokens.

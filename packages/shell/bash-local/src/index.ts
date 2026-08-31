@@ -9,8 +9,8 @@
  * @module @phoenix-ai/dsh-bash-local
  */
 
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { SHELL_SETTINGS_NAMESPACE, ShellExecutor } from '@phoenix-ai/dsh-shell'
 import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellProcessRead, ShellRunResult, CollectedOutput } from '@phoenix-ai/dsh-shell'
 import type { SubprocessCollect, SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@phoenix-ai/dsh-subprocess'

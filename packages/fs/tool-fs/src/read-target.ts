@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-tool-fs/src/read-target
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { FsError } from '@phoenix-ai/dsh-fs'
 import type { FsInfo, FsTarget } from '@phoenix-ai/dsh-fs'
 import type { ToolExecution } from '@phoenix-ai/dsh-tools'

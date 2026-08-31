@@ -177,6 +177,15 @@ get(agent: Agent): GoalView | undefined
 disarm(agent: Agent): GoalView | undefined
 
 /**
+ * Restore process-local continuation authority for an active durable goal.
+ * This is used by the persistent round driver after a process restart; it
+ * does not change the goal revision or bypass a durable external blocker.
+ * @param agent - owning live agent.
+ * @returns a fresh armed view, or `undefined` when no goal is current.
+ */
+activate(agent: Agent): GoalView | undefined
+
+/**
  * Create and arm a goal. A completed goal may be replaced; every other
  * current phase must be cleared or resumed instead.
  * @param agent - owning live agent.
@@ -203,13 +212,25 @@ create(agent: Agent, request: CreateGoalRequest): GoalView
 @Remote('pause') pause(agent: Agent, ref: GoalRef): GoalView
 
 /**
- * Resume and arm a stopped goal, or rearm an active goal after a
- * session-start edge, while its round budget still has capacity.
+ * Resume and arm a stopped goal, or open a new execution window when the
+ * current window has reached its round cap. An active goal restored by a
+ * session-start edge is rearmed by the continuation driver, not by this
+ * remote mutation.
  * @param agent - owning live agent.
  * @param ref - expected current revision.
  * @returns the active view.
  */
 @Remote('resume') resume(agent: Agent, ref: GoalRef): GoalView
+
+/**
+ * Open a new bounded execution window without changing the mission objective.
+ * The previous window's rounds remain in the session log and the new revision
+ * invalidates all stale prompts from that window.
+ * @param agent - owning live agent.
+ * @param ref - expected current active revision or round-limit revision.
+ * @returns the armed goal at the beginning of a new window.
+ */
+@Remote('continue') continueWindow(agent: Agent, ref: GoalRef): GoalView
 
 /**
  * Mark a current non-complete goal complete and disarm it.

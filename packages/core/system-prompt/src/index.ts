@@ -4,13 +4,13 @@
  * @module @phoenix-ai/dsh-system-prompt
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { AnonymousEntries, NamedEntries, ScopedLayers, scopeTarget } from '@phoenix-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer, Scoped } from '@phoenix-ai/dsh-scope'
 import type { ContextSnapshotSection, ToolSchema } from '@phoenix-ai/dsh-llm'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     systemPrompt: SystemPrompt
   }
@@ -82,6 +82,8 @@ export interface PromptContext {
   readonly order: number
   /** Static text or a provider evaluated for each assembly. Empty text contributes nothing. */
   readonly text: string | ((context: AssembleContext) => string)
+  /** Whether `{{name}}` references in the resolved text are interpolated (default true). */
+  readonly interpolateVariables?: boolean
 }
 
 /** One section of an assembly: {@link PromptSection} with its text resolved. */
@@ -98,6 +100,8 @@ export interface AssembledContext {
   name: string
   /** The resolved text before variable interpolation. */
   text: string
+  /** Whether `{{name}}` references in this context are interpolated. */
+  interpolateVariables?: boolean
 }
 
 /** Tool schemas visible in one assembly and their pre-restriction name set. */
@@ -250,7 +254,12 @@ export function joinContextSections(sections: readonly ContextSnapshotSection[])
  */
 export function renderContextSections(assembly: PromptAssembly): ContextSnapshotSection[] {
   return assembly.contexts
-    .map(context => ({ name: context.name, text: interpolate(context, assembly.variables, 'context') }))
+    .map(context => ({
+      name: context.name,
+      text: context.interpolateVariables === false
+        ? context.text
+        : interpolate(context, assembly.variables, 'context'),
+    }))
     .filter(section => section.text.length > 0)
 }
 
@@ -525,6 +534,7 @@ export class SystemPrompt extends Service {
           .map(entry => ({
             name: entry.name,
             text: typeof entry.text === 'function' ? entry.text(context) : entry.text,
+            ...entry.interpolateVariables === undefined ? {} : { interpolateVariables: entry.interpolateVariables },
           })),
       tools: orderTools(collected, this.toolOrder, knownNames),
       variables,

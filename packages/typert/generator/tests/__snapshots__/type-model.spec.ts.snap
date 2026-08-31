@@ -3207,7 +3207,7 @@ exports[`WorkspaceAnalyzer > builds independent face models with an explicit cro
             "name": "Service",
             "target": {
               "kind": "external",
-              "module": "@deepseek-ai/cordis",
+              "module": "@phoenix-ai/cordis",
               "name": "Service",
               "subpath": ".",
             },
@@ -3224,7 +3224,7 @@ exports[`WorkspaceAnalyzer > builds independent face models with an explicit cro
             "name": "Service",
             "target": {
               "kind": "external",
-              "module": "@deepseek-ai/cordis",
+              "module": "@phoenix-ai/cordis",
               "name": "Service",
               "subpath": ".",
             },
@@ -3241,7 +3241,7 @@ exports[`WorkspaceAnalyzer > builds independent face models with an explicit cro
             "name": "Service",
             "target": {
               "kind": "external",
-              "module": "@deepseek-ai/cordis",
+              "module": "@phoenix-ai/cordis",
               "name": "Service",
               "subpath": ".",
             },
@@ -6334,7 +6334,7 @@ exports[`WorkspaceAnalyzer > builds independent face models with an explicit cro
             "name": "Service",
             "target": {
               "kind": "external",
-              "module": "@deepseek-ai/cordis",
+              "module": "@phoenix-ai/cordis",
               "name": "Service",
               "subpath": ".",
             },

@@ -9,11 +9,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import Hmr from '@deepseek-ai/cordis-plugin-hmr'
-import Include, { type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
-import Timer from '@deepseek-ai/cordis-plugin-timer'
+import { Context } from '@phoenix-ai/cordis'
+import Hmr from '@phoenix-ai/cordis-plugin-hmr'
+import Include, { type PatchOptions } from '@phoenix-ai/cordis-plugin-include'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
+import Timer from '@phoenix-ai/cordis-plugin-timer'
 import {
   boot,
   loadOptionalPatches,

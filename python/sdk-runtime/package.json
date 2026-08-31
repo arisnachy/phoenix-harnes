@@ -5,11 +5,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@deepseek-ai/cordis-plugin-group": "workspace:^",
-    "@deepseek-ai/cordis-plugin-include": "workspace:^",
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
-    "@deepseek-ai/cordis-plugin-timer": "workspace:^",
-    "@deepseek-ai/cosmokit": "workspace:^",
+    "@phoenix-ai/cordis-plugin-group": "workspace:^",
+    "@phoenix-ai/cordis-plugin-include": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-timer": "workspace:^",
+    "@phoenix-ai/cosmokit": "workspace:^",
     "@phoenix-ai/dsh-acp": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-agent-loop": "workspace:^",
@@ -122,7 +122,7 @@
     "@phoenix-ai/dsh-workflow": "workspace:^",
     "@phoenix-ai/dsh-workflow-worker-thread": "workspace:^",
     "@phoenix-ai/dsh-agent-instructions": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^"
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { createUserMessage, CallId  } from '@phoenix-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'
 import { defineContentToolFixture } from '@phoenix-ai/dsh-tools'

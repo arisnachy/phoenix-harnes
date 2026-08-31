@@ -1,4 +1,4 @@
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import HardnessRegistry from '@phoenix-ai/dsh-hardness/src/index.ts'
 import type { Agent } from '@phoenix-ai/dsh-agent'
@@ -19,7 +19,7 @@ describe('HARDNESS production mission runtime', () => {
       return async () => {}
     })
     const connection: HostConnectionHandle = { rpc: { handle } as never }
-    const agent = { session: {} } as Agent
+    const agent = { session: { append: vi.fn() } } as unknown as Agent
     const runtime = { language: 'typescript', isolation: 'worker-thread', run: vi.fn(async () => ({ logs: ['ok'], value: 1 })) }
     installHardnessMissionRuntime({
       connection,
@@ -31,9 +31,12 @@ describe('HARDNESS production mission runtime', () => {
       codeRuntime: runtime as never,
     })
     await expect(handler?.('artifact/run', {
-      sessionId: 'session-code', language: 'typescript', program: 'return 1',
+      sessionId: 'session-code', artifactId: 'artifact-code', callId: 'call-code', language: 'typescript', program: 'return 1',
     }, new AbortController().signal)).resolves.toMatchObject({ ok: true, value: { kind: 'execution', result: { value: 1 } } })
     expect(runtime.run).toHaveBeenCalledWith(expect.objectContaining({ program: 'return 1', bindings: [] }))
+    expect((agent.session as unknown as { append?: ReturnType<typeof vi.fn> }).append).toHaveBeenCalledWith('hardness/artifact', {
+      artifactId: 'artifact-code', callId: 'call-code', language: 'typescript', result: { logs: ['ok'], value: 1 },
+    })
     await ctx.fiber.dispose()
   })
 
@@ -51,18 +54,43 @@ describe('HARDNESS production mission runtime', () => {
       return async () => {}
     })
     const connection: HostConnectionHandle = { rpc: { handle } as never }
-    const session = { append: vi.fn() }
+    const session = { append: vi.fn(), events: [] }
     const agent = { session } as unknown as Agent
     const tools = { execute: vi.fn(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'weather', mime: 'text/html', data: '<h1>Sunny</h1>' } } })) }
     const approval = { request: vi.fn(async () => 'allowed-once' as const) }
-    installHardnessMissionRuntime({ connection, agents: { get: id => id === 'session-1' ? agent : undefined }, approval: approval as never, hardness, tools, acquisition })
+    const judgeStart = vi.fn(async () => ({
+      id: 'judge-run' as never,
+      localAgent: undefined,
+      result: Promise.resolve({
+        stopReason: 'completed' as const,
+        output: [],
+        structured: {
+          verdict: 'pass', summary: 'verified', evidence: ['weather'], required_changes: [],
+          criteria: [
+            { id: 'artifact-produced', verdict: 'pass', evidence: ['weather'], findings: [] },
+            { id: 'artifact-rendered', verdict: 'pass', evidence: ['weather'], findings: [] },
+          ],
+          quality: { verdict: 'pass', summary: 'complete', evidence: ['weather'], findings: [] },
+        },
+      }),
+      dispose: vi.fn(async () => {}),
+    }))
+    installHardnessMissionRuntime({
+      connection, agents: { get: id => id === 'session-1' ? agent : undefined }, approval: approval as never, hardness, tools, acquisition,
+      subagents: {
+        getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never,
+        start: judgeStart,
+      },
+    })
     await expect(handler?.('mission/run', { sessionId: 'session-1', callId: 'call-1', need: { kind: 'weather' }, args: {} }, new AbortController().signal)).resolves.toMatchObject({ ok: true, value: { kind: 'completed', artifact: { id: 'weather' } } })
     expect(approval.request).toHaveBeenCalled()
     expect(tools.execute).toHaveBeenCalledOnce()
-    expect(session.append.mock.calls.map(([type]) => type)).toEqual([
-      'hardness/mission', 'hardness/mission', 'hardness/mission', 'hardness/mission',
-      'hardness/mission', 'hardness/mission', 'hardness/mission', 'hardness/mission',
-    ])
+    expect(judgeStart).toHaveBeenCalledOnce()
+    const eventTypes = session.append.mock.calls.map(([type]) => type)
+    expect(eventTypes[0]).toBe('hardness/kernel')
+    expect(eventTypes.at(-1)).toBe('hardness/kernel')
+    expect(eventTypes.filter(type => type === 'hardness/kernel')).toHaveLength(7)
+    expect(eventTypes.filter(type => type === 'hardness/mission')).toHaveLength(8)
     await ctx.fiber.dispose()
   })
 
@@ -88,9 +116,17 @@ describe('HARDNESS production mission runtime', () => {
       return async () => {}
     })
     const connection: HostConnectionHandle = { rpc: { handle } as never }
-    const agent = { session: {} } as Agent
+    const agent = { session: { append: vi.fn(), events: [] } } as unknown as Agent
     const approval = { request: vi.fn(async () => 'allowed-once' as const) }
     const tools = { execute: vi.fn() }
+    const judge = async () => ({
+      verdict: 'pass' as const, summary: 'verified', evidence: ['search-result'], requiredChanges: [],
+      criteria: [
+        { id: 'artifact-produced', verdict: 'pass' as const, evidence: ['search-result'], findings: [] },
+        { id: 'artifact-rendered', verdict: 'pass' as const, evidence: ['search-result'], findings: [] },
+      ],
+      quality: { verdict: 'pass' as const, summary: 'complete', evidence: ['search-result'], findings: [] },
+    })
 
     installHardnessMissionRuntime({
       connection,
@@ -100,6 +136,7 @@ describe('HARDNESS production mission runtime', () => {
       tools: tools as never,
       acquisition,
       executor: broker,
+      judge,
     })
 
     await expect(handler?.(

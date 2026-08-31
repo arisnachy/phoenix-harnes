@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .phoenix/evolution
-          deepseek=$(git ls-remote https://github.com/deepseek-ai/deepseek-harness.git refs/heads/main | cut -f1)
+          deepseek=$(git ls-remote https://github.com/arisnachy/phoenix-harnes.git refs/heads/main | cut -f1)
           codex=$(git ls-remote https://github.com/openai/codex.git refs/heads/main | cut -f1)
           claude=$(git ls-remote https://github.com/anthropics/claude-code.git refs/heads/main | cut -f1)
           [[ -n "$deepseek" && -n "$codex" && -n "$claude" ]] || { echo "Upstream observation incomplete; fail closed."; exit 1; }
@@ -78,7 +78,7 @@ jobs:
           set -euo pipefail
           git config user.name "phoenix-evolution-bot"
           git config user.email "phoenix-evolution-bot@users.noreply.github.com"
-          git remote add deepseek https://github.com/deepseek-ai/deepseek-harness.git
+          git remote add deepseek https://github.com/arisnachy/phoenix-harnes.git
           git fetch deepseek main
           sha=$(git rev-parse deepseek/main); short=${sha:0:12}; branch="phoenix/evolution-deepseek-${short}"
           if git merge-base --is-ancestor deepseek/main HEAD; then exit 0; fi

@@ -9,7 +9,7 @@
  */
 
 import { basename, extname } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { AttachmentError, AttachmentId } from '@phoenix-ai/dsh-attachment'
 import type { ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'

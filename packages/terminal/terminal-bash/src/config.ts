@@ -1,6 +1,6 @@
 /** Validated configuration for the local PTY backend. */
 
-import z from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
 import { resolveBashPath } from '@phoenix-ai/dsh-bash-local'
 import { resolvePwshPath } from '@phoenix-ai/dsh-pwsh-local'
 

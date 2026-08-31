@@ -367,6 +367,13 @@ abstract readFrom(id: SessionId, fromSeq: number, signal?: AbortSignal): Promise
 abstract list(signal?: AbortSignal): Promise<SessionHeader[]>
 
 /**
+ * Physically remove one persisted session.
+  * @param id - session identity to remove.
+ * @returns whether a durable record was removed.
+ */
+remove(id: SessionId): Promise<boolean>
+
+/**
  * List materialized sessions with cheap per-log change tokens.
  *
  * Repeated observations of an unchanged log return the same revision. A

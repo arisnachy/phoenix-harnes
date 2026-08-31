@@ -6,12 +6,14 @@ import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 
 import { isAbsolute, join, resolve } from 'node:path'
 import type {
   PhoenixUpdateRestartReceipt,
+  PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
   PhoenixUpdateStatus,
 } from './types.ts'
 
 const STATE_FILE = 'phoenix-update-state.json'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
+const REFRESH_REQUEST_FILE = 'phoenix-update-refresh-request.json'
 const SHA_PATTERN = /^[0-9a-f]{40}$/i
 const STATE_READ_ATTEMPTS = 3
 const STATE_READ_RETRY_MS = 12
@@ -184,4 +186,19 @@ export function requestPhoenixUpdateRestart(root: string = runtimeRoot()): Phoen
     at,
   })
   return { accepted: true, status: 'restarting' }
+}
+
+/**
+ * Wake the detached updater so a manual refresh performs a real channel check.
+ * @param root - PHOENIX checkout root; defaults to the launcher-protected runtime root.
+ * @returns whether the refresh request was durably written.
+ */
+export function requestPhoenixUpdateRefresh(root: string = runtimeRoot()): PhoenixUpdateRefreshReceipt {
+  const gitDir = gitDirectory(root)
+  if (gitDir === undefined) return { accepted: false }
+  writeStateJson(join(gitDir, REFRESH_REQUEST_FILE), {
+    schema: 1,
+    requestedAt: new Date().toISOString(),
+  })
+  return { accepted: true }
 }

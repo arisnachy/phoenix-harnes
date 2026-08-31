@@ -7,7 +7,7 @@
  * @module @phoenix-ai/dsh-fs-observation-policy
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { FsError } from '@phoenix-ai/dsh-fs'
 import type { FsObservation, FsTarget, FsVersion, FsWriteIntent } from '@phoenix-ai/dsh-fs'
 import type { FsObservationActor } from './types.ts'

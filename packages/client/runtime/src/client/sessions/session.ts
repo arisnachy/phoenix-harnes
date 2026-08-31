@@ -1,7 +1,7 @@
 // Sessions remain resident after creation so they continue consuming mux frames off-screen.
 
-import type { Context } from '@deepseek-ai/cordis'
-import type { AttachmentIdType, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type { Context } from '@phoenix-ai/cordis'
+import type { AttachmentIdType, FileAttachmentRef, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { SessionEvent } from '@phoenix-ai/dsh-session/types'
 import type {
   HistoryEntry, IApiClient, MessageId, MuxFrame, PromptContentPart, QueueAction, RpcError,
@@ -270,7 +270,7 @@ export class Session implements SessionFace {
    */
   async readAttachment(
     attachmentId: AttachmentIdType,
-  ): Promise<RpcResult<{ attachment: ImageAttachmentRef; data: Uint8Array }>> {
+  ): Promise<RpcResult<{ attachment: ImageAttachmentRef | FileAttachmentRef; data: Uint8Array }>> {
     try {
       const result = (await this.api.sessions.attachment({
         sessionId: this.sessionId,

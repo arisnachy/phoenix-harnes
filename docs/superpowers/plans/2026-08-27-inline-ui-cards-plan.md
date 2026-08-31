@@ -39,7 +39,7 @@
 
 Add a test fixture that constructs a `ContentBlock` with:
 
-```ts
+```ts ignore-check
 const card = {
   type: 'ui-card' as const,
   id: 'follow-up',
@@ -68,7 +68,7 @@ Expected: FAIL because `ContentBlockMap` has no `ui-card` member.
 
 In `packages/llm/llm/src/types.ts`, add before `ContentBlockMap`:
 
-```ts
+```ts ignore-check
 export interface UiCardOption {
   value: string
   label: string
@@ -134,7 +134,7 @@ git commit -m "feat: add structured UI card content contract"
 
 Create tests for `normalizeUiCard` with these cases:
 
-```ts
+```ts ignore-check
 expect(normalizeUiCard(validCard)).toMatchObject({ id: 'follow-up', title: 'Seguimiento psicológico' })
 expect(normalizeUiCard({ ...validCard, actions: [] })).toBeNull()
 expect(normalizeUiCard({ ...validCard, fields: [{ ...validCard.fields[0], id: 'x' }, { ...validCard.fields[0], id: 'x' }] })).toBeNull()
@@ -158,7 +158,7 @@ Expected: FAIL because the validator, `ui-card` projection, and model type do no
 
 Create `ui-card-model.ts` with:
 
-```ts
+```ts ignore-check
 import type { UiCardBlock, UiCardField } from '@phoenix-ai/dsh-llm'
 
 export type UiCardValues = Readonly<Record<string, string>>
@@ -284,7 +284,7 @@ Expected: FAIL because `UiCard` does not exist.
 
 Export:
 
-```ts
+```ts ignore-check
 export interface UiCardProps {
   card: UiCardBlock
   onPrepareDraft: (text: string) => void

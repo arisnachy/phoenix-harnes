@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-terminal-bash
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import { TerminalBackendCleanupError } from '@phoenix-ai/dsh-terminal'

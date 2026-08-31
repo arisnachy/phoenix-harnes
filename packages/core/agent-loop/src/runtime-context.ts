@@ -7,7 +7,7 @@ import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ContextSnapshotSection } from '@phoenix-ai/dsh-llm'
 import type { Session, UserMessage } from '@phoenix-ai/dsh-session'
 import { isReplacementSurfaceEvent } from '@phoenix-ai/dsh-session'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 
 const SOURCE = '@phoenix-ai/dsh-system-prompt'
 const CLEARED = 'Current runtime context: none. Earlier runtime-context snapshots no longer apply.'

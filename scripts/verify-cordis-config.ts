@@ -203,7 +203,7 @@ function validateEntry(value: unknown, file: string, path: string): void {
       validateEntry(value.insert[index], file, `${path}.insert[${index}]`)
     }
   }
-  if (value.name !== '@deepseek-ai/cordis-plugin-include') return
+  if (value.name !== '@phoenix-ai/cordis-plugin-include') return
   const config = value.config
   if (!isRecord(config) || !isUnknownArray(config.patches)) return
   for (let index = 0; index < config.patches.length; index++) {

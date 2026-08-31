@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { JobId, JobRegistry } from '@phoenix-ai/dsh-jobs'
 import type {
@@ -91,6 +91,6 @@ describe('JobRegistry seam', () => {
   it('mounting the abstract seam directly fails loudly at load (stale-composition fence)', async () => {
     const ctx = new Context()
     await expect(ctx.plugin(JobRegistry as unknown as typeof StubJobRegistry))
-      .rejects.toThrow(/abstract job registry seam; load an implementation such as @deepseek-ai\/dsh-jobs-local/)
+      .rejects.toThrow(/abstract job registry seam; load an implementation such as @phoenix-ai\/dsh-jobs-local/)
   })
 })

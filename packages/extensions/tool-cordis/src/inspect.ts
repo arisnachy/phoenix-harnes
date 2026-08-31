@@ -7,7 +7,7 @@
  * @module @phoenix-ai/dsh-tool-cordis/inspect
  */
 
-import type { Context, Fiber } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@phoenix-ai/cordis'
 import type { ScopeKey } from '@phoenix-ai/dsh-scope'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 // Type-only: resolves `ctx.dynamicCordisRunner` (the registry this report reads).

@@ -158,7 +158,7 @@ interface CodeRunFailure {
 
 ## The service
 
-`CodeRuntime` (`ctx.codeRuntime`, abstract — defined in [`packages/code-runtime/code-runtime/src/index.ts`](../../packages/code-runtime/code-runtime/src/index.ts)) is `run(request)` plus two readonly descriptors: `language` (what the program must be written in — `'typescript'` and `'python'` are the well-known values, those `dsh-tools` presents, and only `'typescript'` has a published backend; a consumer generating language-specific presentation switches on it and fails loud on one it cannot present) and `isolation` (the execution substrate — `'worker-thread'`, `'process'`, `'container'`; a diagnostic label, **not a security claim**). Implementations must keep runs isolated from each other (no cross-run state) and dispose to quiescence: in-flight runs are terminated and awaited before teardown completes.
+`CodeRuntime` (`ctx.codeRuntime`, abstract — defined in [`packages/code-runtime/code-runtime/src/index.ts`](../../packages/code-runtime/code-runtime/src/index.ts)) is `run(request)` plus two readonly descriptors: `language` (what the program must be written in — `'typescript'` and `'python'` are the well-known values presented by `dsh-tools`) and `isolation` (the execution substrate — `'worker-thread'`, `'process'`, `'container'`; a diagnostic label, **not a security claim**). The Web bundle keeps the TypeScript worker at `ctx.codeRuntime` and mounts the CPython provider at `ctx.pythonCodeRuntime`; the artifact RPC selects between them from the declared language. Implementations must keep runs isolated from each other (no cross-run state) and dispose to quiescence: in-flight runs are terminated and awaited before teardown completes.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -188,4 +188,21 @@ abstract run(request: CodeRunRequest): Promise<CodeRunResult>
 ```
 
 Source: [`packages/code-runtime/code-runtime/src/index.ts`](../../packages/code-runtime/code-runtime/src/index.ts)
+
+<a id="ctxpythoncoderuntime--pythoncoderuntime"></a>
+
+### `ctx.pythonCodeRuntime` — `PythonCodeRuntime`
+
+CPython provider registered as `ctx.pythonCodeRuntime`.
+
+```ts cordis-catalog
+/**
+ * Execute one program in a fresh CPython process.
+ * @param request - Program source, host bindings, and optional abort signal.
+ * @returns The bounded logs, completion value, or structured runtime failure.
+ */
+async run(request: CodeRunRequest): Promise<CodeRunResult>
+```
+
+Source: [`packages/code-runtime/code-runtime-python/src/index.ts`](../../packages/code-runtime/code-runtime-python/src/index.ts)
 <!-- END GENERATED cordis-surface -->

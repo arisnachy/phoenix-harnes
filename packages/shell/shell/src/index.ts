@@ -5,7 +5,7 @@
  * @module @phoenix-ai/dsh-shell
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { settingsNamespace } from '@phoenix-ai/dsh-settings'
 import type { SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellRunResult } from './types.ts'
@@ -37,7 +37,7 @@ export type {
 export { parseExitStatus } from './render.ts'
 export type { ParsedExitStatus } from './render.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     shell: ShellExecutor
   }

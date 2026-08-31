@@ -603,6 +603,30 @@ export class SessionManager {
   }
 
   /**
+   * Delete one cold session and remove it from the local list projection.
+   * @param sessionId - Session identity to remove.
+   * @returns The transport result from the host deletion endpoint.
+   */
+  async delete(sessionId: SessionId): Promise<RpcResult<{ deleted: true }>> {
+    try {
+      const { result } = await this.api.sessions.delete({ sessionId })
+      if (result.ok) {
+        this.recordMutation({ kind: 'remove', sessionId })
+        this.sessions.get(sessionId)?.handleRemoved()
+        this.pendingBuffers.delete(sessionId)
+        this.pendingInteractions.delete(sessionId)
+        this.completedNotifications.delete(sessionId)
+        this.projectionStores.delete(sessionId)
+        if (this.selected === sessionId) this.selected = undefined
+        this.notifier.markDirty()
+      }
+      return result
+    } catch (error: unknown) {
+      return transportError(error)
+    }
+  }
+
+  /**
    * Insert-or-enrich a locally synthesized summary: a new id prepends; an
    * existing entry only gains fields it lacks (the session-added frame and the
    * create() echo race — whichever lands second must fill the placeholder's

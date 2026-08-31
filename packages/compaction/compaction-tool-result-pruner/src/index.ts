@@ -4,8 +4,8 @@
  * @module @phoenix-ai/dsh-compaction-tool-result-pruner
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { freezeMessage } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, ToolResultMessage } from '@phoenix-ai/dsh-session'
@@ -29,7 +29,7 @@ export type {
   ToolResultPruneConfig,
 } from './types.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     toolResultPruner: ToolResultPruner
   }

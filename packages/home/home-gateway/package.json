@@ -1,0 +1,32 @@
+{
+  "name": "@phoenix-ai/dsh-home-gateway",
+  "description": "Allowlisted Home Assistant gateway capability for PHOENIX",
+  "version": "0.1.1-rc.2",
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
+    "directory": "packages/home/home-gateway"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib/index.js", "lib/types/**/*.d.ts"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^"
+  },
+  "dependencies": { "@phoenix-ai/schemastery": "workspace:^" },
+  "devDependencies": {
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^"
+  }
+}

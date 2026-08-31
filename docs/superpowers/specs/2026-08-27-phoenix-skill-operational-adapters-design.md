@@ -24,7 +24,7 @@ El adaptador no depende de un proveedor, modelo, idioma, backend o familia de he
 
 Añadir una capacidad `SkillOperationalAdapter` al seam de skills. El adaptador recibe una `SkillDefinition` y el snapshot de capacidades expuestas por el runtime, y devuelve una definición cargable con un preflight normalizado:
 
-```ts
+```ts ignore-check
 interface SkillOperationalProfile {
   readonly skillName: string
   readonly executionMode: 'native' | 'conditional' | 'instruction-only'

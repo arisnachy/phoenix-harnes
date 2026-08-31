@@ -24,6 +24,9 @@
     - id: code-runtime
       name: '@phoenix-ai/dsh-code-runtime-worker-thread'
 
+    - id: python-code-runtime
+      name: '@phoenix-ai/dsh-code-runtime-python'
+
     - id: headless-startup
       name: '@phoenix-ai/dsh-headless/startup'
 

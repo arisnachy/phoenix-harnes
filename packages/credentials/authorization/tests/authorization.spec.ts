@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { credentialKey } from '@phoenix-ai/dsh-credentials'
 import AuthorizationService, {
   AuthorizationDeclinedError,

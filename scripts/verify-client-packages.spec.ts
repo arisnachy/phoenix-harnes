@@ -15,7 +15,7 @@ import {
   type ClientPackageFacts,
 } from './verify-client-packages.ts'
 
-const CORDIS = '@deepseek-ai/cordis'
+const CORDIS = '@phoenix-ai/cordis'
 const roots: string[] = []
 
 afterEach(() => {
@@ -189,11 +189,11 @@ describe('dependency sections', () => {
 
   it('requires every peer to have the same development range', () => {
     const subject = pkg('feature', {
-      peerDependencies: { [CORDIS]: 'workspace:^', '@deepseek-ai/cordis-plugin-loader': 'workspace:^' },
+      peerDependencies: { [CORDIS]: 'workspace:^', '@phoenix-ai/cordis-plugin-loader': 'workspace:^' },
     })
     expect(collectClientPackageViolations(facts([subject]))).toEqual([
-      'packages/client/feature/package.json: peerDependencies.@deepseek-ai/cordis-plugin-loader'
-      + ' is workspace:^, so devDependencies.@deepseek-ai/cordis-plugin-loader must use the same range;'
+      'packages/client/feature/package.json: peerDependencies.@phoenix-ai/cordis-plugin-loader'
+      + ' is workspace:^, so devDependencies.@phoenix-ai/cordis-plugin-loader must use the same range;'
       + ' found no declaration',
     ])
   })
@@ -219,12 +219,12 @@ describe('dependency sections', () => {
       dynamic: false,
       staticLinked: true,
       runtimeSourceUses: {
-        '@deepseek-ai/cordis-plugin-loader': ['packages/client/web/src/boot.ts'],
+        '@phoenix-ai/cordis-plugin-loader': ['packages/client/web/src/boot.ts'],
         react: ['packages/client/web/src/seed.ts'],
       },
       devDependencies: {
         [CORDIS]: 'workspace:^',
-        '@deepseek-ai/cordis-plugin-loader': 'workspace:^',
+        '@phoenix-ai/cordis-plugin-loader': 'workspace:^',
         react: '^18.2.0',
       },
     })
@@ -328,7 +328,7 @@ describe('manifest declarations', () => {
       },
       peerDependencies: {
         '@phoenix-ai/dsh-client-ui-slots': 'workspace:^',
-        '@deepseek-ai/cordis-plugin-loader': 'workspace:^',
+        '@phoenix-ai/cordis-plugin-loader': 'workspace:^',
       },
       devDependencies: {},
     })
@@ -362,7 +362,7 @@ describe('manifest declarations', () => {
     })
     expect(fixed.dependencies).toBeUndefined()
     expect(fixed.peerDependencies).toEqual({
-      '@deepseek-ai/cordis-plugin-loader': 'workspace:^',
+      '@phoenix-ai/cordis-plugin-loader': 'workspace:^',
       [CORDIS]: 'workspace:^',
       '@phoenix-ai/dsh-agent': 'workspace:*',
     })
@@ -370,7 +370,7 @@ describe('manifest declarations', () => {
       '@phoenix-ai/dsh-client-ui-slots': 'workspace:^',
       [CORDIS]: 'workspace:^',
       '@phoenix-ai/dsh-agent': 'workspace:*',
-      '@deepseek-ai/cordis-plugin-loader': 'workspace:^',
+      '@phoenix-ai/cordis-plugin-loader': 'workspace:^',
     })
   })
 

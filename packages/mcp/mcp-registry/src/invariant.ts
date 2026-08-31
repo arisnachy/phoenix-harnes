@@ -1,6 +1,6 @@
 /** Package-owned invariant companion for `@phoenix-ai/dsh-mcp-connector-registry`. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
 const PACKAGE_NAME = '@phoenix-ai/dsh-mcp-connector-registry'

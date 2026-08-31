@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/subagent/subagent-acp"
   },
   "type": "module",
@@ -39,14 +39,14 @@
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-subprocess": "workspace:^",
     "@phoenix-ai/dsh-timeout": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "0.25.1",
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",
@@ -56,6 +56,6 @@
     "@phoenix-ai/dsh-subprocess": "workspace:^",
     "@phoenix-ai/dsh-subprocess-local": "workspace:^",
     "@phoenix-ai/dsh-timeout": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

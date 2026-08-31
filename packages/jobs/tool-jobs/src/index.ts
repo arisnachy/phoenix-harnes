@@ -7,8 +7,8 @@
  * @module @phoenix-ai/dsh-tool-jobs
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { boundContextSummary, createUserMessage, type ContentBlock } from '@phoenix-ai/dsh-llm'
 import { TextRetainer } from '@phoenix-ai/dsh-output-retention'
 import { defineTool } from '@phoenix-ai/dsh-tools'

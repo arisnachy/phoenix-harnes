@@ -468,6 +468,23 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Runs one model-written program against host-provided async bindings; backends differ by substrate and language (the tool registry consumes it for Code Mode).',
   },
   {
+    key: 'home',
+    pkg: 'home-gateway',
+    title: 'Home Assistant device-control seam',
+    mode: 'seam',
+    consumers: ['tool-home-gateway'],
+    note: 'The gateway enforces entity and service allowlists before forwarding Home Assistant requests; the model-facing tool consumes the same service for discovery and control.',
+  },
+  {
+    key: 'pythonCodeRuntime',
+    pkg: 'code-runtime',
+    title: 'Python code-execution seam',
+    mode: 'seam',
+    implementations: ['code-runtime-python'],
+    consumers: ['hardness-adapters'],
+    note: 'Runs model-written Python in a fresh bounded CPython process; the HARDNESS artifact surface selects it for artifacts that declare the `python` language.',
+  },
+  {
     key: 'fs',
     pkg: 'fs',
     title: 'Filesystem provider seam',
@@ -596,6 +613,22 @@ const SERVICE_ROLES: ServiceRole[] = [
     mode: 'core',
     consumers: ['tool-cordis'],
     note: 'Registers host inspect providers, mirrors the client provider manifest, and routes client queries through the dynamic Cordis transport.',
+  },
+  {
+    key: 'learningMemory',
+    pkg: 'session-learning',
+    title: 'Persistent learning memory',
+    mode: 'core',
+    consumers: ['tool-session-learning', 'system-prompt'],
+    note: 'Records bounded, provenance-aware lessons from durable session events; consumers decide when evidence is recalled and never treat memory as authority for permissions or instructions.',
+  },
+  {
+    key: 'mcpConnectors',
+    pkg: 'mcp-registry',
+    title: 'MCP connector lifecycle registry',
+    mode: 'core',
+    consumers: ['mcp-client', 'hardness-adapters'],
+    note: 'Projects secret-free MCP server identity, transport, lifecycle, and public tool names so diagnostics and model-facing connector inventory can observe live state without receiving credentials or provider errors.',
   },
 ]
 

@@ -1,4 +1,4 @@
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { SettingsSchemaService } from '@phoenix-ai/dsh-client-ui-settings/src/client/schema.ts'
 import { createSettingsSchemaOperations } from '../src/client/schema-operations.ts'
 

@@ -6,10 +6,10 @@
  * @module @phoenix-ai/dsh-invariants
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
-import type { Inject } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
-import type Schema from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import type { Inject } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
+import type Schema from '@phoenix-ai/schemastery'
 
 /** Runtime invariant selection configured on the service plugin. */
 export interface Config {
@@ -65,7 +65,7 @@ export class InvariantError extends Error {
   }
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     invariants: InvariantRegistry
   }

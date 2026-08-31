@@ -28,7 +28,7 @@ export const GOAL_JUDGE_OUTPUT_SCHEMA: ObjectJsonSchema = {
   required: ['verdict', 'summary', 'findings', 'required_changes'],
 }
 
-const READ_ONLY_TOOLS = ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search'] as const
+const READ_ONLY_TOOLS = ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] as const
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 12
 
@@ -91,7 +91,9 @@ export async function judgeGoalCompletion(input: {
       + 'using only read-only tools. Do not edit files, run commands, call other agents, or change goal state. '
       + 'Decide whether the whole objective is complete, not whether the latest response sounds confident. '
       + 'Return pass only when concrete evidence covers the entire objective. Return needs_changes with specific '
-      + 'required_changes when useful work remains. Return blocked only when review cannot proceed because a '
+      + 'required_changes when useful work remains. For product, UI, document, or visual objectives, use web_search '
+      + 'and web_fetch to inspect comparable work when available and require evidence that the result meets or exceeds '
+      + 'the relevant bar. Return blocked only when review cannot proceed because a '
       + 'concrete external condition prevents evaluation.\n'
       + '</goal_judge>',
   }]

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import AgentRegistry, { agentEvents, Inbox } from '@phoenix-ai/dsh-agent'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { createUserMessage, HarnessError } from '@phoenix-ai/dsh-llm'
@@ -76,6 +76,20 @@ function appendRound(session: Session, ref: GoalRef, round: number): void {
     content: [{ type: 'text', text: `round ${round}` }], source,
   }), { surfaceOp: 'append' })
   session.append('turn/end', { turn, reason: { kind: 'completed' } })
+}
+
+/** Append the durable proof required before a goal can enter complete. */
+function appendPassingJudge(session: Session, ref: GoalRef): void {
+  session.append('goal/judge', {
+    callId: 'test-judge' as never,
+    goalId: ref.id,
+    revision: ref.revision,
+    round: 0,
+    verdict: 'pass',
+    summary: 'The complete objective is verified.',
+    findings: [],
+    requiredChanges: [],
+  })
 }
 
 describe('GoalService creation and replay', () => {
@@ -290,12 +304,35 @@ describe('SpecialistLedger persistence', () => {
 })
 
 describe('GoalService mutations', () => {
+  it('rejects completion when no durable independent judge has passed', async () => {
+    const { ctx, agent } = await harness()
+    const goal = ctx.goals.create(agent, { objective: 'do not close early' })
+
+    expect(() => ctx.goals.complete(agent, goal)).toThrow(expect.objectContaining({
+      code: 'GOAL_COMPLETION_NOT_VERIFIED',
+    }))
+    expect(ctx.goals.get(agent)).toMatchObject({ phase: 'active', revision: 1 })
+  })
+
+  it('invalidates a passing judge when the goal revision changes', async () => {
+    const { ctx, agent } = await harness()
+    const created = ctx.goals.create(agent, { objective: 'review the exact version' })
+    appendPassingJudge(agent.session, created)
+    const edited = ctx.goals.edit(agent, created, { objective: 'review the changed version' })
+
+    expect(() => ctx.goals.complete(agent, edited)).toThrow(expect.objectContaining({
+      code: 'GOAL_COMPLETION_NOT_VERIFIED',
+    }))
+    expect(ctx.goals.get(agent)).toMatchObject({ phase: 'active', revision: 2 })
+  })
+
   it('adapts Remote creation and reuses business methods for later mutations', async () => {
     const { ctx, agent } = await harness()
     const created = ctx.goals.remoteExportCreate(agent, { objective: 'remote lifecycle' })
     const edited = ctx.goals.edit(agent, created.ref, { objective: 'edited remotely' })
     const paused = ctx.goals.pause(agent, edited)
     const resumed = ctx.goals.resume(agent, paused)
+    appendPassingJudge(agent.session, resumed)
     const completed = ctx.goals.complete(agent, resumed)
     const cleared = ctx.goals.clear(agent, completed)
 
@@ -337,6 +374,7 @@ describe('GoalService mutations', () => {
     })
     goal = ctx.goals.resume(agent, goal)
     goal = ctx.goals.pause(agent, goal)
+    appendPassingJudge(agent.session, goal)
     goal = ctx.goals.complete(agent, goal)
     expect(goal).toMatchObject({ phase: 'complete', activation: 'disarmed' })
     expect(() => ctx.goals.resume(agent, goal)).toThrow(expect.objectContaining({ code: 'GOAL_INVALID_TRANSITION' }))
@@ -350,6 +388,7 @@ describe('GoalService mutations', () => {
       goal = phase === 'paused'
         ? ctx.goals.pause(agent, goal)
         : ctx.goals.block(agent, goal, { code: 'test-blocker', message: 'Blocked for the test.' })
+      appendPassingJudge(agent.session, goal)
       const complete = ctx.goals.complete(agent, goal)
       const replacement = ctx.goals.create(agent, { objective: `after ${phase}` })
       expect(complete.phase).toBe('complete')
@@ -374,7 +413,7 @@ describe('GoalService mutations', () => {
     }))
   })
 
-  it('records canonical blocker reasons and enforces the round cap on resume', async () => {
+  it('records canonical blocker reasons and opens a new window at the round cap', async () => {
     const { ctx, agent, session } = await harness()
     let goal = ctx.goals.create(agent, { objective: 'bounded', maxGoalRounds: 2 })
     for (const reason of [null, [], { code: 1, message: 'invalid code' }, { code: 'round-limit', message: 1 }]) {
@@ -398,14 +437,12 @@ describe('GoalService mutations', () => {
       roundsStarted: 2,
       activation: 'disarmed',
     })
-    expect(() => ctx.goals.resume(agent, goal)).toThrow(expect.objectContaining({ code: 'GOAL_INVALID_TRANSITION' }))
-    goal = ctx.goals.edit(agent, goal, { maxGoalRounds: 3 })
-    expect(goal.blockedReason).toEqual({ code: 'round-limit', message: 'Goal round limit reached.' })
     goal = ctx.goals.resume(agent, goal)
-    expect(goal).toMatchObject({ phase: 'active', maxGoalRounds: 3, activation: 'armed' })
+    expect(goal).toMatchObject({ phase: 'active', maxGoalRounds: 2, roundsStarted: 0, activation: 'armed', revision: 3 })
     expect(goal.blockedReason).toBeUndefined()
-    appendRound(session, goal, 3)
-    goal = ctx.goals.block(agent, goal, { code: 'round-limit', message: 'Goal round limit reached.' })
+    expect(session.events.at(-1)?.type).toBe('goal/continuation')
+    appendRound(session, goal, 1)
+    appendPassingJudge(agent.session, goal)
     expect(ctx.goals.complete(agent, goal).phase).toBe('complete')
   })
 

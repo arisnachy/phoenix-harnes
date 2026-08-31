@@ -1,6 +1,6 @@
 /** What the browser half registers, and that it all leaves with the fiber. */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveSlotLabel } from '@phoenix-ai/dsh-client-ui-slots'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'

@@ -1,8 +1,9 @@
-import { memo } from 'react'
+import { memo, useEffect } from 'react'
 import type { PropsRenderSlots } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ChatNodeViewProps, TurnTailOwnerProps } from '../contract/slots.ts'
 import { MessageIconActions } from './MessageIconActions.tsx'
 import { assistantText } from './turn-assistant.ts'
+import { speakVoiceAssistantResponse } from '../voice.ts'
 import css from './TurnTailNodeView.module.css'
 
 type TurnTailNodeViewProps = ChatNodeViewProps<'turn-tail'>
@@ -18,8 +19,13 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   const turn = node.location.kind === 'turn' || node.location.kind === 'step'
     ? node.location.turn
     : undefined
-  if (turn === undefined) return null
   const closing = data.closing
+  const responseText = closing === null ? '' : assistantText(closing.blocks)
+  useEffect(() => {
+    if (closing === null || responseText === '') return
+    speakVoiceAssistantResponse(`${node.key}:${closing.finalNode.seq}`, responseText, closing.time)
+  }, [closing, node.key, responseText])
+  if (turn === undefined) return null
   const owner: TurnTailOwnerProps = { turn, seq: closing?.finalNode.seq ?? data.seq, openFile }
   const tail = renderSlotChain('conversation.chat.turnTail', owner)
   if (closing === null) return tail === null ? null : <div className={css.root}>{tail}</div>
@@ -36,12 +42,13 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
     <div className={css.root} data-turn-tail={data.turn} data-time-hover-root>
       {tail}
       <MessageIconActions
-        text={assistantText(closing.blocks)}
+        text={responseText}
         time={closing.time}
         runMs={runMs}
         ttftMs={data.ttftMs}
         tokensPerSecond={data.tokensPerSecond}
         clock="end"
+        speak
         onBranch={() => { forkAt(closing.finalNode.seq) }}
         branchUnavailable={data.branchUnavailable || hasLaterChatNode}
         className={css.actions}

@@ -8,7 +8,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import * as Runtime from '@phoenix-ai/dsh-client-runtime/client'
 import { stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
 import * as Primitives from '@phoenix-ai/dsh-client-ui-primitives'

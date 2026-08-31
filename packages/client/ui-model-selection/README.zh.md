@@ -14,7 +14,7 @@ Host 报告的 `ModelSelection` 是唯一的选择事实，其中包含提供方
 
 `/client` 导出面为插件本体（`apply`/`inject`）、`ModelDirectoryResolver`、`ModelDirectory` 及其状态形状、slot 注入面类型。
 
-Settings trigger 还接收一个紧凑的 Codex 配额 seat。当 authorization catalog 提供 OpenAI/Codex 账户 telemetry 时，它会显示报告的主要和次要窗口（通常为 5h 和 7d）的剩余百分比以及可用的重置倒计时。它独立于当前模型提供方，每分钟刷新一次；缺少或无效 telemetry 时隐藏，并且绝不根据 token 数量估算限制。
+Settings trigger 还接收一个紧凑的 Codex 配额 seat。当 authorization catalog 提供 OpenAI/Codex 账户 telemetry 时，一个可访问的用量胶囊会为报告的主要和次要窗口（通常为 5h 和 7d）显示圆形剩余容量仪表、精确百分比以及可用的重置倒计时。它独立于当前模型提供方；telemetry 可用后每分钟刷新一次，并在页面刷新后账户提供方仍在启动时每两秒重试。缺少或无效 telemetry 时它保持隐藏，并且绝不根据 token 数量估算限制。
 
 ## 模型体验
 

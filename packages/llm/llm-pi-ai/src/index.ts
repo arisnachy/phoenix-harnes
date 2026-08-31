@@ -55,7 +55,7 @@
  * @module @phoenix-ai/dsh-llm-pi-ai
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError } from '@phoenix-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@phoenix-ai/dsh-llm'
@@ -63,7 +63,7 @@ import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoen
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
-import { assertServiceable, Config, resolveProfiles } from './config.ts'
+import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
 import { registerPiAiFlows } from './login.ts'
@@ -81,6 +81,7 @@ export type {
   PiAiThinkingFormat,
   ResolvedPiAiProviderProfile,
 } from './config.ts'
+export { CHATGPT_WEB_DEFAULT_API, CHATGPT_WEB_DEFAULT_BASE_URL, CHATGPT_WEB_PROVIDER, chatgptWebDefaults } from './config.ts'
 export { recordKeyFor } from './auth.ts'
 export { supportedProtocols } from './provider.ts'
 
@@ -108,17 +109,21 @@ function registrationFacts(profiles: ReadonlyMap<string, ResolvedPiAiProviderPro
 }
 
 /**
- * The configurable-provider directory: every installed catalog route, plus
- * every route the current profiles declare. A hand-declared route has no
- * catalog entry, so without this union it would have no settings address and
- * configuration surfaces could neither show nor edit it.
+ * The configurable-provider directory: every installed catalog route, the
+ * optional local ChatGPT Web bridge route, plus every route the current
+ * profiles declare. A hand-declared route has no catalog entry, so without
+ * this union it would have no settings address and configuration surfaces
+ * could neither show nor edit it.
  * @param profiles - the currently resolved provider profiles.
  * @returns the directory entries in catalog order, declared routes last.
  */
 function directoryEntries(
   profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>,
 ): LlmConfigurableProvider[] {
-  const catalog = new Set(catalogProviderIds())
+  // This route is a Phoenix-native adapter for the optional loopback
+  // codex-chatgpt-web bridge. It is exposed as a declared route so the Models
+  // page can configure it, but it remains dormant until a profile is stored.
+  const knownRoutes = new Set([...catalogProviderIds(), CHATGPT_WEB_PROVIDER])
   const entries = new Map<string, LlmConfigurableProvider>()
   const declare = (provider: string, displayName: string): void => {
     entries.set(provider, {
@@ -126,13 +131,16 @@ function directoryEntries(
       displayName,
       settingsNs: NS,
       settingsPath: ['providers', provider],
-      // Membership of the installed catalog, not of the settings document:
-      // narrowing a shipped provider's models stores a profile too, and that
-      // route is still one pi-ai knows.
-      declared: !catalog.has(provider),
+      // The local bridge is a Phoenix route even though pi-ai does not ship a
+      // provider object for it; like a hand-declared route, it needs explicit
+      // profile fields in the settings surface. Other installed catalog routes
+      // remain non-declared even after a profile narrows their models.
+      declared: provider === CHATGPT_WEB_PROVIDER || !knownRoutes.has(provider),
     })
   }
-  for (const provider of catalog) declare(provider, provider)
+  for (const provider of knownRoutes) {
+    declare(provider, provider === CHATGPT_WEB_PROVIDER ? chatgptWebDefaults().displayName : provider)
+  }
   for (const [provider, profile] of profiles) declare(provider, profile.displayName)
   return [...entries.values()]
 }

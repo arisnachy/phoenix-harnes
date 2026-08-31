@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime, { createUserMessage, ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import type { StreamChunk } from '@phoenix-ai/dsh-llm'
 import FileSettingsProvider from '@phoenix-ai/dsh-settings-file'
@@ -150,8 +150,15 @@ describe('hand-declared providers', () => {
     // Membership of the catalog, not of the settings document: a shipped
     // provider carries a stored profile the moment anyone corrects it.
     expect(directory.filter(entry => entry.declared).map(entry => entry.provider))
-      .toEqual(['acme-gateway'])
+      .toEqual(['chatgpt-web', 'acme-gateway'])
     expect(directory.find(entry => entry.provider === 'deepseek')?.declared).toBe(false)
+    expect(directory).toContainEqual({
+      provider: 'chatgpt-web',
+      displayName: 'ChatGPT Web',
+      settingsNs: 'llm-pi-ai',
+      settingsPath: ['providers', 'chatgpt-web'],
+      declared: true,
+    })
   })
 
   it('sizes a model the catalog cannot describe from the route\u2019s own fallbacks', () => {

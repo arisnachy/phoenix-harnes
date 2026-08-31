@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/extensions/cordis-client-runner"
   },
   "type": "module",
@@ -46,17 +46,17 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-api-remotes": "workspace:^",
     "@phoenix-ai/dsh-client-connection": "workspace:^",
     "@phoenix-ai/dsh-client-modules": "workspace:^",
     "@phoenix-ai/dsh-client-runtime": "workspace:^",
     "@phoenix-ai/dsh-client-ui-theme": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-api-remotes": "workspace:^",
     "@phoenix-ai/dsh-client-connection": "workspace:^",
     "@phoenix-ai/dsh-client-modules": "workspace:^",
@@ -64,7 +64,7 @@
     "@phoenix-ai/dsh-client-ui-theme": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@types/react": "~18.3.1",
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "react": "^18.2.0"
   },
   "files": [

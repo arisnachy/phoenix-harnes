@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-30-chatgpt-web-lifecycle.md
+2026-08-30-chatgpt-web-lifecycle.md: adfaeaf71875b6e05f4fccb6552c3da5e69002f5
+2026-08-30-chatgpt-web-lifecycle.zh.md: 3678c6c9dcfca01c7fd28259c8b1f9de09b78574

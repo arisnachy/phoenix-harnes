@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import { carrierKeyOf, createScope } from '@phoenix-ai/dsh-scope'

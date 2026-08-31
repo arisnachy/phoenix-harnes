@@ -1,6 +1,6 @@
 /** Parent adapter that fails if the composition-only Loader test starts a turn. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { GenerateOptions, StreamChunk } from '@phoenix-ai/dsh-llm'
 import { LlmAdapter } from '@phoenix-ai/dsh-llm'
 

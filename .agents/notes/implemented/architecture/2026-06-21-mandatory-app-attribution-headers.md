@@ -32,7 +32,7 @@ The provider-neutral identity is owned by `dsh-llm` (`packages/llm/llm/src/attri
 
 - product token for `User-Agent`: `deepseek-harness` (continuity with the pre-Agent Note wire value and the repo/org identity)
 - version: read from the owning package's manifest via `createRequire`, never a hand-copied constant
-- app URL: `https://github.com/deepseek-ai/deepseek-harness` - the repository home
+- app URL: `https://github.com/arisnachy/phoenix-harnes` - the repository home
 
 The default is mandatory and non-empty. White-label deployments pass their own `AppIdentity` to `attributionHeaders(identity)` - the override hook is the function parameter, with no deployment config plumbing until a consumer needs it - and omission falls back to the harness default rather than suppressing attribution. There is no per-request API for the model, user prompt, session id, cwd, user email, API key owner, or local machine identity to influence these fields.
 

@@ -7,7 +7,7 @@
  * dynamic package from reaching a foreign context. Registrations ride the
  * CALLING fiber, so disposing it must remove them (HMR safety).
  */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import type { FC } from 'react'
 import type {

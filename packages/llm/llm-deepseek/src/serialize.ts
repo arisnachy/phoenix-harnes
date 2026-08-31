@@ -6,9 +6,9 @@
  * @module dsh-llm-deepseek/serialize
  */
 
-import { contentHasImage, LlmError, offloadRequestImagesWithPolicy, requestImageHandleText } from '@phoenix-ai/dsh-llm'
+import { contentHasFile, contentHasImage, LlmError, offloadRequestImagesWithPolicy, requestImageHandleText } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
-import type { ImageAttachmentRef, RequestImageAttachment } from '@phoenix-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef, RequestImageAttachment, StoredFileAttachment } from '@phoenix-ai/dsh-attachment'
 import type {
   WireImageContentPart,
   WireMessage,
@@ -56,6 +56,10 @@ export interface ImageSerializationOptions {
   byteQuantum?: number
   /** Image-count removal step applied after the request exceeds its count bound. */
   countQuantum?: number
+  /** Durable arbitrary files, keyed by attachment id, projected into bounded text. */
+  files?: ReadonlyMap<FileAttachmentRef['attachmentId'], StoredFileAttachment>
+  /** Maximum number of file bytes exposed to the text model per attachment. */
+  maxInlineFileBytes?: number
 }
 
 /** Durable message and image ordinal used in provider diagnostics. */
@@ -65,6 +69,7 @@ export interface ImageWireLocation {
 }
 
 const TOOL_RESULT_IMAGE_TEXT = 'Attached image(s) from tool result:'
+const DEFAULT_MAX_INLINE_FILE_BYTES = 256 * 1024
 
 /** Validate the adapter-owned effort before resolving its DeepSeek wire fields. */
 function reasoningEffort(effort: NonNullable<GenerateOptions['reasoningEffort']>): 'off' | 'low' | 'high' | 'max' {
@@ -111,12 +116,67 @@ function assertTextOnly(blocks: readonly ContentBlock[]): void {
   }
 }
 
+/** Whether a declared media type normally contains human-readable text. */
+function isTextFile(ref: FileAttachmentRef): boolean {
+  if (ref.mediaType.startsWith('text/')) return true
+  return /^(?:application\/(?:json|javascript|xml|yaml|x-yaml|toml|csv)|image\/svg\+xml)$/iu.test(ref.mediaType)
+    || /\.(?:c|cc|cpp|css|csv|go|html?|java|js|json|md|py|rs|sql|svg|toml|ts|tsx|txt|xml|yaml|yml)$/iu.test(ref.name ?? '')
+}
+
+/** Strip control characters from a model-visible file label. */
+function safeFileName(ref: FileAttachmentRef): string {
+  const name = ref.name?.replace(/[\u0000-\u001f\u007f]/g, '').trim()
+  return name === undefined || name.length === 0 ? `attachment-${String(ref.attachmentId).slice(-8)}` : name.slice(0, 255)
+}
+
+/** Project one durable file into bounded text without exposing binary bytes. */
+function fileText(block: Extract<ContentBlock, { type: 'file' }>, images: ImageSerializationOptions): WireTextContentPart {
+  const stored = images.files?.get(block.attachment.attachmentId)
+  if (stored === undefined
+    || stored.ref.attachmentId !== block.attachment.attachmentId
+    || stored.ref.bytes !== stored.data.byteLength
+    || stored.ref.bytes !== block.attachment.bytes) {
+    throw new LlmError(
+      `DeepSeek request file ${block.attachment.attachmentId} was not prepared.`,
+      'INVALID_REQUEST',
+    )
+  }
+  const name = safeFileName(block.attachment)
+  const mediaType = block.attachment.mediaType
+  const maxBytes = images.maxInlineFileBytes ?? DEFAULT_MAX_INLINE_FILE_BYTES
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+    throw new LlmError('DeepSeek arbitrary-file projection requires a positive byte limit.', 'INVALID_REQUEST')
+  }
+  if (!isTextFile(block.attachment)) {
+    return {
+      type: 'text',
+      text: `Attached binary file "${name}" (${mediaType}, ${block.attachment.bytes} bytes); binary contents are not inlined.`,
+    }
+  }
+  const truncated = stored.data.byteLength > maxBytes
+  const data = stored.data.subarray(0, maxBytes)
+  let decoded: string
+  try {
+    decoded = new TextDecoder('utf-8', { fatal: true }).decode(data)
+  } catch (error: unknown) {
+    throw new LlmError(
+      `DeepSeek request file "${name}" is not valid UTF-8 text.`,
+      'UNSUPPORTED_CONTENT',
+      { cause: error },
+    )
+  }
+  return {
+    type: 'text',
+    text: `Attached file "${name}" (${mediaType}):\n${decoded}${truncated ? `\n[file truncated after ${maxBytes} bytes]` : ''}`,
+  }
+}
+
 /** Reject roles whose DeepSeek history format cannot carry image input. */
 function assertSupportedImageRoles(messages: readonly Message[]): void {
   for (const message of messages) {
-    if (message.role !== 'user' && contentHasImage(message.content)) {
+    if (message.role !== 'user' && (contentHasImage(message.content) || contentHasFile(message.content))) {
       throw new LlmError(
-        `The DeepSeek chat-completions adapter cannot represent image content in a ${message.role} message.`,
+        `The DeepSeek chat-completions adapter cannot represent attachment content in a ${message.role} message.`,
         'UNSUPPORTED_CONTENT',
       )
     }
@@ -173,6 +233,9 @@ async function contentParts(
       case 'image':
         nextImage.value += 1
         parts.push(...await imageParts(block, images, { message, image: nextImage.value }, parts.length > 0))
+        break
+      case 'file':
+        parts.push(fileText(block, images))
         break
       case 'tool-result':
         parts.push(...await contentParts(block.content, images, message, nextImage))
@@ -243,6 +306,9 @@ export function serializeMessages(messages: Message[]): WireMessage[] {
   const wire: WireMessage[] = []
   for (const message of messages) {
     assertTextOnly(message.content)
+    if (contentHasFile(message.content)) {
+      throw new LlmError('The DeepSeek chat-completions adapter requires durable file content for serialization.', 'UNSUPPORTED_CONTENT')
+    }
     if (message.role === 'system') {
       wire.push({ role: 'system', content: flattenText(message.content) })
       continue

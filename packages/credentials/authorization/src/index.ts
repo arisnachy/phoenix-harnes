@@ -26,7 +26,7 @@
  * @module @phoenix-ai/dsh-authorization
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import type { CredentialKey } from '@phoenix-ai/dsh-credentials'
 import { HarnessError } from '@phoenix-ai/dsh-llm'
 
@@ -42,7 +42,7 @@ export type {
   AuthorizationUsageTelemetry,
 } from './types.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     authorization: AuthorizationService
   }

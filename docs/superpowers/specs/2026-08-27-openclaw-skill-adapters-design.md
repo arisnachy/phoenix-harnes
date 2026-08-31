@@ -22,7 +22,7 @@ El puente `apps/cli/src/openclaw-skills.ts` generará, junto con `arsenal.json`,
 
 Cada entrada tendrá esta forma lógica:
 
-```ts
+```ts ignore-check
 interface OpenClawAdapter {
   alias: string
   sourceName: string

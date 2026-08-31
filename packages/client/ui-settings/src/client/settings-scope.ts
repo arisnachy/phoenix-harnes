@@ -8,8 +8,8 @@
  * over its snapshot.
  */
 
-import { Service } from '@deepseek-ai/cordis'
-import type { Context } from '@deepseek-ai/cordis'
+import { Service } from '@phoenix-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {
   ConnectionHandle, IApiClient, SettingsNamespaceView, SettingsPathOpView,
 } from '@phoenix-ai/dsh-api-remotes/client'
@@ -223,7 +223,7 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
   }
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     settingsScope: SettingsScopeBinder
   }

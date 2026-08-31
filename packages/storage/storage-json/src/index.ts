@@ -7,8 +7,8 @@
 
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { StorageError, UNIT_NAME_RE, storageBackendServiceKey } from '@phoenix-ai/dsh-storage'
 import type { KvFacet, KvUnit, KvUnitDescriptor, StorageBackend } from '@phoenix-ai/dsh-storage'
 import { openJsonUnit } from './unit.ts'

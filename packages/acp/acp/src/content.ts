@@ -1,7 +1,7 @@
 /** ACP wire-content admission and projection owned by the ACP adapter. @module */
 
 import type { ContentBlock as AcpContentBlock } from '@agentclientprotocol/sdk'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { isImageAdmissionError } from '@phoenix-ai/dsh-attachment'
 import type { ImageAttachmentRef, ImageMediaType, SaveImageAttachment } from '@phoenix-ai/dsh-attachment'
 import type { Agent } from '@phoenix-ai/dsh-agent'

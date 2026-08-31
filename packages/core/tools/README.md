@@ -66,7 +66,7 @@ First-party plugin authors can use the `defineTool()` helper (exported from this
 
 ```ts
 import { readFile } from 'node:fs/promises'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 
 declare const ctx: Context

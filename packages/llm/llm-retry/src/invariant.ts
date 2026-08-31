@@ -1,6 +1,6 @@
 /** Package-owned durable retry-event invariants. @module @phoenix-ai/dsh-llm-retry/invariant */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import type { LlmFailure } from '@phoenix-ai/dsh-llm'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'

@@ -89,7 +89,7 @@ PascalCase 标识符中的首字母缩略词使用首字母大写格式：`Ui`�
 | `@phoenix-ai/dsh-jsonrpc` | `@phoenix-ai/dsh-sdk-jsonrpc-server` | 它是 SDK 协议的服务器端。单独使用 `jsonrpc` 只说明编码；`sdk-jsonrpc-server` 则同时说明所属系列、机制和职责。 |
 | `HarnessSdkServer` | `HarnessSdkJsonRpcServer` | 该类是 JSON-RPC 服务器的一种实现，并不代表所有可能的 SDK 服务器。 |
 
-保留 `@phoenix-ai/dsh-sdk-client`、`@phoenix-ai/dsh-sdk-protocol` 和 `deepseek-harness-sdk-runtime`。排除 `@deepseek-ai/create-sdk`、`@phoenix-ai/dsh-scripts`、`@phoenix-ai/dsh-helper` 和 `@phoenix-ai/dsh-telemetry`；单独的移除决策负责删除这些包及其支撑依赖图。
+保留 `@phoenix-ai/dsh-sdk-client`、`@phoenix-ai/dsh-sdk-protocol` 和 `deepseek-harness-sdk-runtime`。排除 `@phoenix-ai/create-sdk`、`@phoenix-ai/dsh-scripts`、`@phoenix-ai/dsh-helper` 和 `@phoenix-ai/dsh-telemetry`；单独的移除决策负责删除这些包及其支撑依赖图。
 
 ### Shell 与终端
 

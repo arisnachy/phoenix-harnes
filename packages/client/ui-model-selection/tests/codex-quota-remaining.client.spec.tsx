@@ -80,8 +80,8 @@ describe('formatResetCountdown', () => {
 
   it('uses disponible at or after the reset instant', () => {
     const nowMs = Date.parse('2026-08-27T12:00:00.000Z')
-    expect(formatResetCountdown(nowMs / 1000, nowMs)).toBe('disponible')
-    expect(formatResetCountdown(nowMs / 1000 - 1, nowMs)).toBe('disponible')
+    expect(formatResetCountdown(nowMs / 1000, nowMs)).toBe('available')
+    expect(formatResetCountdown(nowMs / 1000 - 1, nowMs)).toBe('available')
   })
 })
 
@@ -93,7 +93,7 @@ describe('CodexQuotaRemaining', () => {
 
     expect(await screen.findByText('100%')).toBeTruthy()
     expect(auth.list).toHaveBeenCalledWith({})
-    expect(view.container.querySelector('[style]')?.getAttribute('style')).toContain('width: 100%')
+    expect(view.container.querySelector('[data-quota-meter]')?.getAttribute('style')).toContain('--quota-progress: 100%')
   })
 
   it('shows both the five-hour and weekly Codex quota windows with reset countdowns', async () => {
@@ -130,6 +130,8 @@ describe('CodexQuotaRemaining', () => {
     expect(screen.getByText('↻ 4d 6h')).toBeTruthy()
     expect(screen.getByLabelText(/5h.*86%.*2h 18m/)).toBeTruthy()
     expect(screen.getByLabelText(/7d.*91%.*4d 6h/)).toBeTruthy()
+    const group = screen.getByRole('group', { name: 'OpenAI Codex usage limits' })
+    expect(group.querySelectorAll('[data-quota-meter]')).toHaveLength(2)
   })
 
   it('keeps a window visible without inventing a countdown when reset time is absent', async () => {
@@ -148,6 +150,37 @@ describe('CodexQuotaRemaining', () => {
 
     expect(await screen.findByText('100%')).toBeTruthy()
     expect(auth.list).toHaveBeenCalledWith({})
+  })
+
+  it('shows the global Codex quota beside Settings before a session is selected', async () => {
+    const d = directory('openrouter')
+    const auth = authorization(12)
+    render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} sessionId={undefined} />)
+
+    expect(await screen.findByText('88%')).toBeTruthy()
+  })
+
+  it('retries quickly when account telemetry is still starting after a page refresh', async () => {
+    vi.useFakeTimers()
+    const d = directory('openai-codex')
+    const auth = authorization(14)
+    auth.list
+      .mockResolvedValueOnce({
+        rpcId: 'authorization-list-starting' as never,
+        result: { ok: true as const, value: { entries: [] } },
+      })
+
+    render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
+    await act(async () => { await Promise.resolve() })
+    expect(screen.queryByText('86%')).toBeNull()
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000)
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('86%')).toBeTruthy()
+    expect(auth.list).toHaveBeenCalledTimes(2)
   })
 
   it('skips a key-only OpenAI entry and uses the later Codex telemetry entry', async () => {

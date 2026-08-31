@@ -5,7 +5,7 @@
  * @module @phoenix-ai/dsh-sandbox
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { HarnessError } from '@phoenix-ai/dsh-llm'
 import type { SessionId } from '@phoenix-ai/dsh-session'
 
@@ -143,7 +143,7 @@ export class SandboxUnavailableError extends HarnessError {
   }
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     sandbox: SandboxProvider
   }

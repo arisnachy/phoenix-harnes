@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { createScope } from '@phoenix-ai/dsh-scope'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'

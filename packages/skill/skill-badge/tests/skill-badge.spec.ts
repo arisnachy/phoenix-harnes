@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import SkillRegistry from '@phoenix-ai/dsh-skill'
 import * as SkillBadge from '@phoenix-ai/dsh-skill-badge'

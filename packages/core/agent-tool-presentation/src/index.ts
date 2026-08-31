@@ -18,8 +18,8 @@
  * @module @phoenix-ai/dsh-agent-tool-presentation
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { ToolPresentationMode } from '@phoenix-ai/dsh-tools'
 // Type-only: brings the `ctx.tools` Context merge into this program.
 import type {} from '@phoenix-ai/dsh-tools'

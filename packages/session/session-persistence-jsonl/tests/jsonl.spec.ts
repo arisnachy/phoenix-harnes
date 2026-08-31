@@ -1,6 +1,6 @@
 import { MessageId, createUserMessage, createMessage } from '@phoenix-ai/dsh-llm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { appendFile, mkdtemp, mkdir, rm, readFile, writeFile, readdir, stat, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
@@ -267,6 +267,26 @@ describe('JsonlSessionPersistence: durability and crash semantics', () => {
     await ctx.plugin(JsonlSessionPersistence, { root, compression: 'none' })
   })
   afterEach(async () => { await ctx.fiber.dispose() })
+
+  it('physically removes a persisted session and its artifact directory', async () => {
+    const session = ctx.sessions.create(SessionId('delete-me'))
+    session.append('turn/start', { turn: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    await ctx.sessions.flush(session)
+    const location = ctx.sessionPersistence.locate(session.header)
+    if (location === undefined) throw new Error('JSONL location missing')
+    await stat(location.path)
+
+    await ctx.fiber.dispose()
+    const coldCtx = new Context()
+    await coldCtx.plugin(SessionStore)
+    const coldFiber = await coldCtx.plugin(JsonlSessionPersistence, { root, compression: 'none' })
+    await expect(coldCtx.sessionPersistence.remove(session.id)).resolves.toBe(true)
+    await expect(stat(location.path)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(coldCtx.sessionPersistence.list()).resolves.toEqual([])
+    await expect(coldCtx.sessionPersistence.remove(session.id)).resolves.toBe(false)
+    await coldFiber.dispose()
+  })
 
   it('lazy materialization: create() writes no file until the first append', async () => {
     const m = meta('lazy', '/work')

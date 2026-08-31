@@ -3,7 +3,7 @@
  * Isolated file so vi.mock of the MCP SDK doesn't pollute other test suites.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime from '@phoenix-ai/dsh-tools'
 import McpConnectorRegistry from '@phoenix-ai/dsh-mcp-connector-registry/src/index.ts'
@@ -84,6 +84,7 @@ const stdioConfig: Config = {
   env: {},
   cwd: '',
   toolCallTimeoutMs: 60_000,
+  startupTimeoutMs: 5_000,
   failOnStartupError: false,
 }
 
@@ -142,6 +143,7 @@ describe('mcp-client plugin module exports', () => {
       reconnect: { initialDelayMs: 100 },
     } as never)
     expect(partial.reconnect).toEqual({ enabled: true, initialDelayMs: 100, maxDelayMs: 30_000, maxAttempts: 10 })
+    expect(partial.startupTimeoutMs).toBe(5_000)
   })
 
   it('Config schema rejects an invalid reconnect block', () => {
@@ -206,6 +208,18 @@ describe('apply (plugin lifecycle)', () => {
     await activation
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
     await fiber.dispose()
+  })
+
+  it('continues boot after a bounded MCP startup timeout when startup failure is non-fatal', async () => {
+    mockConnect.mockImplementation(() => new Promise<void>(() => {}))
+    const warn = vi.spyOn(ctx.logger, 'warn')
+
+    await expect(apply(ctx, {
+      ...stdioConfig,
+      startupTimeoutMs: 10,
+    })).resolves.toBeUndefined()
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('startup timeout'))
   })
 
   it('rejects a duplicate serverName at load and leaves the first instance intact', async () => {

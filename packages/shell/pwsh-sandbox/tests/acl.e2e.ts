@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { SandboxExecutionPolicy } from '@phoenix-ai/dsh-sandbox'
 import { resolvePwshPath } from '@phoenix-ai/dsh-pwsh-local'
 import { LocalSandboxProvider } from '@phoenix-ai/dsh-sandbox-local'

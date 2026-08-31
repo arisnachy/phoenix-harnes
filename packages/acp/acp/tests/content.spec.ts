@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { AttachmentError, AttachmentId } from '@phoenix-ai/dsh-attachment'
 import type { ImageAttachmentRef, SaveImageAttachment } from '@phoenix-ai/dsh-attachment'
 import type { Agent } from '@phoenix-ai/dsh-agent'

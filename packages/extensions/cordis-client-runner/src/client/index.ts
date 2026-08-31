@@ -10,7 +10,7 @@
  * it until asked again.
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {
   ApprovalRequestId, CordisDynamicPluginId, DynamicCordisInvokeResult, JsonValue,
   DynamicCordisInventoryRow,
@@ -122,7 +122,7 @@ export interface CordisRunnerFace {
   isLoaded(pluginId: CordisDynamicPluginId): boolean
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     /** Run orchestration and page-local load state: what run surfaces read and call. */
     dynamicCordisRunner: CordisRunnerFace

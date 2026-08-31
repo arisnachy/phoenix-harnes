@@ -8,7 +8,7 @@
  * @module @phoenix-ai/dsh-bash-sandbox
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellRunResult } from '@phoenix-ai/dsh-shell'
 import { SandboxUnavailableError } from '@phoenix-ai/dsh-sandbox'
 import type {

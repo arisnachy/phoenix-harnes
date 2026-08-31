@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-agent/model-selection
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 /** Complete provider, model, and optional reasoning effort selected for one live Agent. */

@@ -2,7 +2,7 @@
 # independent one-shot tool rows an Agent Preset may contribute. Loading the
 # composition starts neither product; the scenario pins all four schemas.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

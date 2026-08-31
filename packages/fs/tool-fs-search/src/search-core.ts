@@ -21,7 +21,7 @@
 
 import { existsSync } from 'node:fs'
 import { isAbsolute, relative, sep } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { HarnessError } from '@phoenix-ai/dsh-llm'
 import { ItemRetainer, TextRetainer } from '@phoenix-ai/dsh-output-retention'
 import type { RetainedItems } from '@phoenix-ai/dsh-output-retention'
@@ -40,7 +40,7 @@ export const RAW_OUTPUT_MAX_BYTES = 20_000_000
  * config), attached to both tool definitions for
  * `@phoenix-ai/dsh-tool-call-timeout-policy` to enforce through `exec.signal`.
  */
-export const SEARCH_TIMEOUT_MS = 30_000
+export const SEARCH_TIMEOUT_MS = 60_000
 
 /**
  * Default cap in bytes on the retained stderr tail of one search run — a

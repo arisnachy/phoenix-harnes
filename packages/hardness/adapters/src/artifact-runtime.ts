@@ -1,4 +1,24 @@
 import type { ToolResult } from '@phoenix-ai/dsh-tools'
+import type { CodeRunResult } from '@phoenix-ai/dsh-code-runtime'
+
+/** Durable result of one universal artifact execution. */
+export interface HardnessArtifactExecutionEvent {
+  /** Artifact identity from the original tool result. */
+  readonly artifactId: string
+  /** Tool call that emitted the artifact. */
+  readonly callId: string
+  /** Runtime language selected for the execution. */
+  readonly language: string
+  /** Structured sandbox result, including bounded logs or a failure field. */
+  readonly result: CodeRunResult
+}
+
+declare module '@phoenix-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /** Durable result of a universal HARDNESS artifact execution. */
+    'hardness/artifact': HardnessArtifactExecutionEvent
+  }
+}
 
 /** Serializable artifact emitted by a successful governed capability result. */
 export interface CapabilityArtifact {

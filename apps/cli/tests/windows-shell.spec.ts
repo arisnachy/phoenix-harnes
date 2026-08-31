@@ -16,8 +16,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
-import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
-import { evaluate } from '@deepseek-ai/cordis-plugin-loader'
+import { entryListSchema } from '@phoenix-ai/cordis-plugin-include'
+import { evaluate } from '@phoenix-ai/cordis-plugin-loader'
 import { composeEntries, initProfile, loadProfile, PROFILES_DIR } from '@phoenix-ai/dsh-app-boot'
 
 /**

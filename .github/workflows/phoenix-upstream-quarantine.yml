@@ -27,7 +27,7 @@ jobs:
 
       - name: Fetch the public upstream
         run: |
-          git remote add deepseek-upstream https://github.com/deepseek-ai/deepseek-harness.git
+          git remote add deepseek-upstream https://github.com/arisnachy/phoenix-harnes.git
           git fetch --no-tags deepseek-upstream main
 
       - name: Stop when this upstream SHA already has a candidate

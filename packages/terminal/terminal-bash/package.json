@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/terminal/terminal-bash"
   },
   "type": "module",
@@ -39,12 +39,12 @@
     "@phoenix-ai/dsh-sandbox-policy": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-subprocess": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
     "@phoenix-ai/dsh-bash-local": "workspace:^",
     "@phoenix-ai/dsh-pwsh-local": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
@@ -55,6 +55,6 @@
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-subprocess": "workspace:^",
     "@phoenix-ai/dsh-subprocess-local": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

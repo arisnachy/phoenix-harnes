@@ -1,6 +1,6 @@
 /** Package-owned workflow lifecycle invariants. @module @phoenix-ai/dsh-workflow/invariant */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type {
   WorkflowAgentEndInfo,

@@ -1,7 +1,7 @@
 # Test-only product-shaped composition: mount a deterministic provider behind
 # the same one-shot tool schema as the public Codex example.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

@@ -1,4 +1,4 @@
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SystemPrompt, { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import { createScope, type ScopeKey } from '@phoenix-ai/dsh-scope'
 import { describe, expect, it } from 'vitest'

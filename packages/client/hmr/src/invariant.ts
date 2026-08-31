@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-client-hmr/invariant
  */
 
-import type { Context, Fiber } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@phoenix-ai/cordis'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
 const PACKAGE_NAME = '@phoenix-ai/dsh-client-hmr'

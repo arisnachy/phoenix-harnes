@@ -40,15 +40,15 @@ The vendored packages are decoupled from upstream by their scope but keep their 
 
 | Package | Upstream version | First published version |
 |---|---|---|
-| `@deepseek-ai/cordis` | 4.0.0-rc.7 | 4.0.1 |
-| `@deepseek-ai/cordis-plugin-loader` | 1.0.0-rc.5 | 1.0.1 |
-| `@deepseek-ai/cosmokit` | 1.8.1 | 1.8.2 |
-| `@deepseek-ai/schemastery` | 3.18.0 | 3.18.1 |
-| `@deepseek-ai/cordis-plugin-hmr` | 1.0.15 | 1.0.16 |
-| `@deepseek-ai/cordis-plugin-include` | 1.0.4 | 1.0.5 |
-| `@deepseek-ai/cordis-plugin-timer` | 1.1.2 | 1.1.3 |
-| `@deepseek-ai/cordis-plugin-group` | 1.0.0 | 1.0.1 |
-| `@deepseek-ai/cordis-plugin-logger-console` | 1.0.0 | 1.0.1 |
+| `@phoenix-ai/cordis` | 4.0.0-rc.7 | 4.0.1 |
+| `@phoenix-ai/cordis-plugin-loader` | 1.0.0-rc.5 | 1.0.1 |
+| `@phoenix-ai/cosmokit` | 1.8.1 | 1.8.2 |
+| `@phoenix-ai/schemastery` | 3.18.0 | 3.18.1 |
+| `@phoenix-ai/cordis-plugin-hmr` | 1.0.15 | 1.0.16 |
+| `@phoenix-ai/cordis-plugin-include` | 1.0.4 | 1.0.5 |
+| `@phoenix-ai/cordis-plugin-timer` | 1.1.2 | 1.1.3 |
+| `@phoenix-ai/cordis-plugin-group` | 1.0.0 | 1.0.1 |
+| `@phoenix-ai/cordis-plugin-logger-console` | 1.0.0 | 1.0.1 |
 
 Taking the last published version as the baseline is what survives a re-sync: upstream restoring `4.0.0-rc.8` after this repository published `4.0.1` would otherwise compute `4.0.1` again and collide. `--prerelease rc.1` publishes a rehearsal instead, which takes `--tag next` and leaves the release numbers free: a prerelease has lower precedence than the release it precedes, so `4.0.1` still follows `4.0.1-rc.1`. That ordering is computed here rather than read from `git tag --sort=v:refname`, which places a prerelease above its release.
 

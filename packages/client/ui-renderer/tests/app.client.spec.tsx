@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { SlotTestRuntime } from '@phoenix-ai/dsh-client-test-runtime'
 import type { SessionId } from '@phoenix-ai/dsh-client-runtime/client'
 import { buildRenderApp } from '../src/client/app.tsx'

@@ -4,8 +4,8 @@
  * participates in method lookup, invocation, or type exposure.
  */
 
-import { Service } from '@deepseek-ai/cordis'
-import type { Context, Events } from '@deepseek-ai/cordis'
+import { Service } from '@phoenix-ai/cordis'
+import type { Context, Events } from '@phoenix-ai/cordis'
 import type { ConnectionHandle } from '@phoenix-ai/dsh-client-connection/client'
 import type {
   InvocationDescriptor,
@@ -63,7 +63,7 @@ interface InstalledMethod {
 /** Typed Remote service augmented by generated direct namespaces. */
 export type ClientRemote = TypertClientRemote
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     /** Generated Remote namespaces selected by the Client assembly. */
     remote: ClientRemote

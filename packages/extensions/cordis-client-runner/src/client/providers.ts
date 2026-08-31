@@ -1,6 +1,6 @@
 /** Built-in Client inspect providers over live Client-owned services. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { JsonValue } from '@phoenix-ai/dsh-api-remotes/client'
 import type { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
 import type {} from '@phoenix-ai/dsh-client-ui-theme/client'

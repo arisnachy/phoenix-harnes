@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { agentEvents, type Agent } from '@phoenix-ai/dsh-agent'
 import { CompactionId, compactCheckpointSource } from '@phoenix-ai/dsh-compaction'
 import { createUserMessage, CallId , createMessage, createToolResultMessage } from '@phoenix-ai/dsh-llm'

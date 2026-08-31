@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import * as AgentInvariant from '@phoenix-ai/dsh-agent/invariant'
 import { scopeTarget } from '@phoenix-ai/dsh-scope'

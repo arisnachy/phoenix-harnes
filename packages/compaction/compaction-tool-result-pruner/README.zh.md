@@ -31,7 +31,7 @@
 ## 用法
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import ToolResultPruner from '@phoenix-ai/dsh-compaction-tool-result-pruner'
 
 export function apply(ctx: Context): void {

@@ -1,6 +1,6 @@
 /** Host registration for the browser locale preference. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { settingsNamespace } from '@phoenix-ai/dsh-settings'
 import { LOCALE_SETTINGS_NAMESPACE, LocaleSettingsSchema } from './locale-settings.ts'
 

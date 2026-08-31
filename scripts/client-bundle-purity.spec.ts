@@ -88,7 +88,7 @@ describe('client bundle purity gate', () => {
     expect(() => resolveId('@phoenix-ai/dsh-goal/remote/nested')).toThrow(/purity/)
   })
 
-  it('throws on any other @deepseek-ai leak', () => {
+  it('throws on any other @phoenix-ai leak', () => {
     expect(() => resolveId('@phoenix-ai/dsh-agent')).toThrow(/purity/)
     expect(() => resolveId('@phoenix-ai/dsh-client-web')).toThrow(/purity/)
   })

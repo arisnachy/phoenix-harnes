@@ -4,7 +4,7 @@
  * fresh on settings-document and connection-reset invalidations, and retires
  * both the service and the subscriptions with its fiber.
  */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { TestRemote } from '@phoenix-ai/dsh-client-test-runtime'
 import { apply, inject } from '../src/client/index.ts'

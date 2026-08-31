@@ -1,5 +1,5 @@
-import { Context } from '@deepseek-ai/cordis'
-import Timer from '@deepseek-ai/cordis-plugin-timer'
+import { Context } from '@phoenix-ai/cordis'
+import Timer from '@phoenix-ai/cordis-plugin-timer'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRegistry from '@phoenix-ai/dsh-tools'

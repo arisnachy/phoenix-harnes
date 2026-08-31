@@ -48,6 +48,59 @@
   margin-bottom: 0;
 }
 
+.fileAttachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  margin-bottom: 8px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent);
+}
+
+.fileAttachment:last-child {
+  margin-bottom: 0;
+}
+
+.fileAttachmentIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 15px;
+}
+
+.fileAttachmentCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 18px;
+}
+
+.fileAttachmentCopy strong,
+.fileAttachmentCopy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileAttachmentCopy strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fileAttachmentCopy span {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
 .referenceSummary {
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;

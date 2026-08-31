@@ -4,7 +4,7 @@
  * registration follows the slot declaration, resolves the per-session controller from the slot's
  * sessionId, and unregisters on fiber teardown.
  */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'
 import { createScope, scopeOf, SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'

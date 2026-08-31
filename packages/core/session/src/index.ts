@@ -6,7 +6,7 @@
  * @module @phoenix-ai/dsh-session
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { isAbsolute } from 'node:path'
 import { deepFreeze } from '@phoenix-ai/dsh-llm'
 import { scopeOf, scopeTarget } from '@phoenix-ai/dsh-scope'
@@ -34,7 +34,7 @@ export { deriveEventMessage, foldSurface, isAppendSurfaceEvent, isReplacementSur
 export { canonicalHeader, foldRequestHeader, headerEquals } from './request-header.ts'
 export { KNOWN_SESSION_EVENT_TYPES } from './known-event-types.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     sessions: SessionStore
   }

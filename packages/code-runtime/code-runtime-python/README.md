@@ -4,7 +4,11 @@ English | [中文](README.zh.md)
 
 CPython-subprocess implementation of the [`@phoenix-ai/dsh-code-runtime`](../code-runtime/README.md) seam. Companion to [`@phoenix-ai/dsh-code-runtime-worker-thread`](../code-runtime-worker-thread/README.md); trades the Node worker thread for a fresh `python3` subprocess so model code is Python instead of TypeScript.
 
-The package owns the wire protocol for that seam: the host-side frame codec and the Python-side mirror of the same message vocabulary.
+The package owns the wire protocol and the production provider for that seam: the host-side frame codec, the Python-side mirror of the same message vocabulary, and `PythonCodeRuntime`, which registers as `ctx.pythonCodeRuntime`.
+
+## Provider
+
+`PythonCodeRuntime` starts a fresh CPython process for every run. It supports `return`, `await tools.name(args)`, streamed stdout/stderr capture, typed binding errors, abort, wall-clock timeout, output limits, and POSIX CPU/address-space limits where the host exposes them. The process receives an empty environment and a private fd-3 protocol channel. It is containment, not a security boundary; consumers must still apply the product sandbox and approval policy.
 
 ## Wire protocol
 
@@ -26,4 +30,5 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 ## Known Limitations and Deferred Work
 
 - **The cross-language guard covers the runtime-executed surfaces and the frame field shapes** — `tests/protocol-mirror.e2e.ts` spawns a real `python3` and asserts, against `src/protocol.ts`, both `PROTOCOL_FD` / the log truncation marker text AND each `TypedDict`'s required/optional wire field set in `py/protocol.py`. What it does not compare is the field *types* (e.g. that `cpuSeconds` is an `int` on both sides): comparing type declarations across TypeScript and Python has no mechanical equivalent here, so a type-level drift is still caught by review plus the backend's real-subprocess suite rather than this package's tests.
-- **`src/index.ts` exports the protocol vocabulary only** — the package carries no subprocess execution path and no Python-side JSON codec, so nothing here spawns `python3` outside the mirror test.
+- **The Python provider depends on a CPython executable being installed** — `pythonCommand` is configurable and defaults to `python` on Windows and `python3` elsewhere. If no interpreter is available, the provider reports a child-process failure; it does not silently fall back to TypeScript.
+- **The child process is containment, not a security boundary** — model code can still use Python's standard library and must be governed by the product sandbox and approval policy before execution.

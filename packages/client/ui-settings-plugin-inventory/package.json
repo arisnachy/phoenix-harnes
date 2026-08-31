@@ -52,7 +52,7 @@
     "@phoenix-ai/dsh-client-ui-settings": "workspace:^",
     "@phoenix-ai/dsh-client-ui-sidebar": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-api-remotes": "workspace:^",
@@ -66,7 +66,7 @@
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@testing-library/react": "^16.1.0",
     "@types/react": "~18.3.1",
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

@@ -431,6 +431,35 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
+        signature: 'readonly fileLimits: FileAttachmentLimits = Object.freeze({ maxFileBytes: 25 * 1024 * 1024, maxFilesPerMessage: 20, maxMessageFileBytes: 100 * 1024 * 1024, })',
+        description: 'Deployment-resolved limits for arbitrary file uploads.',
+        parameters: [],
+      },
+      {
+        signature: 'validateFile(_input: SaveFileAttachment): Promise<void>',
+        description: 'Validate one arbitrary file without persisting it.',
+        parameters: [{ name: '_input', description: 'arbitrary file bytes and declared metadata.' }],
+        returns: 'completion after validation.',
+      },
+      {
+        signature: 'async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]>',
+        description: 'Validate and durably commit an ordered arbitrary-file batch.',
+        parameters: [{ name: 'inputs', description: 'arbitrary files in message order.' }],
+        returns: 'durable references in input order.',
+      },
+      {
+        signature: 'saveFile(_input: SaveFileAttachment): Promise<FileAttachmentRef>',
+        description: 'Validate and durably commit one arbitrary file.',
+        parameters: [{ name: '_input', description: 'arbitrary file bytes and declared metadata.' }],
+        returns: 'the durable file reference.',
+      },
+      {
+        signature: 'readFile(_ref: FileAttachmentRef, _signal?: AbortSignal): Promise<StoredFileAttachment>',
+        description: 'Read one arbitrary file and verify its durable reference.',
+        parameters: [{ name: '_ref', description: 'durable file reference to read.' }, { name: '_signal', description: 'optional cancellation signal.' }],
+        returns: 'stored bytes with verified reference metadata.',
+      },
+      {
         signature: 'abstract validateImage(input: SaveImageAttachment): Promise<void>',
         description: 'Validate one image without persisting it. Batch callers validate every member before saving any member.',
         parameters: [{ name: 'input', description: 'encoded bytes, declared media type, and optional display name.' }],
@@ -835,6 +864,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
+        signature: 'readonly organizationForge: OrganizationForgeLedger = new OrganizationForgeLedger()',
+        description: 'Durable Organization Forge laboratories share the owning session log.',
+        parameters: [],
+      },
+      {
         signature: 'get(agent: Agent): GoalView | undefined',
         description: 'Read the current goal for one exact live agent.',
         parameters: [{ name: 'agent', description: 'owning live agent.' }],
@@ -846,6 +880,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Remove process-local continuation authority without changing durable goal phase or revision. Lifecycle owners use this before unloading a driver; a later human-authorized resume records the new activation edge.',
         parameters: [{ name: 'agent', description: 'owning live agent.' }],
         returns: 'a fresh disarmed view, or `undefined` when no goal is current.',
+      },
+      {
+        signature: 'activate(agent: Agent): GoalView | undefined',
+        description: 'Restore process-local continuation authority for an active durable goal. This is used by the persistent round driver after a process restart; it does not change the goal revision or bypass a durable external blocker.',
+        parameters: [{ name: 'agent', description: 'owning live agent.' }],
+        returns: 'a fresh armed view, or `undefined` when no goal is current.',
       },
       {
         signature: 'create(agent: Agent, request: CreateGoalRequest): GoalView',
@@ -867,9 +907,15 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'resume\') resume(agent: Agent, ref: GoalRef): GoalView',
-        description: 'Resume and arm a stopped goal, or rearm an active goal after a session-start edge, while its round budget still has capacity.',
+        description: 'Resume and arm a stopped goal, or open a new execution window when the current window has reached its round cap. An active goal restored by a session-start edge is rearmed by the continuation driver, not by this remote mutation.',
         parameters: [{ name: 'agent', description: 'owning live agent.' }, { name: 'ref', description: 'expected current revision.' }],
         returns: 'the active view.',
+      },
+      {
+        signature: '@Remote(\'continue\') continueWindow(agent: Agent, ref: GoalRef): GoalView',
+        description: 'Open a new bounded execution window without changing the mission objective. The previous window\'s rounds remain in the session log and the new revision invalidates all stale prompts from that window.',
+        parameters: [{ name: 'agent', description: 'owning live agent.' }, { name: 'ref', description: 'expected current active revision or round-limit revision.' }],
+        returns: 'the armed goal at the beginning of a new window.',
       },
       {
         signature: '@Remote(\'complete\') complete(agent: Agent, ref: GoalRef): GoalView',
@@ -894,6 +940,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Create one Goal through the remote boundary.',
         parameters: [{ name: 'agent', description: 'exact live Agent resolved from the wire identity.' }, { name: 'request', description: 'objective and optional round cap.' }],
         returns: 'the created Goal identity.',
+      },
+    ],
+  },
+  {
+    key: 'home',
+    summary: 'Cordis service owner for the Home Assistant gateway.',
+    description: 'Cordis service owner for the Home Assistant gateway.',
+    methods: [
+      {
+        signature: 'listDevices(signal?: AbortSignal): Promise<readonly HomeDevice[]>',
+        description: 'List allowlisted device states and honor cancellation from the requesting tool.',
+        parameters: [{ name: 'signal', description: 'cancellation signal from the requesting tool.' }],
+        returns: 'allowlisted device states.',
+      },
+      {
+        signature: 'control(request: HomeControlRequest, signal?: AbortSignal): Promise<HomeControlResult>',
+        description: 'Invoke one allowlisted service and honor cancellation from the requesting tool.',
+        parameters: [{ name: 'request', description: 'allowlisted entity/service request.' }, { name: 'signal', description: 'cancellation signal from the requesting tool.' }],
+        returns: 'the service outcome.',
       },
     ],
   },
@@ -968,6 +1033,47 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Attach an effect-scoped controller that can read and stop jobs. It serves the owners its registering context\'s scope covers, and start refuses an owner no attached controller serves.',
         parameters: [{ name: 'name', description: 'diagnostic label; duplicate names remain independent.' }],
         returns: 'disposer that detaches this controller.',
+      },
+    ],
+  },
+  {
+    key: 'learningMemory',
+    summary: 'Event-backed memory service.',
+    description: 'Event-backed memory service. Every source event is deduplicated by the ledger, so hot reload and resumed sessions do not multiply memories.',
+    methods: [
+      {
+        signature: 'async ready(): Promise<void>',
+        description: 'Wait until all queued learning writes have reached the ledger.',
+        parameters: [],
+      },
+      {
+        signature: 'search(query: string = \'\', limit: number = 50): Promise<MemoryRecord[]>',
+        description: 'Search active memories by words in their summary or provenance.',
+        parameters: [{ name: 'query', description: 'Words to match against memory text.' }, { name: 'limit', description: 'Maximum number of records to return.' }],
+        returns: 'Matching active memory records.',
+      },
+      {
+        signature: 'recent(limit: number = 20): MemoryRecord[]',
+        description: 'Read newest active records for bounded automatic model recall.',
+        parameters: [{ name: 'limit', description: 'Maximum number of records to return.' }],
+        returns: 'Newest active memory records.',
+      },
+      {
+        signature: 'recall(limit: number = 20): MemoryRecord[]',
+        description: 'Read bounded automatic continuity context, prioritizing durable memories.',
+        parameters: [{ name: 'limit', description: 'Maximum number of records to return.' }],
+        returns: 'Durable high-confidence memories followed by recent evidence.',
+      },
+      {
+        signature: 'remember(input: MemoryRecordInput): Promise<MemoryRecord>',
+        description: 'Store an explicit, bounded lesson supplied by the model or user workflow.',
+        parameters: [{ name: 'input', description: 'Memory record to persist.' }],
+        returns: 'The persisted memory record.',
+      },
+      {
+        signature: 'forget(id: MemoryId): Promise<void>',
+        description: 'Forget one memory while preserving an auditable tombstone.',
+        parameters: [{ name: 'id', description: 'Memory identity to forget.' }],
       },
     ],
   },
@@ -1171,6 +1277,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'pythonCodeRuntime',
+    summary: 'CPython provider registered as `ctx.pythonCodeRuntime`.',
+    description: 'CPython provider registered as `ctx.pythonCodeRuntime`.',
+    methods: [
+      {
+        signature: 'async run(request: CodeRunRequest): Promise<CodeRunResult>',
+        description: 'Execute one program in a fresh CPython process.',
+        parameters: [{ name: 'request', description: 'Program source, host bindings, and optional abort signal.' }],
+        returns: 'The bounded logs, completion value, or structured runtime failure.',
+      },
+    ],
+  },
+  {
     key: 'sandbox',
     summary: 'Abstract process-sandbox service.',
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
@@ -1274,6 +1393,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Lightweight listing from metadata, without a full-log parse.',
         parameters: [{ name: 'signal', description: 'optional cancellation for backend listing work.' }],
         returns: 'one header per materialized session.',
+      },
+      {
+        signature: 'remove(id: SessionId): Promise<boolean>',
+        description: 'Physically remove one persisted session.',
+        parameters: [{ name: 'id', description: 'session identity to remove.' }],
+        returns: 'whether a durable record was removed.',
       },
       {
         signature: 'abstract listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]>',
@@ -2427,6 +2552,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'resolution after durability.',
       },
       {
+        signature: 'forgetSession(sessionId: SessionId): Promise<void>',
+        description: 'Remove one session from every workspace account and from the archive set after its durable log has been deleted by the session owner.',
+        parameters: [{ name: 'sessionId', description: 'physically deleted session identity.' }],
+      },
+      {
         signature: 'async resolveByPath(path: string): Promise<Workspace | undefined>',
         description: 'Resolve by canonical directory path without creating or mutating a workspace. A missing path rejects during `realpath`; an existing unowned directory returns `undefined`.',
         parameters: [{ name: 'path', description: 'Existing directory path in any spelling.' }],
@@ -2919,6 +3049,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AdapterRegistrationHandle {\n    (): void;\n    replace(providers: string[]): void;\n}',
   },
   {
+    name: 'AddForgeAuditRequest',
+    declaration: 'export interface AddForgeAuditRequest {\n    readonly stage: \'pre-reuse\' | \'post-modification\';\n    readonly sourceId?: string;\n    readonly license: ForgeSourceAuditStatus;\n    readonly dependencies: ForgeSourceAuditStatus;\n    readonly secrets: ForgeSourceAuditStatus;\n    readonly vulnerabilities: ForgeSourceAuditStatus;\n    readonly findings?: readonly string[];\n}',
+  },
+  {
+    name: 'AddForgeSourceRequest',
+    declaration: 'export interface AddForgeSourceRequest {\n    readonly title: string;\n    readonly locator: string;\n    readonly license: string;\n}',
+  },
+  {
     name: 'AddSpecialistExperimentRequest',
     declaration: 'export interface AddSpecialistExperimentRequest {\n    readonly name: string;\n    readonly dataset: string;\n}',
   },
@@ -3016,7 +3154,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AssembledContext',
-    declaration: 'export interface AssembledContext {\n    name: string;\n    text: string;\n}',
+    declaration: 'export interface AssembledContext {\n    name: string;\n    text: string;\n    interpolateVariables?: boolean;\n}',
   },
   {
     name: 'AssembledSection',
@@ -3224,7 +3362,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ContentBlockMap',
-    declaration: 'export interface ContentBlockMap {\n    \'text\': TextBlock;\n    \'reasoning\': ReasoningBlock;\n    \'image\': ImageBlock;\n    \'tool-call\': ToolCallBlock;\n    \'tool-result\': ToolResultBlock;\n}',
+    declaration: 'export interface ContentBlockMap {\n    \'text\': TextBlock;\n    \'reasoning\': ReasoningBlock;\n    \'image\': ImageBlock;\n    \'file\': FileBlock;\n    \'tool-call\': ToolCallBlock;\n    \'tool-result\': ToolResultBlock;\n}',
   },
   {
     name: 'ContentBlockType',
@@ -3448,7 +3586,19 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'EvaluateSpecialistRequest',
-    declaration: 'export interface EvaluateSpecialistRequest {\n    readonly score: number;\n    readonly passed: boolean;\n    readonly summary: string;\n    readonly requiredChanges?: readonly string[];\n}',
+    declaration: 'export interface EvaluateSpecialistRequest {\n    readonly score: number;\n    readonly passed: boolean;\n    readonly blocked?: boolean;\n    readonly summary: string;\n    readonly requiredChanges?: readonly string[];\n}',
+  },
+  {
+    name: 'FileAttachmentLimits',
+    declaration: 'export interface FileAttachmentLimits {\n    maxFileBytes: number;\n    maxFilesPerMessage: number;\n    maxMessageFileBytes: number;\n}',
+  },
+  {
+    name: 'FileAttachmentRef',
+    declaration: 'export interface FileAttachmentRef {\n    attachmentId: AttachmentId;\n    mediaType: FileMediaType;\n    bytes: number;\n    name?: string;\n}',
+  },
+  {
+    name: 'FileBlock',
+    declaration: 'export interface FileBlock {\n    type: \'file\';\n    attachment: FileAttachmentRef;\n}',
   },
   {
     name: 'FileDiff',
@@ -3457,6 +3607,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FileLocation',
     declaration: 'export interface FileLocation {\n    path: string;\n    line?: number;\n}',
+  },
+  {
+    name: 'FileMediaType',
+    declaration: 'export type FileMediaType = string;',
   },
   {
     name: 'FileReferenceCandidate',
@@ -3469,6 +3623,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FinishReasonMap',
     declaration: 'export interface FinishReasonMap {\n    \'stop\': {\n        kind: \'stop\';\n    };\n    \'tool-calls\': {\n        kind: \'tool-calls\';\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    \'aborted\': {\n        kind: \'aborted\';\n        failure: LlmFailure;\n    };\n    \'error\': {\n        kind: \'error\';\n        failure: LlmFailure;\n    };\n}',
+  },
+  {
+    name: 'ForgeCriterionStatus',
+    declaration: 'export type ForgeCriterionStatus = \'pending\' | \'implemented\' | \'tested\' | \'verified\';',
+  },
+  {
+    name: 'ForgeManagementMode',
+    declaration: 'export type ForgeManagementMode = \'handoff\' | \'assisted\' | \'autonomous\';',
+  },
+  {
+    name: 'ForgePhase',
+    declaration: 'export type ForgePhase = \'researching\' | \'auditing\' | \'designing\' | \'building\' | \'verifying\' | \'ready\' | \'blocked\';',
+  },
+  {
+    name: 'ForgeSourceAuditStatus',
+    declaration: 'export type ForgeSourceAuditStatus = \'pending\' | \'passed\' | \'needs_changes\' | \'blocked\';',
   },
   {
     name: 'FsDirEntry',
@@ -3540,7 +3710,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GoalOperation',
-    declaration: 'export type GoalOperation = \'create\' | \'edit\' | \'pause\' | \'resume\' | \'complete\' | \'block\' | \'clear\';',
+    declaration: 'export type GoalOperation = \'create\' | \'edit\' | \'pause\' | \'resume\' | \'continue\' | \'complete\' | \'block\' | \'clear\';',
   },
   {
     name: 'GoalPhase',
@@ -3557,6 +3727,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GrantRecord',
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
+  },
+  {
+    name: 'HomeControlRequest',
+    declaration: 'export interface HomeControlRequest {\n    readonly entityId: string;\n    readonly service: string;\n    readonly data: Record<string, JsonValue>;\n}',
+  },
+  {
+    name: 'HomeControlResult',
+    declaration: 'export interface HomeControlResult {\n    readonly entityId: string;\n    readonly service: string;\n    readonly status: number;\n    readonly succeeded: boolean;\n}',
+  },
+  {
+    name: 'HomeDevice',
+    declaration: 'export interface HomeDevice {\n    readonly entityId: string;\n    readonly state: string;\n    readonly attributes: Record<string, JsonValue>;\n}',
   },
   {
     name: 'ImageAttachmentLimits',
@@ -3831,6 +4013,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type McpConnectorTransport = \'stdio\' | \'streamable-http\';',
   },
   {
+    name: 'MemoryId',
+    declaration: 'export type MemoryId = Branded<\'MemoryId\'>;',
+  },
+  {
+    name: 'MemoryKind',
+    declaration: 'export type MemoryKind = \'interaction\' | \'error\' | \'success\' | \'lesson\' | \'skill\' | \'preference\';',
+  },
+  {
+    name: 'MemoryRecord',
+    declaration: 'export interface MemoryRecord {\n    readonly id: MemoryId;\n    readonly sessionId: string;\n    readonly eventSeq: number;\n    readonly kind: MemoryKind;\n    readonly summary: string;\n    readonly sourceEventType: string;\n    readonly confidence: number;\n    readonly occurredAt: number;\n    readonly recordedAt: number;\n    readonly status: \'active\' | \'forgotten\';\n}',
+  },
+  {
+    name: 'MemoryRecordInput',
+    declaration: 'export type MemoryRecordInput = Omit<MemoryRecord, \'id\' | \'recordedAt\' | \'status\'>;',
+  },
+  {
     name: 'Message',
     declaration: 'export interface Message {\n    readonly id: MessageId;\n    readonly role: \'system\' | \'user\' | \'assistant\';\n    readonly content: ContentBlock[];\n    readonly source: MessageSource;\n}',
   },
@@ -3943,6 +4141,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
   },
   {
+    name: 'OrganizationForgeAudit',
+    declaration: 'export interface OrganizationForgeAudit {\n    readonly id: string;\n    readonly stage: \'pre-reuse\' | \'post-modification\';\n    readonly sourceId?: string;\n    readonly license: ForgeSourceAuditStatus;\n    readonly dependencies: ForgeSourceAuditStatus;\n    readonly secrets: ForgeSourceAuditStatus;\n    readonly vulnerabilities: ForgeSourceAuditStatus;\n    readonly findings: readonly string[];\n    readonly reviewedAt: number;\n}',
+  },
+  {
+    name: 'OrganizationForgeCriterion',
+    declaration: 'export interface OrganizationForgeCriterion {\n    readonly id: string;\n    readonly label: string;\n    readonly required: boolean;\n    readonly status: ForgeCriterionStatus;\n    readonly evidence: readonly string[];\n}',
+  },
+  {
+    name: 'OrganizationForgeJudge',
+    declaration: 'export interface OrganizationForgeJudge {\n    readonly verdict: \'pass\' | \'needs_changes\' | \'blocked\';\n    readonly summary: string;\n    readonly findings: readonly string[];\n    readonly requiredChanges: readonly string[];\n    readonly reviewedAt: number;\n}',
+  },
+  {
+    name: 'OrganizationForgeLedger',
+    declaration: 'export class OrganizationForgeLedger {\n    get(agent: Agent, forgeId: string): OrganizationForgeSnapshot | undefined;\n    list(agent: Agent): readonly OrganizationForgeSnapshot[];\n    start(agent: Agent, request: StartOrganizationForgeRequest): OrganizationForgeSnapshot;\n    addSource(agent: Agent, forgeId: string, request: AddForgeSourceRequest): OrganizationForgeSnapshot;\n    addAudit(agent: Agent, forgeId: string, request: AddForgeAuditRequest): OrganizationForgeSnapshot;\n    advance(agent: Agent, forgeId: string, phase: Exclude<ForgePhase, \'ready\' | \'blocked\'>): OrganizationForgeSnapshot;\n    markCriterion(agent: Agent, forgeId: string, criterionId: string, criterionStatus: ForgeCriterionStatus, evidence: readonly string[]): OrganizationForgeSnapshot;\n    judge(agent: Agent, forgeId: string, result: OrganizationForgeJudge): OrganizationForgeSnapshot;\n    setManagementMode(agent: Agent, forgeId: string, managementMode: ForgeManagementMode): OrganizationForgeSnapshot;\n}',
+  },
+  {
+    name: 'OrganizationForgeSnapshot',
+    declaration: 'export interface OrganizationForgeSnapshot {\n    readonly id: string;\n    readonly revision: number;\n    readonly objective: string;\n    readonly phase: ForgePhase;\n    readonly criteria: readonly OrganizationForgeCriterion[];\n    readonly sources: readonly OrganizationForgeSource[];\n    readonly audits: readonly OrganizationForgeAudit[];\n    readonly teams: {\n        readonly it: boolean;\n        readonly security: boolean;\n        readonly rd: boolean;\n    };\n    readonly managementMode?: ForgeManagementMode;\n    readonly judge?: OrganizationForgeJudge;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n}',
+  },
+  {
+    name: 'OrganizationForgeSource',
+    declaration: 'export interface OrganizationForgeSource {\n    readonly id: string;\n    readonly title: string;\n    readonly locator: string;\n    readonly license: string;\n    readonly auditStatus: ForgeSourceAuditStatus;\n    readonly addedAt: number;\n}',
+  },
+  {
     name: 'PermissionSelect',
     declaration: 'export interface PermissionSelect {\n    options: PresetOption[];\n    currentValue: string;\n}',
   },
@@ -4012,7 +4234,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PromptContext',
-    declaration: 'export interface PromptContext {\n    readonly name: string;\n    readonly order: number;\n    readonly text: string | ((context: AssembleContext) => string);\n}',
+    declaration: 'export interface PromptContext {\n    readonly name: string;\n    readonly order: number;\n    readonly text: string | ((context: AssembleContext) => string);\n    readonly interpolateVariables?: boolean;\n}',
   },
   {
     name: 'PromptSection',
@@ -4153,6 +4375,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SandboxPolicyRequest',
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
+  },
+  {
+    name: 'SaveFileAttachment',
+    declaration: 'export interface SaveFileAttachment {\n    data: Uint8Array;\n    mediaType: FileMediaType;\n    name?: string;\n}',
   },
   {
     name: 'SaveImageAttachment',
@@ -4623,6 +4849,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SpillSource {\n    toolName: string;\n    callId: CallId;\n    label: string;\n}',
   },
   {
+    name: 'StartOrganizationForgeRequest',
+    declaration: 'export interface StartOrganizationForgeRequest {\n    readonly objective: string;\n    readonly criteria?: readonly string[];\n}',
+  },
+  {
     name: 'StartSpecialistRequest',
     declaration: 'export interface StartSpecialistRequest {\n    readonly topic: string;\n    readonly objective: string;\n    readonly successCriteria: readonly string[];\n    readonly maxIterations?: number;\n}',
   },
@@ -4633,6 +4863,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'StorageForms',
     declaration: 'export interface StorageForms {\n}',
+  },
+  {
+    name: 'StoredFileAttachment',
+    declaration: 'export interface StoredFileAttachment {\n    ref: FileAttachmentRef;\n    data: Uint8Array;\n}',
   },
   {
     name: 'StoredImageAttachment',

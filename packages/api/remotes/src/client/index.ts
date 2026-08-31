@@ -1,6 +1,6 @@
 /** Platform-neutral assembly of generated Host Remote contributions. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import commandsRemote from '@phoenix-ai/dsh-commands/remote'
 import goalsRemote from '@phoenix-ai/dsh-goal/remote'
 import dynamicRemote from '@phoenix-ai/dsh-cordis-host-runner/remote'
@@ -99,7 +99,7 @@ export type { JsonValue } from '@phoenix-ai/dsh-session/types'
 export type { FileReferenceCandidate } from '@phoenix-ai/dsh-file-reference/types'
 export type { SessionReferenceMentionCandidate } from '@phoenix-ai/dsh-session-reference/types'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     /** Generated Remote namespaces selected by this Client assembly. */
     remote: TypertClientRemote

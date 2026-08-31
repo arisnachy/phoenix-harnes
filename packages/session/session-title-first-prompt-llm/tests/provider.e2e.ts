@@ -1,6 +1,6 @@
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime from '@phoenix-ai/dsh-llm'
 import * as LlmDeepSeek from '@phoenix-ai/dsh-llm-deepseek'
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'

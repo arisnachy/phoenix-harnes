@@ -12,7 +12,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { foldConsumedWork } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentHandle } from '@phoenix-ai/dsh-agent'
 import { SessionId, type SessionEvent, type TurnEndReason } from '@phoenix-ai/dsh-session'

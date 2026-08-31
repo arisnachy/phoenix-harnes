@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-workflow
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { HarnessError } from '@phoenix-ai/dsh-llm'
 import type {
   WorkflowAgentEndInfo,
@@ -28,7 +28,7 @@ export type {
 } from './types.ts'
 export type { WorkflowRun, WorkflowStartRequest } from './runtime-types.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     workflowEngine: WorkflowEngine
   }

@@ -1,16 +1,16 @@
-# Skills por categoría
+# Skills by category
 
-Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y el propósito de cada skill.
+Visible catalog: **578** skills. Each category preserves the exact name and purpose of every skill.
 
 ## chrome (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `chrome-driver` | KIRA maneja Chrome REAL estilo Codex — abre una ventana dedicada (perfil 'kira', nunca tu Chrome personal), navega, hace clic, escribe, ejecuta JS, extrae texto y captura pantallas, con puerto de depuración persistente que sobrevive entre comandos. | instruction-only | PASS |
 
 ## codex-airtable (3)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-airtable-airtable-cli` | Lists bases, reads and writes records, manages tables and fields, filters and searches data in Airtable via the `airtable-mcp` CLI. Use when the task involves Airtable data or the user mentions airtable-mcp, bases, tables, records, or fields. | conditional | PASS |
 | `codex-airtable-airtable-filters` | Use this skill when the user wants to find, filter, or narrow down Airtable records by field values, even when they don't explicitly say "filter." | instruction-only | PASS |
@@ -18,7 +18,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-atlassian (5)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-atlassian-rovo-capture-tasks-from-meeting-notes` | Analyze meeting notes to find action items and create Jira tasks for assigned work. When an agent needs to: (1) Create Jira tasks or tickets from meeting notes, (2) Extract or find action items from notes or Confluence pages, (3) Parse meeting notes for assigned tasks, or (4) Analyze notes and generate tasks for team members. Identifies assignees, looks up account IDs, and creates tasks with proper context. | conditional | PASS |
 | `codex-atlassian-rovo-generate-status-report` | Generate project status reports from Jira issues and publish to Confluence. When an agent needs to: (1) Create a status report for a project, (2) Summarize project progress or updates, (3) Generate weekly/daily reports from Jira, (4) Publish status summaries to Confluence, or (5) Analyze project blockers and completion. Queries Jira issues, categorizes by status/priority, and creates formatted reports for delivery managers and executives. | conditional | PASS |
@@ -28,7 +28,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-base44 (3)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-base44-base44-cli` | The base44 CLI is used for EVERYTHING related to base44 projects: resource configuration (entities, backend functions, ai agents), initialization and actions (resource creation, deployment). This skill is the place for learning about how to configure resources. When you plan or implement a feature, you must learn this skill | conditional | PASS |
 | `codex-base44-base44-sdk` | The base44 SDK is the library to communicate with base44 services. In projects, you use it to communicate with remote resources (entities, backend functions, ai agents) and to write backend functions. This skill is the place for learning about available modules and types. When you plan or implement a feature, you must learn this skill | conditional | PASS |
@@ -36,7 +36,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-boltz (8)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-boltz-api-cli-boltz-check-status` | Boltz job status and result recovery. Use when listing jobs, checking progress, resuming downloads, recovering results, or downloading an existing job ID. Not for starting new jobs. | conditional | PASS |
 | `codex-boltz-api-cli-boltz-cli-setup` | Boltz CLI setup and auth. Use when installing, updating, verifying, or authenticating `boltz-api`, or fixing missing CLI, PATH, sandbox, browser login, or auth errors. | conditional | PASS |
@@ -49,19 +49,19 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-box (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-box-box` | Build and troubleshoot Box integrations for uploads, folders, folder listings, downloads and previews, shared links, collaborations, search, metadata, event-driven automations, and Box AI retrieval flows. Use when Codex needs to add Box APIs or SDKs to an app, wire Box-backed document workflows, organize or share content, react to new files, or fetch Box content for search, summarization, extraction, or question-answering. | conditional | PASS |
 
 ## codex-brighthire (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-brighthire-brighthire` | Use BrightHire tools when a user asks about BrightHire interview intelligence, calls, candidates, roles, scorecards, transcripts, hiring decisions, or organization-level interview data. | conditional | PASS |
 
 ## codex-build (44)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-build-ios-apps-ios-app-intents` | Design App Intents, app entities, and App Shortcuts for iOS system surfaces. Use when exposing app actions or content to Shortcuts, Siri, Spotlight, widgets, or controls. | instruction-only | PASS |
 | `codex-build-ios-apps-ios-debugger-agent` | Build, run, and debug iOS apps on Simulator with XcodeBuildMCP. Use when launching an app, inspecting simulator UI or logs, or diagnosing runtime behavior. | instruction-only | PASS |
@@ -110,7 +110,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-canva (3)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-canva-canva-branded-presentation` | Create on-brand Canva presentations from a brief, outline, existing Canva doc, or design link. Use when the user wants a branded slide deck, wants to turn notes into a presentation, or needs a presentation generated in Canva with the right brand kit and a clear slide plan. | instruction-only | PASS |
 | `codex-canva-canva-resize-for-all-social-media` | Resize a Canva design into standard social media formats and prepare export-ready results. Use when the user wants one Canva design adapted across multiple social platforms such as Facebook, Instagram, and LinkedIn, especially when they want all variants produced in one pass. | conditional | PASS |
@@ -118,13 +118,13 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-catalyst (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-catalyst-by-zoho-catalyst-by-zoho` | Expert coding assistant for Catalyst by Zoho — full-stack serverless cloud platform. Trigger on any mention of Catalyst, zcatalyst, AppSail, Data Store, ZCQL, Cache, Stratus, Circuits, SmartBrowz, ConvoKraft, Slate, Signals, Pipelines, QuickML, NoSQL, Job Scheduling, Zia Services, CodeLib, API Gateway, Connections, Zoho MCP, CatalystbyZoho, catalyst init/deploy/serve, zcatalyst-sdk-node, or catalyst-config.json. Covers all 7 function types, full service catalog, architectural guidance, and Zoho MCP tool-based resource management. Also trigger on migration/comparison with AWS Lambda, S3, DynamoDB, Vercel, Netlify, Supabase, Firebase, Heroku, Cloud Run, Cloudflare R2, Railway. Trigger on Catalyst pricing, cost estimation, or "create tables for me", "set up the database", "deploy to Catalyst", "build on Zoho's platform", or "is Catalyst like Firebase". Do NOT use for generic Zoho CRM questions unless Catalyst is the target.  | conditional | PASS |
 
 ## codex-chronograph (4)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-chronograph-gp-chronograph-portfolio-company-one-pager` | GP platform one-pager and investor report generator for private equity portfolio companies. Use this skill whenever a user asks to generate a company tearsheet, one-pager, investor report, portfolio overview, or company deep-dive — especially when they name a company or ask to "build a report", "create a one-pager", or "show me a tearsheet". Also trigger when the user asks to include commentary, quarterly updates, investment narratives, or any Investment Overview in the report output. This skill handles live data fetching via a connected MCP data source OR from an uploaded Excel model, metric formatting, AI-generated or model-sourced commentary, and rendering a fully styled HTML one-pager. Also trigger for LP quarterly updates, valuation summaries, and portco performance pages — any output that combines financials, valuation, and return data for a single portfolio company.  | conditional | PASS |
 | `codex-chronograph-lp-chronograph-cashflow-forecast` | Forecast private capital cashflows for existing portfolios using Chronograph MCP data and a Takahashi-Alexander style model. Use when Codex needs to analyze or forecast LP-level contributions, distributions, NAV, unfunded exposure, net cashflows, or Excel-style cashflow forecast outputs from existing Chronograph funds, commitments, groups, or portfolios. | conditional | PASS |
@@ -133,7 +133,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-circleci (4)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-circleci-builds` | Diagnose and fix failing CircleCI builds quickly and safely. Use when users ask to investigate failed CircleCI jobs, triage flaky pipelines, identify root causes from logs, and implement minimal fixes in configuration, test setup, or build-related code paths. | instruction-only | PASS |
 | `codex-circleci-chunk` | Use CircleCI Chunk for AI-assisted CI/CD work through either the Chunk web UI or the chunk-cli. Trigger this skill when users ask to set up Chunk, troubleshoot or fix failing builds with Chunk, configure Chunk environments, schedule/proactively run Chunk tasks, or use chunk-cli commands such as init, validate, build-prompt, auth, sandbox, task, and skill install. | conditional | PASS |
@@ -142,7 +142,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-cloudflare (9)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-cloudflare-agents-sdk` | Build AI agents on Cloudflare Workers using the Agents SDK. Load when creating stateful agents, durable workflows, real-time WebSocket apps, scheduled tasks, MCP servers, or chat applications. Covers Agent class, state management, callable RPC, Workflows integration, and React hooks. Biases towards retrieval from Cloudflare docs over pre-trained knowledge. | conditional | PASS |
 | `codex-cloudflare-building-ai-agent-on-cloudflare` | Builds AI agents on Cloudflare using the Agents SDK with state management, real-time WebSockets, scheduled tasks, tool integration, and chat capabilities. Generates production-ready agent code deployed to Workers.  Use when: user wants to "build an agent", "AI agent", "chat agent", "stateful agent", mentions "Agents SDK", needs "real-time AI", "WebSocket AI", or asks about agent "state management", "scheduled tasks", or "tool calling". Biases towards retrieval from Cloudflare docs over pre-trained knowledge.  | conditional | PASS |
@@ -156,13 +156,13 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-coderabbit (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-coderabbit-coderabbit-review` | Reviews code changes using CodeRabbit AI. Use when user asks for code review, PR feedback, code quality checks, security issues, or requests fix-review cycles. | conditional | PASS |
 
 ## codex-codex (12)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-codex-security-attack-path-analysis` | Use when Codex is already in the attack-path-analysis phase of a security scan or the user explicitly asks to trace a security finding from source to sink and calibrate severity. Do not use as the primary trigger for full PR, commit, branch, patch, or repository scans. | instruction-only | PASS |
 | `codex-codex-security-deep-security-scan` | Use when the user asks for a deep, exhaustive, multi-pass, or variance-reducing repository-wide or scoped-path Codex Security scan. Run repeated independent discovery passes over one resolved scope with worker-specific threat models, semantically merge candidates, synthesize one canonical validation threat model, then run validation, attack-path analysis, canonical JSON completion, and generated reporting once. Do not use for PRs, commits, branch diffs, or working-tree diffs. | conditional | PASS |
@@ -179,7 +179,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-daloopa (5)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-daloopa-build-model` | Build a multi-tab Excel financial model | conditional | PASS |
 | `codex-daloopa-bull-bear` | Bull/bear/base case scenario framework for a given company | conditional | PASS |
@@ -189,7 +189,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-datasite (8)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-datasite-bulk-qa-answers` | Bulk Q&A Answers skill for Datasite deal rooms. Use this skill whenever a sell-side deal team wants to answer multiple buyer questions at once, generate AI draft responses from VDR content, produce a Q&A tracker spreadsheet, or build a Q&A management dashboard. Triggers include: "answer the Q&A", "draft responses to buyer questions", "process the question list", "generate Q&A tracker", "answer all questions", "bulk answer", "Q&A management dashboard", "respond to diligence questions", or any request to systematically work through a list of buyer questions using data room content as the source. Use this skill proactively whenever a buyer has submitted questions and the deal team wants AI-assisted drafting. Do not use for individual one-off questions outside a structured Q&A process. Do not draft answers from general knowledge — all responses must come from the data room.  | conditional | PASS |
 | `codex-datasite-document-quality-check` | Document Quality Check skill for Datasite deal rooms. Use this skill whenever a deal team wants to audit document quality before going live to buyers. Triggers include: "check document quality", "flag bad documents", "find password protected files", "check for blank documents", "PII check", "redaction review", "find corrupted files", "document audit", "quality check the data room", "are there any blank or broken files", "check for unredacted personal data", or any request to verify that documents in the data room are complete, accessible, and safe to share. Use this skill proactively before a data room goes live. Do not use for renaming files (use smart-file-renaming) or for identifying missing sections (use gap-analysis).  | conditional | PASS |
@@ -202,7 +202,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-deepnote (5)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-deepnote-deepnote` | Use when a task mentions Deepnote, the connected Deepnote app, Deepnote OAuth connection, Deepnote docs, projects, workspaces, notebooks, blocks, integrations, or notebook runs. | conditional | PASS |
 | `codex-deepnote-deepnote-data-execution` | Use when running Deepnote notebooks, inspecting notebook inputs, reviewing integration references and cached table structure, listing run history, or interpreting run status and snapshot outputs through the Deepnote app tools. | conditional | PASS |
@@ -212,19 +212,19 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-digitalocean (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-digitalocean-provision-droplet` | Use when the user wants to spin up / create / launch / provision a DigitalOcean droplet (or "a remote dev box on DO") and connect to it from Codex as a remote SSH workspace.  | conditional | PASS |
 
 ## codex-dnb (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-dnb-finance-analytics-fa-jobs-to-be-done` | Use when the user asks for D&B Finance Analytics workflows such as customer onboarding, credit decisioning, credit limit validation, portfolio risk management, company reports, ownership trees, folder management, or alerts. Use only the D&B Finance Analytics MCP tools for these workflows. | instruction-only | PASS |
 
 ## codex-expo (13)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-expo-building-native-ui` | Complete guide for building beautiful apps with Expo Router. Covers fundamentals, styling, components, navigation, animations, patterns, and native tabs. | conditional | PASS |
 | `codex-expo-codex-expo-run-actions` | Wire Expo projects into the Codex app with project-local run scripts and .codex/environments/environment.toml actions. Use when the user wants the Codex app Run button, build/run actions, action buttons, or a stable Expo start/run workflow from Codex. | conditional | PASS |
@@ -242,7 +242,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-figma (12)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-figma-figma-code-connect` | Creates and maintains Figma Code Connect template files that map Figma components to code snippets. Use when the user mentions Code Connect, Figma component mapping, design-to-code translation, or asks to create/update .figma.ts or .figma.js files. | conditional | PASS |
 | `codex-figma-figma-create-new-file` | **MANDATORY prerequisite** — you MUST invoke this skill BEFORE every `create_new_file` tool call. NEVER call `create_new_file` directly without loading this skill first. Trigger whenever the user wants a new blank Figma file — a new design, FigJam, or Slides file — or when you need a fresh file before calling `use_figma`. Usage — /figma-create-new-file [editorType] [fileName] (e.g. /figma-create-new-file figjam My Whiteboard, /figma-create-new-file slides Q3 Review) | conditional | PASS |
@@ -259,7 +259,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-game (9)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-game-studio-game-playtest` | Run browser-game playtests and frontend QA. Use when the user asks for smoke tests, screenshot-based verification, browser automation, HUD or overlay review, or structured issue-finding in a browser game. | instruction-only | PASS |
 | `codex-game-studio-game-studio` | Route early browser-game work. Use when the user needs stack selection and workflow planning across design, implementation, assets, and playtesting before moving to a specialist skill. | instruction-only | PASS |
@@ -273,7 +273,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-github (4)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-github-gh-address-comments` | Address actionable GitHub pull request review feedback. Use when the user wants to inspect unresolved review threads, requested changes, or inline review comments on a PR, then implement selected fixes. Use the GitHub app for PR metadata and flat comment reads, and use the bundled GraphQL script via `gh` whenever thread-level state, resolution status, or inline review context matters. | conditional | PASS |
 | `codex-github-gh-fix-ci` | Use when a user asks to debug or fix failing GitHub PR checks that run in GitHub Actions. Use the GitHub app from this plugin for PR metadata and patch context, and use `gh` for Actions check and log inspection before implementing any approved fix. | conditional | PASS |
@@ -282,14 +282,14 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-gmail (2)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-gmail-gmail` | Manage Gmail inbox triage, mailbox search, thread summaries, action extraction, reply drafting, and email forwarding through connected Gmail data. Use when the user wants to inspect a mailbox or thread, search email with Gmail query syntax, summarize messages, extract decisions and follow-ups, prepare replies or forwarded messages, or organize messages with explicit confirmation before send, archive, delete, or label actions. | conditional | PASS |
 | `codex-gmail-gmail-inbox-triage` | Triage a Gmail inbox into actionable buckets such as urgent, needs reply soon, waiting, and FYI using connected Gmail data. Use when the user asks to triage the inbox, rank what needs attention, find what still needs a reply, or separate important mail from noise. | instruction-only | PASS |
 
 ## codex-google (10)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-google-calendar-google-calendar` | Manage scheduling and conflicts in connected Google Calendar data. Use when the user wants to inspect calendars, compare availability, review conflicts, find a meeting room, review event notes or attachments, add or adjust reminders, place temporary holds, or draft exact create, update, reschedule, or cancel changes with timezone-aware details. | conditional | PASS |
 | `codex-google-calendar-google-calendar-daily-brief` | Build polished one-day Google Calendar briefs. Use when the user asks for today, tomorrow, or a specific date summary with an agenda, conflict flags, free windows, remaining-meeting readouts, or a calendar brief, and the Google Calendar connector is available. | instruction-only | PASS |
@@ -304,20 +304,20 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-hex (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-hex-hex` | Search Hex projects and ask Hex Threads questions. Use when the user explicitly references Hex, Hex projects, Hex dashboards, Hex data apps, Hex Threads, or asks to search an existing Hex workspace asset. | conditional | PASS |
 
 ## codex-heygen (2)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-heygen-heygen-avatar` | Create a persistent HeyGen avatar — a reusable face + voice identity for the agent, the user, or any named character — powered by HeyGen Avatar V technology. Prompt-based creation by default (description → HeyGen builds it); photo upload is optional for real-person digital twins. Use when: (1) giving the agent a face + voice so it can present videos ("bring yourself to life", "create your avatar", "give yourself an avatar", "design a presenter", "set up an avatar", "let's make an avatar"), (2) the user wants to appear in videos as themselves ("create my avatar", "I want my face in a video", "digital twin of me", "build me an avatar"), (3) building a named character presenter ("create an avatar called Cleo", "design a character named X"), (4) establishing HeyGen identity before making videos — the correct FIRST step when no avatar exists yet. Chain signal: when the user says both an identity/avatar action AND a video action in the same request ("create an avatar AND make a video", "set up identity THEN create a video", "design a presenter AND immediately record"), run heygen-avatar first, then heygen-video. Returns avatar_id + voice_id — pass directly to heygen-video to create HeyGen videos. NOT for: generating videos (use heygen-video), translating videos, or TTS-only tasks.  | conditional | PASS |
 | `codex-heygen-heygen-video` | Generate HeyGen presenter videos via the v3 Video Agent pipeline — handles Frame Check (aspect ratio correction), prompt engineering, avatar resolution, and voice selection. Required for any HeyGen video generation. Replaces deprecated endpoints with v3. Use when: (1) generating any HeyGen video (via API or otherwise), (2) sending a personalized video message (outreach, update, announcement, pitch, knowledge), (3) creating a HeyGen presenter-led explainer, tutorial, or product demo with a human face, (4) "make a video of me saying...", "send a video to my leads", "record an update for my team", "create a video pitch", "make a loom-style message", "I want to appear in this video", "generate a HeyGen video", "make a talking head video". Accepts avatar_id from heygen-avatar for identity-first HeyGen videos, or uses a stock presenter. Returns video share URL + HeyGen session URL for iteration. Chain signal: when the user wants to create/design an avatar AND make a video in the same request, run heygen-avatar first, then return here. Conjunctions to watch: "and then", "and immediately", "first...then", "X and make a video", "design [presenter] and record" = always CHAIN. If the user provides a photo AND wants a video, route to heygen-avatar first. NOT for: avatar creation or identity setup (use heygen-avatar first), cinematic footage or b-roll without a presenter, translating videos, TTS-only, or streaming avatars.  | conditional | PASS |
 
 ## codex-hubspot (4)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-hubspot-hubspot` | Use when working with HubSpot CRM records to search, summarize, create, update, associate, or analyze objects and properties. | conditional | PASS |
 | `codex-hubspot-hubspot-crm-data-hygiene` | Use when auditing HubSpot data quality for missing fields, stale records, duplicates, associations, owners, or cleanup tasks. | conditional | PASS |
@@ -326,7 +326,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-hugging (11)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-hugging-face-cli` | Hugging Face Hub CLI (`hf`) for downloading, uploading, and managing repositories, models, datasets, and Spaces on the Hugging Face Hub. Replaces now deprecated `huggingface-cli` command. | conditional | PASS |
 | `codex-hugging-face-community-evals` | Run evaluations for Hugging Face Hub models using inspect-ai and lighteval on local hardware. Use for backend selection, local GPU evals, and choosing between vLLM / Transformers / accelerate. Not for HF Jobs orchestration, model-card PRs, .eval_results publication, or community-evals automation. | instruction-only | PASS |
@@ -342,7 +342,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-hyperframes (5)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-hyperframes-gsap` | GSAP animation reference for HyperFrames. Covers gsap.to(), from(), fromTo(), easing, stagger, defaults, timelines (gsap.timeline(), position parameter, labels, nesting, playback), and performance (transforms, will-change, quickTo). Use when writing GSAP animations in HyperFrames compositions. | instruction-only | PASS |
 | `codex-hyperframes-hyperframes` | Create video compositions, animations, title cards, overlays, captions, voiceovers, audio-reactive visuals, and scene transitions in HyperFrames HTML. Use when asked to build any HTML-based video content, add captions or subtitles synced to audio, generate text-to-speech narration, create audio-reactive animation (beat sync, glow, pulse driven by music), add animated text highlighting (marker sweeps, hand-drawn circles, burst lines, scribble, sketchout), or add transitions between scenes (crossfades, wipes, reveals, shader transitions). Covers composition authoring, timing, media, and the full video production workflow. For CLI commands (init, lint, preview, render, transcribe, tts) see the hyperframes-cli skill. | conditional | PASS |
@@ -352,7 +352,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-life (50)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-life-science-research-alphafold-skill` | Submit compact AlphaFold Protein Structure Database API requests for prediction, UniProt summary, sequence summary, and annotation lookups. Use when a user wants AlphaFold metadata or concise structure summaries | conditional | PASS |
 | `codex-life-science-research-bgee-skill` | Submit compact Bgee SPARQL requests for healthy wild-type expression metadata and ontology-aware lookup patterns. Use when a user wants concise Bgee summaries; save raw results only on request. | instruction-only | PASS |
@@ -407,19 +407,19 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-linear (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-linear-linear` | Manage issues, projects & team workflows in Linear. Use when the user wants to read, create or updates tickets in Linear. | conditional | PASS |
 
 ## codex-magicpath (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-magicpath-magicpath` | Use when the user mentions MagicPath, designs, UI components, themes, canvas selections, or repo-to-canvas UI work; run magicpath-ai to search, inspect, install, or author components. | conditional | PASS |
 
 ## codex-midpage (4)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-midpage-cite-check` | Cite-checks a brief, motion, or memo (PDF/Word): verifies each cited case is real, supports the proposition, is good law, and quoted accurately. Returns one marked-up .docx with comments and redlines. | conditional | PASS |
 | `codex-midpage-draft-brief` | Drafts court filings — motions, memoranda of law, appellate briefs — as court-ready .docx, with Midpage research behind every citation. Use to "draft a motion to dismiss," "write the brief." | conditional | PASS |
@@ -428,7 +428,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-mixpanel (4)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-mixpanel-headless-dashboard-expert` | Full CRUD and analysis for Mixpanel dashboards. Use when the user asks to build, create, analyze, read, understand, explain, modify, update, enhance, or manage dashboards, or asks about dashboard layout, text cards, or report arrangement. Covers dashboard analysis (read + understand existing), creation (new builds), modification (update existing), and explanation (data-driven annotation). | conditional | PASS |
 | `codex-mixpanel-headless-mixpanel-auth` | Manage Mixpanel Headless authentication: check session state, list/add/use accounts, run OAuth login, switch projects/workspaces, manage targets, and check bridge credentials. | conditional | PASS |
@@ -437,7 +437,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-moody (7)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-moody-s-moody-s-company-analysis` | Use when the user asks for Moody's company profiles, ownership, ratings, credit opinions, financial statements, filings, peers, research, or credit-risk analysis for a company. | instruction-only | PASS |
 | `codex-moody-s-moody-s-earnings-brief` | Produce an Earnings Call Summary HTML report for 2–5 companies using Moody's GenAI MCP tools. Use this skill whenever the user asks to summarize earnings calls, generate an earnings call summary, analyze earnings transcripts across peers, or create an earnings call report. Trigger even if they just name companies and mention "earnings" or "transcript".  | conditional | PASS |
@@ -449,7 +449,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-morningstar (3)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-morningstar-fund-comparison` | Use when comparing 2 to 4 funds or ETFs with Morningstar ratings, returns, risk, and holdings data. | conditional | PASS |
 | `codex-morningstar-fund-screener` | Use when screening funds or ETFs by Morningstar category, ratings, fees, assets, returns, or risk. | conditional | PASS |
@@ -457,14 +457,14 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-neon (2)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-neon-postgres-neon-postgres` | Guides and best practices for working with Neon Serverless Postgres. Covers getting started, local development with Neon, choosing a connection method, Neon features, authentication (@neondatabase/auth), PostgREST-style data API (@neondatabase/neon-js), Neon CLI, and Neon's Platform API/SDKs. Use for any Neon-related questions. | conditional | PASS |
 | `codex-neon-postgres-neon-postgres-egress-optimizer` | Diagnose and fix excessive Postgres egress (network data transfer) in a codebase. Use when a user mentions high database bills, unexpected data transfer costs, network transfer charges, egress spikes, "why is my Neon bill so high", "database costs jumped", SELECT * optimization, query overfetching, reduce Neon costs, optimize database usage, or wants to reduce data sent from their database to their application. Also use when reviewing query patterns for cost efficiency, even if the user doesn't explicitly mention egress or data transfer. | conditional | PASS |
 
 ## codex-netlify (12)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-netlify-netlify-ai-gateway` | Guide for using Netlify AI Gateway to access AI models. Use when adding AI capabilities or selecting/changing AI models. Must be read before choosing a model. Covers supported providers (OpenAI, Anthropic, Google), SDK setup, environment variables, and the list of available models. | conditional | PASS |
 | `codex-netlify-netlify-blobs` | Guide for using Netlify Blobs object storage. Use when storing files, images, documents, or simple key-value data without a full database. Covers getStore(), CRUD operations, metadata, listing, deploy-scoped vs site-scoped stores, and local development. | instruction-only | PASS |
@@ -481,7 +481,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-ngs (18)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-ngs-analysis-ngs-amplicon-microbiome` | Kick off public 16S, 18S, ITS, COI, or other marker-gene amplicon microbiome workflows using nf-core/ampliseq, QIIME2, DADA2, and Cutadapt. | conditional | PASS |
 | `codex-ngs-analysis-ngs-analysis-router` | Route BCL, FASTQ, BAM/CRAM, count-matrix, or VCF sequencing requests to the right public NGS analysis skill and ask only the missing assay-specific setup questions. | conditional | PASS |
@@ -504,7 +504,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-notion (4)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-notion-notion-knowledge-capture` | Capture conversations and decisions into structured Notion pages; use when turning chats/notes into wiki entries, how-tos, decisions, or FAQs with proper linking. | conditional | PASS |
 | `codex-notion-notion-meeting-intelligence` | Prepare meeting materials with Notion context and Codex research; use when gathering context, drafting agendas/pre-reads, and tailoring materials to attendees. | conditional | PASS |
@@ -513,7 +513,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-nvidia (11)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-nvidia-aiq-deploy` | Use when asked to install, deploy, run, validate, troubleshoot, or stop NVIDIA AI-Q Blueprint infrastructure.  | conditional | PASS |
 | `codex-nvidia-aiq-research` | Use when asked to run deep research or AI-Q research through a reachable NVIDIA AI-Q Blueprint backend.  | conditional | PASS |
@@ -529,7 +529,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-openai (6)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-openai-ads-conversions-openai-ads-conversions-setup` | Guide Codex through instrumenting or extending repositories with OpenAI Ads Measurement Pixel and optional Conversions API (CAPI). Use when adding Ads conversion tracking, browser pixel events, server-side conversion events, event_id deduplication, CAPI secret placeholders, incremental conversion coverage, or validating Ads conversion setup. Applies to local repositories and PR review contexts; prioritize safe, reviewable diffs and never place API keys or secrets in source code or client bundles. | conditional | PASS |
 | `codex-openai-developers-agents-sdk` | Build, run, deploy, and evaluate OpenAI Agents SDK apps from Codex. Use when the user asks to create or adapt an Agents SDK app, build from a prompt or Codex thread, prepare a runnable agent prototype, add a focused eval harness, or deploy locally through the Agents SDK Deployment Manager. | conditional | PASS |
@@ -540,7 +540,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-outlook (12)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-outlook-calendar-outlook-calendar` | Handle Outlook Calendar workflows, including delegated/shared calendar writes. Use when the user asks for schedule understanding, availability checks, meeting scheduling, intelligent rescheduling, meeting prep, reminder updates, RSVP responses, recurring maintenance, travel coordination, deadline planning, or safe create, update, reschedule, respond, attach, delete, or cancel changes with timezone-aware event times and attendee validation. | conditional | PASS |
 | `codex-outlook-calendar-outlook-calendar-daily-brief` | Build polished one-day Outlook Calendar briefs. Use when the user asks for today, tomorrow, or a specific date summary with an agenda, conflict flags, free windows, remaining-meeting readouts, or a calendar brief, and Outlook Calendar is available. | instruction-only | PASS |
@@ -557,7 +557,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-plugin (5)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-plugin-eval-evaluate-plugin` | Evaluate a local Codex plugin in engineer-friendly language. Use when the user says "evaluate this plugin", "audit this plugin", "why did this score that way", "what should I fix first", "help me benchmark this plugin", or asks for a plugin-wide report before comparing versions. | instruction-only | PASS |
 | `codex-plugin-eval-evaluate-skill` | Evaluate a local Codex skill in engineer-friendly terms. Use when the user says "evaluate this skill", "give me an analysis of the game dev skill", "audit this skill", "why did this score that way", "what should I fix first", or asks for a skill-specific report before benchmarking it. | conditional | PASS |
@@ -567,19 +567,19 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-posthog (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-posthog-posthog` | Analyze product data and manage product tooling in PostHog. Use when the user wants product analytics or insights, HogQL/SQL queries, feature flags, experiments and A/B tests, error tracking, session replay, surveys, LLM analytics, dashboards, data warehouse, or PostHog documentation. | conditional | PASS |
 
 ## codex-remotion (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-remotion-remotion` | Best practices for Remotion - Video creation in React | conditional | PASS |
 
 ## codex-render (21)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-render-render-background-workers` | Sets up and configures background workers on Render for queue-based job processing. Use when the user needs to process async jobs, consume from a queue, run Celery/Sidekiq/BullMQ/Asynq/Oban workers, handle graceful shutdown with SIGTERM, wire a worker to Key Value (Redis), or choose between workers and cron jobs for background work. Trigger terms: background worker, async jobs, queue consumer, Celery, Sidekiq, BullMQ, Asynq, Oban, job processing, SIGTERM, graceful shutdown. | instruction-only | PASS |
 | `codex-render-render-blueprints` | Authors and validates render.yaml Blueprints for Render infrastructure. Use when the user needs to write or edit a render.yaml, wire services together with fromDatabase/fromService/fromGroup, set up projects and environments for multi-service apps, configure preview environments, validate against the schema, or fix immutable field errors. Trigger terms: render.yaml, Blueprint, IaC, fromDatabase, fromService, envVarGroups, previews, projects, environments. | conditional | PASS |
@@ -605,20 +605,20 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-replayio (2)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-replayio-replay-qa-api` | Use when calling Replay QA's REST API directly from Codex. Covers bearer-token setup, Replay recording prerequisites, project creation from Replay recordings or target URLs, polling, bug retrieval, journeys, test runs, explorations, and fix workflow discipline. | conditional | PASS |
 | `codex-replayio-replayio` | Use when you need to record or inspect an agent browser run in Replay, test a local app with the host agent browser using Replay Chromium, or use the Replay MCP server for deeper debugging of an uploaded recording. | conditional | PASS |
 
 ## codex-sentry (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-sentry-sentry` | Use when the user asks to inspect Sentry issues or events, summarize recent production errors, or pull basic Sentry health data via the Sentry API; perform read-only queries with the bundled script and require `SENTRY_AUTH_TOKEN`. | conditional | PASS |
 
 ## codex-sharepoint (7)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-sharepoint-sharepoint` | Inspect Microsoft SharePoint context, discover the right site or library, and prepare safe changes. Use when the user wants site, page, or file review, ownership and status extraction, or change planning before editing content, navigation, or information architecture. | conditional | PASS |
 | `codex-sharepoint-sharepoint-powerpoint` | Create, edit, restyle, and review PowerPoint `.pptx` files fetched from SharePoint, with emphasis on style preservation, slide cloning, theme-aware updates, and rendered visual QA. Use when the user wants reliable slide edits that should match an existing deck's design language. | conditional | PASS |
@@ -630,7 +630,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-shopify (20)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-shopify-shopify-admin` | Write or explain **Admin GraphQL** queries and mutations for apps and integrations that extend the Shopify admin. Use when the user wants to **understand, design, or generate** the operation itself—even before deciding how to run it. Do **not** choose `admin` first for **app or extension config validation** —use **`use-shopify-cli`**. Do **not** choose `admin` first to **execute** Admin GraphQL **now via Shopify CLI** or for CLI setup/troubleshooting on store workflows—use **`use-shopify-cli`** (store auth/execute, handle/SKU/location lookups, inventory changes). | conditional | PASS |
 | `codex-shopify-shopify-app-store-review` | Run a pre-submission compliance check against your Shopify app's codebase. Reviews App Store requirements and surfaces likely issues before you submit for official review. | conditional | PASS |
@@ -655,7 +655,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-slack (6)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-slack-slack` | Read Slack context, route to the right Slack workflow, and prepare or perform Slack writes that match the user's intent. | conditional | PASS |
 | `codex-slack-slack-channel-summarization` | Summarize activity from one Slack channel and return a concise recap, post-ready update, or summary doc. | conditional | PASS |
@@ -666,21 +666,21 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-stripe (2)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-stripe-stripe-best-practices` | Guides Stripe integration decisions — API selection (Checkout Sessions vs PaymentIntents), Connect platform setup (Accounts v2, controller properties), billing/subscriptions, Treasury financial accounts, integration surfaces (Checkout, Payment Element), and migrating from deprecated Stripe APIs. Use when building, modifying, or reviewing any Stripe integration — including accepting payments, building marketplaces, integrating Stripe, processing payments, setting up subscriptions, or creating connected accounts. | conditional | PASS |
 | `codex-stripe-upgrade-stripe` | Guide for upgrading Stripe API versions and SDKs | conditional | PASS |
 
 ## codex-supabase (2)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-supabase-supabase` | Use when doing ANY task involving Supabase. Triggers: Supabase products (Database, Auth, Edge Functions, Realtime, Storage, Vectors, Cron, Queues); client libraries and SSR integrations (supabase-js, @supabase/ssr) in Next.js, React, SvelteKit, Astro, Remix; auth issues (login, logout, sessions, JWT, cookies, getSession, getUser, getClaims, RLS); Supabase CLI or MCP server; schema changes, migrations, security audits, Postgres extensions (pg_graphql, pg_cron, pg_vector). | conditional | PASS |
 | `codex-supabase-supabase-postgres-best-practices` | Postgres performance optimization and best practices from Supabase. Use this skill when writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations. | instruction-only | PASS |
 
 ## codex-superhuman (6)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-superhuman-batch-draft-writer` | Drafts multiple email replies or follow-ups in batch using the Superhuman Mail MCP server — processing your inbox in bulk rather than one email at a time. Use this skill whenever someone asks to "draft replies to my unread emails", "respond to all my emails", "write follow-ups for my meetings this week", "batch draft responses", "draft emails for all threads that need a reply", "auto-draft my inbox", "help me respond to everything", "write follow-up emails based on my meetings", "process my inbox", "draft responses to these threads", or any variation of wanting multiple emails drafted at once. Also trigger when someone says "I have a bunch of emails to respond to", "help me get through my inbox", "draft a mail merge", "send personalized emails to these people", or wants to create multiple drafts from a single prompt. Trigger broadly — if someone wants more than one email drafted, this skill should activate. | conditional | PASS |
 | `codex-superhuman-deal-tracker` | Builds a relationship or deal summary using the Superhuman Mail MCP server — pulling together all email history, read receipts, and calendar interactions with a specific person or company to act as a lightweight CRM. Use this skill whenever someone asks to "show me all communication with [person/company]", "what's the status of my deal with [company]", "give me a relationship summary for [person]", "when did I last talk to [person]", "pull up everything about [company]", "track this deal", "who haven't I followed up with", "show me engagement on emails I sent to [person]", "CRM view of [person]", "what's my communication history with [person]", or any variation of wanting a consolidated view of a relationship or deal. Trigger broadly — if someone wants to understand the full picture of their interactions with a person or company, this skill should activate. | conditional | PASS |
@@ -691,7 +691,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-superpowers (14)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-superpowers-brainstorming` | You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation. | conditional | PASS |
 | `codex-superpowers-dispatching-parallel-agents` | Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies | conditional | PASS |
@@ -710,7 +710,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-teams (7)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-teams-teams` | Search through Microsoft Teams chats or channels, triage unread or recent activity, draft follow-ups, and manage Planner tasks through connected Teams data. | conditional | PASS |
 | `codex-teams-teams-channel-summarization` | Summarize activity from one Microsoft Teams channel or one scoped Teams conversation and return a concise recap or post-ready follow-up. | conditional | PASS |
@@ -722,20 +722,20 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-temporal (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-temporal-temporal-developer` | Develop, debug, and manage Temporal applications across Python, TypeScript, Go, and Java. Use when the user is building workflows, activities, or workers with a Temporal SDK, debugging issues like non-determinism errors, stuck workflows, or activity retries, using Temporal CLI, Temporal Server, or Temporal Cloud, or working with durable execution concepts like signals, queries, heartbeats, versioning, continue-as-new, child workflows, or saga patterns. | conditional | PASS |
 
 ## codex-test (2)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-test-android-apps-android-emulator-qa` | Use when validating Android feature flows in an emulator with adb-driven launch, input, UI-tree inspection, screenshots, and logcat capture. | instruction-only | PASS |
 | `codex-test-android-apps-android-performance` | Gather and interpret Android performance evidence on an adb target using Simpleperf CPU profiles, Perfetto or Compose traces, gfxinfo frame data, dumpsys meminfo snapshots, Java heap dumps, and native allocation traces. Use when asked to profile an Android app flow, find CPU-heavy functions, diagnose jank, capture startup or frame timing evidence, compare before/after performance, explain what code is taking time, or gather memory/leak profiling artifacts. | conditional | PASS |
 
 ## codex-vercel (47)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-vercel-agent-browser` | Browser automation CLI for AI agents. Use when the user needs to interact with websites, verify dev server output, test web apps, navigate pages, fill forms, click buttons, take screenshots, extract data, or automate any browser task. Also triggers when a dev server starts so you can verify it visually. | conditional | PASS |
 | `codex-vercel-agent-browser-verify` | Automated browser verification for dev servers. Triggers when a dev server starts to run a visual gut-check with agent-browser — verifies the page loads, checks for console errors, validates key UI elements, and reports pass/fail before continuing. | conditional | PASS |
@@ -787,7 +787,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-wix (4)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-wix-wix-app` | Build and review Wix CLI app extensions — dashboard pages, modals, plugins, menu plugins, custom element widgets, Editor React components, site plugins, embedded scripts, backend APIs, backend events, service plugins, data collections, and App Market readiness. Use when building ANY feature or extension for a Wix CLI app or preparing a Wix app for App Market review. Triggers on: add, build, create, implement, help me, dashboard, widget, plugin, backend, API, event, collection, embedded script, service plugin, Editor React component, checkout, shipping, tax, discount, SPI, CMS, schema, tracking, popup, admin panel, menu item, modal, validate, test, verify, register extension, App Market, app review, submission readiness. | conditional | PASS |
 | `codex-wix-wix-design-system` | Wix Design System component reference. Use when building UI with @wix/design-system, choosing components, checking props and examples, or writing tests with component testkits. Triggers on "what component", "how do I make", "WDS", "show me props", "testkit", "driver", or component names like Button, Card, Modal, Box, Text. | conditional | PASS |
@@ -796,7 +796,7 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-zoom (27)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-zoom-build-zoom-bot` | Use when building bots. | conditional | PASS |
 | `codex-zoom-build-zoom-meeting-app` | Use when embedding meetings. | conditional | PASS |
@@ -828,19 +828,19 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## codex-zotero (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `codex-zotero-zotero` | Use Zotero Desktop from Codex to enable/probe the local API, search a local Zotero library, list items/collections/tags, export BibTeX, insert citation keys into LaTeX or Markdown drafts, read indexed full text when requested, and import BibTeX/RIS records into Zotero through the connector server. Use when the user mentions Zotero, citations, references.bib, BibTeX export, local Zotero API, localhost:23119, or adding citations from a Zotero library. | conditional | PASS |
 
 ## developing (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `developing-with-streamlit` | Use for ALL Streamlit tasks: creating, editing, debugging, beautifying, styling, theming, optimizing, or deploying Streamlit apps. Also custom components, st.components.v2, HTML/JS/CSS work. Discovers and loads version-matched reference docs from the user's installed Streamlit (>=1.57). Triggers: streamlit, st., dashboard, app.py, beautify, style, CSS, color, background, theme, button, widget styling, custom component, st.components, CCv2, session state, performance, cache, fragment, slow rerun, deploy. | instruction-only | PASS |
 
 ## dsh (9)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `dsh-archive-agent-notes` | Use when adding, auditing, pruning, archiving, restoring, or reviewing Agent Notes in deepseek-harness; checks every new note for superseded active records, classifies implemented notes by future decision value, deletes rejected notes that no longer prevent a tempting fallacy, and applies the frozen archived/{kind} triplet and manifest rules. | conditional | PASS |
 | `dsh-code-review` | Use when reviewing a pull request in the deepseek-harness repo — orients the reviewer to this codebase's standards (AGENTS.md conventions, defensive patterns, ADRs, quality gates) and the review-specific checks that code alone can't show | conditional | PASS |
@@ -854,13 +854,19 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## google (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `google-suite-setup` | prepara y activa el acceso de KIRA a Google Suite (Gmail, Calendar, Drive, Docs) mediante un servidor MCP autoconfigurado por el propio harness. | conditional | PASS |
 
+## kasa (1)
+
+| Skill | Purpose | Mode | Test |
+|---|---|---|---|
+| `kasa-luz-sala` | Use when the user asks to inspect, encender, apagar o controlar la luz Kasa/TP-Link HS220 llamada "luz sala", o menciona relay_state, system.set_relay_state o el error module not support en ese dispositivo. | instruction-only | PASS |
+
 ## kira (3)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `kira-evolution` | protocolo evolutivo de KIRA para crear especialistas nuevos, montar laboratorios y mejorar sus propias herramientas cuando falta una capacidad. | conditional | PASS |
 | `kira-lab` | monta laboratorios evolutivos en cualquier dominio (apuestas deportivas, trading, escritura serial estilo G.R.R. Martin, etc.) con experimentos sobre datos históricos, congelado de estrategias verificadas y memoria de aprendizaje. | instruction-only | PASS |
@@ -868,13 +874,13 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## model (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `model-router` | router de modelos de KIRA Ω — asigna el cerebro (proveedor/modelo) a cada rol y misión según calidad, coste, contexto, velocidad, privacidad y disponibilidad; el rol NUNCA depende del modelo. | conditional | PASS |
 
 ## openclaw (51)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `openclaw-1password` | Set up and use 1Password CLI for sign-in, desktop integration, and reading or injecting secrets. | conditional | PASS |
 | `openclaw-apple-notes` | Create, view, edit, delete, search, move, or export Apple Notes via the memo CLI on macOS. | conditional | PASS |
@@ -930,26 +936,26 @@ Catálogo visible: **577** skills. Cada categoría conserva el nombre exacto y e
 
 ## phoenix (2)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `phoenix-self-improve` | autoevaluación interna del harness PHOENIX — quemado de tokens, calidad de trabajo — con hipótesis, laboratorio de causas y ajustes que no dañan la estructura. | instruction-only | PASS |
 | `phoenix-self-update` | pipeline de auto-actualización de PHOENIX desde GitHub — detecta cambios en origin/main, prepara rama de revisión kira/auto-update y deja la promoción a main como decisión humana explícita. | instruction-only | PASS |
 
 ## record (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `record-browser-gif` | Record browser or Web UI interaction demos as optimized GIFs using the available built-in browser, state-based frame capture, and deterministic encoding, then publish to a dedicated assets branch when the task includes attaching the GIF to a pull request. Use when asked to make, record, or generate a GIF that demonstrates a browser workflow, and for every pull request that changes product-user-visible GUI behavior, which MUST include a GIF recorded from the pull request's real server and model flow. | conditional | PASS |
 
 ## user (1)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `user-memory` | memoria PERMANENTE del usuario (arisnachy y familia) — protocolo para registrar datos personales nuevos que surjan en conversaciones normales y para recuperarlos; fuente única ~/.dsh/AGENTS.md que se auto-carga en cada sesión. | conditional | PASS |
 
 ## web (2)
 
-| Skill | Qué hace | Modo | Prueba |
+| Skill | Purpose | Mode | Test |
 |---|---|---|---|
 | `web-recon` | KIRA RECON — escáner de reconocimiento web estilo auditoría. Abre una pestaña en el Chrome dedicado, extrae tecnología, rastreadores, estructura, formularios de login, emails expuestos y rendimiento; guarda informe JSON + captura PNG en .kira/audits/. | instruction-only | PASS |
 | `web-sentinel` | KIRA SENTINEL — estación de vigilancia web personal 24/7. Vigila URLs con frases clave, detecta cambios de contenido y menciones nuevas, guarda historial forense y pinta un panel de mando en el Chrome dedicado. | instruction-only | PASS |

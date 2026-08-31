@@ -5,8 +5,8 @@
  * {@link InputTriggerController}; the service only registers sources, resolves
  * controllers by session scope, and relays roster changes.
  */
-import { Service } from '@deepseek-ai/cordis'
-import type { Context } from '@deepseek-ai/cordis'
+import { Service } from '@phoenix-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { ClientContext, ISessions, SessionId } from '@phoenix-ai/dsh-client-runtime/client'
 import type { InputTriggerSource } from '../types.ts'
 import { InputTriggerController } from './controller.ts'

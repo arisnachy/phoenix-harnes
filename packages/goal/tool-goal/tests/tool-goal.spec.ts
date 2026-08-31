@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import { Context } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import AgentRegistry, { agentEvents, Inbox } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentStatus } from '@phoenix-ai/dsh-agent'
 import GoalService, { GoalId } from '@phoenix-ai/dsh-goal'
@@ -79,6 +79,20 @@ async function harness(config: toolGoal.Config = {}) {
   const root = stubAgent(`goal-tool-root-${Math.random()}`)
   ctx.agents.register(root.agent)
   return { ctx, fiber, root }
+}
+
+/** Add a revision-bound judge proof for tests that exercise the domain transition directly. */
+function appendPassingJudge(root: StubAgent, goal: NonNullable<ReturnType<GoalService['get']>>): void {
+  root.session.append('goal/judge', {
+    callId: 'tool-goal-test-judge' as never,
+    goalId: goal.id,
+    revision: goal.revision,
+    round: goal.roundsStarted,
+    verdict: 'pass',
+    summary: 'The complete objective is verified.',
+    findings: [],
+    requiredChanges: [],
+  })
 }
 
 /** Execute one registered tool under an optional driver initiator. */
@@ -197,7 +211,7 @@ describe('goal tool registration and presentation', () => {
 
 describe('goal tool execution authority', () => {
   it('lets a root model infer create intent from its accepted human turn', async () => {
-    const { ctx, root } = await harness()
+    const { ctx, root } = await harness({ requireJudge: false })
     openTurn(root, { kind: 'user' }, '请持续工作直到这个功能完成')
     const result = await execute(ctx, 'create_goal', {
       objective: 'Finish the feature', max_goal_rounds: 9,
@@ -330,7 +344,7 @@ describe('goal tool execution authority', () => {
 
 describe('goal tool state transitions', () => {
   it('exposes a persistent specialist laboratory lifecycle to the model', async () => {
-    const { ctx, root } = await harness()
+    const { ctx, root } = await harness({ requireJudge: false })
     openTurn(root, { kind: 'user' }, 'become an expert in a topic')
     const started = resultJson(await execute(ctx, 'specialist_lab', {
       action: 'start', topic: 'topic', objective: 'objective', success_criteria: ['criterion'], max_iterations: 2,
@@ -367,7 +381,7 @@ describe('goal tool state transitions', () => {
   })
 
   it('injects one wrap-up instruction for an autonomous completion but leaves a human pause interactive', async () => {
-    const { ctx, root } = await harness()
+    const { ctx, root } = await harness({ requireJudge: false })
     const humanTurn = openTurn(root, { kind: 'user' })
     const created = ctx.goals.create(root.agent, { objective: 'pause cleanly' })
     const paused = await execute(ctx, 'update_goal', {
@@ -379,6 +393,7 @@ describe('goal tool state transitions', () => {
     const resumed = resultGoal(await execute(ctx, 'update_goal', {
       goal_id: created.id, revision: 2, action: 'resume',
     }, root.agent))
+    appendPassingJudge(root, ctx.goals.get(root.agent)!)
     closeTurn(root, humanTurn)
 
     openTurn(root, {
@@ -405,9 +420,10 @@ describe('goal tool state transitions', () => {
   })
 
   it('completes without a wrap-up instruction under direct human authority', async () => {
-    const { ctx, root } = await harness()
+    const { ctx, root } = await harness({ requireJudge: false })
     openTurn(root, { kind: 'user' })
     const created = ctx.goals.create(root.agent, { objective: 'finish now' })
+    appendPassingJudge(root, created)
     const complete = await execute(ctx, 'update_goal', {
       goal_id: created.id, revision: created.revision, action: 'complete',
     }, root.agent)
@@ -416,8 +432,23 @@ describe('goal tool state transitions', () => {
     expect(complete.additionalContexts).toBeUndefined()
   })
 
+  it('keeps a judged goal active when the completion judge is unavailable', async () => {
+    const { ctx, root } = await harness({ requireJudge: true })
+    openTurn(root, { kind: 'user' })
+    const created = ctx.goals.create(root.agent, { objective: 'deliver the verified artifact' })
+
+    const complete = await execute(ctx, 'update_goal', {
+      goal_id: created.id,
+      revision: created.revision,
+      action: 'complete',
+    }, root.agent)
+
+    expect(complete.error?.info?.code).toBe('GOAL_JUDGE_UNAVAILABLE')
+    expect(ctx.goals.get(root.agent)).toMatchObject({ phase: 'active', revision: created.revision })
+  })
+
   it('rearms a restored active goal only after a new direct human prompt', async () => {
-    const { ctx, root } = await harness()
+    const { ctx, root } = await harness({ requireJudge: false })
     let turn = openTurn(root, { kind: 'user' })
     const created = ctx.goals.create(root.agent, { objective: 'continue later' })
     closeTurn(root, turn)
@@ -479,7 +510,7 @@ describe('goal tool state transitions', () => {
   })
 
   it('accepts only empty fillers in fields unused by the selected action', async () => {
-    const { ctx, root } = await harness()
+    const { ctx, root } = await harness({ requireJudge: false })
     openTurn(root, { kind: 'user' })
     let goal = ctx.goals.create(root.agent, { objective: 'valid' })
 
@@ -537,6 +568,7 @@ describe('goal tool state transitions', () => {
     }, root.agent)
     expect(resultGoal(blocked)).toMatchObject({ phase: 'blocked' })
     goal = ctx.goals.resume(root.agent, { id: goal.id, revision: goal.revision + 1 })
+    appendPassingJudge(root, goal)
 
     const complete = await execute(ctx, 'update_goal', {
       goal_id: goal.id,
@@ -550,9 +582,10 @@ describe('goal tool state transitions', () => {
   })
 
   it('allows exact goal rounds to complete but not edit or pause', async () => {
-    const { ctx, root } = await harness()
+    const { ctx, root } = await harness({ requireJudge: false })
     const humanTurn = openTurn(root, { kind: 'user' })
     const created = ctx.goals.create(root.agent, { objective: 'round-owned' })
+    appendPassingJudge(root, created)
     closeTurn(root, humanTurn)
     openTurn(root, { kind: 'goal', goalId: created.id, revision: created.revision, round: 1 })
     const edit = await execute(ctx, 'update_goal', {

@@ -65,6 +65,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   shellEnv: 'shell.md',
   clientModules: 'client-modules.md',
   codeRuntime: 'code-runtime.md',
+  pythonCodeRuntime: 'code-runtime.md',
   commands: 'commands.md',
   compaction: 'compaction.md',
   cordisInspect: 'extensions.md',
@@ -77,6 +78,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   fileReferences: 'session-reference.md',
   fs: 'filesystem.md',
   goals: 'goal.md',
+  home: 'extensions.md',
   webServer: 'web-server.md',
   invariants: 'invariants.md',
   llm: 'llm-streaming.md',
@@ -96,6 +98,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   settings: 'settings.md',
   userProfile: 'settings.md',
   sessionTitle: 'session-title.md',
+  learningMemory: 'session.md',
   skills: 'skills.md',
   spillStore: 'spill.md',
   storage: 'storage.md',
@@ -120,7 +123,7 @@ export const SERVICE_PAGE: Record<string, string> = {
 /**
  * Context keys declared in `interface Context` merges that the rendering
  * projection cannot see, each with the reason and its documentation owner.
- * The scan that enforces this list reads EVERY `declare module '@deepseek-ai/cordis'`
+ * The scan that enforces this list reads EVERY `declare module '@phoenix-ai/cordis'`
  * Context merge under `packages/x/x/src/**` — any depth, not only root
  * `index.ts` files with a same-named service class — so a new service can
  * never silently join this blind spot: it either enters {@link SERVICE_PAGE}
@@ -200,7 +203,7 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
  * Event names declared in `interface Events` merges that the rendering
  * projection cannot see, each with the reason and its documentation owner.
  * The mirror of {@link SERVICE_WALK_EXEMPTIONS} for events: an independent
- * scan reads EVERY `declare module '@deepseek-ai/cordis'` Events merge under
+ * scan reads EVERY `declare module '@phoenix-ai/cordis'` Events merge under
  * `packages/x/x/src/**`, so a declared event either renders onto a subsystems
  * page (via {@link EVENT_SCOPE_PAGE}) or names itself here — never vanishes
  * silently. Keys are full event names rather than scopes, so a scope-level
@@ -294,10 +297,16 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   ApprovalRequest: 'approval.md',
   ApprovalService: 'approval.md',
   EncodedImageAttachment: 'attachment.md',
+  EncodedFileAttachment: 'attachment.md',
+  FileAttachmentLimits: 'attachment.md',
+  FileAttachmentRef: 'attachment.md',
+  FileMediaType: 'attachment.md',
   ImageAttachmentRef: 'attachment.md',
   ImageRequestPolicy: 'attachment.md',
   RequestImageAttachment: 'attachment.md',
   SaveImageAttachment: 'attachment.md',
+  SaveFileAttachment: 'attachment.md',
+  StoredFileAttachment: 'attachment.md',
   StoredImageAttachment: 'attachment.md',
   ShellExecRequest: 'shell.md',
   ShellExecSpec: 'shell.md',
@@ -563,6 +572,9 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   InsertReferenceRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   ConsumeTokenRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   InsertTextRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
+  MemoryId: 'learning identity is owned by packages/session/session-learning/README.md',
+  MemoryRecord: 'learning record is owned by packages/session/session-learning/README.md',
+  MemoryRecordInput: 'learning input is owned by packages/session/session-learning/README.md',
   AgentHandle: 'agent ownership handle is owned by packages/core/agent/README.md',
   AgentPreset: 'discovered preset record is owned by packages/preset/agent-presets/README.md',
   PresetMetadata: 'preset display text is owned by packages/preset/agent-presets/README.md',
@@ -619,6 +631,9 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
     'upgrade route registration contract is owned by packages/host/webserver/src/index.ts',
   InvariantRegistration: 'service-local lifecycle handle is owned by packages/runtime-diagnostics/invariants/README.md',
   JsonValue: 'JSON value union is owned by packages/core/session/src/json.ts',
+  HomeDevice: 'Home Assistant device projection is owned by packages/home/home-gateway/README.md',
+  HomeControlRequest: 'Home Assistant control request is owned by packages/home/home-gateway/README.md',
+  HomeControlResult: 'Home Assistant control result is owned by packages/home/home-gateway/README.md',
   KnobState: 'projection unit state fields are owned by packages/interaction/permission-presets/README.md',
   PermissionSelect: 'permissions projection payload is owned by packages/interaction/permission-presets/src/types.ts',
   PromptAssembly: 'assembly result is owned by packages/core/system-prompt/README.md',

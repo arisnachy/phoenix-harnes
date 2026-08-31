@@ -220,9 +220,12 @@ const { primary: all, derivatives } = partitionPairedMarkdownDerivatives(
 )
 const checked = all.filter(b => b.kind === 'check')
 const ignored = all.filter(b => b.kind === 'ignore')
-// Only compile-eligible fences belong in the opt-out ratio; every other skipped
-// kind has an independent verifier named in the BlockKind rules above.
-const ratioDenominator = checked.length + ignored.length
+// Only compile-eligible fences in maintained documentation belong in the opt-out
+// ratio. Superpowers plans are executable instructions for a future change and
+// may contain deliberately incomplete sketches; `ignore-check` documents that
+// status while the plan itself remains reviewable as Markdown.
+const maintainedIgnored = ignored.filter(block => !block.file.replaceAll('\\', '/').startsWith('docs/superpowers/plans/'))
+const ratioDenominator = checked.length + maintainedIgnored.length
 
 if (checked.length === 0) {
   console.log('doc-typecheck: no ts code blocks to check.')
@@ -242,11 +245,12 @@ if (compilationError !== undefined) {
   process.exit(1)
 }
 
-const ratio = ignored.length / ratioDenominator
+const ratio = maintainedIgnored.length / ratioDenominator
 const skipped = all.length - ratioDenominator
-console.log(`doc-typecheck: ${checked.length} block(s) compiled, ${ignored.length} ignored (${(ratio * 100).toFixed(0)}% opt-out), ${skipped} type-equiv/catalog (checked elsewhere), ${derivatives.length} paired derivative(s).`)
+const plannedIgnored = ignored.length - maintainedIgnored.length
+console.log(`doc-typecheck: ${checked.length} block(s) compiled, ${maintainedIgnored.length} maintained ignored (${(ratio * 100).toFixed(0)}% opt-out), ${plannedIgnored} planned sketch(es) excluded, ${skipped} type-equiv/catalog (checked elsewhere), ${derivatives.length} paired derivative(s).`)
 // Guard against the escape hatch becoming the norm.
 if (ratioDenominator >= 4 && ratio > 0.5) {
-  console.error(`doc-typecheck: too many blocks opt out of checking (${ignored.length}/${ratioDenominator}). Make them compile or delete them.`)
+  console.error(`doc-typecheck: too many maintained blocks opt out of checking (${maintainedIgnored.length}/${ratioDenominator}). Make them compile or delete them.`)
   process.exit(1)
 }

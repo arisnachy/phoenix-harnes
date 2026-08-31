@@ -11,8 +11,8 @@
  * @module @phoenix-ai/dsh-llm-deepseek
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { assertUsableApiKey, LlmError, resolveRetryPolicy, RetryPolicySchema } from '@phoenix-ai/dsh-llm'
 import type { ModelModality, RetryPolicyConfig } from '@phoenix-ai/dsh-llm'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
@@ -31,6 +31,7 @@ import {
   DEFAULT_INLINE_IMAGE_OFFLOAD_BYTE_QUANTUM,
   DEFAULT_LOW_DETAIL_IMAGE_PIXEL_BUDGET,
   DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES,
+  DEFAULT_MAX_INLINE_FILE_BYTES,
   DEFAULT_MAX_IMAGES_PER_REQUEST,
   DEFAULT_MAX_REQUEST_FILES_BYTES,
   DEFAULT_MAX_TOKENS,
@@ -52,6 +53,7 @@ export {
   DEFAULT_INLINE_IMAGE_OFFLOAD_BYTE_QUANTUM,
   DEFAULT_LOW_DETAIL_IMAGE_PIXEL_BUDGET,
   DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES,
+  DEFAULT_MAX_INLINE_FILE_BYTES,
   DEFAULT_MAX_IMAGES_PER_REQUEST,
   DEFAULT_MAX_REQUEST_FILES_BYTES,
   DEFAULT_MAX_TOKENS,
@@ -124,6 +126,8 @@ export interface Config {
   maxRequestFilesBytes?: number
   /** Maximum accumulated base64 image payload after Files API fallback (default 20 MiB). */
   maxInlineRequestImageBytes?: number
+  /** Maximum arbitrary-file bytes projected into one text request per attachment (default 256 KiB). */
+  maxInlineFileBytes?: number
   /** Maximum number of represented images per chat request (default 600). */
   maxImagesPerRequest?: number
   /** Raw-byte removal step after the request exceeds its file bound (default 64 MiB). */
@@ -167,6 +171,7 @@ export const Config: z<Config> = z.object({
   streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STREAM_IDLE_TIMEOUT_MS),
   maxRequestFilesBytes: z.number().step(1).min(1).default(DEFAULT_MAX_REQUEST_FILES_BYTES),
   maxInlineRequestImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES),
+  maxInlineFileBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INLINE_FILE_BYTES),
   maxImagesPerRequest: z.number().step(1).min(1).default(DEFAULT_MAX_IMAGES_PER_REQUEST),
   imageOffloadByteQuantum: z.number().step(1).min(1).default(DEFAULT_IMAGE_OFFLOAD_BYTE_QUANTUM),
   inlineImageOffloadByteQuantum: z.number().step(1).min(1).default(DEFAULT_INLINE_IMAGE_OFFLOAD_BYTE_QUANTUM),
@@ -302,6 +307,10 @@ export function resolveAdapterOptions(config: Config, environment?: LaunchEnviro
   if (!Number.isSafeInteger(maxInlineRequestImageBytes) || maxInlineRequestImageBytes <= 0) {
     throw new Error('llm-deepseek: maxInlineRequestImageBytes must be a positive safe integer')
   }
+  const maxInlineFileBytes = config.maxInlineFileBytes ?? DEFAULT_MAX_INLINE_FILE_BYTES
+  if (!Number.isSafeInteger(maxInlineFileBytes) || maxInlineFileBytes <= 0) {
+    throw new Error('llm-deepseek: maxInlineFileBytes must be a positive safe integer')
+  }
   const maxImagesPerRequest = config.maxImagesPerRequest ?? DEFAULT_MAX_IMAGES_PER_REQUEST
   if (!Number.isSafeInteger(maxImagesPerRequest) || maxImagesPerRequest <= 0) {
     throw new Error('llm-deepseek: maxImagesPerRequest must be a positive safe integer')
@@ -369,6 +378,7 @@ export function resolveAdapterOptions(config: Config, environment?: LaunchEnviro
     streamIdleTimeoutMs,
     maxRequestFilesBytes,
     maxInlineRequestImageBytes,
+    maxInlineFileBytes,
     maxImagesPerRequest,
     imageOffloadByteQuantum,
     inlineImageOffloadByteQuantum,

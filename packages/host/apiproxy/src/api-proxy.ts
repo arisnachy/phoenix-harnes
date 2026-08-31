@@ -8,12 +8,12 @@ import { mkdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname } from 'node:path'
 import { z as zod } from 'zod'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { defaultExecutionHandoff, installModelSelection } from '@phoenix-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@phoenix-ai/dsh-agent'
 import type {} from '@phoenix-ai/dsh-agent-presets/types'
-import { AttachmentError, admitEncodedImages } from '@phoenix-ai/dsh-attachment'
-import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import { AttachmentError, admitEncodedFiles, admitEncodedImages } from '@phoenix-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import { createUserMessage, freezeMessage, ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import { errorChain } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, MessageSource } from '@phoenix-ai/dsh-llm'
@@ -100,7 +100,7 @@ import type { ApprovalDeadline, ApprovalOutcome, ApprovalRequestId } from '@phoe
 // `ctx.get('approval')` without a value dependency on the seam (optional composition).
 import type {} from '@phoenix-ai/dsh-user-approval'
 import { approvalResponsePayloadSchema } from './api/approvals.schema.ts'
-import { imageLimitsProjectionSchema, sessionListMetadataProjectionSchema } from './api/sessions.schema.ts'
+import { fileLimitsProjectionSchema, imageLimitsProjectionSchema, sessionListMetadataProjectionSchema } from './api/sessions.schema.ts'
 import { questionResponsePayloadSchema } from './api/questions.schema.ts'
 import type { ClientResponse, RpcError, RpcReceipt, RpcRequest, RpcResponse } from './api/rpc.ts'
 import { RpcId } from './api/rpc.ts'
@@ -140,11 +140,16 @@ async function durablePromptContent(ctx: Context, content: readonly PromptConten
     return content.map(part => ({ type: 'text', text: part.text }))
   }
   const refs = await admitEncodedImages(ctx.attachments, content.filter(part => part.type === 'image'))
+  const fileRefs = await admitEncodedFiles(ctx.attachments, content.filter(part => part.type === 'file'))
+  let nextFile = 0
   let next = 0
   return content.map(part => part.type === 'text'
     ? { type: 'text', text: part.text }
-    // admitEncodedImages returns one reference per image part in order.
-    : { type: 'image', attachment: refs[next++] as ImageAttachmentRef })
+    : part.type === 'image'
+      // admitEncodedImages returns one reference per image part in order.
+      ? { type: 'image', attachment: refs[next++] as ImageAttachmentRef }
+      // admitEncodedFiles returns one reference per file part in order.
+      : { type: 'file', attachment: fileRefs[nextFile++] as FileAttachmentRef })
 }
 
 /** Search durable content for an image reference, including nested tool results. */
@@ -159,6 +164,24 @@ function imageBlockIn(content: unknown, match: (ref: ImageAttachmentRef) => bool
     }
     if (block.type === 'tool-result') {
       const nested = imageBlockIn(block.content, match)
+      if (nested !== undefined) return nested
+    }
+  }
+  return undefined
+}
+
+/** Search durable content for an arbitrary-file reference, including nested tool results. */
+function fileBlockIn(content: unknown, match: (ref: FileAttachmentRef) => boolean): FileAttachmentRef | undefined {
+  if (!Array.isArray(content)) return undefined
+  for (const value of content) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
+    const block = value as { type?: unknown; attachment?: unknown; content?: unknown }
+    if (block.type === 'file' && typeof block.attachment === 'object' && block.attachment !== null) {
+      const ref = block.attachment as FileAttachmentRef
+      if (match(ref)) return ref
+    }
+    if (block.type === 'tool-result') {
+      const nested = fileBlockIn(block.content, match)
       if (nested !== undefined) return nested
     }
   }
@@ -195,6 +218,29 @@ function imageInEvent(event: SessionEvent, match: (ref: ImageAttachmentRef) => b
 function referencedImage(events: readonly SessionEvent[], attachmentId: string): ImageAttachmentRef | undefined {
   for (const event of events) {
     const found = imageInEvent(event, ref => String(ref.attachmentId) === attachmentId)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+
+/** Resolve one arbitrary-file reference matching an opaque attachment id. */
+function referencedFile(events: readonly SessionEvent[], attachmentId: string): FileAttachmentRef | undefined {
+  for (const event of events) {
+    const data = event.data as {
+      content?: unknown
+      message?: { content?: unknown }
+      inserted?: Array<{ content?: unknown }>
+      chunk?: { type?: unknown; block?: unknown }
+    }
+    const candidates = [
+      fileBlockIn(data.content, ref => String(ref.attachmentId) === attachmentId),
+      fileBlockIn(data.message?.content, ref => String(ref.attachmentId) === attachmentId),
+      ...(data.inserted?.map(message => fileBlockIn(message.content, ref => String(ref.attachmentId) === attachmentId)) ?? []),
+      ...(event.type === 'assistant/chunk' && data.chunk?.type === 'block-end'
+        ? [fileBlockIn([data.chunk.block], ref => String(ref.attachmentId) === attachmentId)]
+        : []),
+    ]
+    const found = candidates.find((candidate): candidate is FileAttachmentRef => candidate !== undefined)
     if (found !== undefined) return found
   }
   return undefined
@@ -1304,6 +1350,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       init: () => null,
       apply: state => state,
       wire: { viewSchema: imageLimitsProjectionSchema, view: () => projectionCtx.attachments.imageLimits },
+      stateVersion: 1,
+    })
+    projectionCtx.sessionProjections.register<'fileLimits', null>({
+      key: 'fileLimits',
+      stateSchema: zod.null(),
+      init: () => null,
+      apply: state => state,
+      wire: { viewSchema: fileLimitsProjectionSchema, view: () => projectionCtx.attachments.fileLimits },
       stateVersion: 1,
     })
   })
@@ -2486,6 +2540,42 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
       },
 
+      async delete(request) {
+        const { sessionId } = request.payload
+        if (ctx.agents.get(sessionId) !== undefined || ctx.sessions.get(sessionId) !== undefined) {
+          return err(request, {
+            code: 'agent-busy',
+            message: `session "${sessionId}" is active and cannot be deleted`,
+            details: { reason: 'stop the active session before deleting its durable log' },
+          })
+        }
+        const persistence = ctx.get('sessionPersistence')
+        if (persistence === undefined) {
+          return err(request, {
+            code: 'internal',
+            message: 'session deletion is unavailable: this deployment mounts no session persistence service',
+            details: {},
+          })
+        }
+        try {
+          if (!await persistence.remove(sessionId)) {
+            return err(request, {
+              code: 'session-not-found',
+              message: `session "${sessionId}" was not found in durable storage`,
+              details: { sessionId },
+            })
+          }
+          await ctx.workspaceRegistry.forgetSession(sessionId)
+          return ok(request, { deleted: true as const })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: `failed to delete session "${sessionId}": ${String(error)}`,
+            details: {},
+          })
+        }
+      },
+
       async fork(request) {
         const { sessionId, atSeq } = request.payload
         let source: SessionReadState
@@ -2681,15 +2771,18 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         }
         const ref = referencedImage(state.events, String(attachmentId))
+          ?? referencedFile(state.events, String(attachmentId))
         if (ref === undefined) {
           return err(request, {
             code: 'attachment-error',
-            message: 'Image is not referenced by this session.',
+            message: 'Attachment is not referenced by this session.',
             details: { reason: 'ATTACHMENT_NOT_REFERENCED' },
           })
         }
         try {
-          const stored = await ctx.attachments.readImage(ref)
+          const stored = ref.mediaType.startsWith('image/')
+            ? await ctx.attachments.readImage(ref as ImageAttachmentRef)
+            : await ctx.attachments.readFile(ref as FileAttachmentRef)
           return ok(request, {
             attachment: stored.ref,
             data: Buffer.from(stored.data).toString('base64'),
@@ -2704,7 +2797,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }
           return err(request, {
             code: 'internal',
-            message: 'Unable to read image attachment.',
+            message: 'Unable to read attachment.',
             details: {},
           })
         }

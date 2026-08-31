@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateSnapshot,
@@ -11,6 +11,10 @@ import css from './UpdateFooterAction.module.css'
 
 /** Poll cadence for the repository-local updater state while Web is open. */
 const UPDATE_STATE_POLL_MS = 1250
+/** First automatic retry delay for a durable updater failure. */
+const UPDATE_RETRY_BASE_MS = 15_000
+/** Upper bound for repeated retries while the same failure remains durable. */
+const UPDATE_RETRY_MAX_MS = 5 * 60 * 1000
 /** Keep expected Host disconnects from being misreported as updater failures. */
 const RESTART_RECONNECT_GRACE_MS = 2 * 60 * 1000
 const RESTART_RECONNECT_GRACE_KEY = 'phoenix.update.restart-grace-until'
@@ -21,6 +25,8 @@ export interface UpdateFooterActionInjected {
   readUpdateState: () => Promise<PhoenixUpdateSnapshot>
   /** Ask the Host to close only when a prepared stable update can take over. */
   restartForUpdate: () => Promise<PhoenixUpdateRestartReceipt>
+  /** Wake the detached updater so a manual retry performs a real channel check. */
+  refreshForUpdate: () => Promise<{ readonly accepted: boolean }>
 }
 
 /** Full props assembled by the sidebar footer slot renderer. */
@@ -61,14 +67,16 @@ function clearRestartReconnectGrace(): void {
  * @returns locale key, or undefined when the updater should stay invisible.
  */
 export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventoryLocaleKey | undefined {
+  const developmentBranchPause = snapshot.phase === 'development-branch'
+    || snapshot.detail?.startsWith('Automatic updates are disabled on branch ') === true
   switch (snapshot.status) {
     case 'idle':
     case 'current':
     case 'updated':
-    case 'paused':
     case 'off':
       return undefined
-    case 'checking': return 'updateChecking'
+    case 'paused': return developmentBranchPause ? undefined : 'updatePaused'
+    case 'checking': return undefined
     case 'available': return 'updateAvailable'
     case 'preparing':
       switch (snapshot.phase) {
@@ -155,9 +163,11 @@ export function UpdateFooterAction({
   t,
   readUpdateState,
   restartForUpdate,
+  refreshForUpdate,
 }: UpdateFooterActionProps) {
   const [snapshot, setSnapshot] = useState<PhoenixUpdateSnapshot>({ status: 'idle' })
   const [requesting, setRequesting] = useState(false)
+  const requestInFlight = useRef(false)
 
   const acceptDurableSnapshot = useCallback((next: PhoenixUpdateSnapshot) => {
     // A successful RPC proves the Host is reachable again. From this point the
@@ -171,12 +181,8 @@ export function UpdateFooterAction({
     // transport gap as part of the restart instead of inventing an updater error.
     if (restartReconnectGraceActive()) return
     // A transient RPC/network failure is not evidence that an update failed.
-    // Keep polling and expose a reconnecting state until the durable Host state
-    // can be read again.
-    setSnapshot({
-      status: 'checking',
-      phase: 'reconnect',
-    })
+    // Keep polling silently until the durable Host state can be read again.
+    setSnapshot({ status: 'idle' })
   }, [])
 
   const reportRestartFailure = useCallback(() => {
@@ -215,6 +221,45 @@ export function UpdateFooterAction({
     }
   }, [acceptDurableSnapshot, readUpdateState, reportReadFailure])
 
+  const retryUpdate = useCallback(async (): Promise<void> => {
+    if (requestInFlight.current) return
+    requestInFlight.current = true
+    setRequesting(true)
+    try {
+      await refreshForUpdate()
+      await refresh()
+    } catch (_error) {
+      // A failed wake request does not replace the last durable updater state.
+      // Polling and the next bounded retry remain active without exposing the
+      // private transport detail in the sidebar.
+    } finally {
+      requestInFlight.current = false
+      setRequesting(false)
+    }
+  }, [refresh, refreshForUpdate])
+
+  useEffect(() => {
+    if (snapshot.status !== 'error' && snapshot.status !== 'rollback-failed') return
+    let active = true
+    let attempt = 0
+    let timer: number | undefined
+    const schedule = (): void => {
+      const delay = Math.min(UPDATE_RETRY_BASE_MS * (2 ** Math.min(attempt, 4)), UPDATE_RETRY_MAX_MS)
+      timer = window.setTimeout(() => {
+        void retryUpdate().finally(() => {
+          if (!active) return
+          attempt += 1
+          schedule()
+        })
+      }, delay)
+    }
+    schedule()
+    return () => {
+      active = false
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [retryUpdate, snapshot.status])
+
   const labelKey = updateLabelKey(snapshot)
   if (labelKey === undefined) return null
 
@@ -251,48 +296,39 @@ export function UpdateFooterAction({
   }
 
   const onRetry = async (): Promise<void> => {
-    if (requesting) return
-    setRequesting(true)
-    try {
-      await refresh()
-    } finally {
-      setRequesting(false)
-    }
+    await retryUpdate()
   }
 
   const progress = updateProgress(snapshot)
   const target = snapshot.target?.slice(0, 12)
+  const retryable = errorState || snapshot.status === 'paused'
+  const detail = retryable
+    ? snapshot.detail ?? t(snapshot.status === 'paused' ? 'updatePausedHint' : 'updateErrorHint')
+    : undefined
   const content = (
     <>
       <UpdateGlyph spinning={busy} />
       {wide && (
-        <span className={css.copy}>
-          <span className={css.heading}>
-            <span className={css.eyebrow}>{t('updateChannel')}</span>
-            <span className={css.title}>{label}</span>
-          </span>
-          <span className={css.progressTrack} aria-hidden="true">
-            <span className={css.progressValue} style={{ width: `${String(progress)}%` }} />
-          </span>
-          <span className={css.metadata}>
-            {target !== undefined && <code className={css.target}>{target}</code>}
-            {ready ? <span className={css.detail}>{t('updateRestart')}</span> : null}
-            {snapshot.status === 'checking' ? <span className={css.detail}>{t('updateAutoRetry')}</span> : null}
-            {errorState ? (
-              <>
-                <span className={css.detail}>{t('updateErrorHint')}</span>
-                <button
-                  type="button"
-                  className={css.retryButton}
-                  aria-label={t('updateRetry')}
-                  disabled={requesting}
-                  onClick={() => { void onRetry() }}
-                >
-                  {t('retry')}
-                </button>
-              </>
-            ) : null}
-          </span>
+        <span className={css.copy} title={detail}>
+          <span className={css.title}>{label}</span>
+          {target !== undefined && <code className={css.target}>{target}</code>}
+          {ready ? <span className={css.detail}>{t('updateRestart')}</span> : null}
+          {retryable ? (
+            <button
+              type="button"
+              className={css.retryButton}
+              aria-label={t('updateRetry')}
+              disabled={requesting}
+              onClick={() => { void onRetry() }}
+            >
+              {t('retry')}
+            </button>
+          ) : null}
+          {busy && progress > 0 ? (
+            <span className={css.progressTrack} aria-hidden="true">
+              <span className={css.progressValue} style={{ width: `${String(progress)}%` }} />
+            </span>
+          ) : null}
         </span>
       )}
     </>

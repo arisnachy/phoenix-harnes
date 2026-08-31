@@ -8,7 +8,7 @@
  * @module @phoenix-ai/dsh-credentials
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import type { CredentialKey, CredentialRecord, CredentialRef } from './types.ts'
 
 export type { ApiKeyRecord, CredentialKey, CredentialRecord, CredentialRef, GrantRecord } from './types.ts'
@@ -152,7 +152,7 @@ export interface CredentialRecordEntry {
   kind: CredentialRecord['kind']
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     credentials: CredentialProvider
   }

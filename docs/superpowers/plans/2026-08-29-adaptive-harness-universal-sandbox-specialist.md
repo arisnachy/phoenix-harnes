@@ -20,7 +20,7 @@ English | [中文](2026-08-29-adaptive-harness-universal-sandbox-specialist.zh.m
 - Executable artifacts run only through the existing sandbox policy or an empty iframe sandbox; never grant network or parent access by default.
 - All model-visible state is represented by session events and replayable folds.
 - Specialist readiness requires independent judge evidence; retries and refreshes are bounded and configurable.
-- Keep upstream `@deepseek-ai/cordis` and vendor identities unchanged; Phoenix-owned packages remain `@phoenix-ai/*`.
+- Keep upstream `@phoenix-ai/cordis` and vendor identities unchanged; Phoenix-owned packages remain `@phoenix-ai/*`.
 - Update English and required `.zh.md` documentation together and run translation pairing checks.
 
 ---

@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'
 import type { Session } from '@phoenix-ai/dsh-session'
 import SessionProjectionRegistry from '@phoenix-ai/dsh-session-projection'

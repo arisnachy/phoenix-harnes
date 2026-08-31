@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'
@@ -24,6 +24,9 @@ type UpdateStateResult =
 type RestartResult =
   | { readonly ok: true; readonly value: { readonly accepted: false; readonly status: 'current' } }
   | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } }
+type RefreshResult =
+  | { readonly ok: true; readonly value: { readonly accepted: boolean } }
+  | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } }
 
 async function bench() {
   const ctx = new Context()
@@ -42,8 +45,10 @@ async function bench() {
     .mockResolvedValue({ ok: true, value: { status: 'current' } })
   const restartForUpdate = vi.fn<() => Promise<RestartResult>>()
     .mockResolvedValue({ ok: true, value: { accepted: false, status: 'current' } })
-  ctx.provide('remote.pluginInventory', { list, updateState, restartForUpdate })
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, list, updateState, restartForUpdate }
+  const refreshForUpdate = vi.fn<() => Promise<RefreshResult>>()
+    .mockResolvedValue({ ok: true, value: { accepted: true } })
+  ctx.provide('remote.pluginInventory', { list, updateState, restartForUpdate, refreshForUpdate })
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, list, updateState, restartForUpdate, refreshForUpdate }
 }
 
 function declareSettings(slots: SlotRegistry): () => void {
@@ -97,10 +102,13 @@ describe('ui-settings-plugin-inventory browser plugin', () => {
     const updateInjected = (footer.inject as unknown as () => UpdateFooterActionInjected)()
     await expect(updateInjected.readUpdateState()).resolves.toEqual({ status: 'current' })
     await expect(updateInjected.restartForUpdate()).resolves.toEqual({ accepted: false, status: 'current' })
+    await expect(updateInjected.refreshForUpdate()).resolves.toEqual({ accepted: true })
     b.updateState.mockResolvedValueOnce({ ok: false, error: { code: 'STATE_ERROR', message: 'unavailable' } })
     await expect(updateInjected.readUpdateState()).rejects.toThrow('pluginInventory.updateState failed: STATE_ERROR: unavailable')
     b.restartForUpdate.mockResolvedValueOnce({ ok: false, error: { code: 'RESTART_ERROR', message: 'unavailable' } })
     await expect(updateInjected.restartForUpdate()).rejects.toThrow('pluginInventory.restartForUpdate failed: RESTART_ERROR: unavailable')
+    b.refreshForUpdate.mockResolvedValueOnce({ ok: false, error: { code: 'REFRESH_ERROR', message: 'unavailable' } })
+    await expect(updateInjected.refreshForUpdate()).rejects.toThrow('pluginInventory.refreshForUpdate failed: REFRESH_ERROR: unavailable')
     await b.ctx.fiber.dispose()
   })
 

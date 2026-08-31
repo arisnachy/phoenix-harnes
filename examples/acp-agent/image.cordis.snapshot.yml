@@ -5,7 +5,7 @@
 # so the strict read_image gate accepts the route and the tool result carries
 # the durable image block.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/subagent/subagent"
   },
   "type": "module",
@@ -55,7 +55,7 @@
     "@phoenix-ai/dsh-jobs": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/dsh-user-approval": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@phoenix-ai/dsh-agent-presets": {
@@ -101,6 +101,6 @@
     "@phoenix-ai/dsh-jobs": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/dsh-user-approval": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

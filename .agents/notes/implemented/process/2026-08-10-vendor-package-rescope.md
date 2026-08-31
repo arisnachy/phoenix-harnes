@@ -14,15 +14,15 @@ All nine packages move into the `@deepseek-ai` scope. Directory names, upstream 
 
 | Directory | npm name | Upstream name |
 |---|---|---|
-| `cordis/` | `@deepseek-ai/cordis` | `cordis` |
-| `cosmokit/` | `@deepseek-ai/cosmokit` | `cosmokit` |
-| `schemastery/` | `@deepseek-ai/schemastery` | `schemastery` |
-| `loader/` | `@deepseek-ai/cordis-plugin-loader` | `@cordisjs/plugin-loader` |
-| `include/` | `@deepseek-ai/cordis-plugin-include` | `@cordisjs/plugin-include` |
-| `group/` | `@deepseek-ai/cordis-plugin-group` | `@cordisjs/plugin-group` |
-| `timer/` | `@deepseek-ai/cordis-plugin-timer` | `@cordisjs/plugin-timer` |
-| `hmr/` | `@deepseek-ai/cordis-plugin-hmr` | `@cordisjs/plugin-hmr` |
-| `logger-console/` | `@deepseek-ai/cordis-plugin-logger-console` | `@cordisjs/plugin-logger-console` |
+| `cordis/` | `@phoenix-ai/cordis` | `cordis` |
+| `cosmokit/` | `@phoenix-ai/cosmokit` | `cosmokit` |
+| `schemastery/` | `@phoenix-ai/schemastery` | `schemastery` |
+| `loader/` | `@phoenix-ai/cordis-plugin-loader` | `@cordisjs/plugin-loader` |
+| `include/` | `@phoenix-ai/cordis-plugin-include` | `@cordisjs/plugin-include` |
+| `group/` | `@phoenix-ai/cordis-plugin-group` | `@cordisjs/plugin-group` |
+| `timer/` | `@phoenix-ai/cordis-plugin-timer` | `@cordisjs/plugin-timer` |
+| `hmr/` | `@phoenix-ai/cordis-plugin-hmr` | `@cordisjs/plugin-hmr` |
+| `logger-console/` | `@phoenix-ai/cordis-plugin-logger-console` | `@cordisjs/plugin-logger-console` |
 
 The rewrite touches only **delimited, complete package-name tokens**: quoted or backticked specifiers (optionally with a `/subpath`), `package.json` names and dependency keys, `cordis.yml` `name:` values, and `tsconfig.base.json` `paths` keys. Identically spelled strings that are not package names therefore stayed as they were: the `cordis.yml` config-file family, the Loader's literal `cordis:` builtin prefix (`cordis:include`, `cordis:group` — see `vendor/loader/src/config/tree.ts`), kind strings like `cordis-config-entry`, `@phoenix-ai/dsh-tool-cordis`, Schemastery's upstream `Symbol.for('schemastery')` and `vendor:` metadata field, the `packages/<group>/` directory names in `GROUP_ORDER` (`scripts/gen-module-graph.ts`, `scripts/gen-doc-graphs.ts`), and the upstream install instructions in `vendor/*/README.md`.
 
@@ -32,9 +32,9 @@ Markdown splits along what a reader does with it. Every fence follows the rename
 
 ## Consequences
 
-- No upstream name remains in the publication set. `publish-npm-baseline.ts` now requires every published package to be `@deepseek-ai/*` with no vendored exemption, so regressing the rename fails before packing.
+- No upstream name remains in the publication set. `publish-npm-baseline.ts` now requires every published package to be `@phoenix-ai/*` with no vendored exemption, so regressing the rename fails before packing.
 - The `vendor/README.md` manifest table gains an upstream-name column; `gen-third-party-notices` parses six columns and renders that name into `THIRD_PARTY_NOTICES.md`, keeping MIT attribution pointed at each fork's origin rather than our scope.
-- `pnpm-workspace.yaml` drops the `cordis` and `@cordisjs/plugin-loader` `minimumReleaseAgeExclude` entries, which can no longer be fetched from a registry, and `knip.json` drops the `@cordisjs/.+` ignore pattern that `@deepseek-ai/.+` already covers.
+- `pnpm-workspace.yaml` drops the `cordis` and `@cordisjs/plugin-loader` `minimumReleaseAgeExclude` entries, which can no longer be fetched from a registry, and `knip.json` drops the `@cordisjs/.+` ignore pattern that `@phoenix-ai/.+` already covers.
 - Upstream sync follows the procedure in `vendor/README.md` with one added obligation in step 3: re-apply the rename over the copied sources with `pnpm run rescope-vendor --apply`, whose mapping and the table's two name columns must agree.
 - **Returning to the official upstream packages** means applying that mapping in reverse — `pnpm run rescope-vendor --apply --reverse` — then restoring the two `minimumReleaseAgeExclude` entries and relaxing the publication-set assertion. It spans roughly 1300 files, so replay it with the script rather than by hand.
 

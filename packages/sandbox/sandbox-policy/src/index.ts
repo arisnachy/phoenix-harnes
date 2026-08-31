@@ -28,8 +28,8 @@
 
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path'
-import { Context, Service } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-agent'
 import { canonicalPath, type SandboxExecutionPolicy, type SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import type { Session } from '@phoenix-ai/dsh-session'
@@ -86,7 +86,7 @@ function renderPolicyContext(policy: SandboxExecutionPolicy, evolutionRoot: stri
   return `${text} PHOENIX HARDNESS runtime protection is active: model-controlled file and shell operations cannot write the live PHOENIX installation or its durable internal data home. ${destination}`
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     sandboxPolicy: SandboxPolicyService
   }

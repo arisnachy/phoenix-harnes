@@ -32,10 +32,12 @@
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`、`grep` | `ctx.tools`、`ctx.subprocess`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn 随包提供的 ripgrep 二进制文件（`@vscode/ripgrep`），并作为普通前台调用运行，绝不作为后台任务；无需在宿主机安装 `rg`，也不经过 shell 层。本目录使用 `sampleOverCapGlobResults: true`；部署必须显式选择该行为。结果超过上限时，会通过可选的 ctx.spillStore 后端保存完整的格式化列表；在共置部署中，如果后端公开本地路径，返回的定位信息可供后续读取／搜索。 |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`、`terminal_list`、`terminal_open`、`terminal_read`、`terminal_send`、`terminal_signal` | `ctx.tools`、`ctx.terminals`、`ctx.systemPrompt`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | 这 6 个终端工具需要选择启用，用于补充一次性 bash／文件系统工具。`terminal_send(run_in_background: true)` 会注册到 `ctx.jobs`；schema 不包含 TUI、具名按键序列、BEL、调整尺寸、自动启动和跨 agent 共享。 |
 | `@phoenix-ai/dsh-tool-goal` | `create_goal`、`get_goal`、`specialist_lab`、`update_goal` | `ctx.tools`、`ctx.agents`、`ctx.goals`、`ctx.systemPrompt`、`a calling Agent in an authorized open turn` | `tool/call`、`goal/change for mutations`、`tool/result` | - | create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。 |
+| `@phoenix-ai/dsh-tool-home-gateway` | `home_control`、`home_list_devices` | `ctx.tools`、`ctx.home`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`Home Assistant request at execution time` | - | schema harvest 使用私有 fake endpoint，绝不发起请求。Live 部署在操作员提供私有 endpoint、token 变量和两个 allowlist 前保持禁用。 |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`、`schedule_delete`、`schedule_list` | `ctx.tools`、`ctx.sessions`、Session 持久化、未来创建的 live 根 Agent | `tool/call`、`schedule/change create or delete`、`tool/result` | - | 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。 |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`、`ctx.lsp`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，因此其模型可见 schema 在更换提供方时保持稳定。运行时要求已注册提供方，例如 `@phoenix-ai/dsh-lsp-stdio`；如果没有提供方，查询会返回结构化 `LSP_UNAVAILABLE` 错误，而不会改变 schema。 |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`、`ctx.workflowEngine`、`ctx.subagents`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents every fresh round)` | `tool/call`、`tool/result`、`workflow and child session events during execution` | - | 固定的前台工作流会在每个 Round 启动一个全新的结构化子级；模型只能选择不可变目标和可选的 Round 上限。 |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`、`ctx.agents`、`ctx.skills` | `tool/call`、`tool/result`、`user/message replacement catalogs via agent.inject()` | - | - |
+| `@phoenix-ai/dsh-tool-session-learning` | `memory_remember`、`memory_search` | `ctx.tools`、`ctx.systemPrompt`、`ctx.learningMemory` | `tool/call`、`tool/result`、`bounded learning context` | - | memory_search 和 memory_remember 只提供有界且保留来源的学习记录；它们不会授予权限或修改受信任指令。 |
 | `@phoenix-ai/dsh-tool-session-query` | `session_event_read`、`session_event_search`、`session_event_trace`、`session_search`、`session_trace` | `ctx.tools`、`ctx.systemPrompt`、`ctx.sessionQuery`、`a calling Agent for workspace authority` | `tool/call`、`tool/result` | - | 这 5 个只读工具会隐藏提供方游标，并根据不可变的调用 agent 会话为每个结果授权。该包需要选择启用；需要强制截止时间或限制行内输出的组合还会挂载通用超时或 spill 策略。 |
 | `@phoenix-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`、`ctx.subagents`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`child session events through the chosen provider` | `subagent`、`subagent_fork` | 注册的工具名称取决于加载时 `toolName` 配置（默认为 `subagent`）；上述 schema 对应默认值。随产品发布的组合会为每个 subagent 后端加载一次该包，因此模型还会看到绑定到 fork 后端的 `subagent_fork`。每个实例的描述、`run_in_background` 参数与 system prompt 策略取决于它自己的 `backgroundMode` 和 `enableRunInBackground`，因此两个随附 schema 并不相同：`subagent` 为 `continuable`，省略参数时默认后台运行，并由 runtime 自动投递结束结果；`subagent_fork` 保持 `one-shot`，省略参数时默认前台运行。详见 `packages/bundle/base/cordis.patch.yml` 和 `examples/acp-agent/cordis.yml`。 |
 | `@phoenix-ai/dsh-tool-subagent-control` | `interrupt_agent`、`list_agents`、`send_message` | `ctx.tools`、`ctx.subagents`、`ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`、`tool/result`、`child session events through ctx.subagents` | - | 这些是控制可继续后台 subagent 的全局命名工具：绑定提供方的 `tool-subagent` 实例注册不同的委派工具；本包注册一次 `send_message` 和 `interrupt_agent`，另由 `list_agents` 通过单独加载的 `/list-agents` 插件提供，其目录行使用 sessionProjections 和实时 Agent 注册表。 |
@@ -1015,6 +1017,174 @@ glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn �
 
 来源：[`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
 
+### `organization_forge`
+
+Build one organization, business, or system as a durable Organization Forge. Research comparable solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, and R&D roles active, prefer deterministic automation, and require functional, tested, secure, observable, maintainable, documented evidence plus an independent judge before delivery. Forge is a modular capability over the mission system, not a replacement for it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "start, get, source, audit, advance, criterion, judge, or management",
+      "enum": [
+        "start",
+        "get",
+        "source",
+        "audit",
+        "advance",
+        "criterion",
+        "judge",
+        "management"
+      ]
+    },
+    "forge_id": {
+      "type": "string",
+      "description": "Existing Forge build id for non-start actions."
+    },
+    "objective": {
+      "type": "string",
+      "description": "Business, organization, or system objective for start."
+    },
+    "criteria": {
+      "type": "array",
+      "description": "Required delivery criteria for start.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "title": {
+      "type": "string",
+      "description": "Public source title."
+    },
+    "locator": {
+      "type": "string",
+      "description": "Public https, atlas, or local source reference without credentials."
+    },
+    "license": {
+      "type": "string",
+      "description": "Detected license identifier or policy result."
+    },
+    "stage": {
+      "type": "string",
+      "description": "Audit stage.",
+      "enum": [
+        "pre-reuse",
+        "post-modification"
+      ]
+    },
+    "source_id": {
+      "type": "string",
+      "description": "Source id being audited."
+    },
+    "dependencies": {
+      "type": "string",
+      "description": "Dependency audit result.",
+      "enum": [
+        "pending",
+        "passed",
+        "needs_changes",
+        "blocked"
+      ]
+    },
+    "secrets": {
+      "type": "string",
+      "description": "Secret scan result.",
+      "enum": [
+        "pending",
+        "passed",
+        "needs_changes",
+        "blocked"
+      ]
+    },
+    "vulnerabilities": {
+      "type": "string",
+      "description": "Vulnerability audit result.",
+      "enum": [
+        "pending",
+        "passed",
+        "needs_changes",
+        "blocked"
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "description": "Bounded audit or judge findings.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "phase": {
+      "type": "string",
+      "description": "Next Forge lifecycle phase.",
+      "enum": [
+        "researching",
+        "auditing",
+        "designing",
+        "building",
+        "verifying"
+      ]
+    },
+    "criterion_id": {
+      "type": "string",
+      "description": "Criterion id returned by start or get."
+    },
+    "criterion_status": {
+      "type": "string",
+      "description": "Evidence state.",
+      "enum": [
+        "pending",
+        "implemented",
+        "tested",
+        "verified"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Evidence references; required for verified.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "description": "Optional manual verdict when judging is disabled.",
+      "enum": [
+        "pass",
+        "needs_changes",
+        "blocked"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Judge summary."
+    },
+    "required_changes": {
+      "type": "array",
+      "description": "Required changes before approval.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "management_mode": {
+      "type": "string",
+      "description": "Post-build management choice.",
+      "enum": [
+        "handoff",
+        "assisted",
+        "autonomous"
+      ]
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
+
 ### `specialist_lab`
 
 维护一个持久化且有证据支持的 specialist laboratory。只有在收到明确的专家请求时才启动，然后登记可追溯来源、可证伪假设、可复现实验和 judge 结果。只有通过评估后 specialist 才会进入 ready；评估失败会创建 improving checkpoint，并受 max_iterations 限制。当基础 profile 要求 judge 时，evaluate 会自动调用新的只读独立 judge。
@@ -1156,6 +1326,57 @@ glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn �
 来源：[`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
 
 create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。
+
+<a id="phoenix-aidsh-tool-home-gateway"></a>
+
+## `@phoenix-ai/dsh-tool-home-gateway`
+
+### `home_control`
+
+调用一个明确列入 allowlist 的 Home Assistant 服务，作用于一个明确列入 allowlist 的实体。服务名不得包含 domain（例如 light.office 使用 turn_on）；gateway 会推导并验证 domain。不要将此工具用于任意网络设备。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "entity_id": {
+      "type": "string",
+      "description": "Exact allowlisted entity id, such as light.office."
+    },
+    "service": {
+      "type": "string",
+      "description": "Allowlisted service name without domain, such as turn_on."
+    },
+    "data": {
+      "type": "object",
+      "description": "JSON service data, usually {}.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "entity_id",
+    "service",
+    "data"
+  ]
+}
+```
+
+来源：[`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts)
+
+### `home_list_devices`
+
+列出明确列入 allowlist 的 Home Assistant 实体的当前状态和安全属性。此工具不会扫描网络，也不会公开 allowlist 之外的设备。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts)
+
+schema harvest 使用私有 fake endpoint，绝不发起请求。Live 部署在操作员提供私有 endpoint、token 变量和两个 allowlist 前保持禁用。
 
 <a id="phoenix-aidsh-schedule"></a>
 
@@ -1357,6 +1578,69 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 ```
 
 来源：[`packages/skill/tool-skill/src/index.ts`](../packages/skill/tool-skill/src/index.ts)
+
+<a id="phoenix-aidsh-tool-session-learning"></a>
+
+## `@phoenix-ai/dsh-tool-session-learning`
+
+### `memory_remember`
+
+Persist one bounded Phoenix preference or verified lesson with provenance from the current session.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "description": "Memory category; use preference for user choices and lesson or skill for verified learning.",
+      "enum": [
+        "lesson",
+        "skill",
+        "preference"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Short secret-free statement to retain."
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Optional confidence from 0 to 1; defaults to 0.8."
+    }
+  },
+  "required": [
+    "kind",
+    "summary"
+  ]
+}
+```
+
+来源：[`packages/session-learning/tool-session-learning/src/index.ts`](../packages/session-learning/tool-session-learning/src/index.ts)
+
+### `memory_search`
+
+Search Phoenix persistent learning memory and return bounded records with source session, event, and confidence.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Words to find in memory summaries or provenance. Omit to list recent memories."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Optional result count, capped by the configured maximum."
+    }
+  }
+}
+```
+
+来源：[`packages/session-learning/tool-session-learning/src/index.ts`](../packages/session-learning/tool-session-learning/src/index.ts)
+
+memory_search and memory_remember expose only bounded, provenance-preserving learning records; they never grant permissions or modify trusted instructions.
 
 <a id="phoenix-aidsh-tool-session-query"></a>
 

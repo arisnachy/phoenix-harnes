@@ -1,5 +1,5 @@
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { describe, expect, it, vi } from 'vitest'
 import type { RpcResponse, SettingsNamespaceView } from '@phoenix-ai/dsh-api-remotes/client'
 import { TestRemote } from '@phoenix-ai/dsh-client-test-runtime'

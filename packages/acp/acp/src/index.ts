@@ -9,11 +9,11 @@
  * @module @phoenix-ai/dsh-acp
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { randomUUID } from 'node:crypto'
 import { isAbsolute } from 'node:path'
 import { Readable, Writable } from 'node:stream'
-import Schema from '@deepseek-ai/schemastery'
+import Schema from '@phoenix-ai/schemastery'
 import { createUserMessage, errorChain } from '@phoenix-ai/dsh-llm'
 import {
   AgentSideConnection,

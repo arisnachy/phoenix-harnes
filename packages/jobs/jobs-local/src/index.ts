@@ -9,8 +9,8 @@
  * @module @phoenix-ai/dsh-jobs-local
  */
 
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { AnonymousEntries, ScopedLayers, scopeOf } from '@phoenix-ai/dsh-scope'
 import type { ScopeLayer } from '@phoenix-ai/dsh-scope'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import HardnessRegistry from '../src/index.ts'
 import type { CapabilityDescriptor, CapabilityEvidence, CapabilityId, HardnessService } from '../src/types.ts'
 

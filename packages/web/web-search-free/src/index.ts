@@ -1,5 +1,5 @@
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-web'
 import { FreeSearchProvider, type FreeSearchEngine } from './provider.ts'
 

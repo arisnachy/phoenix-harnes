@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { SessionId } from '@phoenix-ai/dsh-session'
 
 export const name = 'subagent-durability-failure'

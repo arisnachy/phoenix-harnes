@@ -9,7 +9,7 @@
  * @module @phoenix-ai/dsh-tool-fs-search/glob
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { sep } from 'node:path'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { GenericCallView, SearchResultView, ToolResult } from '@phoenix-ai/dsh-tools'

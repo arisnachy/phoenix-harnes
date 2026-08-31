@@ -31,8 +31,8 @@ import {
   launcherPath as landlockLauncherPath,
   probe as defaultProbeLandlock,
 } from '@phoenix-ai/node-addon-landlock-run'
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { assertNever } from '@phoenix-ai/dsh-llm'
 import { SandboxProvider, SandboxUnavailableError } from '@phoenix-ai/dsh-sandbox'
 import type { ConfinedArgv, ConfinedSandboxMode, RunnerFailureRule, SandboxEnforcement, SandboxPolicy } from '@phoenix-ai/dsh-sandbox'

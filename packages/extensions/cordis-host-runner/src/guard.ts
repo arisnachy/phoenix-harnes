@@ -13,8 +13,8 @@
  * @module @phoenix-ai/dsh-cordis-host-runner/guard
  */
 
-import { Context } from '@deepseek-ai/cordis'
-import type { Plugin } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
+import type { Plugin } from '@phoenix-ai/cordis'
 import { scopeOf } from '@phoenix-ai/dsh-scope'
 import { assertSupportedJsonSchema, defineTool } from '@phoenix-ai/dsh-tools'
 import type { ToolDefinition } from '@phoenix-ai/dsh-tools'

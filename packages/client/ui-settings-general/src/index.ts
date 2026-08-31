@@ -1,7 +1,7 @@
 /** Host loader entry for the browser implementation exported from `./client`. */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { settingsNamespace } from '@phoenix-ai/dsh-settings'
 
 /** Durable settings namespace for product-wide GUI onboarding facts. */

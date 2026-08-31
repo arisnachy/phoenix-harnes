@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-schedule
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { EveryScheduleRecord, OneShotScheduleRecord } from './types.ts'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { Session, SessionId } from '@phoenix-ai/dsh-session'
 import * as HookInvariant from '@phoenix-ai/dsh-hook-protocol/invariant'
 import InvariantRegistry from '@phoenix-ai/dsh-invariants'

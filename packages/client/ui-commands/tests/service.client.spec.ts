@@ -7,7 +7,7 @@
  * payload, the scoped consume-token dispatch, per-session popupFor
  * lifecycle, and the directory invalidation event subscriptions.
  */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import type { CommandResult } from '@phoenix-ai/dsh-commands/types'
 import { createScope, scopeOf } from '@phoenix-ai/dsh-client-runtime/client'

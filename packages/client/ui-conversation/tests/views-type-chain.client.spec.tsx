@@ -1,7 +1,7 @@
 // View-ring type-chain samples. This spec pins the conversation-owned SlotMap
 // row, list-kind registration shape, composed view props, and the runtime
 // ledger projection consumed by ConversationRoot.
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import type { ReactNode } from 'react'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'

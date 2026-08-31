@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { apply, inject, name } from '../src/invariant.ts'
 
 describe('@phoenix-ai/dsh-session-log-export/invariant', () => {

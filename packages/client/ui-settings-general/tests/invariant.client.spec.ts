@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import * as GeneralInvariant from '@phoenix-ai/dsh-client-ui-settings-general/invariant'
 import InvariantRegistry from '@phoenix-ai/dsh-invariants'
 

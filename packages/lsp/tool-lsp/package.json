@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/lsp/tool-lsp"
   },
   "type": "module",
@@ -38,10 +38,10 @@
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/dsh-timeout": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
@@ -56,6 +56,6 @@
     "@phoenix-ai/dsh-timeout": "workspace:^",
     "@phoenix-ai/dsh-tool-call-timeout-policy": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

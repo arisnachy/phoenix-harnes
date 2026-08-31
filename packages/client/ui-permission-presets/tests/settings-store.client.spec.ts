@@ -1,4 +1,4 @@
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import type { SettingsNamespaceView } from '@phoenix-ai/dsh-api-remotes/client'
 import { SettingsSchemaService } from '@phoenix-ai/dsh-client-ui-settings/src/client/schema.ts'

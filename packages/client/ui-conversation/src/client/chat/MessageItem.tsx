@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import type {
   ModelRetryNode, TurnErrorNode, UserMessageNode,
 } from '@phoenix-ai/dsh-client-runtime/client'
+import type { FileAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import { JsonBlock, MarkdownText, MessageText, StateDot } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
 import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
@@ -18,14 +19,17 @@ import { formatStructuredError } from './structured-error.ts'
 import css from './MessageItem.module.css'
 
 type UserImage = Extract<UserMessageNode['content'][number], { type: 'image' }>
+type UserFile = Extract<UserMessageNode['content'][number], { type: 'file' }>
 
 function contentParts(content: readonly unknown[]): {
   text: string
   images: { attachment: UserImage['attachment'] }[]
+  files: { attachment: UserFile['attachment'] }[]
   rest: unknown[]
 } {
   const texts: string[] = []
   const images: { attachment: UserImage['attachment'] }[] = []
+  const files: { attachment: FileAttachmentRef }[] = []
   const rest: unknown[] = []
   for (const block of content) {
     const b = block as { type?: string; text?: string; attachment?: unknown }
@@ -33,9 +37,12 @@ function contentParts(content: readonly unknown[]): {
     else if (b.type === 'image' && b.attachment !== undefined) {
       images.push({ attachment: (b as UserImage).attachment })
     }
+    else if (b.type === 'file' && b.attachment !== undefined) {
+      files.push({ attachment: (b as UserFile).attachment })
+    }
     else rest.push(block)
   }
-  return { text: texts.join(''), images, rest }
+  return { text: texts.join(''), images, files, rest }
 }
 
 function retrySeconds(milliseconds: number): number {
@@ -273,13 +280,22 @@ function UserStyleBubble({
   referenceLabels?: readonly string[]
   t: ChatViewSlotProps['t']
 }): ReactNode {
-  const { text, images, rest } = contentParts(content)
+  const { text, images, files, rest } = contentParts(content)
   const truncated = (total: number): string => t('json.truncated', { total })
   const showBubble = text !== '' || rest.length > 0
   return (
     <div className={css.userRow} data-pending-steering={pending || undefined} data-time-hover-root>
       <div className={css.userStack}>
         {renderMessageImages({ images, align: 'end' })}
+        {files.map(({ attachment }) => (
+          <div className={css.fileAttachment} key={String(attachment.attachmentId)}>
+            <span className={css.fileAttachmentIcon} aria-hidden="true">↗</span>
+            <span className={css.fileAttachmentCopy}>
+              <strong>{attachment.name ?? t('file.attachmentFallback')}</strong>
+              <span>{t('file.attachmentMeta', { mediaType: attachment.mediaType, bytes: attachment.bytes })}</span>
+            </span>
+          </div>
+        ))}
         {showBubble && <div className={css.bubble}>
           {projectUserText(text, referenceLabels)}
           {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}

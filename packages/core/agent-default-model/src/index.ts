@@ -4,13 +4,13 @@
  * @module @phoenix-ai/dsh-agent-default-model
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { ModelSelection } from '@phoenix-ai/dsh-agent'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import { installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     /** Default model selection for Agents created without an explicit model. */
     agentDefaultModel: AgentDefaultModelConfig

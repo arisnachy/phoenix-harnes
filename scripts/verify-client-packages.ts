@@ -16,7 +16,7 @@ const CONFIG_GLOB = 'packages/*/*/tsdown.config.ts'
 const PLATFORM_SOURCE = 'packages/client/web/src/platform.ts'
 const PARSER_PRELOAD_SOURCE = 'packages/client/modules/src/index.ts'
 const STATIC_PRESET_SOURCE = 'packages/client/tsdown.client.ts'
-const CORDIS = '@deepseek-ai/cordis'
+const CORDIS = '@phoenix-ai/cordis'
 const DSH_PREFIX = '@phoenix-ai/dsh-'
 const CLIENT_WEB = '@phoenix-ai/dsh-client-web'
 

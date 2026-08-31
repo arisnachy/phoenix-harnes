@@ -13,7 +13,7 @@
  * projections. Direct driving is deliberate: this spec owns only the
  * source's own contract.
  */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@phoenix-ai/dsh-client-runtime/client'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'

@@ -3,12 +3,12 @@ import { mkdir, mkdtemp, readFile, stat, symlink, writeFile } from 'node:fs/prom
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { boot, healProfilesModuleFallback, loadOverlayPatches, loadProfile } from '@phoenix-ai/dsh-app-boot'
 import { provideCmdline } from '@phoenix-ai/dsh-cmdline'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import type { Agent } from '@phoenix-ai/dsh-agent'
-import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
+import type { PatchOptions } from '@phoenix-ai/cordis-plugin-include'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { settingsNamespace } from '@phoenix-ai/dsh-settings'
 import { resolveSessionPreset, SETTINGS_NAMESPACE } from '@phoenix-ai/dsh-agent-presets'
@@ -39,6 +39,24 @@ const MINIMAL_BASH_DESCRIPTION = `Run commands in a bash shell
 * To inspect a particular line range of a file, e.g. lines 10-25, try 'sed -n 10,25p /path/to/the/file'.
 * Please avoid commands that may produce a very large amount of output.
 * Please run long lived commands in the background, e.g. 'sleep 10 &' or start a server in the background.`
+
+const SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
+const MINIMAL_SHELL_DESCRIPTION = process.platform === 'win32'
+  ? `Run commands in a PowerShell shell
+* When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.
+* You don't have access to the internet via this tool.
+* State is persistent across command calls and discussions with the user.
+* Use native Windows paths (C:\\...) and $env:NAME variables; this is PowerShell, not bash.
+* Please avoid commands that may produce a very large amount of output.
+* Please run long lived commands in the background, e.g. 'Start-Job' or start a server with Start-Process.`
+  : MINIMAL_BASH_DESCRIPTION
+const FULL_AGENT_TOOLS = [
+  'ask_user_question', 'connector_list', 'create_goal', 'edit', 'exit_plan_mode',
+  'get_goal', 'hardness_run', 'interrupt_agent', 'job_kill', 'job_list', 'job_output',
+  'list_agents', 'memory_remember', 'memory_search', SHELL_TOOL, 'ralph', 'read',
+  'read_image', 'send_message', 'skill', 'specialist_lab', 'subagent', 'subagent_fork',
+  'todo_write', 'update_goal', 'web_search', 'workflow', 'write',
+].sort()
 
 /**
  * Boot the shipped Web composition, minus the rows that would bind a port,
@@ -235,15 +253,37 @@ describe('the shipped Web composition', () => {
       // layer mounts cleanly and simply contributes nothing. `glob`/`grep` are
       // excluded for the reason the TUI composition e2e excludes them — they
       // depend on ripgrep being present on the machine.
-      expect(toolNames(ctx, handle.agent).filter(name => name !== 'glob' && name !== 'grep')).toEqual([
-        'ask_user_question', 'bash', 'create_goal', 'edit', 'exit_plan_mode',
-        'get_goal', 'interrupt_agent', 'job_kill', 'job_list', 'job_output', 'list_agents', 'ralph', 'read', 'read_image', 'send_message', 'skill',
-        'subagent', 'subagent_fork', 'todo_write', 'update_goal', 'web_search',
-        'workflow', 'write',
-      ])
+      expect(toolNames(ctx, handle.agent).filter(name => name !== 'glob' && name !== 'grep')).toEqual(FULL_AGENT_TOOLS)
     } finally {
       await handle.dispose()
     }
+  })
+
+  it('keeps unfinished missions non-terminal in every assembled persona', async () => {
+    const contracts: Record<string, string> = {}
+    for (const preset of ['standard', 'code', 'cordis']) {
+      const handle = await ctx.agents.create({
+        sessionId: SessionId(`preset-mission-contract-${preset}`),
+        setup: agentCtx => ctx.agentPresets.mount(agentCtx, preset).then(() => undefined),
+      })
+      try {
+        const assembly = await ctx.systemPrompt.assemble({ scope: handle.agent })
+        const persona = assembly.sections.find(section => section.name === 'deployment:persona')?.text ?? ''
+        const contract = persona.match(/<mission_completion_contract>[\s\S]*?<\/mission_completion_contract>/u)?.[0]
+        if (contract === undefined) throw new Error(`preset ${preset} has no mission completion contract`)
+        contracts[preset] = contract.replace(/\s+/gu, ' ')
+      } finally {
+        await handle.dispose()
+      }
+    }
+
+    expect(contracts).toMatchInlineSnapshot(`
+      {
+        "code": "<mission_completion_contract> A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure. Do not label a response final or emit a completion report while any mandatory deliverable, acceptance criterion, integration, or verification remains. Continue with root-cause analysis and a materially different strategy. If an external dependency requires a physical or human action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition, keep testing safe alternatives, and resume automatically when that condition changes; ask only for the minimal required action. Only close the mission after the independent judge returns PASS with evidence, or after the user explicitly cancels it. </mission_completion_contract>",
+        "cordis": "<mission_completion_contract> A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure. Do not label a response final or emit a completion report while any mandatory deliverable, acceptance criterion, integration, or verification remains. Continue with root-cause analysis and a materially different strategy. If an external dependency requires a physical or human action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition, keep testing safe alternatives, and resume automatically when that condition changes; ask only for the minimal required action. Only close the mission after the independent judge returns PASS with evidence, or after the user explicitly cancels it. </mission_completion_contract>",
+        "standard": "<mission_completion_contract> A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure. Do not label a response final or emit a completion report while any mandatory deliverable, acceptance criterion, integration, or verification remains. Continue with root-cause analysis and a materially different strategy. If an external dependency requires a physical or human action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition, keep testing safe alternatives, and resume automatically when that condition changes; ask only for the minimal required action. Only close the mission after the independent judge returns PASS with evidence, or after the user explicitly cancels it. </mission_completion_contract>",
+      }
+    `)
   })
 
   it('composes the exact RL prompt and two tools from `minimal`', async () => {
@@ -256,8 +296,8 @@ describe('the shipped Web composition', () => {
       expect(assembly.sections).toEqual([
         { name: 'deployment:persona', text: MINIMAL_PROMPT },
       ])
-      expect(assembly.tools.map(tool => tool.name)).toEqual(['bash', 'str_replace_editor'])
-      expect(assembly.tools.find(tool => tool.name === 'bash')?.description).toBe(MINIMAL_BASH_DESCRIPTION)
+      expect(assembly.tools.map(tool => tool.name)).toEqual([SHELL_TOOL, 'str_replace_editor'])
+      expect(assembly.tools.find(tool => tool.name === SHELL_TOOL)?.description).toBe(MINIMAL_SHELL_DESCRIPTION)
       expect(JSON.stringify(assembly.tools.find(tool => tool.name === 'str_replace_editor')?.parameters))
         .toContain('Absolute path')
       expect(ctx.agentPresets.serviceFor(handle.agent, 'compaction')).toBeUndefined()
@@ -277,7 +317,7 @@ describe('the shipped Web composition', () => {
       setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'minimal').then(() => undefined),
     })
     try {
-      expect(toolNames(ctx, minimal.agent)).toEqual(['bash', 'str_replace_editor'])
+      expect(toolNames(ctx, minimal.agent)).toEqual([SHELL_TOOL, 'str_replace_editor'])
       expect(toolNames(ctx, full.agent).length).toBeGreaterThan(10)
 
       await minimal.dispose()
@@ -303,7 +343,7 @@ describe('the shipped Web composition', () => {
         'cordis_define', 'cordis_run', 'cordis_stop', 'cordis_undefine',
       ]))
       // And it keeps the standard agent's own tools rather than replacing them.
-      expect(tools).toEqual(expect.arrayContaining(['bash', 'read', 'edit', 'skill']))
+      expect(tools).toEqual(expect.arrayContaining([SHELL_TOOL, 'read', 'edit', 'skill']))
       expect(tools).not.toContain('str_replace_editor')
 
       // The preset's own authoring skill registers into ITS layer of the host
@@ -339,7 +379,7 @@ describe('the shipped Web composition', () => {
       // The presentation is this agent's alone: the deployment default is
       // native, and the session composed from `standard` still sees it.
       const nativeAssembly = await ctx.systemPrompt.assemble({ scope: native.agent })
-      expect(nativeAssembly.tools.map(tool => tool.name)).toContain('bash')
+      expect(nativeAssembly.tools.map(tool => tool.name)).toContain(SHELL_TOOL)
       expect(nativeAssembly.tools.map(tool => tool.name)).not.toContain('run_code')
       expect(nativeAssembly.sections.some(section => section.name === 'tools:sdk')).toBe(false)
     } finally {
@@ -426,7 +466,7 @@ describe('the shipped Web composition', () => {
       // stays the preset's choice — minimal mounts no `tool-skill`, so its
       // tool table has no loader even though the global layer is readable.
       expect((await ctx.skills.list({ scope: handle.agent })).map(skill => skill.name)).toContain('dsh-badge')
-      expect(toolNames(ctx, handle.agent)).toEqual(['bash', 'str_replace_editor'])
+      expect(toolNames(ctx, handle.agent)).toEqual([SHELL_TOOL, 'str_replace_editor'])
     } finally {
       await handle.dispose()
     }
@@ -675,7 +715,7 @@ describe('a delegated child', () => {
       expect(toolNames(ctx, child.agent)).toEqual(toolNames(ctx, parent.agent))
       // The shipped `standard` preset is the whole coding agent; an empty
       // child here is the defect, and equality alone would not catch it.
-      expect(toolNames(ctx, child.agent)).toContain('bash')
+      expect(toolNames(ctx, child.agent)).toContain(SHELL_TOOL)
       expect(child.agent.session.header.agentPreset).toBe('standard')
     } finally {
       await child.dispose()
@@ -804,27 +844,28 @@ describe('authoring a preset on the shipped composition', () => {
   })
 
   it('copies a shipped preset a session then really composes from', async () => {
-    await authorCtx.agentPresets.copy('minimal', 'my-agent', '我的模式')
+    const authoredPresetId = `my-agent-${randomUUID()}`
+    await authorCtx.agentPresets.copy('minimal', authoredPresetId, 'My mode')
 
     // Round-trips through the roster as a `user` row carrying the given name
     // and the source's description, over the source's own composition text.
-    const preset = await authorCtx.agentPresets.resolve('my-agent')
+    const preset = await authorCtx.agentPresets.resolve(authoredPresetId)
     const source = await authorCtx.agentPresets.resolve('minimal')
     expect(preset.trust).toBe('user')
-    expect(preset.name).toBe('我的模式')
+    expect(preset.name).toBe('My mode')
     expect(preset.description).toBe(source.description)
-    expect(await authorCtx.agentPresets.read('my-agent')).toBe(await authorCtx.agentPresets.read('minimal'))
+    expect(await authorCtx.agentPresets.read(authoredPresetId)).toBe(await authorCtx.agentPresets.read('minimal'))
     // Owner-only, in an owner-only directory: a composition is executable
     // configuration on a machine that may have other users.
-    expect((await stat(preset.path)).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32') expect((await stat(preset.path)).mode & 0o777).toBe(0o600)
     const handle = await authorCtx.agents.create({
       sessionId: SessionId('preset-authored'),
-      setup: agentCtx => authorCtx.agentPresets.mount(agentCtx, 'my-agent').then(() => undefined),
+      setup: agentCtx => authorCtx.agentPresets.mount(agentCtx, authoredPresetId).then(() => undefined),
     })
     try {
       // The same tools the shipped `minimal` composes, from a directory copied
       // through the service into a root outside the installed harness.
-      expect(toolNames(authorCtx, handle.agent)).toEqual(['bash', 'str_replace_editor'])
+      expect(toolNames(authorCtx, handle.agent)).toEqual([SHELL_TOOL, 'str_replace_editor'])
     } finally {
       await handle.dispose()
     }
@@ -861,7 +902,7 @@ describe('the default preset as a user setting', () => {
       try {
         // `mount()` with no id resolves the effective default. Two tools, not
         // `standard`'s catalog: the setting decided the composition.
-        expect(toolNames(ctx, handle.agent)).toEqual(['bash', 'str_replace_editor'])
+        expect(toolNames(ctx, handle.agent)).toEqual([SHELL_TOOL, 'str_replace_editor'])
       } finally {
         await handle.dispose()
       }

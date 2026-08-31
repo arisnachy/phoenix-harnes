@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-code-runtime
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import type { CodeRunRequest, CodeRunResult } from './types.ts'
 
 export type {
@@ -86,7 +86,7 @@ export const PORTABLE_RESERVED_WORDS: ReadonlySet<string> = new Set([
   'global', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'match', 'type', '_',
 ])
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     codeRuntime: CodeRuntime
   }
@@ -118,8 +118,8 @@ export abstract class CodeRuntime extends Service {
    */
   abstract readonly isolation: string
 
-  constructor(ctx: Context) {
-    super(ctx, 'codeRuntime')
+  constructor(ctx: Context, serviceName = 'codeRuntime') {
+    super(ctx, serviceName)
   }
 
   /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { AuthorizationEntry, AuthorizationRequest, AuthorizationService } from '@phoenix-ai/dsh-authorization'
 import { createApiProxy } from '../src/api-proxy.ts'
 import { RpcId } from '../src/api/rpc.ts'

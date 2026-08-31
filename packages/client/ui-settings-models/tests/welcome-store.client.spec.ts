@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { SettingsSchemaService } from '@phoenix-ai/dsh-client-ui-settings/src/client/schema.ts'
 import { SettingsDescribeMirror } from '@phoenix-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { SettingsScopeController } from '@phoenix-ai/dsh-client-ui-settings/src/client/settings-scope.ts'

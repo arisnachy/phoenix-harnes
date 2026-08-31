@@ -18,7 +18,7 @@
 - 可执行产物只能通过现有 sandbox policy 或空 iframe sandbox 运行，默认不授予网络或父页面访问。
 - 所有模型可见状态都由会话事件表示并可 replay。
 - Specialist 进入 ready 必须有独立 judge 证据；retry 和 refresh 有界且可配置。
-- 保留上游 `@deepseek-ai/cordis` 与 vendor 身份；Phoenix 自有包使用 `@phoenix-ai/*`。
+- 保留上游 `@phoenix-ai/cordis` 与 vendor 身份；Phoenix 自有包使用 `@phoenix-ai/*`。
 - 英文与必需的 `.zh.md` 文档必须同步更新，并运行 pairing 检查。
 
 ### Task 1：持久化审批期限与单一计划策略

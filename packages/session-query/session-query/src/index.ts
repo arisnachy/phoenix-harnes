@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-session-query
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { Session, snapshotSessionEvent, type SessionId } from '@phoenix-ai/dsh-session'
 import { foldSessionTitle } from '@phoenix-ai/dsh-session-title'
 import type { SessionTitleSnapshot } from '@phoenix-ai/dsh-session-title'
@@ -65,7 +65,7 @@ export {
 } from './filters.ts'
 export { assertSessionHeadersCompatible } from './sources.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     sessionQuery: SessionQueryEngine
   }

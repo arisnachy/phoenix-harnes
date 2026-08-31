@@ -6,7 +6,7 @@
  * @module @phoenix-ai/dsh-agent/dispatch
  */
 
-import type { Context, Events } from '@deepseek-ai/cordis'
+import type { Context, Events } from '@phoenix-ai/cordis'
 import { scopeTarget } from '@phoenix-ai/dsh-scope'
 import type { Scoped } from '@phoenix-ai/dsh-scope'
 import type { AssembleContext } from '@phoenix-ai/dsh-system-prompt'

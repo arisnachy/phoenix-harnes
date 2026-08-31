@@ -5,7 +5,10 @@
  */
 
 import type { MessageId } from '@phoenix-ai/dsh-llm/brand'
-import type { AttachmentIdType, ImageAttachmentLimits, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
+import type {
+  AttachmentIdType, FileAttachmentLimits, FileAttachmentRef, ImageAttachmentLimits, ImageAttachmentRef,
+  ImageMediaType,
+} from '@phoenix-ai/dsh-attachment'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm/types'
 import type { SessionEvent, SessionId } from '@phoenix-ai/dsh-session/types'
 // The pure-type outlet: api/ is browser-importable, and the package root's
@@ -19,6 +22,7 @@ declare module '@phoenix-ai/dsh-session-projection/types' {
   interface SessionProjectionStateMap {
     sessionListMetadata: SessionListMetadata
     imageLimits: null
+    fileLimits: null
   }
   interface SessionProjectionMap {
     /**
@@ -36,6 +40,8 @@ declare module '@phoenix-ai/dsh-session-projection/types' {
      * composed — clients skip the pre-check and let the host answer.
      */
     imageLimits: ImageAttachmentLimits
+    /** The deployment's arbitrary-file intake limits. */
+    fileLimits: FileAttachmentLimits
   }
 }
 
@@ -91,6 +97,7 @@ export interface SessionProjectionsBlock {
 export type PromptContentPart =
   | { type: 'text'; text: string }
   | { type: 'image'; mediaType: ImageMediaType; data: string; name?: string }
+  | { type: 'file'; mediaType: string; data: string; name?: string }
 
 /** Complete model selection for one session. */
 export interface ModelSelection {
@@ -317,6 +324,13 @@ export interface SessionsApi {
   Promise<RpcResponse<{ title: string; seq: number }>>
 
   /**
+   * Physically deletes a cold session log. Active sessions are rejected so a
+   * running agent can never append to a record after the delete request.
+   */
+  delete?(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ deleted: true }>>
+
+  /**
    * Sends a message. content is core's ContentBlock[] verbatim; mode maps 1:1 — queue→send, steer→steer.
    * A prompt whose content is exactly one text block starting with '/' is a slash command: the host
    * executes it through the command registry (mode-agnostic) and it is never sent to the model. A
@@ -356,9 +370,9 @@ export interface SessionsApi {
   }>):
   Promise<RpcResponse<{ accepted: true; command?: { kind: 'success'; text?: string } }>>
 
-  /** Reads one durable image after proving that this session's log references its id. */
+  /** Reads one durable attachment after proving that this session's log references its id. */
   attachment(request: RpcRequest<{ sessionId: SessionId; attachmentId: AttachmentIdType }>):
-  Promise<RpcResponse<{ attachment: ImageAttachmentRef; data: string }>>
+  Promise<RpcResponse<{ attachment: ImageAttachmentRef | FileAttachmentRef; data: string }>>
 
   /**
    * Edits, removes, or strictly steers one pending queued occurrence on an ordinary session.

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-30-universal-artifact-language.md
+2026-08-30-universal-artifact-language.md: 7d768040169ff392b61e07163a34f542cd0736b9
+2026-08-30-universal-artifact-language.zh.md: 2b20cf73ef5f9680c0d3b4f35f4b5fdb2dee2139

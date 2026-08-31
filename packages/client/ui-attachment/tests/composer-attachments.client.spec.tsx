@@ -53,6 +53,14 @@ function attachment(id: string, name = `${id}.png`): ComposerAttachment {
   }
 }
 
+function fileAttachment(id: string): ComposerAttachment {
+  return {
+    kind: 'file',
+    id: id as ComposerAttachment['id'],
+    file: new File([Uint8Array.of(1, 2, 3)], `${id}.csv`, { type: 'text/csv' }),
+  }
+}
+
 function props(overrides: Partial<ComposerAttachmentsOwnerProps> = {}): ComposerAttachmentsProps {
   return {
     attachments: [],
@@ -65,6 +73,14 @@ function props(overrides: Partial<ComposerAttachmentsOwnerProps> = {}): Composer
 }
 
 describe('ComposerAttachments', () => {
+  it('renders arbitrary file drafts as named cards instead of image thumbnails', () => {
+    render(<ComposerAttachments {...props({ attachments: [fileAttachment('data')] })} />)
+
+    expect(document.querySelector('[data-attachment-kind="file"]')).toBeTruthy()
+    expect(document.querySelector('img')).toBeNull()
+    expect(document.body.textContent).toContain('data.csv')
+  })
+
   it('accepts file drops anywhere on the document and keeps non-file drags native', () => {
     const onAddImages = vi.fn()
     const view = render(<ComposerAttachments {...props({

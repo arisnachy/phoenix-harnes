@@ -21,7 +21,7 @@ The key is `<scope>/<id>`, where `scope` is the **owning plugin's registered nam
 ## Surface
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { credentialKey, credentialRef } from '@phoenix-ai/dsh-credentials'
 
 declare const ctx: Context

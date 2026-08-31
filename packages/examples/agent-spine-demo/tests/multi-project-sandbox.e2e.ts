@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { SandboxBashExecutor } from '@phoenix-ai/dsh-bash-sandbox'
 import LocalSubprocessRuntime from '@phoenix-ai/dsh-subprocess-local'
 import * as FsPolicy from '@phoenix-ai/dsh-fs-observation-policy'

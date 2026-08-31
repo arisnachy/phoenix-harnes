@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {
   ConversationNodeDefinition, UnknownSurfaceNode,
 } from '@phoenix-ai/dsh-client-runtime/client'

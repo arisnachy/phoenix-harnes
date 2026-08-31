@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/sdk/server"
   },
   "type": "module",
@@ -32,7 +32,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@phoenix-ai/schemastery": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
@@ -43,10 +43,10 @@
     "@phoenix-ai/dsh-sdk-protocol": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-agent-spine-demo": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
@@ -57,6 +57,6 @@
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-session-persistence-jsonl": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

@@ -49,7 +49,7 @@ An adapter may return no capacity for a valid dynamic route, and resolved capaci
 `BasicCompactionEngine` requires `ctx.llm`, `ctx.tokenMeter`, and `ctx.sessions`. The composition below receives `ctx.llm` from its host and installs the other two services:
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { BasicCompactionEngine } from '@phoenix-ai/dsh-compaction-basic'
 import SessionStore from '@phoenix-ai/dsh-session'
 import TokenMeter from '@phoenix-ai/dsh-token-meter'

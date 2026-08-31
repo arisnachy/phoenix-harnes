@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import WebRuntime from '@phoenix-ai/dsh-web'
 import { ExaSearchProvider, EXA_PROVIDER_ID } from '@phoenix-ai/dsh-web-search-exa'
 import * as exaPlugin from '@phoenix-ai/dsh-web-search-exa'

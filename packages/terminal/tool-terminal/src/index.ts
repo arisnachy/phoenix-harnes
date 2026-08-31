@@ -4,8 +4,8 @@
  * @module @phoenix-ai/dsh-tool-terminal
  */
 
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import { TerminalSessionId } from '@phoenix-ai/dsh-terminal'

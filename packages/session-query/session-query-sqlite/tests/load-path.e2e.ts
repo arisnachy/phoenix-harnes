@@ -6,8 +6,8 @@ import { createUserMessage } from '@phoenix-ai/dsh-llm'
  */
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import { Context } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import { SESSION_FORMAT_VERSION, SessionId } from '@phoenix-ai/dsh-session'
 import SessionStore from '@phoenix-ai/dsh-session'
 import SqliteSessionPersistence from '@phoenix-ai/dsh-session-persistence-sqlite'

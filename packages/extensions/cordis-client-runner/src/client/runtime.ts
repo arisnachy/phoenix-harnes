@@ -14,8 +14,8 @@
  * serialization keeps a second request from interleaving with one in flight.
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import type { Loader } from '@deepseek-ai/cordis-plugin-loader'
+import type { Context } from '@phoenix-ai/cordis'
+import type { Loader } from '@phoenix-ai/cordis-plugin-loader'
 import type {
   CordisDynamicPackageId, CordisDynamicPluginId, CordisDynamicPluginRunId, DynamicCordisPackage,
 } from '@phoenix-ai/dsh-api-remotes/client'

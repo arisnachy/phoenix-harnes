@@ -7,7 +7,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { z } from 'zod'
 import Storage from '@phoenix-ai/dsh-storage'
 import { DomainFacility } from '@phoenix-ai/dsh-storage-domain'

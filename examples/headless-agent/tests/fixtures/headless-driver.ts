@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Snapshot-only Loader driver: stream one fixture turn as canonical JSONL. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { boot, installFailLoud, loadEnv, resolveConfigPath } from '@phoenix-ai/dsh-app-boot'
 import { runFixtureTurn } from '@phoenix-ai/dsh-loader-smoke'
 import type { SessionEvent } from '@phoenix-ai/dsh-session'

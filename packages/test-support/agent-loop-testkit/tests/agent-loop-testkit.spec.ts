@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import { mountAgentLoopTestDependencies } from '../src/index.ts'

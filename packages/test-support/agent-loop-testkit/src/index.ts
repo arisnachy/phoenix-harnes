@@ -5,7 +5,7 @@
  * @module @phoenix-ai/dsh-agent-loop-testkit
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import AgentRegistry from '@phoenix-ai/dsh-agent'
 import LlmRuntime from '@phoenix-ai/dsh-llm'
 import SessionStore from '@phoenix-ai/dsh-session'

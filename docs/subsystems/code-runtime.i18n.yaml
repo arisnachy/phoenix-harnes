@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/code-runtime.md
-code-runtime.md: ae760487eff19f6a0b91620b92007d0a86eb1589
-code-runtime.zh.md: b48e1a01b2817d9dafb25ac96673d00cf7d9ed08
+code-runtime.md: ac83c2fce891da85f8d597e1ea3173f442d5c89e
+code-runtime.zh.md: 03fc8ad32c948e55827a31fa2e42526ac0245df7

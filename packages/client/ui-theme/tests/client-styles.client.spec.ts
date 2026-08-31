@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /** Dynamic ui-theme entry owns the global styles in dependency order. */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import { installThemeStyles } from '../src/client/styles.ts'
 

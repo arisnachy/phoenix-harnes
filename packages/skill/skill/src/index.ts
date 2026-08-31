@@ -10,12 +10,12 @@
  * @module @phoenix-ai/dsh-skill
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { assertNever } from '@phoenix-ai/dsh-llm'
 import { NamedEntries, ScopedLayers, scopeChainOf, scopeOf } from '@phoenix-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer } from '@phoenix-ai/dsh-scope'
-import z from '@deepseek-ai/schemastery'
-import type Schema from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
+import type Schema from '@phoenix-ai/schemastery'
 import type { SkillOperationalProfile } from './operational.js'
 
 export * from './operational.js'
@@ -286,7 +286,7 @@ export interface Config {
   readonly collectCacheMaxEntries?: number
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     skills: SkillRegistry
   }

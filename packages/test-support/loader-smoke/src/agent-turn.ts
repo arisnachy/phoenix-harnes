@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-loader-smoke/agent-turn
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { createUserMessage, type TokenUsage } from '@phoenix-ai/dsh-llm'
 import type { SessionEvent } from '@phoenix-ai/dsh-session'

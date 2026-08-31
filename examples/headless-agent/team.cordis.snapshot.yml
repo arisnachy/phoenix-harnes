@@ -1,6 +1,6 @@
 # Keyless Agent Teams composition over the real headless app and deterministic fixture adapter.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

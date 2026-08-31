@@ -4,8 +4,8 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { TerminalReadResult, TerminalSessionId } from '@phoenix-ai/dsh-terminal'
 import { deadline, timeoutOf } from '@phoenix-ai/dsh-timeout'

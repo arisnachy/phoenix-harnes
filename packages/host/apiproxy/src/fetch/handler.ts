@@ -19,6 +19,7 @@ import {
   sessionCancelRequestSchema,
   sessionAttachmentRequestSchema,
   sessionCreateRequestSchema,
+  sessionDeleteRequestSchema,
   sessionForkRequestSchema,
   sessionHistoryRequestSchema,
   sessionListRequestSchema,
@@ -99,6 +100,14 @@ const UNARY_ROUTES: UnaryRoutes = {
   'session.models': { schema: sessionModelsRequestSchema, invoke: (api, r) => api.sessions.models(r) },
   'session.selectModel': { schema: sessionSelectModelRequestSchema, invoke: (api, r) => api.sessions.selectModel(r) },
   'session.rename': { schema: sessionRenameRequestSchema, invoke: (api, r) => api.sessions.rename(r) },
+  'session.delete': {
+    schema: sessionDeleteRequestSchema,
+    invoke: async (api, r) => {
+      const sessions = api.sessions
+      if (sessions.delete === undefined) throw new Error('session deletion is unavailable')
+      return sessions.delete(r)
+    },
+  },
   'session.fork': { schema: sessionForkRequestSchema, invoke: (api, r) => api.sessions.fork(r) },
   'session.prompt': { schema: sessionPromptRequestSchema, invoke: (api, r) => api.sessions.prompt(r) },
   'session.attachment': { schema: sessionAttachmentRequestSchema, invoke: (api, r) => api.sessions.attachment(r) },

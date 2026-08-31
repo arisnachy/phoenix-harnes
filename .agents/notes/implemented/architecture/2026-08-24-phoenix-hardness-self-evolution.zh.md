@@ -14,7 +14,9 @@ Windows PHOENIX 启动器通过 `PHOENIX_RUNTIME_ROOT` 标记正在运行的 che
 
 模型可以在演化 worktree 中编辑、安装依赖、构建、测试并反复修正。该 worktree 不是正在运行的 runtime，并且有意保持 detached，因此激活仍是独立的受信任发布操作。受管理安装只消费已提升的 stable manifest。
 
-stable watcher 同样把准备与激活分开。当前 PHOENIX Host 保持可用期间，被提名的 stable commit 会被获取到一个 detached staging worktree，在那里安装锁定依赖、构建候选版本并对启动器执行 smoke test。只有该 preflight 成功后，watcher 才会把阶段写入仓库拥有的 Git 状态并将 target 标记为 `ready`。Web 侧栏读取这份状态的清理后投影，在 Settings 上方显示进度，而不会修改实时 checkout。
+stable watcher 同样把准备与激活分开。当前 PHOENIX Host 保持可用期间，被提名的 stable commit 会被获取到一个 detached staging worktree，在那里安装锁定依赖、构建候选版本并对启动器执行 smoke test。只有该 preflight 成功后，watcher 才会把阶段写入仓库拥有的 Git 状态并将 target 标记为 `ready`。Web 侧栏读取这份状态的清理后投影，在 Settings 上方显示按阶段的进度卡片，而不会修改实时 checkout。临时频道或 Host 读取失败会保持为 `checking/retry` 并自动重试；只有候选准备、激活或 rollback 失败才会成为更新错误。
+
+Host bridge 还会把旧版受管理安装使用的完成状态 `realigned-stable` 规范化为当前的 `updated` 状态。这样，成功的 stable realignment 在重启后不会显示为更新失败；新的受管理更新会直接写入共享状态词汇。
 
 `ready` 发布可以通过正常关闭 PHOENIX 激活，也可以通过明确的 **Restart to complete update** 操作激活。浏览器不能指定 commit：Host 只会为已经记录为 `ready` 的精确 target 接受重启请求，先持久写入请求并返回 receipt，然后才安排自身退出。detached watcher 观察到退出后，会激活同一个 target，对实时 checkout 再次构建和 smoke 验证；失败时恢复之前的 recovery ref；若是明确的重启请求，则在完成后自动重新启动 PHOENIX。
 
@@ -34,7 +36,11 @@ stable watcher 同样把准备与激活分开。当前 PHOENIX Host 保持可用
 
 模型可以进行破坏性或不完整修改，而不会损坏正在服务当前会话的 runtime；它可以把演化 worktree 中的构建或测试错误作为反馈继续修复。worktree 创建失败时，自我修改会降为只读，而不是获得实时 checkout 的写权限。HARDNESS 保护启动期间有意不允许模型进行不受约束的整机写入；广泛写权限仍限制在解析后的 workspace。
 
-stable 更新可以在当前 Host 仍可使用时完成耗时的 fetch、依赖、构建与 smoke 工作。侧栏显示这些真实阶段，并且只有准备成功后才提供 Restart。激活时仍会重新构建并验证实时 checkout，因此 `ready` 表示候选版本通过了隔离 preflight，而不是保证激活绝不会失败；任何激活失败都会通过 recovery 恢复之前的 checkout。提升与重启仍是明确边界，因此模型修改或刚出现的 `main` commit 都不会仅因为存在就进入实时运行。
+stable 更新可以在当前 Host 仍可使用时完成耗时的 fetch、依赖、构建与 smoke 工作。侧栏在紧凑卡片中显示这些真实阶段，并且只有准备成功后才提供 Restart。激活时仍会重新构建并验证实时 checkout，因此 `ready` 表示候选版本通过了隔离 preflight，而不是保证激活绝不会失败；任何激活失败都会通过 recovery 恢复之前的 checkout。提升与重启仍是明确边界，因此模型修改或刚出现的 `main` commit 都不会仅因为存在就进入实时运行。Windows 准备被中断而留下的 staging `index.lock` 会在下一次准备前恢复。
+
+通用 HARDNESS artifact surface 现在有两个执行提供者：现有的 TypeScript worker 和全新进程的 `PythonCodeRuntime`。RPC 根据 artifact 语言选择提供者，因此 Python 执行不会替换 TypeScript 执行。HTML 和 mini-app 预览通过隔离 iframe 的 postMessage 报告测量后的文档高度；父页面只接受来自该 iframe 的消息，并将结果限制在响应式 surface 的范围内。
+
+Python 提供者需要已安装的 CPython，并且仍然是隔离措施而非安全边界。进程级预算和空环境可以减少意外干扰，而共享 sandbox 和审批服务仍是执行风险的权威来源。
 
 ## Changed-path coverage
 

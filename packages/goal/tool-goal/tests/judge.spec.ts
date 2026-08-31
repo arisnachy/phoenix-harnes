@@ -43,8 +43,8 @@ describe('goal completion judge', () => {
     })
     expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
       label: 'goal-completion-judge',
-      toolFilter: { allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search'] },
-      outputSchema: expect.objectContaining({ required: ['verdict', 'summary', 'findings', 'required_changes'] }),
+      toolFilter: { allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] },
+      outputSchema: expect.objectContaining({ required: ['verdict', 'summary', 'findings', 'required_changes'] }) as unknown,
     }))
   })
 
@@ -81,6 +81,7 @@ describe('goal completion judge', () => {
     recordGoalJudge(session, {
       callId: 'call-1' as never,
       goalId: 'goal-1',
+      revision: 1,
       round: 3,
       verdict: 'blocked',
       summary: 'goal judge provider is unavailable',

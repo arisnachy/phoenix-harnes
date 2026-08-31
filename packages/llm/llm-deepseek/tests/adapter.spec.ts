@@ -2,9 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { AttachmentId, ImageVariantId } from '@phoenix-ai/dsh-attachment'
-import type { AttachmentStore, ImageAttachmentRef, RequestImageAttachment } from '@phoenix-ai/dsh-attachment'
+import type {
+  AttachmentStore,
+  FileAttachmentRef,
+  ImageAttachmentRef,
+  RequestImageAttachment,
+  StoredFileAttachment,
+} from '@phoenix-ai/dsh-attachment'
 import { createLaunchEnvironmentSnapshot } from '@phoenix-ai/dsh-launch-environment'
 import LlmRuntime, { CallId, createUserMessage,
   CONTEXT_WINDOW_EXCEEDED_CODE,
@@ -75,6 +81,13 @@ const imageRef: ImageAttachmentRef = {
   bytes: 3,
   width: 1,
   height: 1,
+}
+
+const textFileRef: FileAttachmentRef = {
+  attachmentId: AttachmentId(`sha256:${'f'.repeat(64)}`),
+  mediaType: 'text/csv',
+  bytes: new TextEncoder().encode('name,value\nPhoenix,ready\n').byteLength,
+  name: 'report.csv',
 }
 
 function requestImage(ref = imageRef): RequestImageAttachment {
@@ -350,6 +363,34 @@ describe('DeepSeekAdapter against a mock server', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     expect(fetchSpy.mock.calls[0]?.[1]?.body).toEqual(expect.stringContaining('image_url'))
     fetchSpy.mockRestore()
+  })
+
+  it('reads and projects arbitrary files on the text-model path', async () => {
+    const server = await mockServer([{ kind: 'sse', events: textEvents }])
+    const stored: StoredFileAttachment = {
+      ref: textFileRef,
+      data: new TextEncoder().encode('name,value\nPhoenix,ready\n'),
+    }
+    const readFile = vi.fn(async (ref: FileAttachmentRef) => {
+      expect(ref).toMatchObject(textFileRef)
+      return stored
+    })
+    const adapter = adapterOf({ baseURL: server.url, maxInlineFileBytes: 1024 }, {
+      readFile,
+    } as unknown as AttachmentStore)
+
+    await drain(adapter.stream({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      messages: [createUserMessage({
+        content: [{ type: 'file', attachment: textFileRef }],
+        source: { kind: 'plugin', plugin: 'test' },
+      })],
+    }))
+
+    expect(readFile).toHaveBeenCalledWith(textFileRef, expect.any(AbortSignal))
+    expect(JSON.stringify(server.requests[0])).toContain('Phoenix,ready')
+    expect(JSON.stringify(server.requests[0])).toContain('report.csv')
   })
 
   it('does not turn caller cancellation during file resolution into base64 fallback', async () => {

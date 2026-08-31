@@ -27,9 +27,9 @@
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-settings": "workspace:^",
     "@phoenix-ai/dsh-web": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
-  "dependencies": { "@deepseek-ai/schemastery": "workspace:^" },
+  "dependencies": { "@phoenix-ai/schemastery": "workspace:^" },
   "devDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-credentials": "workspace:^",
@@ -38,6 +38,6 @@
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-settings": "workspace:^",
     "@phoenix-ai/dsh-web": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

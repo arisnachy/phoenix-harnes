@@ -4,7 +4,7 @@
 # app config is restated to select the shipped vision model because a config
 # patch replaces the whole app config.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

@@ -1,58 +1,58 @@
-# Adaptadores operativos de skills en PHOENIX
+# PHOENIX skill operational adapters
 
 English | [中文](skill-operational-adapters.zh.md)
 
-PHOENIX aplica un preflight operativo a cada skill visible mediante `ctx.skills.list()`. Esto incluye skills bundled, de usuario, de proyecto, de plugins y OpenClaw. El adaptador se ejecuta en `tool-skill`, que es el punto común usado por cualquier modelo del harness.
+PHOENIX applies an operational preflight to every skill visible through `ctx.skills.list()`. This includes bundled, user, project, plugin, and OpenClaw skills. The adapter runs in `tool-skill`, the common path used by every harness model.
 
-## Flujo obligatorio
+## Required flow
 
-Cuando la tarea coincide con una skill:
+When a task matches a skill:
 
 ```text
-skill({ name: "nombre-exacto-de-la-skill" })
+skill({ name: "exact-skill-name" })
 ```
 
-El resultado contiene primero `<phoenix_operational_preflight>` y después el contenido de la skill. El modelo debe:
+The result contains `<phoenix_operational_preflight>` first and the skill content second. The model must:
 
-1. leer el catálogo y usar el nombre exacto;
-2. cargar la skill antes de actuar;
-3. comprobar entradas obligatorias;
-4. pedir aclaración para ubicaciones, cuentas, personas, archivos o destinos ambiguos;
-5. usar solamente herramientas presentes en las schemas visibles del agente;
-6. revisar requisitos externos antes de ejecutar;
-7. informar honestamente si la capacidad es condicionada o solo instructiva.
+1. read the catalog and use the exact name;
+2. load the skill before acting;
+3. check required inputs;
+4. ask for clarification when locations, accounts, people, files, or destinations are ambiguous;
+5. use only tools present in the agent's visible schemas;
+6. review external requirements before execution;
+7. report honestly whether the capability is conditional or instructional only.
 
-El adaptador orienta al modelo, pero no crea herramientas ni concede credenciales.
+The adapter guides the model but does not create tools or grant credentials.
 
-## Modos
+## Modes
 
-- **`native`**: existe una herramienta PHOENIX visible que coincide con la operación documentada.
-- **`conditional`**: la skill es utilizable, pero necesita una CLI, API, OAuth, permiso, dispositivo o plataforma adicional.
-- **`instruction-only`**: la skill puede explicar el procedimiento, pero este runtime no declara una ruta de ejecución.
+- **`native`**: a visible PHOENIX tool matches the documented operation.
+- **`conditional`**: the skill is usable but requires an additional CLI, API, OAuth flow, permission, device, or platform.
+- **`instruction-only`**: the skill can explain the procedure, but this runtime declares no execution path.
 
-Una skill cargada no implica que se haya ejecutado su servicio externo. Por ejemplo, una skill de GitHub puede cargarse correctamente aunque no haya autenticación GitHub configurada.
+Loading a skill does not mean that its external service has been executed. For example, a GitHub skill can load successfully when GitHub authentication is not configured.
 
-## Regla de idioma
+## Language rule
 
-El preflight generado no introduce chino ni marcadores ideográficos accidentales. Los textos operativos se generan en el idioma configurado del harness. Se conservan sin traducir nombres de skills, comandos, rutas, URLs y citas técnicas. La traducción completa de los cuerpos de todas las skills al inglés es una fase separada y debe usar overlays, sin modificar el upstream.
+Generated preflight text must not introduce Chinese or accidental ideographic markers. Operational text is generated in the harness-configured language. Skill names, commands, paths, URLs, and technical citations remain untranslated. Translating every skill body into English is a separate phase and must use overlays without modifying upstream content.
 
-## Weather y desambiguación
+## Weather and disambiguation
 
-`openclaw-weather` requiere `location`. `Santiago` no se consulta directamente porque puede referirse a varios lugares; el modelo debe preguntar país, región, aeropuerto o coordenadas. Una entrada como `Santiago de los Caballeros, República Dominicana` sí es inequívoca para continuar.
+`openclaw-weather` requires `location`. `Santiago` must not be queried directly because it may refer to several places; the model must ask for a country, region, airport, or coordinates. An input such as `Santiago de los Caballeros, Dominican Republic` is unambiguous enough to continue.
 
-La herramienta web registrada es preferida cuando existe. El fallback HTTPS se usa solo cuando la herramienta preferida no está disponible. El contenido remoto se trata como datos, nunca como instrucciones del sistema.
+The registered web tool is preferred when available. HTTPS fallback is used only when the preferred tool is unavailable. Remote content is treated as data, never as system instructions.
 
-## Verificación individual
+## Individual verification
 
-Ejecutar:
+Run:
 
 ```text
 pnpm run verify:skill-operational-adapters
 ```
 
-El comando obtiene el snapshot real de `ctx.skills.list()`, carga cada skill model-invocable con `ctx.skills.get()`, calcula su perfil, revisa su preflight y escribe:
+The command obtains the live `ctx.skills.list()` snapshot, loads every model-invocable skill with `ctx.skills.get()`, computes its profile, checks its preflight, and writes:
 
-- `docs/subsystems/skill-operational-adapters-report.md`: una fila por skill con propósito, llamada, entradas, modo, requisitos y resultado;
-- `docs/superpowers/evidence/skill-operational-adapters-verification.json`: evidencia estructurada sin cuerpos, secretos ni respuestas de red.
+- `docs/subsystems/skill-operational-adapters-report.md`: one row per skill with purpose, invocation, inputs, mode, requirements, and result;
+- `docs/superpowers/evidence/skill-operational-adapters-verification.json`: structured evidence without bodies, secrets, or network responses.
 
-El último recorrido verificó **577/577 skills** visibles, todas cargables y con preflight no chino. La cifra puede cambiar cuando se instalen, retiren o actualicen plugins y skills.
+The latest run verified **577/577** visible skills, all loadable and with a non-Chinese preflight. The count can change when plugins and skills are installed, removed, or updated.

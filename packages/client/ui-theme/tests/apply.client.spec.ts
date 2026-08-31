@@ -1,7 +1,7 @@
 /** ui-theme apply wiring: service provision, settings dictionaries riding the
  * locale service, declaration-aware Appearance row registration, snapshot
  * projection into the row store, and HMR collapse recovery. */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'

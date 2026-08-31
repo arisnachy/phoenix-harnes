@@ -31,7 +31,7 @@ All values are integers; the threshold is positive and head/tail are non-negativ
 ## Usage
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import ToolResultPruner from '@phoenix-ai/dsh-compaction-tool-result-pruner'
 
 export function apply(ctx: Context): void {

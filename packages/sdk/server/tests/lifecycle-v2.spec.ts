@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import type { Agent, AgentHandle } from '@phoenix-ai/dsh-agent'
 import type { JsonRpcTransportPeer } from '@phoenix-ai/dsh-sdk-protocol'

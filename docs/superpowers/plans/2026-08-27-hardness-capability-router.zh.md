@@ -20,7 +20,7 @@
 
 覆盖 visual route、workspace mismatch、unknown need，并确认结果没有执行回调。
 
-```ts
+```ts ignore-check
 expect(result).toMatchObject({ kind: 'route', route: { modality: 'visual', capability: { id } } })
 expect(result.kind).toBe('missing')
 expect(result.kind).toBe('unknown')
@@ -47,7 +47,7 @@ expect('execute' in result).toBe(false)
 
 保留可回滚的提交。
 
-```ts
+```ts ignore-check
 type CapabilityRouteResult =
   | { readonly kind: 'route'; readonly route: CapabilityRoute }
   | { readonly kind: 'missing'; readonly considered: readonly string[]; readonly reasons: readonly string[] }

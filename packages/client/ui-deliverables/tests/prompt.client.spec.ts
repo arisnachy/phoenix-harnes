@@ -1,6 +1,6 @@
 /** Node-half coverage for the model guidance paired with Web file references. */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import { apply, inject } from '../src/index.ts'

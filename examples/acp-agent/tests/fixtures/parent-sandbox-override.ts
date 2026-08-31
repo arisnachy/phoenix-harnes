@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { setSandboxMode } from '@phoenix-ai/dsh-sandbox-policy'
 import type {} from '@phoenix-ai/dsh-agent'
 

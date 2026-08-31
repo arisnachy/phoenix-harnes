@@ -13,7 +13,7 @@
  * as trusted as the host process that accepted its definition.
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { DynamicCordisPackage } from '@phoenix-ai/dsh-api-remotes/client'
 import type { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ThemeRuntime } from '@phoenix-ai/dsh-client-ui-theme/client'

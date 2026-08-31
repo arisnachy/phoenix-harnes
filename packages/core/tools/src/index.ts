@@ -4,8 +4,8 @@
  * @module @phoenix-ai/dsh-tools
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { AnonymousEntries, NamedEntries, ScopedLayers, scopeOf, scopeTarget } from '@phoenix-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer, Scoped } from '@phoenix-ai/dsh-scope'
 import type { CallId, ContentBlock, ToolSchema } from '@phoenix-ai/dsh-llm'
@@ -135,7 +135,7 @@ export type {
   WebSource,
 } from './presentation.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     tools: ToolRuntime
   }

@@ -11,7 +11,7 @@ import { createUserMessage } from '@phoenix-ai/dsh-llm'
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { Context, type Fiber } from '@deepseek-ai/cordis'
+import { Context, type Fiber } from '@phoenix-ai/cordis'
 import { scopeTarget } from '@phoenix-ai/dsh-scope'
 import SessionStore, { SESSION_FORMAT_VERSION, Session, SessionId } from '@phoenix-ai/dsh-session'
 import type { SessionEvent } from '@phoenix-ai/dsh-session'

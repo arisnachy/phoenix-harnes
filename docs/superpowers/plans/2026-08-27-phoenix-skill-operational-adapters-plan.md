@@ -34,7 +34,7 @@
 
 - [ ] **Step 1: Write tests for a generic profile and missing capabilities**
 
-```ts
+```ts ignore-check
 import { describe, expect, it } from 'vitest'
 import {
   buildOperationalProfile,
@@ -107,7 +107,7 @@ Derive documented tool names and requirement signals from skill metadata/body, t
 
 Use these deterministic rules:
 
-```ts
+```ts ignore-check
 const externalPatterns = [
   /\b(?:cli|command|binary|ffmpeg|curl|jq|python|node|tmux)\b/i,
   /\b(?:api|oauth|token|credential|secret|device|macos|ios|android)\b/i,
@@ -223,7 +223,7 @@ Expected: all OpenClaw tests pass and `openclaw-weather` refuses ambiguous locat
 
 Register `verify:skill-operational-adapters` as `tsx scripts/verify-skill-operational-adapters.ts`. The script must use the actual runtime `ctx.skills.list()` snapshot, then for each model-invocable entry:
 
-```ts
+```ts ignore-check
 for (const summary of snapshot.skills) {
   const definition = await ctx.skills.get(summary.name, lookup)
   const profile = buildOperationalProfile(definition, capabilities)

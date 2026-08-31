@@ -5,7 +5,7 @@
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/session-query/session-log-export"
   },
   "type": "module",
@@ -22,7 +22,7 @@
   "scripts": { "bundle": "tsdown", "watch": "tsdown --watch" },
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-client-locale": "workspace:^",
     "@phoenix-ai/dsh-client-runtime": "workspace:^",
     "@phoenix-ai/dsh-client-ui-commands": "workspace:^",
@@ -31,8 +31,8 @@
     "@phoenix-ai/dsh-invariants": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-client-locale": "workspace:^",
     "@phoenix-ai/dsh-client-runtime": "workspace:^",

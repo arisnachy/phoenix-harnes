@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { HardnessArtifactValue } from '../conversation-nodes/hardness-artifact.ts'
 import styles from './HardnessArtifactNodeView.module.css'
 
@@ -232,7 +232,8 @@ function sandboxDocument(html: string): string {
   ].join(' ')
   const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
   const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${body}</body></html>`
+  const heightReporter = '<script>(function(){function report(){var root=document.documentElement;parent.postMessage({type:\'phoenix-artifact-height\',height:Math.max(root.scrollHeight,root.offsetHeight)},\'*\')}if(window.ResizeObserver){new ResizeObserver(report).observe(document.documentElement)}new MutationObserver(report).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});window.addEventListener(\'load\',report);report()})()<\/script>'
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${body}${heightReporter}</body></html>`
 }
 
 interface MiniAppProps {
@@ -245,11 +246,25 @@ interface MiniAppProps {
 function MiniApp({ html, expanded, title, executable = false }: MiniAppProps) {
   const [interactive, setInteractive] = useState(executable)
   const [previewReady, setPreviewReady] = useState(false)
+  const [frameHeight, setFrameHeight] = useState<number | undefined>(undefined)
   const [reloadToken, setReloadToken] = useState(0)
   const frameRef = useRef<HTMLIFrameElement>(null)
   const srcDoc = useMemo(() => sandboxDocument(html), [html])
+  useEffect(() => {
+    const onMessage = (event: MessageEvent<unknown>): void => {
+      if (event.source !== frameRef.current?.contentWindow) return
+      if (typeof event.data !== 'object' || event.data === null) return
+      const message = event.data as Record<string, unknown>
+      if (message.type !== 'phoenix-artifact-height' || typeof message.height !== 'number' || !Number.isFinite(message.height)) return
+      const maximum = expanded ? 760 : 640
+      setFrameHeight(Math.round(Math.max(160, Math.min(maximum, message.height))))
+    }
+    window.addEventListener('message', onMessage)
+    return () => { window.removeEventListener('message', onMessage) }
+  }, [expanded])
   const reloadPreview = (): void => {
     setPreviewReady(false)
+    setFrameHeight(undefined)
     setReloadToken(value => value + 1)
   }
   return (
@@ -265,10 +280,11 @@ function MiniApp({ html, expanded, title, executable = false }: MiniAppProps) {
         title={title}
         srcDoc={srcDoc}
         sandbox={interactive ? 'allow-scripts' : ''}
+        style={frameHeight === undefined ? undefined : { height: frameHeight }}
         onLoad={() => { setPreviewReady(true) }}
       />
       <div>
-        <button className={styles.uiButton} type="button" onClick={() => { setInteractive(value => !value); setPreviewReady(false) }}>
+        <button className={styles.uiButton} type="button" onClick={() => { setInteractive(value => !value); setPreviewReady(false); setFrameHeight(undefined) }}>
           {interactive ? 'Disable interaction' : 'Enable sandboxed interaction'}
         </button>
       </div>

@@ -1,7 +1,7 @@
 /** Default Agent model settings layered over a real settings provider. */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import AgentDefaultModelConfig, { AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE } from '../src/index.ts'
 import { SettingsProvider } from '@phoenix-ai/dsh-settings'
 import type { SettingsNamespace } from '@phoenix-ai/dsh-settings'

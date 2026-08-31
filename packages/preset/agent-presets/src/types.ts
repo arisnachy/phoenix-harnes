@@ -1,7 +1,7 @@
 /** Client-safe event declarations owned by the agent-preset domain. */
 import type { SessionId } from '@phoenix-ai/dsh-session/types'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Events {
     /**
      * One session committed a different agent preset to its durable log.

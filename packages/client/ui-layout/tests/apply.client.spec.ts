@@ -6,7 +6,7 @@
 // and the invariant companion ride along — one line exposes the aggregate
 // coverage gate still requires exercised.
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'

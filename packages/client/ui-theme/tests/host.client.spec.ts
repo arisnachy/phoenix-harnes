@@ -1,4 +1,4 @@
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import type { IndexInjection } from '@phoenix-ai/dsh-host-webserver'
 import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@phoenix-ai/dsh-settings'

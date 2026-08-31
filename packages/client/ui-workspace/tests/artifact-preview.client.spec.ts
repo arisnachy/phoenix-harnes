@@ -1,4 +1,4 @@
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
 import { CapabilityArtifactPreview, registerCapabilityArtifactPreview } from '@phoenix-ai/dsh-client-ui-workspace/client'

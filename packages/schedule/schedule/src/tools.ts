@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-schedule
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import { defineTool } from '@phoenix-ai/dsh-tools'

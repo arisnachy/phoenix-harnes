@@ -40,7 +40,7 @@ Complete and blocked also accept the exact current goal round: a goal-sourced `u
     judgeProvider: spawn
 ```
 
-`blockedAfterConsecutiveRounds` must be a positive safe integer. `requireJudge` enables independent completion certification; `judgeProvider` names a fresh structured subagent provider. The base PHOENIX profile enables both judge fields.
+`blockedAfterConsecutiveRounds` must be a positive safe integer. Independent completion certification is enabled by default and should remain enabled; `requireJudge` is retained as an explicit deployment setting for compatibility, while the goal domain always rejects completion without a durable passing judge. `judgeProvider` names a fresh structured subagent provider. The base PHOENIX profile enables both judge fields.
 
 ## Model Experience
 

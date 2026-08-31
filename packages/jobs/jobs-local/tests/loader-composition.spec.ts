@@ -3,9 +3,9 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { Context } from '@deepseek-ai/cordis'
-import Include from '@deepseek-ai/cordis-plugin-include'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import { Context } from '@phoenix-ai/cordis'
+import Include from '@phoenix-ai/cordis-plugin-include'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import LocalJobRegistry from '@phoenix-ai/dsh-jobs-local'
 
 let root: string | undefined

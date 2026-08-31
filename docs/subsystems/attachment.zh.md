@@ -1,4 +1,4 @@
-# 持久图片附件
+# 持久附件
 
 [English](attachment.md) | 中文
 
@@ -7,6 +7,36 @@
 未发送的浏览器草稿可以保留在内存中，原生客户端也可以将其暂存于操作系统临时存储。宿主接受用户消息后，会先把消息中的图片移到 `<DSH_HOME>/attachments/v1` 下，再追加用户事件。结构化模型图片输出遵循同样的先持久化、后追加事件规则。
 
 来源：[`packages/attachment/attachment/src/types.ts`](../../packages/attachment/attachment/src/types.ts)
+
+```ts type-equiv
+/** MIME value recorded for a non-image upload. The bytes remain opaque. */
+type FileMediaType = string
+```
+
+```ts type-equiv
+/** Durable, serializable reference to one immutable arbitrary file. */
+interface FileAttachmentRef {
+  /** Opaque storage identifier; never a filesystem path or bearer URL. */
+  attachmentId: AttachmentId
+  /** Caller-declared MIME value, normalized by the admitting provider. */
+  mediaType: FileMediaType
+  /** Exact stored byte length. */
+  bytes: number
+  /** Optional display name stripped of local path information. */
+  name?: string
+}
+```
+
+```ts type-equiv
+/** Deployment-resolved limits for arbitrary file uploads. */
+interface FileAttachmentLimits {
+  maxFileBytes: number
+  maxFilesPerMessage: number
+  maxMessageFileBytes: number
+}
+```
+
+本地提供方默认每个文件最多 25 MiB、每条消息最多 20 个文件、每条消息最多 100 MiB。它会规范化媒体类型，从名称中移除本地路径，并在每次读取时校验内容寻址摘要与字节数。可处理文本的文件会在明确的单附件字节上限内投影给提供方；二进制文件保持持久化，并且可以导出，不会被复制到文本 prompt 中。
 
 ## 标识与经过校验的元数据
 
@@ -142,6 +172,35 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 Immutable binary attachment service. Implementations validate bytes before publishing a reference.
 
 ```ts cordis-catalog
+/**
+ * Validate one arbitrary file without persisting it.
+ * @param _input - arbitrary file bytes and declared metadata.
+ * @returns completion after validation.
+ */
+validateFile(_input: SaveFileAttachment): Promise<void>
+
+/**
+ * Validate and durably commit an ordered arbitrary-file batch.
+ * @param inputs - arbitrary files in message order.
+ * @returns durable references in input order.
+ */
+async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]>
+
+/**
+ * Validate and durably commit one arbitrary file.
+ * @param _input - arbitrary file bytes and declared metadata.
+ * @returns the durable file reference.
+ */
+saveFile(_input: SaveFileAttachment): Promise<FileAttachmentRef>
+
+/**
+ * Read one arbitrary file and verify its durable reference.
+ * @param _ref - durable file reference to read.
+ * @param _signal - optional cancellation signal.
+ * @returns stored bytes with verified reference metadata.
+ */
+readFile(_ref: FileAttachmentRef, _signal?: AbortSignal): Promise<StoredFileAttachment>
+
 /**
  * Validate one image without persisting it.
  * Batch callers validate every member before saving any member.

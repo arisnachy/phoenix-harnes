@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import { Context } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import { createUserMessage, CallId, LlmAdapter } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@phoenix-ai/dsh-llm'
 import { Session, SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'

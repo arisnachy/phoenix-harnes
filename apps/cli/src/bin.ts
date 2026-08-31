@@ -43,6 +43,16 @@ if (rawArgs[0] === 'openclaw-skills') {
   process.exit(runOpenClawSkills(rawArgs.slice(1)))
 }
 
+if (rawArgs[0] === 'doctor') {
+  const { runDoctor } = await import('./doctor.ts')
+  process.exit(await runDoctor())
+}
+
+if (rawArgs[0] === 'chatgpt-web') {
+  const { runChatGptWebBridge } = await import('./chatgpt-web-bridge.ts')
+  process.exit(await runChatGptWebBridge(rawArgs.slice(1)))
+}
+
 const invocation = parseDshArgs(rawArgs, readVersion())
 
 switch (invocation.mode) {

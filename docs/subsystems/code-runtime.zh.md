@@ -188,4 +188,21 @@ abstract run(request: CodeRunRequest): Promise<CodeRunResult>
 ```
 
 Source: [`packages/code-runtime/code-runtime/src/index.ts`](../../packages/code-runtime/code-runtime/src/index.ts)
+
+<a id="ctxpythoncoderuntime--pythoncoderuntime"></a>
+
+### `ctx.pythonCodeRuntime` — `PythonCodeRuntime`
+
+CPython provider registered as `ctx.pythonCodeRuntime`.
+
+```ts cordis-catalog
+/**
+ * Execute one program in a fresh CPython process.
+ * @param request - Program source, host bindings, and optional abort signal.
+ * @returns The bounded logs, completion value, or structured runtime failure.
+ */
+async run(request: CodeRunRequest): Promise<CodeRunResult>
+```
+
+Source: [`packages/code-runtime/code-runtime-python/src/index.ts`](../../packages/code-runtime/code-runtime-python/src/index.ts)
 <!-- END GENERATED cordis-surface -->

@@ -9,7 +9,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { ShellRunResult, CollectedOutput } from '@phoenix-ai/dsh-shell'
 import { SANDBOX_UNAVAILABLE, SandboxProvider, SandboxUnavailableError } from '@phoenix-ai/dsh-sandbox'
 import type { ConfinedArgv, SandboxExecutionPolicy, SandboxMode, SandboxPolicy } from '@phoenix-ai/dsh-sandbox'

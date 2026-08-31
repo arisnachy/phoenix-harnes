@@ -336,6 +336,14 @@
   cursor: default;
 }
 
+.filePicker {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Plan / Read-only / model — native <select>, chip-like closed chrome
    (figma ToggleButton: 13/20 medium secondary, 12px chevron). */
 .select {
@@ -366,6 +374,44 @@
 .select:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Native voice input: quiet secondary chrome until the browser is listening. */
+.voice {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  transition: color 100ms ease, background-color 100ms ease, border-color 100ms ease;
+}
+
+.voice:hover:not(:disabled) {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.voiceActive {
+  border-color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+  animation: voice-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.voice:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@keyframes voice-pulse {
+  from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-alias-state-error-primary) 0%, transparent); }
+  to { box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsw-alias-state-error-primary) 16%, transparent); }
 }
 
 /* Primary send (figma IconButton 34:10465): 34px circle, #3964FE light /

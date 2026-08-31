@@ -8,7 +8,7 @@
  * @module dsh-llm-deepseek/adapter
  */
 
-import { attributionHeaders, contentHasImage, CONTEXT_WINDOW_EXCEEDED_CODE, isContextWindowExceededError, isQuotaExceededError, LlmAdapter, LlmError, offloadRequestImagesWithPolicy, ProviderRequestId, QUOTA_EXCEEDED_CODE, ReasoningEffortId } from '@phoenix-ai/dsh-llm'
+import { attributionHeaders, contentHasFile, contentHasImage, CONTEXT_WINDOW_EXCEEDED_CODE, isContextWindowExceededError, isQuotaExceededError, LlmAdapter, LlmError, offloadRequestImagesWithPolicy, ProviderRequestId, QUOTA_EXCEEDED_CODE, ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import type {
   ContentBlock,
   GenerateOptions,
@@ -26,6 +26,8 @@ import type {
   ImageAttachmentRef,
   ImageRequestPolicy,
   RequestImageAttachment,
+  FileAttachmentRef,
+  StoredFileAttachment,
 } from '@phoenix-ai/dsh-attachment'
 import type { CredentialRef } from '@phoenix-ai/dsh-credentials'
 import { deadline, idleWatchdog, timeoutOf } from '@phoenix-ai/dsh-timeout'
@@ -91,6 +93,8 @@ export interface DeepSeekConnectionOptions {
   maxRequestFilesBytes: number
   /** Maximum accumulated base64 image payload after Files API fallback. */
   maxInlineRequestImageBytes: number
+  /** Maximum arbitrary-file bytes projected into one text request per attachment. */
+  maxInlineFileBytes: number
   /** Maximum number of represented images in one request. */
   maxImagesPerRequest: number
   /** Raw-byte removal step after the file-reference bound is exceeded. */
@@ -120,7 +124,7 @@ export interface DeepSeekAdapterOptions {
   resolveApiKey: (connection: DeepSeekConnectionOptions) => Promise<string>
   /** Resolve the harness-home anonymous id shared with telemetry and feedback. */
   resolveUserId: () => AnonymousUserId
-  /** Resolve the current durable attachment service; absence rejects image input. */
+  /** Resolve the current durable attachment service; absence rejects attachment input. */
   resolveAttachments?: () => AttachmentStore | undefined
   /** Resolve the process-wide upload reuse store. */
   resolveFiles?: () => DeepSeekFileStore
@@ -136,6 +140,8 @@ export const DEFAULT_MAX_TOKENS = 256_000
 export const DEFAULT_MAX_REQUEST_FILES_BYTES = 128 * 1024 * 1024
 /** Default bound on accumulated base64 image payload after Files API fallback. */
 export const DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES = 20 * 1024 * 1024
+/** Default per-attachment bound for text-projected arbitrary files. */
+export const DEFAULT_MAX_INLINE_FILE_BYTES = 256 * 1024
 /** Provider request image-count limit. */
 export const DEFAULT_MAX_IMAGES_PER_REQUEST = 600
 /** Total-pixel budget matching DeepSeek's normal vision projection. */
@@ -227,6 +233,26 @@ async function prepareRequestImages(
   return new Map(orderedRefs.map((ref, index) => (
     [ref.attachmentId, projected[index] as RequestImageAttachment]
   )))
+}
+
+async function prepareRequestFiles(
+  options: GenerateOptions,
+  attachments: AttachmentStore,
+  signal: AbortSignal,
+): Promise<Map<FileAttachmentRef['attachmentId'], StoredFileAttachment>> {
+  const refs = new Map<FileAttachmentRef['attachmentId'], FileAttachmentRef>()
+  const collect = (content: readonly ContentBlock[]): void => {
+    for (const block of content) {
+      if (block.type === 'file') refs.set(block.attachment.attachmentId, block.attachment)
+      else if (block.type === 'tool-result') collect(block.content)
+    }
+  }
+  for (const message of options.messages) collect(message.content)
+  const entries = await Promise.all([...refs.values()].map(async (ref) => {
+    const stored = await attachments.readFile(ref, signal)
+    return [ref.attachmentId, stored] as const
+  }))
+  return new Map(entries)
 }
 
 function providerRejectedNormalizedImage(detail: string): boolean {
@@ -440,10 +466,11 @@ export class DeepSeekAdapter extends LlmAdapter {
     // The key resolves *from this snapshot*, so an endpoint and the secret
     // sent to it can never come from different configuration generations.
     const hasImages = options.messages.some(message => contentHasImage(message.content))
+    const hasFiles = options.messages.some(message => contentHasFile(message.content))
     let attachments: AttachmentStore | undefined
-    if (hasImages) {
+    if (hasImages || hasFiles) {
       const model = connection.models.find(entry => entry.id === options.model)
-      if (model?.inputModalities?.includes('image') !== true) {
+      if (hasImages && model?.inputModalities?.includes('image') !== true) {
         throw new LlmError(
           `DeepSeek model "${options.model}" does not accept image input.`,
           'UNSUPPORTED_CONTENT',
@@ -452,7 +479,7 @@ export class DeepSeekAdapter extends LlmAdapter {
       attachments = this.config.resolveAttachments?.()
       if (attachments === undefined) {
         throw new LlmError(
-          'DeepSeek image conversion requires the durable attachment service.',
+          'DeepSeek attachment conversion requires the durable attachment service.',
           'UNSUPPORTED_CONTENT',
         )
       }
@@ -543,21 +570,33 @@ export class DeepSeekAdapter extends LlmAdapter {
       byteLength: ref => Math.min(ref.bytes, policy.maxBytes),
     })
     const requestOptions = requestMessages === options.messages ? options : { ...options, messages: [...requestMessages] }
+    const hasFiles = requestOptions.messages.some(message => contentHasFile(message.content))
     const requestImages = attachments === undefined || model === undefined
       ? new Map<AttachmentId, RequestImageAttachment>()
       : await prepareRequestImages(requestOptions, attachments, model, signal)
+    const requestFiles = attachments === undefined || !hasFiles
+      ? new Map<FileAttachmentRef['attachmentId'], StoredFileAttachment>()
+      : await prepareRequestFiles(requestOptions, attachments, signal)
     let representation: 'file' | 'base64' = 'file'
     let fileAttempt = 0
     while (true) {
       const usedFiles: UsedRequestFile[] = []
       let body: WireRequest
       if (attachments === undefined) {
+        if (hasFiles) {
+          throw new LlmError(
+            'DeepSeek arbitrary-file conversion requires the durable attachment service.',
+            'UNSUPPORTED_CONTENT',
+          )
+        }
         body = serializeRequest(requestOptions, connection.defaults)
       } else if (representation === 'base64') {
         body = await serializeRequestWithImages(requestOptions, {
           representation: { kind: 'base64' },
           requestImages,
           maxRequestImageBytes: connection.maxInlineRequestImageBytes,
+          files: requestFiles,
+          maxInlineFileBytes: connection.maxInlineFileBytes,
           maxImagesPerRequest: connection.maxImagesPerRequest,
           byteQuantum: connection.inlineImageOffloadByteQuantum,
           countQuantum: connection.imageOffloadCountQuantum,
@@ -588,6 +627,8 @@ export class DeepSeekAdapter extends LlmAdapter {
             },
             requestImages,
             maxRequestImageBytes: connection.maxRequestFilesBytes,
+            files: requestFiles,
+            maxInlineFileBytes: connection.maxInlineFileBytes,
             maxImagesPerRequest: connection.maxImagesPerRequest,
             byteQuantum: connection.imageOffloadByteQuantum,
             countQuantum: connection.imageOffloadCountQuantum,

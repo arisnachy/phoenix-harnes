@@ -6,7 +6,7 @@ English | [中文](2026-08-11-remove-sdk-project-toolchain.zh.md)
 
 ## Problem
 
-The repository carried an unreleased developer-project product with no consumers. `@deepseek-ai/create-sdk` generated an editable Cordis project, `@phoenix-ai/dsh-scripts` supplied its `dsh-sdk` development, build, start, configuration, and plugin-install commands, `@phoenix-ai/dsh-helper` coordinated feature definitions and multi-file project edits, and `@phoenix-ai/dsh-telemetry` reported launcher activity. The design aimed to keep generated projects editable while giving creation and later configuration one definition of dependencies, Cordis entries, environment placeholders, and owned files.
+The repository carried an unreleased developer-project product with no consumers. `@phoenix-ai/create-sdk` generated an editable Cordis project, `@phoenix-ai/dsh-scripts` supplied its `dsh-sdk` development, build, start, configuration, and plugin-install commands, `@phoenix-ai/dsh-helper` coordinated feature definitions and multi-file project edits, and `@phoenix-ai/dsh-telemetry` reported launcher activity. The design aimed to keep generated projects editable while giving creation and later configuration one definition of dependencies, Cordis entries, environment placeholders, and owned files.
 
 No project was created through a public release, and no current repository or external consumer requires that lifecycle. Keeping it meant maintaining four packages, two interactive command products, project templates, package-manager adapters, configuration reconciliation, launcher telemetry, a repository skill, and their tests and documentation without evidence that the product boundary should exist.
 
@@ -14,7 +14,7 @@ The same `scaffold/` group also contained the independently used SDK protocol, T
 
 ## Decision
 
-The SDK project toolchain is deleted. The `@deepseek-ai/create-sdk`, `@phoenix-ai/dsh-scripts`, `@phoenix-ai/dsh-helper`, and `@phoenix-ai/dsh-telemetry` packages, their binaries, tests, templates, feature catalog, project-editing model, package-manager support, launcher telemetry, and repository creation skill have no replacement or compatibility layer. Their workspace, build, test, packaging, documentation-generator, vendoring-rescope, and dependency records are removed with them.
+The SDK project toolchain is deleted. The `@phoenix-ai/create-sdk`, `@phoenix-ai/dsh-scripts`, `@phoenix-ai/dsh-helper`, and `@phoenix-ai/dsh-telemetry` packages, their binaries, tests, templates, feature catalog, project-editing model, package-manager support, launcher telemetry, and repository creation skill have no replacement or compatibility layer. Their workspace, build, test, packaging, documentation-generator, vendoring-rescope, and dependency records are removed with them.
 
 The runtime SDK remains. `@phoenix-ai/dsh-sdk-client`, `@phoenix-ai/dsh-sdk-protocol`, and `@phoenix-ai/dsh-sdk-jsonrpc-server` move unchanged from `packages/scaffold/` to `packages/sdk/`; their npm names and wire behavior do not change. Consumers continue to provide an executable plus an external `cordis.yml`, and the JSON-RPC server remains an ordinary plugin selected by that configuration. The [repository naming contract](../architecture/2026-08-11-repository-naming-contract-and-rename-ledger.md) owns this one repository meaning of `SDK` and the surviving package names; this note owns the deleted toolchain.
 

@@ -8,7 +8,7 @@ Reference for the contracts a model-facing tool must satisfy. For an ordered fir
 
 ```ts
 import { readFile } from 'node:fs/promises'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 
 export const name = 'my-tool'

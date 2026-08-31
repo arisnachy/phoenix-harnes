@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-file-reference
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { Remote, TypertRemoteService } from '@phoenix-ai/dsh-typert-protocol'
 
@@ -17,7 +17,7 @@ export type { FileReferenceCandidate } from './types.ts'
 /** Model guidance for path-only references selected by a user interface. */
 export const FILE_REFERENCE_PROMPT = 'Paths prefixed with @ are files explicitly referenced by the user. Use the read tool when their contents are needed; do not claim to have inspected a file before reading it.'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     fileReferences: FileReferenceService
   }

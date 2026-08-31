@@ -19,7 +19,7 @@
 
 Create tests for deterministic namespacing and upstream bundle audit records:
 
-```ts
+```ts ignore-check
 import { describe, expect, it } from 'vitest'
 import { openClawAlias, auditBundle } from '../src/openclaw-skills.ts'
 

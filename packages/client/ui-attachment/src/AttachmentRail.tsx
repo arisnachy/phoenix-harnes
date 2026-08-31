@@ -13,7 +13,9 @@ export interface AttachmentRailItem {
   /** Stable identity for the React key. */
   id: string
   /** Object or data URL rendered as the thumbnail. */
-  previewUrl: string
+  previewUrl?: string
+  /** Whether the item is an image thumbnail or an opaque file card. */
+  kind?: 'image' | 'file'
   /** Image alt text (display name with the owner's fallback applied). */
   alt: string
   /** Accessible label of the item's remove control. */
@@ -60,7 +62,7 @@ function pageBehavior(): ScrollBehavior {
  *
  * @param props.items - resolved thumbnails in draft order.
  * @param props.labels - rail-level strings (group name, open tooltip, arrows).
- * @param props.onOpen - single-click open of one item's original image.
+ * @param props.onOpen - single-click open of one item's preview when available.
  * @param props.onRemove - remove one item from the draft.
  * @returns the rail group with its paging arrows.
  */
@@ -172,7 +174,9 @@ export function AttachmentRail<T extends AttachmentRailItem>({ items, labels, on
               title={labels.open}
               onClick={() => { onOpen(item) }}
             >
-              <img src={item.previewUrl} alt={item.alt} />
+              {item.previewUrl === undefined
+                ? <span className={css.fileCard} data-attachment-kind={item.kind ?? 'file'}>{item.alt}</span>
+                : <img src={item.previewUrl} alt={item.alt} />}
             </button>
             <button
               type="button"

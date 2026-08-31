@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-08-28T15:32:00.757Z",
+  "generatedAt": "2026-08-30T13:25:58.411Z",
   "runtimeCapabilities": [
     "skill"
   ],
-  "visibleModelInvocableSkills": 577,
-  "passed": 577,
+  "visibleModelInvocableSkills": 578,
+  "passed": 578,
   "failed": 0,
   "skills": [
     {
@@ -11243,6 +11243,20 @@
         "La autenticación documentada por la skill"
       ],
       "preflightLength": 368,
+      "languageSafe": true
+    },
+    {
+      "name": "kasa-luz-sala",
+      "description": "Use when the user asks to inspect, encender, apagar o controlar la luz Kasa/TP-Link HS220 llamada \"luz sala\", o menciona relay_state, system.set_relay_state o el error module not support en ese dispositivo.",
+      "provider": "filesystem",
+      "source": "user-dsh",
+      "loaded": true,
+      "purpose": "Use when the user asks to inspect, encender, apagar o controlar la luz Kasa/TP-Link HS220 llamada \"luz sala\", o menciona relay_state, system.set_relay_state o el error module not support en ese dispositivo.",
+      "requiredInputs": [],
+      "executionMode": "instruction-only",
+      "toolMappings": [],
+      "externalRequirements": [],
+      "preflightLength": 354,
       "languageSafe": true
     },
     {

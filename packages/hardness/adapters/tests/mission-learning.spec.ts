@@ -1,4 +1,4 @@
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import HardnessRegistry from '@phoenix-ai/dsh-hardness/src/index.ts'
 import type { CapabilityId, HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'

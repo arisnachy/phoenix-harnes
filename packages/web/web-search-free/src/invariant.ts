@@ -1,5 +1,5 @@
 /** Package-owned invariant companion for keyless free web search. */
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
 const PACKAGE_NAME = '@phoenix-ai/dsh-web-search-free'

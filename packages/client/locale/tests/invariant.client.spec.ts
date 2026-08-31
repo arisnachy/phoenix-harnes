@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { apply as nodeApply } from '@phoenix-ai/dsh-client-locale'
 import { apply as clientApply, COMMON_NS, LocaleRuntime, inject } from '@phoenix-ai/dsh-client-locale/client'
 import * as LocaleInvariant from '@phoenix-ai/dsh-client-locale/invariant'

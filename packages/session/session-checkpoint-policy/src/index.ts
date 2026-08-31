@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-session-checkpoint-policy
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Session } from '@phoenix-ai/dsh-session'
 import type { StreamChunk } from '@phoenix-ai/dsh-llm'
 import { TOOL_ABORTED_BEFORE_DISPATCH, type ToolExecutionResult } from '@phoenix-ai/dsh-tools'

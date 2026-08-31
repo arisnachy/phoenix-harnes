@@ -5,8 +5,8 @@
  * @module @phoenix-ai/dsh-scope
  */
 
-import type { Context, Fiber } from '@deepseek-ai/cordis'
-import { Context as CordisContext } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@phoenix-ai/cordis'
+import { Context as CordisContext } from '@phoenix-ai/cordis'
 
 export { AnonymousEntries, NamedEntries, ScopedLayers } from './store.ts'
 export type { ScopeLayer } from './store.ts'

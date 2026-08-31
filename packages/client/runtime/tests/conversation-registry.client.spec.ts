@@ -1,4 +1,4 @@
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@phoenix-ai/dsh-api-remotes/client'
 import { ConversationEventRegistry } from '../src/client/conversation/event-registry.ts'

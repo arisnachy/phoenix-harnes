@@ -1,4 +1,5 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
 import type { HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'
 import { indexSkills } from './skill-adapter.ts'
@@ -14,6 +15,7 @@ import { createHardnessTool } from './hardness-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import type { AuthorizationService } from '@phoenix-ai/dsh-authorization'
 import type { McpConnectorRegistry } from '@phoenix-ai/dsh-mcp-connector-registry'
+import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 
 export { indexTools } from './tool-adapter.ts'
 export type { ToolAtlasIndexOptions, ToolChangeSource } from './tool-adapter.ts'
@@ -32,15 +34,46 @@ export type { ImprovementRecord, LabExperiment, LabSnapshot } from './lab-mode.t
 export { executeCapabilityNeed } from './execution-bridge.ts'
 export type { CapabilityApproval, CapabilityExecutionContext, CapabilityExecutionHooks, CapabilityExecutionResult } from './execution-bridge.ts'
 export { ArtifactRuntime, artifactFromToolResult } from './artifact-runtime.ts'
-export type { ArtifactRenderModel, CapabilityArtifact } from './artifact-runtime.ts'
+export type { ArtifactRenderModel, CapabilityArtifact, HardnessArtifactExecutionEvent } from './artifact-runtime.ts'
 export { AcquisitionRegistry } from './acquisition-registry.ts'
 export type { AcquisitionResult, CapabilityBuilder, MissionLearningHooks } from './acquisition-registry.ts'
 export { installSandboxCapabilityGuard } from './sandbox-guard.ts'
 export type { SandboxPolicyResolver } from './sandbox-guard.ts'
 export { runHardnessMission } from './mission-orchestrator.ts'
-export type { HardnessMissionInput, HardnessMissionResult } from './mission-orchestrator.ts'
+export type {
+  HardnessMissionInput,
+  HardnessMissionJudge,
+  HardnessMissionJudgeInput,
+  HardnessMissionNextAction,
+  HardnessMissionResult,
+  HardnessMissionStatus,
+} from './mission-orchestrator.ts'
+export { createSubagentMissionJudge, MISSION_JUDGE_OUTPUT_SCHEMA, MISSION_JUDGE_READ_ONLY_TOOLS } from './mission-judge.ts'
 export { createHardnessMissionAudit, replayHardnessMissionAudit } from './mission-audit.ts'
 export type { HardnessMissionAuditEntry, HardnessMissionAuditOutcome, HardnessMissionAuditWriter } from './mission-audit.ts'
+export {
+  MissionPersistenceKernel,
+  createMissionKernelWriter,
+  replayMissionKernel,
+  replayMissionKernelSession,
+} from './mission-kernel.ts'
+export type {
+  MissionFailureScope,
+  MissionCriterion,
+  MissionCriterionReview,
+  MissionCriterionStatus,
+  MissionDeliverable,
+  MissionGoalLock,
+  MissionJudgeDecision,
+  MissionKernelEvent,
+  MissionKernelState,
+  MissionKernelWriter,
+  MissionLearning,
+  MissionQualityGate,
+  MissionRoute,
+  MissionStatus,
+  MissionTerminalReason,
+} from './mission-kernel.ts'
 export { installHardnessMissionRuntime, createHardnessAcquisition, createHardnessMissionRunner } from './mission-runtime.ts'
 export type { HardnessMissionRpcPayload, HardnessMissionRunner, HardnessMissionRunnerInput, HardnessMissionRuntimeDependencies } from './mission-runtime.ts'
 export { createHardnessTool } from './hardness-tool.ts'
@@ -51,6 +84,20 @@ export type { HardnessPromptRegistrar } from './protocol.ts'
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
 export const inject = ['hardness', 'tools', 'skills', 'agents', 'approval', 'systemPrompt', 'authorization']
+
+/** HARDNESS mission completion judge configuration. */
+export interface Config {
+  /** Structured subagent provider used for independent completion review. */
+  judgeProvider?: string
+  /** Register model-facing HARDNESS tools in this scope. */
+  modelTools?: boolean
+}
+
+/** Schemastery validation for the independent mission judge provider. */
+export const Config: z<Config> = z.object({
+  judgeProvider: z.string().default('spawn'),
+  modelTools: z.boolean().default(true),
+})
 
 type Disposer = () => void
 
@@ -79,24 +126,37 @@ function requiredServices(ctx: Context) {
  * @param ctx - Owning Cordis context with HARDNESS dependencies.
  * @returns Idempotent disposer for every projection installed by this adapter.
  */
-export async function apply(ctx: Context): Promise<() => void> {
+export async function apply(ctx: Context, config: Config): Promise<() => void> {
   const { hardness, tools, skills, agents, approval, systemPrompt, authorization, mcpConnectors } = requiredServices(ctx)
+  const modelTools = config.modelTools ?? true
   const disposers: Disposer[] = []
   try {
     disposers.push(installHardnessProtocol(systemPrompt))
-    disposers.push(indexOpenClawExtensions(hardness))
-    disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run'] }))
-    disposers.push(await indexSkills(skills, hardness))
-    if (authorization !== undefined || mcpConnectors !== undefined) {
+    if (!modelTools) {
+      // Capability projections and the mission runtime are host-owned. Do not
+      // repeat them when several sessions mount full presets in one process.
+      disposers.push(indexOpenClawExtensions(hardness))
+      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run'] }))
+      disposers.push(await indexSkills(skills, hardness))
+    } else if (authorization !== undefined || mcpConnectors !== undefined) {
+      // A preset contributes only its scoped connector inventory tool; the
+      // host remains the sole owner of the HARDNESS capability index.
       disposers.push(ctx.tools.register(createConnectorListTool(authorization, mcpConnectors)))
     }
     const acquisition = createHardnessAcquisition(hardness)
     const codeRuntime = ctx.get('codeRuntime')
+    const pythonCodeRuntime = ctx.get('pythonCodeRuntime')
+    const subagents = ctx.get('subagents') as Pick<SubagentRuntime, 'getProvider' | 'start'> | undefined
     const missionRunner = createHardnessMissionRunner({
       hardness, tools, acquisition, approval,
+      ...(subagents === undefined ? {} : { subagents }),
+      ...(config.judgeProvider === undefined ? {} : { judgeProvider: config.judgeProvider }),
       ...(codeRuntime === undefined ? {} : { codeRuntime }),
+      ...(pythonCodeRuntime === undefined ? {} : { pythonCodeRuntime }),
     })
-    disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
+    if (modelTools) {
+      disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
+    }
     let activeConnection: HostConnectionHandle | undefined
     let missionDispose: (() => Promise<void>) | undefined
     const syncMissionRuntime = (): void => {
@@ -116,6 +176,9 @@ export async function apply(ctx: Context): Promise<() => void> {
         tools,
         acquisition,
         ...(codeRuntime === undefined ? {} : { codeRuntime }),
+        ...(pythonCodeRuntime === undefined ? {} : { pythonCodeRuntime }),
+        ...(subagents === undefined ? {} : { subagents }),
+        ...(config.judgeProvider === undefined ? {} : { judgeProvider: config.judgeProvider }),
       })
     }
     syncMissionRuntime()

@@ -7,7 +7,7 @@ import { createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SessionId, type Session, type SessionEvent } from '@phoenix-ai/dsh-session'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import {

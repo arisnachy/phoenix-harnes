@@ -102,6 +102,7 @@ describe('HARDNESS model operating protocol', () => {
     expect(rendered).toContain('<phoenix_hardness_protocol>')
     expect(rendered).toContain('inspect → resolve → plan → approve → execute → verify → present → audit')
     expect(rendered).toContain('Never execute an unresolved, unapproved, or unverified operation.')
+    expect(rendered).toContain('only pass with a passing quality gate may enter DONE')
     expect(rendered).not.toContain('function')
     expect(rendered).not.toContain('credential')
     expect(rendered).toBe(renderHardnessProtocol('en'))

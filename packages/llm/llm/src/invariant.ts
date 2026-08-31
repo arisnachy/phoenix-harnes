@@ -1,6 +1,6 @@
 /** Package-owned LLM stream-protocol invariants. @module @phoenix-ai/dsh-llm/invariant */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { ContentBlockType, StreamChunk } from './types.ts'
 

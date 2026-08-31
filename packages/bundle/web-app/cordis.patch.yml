@@ -48,6 +48,9 @@
     - id: code-runtime
       name: '@phoenix-ai/dsh-code-runtime-worker-thread'
 
+    - id: python-code-runtime
+      name: '@phoenix-ai/dsh-code-runtime-python'
+
     - id: storage
       name: '@phoenix-ai/dsh-storage'
 

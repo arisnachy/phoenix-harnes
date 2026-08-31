@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import JobRegistry, { JobId } from '@phoenix-ai/dsh-jobs'

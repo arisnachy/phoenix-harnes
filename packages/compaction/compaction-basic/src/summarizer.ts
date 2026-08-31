@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-compaction-basic/summarizer
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { contentHasImage, createUserMessage, BlockAssembler, LlmError } from '@phoenix-ai/dsh-llm'
 import type {
   ContentBlock, FinishReason, GenerateOptions, Message, TokenUsage, ToolSchema,

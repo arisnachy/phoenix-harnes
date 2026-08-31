@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { FsTargetKey, FsVersion } from '@phoenix-ai/dsh-fs'
 import type { FsTarget } from '@phoenix-ai/dsh-fs'
 import * as FsInvariant from '@phoenix-ai/dsh-fs/invariant'

@@ -6,7 +6,7 @@
  * @module @phoenix-ai/dsh-jobs
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type {
   JobDoneListener, JobId, JobRead, JobSnapshot, JobStart, JobsChangedListener,
@@ -26,7 +26,7 @@ export type {
   JobsChangedListener,
 } from './types.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     jobs: JobRegistry
   }

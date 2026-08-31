@@ -14,7 +14,7 @@
  * @module @phoenix-ai/dsh-tool-call-timeout-policy
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { deadline, timeoutOf } from '@phoenix-ai/dsh-timeout'
 import type { ToolExecutionResult } from '@phoenix-ai/dsh-tools'
 import { apply as applyExecPolicy, type ExecPolicyConfig } from './exec-policy.ts'

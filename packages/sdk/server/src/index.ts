@@ -9,9 +9,9 @@
  * @module @phoenix-ai/dsh-sdk-jsonrpc-server
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Readable, Writable } from 'node:stream'
-import Schema from '@deepseek-ai/schemastery'
+import Schema from '@phoenix-ai/schemastery'
 import { JsonRpcLineTransport } from '@phoenix-ai/dsh-sdk-protocol'
 import { HarnessSdkJsonRpcServer } from './server.ts'
 

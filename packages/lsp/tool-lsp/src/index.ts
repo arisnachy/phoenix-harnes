@@ -10,8 +10,8 @@
  * @module @phoenix-ai/dsh-tool-lsp
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import { assertNever } from '@phoenix-ai/dsh-llm'
 import { LspError } from '@phoenix-ai/dsh-lsp'

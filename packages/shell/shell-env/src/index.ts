@@ -8,15 +8,15 @@
  * @module @phoenix-ai/dsh-shell-env
  */
 
-import { Service, type Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Service, type Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { DSH_ENV_PREFIX } from '@phoenix-ai/dsh-shell'
 import type { DshEnvironment, DshEnvironmentKey } from '@phoenix-ai/dsh-shell'
 import { DSH_HOME_ENV, resolveDshHome } from '@phoenix-ai/dsh-home-paths'
 import type { ToolExecution } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-session-persistence'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     shellEnv: ShellEnvRegistry
   }

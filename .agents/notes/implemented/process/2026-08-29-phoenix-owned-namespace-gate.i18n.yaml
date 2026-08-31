@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-29-phoenix-owned-namespace-gate.md
-2026-08-29-phoenix-owned-namespace-gate.md: 9943a1a5c23dcc3c5988b6956d7414ef979dceab
-2026-08-29-phoenix-owned-namespace-gate.zh.md: a550f4d95c7bd02ee8476590a80968af7151edcb
+2026-08-29-phoenix-owned-namespace-gate.md: b5a4fdd5ec6c93b093cab0f78fc433a91c414367
+2026-08-29-phoenix-owned-namespace-gate.zh.md: a7626758e8c3bad6d141e9995b11a2c2ece72edc

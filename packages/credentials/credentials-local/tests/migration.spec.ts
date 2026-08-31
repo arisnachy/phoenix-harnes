@@ -3,7 +3,7 @@
 // edit, byte for byte, while everything the recognizer cannot prove flat
 // keeps the loud rejection local.spec exercises.
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

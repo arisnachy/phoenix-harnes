@@ -7,7 +7,7 @@
 // render in the composer takeover.
 
 import { IconQuestionOutline14 } from '@phoenix-ai/dsh-client-ui-primitives'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'
 import { toolRowModel } from '../models/tool-call-model.ts'

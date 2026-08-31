@@ -8,7 +8,7 @@
  * (and the reverse), the one-shared-state contract of the dual entry.
  * Scope disposal drops the directory (HMR safety).
  */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { createScope } from '@phoenix-ai/dsh-client-runtime/client'
 import type { SessionId } from '@phoenix-ai/dsh-client-runtime/client'

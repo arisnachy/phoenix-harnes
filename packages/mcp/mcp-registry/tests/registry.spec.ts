@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import McpConnectorRegistry from '@phoenix-ai/dsh-mcp-connector-registry/src/index.ts'
 
 describe('McpConnectorRegistry', () => {

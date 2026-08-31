@@ -4,7 +4,7 @@
  * removal — HMR safety), the inert node entry, and the invariant companion's
  * ownership reservation.
  */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import InvariantRegistry from '@phoenix-ai/dsh-invariants'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'

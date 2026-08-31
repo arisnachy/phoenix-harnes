@@ -5,8 +5,8 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { z as zod } from 'zod'
 import type { ZodType } from 'zod'
 import { agentEvents } from '@phoenix-ai/dsh-agent'
@@ -47,6 +47,7 @@ import type {
   GoalSnapshotChangeMeta,
 } from './domain.ts'
 import { SpecialistLedger } from './specialist.ts'
+import { OrganizationForgeLedger } from './organization-forge.ts'
 
 // The pure payload outlet (./types.ts, ONE home of the `goal` projection-key
 // declaration) re-exported onto the package root keeps the module edge in
@@ -54,15 +55,22 @@ import { SpecialistLedger } from './specialist.ts'
 // still receive the SessionProjectionMap merge.
 export type * from './types.ts'
 export type * from './domain.ts'
+export type * from './organization-forge.ts'
 export { SpecialistLedger, foldSpecialists } from './specialist.ts'
+export { OrganizationForgeLedger, foldOrganizationForge } from './organization-forge.ts'
 export type {
   AddSpecialistExperimentRequest, AddSpecialistSourceRequest, EvaluateSpecialistRequest,
   StartSpecialistRequest,
 } from './specialist.ts'
+export type {
+  AddForgeAuditRequest, AddForgeSourceRequest, ForgeCriterionStatus, ForgeManagementMode,
+  ForgePhase, ForgeSourceAuditStatus, OrganizationForgeAudit, OrganizationForgeCriterion,
+  OrganizationForgeJudge, OrganizationForgeSource, OrganizationForgeSnapshot, StartOrganizationForgeRequest,
+} from './organization-forge.ts'
 export { GOAL_CHANGE_VERSION, GoalError, GoalId } from './runtime.ts'
 export { decodeGoalChange, foldGoal, goalChangeRef } from './fold.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     goals: GoalService
   }
@@ -197,6 +205,8 @@ export class GoalService extends TypertRemoteService {
   private readonly caches = new WeakMap<Session, GoalCache>()
   /** Event-backed specialist laboratories share the owning goal session. */
   readonly specialists: SpecialistLedger = new SpecialistLedger()
+  /** Durable Organization Forge laboratories share the owning session log. */
+  readonly organizationForge: OrganizationForgeLedger = new OrganizationForgeLedger()
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'goals')
@@ -246,6 +256,21 @@ export class GoalService extends TypertRemoteService {
     const cache = this.cache(agent.session)
     this.sync(agent.session, cache)
     cache.activation = 'disarmed'
+    return this.view(cache)
+  }
+
+  /**
+   * Restore process-local continuation authority for an active durable goal.
+   * This is used by the persistent round driver after a process restart; it
+   * does not change the goal revision or bypass a durable external blocker.
+   * @param agent - owning live agent.
+   * @returns a fresh armed view, or `undefined` when no goal is current.
+   */
+  activate(agent: Agent): GoalView | undefined {
+    this.assertLive(agent)
+    const cache = this.cache(agent.session)
+    this.sync(agent.session, cache)
+    if (cache.state.goal?.phase === 'active') cache.activation = 'armed'
     return this.view(cache)
   }
 
@@ -309,8 +334,10 @@ export class GoalService extends TypertRemoteService {
   }
 
   /**
-   * Resume and arm a stopped goal, or rearm an active goal after a
-   * session-start edge, while its round budget still has capacity.
+   * Resume and arm a stopped goal, or open a new execution window when the
+   * current window has reached its round cap. An active goal restored by a
+   * session-start edge is rearmed by the continuation driver, not by this
+   * remote mutation.
    * @param agent - owning live agent.
    * @param ref - expected current revision.
    * @returns the active view.
@@ -323,16 +350,49 @@ export class GoalService extends TypertRemoteService {
     if (!resumable.includes(current.phase)) {
       throw this.transitionError(current, 'resume', resumable)
     }
-    if (current.phase === 'active' && cache.activation === 'armed') {
-      throw new GoalError(`goal "${current.id}" is already active and armed`, 'GOAL_INVALID_TRANSITION')
-    }
     if (cache.state.roundsStarted >= current.maxGoalRounds) {
+      if (current.phase === 'active' || current.blockedReason?.code === 'round-limit') {
+        return this.continueWindow(agent, ref)
+      }
       throw new GoalError(
         `goal "${current.id}" exhausted ${current.maxGoalRounds} goal rounds; increase maxGoalRounds before resuming`,
         'GOAL_INVALID_TRANSITION',
       )
     }
+    if (current.phase === 'active' && cache.activation === 'armed') {
+      throw new GoalError(`goal "${current.id}" is already active and armed`, 'GOAL_INVALID_TRANSITION')
+    }
     return this.commitCurrent(agent, cache, 'resume', this.withPhase(current, 'active'), 'armed')
+  }
+
+  /**
+   * Open a new bounded execution window without changing the mission objective.
+   * The previous window's rounds remain in the session log and the new revision
+   * invalidates all stale prompts from that window.
+   * @param agent - owning live agent.
+   * @param ref - expected current active revision or round-limit revision.
+   * @returns the armed goal at the beginning of a new window.
+   */
+  @Remote('continue')
+  continueWindow(agent: Agent, ref: GoalRef): GoalView {
+    const cache = this.prepareMutation(agent)
+    const current = this.expectCurrent(cache, ref)
+    if (current.phase !== 'active' && current.blockedReason?.code !== 'round-limit') {
+      throw this.transitionError(current, 'continue', ['active'])
+    }
+    const next: GoalSnapshot = this.withPhase(current, 'active')
+    const createdAt = cache.state.createdAt
+    if (createdAt === undefined) throw new Error('current goal cache lacks createdAt')
+    const previousRounds = cache.state.roundsStarted
+    const result = this.commitSnapshot(agent, cache, 'continue', next, 0,
+      createdAt, this.nextMutationTime(cache), 'armed')
+    agent.session.append('goal/continuation', {
+      goalId: result.id,
+      revision: result.revision,
+      previousRounds,
+      reason: 'round-limit',
+    })
+    return result
   }
 
   /**
@@ -343,6 +403,17 @@ export class GoalService extends TypertRemoteService {
    */
   @Remote('complete')
   complete(agent: Agent, ref: GoalRef): GoalView {
+    const cache = this.prepareMutation(agent)
+    const current = this.expectCurrent(cache, ref)
+    const judge = agent.session.events.findLast((event): event is SessionEvent<'goal/judge'> =>
+      event.type === 'goal/judge' && event.data.goalId === current.id && event.data.revision === current.revision,
+    )
+    if (judge?.data.verdict !== 'pass') {
+      throw new GoalError(
+        `goal "${current.id}" requires an independent passing judge before completion`,
+        'GOAL_COMPLETION_NOT_VERIFIED',
+      )
+    }
     return this.transition(
       agent,
       ref,

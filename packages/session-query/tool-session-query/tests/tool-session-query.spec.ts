@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context, type Fiber } from '@deepseek-ai/cordis'
+import { Context, type Fiber } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { createUserMessage, CallId, HarnessError , createMessage } from '@phoenix-ai/dsh-llm'
 import { MAX_TIMER_DELAY_MS, TimeoutReason } from '@phoenix-ai/dsh-timeout'

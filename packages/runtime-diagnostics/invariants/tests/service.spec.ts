@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import InvariantRegistry, {
   InvariantError,
   type Config,
 } from '@phoenix-ai/dsh-invariants'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     invariantProbe: InvariantProbeService
   }

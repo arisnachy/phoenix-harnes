@@ -81,6 +81,8 @@ interface PromptContext {
   readonly order: number
   /** Static text or a provider evaluated for each assembly. Empty text contributes nothing. */
   readonly text: string | ((context: AssembleContext) => string)
+  /** Whether `{{name}}` references in the resolved text are interpolated (default true). */
+  readonly interpolateVariables?: boolean
 }
 ```
 

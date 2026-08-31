@@ -1,6 +1,6 @@
 /** Deterministic provider for model-visible foreground and Job diagnostic snapshots. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import {
   NO_START_CAPABILITIES,
   type ResolvedSubagentStartRequest,

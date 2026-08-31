@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { GenerateOptions, StreamChunk } from '@phoenix-ai/dsh-llm'
 import { CallId, LlmAdapter } from '@phoenix-ai/dsh-llm'
 

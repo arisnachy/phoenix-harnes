@@ -10,8 +10,8 @@
  * @module @phoenix-ai/dsh-subagent-dsh-sdk
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { SubagentCapabilities, SubagentProvider, SubagentStartRequest } from '@phoenix-ai/dsh-subagent'
 import { assertPositiveFinite, NO_START_CAPABILITIES, resolveChildCwd, validateConfiguredCwd } from '@phoenix-ai/dsh-subagent'
 import {

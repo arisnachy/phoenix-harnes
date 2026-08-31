@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { bindScopeParent, createScope, scopeOf } from '@phoenix-ai/dsh-scope'
 import SkillRegistry, {
   isModelInvocable,

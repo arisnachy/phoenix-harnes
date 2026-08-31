@@ -6,8 +6,8 @@
 
 import { randomUUID } from 'node:crypto'
 import { posix } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { SubprocessRuntime } from '@phoenix-ai/dsh-subprocess'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import type {

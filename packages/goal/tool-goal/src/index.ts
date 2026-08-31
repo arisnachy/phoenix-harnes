@@ -4,10 +4,13 @@
  * @module @phoenix-ai/dsh-tool-goal
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { GoalId } from '@phoenix-ai/dsh-goal'
-import type { GoalRef, GoalView } from '@phoenix-ai/dsh-goal'
+import type {
+  ForgeCriterionStatus, ForgeManagementMode, ForgePhase, ForgeSourceAuditStatus,
+  GoalRef, GoalView, OrganizationForgeSnapshot,
+} from '@phoenix-ai/dsh-goal'
 import { boundContextSummary, createUserMessage, HarnessError } from '@phoenix-ai/dsh-llm'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { GenericCallView, JsonValue } from '@phoenix-ai/dsh-tools'
@@ -37,7 +40,7 @@ export interface Config {
 /** Schemastery config for the goal-tool policy. */
 export const Config: z<Config> = z.object({
   blockedAfterConsecutiveRounds: z.number().step(1).min(1).default(3),
-  requireJudge: z.boolean().default(false),
+  requireJudge: z.boolean().default(true),
   judgeProvider: z.string().default('spawn'),
 })
 
@@ -68,7 +71,19 @@ const SPECIALIST_DESCRIPTION =
   + 'expertise request, then register traceable sources, falsifiable hypotheses, reproducible '
   + 'experiments, and judge results. A specialist is ready only after a passing evaluation; failed '
   + 'evaluations create an improving checkpoint and are bounded by max_iterations. When the base '
-  + 'profile requires judging, evaluate invokes a fresh read-only independent judge automatically.'
+      + 'profile requires judging, evaluate invokes a fresh read-only independent judge automatically.'
+
+const FORGE_DESCRIPTION =
+  'Build one organization, business, or system as a durable Organization Forge. Research comparable '
+  + 'solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, '
+  + 'and R&D roles active, prefer deterministic automation, and require functional, tested, secure, '
+  + 'observable, maintainable, documented evidence plus an independent judge before delivery. Forge is '
+  + 'a modular capability over the mission system, not a replacement for it.'
+
+const FORGE_PHASES: readonly ForgePhase[] = ['researching', 'auditing', 'designing', 'building', 'verifying']
+const FORGE_CRITERION_STATUSES: readonly ForgeCriterionStatus[] = ['pending', 'implemented', 'tested', 'verified']
+const FORGE_AUDIT_STATUSES: readonly ForgeSourceAuditStatus[] = ['pending', 'passed', 'needs_changes', 'blocked']
+const FORGE_ACTIONS = ['start', 'get', 'source', 'audit', 'advance', 'criterion', 'judge', 'management'] as const
 
 /** Canonical goal-tool output, matching the existing compact Native JSON. */
 type GoalToolValue =
@@ -147,12 +162,13 @@ function guidance(blockedAfter: number, requireJudge: boolean): string {
   return 'Use goal tools for one long-running completion objective in the current session. '
     + 'create_goal may infer goal intent from a direct human request in any language; do not '
     + 'create a goal for routine single-turn work. Call get_goal before update_goal and copy its '
-    + 'exact goal_id and revision. After session resume or fork, an active goal is disarmed: when '
-    + 'a human asks to continue or resume in any wording or language, use update_goal action '
-    + 'resume to rearm it. Mark complete only when the objective is actually achieved. Mark '
+    + 'exact goal_id and revision. After session resume or fork, the driver restores an active durable '
+    + 'goal and continues it automatically; blocked goals wait for their external condition or an '
+    + 'explicit resume. Mark complete only when the objective is actually achieved. Mark '
     + `blocked only after the same blocking condition persists for at least ${blockedAfter} `
     + 'consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, '
-    + 'or useful remaining work is not blocked.'
+    + 'or useful remaining work is not blocked. The goal domain independently rejects completion unless '
+    + 'a durable judge has passed the exact current goal revision.'
     + (requireJudge
       ? ' Completion is gated by an independent read-only judge: a self-reported complete result '
         + 'remains active until the judge returns pass; use its required_changes as the next work list.'
@@ -162,7 +178,7 @@ function guidance(blockedAfter: number, requireJudge: boolean): string {
 /** Validate config even when apply is called directly outside Loader normalization. */
 function resolveConfig(config: Config): ResolvedConfig {
   const blockedAfter = config.blockedAfterConsecutiveRounds ?? 3
-  const requireJudge = config.requireJudge ?? false
+  const requireJudge = config.requireJudge ?? true
   const judgeProvider = config.judgeProvider ?? 'spawn'
   if (!Number.isSafeInteger(blockedAfter) || blockedAfter < 1) {
     throw new TypeError('blockedAfterConsecutiveRounds must be a positive safe integer')
@@ -225,6 +241,17 @@ function goalValue(goal: GoalView | undefined, judge?: GoalJudgeResult): GoalToo
 /** Compact model-facing projection of a specialist laboratory. */
 function specialistValue(value: unknown): { specialist: Record<string, JsonValue> } {
   return { specialist: JSON.parse(JSON.stringify(value)) as Record<string, JsonValue> }
+}
+
+/** Compact model-facing projection of one Organization Forge build. */
+function forgeValue(value: OrganizationForgeSnapshot, includeHandoff = false): Record<string, JsonValue> {
+  return {
+    forge: JSON.parse(JSON.stringify(value)) as JsonValue,
+    ...includeHandoff ? {
+      handoffQuestion: '¿Quieres que Phoenix gestione también este negocio/sistema?',
+      managementOptions: ['Entregar', 'Gestión asistida', 'Gestión autónoma'],
+    } : {},
+  }
 }
 
 /** Give the independent judge bounded durable laboratory evidence to review. */
@@ -398,6 +425,7 @@ export function apply(ctx: Context, config: Config): void {
         recordGoalJudge(execution.agent.session, {
           callId: exec.callId,
           goalId: currentGoal.id,
+          revision: currentGoal.revision,
           round: currentGoal.roundsStarted,
           verdict: judge.verdict,
           summary: judge.summary,
@@ -456,6 +484,131 @@ export function apply(ctx: Context, config: Config): void {
           ? args.objective
           : hasRoundCap(args.max_goal_rounds) ? args.max_goal_rounds : args.goal_id,
     ),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'organization_forge',
+    description: FORGE_DESCRIPTION,
+    parameters: {
+      action: {
+        type: 'string',
+        required: true,
+        enum: FORGE_ACTIONS,
+        description: 'start, get, source, audit, advance, criterion, judge, or management',
+      },
+      forge_id: { type: 'string', description: 'Existing Forge build id for non-start actions.' },
+      objective: { type: 'string', description: 'Business, organization, or system objective for start.' },
+      criteria: { type: 'array', items: { type: 'string' }, description: 'Required delivery criteria for start.' },
+      title: { type: 'string', description: 'Public source title.' },
+      locator: { type: 'string', description: 'Public https, atlas, or local source reference without credentials.' },
+      license: { type: 'string', description: 'Detected license identifier or policy result.' },
+      stage: { type: 'string', enum: ['pre-reuse', 'post-modification'], description: 'Audit stage.' },
+      source_id: { type: 'string', description: 'Source id being audited.' },
+      dependencies: { type: 'string', enum: FORGE_AUDIT_STATUSES, description: 'Dependency audit result.' },
+      secrets: { type: 'string', enum: FORGE_AUDIT_STATUSES, description: 'Secret scan result.' },
+      vulnerabilities: { type: 'string', enum: FORGE_AUDIT_STATUSES, description: 'Vulnerability audit result.' },
+      findings: { type: 'array', items: { type: 'string' }, description: 'Bounded audit or judge findings.' },
+      phase: { type: 'string', enum: FORGE_PHASES, description: 'Next Forge lifecycle phase.' },
+      criterion_id: { type: 'string', description: 'Criterion id returned by start or get.' },
+      criterion_status: { type: 'string', enum: FORGE_CRITERION_STATUSES, description: 'Evidence state.' },
+      evidence: { type: 'array', items: { type: 'string' }, description: 'Evidence references; required for verified.' },
+      verdict: { type: 'string', enum: ['pass', 'needs_changes', 'blocked'], description: 'Optional manual verdict when judging is disabled.' },
+      summary: { type: 'string', description: 'Judge summary.' },
+      required_changes: { type: 'array', items: { type: 'string' }, description: 'Required changes before approval.' },
+      management_mode: { type: 'string', enum: ['handoff', 'assisted', 'autonomous'], description: 'Post-build management choice.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value: Record<string, JsonValue>) => [{ type: 'text' as const, text: JSON.stringify(value) }],
+    },
+    async execute(args, exec) {
+      const execution = goalToolExecution(ctx, exec)
+      const ledger = ctx.goals.organizationForge
+      if (args.action === 'start') {
+        requireDirectHuman(ctx, execution)
+        if (typeof args.objective !== 'string') throw new HarnessError('start requires objective', 'FORGE_INVALID_REQUEST')
+        if (args.criteria !== undefined && !Array.isArray(args.criteria)) throw new HarnessError('criteria must be an array', 'FORGE_INVALID_REQUEST')
+        return forgeValue(ledger.start(execution.agent, {
+          objective: args.objective,
+          ...(args.criteria === undefined ? {} : { criteria: args.criteria }),
+        }))
+      }
+      if (args.action === 'get') {
+        if (typeof args.forge_id === 'string') {
+          const forge = ledger.get(execution.agent, args.forge_id)
+          if (forge === undefined) throw new HarnessError(`Forge not found: ${args.forge_id}`, 'FORGE_NOT_FOUND')
+          return forgeValue(forge, forge.phase === 'ready')
+        }
+        return { forges: ledger.list(execution.agent).map(forge => forgeValue(forge, forge.phase === 'ready')) }
+      }
+      if (typeof args.forge_id !== 'string') throw new HarnessError('forge_id is required for this action', 'FORGE_INVALID_REQUEST')
+      const forgeId = args.forge_id
+      if (args.action === 'source') {
+        if (typeof args.title !== 'string' || typeof args.locator !== 'string' || typeof args.license !== 'string') {
+          throw new HarnessError('source requires title, locator, and license', 'FORGE_INVALID_REQUEST')
+        }
+        return forgeValue(ledger.addSource(execution.agent, forgeId, {
+          title: args.title, locator: args.locator, license: args.license,
+        }))
+      }
+      if (args.action === 'audit') {
+        if (args.stage !== 'pre-reuse' && args.stage !== 'post-modification'
+          || typeof args.license !== 'string' || !FORGE_AUDIT_STATUSES.includes(args.license as ForgeSourceAuditStatus)
+          || typeof args.dependencies !== 'string' || !FORGE_AUDIT_STATUSES.includes(args.dependencies as ForgeSourceAuditStatus)
+          || typeof args.secrets !== 'string' || !FORGE_AUDIT_STATUSES.includes(args.secrets as ForgeSourceAuditStatus)
+          || typeof args.vulnerabilities !== 'string' || !FORGE_AUDIT_STATUSES.includes(args.vulnerabilities as ForgeSourceAuditStatus)) {
+          throw new HarnessError('audit requires stage, license, dependencies, secrets, and vulnerabilities', 'FORGE_INVALID_REQUEST')
+        }
+        return forgeValue(ledger.addAudit(execution.agent, forgeId, {
+          stage: args.stage,
+          ...args.source_id === undefined ? {} : { sourceId: args.source_id },
+          license: args.license as ForgeSourceAuditStatus,
+          dependencies: args.dependencies as ForgeSourceAuditStatus,
+          secrets: args.secrets as ForgeSourceAuditStatus,
+          vulnerabilities: args.vulnerabilities as ForgeSourceAuditStatus,
+          findings: args.findings ?? [],
+        }))
+      }
+      if (args.action === 'advance') {
+        if (!FORGE_PHASES.includes(args.phase as ForgePhase)) throw new HarnessError('advance requires a valid phase', 'FORGE_INVALID_REQUEST')
+        return forgeValue(ledger.advance(execution.agent, forgeId, args.phase as Exclude<ForgePhase, 'ready' | 'blocked'>))
+      }
+      if (args.action === 'criterion') {
+        if (typeof args.criterion_id !== 'string' || !FORGE_CRITERION_STATUSES.includes(args.criterion_status as ForgeCriterionStatus)
+          || !Array.isArray(args.evidence)) throw new HarnessError('criterion requires criterion_id, criterion_status, and evidence', 'FORGE_INVALID_REQUEST')
+        return forgeValue(ledger.markCriterion(execution.agent, forgeId, args.criterion_id,
+          args.criterion_status as ForgeCriterionStatus, args.evidence))
+      }
+      if (args.action === 'judge') {
+        const forge = ledger.get(execution.agent, forgeId)
+        if (forge === undefined) throw new HarnessError(`Forge not found: ${forgeId}`, 'FORGE_NOT_FOUND')
+        const subagents = ctx.get('subagents')
+        if (subagents === undefined) throw new HarnessError('Forge completion requires the independent judge service', 'FORGE_JUDGE_UNAVAILABLE')
+        const judge = await judgeGoalCompletion({
+          subagents,
+          provider: resolved.judgeProvider,
+          parent: execution.agent,
+          objective: `Organization Forge review: ${forge.objective}\n${JSON.stringify({ criteria: forge.criteria, sources: forge.sources, audits: forge.audits }).slice(0, 8_000)}`,
+          round: forge.revision,
+          signal: exec.signal,
+        })
+        const result = ledger.judge(execution.agent, forgeId, {
+          ...judge,
+          reviewedAt: Date.now(),
+        })
+        return forgeValue(result, result.phase === 'ready')
+      }
+      if (args.action === 'management') {
+        requireDirectHuman(ctx, execution)
+        if (!['handoff', 'assisted', 'autonomous'].includes(args.management_mode as ForgeManagementMode)) {
+          throw new HarnessError('management requires handoff, assisted, or autonomous', 'FORGE_INVALID_REQUEST')
+        }
+        const result = ledger.setManagementMode(execution.agent, forgeId, args.management_mode as ForgeManagementMode)
+        return forgeValue(result)
+      }
+      throw new HarnessError(`unknown Forge action: ${String(args.action)}`, 'FORGE_INVALID_REQUEST')
+    },
+    presentCall: args => present(`Organization Forge: ${args.action}`, 'other', args.forge_id ?? args.objective),
   }))
 
   ctx.tools.register(defineTool({

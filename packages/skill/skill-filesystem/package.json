@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/skill/skill-filesystem"
   },
   "type": "module",
@@ -36,11 +36,11 @@
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-home-paths": "workspace:^",
     "@phoenix-ai/dsh-skill": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
     "chokidar": "^5.0.0",
-    "@deepseek-ai/schemastery": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^",
     "yaml": "^2.4.2"
   },
   "devDependencies": {
@@ -48,6 +48,6 @@
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-home-paths": "workspace:^",
     "@phoenix-ai/dsh-skill": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

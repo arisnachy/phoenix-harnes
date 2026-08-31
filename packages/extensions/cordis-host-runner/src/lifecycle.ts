@@ -8,7 +8,7 @@
  * @module @phoenix-ai/dsh-cordis-host-runner/lifecycle
  */
 
-import type { Context, Fiber, Plugin } from '@deepseek-ai/cordis'
+import type { Context, Fiber, Plugin } from '@phoenix-ai/cordis'
 import { guardedPlugin } from './guard.ts'
 
 /**

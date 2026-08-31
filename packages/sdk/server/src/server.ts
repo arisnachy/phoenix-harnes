@@ -5,7 +5,7 @@
  * @module @phoenix-ai/dsh-sdk-jsonrpc-server/server
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { resolve } from 'node:path'
 import type { Agent, AgentHandle } from '@phoenix-ai/dsh-agent'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'

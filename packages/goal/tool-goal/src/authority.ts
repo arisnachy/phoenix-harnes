@@ -1,6 +1,6 @@
 /** Execution-time authority checks for the model-facing goal tools. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { GoalView } from '@phoenix-ai/dsh-goal'
 import { HarnessError } from '@phoenix-ai/dsh-llm'

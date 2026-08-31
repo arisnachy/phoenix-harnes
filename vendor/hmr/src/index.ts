@@ -1,18 +1,18 @@
-import { Context, Service, type Plugin } from '@deepseek-ai/cordis'
-import type { Dict } from '@deepseek-ai/cosmokit'
-import { ModuleLoader, type ModuleJob, type ResolveResult } from '@deepseek-ai/cordis-plugin-loader'
-import type { Include } from '@deepseek-ai/cordis-plugin-include'
+import { Context, Service, type Plugin } from '@phoenix-ai/cordis'
+import type { Dict } from '@phoenix-ai/cosmokit'
+import { ModuleLoader, type ModuleJob, type ResolveResult } from '@phoenix-ai/cordis-plugin-loader'
+import type { Include } from '@phoenix-ai/cordis-plugin-include'
 import { FSWatcher, watch, type ChokidarOptions } from 'chokidar'
 import { dirname, relative, resolve } from 'node:path'
 import { realpath, stat } from 'node:fs/promises'
 import { handleError } from './error.ts'
-import type {} from '@deepseek-ai/cordis-plugin-timer'
+import type {} from '@phoenix-ai/cordis-plugin-timer'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import picomatch from 'picomatch'
-import z from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     hmr: Hmr
   }

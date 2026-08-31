@@ -101,6 +101,10 @@ export function apply(ctx: ClientContext): void {
           // Fork or child-rename failure keeps the current selection.
         })
     },
+    deleteSession: async (sessionId) => {
+      const result = await ctx.sessions.delete(sessionId)
+      if (!result.ok) throw new Error(result.error.message)
+    },
     renameWorkspace: async (workspaceId, title) => { await ctx.workspaces.rename(workspaceId, title) },
     deleteWorkspace: async (workspaceId) => { await ctx.workspaces.delete(workspaceId) },
     insertWorkspaceBefore: async (workspaceId, beforeWorkspaceId) => {

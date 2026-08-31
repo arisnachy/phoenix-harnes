@@ -155,6 +155,7 @@ Source: [`packages/preset/agent-presets/src/session.ts:26`](../packages/preset/a
   toolName: string
   callId?: CallId
   reason?: string
+  deadline?: ApprovalDeadline
 }
 ```
 
@@ -178,7 +179,7 @@ Source: [`packages/interaction/user-approval/src/index.ts:44`](../packages/inter
 }
 ```
 
-Source: [`packages/interaction/user-approval/src/index.ts:55`](../packages/interaction/user-approval/src/index.ts)
+Source: [`packages/interaction/user-approval/src/index.ts:56`](../packages/interaction/user-approval/src/index.ts)
 
 <a id="approvalpolicy--log-only"></a>
 
@@ -200,7 +201,7 @@ Source: [`packages/interaction/user-approval/src/index.ts:55`](../packages/inter
 }
 ```
 
-Source: [`packages/interaction/user-approval/src/index.ts:67`](../packages/interaction/user-approval/src/index.ts)
+Source: [`packages/interaction/user-approval/src/index.ts:68`](../packages/interaction/user-approval/src/index.ts)
 
 ### `assistant/*`
 
@@ -422,7 +423,18 @@ Source: [`packages/feedback/command-feedback/src/index.ts:62`](../packages/feedb
 'goal/change': GoalChangeMeta
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:98`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:164`](../packages/goal/goal/src/domain.ts)
+
+<a id="goalcontinuation--log-only"></a>
+
+#### `goal/continuation` — log-only
+
+```ts persistence-catalog
+/** Automatic continuation window; a round cap never completes a goal. */
+'goal/continuation': GoalContinuationWindow
+```
+
+Source: [`packages/goal/goal/src/domain.ts:172`](../packages/goal/goal/src/domain.ts)
 
 <a id="goaljudge--log-only"></a>
 
@@ -433,7 +445,7 @@ Source: [`packages/goal/goal/src/domain.ts:98`](../packages/goal/goal/src/domain
 'goal/judge': GoalJudgeAuditEntry
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:100`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:166`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalstrategy--log-only"></a>
 
@@ -444,7 +456,7 @@ Source: [`packages/goal/goal/src/domain.ts:100`](../packages/goal/goal/src/domai
 'goal/strategy': GoalStrategySelection
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:104`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:170`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalsupervisor--log-only"></a>
 
@@ -455,9 +467,31 @@ Source: [`packages/goal/goal/src/domain.ts:104`](../packages/goal/goal/src/domai
 'goal/supervisor': GoalSupervisorCheckpoint
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:102`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:168`](../packages/goal/goal/src/domain.ts)
 
 ### `hardness/*`
+
+<a id="hardnessartifact--log-only"></a>
+
+#### `hardness/artifact` — log-only
+
+```ts persistence-catalog
+/** Durable result of a universal HARDNESS artifact execution. */
+'hardness/artifact': HardnessArtifactExecutionEvent
+```
+
+Source: [`packages/hardness/adapters/src/artifact-runtime.ts:19`](../packages/hardness/adapters/src/artifact-runtime.ts)
+
+<a id="hardnesskernel--log-only"></a>
+
+#### `hardness/kernel` — log-only
+
+```ts persistence-catalog
+/** Mission Persistence Kernel state transition; never contains credentials or raw arguments. */
+'hardness/kernel': MissionKernelEvent
+```
+
+Source: [`packages/hardness/adapters/src/mission-kernel.ts:201`](../packages/hardness/adapters/src/mission-kernel.ts)
 
 <a id="hardnessmission--log-only"></a>
 
@@ -543,6 +577,19 @@ Source: [`packages/llm/llm-retry/src/types.ts:9`](../packages/llm/llm-retry/src/
 ```
 
 Source: [`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
+
+### `organization-forge/*`
+
+<a id="organization-forgechange--log-only"></a>
+
+#### `organization-forge/change` — log-only
+
+```ts persistence-catalog
+/** Full replayable Organization Forge snapshot. */
+'organization-forge/change': OrganizationForgeChange
+```
+
+Source: [`packages/goal/goal/src/organization-forge.ts:116`](../packages/goal/goal/src/organization-forge.ts)
 
 ### `permission/*`
 
@@ -712,6 +759,19 @@ Source: [`packages/session/session-title/src/index.ts:100`](../packages/session/
 Types: [SessionTitleLlmRequestEventData](subsystems/session-title.md)
 
 Source: [`packages/session/session-title-llm/src/index.ts:43`](../packages/session/session-title-llm/src/index.ts)
+
+### `specialist/*`
+
+<a id="specialistchange--log-only"></a>
+
+#### `specialist/change` — log-only
+
+```ts persistence-catalog
+/** Full replayable specialist-laboratory snapshot. */
+'specialist/change': SpecialistChange
+```
+
+Source: [`packages/goal/goal/src/domain.ts:174`](../packages/goal/goal/src/domain.ts)
 
 ### `step/*`
 

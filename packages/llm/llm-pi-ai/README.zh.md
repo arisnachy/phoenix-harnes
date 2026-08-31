@@ -6,6 +6,8 @@
 
 包根入口导出 Cordis 插件约定、`PiAiAdapter` 与 `supportedProtocols()`；profile 解析、catalog 物化、提供方构造、回放转换和流转换保留在包内部。
 
+可配置提供方目录还包含可选的 `chatgpt-web` 路由，用于连接本地运行的 [`codex-chatgpt-web`](https://github.com/miuuyy/codex-chatgpt-web) 桥接。添加 `providers.chatgpt-web: {}` 后，Phoenix 会使用桥接默认的 OpenAI Responses 适配器（`http://127.0.0.1:17841/v1`、`gpt-5.6-sol` 和 `gpt-5.6-luna`）；仍然支持覆盖 `baseURL` 或 `models`。该路由不会导入浏览器 Cookie 或凭据。设置 `PHOENIX_CHATGPT_WEB_URL` 为桥接来源后运行 `dsh doctor`，即可检查其 `/v1/models` 端点，同时不会打印响应数据。
+
 ## 配置
 
 按提供方配置凭据、模型 catalog 与部署特定传输设置，并以提供方路由本身为键。每个 profile 都可以设置 `retryPolicy`；省略时使用 normal 模式并重试两次。`apiKeyEnv` 是按请求解析的凭据*引用*，因此机密不进入该文件。省略它会让该路由处于未认证状态；对已安装 catalog 路由而言，这意味着交给 pi-ai 的提供方原生环境发现。已配置却解析不出任何值的引用则相反，会让请求以 `MISSING_CREDENTIAL` 失败，因为放行下去就会用环境里恰好持有的某个无关密钥完成认证。一条凭据服务该路由下的全部模型。
@@ -141,6 +143,8 @@ pi-ai 依据提供方 id 与 baseURL 决定每个请求的形状：系统提示�
 多数列表只公布 id；`context_window`/`context_length` 与 `max_output_tokens`/`max_tokens` 在网关提供时会被读取，没有可用 id 的条目会被跳过而不是让整份列表失败，其余仍由采纳方补齐。回复在四兆字节上限下读取，且上限落在实际收到的字节上——端点是用户自己填的 URL，因此会先看声明长度，但绝不把它当作边界。端点不可达、凭据被拒、响应非 JSON、以及响应没有 `data` 数组，都会以 `DISCOVERY_FAILED` 失败，消息点名端点；仅当 401 或 403 时才点名凭据。读取响应体期间被取消会呈现为 `ABORTED`，与请求发出之前被取消一致。
 
 ## 提供方／模型路由与回放
+
+每次请求都会从持久化附件存储解析用户文件附件。类文本文件会以有界 UTF-8 文本加入请求，并带有名称、媒体类型、字节数和截断标记；二进制文件会保留为带名称的描述符，不尝试解码任意字节。`maxInlineFileBytes` 默认 256 KiB，仅限制文本投影，因此已附加文件不会静默地从模型请求中消失。
 
 每次解析产出一份**不可变**快照——profiles 加上一个持有各路由所建 `Provider` 的 `createModels()` 集合——每个操作都在自己第一个 `await` 之前整体捕获一份快照。配置变化会构造**新**集合，而不是改动正在被使用的那个：`Models.streamSimple()` 是惰性的，它在流首次被消费时才解析 provider，而那已在 credential await 之后，因此改动共享集合会让一个在旧配置下开始的请求在新配置下结束，或者撞上一个已不存在的 provider。这正是 seam 的每步调用冻结（`llm.prepareCall()`）能贯通到底的原因——回复途中切换模型会在下一步生效，绝不会影响在途的那一步。请求经 `Models.streamSimple()` 抵达提供方。保持 catalog 协议不变的 catalog 路由会**复用**已安装提供方，只替换其模型列表，因为该提供方持有本包无法重建的 API 实现——Bedrock 经由独立入口加载其 Smithy 模块——从零件重建会静默收窄可用提供方的范围。其余路由都由 `createProvider()` 基于 `supportedProtocols()` 背后的协议表构造，表中条目正是 pi-ai 自己的提供方工厂所用的同一批 factory。
 

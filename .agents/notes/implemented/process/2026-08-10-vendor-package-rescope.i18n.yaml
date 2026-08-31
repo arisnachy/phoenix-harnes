@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-10-vendor-package-rescope.md
-2026-08-10-vendor-package-rescope.md: 421350fa538f0cc0e14e5b5fd8e321761e970b0f
-2026-08-10-vendor-package-rescope.zh.md: ad3e43836477dc689be49deab0d707101838f3c8
+2026-08-10-vendor-package-rescope.md: cfe5e11fc93902535f7c3b0e75a70ef949c4044f
+2026-08-10-vendor-package-rescope.zh.md: 55b677fd11e058fd081bd2fa1fa92c8235fff371

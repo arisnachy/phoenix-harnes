@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/host/apiproxy"
   },
   "type": "module",
@@ -71,18 +71,18 @@
     "@phoenix-ai/dsh-user-approval": "workspace:^",
     "@phoenix-ai/dsh-user-questions": "workspace:^",
     "@phoenix-ai/dsh-workspace": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^",
     "fflate": "^0.8.2",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent-presets": "workspace:^",
     "@phoenix-ai/dsh-cordis-host-runner": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent-presets": "workspace:^",
     "@phoenix-ai/dsh-cordis-host-runner": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
@@ -90,6 +90,6 @@
     "@phoenix-ai/dsh-storage-domain": "workspace:^",
     "@phoenix-ai/dsh-typert-protocol": "workspace:^",
     "@phoenix-ai/dsh-typert-registry": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

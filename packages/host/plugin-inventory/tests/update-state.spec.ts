@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   parsePhoenixUpdateSnapshot,
   readPhoenixUpdateSnapshot,
+  requestPhoenixUpdateRefresh,
   requestPhoenixUpdateRestart,
 } from '../src/update-state.ts'
 
@@ -147,6 +148,15 @@ describe('PHOENIX updater state bridge', () => {
 
     writeFileSync(statePath(repo), JSON.stringify({ status: 'ready', target: 'bad' }))
     expect(requestPhoenixUpdateRestart(repo)).toEqual({ accepted: false, status: 'ready' })
+  })
+
+  it('queues an immediate updater refresh without changing the durable update state', () => {
+    const repo = repository()
+    expect(requestPhoenixUpdateRefresh(repo)).toEqual({ accepted: true })
+    const request = JSON.parse(readFileSync(join(repo, '.git', 'phoenix-update-refresh-request.json'), 'utf8')) as { requestedAt?: string }
+    expect(request).toMatchObject({ schema: 1 })
+    expect(new Date(request.requestedAt ?? '').toString()).not.toBe('Invalid Date')
+    expect(readPhoenixUpdateSnapshot(repo)).toEqual({ status: 'idle' })
   })
 
   it('binds a restart request to the exact ready target and marks the state restarting', () => {

@@ -7,6 +7,49 @@ export type { AttachmentId } from './brand.ts'
 /** Raster image formats accepted by the version-one attachment path. */
 export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
 
+/** MIME value recorded for a non-image upload. The bytes remain opaque. */
+export type FileMediaType = string
+
+/** Durable, serializable reference to one immutable arbitrary file. */
+export interface FileAttachmentRef {
+  /** Opaque storage identifier; never a filesystem path or bearer URL. */
+  attachmentId: AttachmentId
+  /** Caller-declared MIME value, normalized by the admitting provider. */
+  mediaType: FileMediaType
+  /** Exact stored byte length. */
+  bytes: number
+  /** Optional display name stripped of local path information. */
+  name?: string
+}
+
+/** Deployment-resolved limits for arbitrary file uploads. */
+export interface FileAttachmentLimits {
+  maxFileBytes: number
+  maxFilesPerMessage: number
+  maxMessageFileBytes: number
+}
+
+/** Raw arbitrary-file input before durable publication. */
+export interface SaveFileAttachment {
+  data: Uint8Array
+  mediaType: FileMediaType
+  /** Optional browser/provider display name; never interpreted as a path. */
+  name?: string
+}
+
+/** Stored arbitrary-file bytes returned after reference and digest verification. */
+export interface StoredFileAttachment {
+  ref: FileAttachmentRef
+  data: Uint8Array
+}
+
+/** Base64-encoded arbitrary-file upload accompanying one wire request. */
+export interface EncodedFileAttachment {
+  mediaType: FileMediaType
+  data: string
+  name?: string
+}
+
 /** Durable, serializable reference to one immutable normalized image. */
 export interface ImageAttachmentRef {
   /** Opaque storage identifier; never a filesystem path or bearer URL. */

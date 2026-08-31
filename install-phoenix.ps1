@@ -2,7 +2,9 @@
 [CmdletBinding()]
 param(
   [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'Programs\PHOENIX'),
-  [switch]$NoLaunch
+  [switch]$NoLaunch,
+  [switch]$NoStartup,
+  [switch]$NoTaskbar
 )
 
 $ErrorActionPreference = 'Stop'
@@ -148,15 +150,47 @@ try {
   Pop-Location
 }
 
+$shell = New-Object -ComObject WScript.Shell
+
+function New-PhoenixShortcut([string]$Path) {
+  $shortcut = $shell.CreateShortcut($Path)
+  $shortcut.TargetPath = Join-Path $resolvedInstallDirectory 'phoenix-windows.cmd'
+  $shortcut.WorkingDirectory = $resolvedInstallDirectory
+  $shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,14"
+  $shortcut.Save()
+}
+
 $programs = [Environment]::GetFolderPath('Programs')
 $shortcutPath = Join-Path $programs 'PHOENIX HARDNESS.lnk'
-$shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = Join-Path $resolvedInstallDirectory 'phoenix-windows.cmd'
-$shortcut.WorkingDirectory = $resolvedInstallDirectory
-$shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,14"
-$shortcut.Save()
+New-PhoenixShortcut $shortcutPath
+
+$startupShortcutPath = Join-Path ([Environment]::GetFolderPath('Startup')) 'PHOENIX HARDNESS.lnk'
+if (-not $NoStartup) {
+  New-PhoenixShortcut $startupShortcutPath
+}
+
+$taskbarShortcutPath = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\PHOENIX HARDNESS.lnk'
+if (-not $NoTaskbar) {
+  try {
+    $taskbarDirectory = Split-Path -Parent $taskbarShortcutPath
+    New-Item -ItemType Directory -Force -Path $taskbarDirectory | Out-Null
+    New-PhoenixShortcut $taskbarShortcutPath
+
+    # Windows exposes the pin verb only on some versions and locales. Invoke it
+    # when available; the taskbar-ready shortcut remains the deterministic fallback.
+    $programFolder = $shell.Namespace($programs)
+    $programItem = $programFolder.ParseName('PHOENIX HARDNESS.lnk')
+    $pinVerb = @($programItem.Verbs()) | Where-Object {
+      $_.Name.Replace('&', '') -match 'Pin to taskbar|barra de tareas|Taskleiste'
+    } | Select-Object -First 1
+    if ($null -ne $pinVerb) { $pinVerb.DoIt() }
+  } catch {
+    Write-Warning "Could not prepare the PHOENIX taskbar shortcut; the Start menu shortcut remains available. $($_.Exception.Message)"
+  }
+}
 
 Write-Host "PHOENIX HARDNESS stable is installed at $resolvedInstallDirectory"
 Write-Host "Start menu shortcut: $shortcutPath"
+if (-not $NoStartup) { Write-Host "Windows startup shortcut: $startupShortcutPath" }
+if (-not $NoTaskbar) { Write-Host "Taskbar shortcut prepared: $taskbarShortcutPath" }
 if (-not $NoLaunch) { & (Join-Path $resolvedInstallDirectory 'phoenix-windows.cmd') }

@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-cordis-host-runner/registry
  */
 
-import type { Fiber } from '@deepseek-ai/cordis'
+import type { Fiber } from '@phoenix-ai/cordis'
 import type { SessionId } from '@phoenix-ai/dsh-session/types'
 import type {
   ApprovalRequestId, CordisDynamicPackageId, CordisDynamicPluginId, CordisDynamicPluginRunId,

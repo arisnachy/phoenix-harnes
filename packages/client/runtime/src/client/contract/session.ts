@@ -7,7 +7,7 @@
  * must stub); runtime-internal entry points (history staging, wire-frame
  * dispatch) stay on the class, invisible out here.
  */
-import type { AttachmentIdType, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type { AttachmentIdType, FileAttachmentRef, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type {
   MessageId, PromptContentPart, QueueAction, RpcResult, SessionId,
 } from '@phoenix-ai/dsh-api-remotes/client'
@@ -50,7 +50,7 @@ export interface ISession {
    */
   readAttachment(
     attachmentId: AttachmentIdType,
-  ): Promise<RpcResult<{ attachment: ImageAttachmentRef; data: Uint8Array }>>
+  ): Promise<RpcResult<{ attachment: ImageAttachmentRef | FileAttachmentRef; data: Uint8Array }>>
   /**
    * Apply one edit, remove, or strict steer action to a still-pending queue occurrence.
    * @param itemId - agent-owned inbox occurrence identity.

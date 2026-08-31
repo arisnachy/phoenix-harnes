@@ -1,6 +1,6 @@
 # Keyless replay keeps the LSP composition intact and replaces only the model adapter.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ../cordis.yml
     patches:

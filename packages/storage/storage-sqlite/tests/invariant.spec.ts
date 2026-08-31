@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import InvariantRegistry from '@phoenix-ai/dsh-invariants'
 import * as StorageSqliteInvariant from '../src/invariant.ts'
 

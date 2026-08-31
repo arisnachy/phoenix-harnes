@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { stat } from 'node:fs/promises'
 import AgentRegistry from '@phoenix-ai/dsh-agent'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'

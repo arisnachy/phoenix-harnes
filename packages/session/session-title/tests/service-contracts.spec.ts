@@ -1,5 +1,5 @@
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
-import { Context, type Fiber } from '@deepseek-ai/cordis'
+import { Context, type Fiber } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import SessionStore, { Session, SessionId } from '@phoenix-ai/dsh-session'
 import SessionTitleService, {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { createMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { TokenUsage } from '@phoenix-ai/dsh-llm'
 import SessionStore from '@phoenix-ai/dsh-session'

@@ -27,11 +27,13 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-fs` | `edit`, `read`, `read_image`, `write` | `ctx.tools`, `ctx.fs`, `ctx.systemPrompt`, `ctx.attachments (image-tool registration)`, `ctx.llm + an image-capable route (image-tool execution)` | `tool/call`, `fs/write-intent or fs/edit-intent for mutations`, `fs/observed after read presence/absence or successful file operation`, `durable attachment (read_image)`, `tool/result` | - | The read-before-write/edit policy is added by `@phoenix-ai/dsh-fs-observation-policy` (an `fs/*` event-gate plugin, no schema change); a deployment that loads these tools is expected to also load it. The image tool is not registered without `ctx.attachments`; its schema is route-independent, and execution refuses unless the exact routed model declares image input. |
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`, `grep` | `ctx.tools`, `ctx.subprocess`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments. |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`, `terminal_list`, `terminal_open`, `terminal_read`, `terminal_send`, `terminal_signal` | `ctx.tools`, `ctx.terminals`, `ctx.systemPrompt`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The six terminal tools are opt-in and complement one-shot shell/filesystem tools. `terminal_send(run_in_background: true)` registers with `ctx.jobs`; TUI, named key sequences, BEL, resize, auto-start, and cross-agent sharing are absent from the schema. |
-| `@phoenix-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `specialist_lab`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
+| `@phoenix-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `organization_forge`, `specialist_lab`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
+| `@phoenix-ai/dsh-tool-home-gateway` | `home_control`, `home_list_devices` | `ctx.tools`, `ctx.home`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `Home Assistant request at execution time` | - | The schema harvest uses a private fake endpoint and never performs a request. Live deployments remain disabled until the operator supplies a private endpoint, token variable, and both allowlists. |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@phoenix-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
+| `@phoenix-ai/dsh-tool-session-learning` | `memory_remember`, `memory_search` | `ctx.tools`, `ctx.systemPrompt`, `ctx.learningMemory` | `tool/call`, `tool/result`, `bounded learning context` | - | memory_search and memory_remember expose only bounded, provenance-preserving learning records; they never grant permissions or modify trusted instructions. |
 | `@phoenix-ai/dsh-tool-session-query` | `session_event_read`, `session_event_search`, `session_event_trace`, `session_search`, `session_trace` | `ctx.tools`, `ctx.systemPrompt`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `tool/result` | - | The five read-only tools hide provider cursors and authorize every result from the immutable calling agent session. The package is opt-in; compositions that need enforced deadlines or bounded inline output also mount the generic timeout or spill policies. |
 | `@phoenix-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`, `ctx.subagents`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `child session events through the chosen provider` | `subagent`, `subagent_fork` | The registered tool name is the load-time `toolName` config (default `subagent`); the schema above is that default. The shipped compositions load this package once per subagent backend, so the model additionally sees `subagent_fork` bound to the fork backend. Each instance's description, `run_in_background` parameter, and system-prompt policy follow its own `backgroundMode` and `enableRunInBackground`, so the two shipped schemas are not identical: `subagent` is `continuable` and defaults omitted calls to background with automatic settlement delivery, while `subagent_fork` stays `one-shot` and defaults them to foreground — see `packages/bundle/base/cordis.patch.yml` and `examples/acp-agent/cordis.yml`. |
 | `@phoenix-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
@@ -154,7 +156,7 @@ Owned by the tool registry as a reserved transport outside filterable capability
 
 ### `exit_plan_mode`
 
-Use only in plan mode. Present your plan for the user's review and, on approval, leave plan mode. Send the COMPLETE plan as markdown, starting with a # heading that names it. The user may approve (carry out the plan from your next step) or keep planning — their feedback comes back in the tool result; revise and present again.
+Use in plan mode to present your plan for the user's review and, on approval, leave plan mode. If plan mode is already inactive, this call is ignored and execution should continue. Send the COMPLETE plan as markdown, starting with a # heading that names it. The user may approve (carry out the plan from your next step) or keep planning — their feedback comes back in the tool result; revise and present again.
 
 ```json
 {
@@ -1009,6 +1011,174 @@ Read the current same-session goal, including its exact id/revision, objective, 
 
 Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
 
+### `organization_forge`
+
+Build one organization, business, or system as a durable Organization Forge. Research comparable solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, and R&D roles active, prefer deterministic automation, and require functional, tested, secure, observable, maintainable, documented evidence plus an independent judge before delivery. Forge is a modular capability over the mission system, not a replacement for it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "start, get, source, audit, advance, criterion, judge, or management",
+      "enum": [
+        "start",
+        "get",
+        "source",
+        "audit",
+        "advance",
+        "criterion",
+        "judge",
+        "management"
+      ]
+    },
+    "forge_id": {
+      "type": "string",
+      "description": "Existing Forge build id for non-start actions."
+    },
+    "objective": {
+      "type": "string",
+      "description": "Business, organization, or system objective for start."
+    },
+    "criteria": {
+      "type": "array",
+      "description": "Required delivery criteria for start.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "title": {
+      "type": "string",
+      "description": "Public source title."
+    },
+    "locator": {
+      "type": "string",
+      "description": "Public https, atlas, or local source reference without credentials."
+    },
+    "license": {
+      "type": "string",
+      "description": "Detected license identifier or policy result."
+    },
+    "stage": {
+      "type": "string",
+      "description": "Audit stage.",
+      "enum": [
+        "pre-reuse",
+        "post-modification"
+      ]
+    },
+    "source_id": {
+      "type": "string",
+      "description": "Source id being audited."
+    },
+    "dependencies": {
+      "type": "string",
+      "description": "Dependency audit result.",
+      "enum": [
+        "pending",
+        "passed",
+        "needs_changes",
+        "blocked"
+      ]
+    },
+    "secrets": {
+      "type": "string",
+      "description": "Secret scan result.",
+      "enum": [
+        "pending",
+        "passed",
+        "needs_changes",
+        "blocked"
+      ]
+    },
+    "vulnerabilities": {
+      "type": "string",
+      "description": "Vulnerability audit result.",
+      "enum": [
+        "pending",
+        "passed",
+        "needs_changes",
+        "blocked"
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "description": "Bounded audit or judge findings.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "phase": {
+      "type": "string",
+      "description": "Next Forge lifecycle phase.",
+      "enum": [
+        "researching",
+        "auditing",
+        "designing",
+        "building",
+        "verifying"
+      ]
+    },
+    "criterion_id": {
+      "type": "string",
+      "description": "Criterion id returned by start or get."
+    },
+    "criterion_status": {
+      "type": "string",
+      "description": "Evidence state.",
+      "enum": [
+        "pending",
+        "implemented",
+        "tested",
+        "verified"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Evidence references; required for verified.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "description": "Optional manual verdict when judging is disabled.",
+      "enum": [
+        "pass",
+        "needs_changes",
+        "blocked"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Judge summary."
+    },
+    "required_changes": {
+      "type": "array",
+      "description": "Required changes before approval.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "management_mode": {
+      "type": "string",
+      "description": "Post-build management choice.",
+      "enum": [
+        "handoff",
+        "assisted",
+        "autonomous"
+      ]
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
+
 ### `specialist_lab`
 
 Maintain one persistent, evidence-based specialist laboratory. Start it only for an explicit expertise request, then register traceable sources, falsifiable hypotheses, reproducible experiments, and judge results. A specialist is ready only after a passing evaluation; failed evaluations create an improving checkpoint and are bounded by max_iterations. When the base profile requires judging, evaluate invokes a fresh read-only independent judge automatically.
@@ -1150,6 +1320,57 @@ Update the exact current goal revision. edit, pause, and resume require a direct
 Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
 
 create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds.
+
+<a id="phoenix-aidsh-tool-home-gateway"></a>
+
+## `@phoenix-ai/dsh-tool-home-gateway`
+
+### `home_control`
+
+Call one explicitly allowlisted Home Assistant service for one explicitly allowlisted entity. The service must be written without its domain (for example turn_on for light.office); the gateway derives and validates the domain. Never use this tool for arbitrary network devices.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "entity_id": {
+      "type": "string",
+      "description": "Exact allowlisted entity id, such as light.office."
+    },
+    "service": {
+      "type": "string",
+      "description": "Allowlisted service name without domain, such as turn_on."
+    },
+    "data": {
+      "type": "object",
+      "description": "JSON service data, usually {}.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "entity_id",
+    "service",
+    "data"
+  ]
+}
+```
+
+Source: [`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts)
+
+### `home_list_devices`
+
+List current states and safe attributes for explicitly allowlisted Home Assistant entities. This does not scan the network or expose non-allowlisted devices.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts)
+
+The schema harvest uses a private fake endpoint and never performs a request. Live deployments remain disabled until the operator supplies a private endpoint, token variable, and both allowlists.
 
 <a id="phoenix-aidsh-schedule"></a>
 
@@ -1351,6 +1572,69 @@ Load the full instructions for an available skill. Call this with the exact skil
 ```
 
 Source: [`packages/skill/tool-skill/src/index.ts`](../packages/skill/tool-skill/src/index.ts)
+
+<a id="phoenix-aidsh-tool-session-learning"></a>
+
+## `@phoenix-ai/dsh-tool-session-learning`
+
+### `memory_remember`
+
+Persist one bounded Phoenix preference or verified lesson with provenance from the current session.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "description": "Memory category; use preference for user choices and lesson or skill for verified learning.",
+      "enum": [
+        "lesson",
+        "skill",
+        "preference"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Short secret-free statement to retain."
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Optional confidence from 0 to 1; defaults to 0.8."
+    }
+  },
+  "required": [
+    "kind",
+    "summary"
+  ]
+}
+```
+
+Source: [`packages/session-learning/tool-session-learning/src/index.ts`](../packages/session-learning/tool-session-learning/src/index.ts)
+
+### `memory_search`
+
+Search Phoenix persistent learning memory and return bounded records with source session, event, and confidence.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Words to find in memory summaries or provenance. Omit to list recent memories."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Optional result count, capped by the configured maximum."
+    }
+  }
+}
+```
+
+Source: [`packages/session-learning/tool-session-learning/src/index.ts`](../packages/session-learning/tool-session-learning/src/index.ts)
+
+memory_search and memory_remember expose only bounded, provenance-preserving learning records; they never grant permissions or modify trusted instructions.
 
 <a id="phoenix-aidsh-tool-session-query"></a>
 

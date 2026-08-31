@@ -1,4 +1,4 @@
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import InvariantRegistry from '@phoenix-ai/dsh-invariants'
 import * as PluginsInvariant from '../src/invariant.ts'

@@ -5,7 +5,7 @@
  * @module @phoenix-ai/dsh-client-runtime/client/sessions/remotes
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-api-remotes/client'
 
 /** The generated Remote namespaces a Session and its manager call. */

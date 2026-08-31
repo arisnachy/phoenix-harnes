@@ -1,6 +1,6 @@
 /** Local user profile service with explicit model-context consent. */
 
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { Service, type Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { settingsNamespace, type SettingsScope } from '@phoenix-ai/dsh-settings'
 import {
@@ -17,7 +17,7 @@ export type * from './types.ts'
 /** Branded Settings namespace used by the Host and Client settings scope. */
 export const USER_PROFILE_NAMESPACE = settingsNamespace(USER_PROFILE_SETTINGS_NAMESPACE)
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     userProfile: UserProfileService
   }

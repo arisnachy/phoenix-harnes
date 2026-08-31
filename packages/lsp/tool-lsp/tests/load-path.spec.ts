@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import * as toolLsp from '@phoenix-ai/dsh-tool-lsp'
 
 describe('dsh-tool-lsp Loader export-shape guard', () => {

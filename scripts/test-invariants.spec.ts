@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context, FiberState, Service, ValidationError } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
-import z from '@deepseek-ai/schemastery'
+import { Context, FiberState, Service, ValidationError } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
+import z from '@phoenix-ai/schemastery'
 import InvariantRegistry from '@phoenix-ai/dsh-invariants'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import { packageInvariantOwners } from './package-invariants.ts'
@@ -13,7 +13,7 @@ import {
   usesManualInvariantTree,
 } from './test-invariants.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     testInvariantProbe: TestInvariantProbe
   }

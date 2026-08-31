@@ -5,7 +5,7 @@
  * @module @phoenix-ai/dsh-tool-fs/src/write
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { DiffCallView, DiffResultView, ToolResult } from '@phoenix-ai/dsh-tools'
 import type { FsWriteOutcome } from '@phoenix-ai/dsh-fs'

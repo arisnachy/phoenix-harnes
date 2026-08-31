@@ -23,7 +23,7 @@
   "files": ["lib/index.js", "lib/invariant.js", "lib/bin.js", "lib/server-*.js", "lib/types/**/*.d.ts"],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^"
   },
   "dependencies": {
@@ -31,7 +31,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^"
   }
 }

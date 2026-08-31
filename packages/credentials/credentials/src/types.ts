@@ -58,7 +58,7 @@ export interface GrantRecord {
 /** One durable credential record, tagged by what the seam may do with it. */
 export type CredentialRecord = ApiKeyRecord | GrantRecord
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Events {
     /**
      * Committed change to a provider-managed credential source: a `set`, an

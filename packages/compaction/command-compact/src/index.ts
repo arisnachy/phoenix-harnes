@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-command-compact
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { ManualCompactionError } from '@phoenix-ai/dsh-compaction'
 import type { CommandInvocation, CommandResult } from '@phoenix-ai/dsh-commands'
 

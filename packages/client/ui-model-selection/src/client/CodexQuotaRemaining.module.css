@@ -1,109 +1,130 @@
 .root {
   flex: 0 1 auto;
   display: flex;
-  align-items: stretch;
-  gap: 6px;
+  align-items: center;
+  gap: 3px;
   width: fit-content;
-  max-width: min(280px, 100%);
+  max-width: min(184px, 100%);
   min-width: 0;
-  height: 40px;
+  height: 38px;
   margin-left: auto;
   overflow: hidden;
-  padding: 4px 6px;
+  padding: 3px 5px;
   box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, #91a6bd 24%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--dsw-specific-sidebar-nav-item-active) 82%, #d9e3ef);
-  box-shadow: 0 1px 2px color-mix(in srgb, #6f8298 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 10%, transparent);
+  border-radius: 15px;
+  background:
+    linear-gradient(145deg,
+      color-mix(in srgb, var(--dsw-specific-sidebar-nav-item-active) 92%, white),
+      color-mix(in srgb, var(--dsw-specific-sidebar-nav-item-active) 84%, #b8c9db));
+  box-shadow:
+    0 1px 1px color-mix(in srgb, black 5%, transparent),
+    0 5px 14px color-mix(in srgb, #61778e 9%, transparent),
+    inset 0 1px color-mix(in srgb, white 38%, transparent);
   color: var(--dsw-alias-label-primary);
 }
 
 .window {
-  --quota-accent: #bf765d;
+  --quota-accent: #b96f55;
   flex: 0 1 auto;
-  display: flex;
+  display: grid;
+  grid-template-columns: 28px minmax(32px, auto);
+  align-items: center;
+  gap: 4px;
   min-width: 0;
+}
+
+.primary {
+  --quota-accent: #c5765a;
+}
+
+.secondary {
+  --quota-accent: #6f8eae;
+}
+
+.window + .window {
+  padding-left: 5px;
+  border-left: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+}
+
+.meter {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  background: conic-gradient(
+    from -90deg,
+    var(--quota-accent) var(--quota-progress),
+    color-mix(in srgb, var(--quota-accent) 13%, transparent) 0
+  );
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--quota-accent) 16%, transparent);
+}
+
+.meter::after {
+  position: absolute;
+  inset: 2.5px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-nav-item-active) 94%, white);
+  content: '';
+}
+
+.value {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 8px;
+  line-height: 10px;
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: -0.035em;
+}
+
+.copy {
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 1px;
 }
 
-.primary {
-  --quota-accent: #c77a5f;
-}
-
-.secondary {
-  --quota-accent: #6f8ba9;
-}
-
-.window + .window {
-  padding-left: 6px;
-  border-left: 1px solid color-mix(in srgb, #91a6bd 28%, transparent);
-}
-
-.summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-}
-
 .label {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 10px;
-  line-height: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.value {
-  min-width: 22px;
-  text-align: right;
+  color: var(--dsw-alias-label-primary);
   font-size: 11px;
-  line-height: 12px;
-  font-weight: 600;
+  line-height: 13px;
+  font-weight: 680;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
   letter-spacing: -0.01em;
 }
 
-.track {
-  display: block;
-  width: 16px;
-  height: 3px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--quota-accent) 17%, transparent);
-}
-
-.fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--quota-accent);
-  opacity: 0.78;
-  transition: width 180ms ease-out;
-}
-
 .reset {
-  color: color-mix(in srgb, var(--quota-accent) 58%, var(--dsw-alias-label-secondary));
+  overflow: hidden;
+  color: color-mix(in srgb, var(--quota-accent) 62%, var(--dsw-alias-label-secondary));
   font-size: 8px;
   line-height: 10px;
+  font-weight: 560;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 0.9;
 }
 
 @media (max-width: 760px) {
   .root {
-    gap: 5px;
-    padding-inline: 6px;
+    gap: 4px;
+    padding-inline: 5px;
   }
 
   .window + .window {
-    padding-left: 5px;
+    padding-left: 4px;
   }
+}
 
-  .track {
-    width: 16px;
+@media (prefers-reduced-motion: no-preference) {
+  .meter {
+    transition: background 220ms ease-out;
   }
 }

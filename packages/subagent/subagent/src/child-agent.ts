@@ -8,7 +8,7 @@
  * @module @phoenix-ai/dsh-subagent/child-agent
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, AgentOptions, CreateAgentOptions } from '@phoenix-ai/dsh-agent'
 import type { SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import type { Session, SessionId } from '@phoenix-ai/dsh-session'

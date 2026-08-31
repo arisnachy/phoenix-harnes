@@ -27,7 +27,7 @@ export type {
 export type { DetectTrigger, ExactMatch, MenuEvent, MenuReduce, MenuState, TriggerHit } from '../core/contract.ts'
 export type { InputTriggerServiceContract } from './contract.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     /** The outward face only; the concrete service stays inside this plugin. */
     inputTriggers: import('./contract.ts').InputTriggerServiceContract

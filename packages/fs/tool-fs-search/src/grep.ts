@@ -11,7 +11,7 @@
  * @module @phoenix-ai/dsh-tool-fs-search/grep
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { GenericCallView, SearchResultView, ToolResult } from '@phoenix-ai/dsh-tools'
 import type { RetainedItems } from '@phoenix-ai/dsh-output-retention'

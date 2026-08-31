@@ -32,7 +32,7 @@ import type { EpochHeader, RequestContext, Session, SessionId, TurnEndReason, Us
 import { canonicalHeader, headerEquals } from '@phoenix-ai/dsh-session'
 import { joinContextSections, renderContextSections, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@phoenix-ai/dsh-system-prompt'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
 import { DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'

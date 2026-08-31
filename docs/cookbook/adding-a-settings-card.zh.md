@@ -11,9 +11,9 @@
 命名空间就是配对用的键，所以只挑一次，并在两个半侧都写出它。已经有 `cordis.yml` entry 的消费方应通过 `installSettingsSection` 注册——它把 entry 层叠在用户文档之下，并在没有挂载 settings provider 时照常工作：
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
-import z from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
 
 declare function assertReachable(endpoint: string | undefined): void
 declare function rebuildFromSettings(config: Config): void

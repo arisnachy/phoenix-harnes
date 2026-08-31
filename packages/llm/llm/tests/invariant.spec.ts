@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime, { CallId, LlmAdapter } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@phoenix-ai/dsh-llm'
 import * as LlmInvariant from '@phoenix-ai/dsh-llm/invariant'

@@ -3,7 +3,7 @@
 //
 // The 'conversation.input.dock' SlotMap declaration lives in
 // ../contract/slots.ts beside the other input-region slots.
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { useEffect, useId, useMemo, useState } from 'react'
 import type { PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { SessionId } from '@phoenix-ai/dsh-client-runtime/client'

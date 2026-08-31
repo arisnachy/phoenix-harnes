@@ -7,7 +7,7 @@
  * @module @phoenix-ai/dsh-settings/redact
  */
 
-import type z from '@deepseek-ai/schemastery'
+import type z from '@phoenix-ai/schemastery'
 
 /**
  * Minimal structural view of a live schemastery node. Only the relations the

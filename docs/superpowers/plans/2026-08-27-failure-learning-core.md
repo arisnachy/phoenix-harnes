@@ -55,7 +55,7 @@ No se editarán fichas shipped del roster. La integración con `model-router` co
 
 - [ ] **Step 1: Escribir la prueba de estados.**
 
-```ts
+```ts ignore-check
 import { describe, expect, it } from 'vitest'
 import { isVerifiedLearning } from '../src/index.ts'
 
@@ -78,7 +78,7 @@ Expected: FAIL porque el paquete no existe.
 
 Definir `FailureScope`, `FailureConfidence`, `FailureRisk`, `FailureEvidence`, `FailureRecord`, `LearningEntry`, `RouteCandidate`, `RouteDecision`, `RecoveryAction` y `RecoveryResult`, todos con campos persistentes `readonly`. Exportar:
 
-```ts
+```ts ignore-check
 export function isVerifiedLearning(value: Pick<LearningEntry, 'confidence'>): boolean {
   return value.confidence === 'verified'
 }
@@ -109,7 +109,7 @@ git commit -m "feat: add failure learning contracts"
 
 - [ ] **Step 1: Escribir pruebas de secreto y estabilidad.**
 
-```ts
+```ts ignore-check
 import { describe, expect, it } from 'vitest'
 import { redactFailureText } from '../src/redaction.ts'
 import { failureFingerprint } from '../src/fingerprint.ts'
@@ -162,7 +162,7 @@ git commit -m "feat: normalize and fingerprint failures safely"
 
 - [ ] **Step 1: Escribir pruebas de persistencia y confianza.**
 
-```ts
+```ts ignore-check
 import { describe, expect, it } from 'vitest'
 import { FailureMemory } from '../src/memory.ts'
 
@@ -215,7 +215,7 @@ git commit -m "feat: persist structured failure memory"
 
 - [ ] **Step 1: Escribir pruebas de límites y fallback.**
 
-```ts
+```ts ignore-check
 import { describe, expect, it } from 'vitest'
 import { chooseRecovery } from '../src/recovery.ts'
 import { decideRoute } from '../src/route-policy.ts'
@@ -268,7 +268,7 @@ git commit -m "feat: govern recovery and route selection"
 
 - [ ] **Step 1: Escribir la prueba de conversión segura.**
 
-```ts
+```ts ignore-check
 import { describe, expect, it } from 'vitest'
 import { failureFromLlm } from '../src/failure-learning.ts'
 
@@ -312,7 +312,7 @@ git commit -m "feat: adapt LLM failures to learning core"
 
 - [ ] **Step 1: Escribir prueba de ciclo gobernado.**
 
-```ts
+```ts ignore-check
 it('records a failed mission as hypothesis and never freezes it', async () => {
   const result = await runFixtureMissionThatFails()
   expect(result.kind).toBe('blocked')
@@ -381,7 +381,7 @@ git commit -m "docs: document failure learning lifecycle"
 
 - [ ] **Step 1: Escribir la prueba end-to-end local.**
 
-```ts
+```ts ignore-check
 it('learns AUTH failure and avoids the same route on the next decision', async () => {
   const first = await executeWithFailure('deepseek-official', 'flash')
   expect(first.failure.confidence).toBe('hypothesis')

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import { Context } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import AgentRegistry, { Inbox } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentStatus } from '@phoenix-ai/dsh-agent'
 import CommandRuntime from '@phoenix-ai/dsh-commands'
@@ -85,6 +85,20 @@ function ref(goal: NonNullable<ReturnType<GoalService['get']>>): GoalRef {
   return { id: goal.id, revision: goal.revision }
 }
 
+/** Append the durable proof required before the goal domain accepts completion. */
+function appendPassingJudge(session: Session, goal: NonNullable<ReturnType<GoalService['get']>>): void {
+  session.append('goal/judge', {
+    callId: 'command-test-judge' as never,
+    goalId: goal.id,
+    revision: goal.revision,
+    round: 0,
+    verdict: 'pass',
+    summary: 'The complete objective is verified.',
+    findings: [],
+    requiredChanges: [],
+  })
+}
+
 describe('@phoenix-ai/dsh-command-goal registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     const test = await harness()
@@ -159,6 +173,7 @@ describe('/goal human command', () => {
     expect(test.ctx.goals.get(test.agent)).toMatchObject({ id: first.id, objective: 'second', revision: 2 })
 
     const current = test.ctx.goals.get(test.agent)!
+    appendPassingJudge(test.session, current)
     test.ctx.goals.complete(test.agent, ref(current))
     const replacement = await run(test, ' edit third')
     expect(replacement.kind).toBe('success')
@@ -221,6 +236,7 @@ describe('/goal human command', () => {
     expect(blocked.text).toContain('Blocker: upstream-unavailable: Provider unavailable')
 
     goal = test.ctx.goals.resume(test.agent, ref(goal))
+    appendPassingJudge(test.session, goal)
     test.ctx.goals.complete(test.agent, ref(goal))
     const complete = await run(test)
     expect(complete.text).toContain('Status: complete')

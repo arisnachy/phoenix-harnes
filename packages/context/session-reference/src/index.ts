@@ -5,8 +5,8 @@
  * @module @phoenix-ai/dsh-session-reference
  */
 
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
 import { Remote, TypertRemoteService } from '@phoenix-ai/dsh-typert-protocol'
 import { createUserMessage, freezeMessage } from '@phoenix-ai/dsh-llm'
@@ -55,7 +55,7 @@ user explicitly repeats them.
 `
 const PROMPT_SUFFIX = '\n</referenced-sessions>'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     sessionReferenceResolver: SessionReferenceResolver
   }

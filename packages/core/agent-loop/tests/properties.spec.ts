@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime from '@phoenix-ai/dsh-llm'
 import { createUserMessage, LlmAdapter } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@phoenix-ai/dsh-llm'

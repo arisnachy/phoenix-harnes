@@ -2,7 +2,7 @@
 # store so a nested read_image result can cross the generic rich-result bridge.
 # The live config selects the shipped vision route for manual use.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

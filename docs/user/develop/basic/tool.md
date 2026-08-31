@@ -9,7 +9,7 @@ This tutorial adds a `greet` tool to the Web UI. Complete [Your first plugin](./
 Replace `scratch-plugin/src/my-plugin.ts` with:
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 
 export const name = 'greet-tool'

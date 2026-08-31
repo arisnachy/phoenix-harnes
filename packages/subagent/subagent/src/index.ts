@@ -31,7 +31,7 @@
  * @module @phoenix-ai/dsh-subagent
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { scopeTarget } from '@phoenix-ai/dsh-scope'
 import type { Scoped } from '@phoenix-ai/dsh-scope'
 import { assertObjectJsonSchema } from '@phoenix-ai/dsh-tools'
@@ -135,7 +135,7 @@ export type {
   SubagentTimingProjection,
 } from './projection-types.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     subagents: SubagentRuntime
   }

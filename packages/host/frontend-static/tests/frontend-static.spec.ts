@@ -11,9 +11,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
-import Include from '@deepseek-ai/cordis-plugin-include'
+import { Context } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
+import Include from '@phoenix-ai/cordis-plugin-include'
 import HttpServer from '@phoenix-ai/dsh-host-webserver'
 import * as FrontendStatic from '../src/index.ts'
 
@@ -114,6 +114,11 @@ describe('real Loader composition', () => {
 
     // Only the root and index path render index.html through registered taps.
     const untap = server.tapIndex(html => html.replace('<head>', '<head><script>window.__T__=1</script>'))
+    const shellResponse = await fetch(`http://127.0.0.1:${String(port)}/`)
+    expect(shellResponse.headers.get('cache-control')).toBe('no-store, no-cache, must-revalidate, proxy-revalidate')
+    expect(shellResponse.headers.get('pragma')).toBe('no-cache')
+    expect(shellResponse.headers.get('expires')).toBe('0')
+    await shellResponse.arrayBuffer()
     for (const path of ['/', '/index.html', '/?fixture']) {
       const got = await request(port, path)
       expect(got.status).toBe(200)

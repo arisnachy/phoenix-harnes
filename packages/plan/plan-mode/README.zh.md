@@ -14,7 +14,7 @@
 
 ## 模型与人类交互
 
-激活时，`plan:policy` 会渲染已配置的 `section`。插件始终注册 `exit_plan_mode`，使工具 schema 在转换期间保持稳定；其 execute 路径只接受已激活的 plan mode，且只有通过 `ctx.userQuestions` 获得用户明确批准后才退出。
+激活时，`plan:policy` 会渲染已配置的 `section`。插件始终注册 `exit_plan_mode`，使工具 schema 在转换期间保持稳定；只有通过 `ctx.userQuestions` 获得用户明确批准后，激活的 plan mode 才会退出；plan mode 已停用后收到的过期调用会返回非终止性的忽略结果，使执行可以继续。
 
 评审问题声明 `plan-review` 呈现意图，并指名 `Approve` 为表示批准的标签，因此有能力的 UI 会把计划呈现为一次决定而非通用问题；两种情况下该工具读到的回答完全相同。放弃审阅——用户关闭请求，转而发言——会如实报告给模型，要求它留在 plan mode 中等待那条消息；其余每一种评审失败都保留 seam 自身的消息。
 
@@ -81,7 +81,7 @@ You are in plan mode. Explore and design before presenting the complete plan thr
 
 #### 模型所见内容
 
-[`exit_plan_mode` schema](../../../docs/tool-catalog.zh.md#phoenix-aidsh-plan-mode) 在两种状态下均可用；在 plan mode 外执行会失败，而 plan mode 内经批准的评审会返回规范的 `{ approved: true }` 值，并渲染既有的确认文本。拒绝仍是携带评审反馈的失败调用，放弃审阅则是一次指明用户接手的失败调用。
+[`exit_plan_mode` schema](../../../docs/tool-catalog.zh.md#phoenix-aidsh-plan-mode) 在两种状态下均可用；plan mode 停用后收到的调用会返回 `{ approved: false, outcome: 'ignored' }`，并告知模型继续执行；plan mode 内经批准的评审会返回规范的 `{ approved: true }` 值，并渲染既有的确认文本。拒绝仍是携带评审反馈的失败调用，放弃审阅则是一次指明用户接手的失败调用。
 
 #### Token 影响
 

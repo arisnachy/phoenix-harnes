@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context, type Fiber } from '@deepseek-ai/cordis'
+import { Context, type Fiber } from '@phoenix-ai/cordis'
 import AgentRegistry, { type Agent } from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import LlmRuntime, { createUserMessage, CallId, LlmAdapter  } from '@phoenix-ai/dsh-llm'

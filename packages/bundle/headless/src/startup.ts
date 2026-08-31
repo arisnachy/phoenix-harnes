@@ -6,7 +6,7 @@
  */
 
 import { Command } from 'commander'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { parseCmdline } from '@phoenix-ai/dsh-cmdline'
 
 /** Stable Cordis plugin name. */

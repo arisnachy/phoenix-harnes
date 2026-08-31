@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/bundle/web-app"
   },
   "type": "module",
@@ -89,6 +89,7 @@
     "@phoenix-ai/dsh-client-ui-workspace": "workspace:^",
     "@phoenix-ai/dsh-cmdline": "workspace:^",
     "@phoenix-ai/dsh-code-runtime-worker-thread": "workspace:^",
+    "@phoenix-ai/dsh-code-runtime-python": "workspace:^",
     "@phoenix-ai/dsh-cordis-client-runner": "workspace:^",
     "@phoenix-ai/dsh-cordis-host-runner": "workspace:^",
     "@phoenix-ai/dsh-web-frontend": "workspace:^",
@@ -113,22 +114,22 @@
     "@phoenix-ai/dsh-storage-json": "workspace:^",
     "@phoenix-ai/dsh-subprocess": "workspace:^",
     "@phoenix-ai/dsh-workspace": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^",
     "commander": "^15.0.0",
     "open": "^11.0.0"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-shell-env": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-shell-env": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

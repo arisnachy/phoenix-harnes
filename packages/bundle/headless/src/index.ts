@@ -8,8 +8,8 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { defaultExecutionHandoff, installModelSelection } from '@phoenix-ai/dsh-agent'
 import type { ModelSelectionRef } from '@phoenix-ai/dsh-agent'
 import type {} from '@phoenix-ai/dsh-agent-default-model'
@@ -18,7 +18,7 @@ import { SessionId } from '@phoenix-ai/dsh-session'
 import type { SessionEvent } from '@phoenix-ai/dsh-session'
 // Empty type imports carry the loader Context merge for the settlement await
 // and the cmdline Context merge for the appExit host value.
-import type {} from '@deepseek-ai/cordis-plugin-loader'
+import type {} from '@phoenix-ai/cordis-plugin-loader'
 import type {} from '@phoenix-ai/dsh-cmdline'
 
 /** Stable Cordis plugin name. */

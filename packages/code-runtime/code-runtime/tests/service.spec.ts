@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'
 import type { CodeRunRequest, CodeRunResult } from '@phoenix-ai/dsh-code-runtime'
 

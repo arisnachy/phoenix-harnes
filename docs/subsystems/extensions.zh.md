@@ -257,6 +257,31 @@ Types: [Agent](core.zh.md)
 
 Source: [`packages/extensions/cordis-host-runner/src/index.ts`](../../packages/extensions/cordis-host-runner/src/index.ts)
 
+<a id="ctxhome--homeassistantgatewayservice"></a>
+
+### `ctx.home` — `HomeAssistantGatewayService`
+
+Cordis service owner for the Home Assistant gateway.
+
+```ts cordis-catalog
+/**
+ * List allowlisted device states and honor cancellation from the requesting tool.
+ * @param signal - cancellation signal from the requesting tool.
+ * @returns allowlisted device states.
+ */
+listDevices(signal?: AbortSignal): Promise<readonly HomeDevice[]>
+
+/**
+ * Invoke one allowlisted service and honor cancellation from the requesting tool.
+ * @param request - allowlisted entity/service request.
+ * @param signal - cancellation signal from the requesting tool.
+ * @returns the service outcome.
+ */
+control(request: HomeControlRequest, signal?: AbortSignal): Promise<HomeControlResult>
+```
+
+Source: [`packages/home/home-gateway/src/index.ts`](../../packages/home/home-gateway/src/index.ts)
+
 <a id="ctxmcpconnectors--mcpconnectorregistry"></a>
 
 ### `ctx.mcpConnectors` — `McpConnectorRegistry`

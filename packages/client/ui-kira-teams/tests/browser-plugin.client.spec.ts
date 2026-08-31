@@ -1,5 +1,5 @@
 /** ui-kira-teams browser half: overlay registration, injected actions, lineage read model. */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
 import { describe, expect, it } from 'vitest'
 import {

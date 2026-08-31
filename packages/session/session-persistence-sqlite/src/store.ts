@@ -245,6 +245,24 @@ export class SqliteStore implements PersistenceBackend<number> {
     return rows.map(rowToMeta)
   }
 
+  /** Delete one session row and its cascaded event rows in one transaction. */
+  async removeStored(id: SessionId): Promise<boolean> {
+    await this.observe(undefined)
+    this.db.exec(sql('begin-immediate'))
+    try {
+      validateSchemaForMutation(this.databaseConstructor, this.db, this.databasePath)
+      if (this.rowFor(id) === undefined) {
+        this.db.exec(sql('commit'))
+        return false
+      }
+      const result = this.db.prepare(sql('delete-session')).run(id)
+      this.db.exec(sql('commit'))
+      return Number(result.changes) === 1
+    } catch (error: unknown) {
+      this.rollback(error, 'remove')
+    }
+  }
+
   /**
    * Return every materialized header with its source-qualified revision.
    * @param signal - optional cancellation before or after the metadata query.

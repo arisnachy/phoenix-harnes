@@ -14,7 +14,7 @@
  * @module @phoenix-ai/dsh-host-apiproxy/src/vision-fallback
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'

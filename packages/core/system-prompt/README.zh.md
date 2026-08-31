@@ -18,7 +18,7 @@
 ### 公开 API
 
 - `ctx.systemPrompt.section(section: PromptSection): () => void`：贡献一个段。层由调用上下文的作用域决定：`agent.ctx` 只为该 agent 贡献，并在该处遮蔽同名全局段。一个 `complete: true` 段会在组装 waterfall 之后成为精确的完整提示词；有效 complete 段超过一个时，组装会被拒绝。同一层中的重复名称和非有限顺序会抛出。随调用 fiber 一并 dispose（资源释放）。
-- `ctx.systemPrompt.context(context: PromptContext): () => void`：为调用作用域贡献有序动态上下文。每次符合条件的组装都会求值提供方，并在随附循环下成为模型历史中带来源的 runtime-context 快照。
+- `ctx.systemPrompt.context(context: PromptContext): () => void`：为调用作用域贡献有序动态上下文。每次符合条件的组装都会求值提供方，并在随附循环下成为模型历史中带来源的 runtime-context 快照。对于必须保留字面量 `{{...}}` 内容的不受信任或生成文本，设置 `interpolateVariables: false`。
 - `ctx.systemPrompt.suppressRuntimeContext(): () => void`：抑制调用作用域的所有动态上下文贡献。多个注册会独立组合；只有当不再存在抑制器时，dispose 返回的 effect 才会恢复上下文。
 - `ctx.systemPrompt.tools(provider: (context: AssembleContext) => ToolProviderResult): () => void`：贡献工具 schema；每次组装时使用该次组装的上下文求值。`ToolProviderResult` = `{ schemas, knownNames? }`：`schemas` 是限制后的可见集合；`knownNames` 是限制前由 `toolOrder` 使用的全集。提供方不得返回名为 `TOOL_ORDER_REST` 的 schema。带作用域提供方只在其作用域的组装中查询。随调用 fiber 一并 dispose。
 - `ctx.systemPrompt.variable(name: string, provider: (context) => string | undefined): () => void`：贡献提示词变量，在段文本中以 `{{name}}` 引用。带作用域变量会为该 agent 遮蔽同名全局变量。同层重复或无法引用的名称会抛出；`undefined` 表示「本次组装没有值」。随调用 fiber 一并 dispose。

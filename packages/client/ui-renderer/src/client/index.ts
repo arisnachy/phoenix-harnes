@@ -6,7 +6,7 @@
 import { createElement, useLayoutEffect, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot, hydrateRoot, type Root } from 'react-dom/client'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { SnapshotSelectorHook } from '@phoenix-ai/dsh-client-ui-slots'
 import { createSlotRenderer } from './scoped-slots.tsx'
 import { buildRenderApp } from './app.tsx'
@@ -30,7 +30,7 @@ export interface UiRendererService {
   mount: (container: HTMLElement) => () => void
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     /** Mount face provided after the UI renderer activates. */
     uiRenderer: UiRendererService

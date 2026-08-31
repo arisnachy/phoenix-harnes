@@ -1,6 +1,6 @@
 /** Web Session-log download command over the host endpoint owned by ApiProxy. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { CommandResult } from '@phoenix-ai/dsh-commands'
 
 export const name = 'session-log-download'

@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/extensions/ui-cordis"
   },
   "type": "module",
@@ -59,7 +59,7 @@
     "@phoenix-ai/dsh-client-ui-input-trigger": "workspace:^",
     "@phoenix-ai/dsh-client-ui-tool": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-api-remotes": "workspace:^",
@@ -74,7 +74,7 @@
     "@phoenix-ai/dsh-client-ui-tool": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@types/react": "~18.3.1",
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "react": "^18.2.0"
   },
   "files": [

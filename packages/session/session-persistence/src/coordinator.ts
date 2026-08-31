@@ -5,7 +5,7 @@
  * @module @phoenix-ai/dsh-session-persistence/coordinator
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import {
   adoptSessionEvent,
   interruptedTurnClosers,
@@ -197,6 +197,14 @@ export interface PersistenceBackend<TornMarker = unknown> {
    * @param signal - optional cancellation for backend listing work.
    */
   list(signal?: AbortSignal): Promise<SessionHeader[]>
+
+  /**
+   * Physically remove one persisted session and invalidate prepared state.
+   * Implementations must return false when the id has no durable record.
+   * @param id - session identity to remove.
+   * @returns whether a durable record was removed.
+   */
+  removeStored?(id: SessionId): Promise<boolean>
 
   /**
    * Optional side-effect-free artifact locator, used to point refusal
@@ -677,6 +685,30 @@ export class PersistenceCoordinator<TornMarker = unknown> {
       throw new TypeError('session event batch is not losslessly JSON-serializable because it contains non-JSON-serializable data')
     }
     return this.serialize(id, () => this.appendCore(id, batch))
+  }
+
+  /**
+   * Remove one cold session after all per-id writes and retirements settle.
+   * @param id - Session identity to remove.
+   * @returns Whether a durable record was removed.
+   */
+  async remove(id: SessionId): Promise<boolean> {
+    await this.waitForRetirement(id)
+    return this.serialize(id, async () => {
+      if (this.live.size > 0 && [...this.live.keys()].some(session => session.id === id)) {
+        throw new Error(`cannot remove session "${id}" while it is live`)
+      }
+      const removeStored = this.backend.removeStored
+      if (removeStored === undefined) {
+        throw new Error(`session persistence backend "${this.backend.name}" does not support physical deletion`)
+      }
+      const removed = await removeStored.call(this.backend, id)
+      if (removed) {
+        this.states.delete(id)
+        this.preparations.invalidate(id)
+      }
+      return removed
+    })
   }
 
   private async appendCore(id: SessionId, events: readonly SessionEvent[]): Promise<void> {

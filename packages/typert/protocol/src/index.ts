@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-typert-protocol
  */
 
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { Service, type Context } from '@phoenix-ai/cordis'
 import type { TypertContextMap } from './types.ts'
 
 const TYPERT_REMOTE_SEGMENT_PATTERN = /^[A-Za-z0-9_$.-]+$/

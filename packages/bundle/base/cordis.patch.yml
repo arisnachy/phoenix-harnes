@@ -14,10 +14,10 @@
 
 - insert:
     - id: timer
-      name: '@deepseek-ai/cordis-plugin-timer'
+      name: '@phoenix-ai/cordis-plugin-timer'
 
     - id: hmr
-      name: '@deepseek-ai/cordis-plugin-hmr'
+      name: '@phoenix-ai/cordis-plugin-hmr'
       config:
         root: ['.']
 
@@ -128,11 +128,22 @@
         providers:
           openrouter:
             apiKeyEnv: OPENROUTER_API_KEY
+          # Optional local ChatGPT Web bridge. It exposes selectable bridge
+          # models immediately; requests remain loopback-only and fail clearly
+          # until the user configures PHOENIX_CHATGPT_WEB_COMMAND and starts it.
+          chatgpt-web: {}
 
     - id: session-persistence-jsonl
       name: '@phoenix-ai/dsh-session-persistence-jsonl'
       config:
         root: !!js dshHomePath('sessions')
+
+    # Learning observations are separate from conversation logs but use the
+    # same owner-only harness home and remain provenance-linked to session ids.
+    - id: session-learning
+      name: '@phoenix-ai/dsh-session-learning'
+      config:
+        path: !!js dshHomePath('memory', 'learning.jsonl')
 
     # Durable image bytes live outside the append-only session log. Messages
     # keep content-addressed references that this shared backend resolves for
@@ -433,6 +444,24 @@
         requireJudge: true
         judgeProvider: spawn
 
+    # Optional, LAN-only Home Assistant integration. It is disabled unless an
+    # operator supplies a private endpoint and both explicit entity/service
+    # allowlists. The token value never enters this file; only its env-var name
+    # is passed to the provider.
+    - id: home-gateway
+      name: '@phoenix-ai/dsh-home-gateway'
+      disabled: !!js process.env.PHOENIX_HOME_ASSISTANT_URL === undefined || process.env.PHOENIX_HOME_ASSISTANT_URL === ''
+      config:
+        baseUrl: !!js process.env.PHOENIX_HOME_ASSISTANT_URL ?? 'http://homeassistant.local:8123'
+        tokenEnv: !!js process.env.PHOENIX_HOME_ASSISTANT_TOKEN_ENV ?? 'HOME_ASSISTANT_TOKEN'
+        allowedEntities: !!js JSON.parse(process.env.PHOENIX_HOME_ASSISTANT_ALLOWED_ENTITIES ?? '[]')
+        allowedServices: !!js JSON.parse(process.env.PHOENIX_HOME_ASSISTANT_ALLOWED_SERVICES ?? '[]')
+        requestTimeoutMs: 10000
+
+    - id: tool-home-gateway
+      name: '@phoenix-ai/dsh-tool-home-gateway'
+      disabled: !!js process.env.PHOENIX_HOME_ASSISTANT_URL === undefined || process.env.PHOENIX_HOME_ASSISTANT_URL === ''
+
     # Fresh-agent Ralph iteration over a build-time-fixed script.
     - id: tool-ralph
       name: '@phoenix-ai/dsh-tool-ralph'
@@ -501,6 +530,13 @@
 
     - id: hardness-adapters
       name: '@phoenix-ai/dsh-hardness-adapters'
+      # HARDNESS projections that become model-facing tools belong to an
+      # agent preset. Keep the host declaration available for overlays without
+      # leaking those tools into every agent, including `minimal`.
+      disabled: true
+      config:
+        judgeProvider: spawn
+        modelTools: false
 
     # The deployment persona is a deployment choice; plan-mode and tool plugins own
     # their own prompt sections.

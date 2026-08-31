@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { AttachmentId, ImageVariantId } from '@phoenix-ai/dsh-attachment'
 import type {
   AttachmentStore,
+  FileAttachmentRef,
   ImageAttachmentRef,
   ImageRequestPolicy,
   RequestImageAttachment,
+  StoredFileAttachment,
 } from '@phoenix-ai/dsh-attachment'
 import { CallId, createMessage, createUserMessage, OFFLOADED_IMAGE_TEXT } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
@@ -44,6 +46,22 @@ function projectionStore(
   )),
 ): AttachmentStore {
   return { readImageRequest } as unknown as AttachmentStore
+}
+
+function fileRef(overrides: Partial<FileAttachmentRef> = {}): FileAttachmentRef {
+  return {
+    attachmentId: AttachmentId(`sha256:${'f'.repeat(64)}`),
+    mediaType: 'text/plain',
+    bytes: 11,
+    name: 'notes.txt',
+    ...overrides,
+  }
+}
+
+function fileStore(
+  readFile: (value: FileAttachmentRef, signal?: AbortSignal) => Promise<StoredFileAttachment>,
+): AttachmentStore {
+  return { readFile } as unknown as AttachmentStore
 }
 
 const attachments = projectionStore()
@@ -172,6 +190,39 @@ describe('pi-ai request context conversion', () => {
         timestamp: 0,
       },
     ])
+  })
+
+  it('projects durable file attachments into the pi-ai user message', async () => {
+    const ref = fileRef()
+    const context = await toPiContext(request([user([
+      { type: 'file', attachment: ref },
+      { type: 'text', text: 'Summarize the attachment.' },
+    ])]), fileStore(async value => ({
+      ref: value,
+      data: new TextEncoder().encode('hello world'),
+    })))
+
+    expect(context.messages).toEqual([{
+      role: 'user',
+      content: expect.stringContaining('Attached file "notes.txt" (text/plain, 11 bytes):\nhello world\nSummarize the attachment.') as string,
+      timestamp: 0,
+    }])
+  })
+
+  it('keeps binary attachments visible without trying to decode their bytes', async () => {
+    const ref = fileRef({ mediaType: 'application/pdf', name: 'report.pdf', bytes: 3 })
+    const context = await toPiContext(request([user([
+      { type: 'file', attachment: ref },
+    ])]), fileStore(async value => ({
+      ref: value,
+      data: Uint8Array.of(0, 255, 1),
+    })))
+
+    expect(context.messages).toEqual([{
+      role: 'user',
+      content: 'Attached binary file "report.pdf" (application/pdf, 3 bytes).\n',
+      timestamp: 0,
+    }])
   })
 
   it('recursively converts nested tool-result text and images', async () => {

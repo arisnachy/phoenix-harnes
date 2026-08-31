@@ -38,6 +38,7 @@ export const zh = {
   updateChannel: '稳定频道',
   updateAutoRetry: '将自动重试',
   updateErrorHint: '将保留上一稳定版本并自动重试',
+  updatePausedHint: '满足更新条件后将重新检查',
 } satisfies Record<string, string>
 
 /** Plugin inventory locale key union. */
@@ -81,6 +82,7 @@ export const en = {
   updateChannel: 'Stable channel',
   updateAutoRetry: 'Will retry automatically',
   updateErrorHint: 'The last known-good version is kept while Phoenix retries',
+  updatePausedHint: 'Phoenix will check again when this checkout is eligible',
 } satisfies Record<PluginInventoryLocaleKey, string>
 
 /** Spanish dictionary checked against the same key set. */
@@ -121,4 +123,5 @@ export const es = {
   updateChannel: 'Canal estable',
   updateAutoRetry: 'Se reintentará automáticamente',
   updateErrorHint: 'Se conservará la última versión estable y se reintentará',
+  updatePausedHint: 'Phoenix volverá a comprobar cuando este checkout sea elegible',
 } satisfies Record<PluginInventoryLocaleKey, string>

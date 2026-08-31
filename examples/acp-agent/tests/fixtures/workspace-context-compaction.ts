@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-agent'
 import { CompactionId, compactCheckpointSource } from '@phoenix-ai/dsh-compaction'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'

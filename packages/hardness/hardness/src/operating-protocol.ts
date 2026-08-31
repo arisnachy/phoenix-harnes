@@ -222,6 +222,9 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
       'Solicita aprobación explícita cuando la capacidad declare permisos.',
       'Verifica el resultado antes de presentarlo.',
       'Registra evidencia antes de afirmar que la operación terminó.',
+      'Bloquea el objetivo original, sus entregables, criterios y requisitos de calidad; un fallo de intento, plan, herramienta o estrategia solo activa WALL_PROTOCOL y recuperación.',
+      'Somete la evidencia a un juez independiente e implacable: debe revisar completitud, estructura, presentación visual, seguridad, reproducibilidad y criterios; solo un pass con quality gate aprobado permite DONE.',
+      'Nunca cierres una misión por progreso, pruebas parciales, un scaffold, un mock, un sustituto parcial o un turno terminado; needs_changes y blocked la mantienen activa o esperando una dependencia externa.',
       'Nunca ejecutes una operación no resuelta, no aprobada o no verificada.',
       '</phoenix_hardness_protocol>',
     ].join('\n')
@@ -233,6 +236,9 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
     'Request explicit approval when the capability declares permissions.',
     'Verify the result before presenting it.',
     'Record evidence before claiming that the operation completed.',
+    'Lock the original objective, deliverables, criteria, and quality requirements; a failed attempt, plan, tool, or strategy only activates WALL_PROTOCOL and recovery.',
+    'Submit evidence to an implacable independent judge: it must inspect completeness, structure, visual presentation, security, reproducibility, and every criterion; only pass with a passing quality gate may enter DONE.',
+    'Never close a mission because work progressed, partial tests passed, a scaffold or mock exists, or a turn ended; needs_changes and blocked keep it active or waiting for an external dependency.',
     'Never execute an unresolved, unapproved, or unverified operation.',
     '</phoenix_hardness_protocol>',
   ].join('\n')

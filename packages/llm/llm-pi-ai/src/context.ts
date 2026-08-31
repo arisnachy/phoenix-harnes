@@ -4,18 +4,24 @@
  * @module dsh-llm-pi-ai/context
  */
 
-import { CallId, contentHasImage, LlmError, offloadRequestImagesWithPolicy, requestImageHandleText } from '@phoenix-ai/dsh-llm'
+import { CallId, contentHasFile, contentHasImage, LlmError, offloadRequestImagesWithPolicy, requestImageHandleText } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
 import type {
   AttachmentId,
   AttachmentStore,
+  FileAttachmentRef,
   ImageAttachmentRef,
   ImageRequestPolicy,
   RequestImageAttachment,
+  StoredFileAttachment,
 } from '@phoenix-ai/dsh-attachment'
 import type { Context as PiContext, ImageContent, Message as PiMessage, TextContent, Tool as PiTool } from '@earendil-works/pi-ai'
 import { toPiAssistant } from './replay.ts'
-import { DEFAULT_REQUEST_IMAGE_MAX_BYTES, DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET } from './config.ts'
+import {
+  DEFAULT_MAX_INLINE_FILE_BYTES,
+  DEFAULT_REQUEST_IMAGE_MAX_BYTES,
+  DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET,
+} from './config.ts'
 
 /** Join the text blocks of a harness message. */
 function flattenText(message: Message): string {
@@ -36,9 +42,9 @@ function toolResultText(blocks: readonly ContentBlock[]): string {
 /** Reject image roles that pi-ai cannot replay before request-size offloading can replace them. */
 function assertSupportedImageRoles(messages: readonly Message[]): void {
   for (const message of messages) {
-    if (message.role !== 'user' && contentHasImage(message.content)) {
+    if (message.role !== 'user' && (contentHasImage(message.content) || contentHasFile(message.content))) {
       throw new LlmError(
-        `pi-ai cannot represent an image in an in-history ${message.role} message`,
+        `pi-ai cannot represent attachment content in an in-history ${message.role} message`,
         'UNSUPPORTED_CONTENT',
       )
     }
@@ -48,6 +54,8 @@ function assertSupportedImageRoles(messages: readonly Message[]): void {
 async function userContent(
   blocks: readonly ContentBlock[],
   requestImages: ReadonlyMap<AttachmentId, RequestImageAttachment>,
+  requestFiles: ReadonlyMap<AttachmentId, StoredFileAttachment>,
+  maxInlineFileBytes: number,
 ): Promise<string | (TextContent | ImageContent)[]> {
   const content: (TextContent | ImageContent)[] = []
   for (const block of blocks) {
@@ -65,9 +73,47 @@ async function userContent(
         })
         break
       }
+      case 'file': {
+        const stored = requestFiles.get(block.attachment.attachmentId)
+        if (stored === undefined
+          || stored.ref.attachmentId !== block.attachment.attachmentId
+          || stored.ref.bytes !== stored.data.byteLength
+          || stored.ref.bytes !== block.attachment.bytes) {
+          throw new LlmError(
+            `pi-ai request file ${block.attachment.attachmentId} was not prepared.`,
+            'INVALID_REQUEST',
+          )
+        }
+        const name = safeFileName(block.attachment)
+        if (!isTextFile(block.attachment)) {
+          content.push({
+            type: 'text',
+            text: `Attached binary file "${name}" (${block.attachment.mediaType}, ${block.attachment.bytes} bytes).\n`,
+          })
+          break
+        }
+        const data = stored.data.subarray(0, maxInlineFileBytes)
+        let decoded: string
+        try {
+          decoded = new TextDecoder('utf-8', { fatal: true }).decode(data)
+        } catch (error: unknown) {
+          throw new LlmError(
+            `pi-ai request file "${name}" is not valid UTF-8 text.`,
+            'UNSUPPORTED_CONTENT',
+            { cause: error },
+          )
+        }
+        const truncated = stored.data.byteLength > maxInlineFileBytes
+        content.push({
+          type: 'text',
+          text: `Attached file "${name}" (${block.attachment.mediaType}, ${block.attachment.bytes} bytes):\n`
+            + `${decoded}${truncated ? `\n[file truncated after ${maxInlineFileBytes} bytes]` : ''}\n`,
+        })
+        break
+      }
       case 'tool-result':
         {
-          const nested = await userContent(block.content, requestImages)
+          const nested = await userContent(block.content, requestImages, requestFiles, maxInlineFileBytes)
           if (typeof nested === 'string') {
             if (nested.length > 0) content.push({ type: 'text', text: nested })
           } else {
@@ -82,6 +128,21 @@ async function userContent(
   }
   if (content.every(block => block.type === 'text')) return content.map(block => block.text).join('')
   return content
+}
+
+/** Strip control characters from a model-visible attachment name. */
+function safeFileName(ref: FileAttachmentRef): string {
+  const name = ref.name?.replace(/[\u0000-\u001f\u007f]/gu, '').trim()
+  return name === undefined || name.length === 0
+    ? `attachment-${String(ref.attachmentId).slice(-8)}`
+    : name.slice(0, 255)
+}
+
+/** Decide whether an attachment can safely be projected as UTF-8 text. */
+function isTextFile(ref: FileAttachmentRef): boolean {
+  if (ref.mediaType.startsWith('text/')) return true
+  return /^(?:application\/(?:json|javascript|xml|yaml|x-yaml|toml|csv)|image\/svg\+xml)$/iu.test(ref.mediaType)
+    || /\.(?:c|cc|cpp|css|csv|go|html?|java|js|json|md|py|rs|sql|svg|toml|ts|tsx|txt|xml|yaml|yml)$/iu.test(ref.name ?? '')
 }
 
 function collectImageRefs(
@@ -113,6 +174,32 @@ async function prepareRequestImages(
   return versions
 }
 
+/** Collect durable file references in request and nested tool-result order. */
+function collectFileRefs(
+  blocks: readonly ContentBlock[],
+  refs: Map<AttachmentId, FileAttachmentRef>,
+): void {
+  for (const block of blocks) {
+    if (block.type === 'file') refs.set(block.attachment.attachmentId, block.attachment)
+    else if (block.type === 'tool-result') collectFileRefs(block.content, refs)
+  }
+}
+
+/** Resolve every file that the pi-ai request will project into model text. */
+async function prepareRequestFiles(
+  messages: readonly Message[],
+  attachments: AttachmentStore,
+  signal?: AbortSignal,
+): Promise<Map<AttachmentId, StoredFileAttachment>> {
+  const refs = new Map<AttachmentId, FileAttachmentRef>()
+  for (const message of messages) collectFileRefs(message.content, refs)
+  const entries = await Promise.all([...refs.values()].map(async (ref) => {
+    const stored = await attachments.readFile(ref, signal)
+    return [ref.attachmentId, stored] as const
+  }))
+  return new Map(entries)
+}
+
 function toolsOf(options: GenerateOptions): PiTool[] | undefined {
   return options.tools?.map(tool => ({
     name: tool.name,
@@ -137,8 +224,8 @@ function textOnlyContext(options: GenerateOptions, onReplayDegrade?: (reason: st
   const toolNames = new Map<CallId, string>()
   const messages: PiMessage[] = []
   for (const message of options.messages) {
-    if (contentHasImage(message.content)) {
-      throw new LlmError('pi-ai image conversion requires the durable attachment service', 'UNSUPPORTED_CONTENT')
+    if (contentHasImage(message.content) || contentHasFile(message.content)) {
+      throw new LlmError('pi-ai attachment conversion requires the durable attachment service', 'UNSUPPORTED_CONTENT')
     }
     if (message.role === 'system') {
       messages.push({ role: 'user', content: flattenText(message), timestamp: 0 })
@@ -194,6 +281,7 @@ export function toPiContext(
  * @param onReplayDegrade - forwarded to {@link toPiAssistant} for each assistant message.
  * @param maxRequestImageBytes - request-level bound on base64-encoded image payload; omission leaves every image in place.
  * @param requestImagePolicy - route pixel and raw encoded-byte budgets.
+ * @param maxInlineFileBytes - request-level bound for decoded text file attachments.
  * @returns the asynchronously resolved pi-ai context.
  */
 export function toPiContext(
@@ -202,6 +290,7 @@ export function toPiContext(
   onReplayDegrade?: (reason: string) => void,
   maxRequestImageBytes?: number,
   requestImagePolicy?: ImageRequestPolicy,
+  maxInlineFileBytes?: number,
 ): Promise<PiContext>
 export function toPiContext(
   options: GenerateOptions,
@@ -209,10 +298,11 @@ export function toPiContext(
   onReplayDegrade?: (reason: string) => void,
   maxRequestImageBytes?: number,
   requestImagePolicy?: ImageRequestPolicy,
+  maxInlineFileBytes?: number,
 ): PiContext | Promise<PiContext> {
   return attachments === undefined
     ? textOnlyContext(options, onReplayDegrade)
-    : toPiContextWithImages(options, attachments, onReplayDegrade, maxRequestImageBytes, requestImagePolicy)
+    : toPiContextWithImages(options, attachments, onReplayDegrade, maxRequestImageBytes, requestImagePolicy, maxInlineFileBytes)
 }
 
 async function toPiContextWithImages(
@@ -224,6 +314,7 @@ async function toPiContextWithImages(
     maxPixels: DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET,
     maxBytes: DEFAULT_REQUEST_IMAGE_MAX_BYTES,
   },
+  maxInlineFileBytes = DEFAULT_MAX_INLINE_FILE_BYTES,
 ): Promise<PiContext> {
   assertSupportedImageRoles(options.messages)
   const requestMessages = offloadRequestImagesWithPolicy(options.messages, {
@@ -233,6 +324,7 @@ async function toPiContextWithImages(
     byteLength: ref => Math.min(ref.bytes, requestImagePolicy.maxBytes),
   })
   const requestImages = await prepareRequestImages(requestMessages, attachments, requestImagePolicy, options.signal)
+  const requestFiles = await prepareRequestFiles(requestMessages, attachments, options.signal)
   const exactMessages = offloadRequestImagesWithPolicy(requestMessages, {
     representation: 'base64',
     ...maxRequestImageBytes === undefined ? {} : { maxBytes: maxRequestImageBytes },
@@ -260,7 +352,7 @@ async function toPiContextWithImages(
     }
     // user role: text + tool results (each result becomes its own message).
     const regular = message.content.filter(block => block.type !== 'tool-result')
-    const content = await userContent(regular, requestImages)
+    const content = await userContent(regular, requestImages, requestFiles, maxInlineFileBytes)
     const results = message.content.filter((block): block is Extract<ContentBlock, { type: 'tool-result' }> => (
       block.type === 'tool-result'
     ))
@@ -268,7 +360,7 @@ async function toPiContextWithImages(
       messages.push({ role: 'user', content, timestamp: 0 })
     }
     for (const result of results) {
-      const resultContent = await userContent(result.content, requestImages)
+      const resultContent = await userContent(result.content, requestImages, requestFiles, maxInlineFileBytes)
       messages.push({
         role: 'toolResult',
         toolCallId: result.toolCallId,

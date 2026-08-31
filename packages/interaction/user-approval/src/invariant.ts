@@ -1,6 +1,6 @@
 /** Package-owned approval audit-stream invariants. @module @phoenix-ai/dsh-user-approval/invariant */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { ApprovalRequestId } from './index.ts'

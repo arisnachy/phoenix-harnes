@@ -11,7 +11,7 @@
  * @module @phoenix-ai/dsh-subagent/activation-setup-registry
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { AgentSetupCommit } from '@phoenix-ai/dsh-agent'
 import { errorChain } from '@phoenix-ai/dsh-llm'
 import { SubagentError } from './error.ts'

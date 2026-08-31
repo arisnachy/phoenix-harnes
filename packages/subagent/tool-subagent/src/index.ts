@@ -8,8 +8,8 @@
  * @module @phoenix-ai/dsh-tool-subagent
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { AgentOptions } from '@phoenix-ai/dsh-agent'
 import { ReasoningEffortId, type ContentBlock } from '@phoenix-ai/dsh-llm'

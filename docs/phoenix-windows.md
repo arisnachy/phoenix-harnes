@@ -4,7 +4,7 @@ English | [中文](phoenix-windows.zh.md)
 
 ## Install and update
 
-Run the one-line PowerShell installer from the repository README. It installs a dedicated checkout under `%LOCALAPPDATA%\Programs\PHOENIX`, builds the exact `main` revision, and creates a **PHOENIX HARDNESS** Start menu shortcut. Managed launches fetch `origin/main` and accept only a clean fast-forward; local modifications stop the update instead of being overwritten. Set `PHOENIX_AUTO_UPDATE=0` to disable launch-time checks.
+Run the one-line PowerShell installer from the repository README. It installs a dedicated checkout under `%LOCALAPPDATA%\Programs\PHOENIX`, builds the exact `main` revision, and creates **PHOENIX HARDNESS** shortcuts in the Start menu, Windows startup, and the taskbar shortcut store. Windows versions that do not expose a localized pin action still receive a taskbar-ready shortcut; pin it once from the shortcut context menu. Use `-NoStartup` or `-NoTaskbar` to opt out. Managed launches fetch `origin/main` and accept only a clean fast-forward; local modifications stop the update instead of being overwritten. Set `PHOENIX_AUTO_UPDATE=0` to disable launch-time checks.
 
 The bootstrap is operational but not Authenticode-signed. A trusted signed release requires an external publisher certificate and remains a release credential gate.
 

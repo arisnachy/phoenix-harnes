@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context, type Plugin } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
+import { Context, type Plugin } from '@phoenix-ai/cordis'
+import Loader from '@phoenix-ai/cordis-plugin-loader'
 import { remoteMethods } from '@phoenix-ai/dsh-typert-protocol'
 import PluginInventoryGateway from '../src/index.ts'
 
@@ -68,6 +68,7 @@ describe('PluginInventoryGateway', () => {
       { method: 'list', invocation: { kind: 'direct' } },
       { method: 'updateState', invocation: { kind: 'direct' } },
       { method: 'restartForUpdate', invocation: { kind: 'direct' } },
+      { method: 'refreshForUpdate', invocation: { kind: 'direct' } },
     ])
   })
 
@@ -124,6 +125,7 @@ describe('PluginInventoryGateway', () => {
 
     expect(inventory.updateState()).toEqual({ status: 'idle' })
     expect(inventory.restartForUpdate()).toEqual({ accepted: false, status: 'idle' })
+    expect(inventory.refreshForUpdate()).toEqual({ accepted: true })
     expect(exit).not.toHaveBeenCalled()
   })
 

@@ -3,7 +3,7 @@
  * deterministic ordering and labels, quoted-path suppression, pick projections, codec
  * round-trip, and registration lifecycle.
  */
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'
 import type { SessionId } from '@phoenix-ai/dsh-client-runtime/client'

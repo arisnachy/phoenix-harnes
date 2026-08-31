@@ -5,7 +5,7 @@
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/hardness/adapters"
   },
   "type": "module",
@@ -20,7 +20,7 @@
   "files": ["lib/index.js", "lib/invariant.js", "lib/types/**/*.d.ts"],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-authorization": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-client-connection": "workspace:^",
@@ -29,13 +29,15 @@
     "@phoenix-ai/dsh-host-apiproxy": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-mcp-connector-registry": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-skill": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/dsh-user-approval": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-authorization": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-client-connection": "workspace:^",
@@ -44,8 +46,10 @@
     "@phoenix-ai/dsh-host-apiproxy": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-mcp-connector-registry": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-skill": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/dsh-user-approval": "workspace:^"
   }

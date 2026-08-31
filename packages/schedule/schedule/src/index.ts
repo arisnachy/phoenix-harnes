@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-schedule
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type {} from '@phoenix-ai/dsh-session-persistence'
 import { ScheduleRuntime } from './runtime.ts'

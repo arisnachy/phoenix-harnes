@@ -4,8 +4,8 @@
  * @module @phoenix-ai/dsh-token-meter
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { BlockAssembler, deepFreeze } from '@phoenix-ai/dsh-llm'
 import type { Message, TokenUsage } from '@phoenix-ai/dsh-llm'
 import type { EpochHeader, Session, SessionEvent } from '@phoenix-ai/dsh-session'
@@ -64,7 +64,7 @@ function validateConfigKeys(config: TokenMeterConfig): void {
   }
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     tokenMeter: TokenMeter
   }

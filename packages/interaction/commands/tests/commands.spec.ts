@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { createScope } from '@phoenix-ai/dsh-scope'
 import type { Scope } from '@phoenix-ai/dsh-scope'
 import type { Agent } from '@phoenix-ai/dsh-agent'

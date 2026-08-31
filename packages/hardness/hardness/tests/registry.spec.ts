@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import HardnessRegistry from '../src/index.ts'
 import type { CapabilityDescriptor, CapabilityId, HardnessService } from '../src/types.ts'
 
@@ -40,6 +40,23 @@ describe('HARDNESS capability registry', () => {
     service.register(descriptor('1.1.0'))
     expect(service.get(id)?.version).toBe('1.1.0')
     expect(() => { service.transition(id, 'verified', 'manual') }).toThrow(/evidence/i)
+
+    await ctx.fiber.dispose()
+  })
+
+  it('allows identical descriptor registration during an idempotent resume', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const service = ctx.get('hardness') as HardnessService
+
+    const first = service.register(descriptor('1.0.0'))
+    const second = service.register({ ...descriptor('1.0.0') })
+
+    expect(service.get(id)?.version).toBe('1.0.0')
+    second.dispose()
+    expect(service.get(id)?.version).toBe('1.0.0')
+    first.dispose()
+    expect(service.get(id)).toBeUndefined()
 
     await ctx.fiber.dispose()
   })

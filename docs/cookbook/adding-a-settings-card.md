@@ -11,9 +11,9 @@ The two halves live in one package — the Host half under `src/`, the browser h
 The namespace is the join key, so pick it once and spell it in both halves. A consumer that already has a `cordis.yml` entry should register through `installSettingsSection`, which layers the entry under the user document and keeps working when no settings provider is mounted:
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
-import z from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
 
 declare function assertReachable(endpoint: string | undefined): void
 declare function rebuildFromSettings(config: Config): void

@@ -17,7 +17,7 @@
 ```ts
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { TypertRemoteService, Remote, RemoteScope } from '@phoenix-ai/dsh-typert-protocol'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 
 export interface CreateGoalRequest {
   objective: string
@@ -60,7 +60,7 @@ Client 使用普通对象上的具体函数，不使用 JavaScript Proxy。直�
 ```ts ignore-check
 import type { SessionId } from '@phoenix-ai/dsh-session/types'
 import type { AgentContext } from '@phoenix-ai/dsh-client-runtime/client'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-api-remotes/client'
 
 export const inject = ['remote', 'remote.goals']

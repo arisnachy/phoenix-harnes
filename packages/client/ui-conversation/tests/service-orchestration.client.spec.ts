@@ -3,14 +3,14 @@
 // TestSessions mints tagged scopes through the production createScope, so the
 // service's scopeOf/binding path runs against production resolution (no local
 // tag probe).
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { AttachmentId } from '@phoenix-ai/dsh-attachment'
 import { makeTranslate, SlotTestRuntime } from '@phoenix-ai/dsh-client-test-runtime'
 import type { QueuedMessage, SessionFace } from '@phoenix-ai/dsh-client-runtime/client'
 import { ComposerBlockRegistry } from '../src/client/input/blocks.ts'
 import { InputHub } from '../src/client/input/hub.ts'
-import { ConversationController, UnsupportedImageMediaTypeError } from '../src/client/service.ts'
+import { ConversationController } from '../src/client/service.ts'
 import { zh } from '../src/client/locales.ts'
 
 async function bench(readAttachment?: SessionFace['readAttachment']) {
@@ -103,15 +103,40 @@ describe('ConversationController', () => {
     await b.runtime.dispose()
   })
 
-  it('validates every MIME type before allocating previews', async () => {
+  it('classifies unsupported image MIME values as arbitrary files', async () => {
     const b = await bench()
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview')
-    expect(() => b.root.createDraftImages([
+    const attachments = b.root.createDraftImages([
       new File([Uint8Array.of(1)], 'valid.png', { type: 'image/png' }),
       new File([Uint8Array.of(2)], 'invalid.svg', { type: 'image/svg+xml' }),
-    ])).toThrow(UnsupportedImageMediaTypeError)
-    expect(created).not.toHaveBeenCalled()
+    ])
+    expect(attachments[0]?.kind).toBe('image')
+    expect(attachments[1]?.kind).toBe('file')
+    expect(created).toHaveBeenCalledOnce()
     created.mockRestore()
+    await b.runtime.dispose()
+  })
+
+  it('keeps arbitrary file drafts and serializes them as file prompt parts', async () => {
+    const b = await bench()
+    const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:file')
+    try {
+      const [attachment] = b.root.createDraftImages([
+        new File([new Uint8Array([1, 2, 3])], 'data.csv', { type: 'text/csv' }),
+      ])
+      if (attachment === undefined) throw new Error('draft attachment missing')
+      expect(attachment.kind).toBe('file')
+      b.root.input.for(b.runtime.sessions.scope('s1')!).addImages([attachment.id])
+      const result = await b.scoped.sendSession(
+        b.runtime.sessions.behavior('s1'), '', [attachment.id], 'queue',
+      )
+      expect(result).toEqual({ kind: 'success' })
+      expect(b.prompt).toHaveBeenCalledWith([
+        { type: 'file', mediaType: 'text/csv', data: 'AQID', name: 'data.csv' },
+      ], 'queue', undefined)
+    } finally {
+      created.mockRestore()
+    }
     await b.runtime.dispose()
   })
 

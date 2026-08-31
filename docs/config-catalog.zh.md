@@ -349,6 +349,12 @@ export interface Config {
   normalizedImageMaxBytes?: number
   /** Maximum simultaneous normalization or request-image transformations in this service instance. */
   imageCompressionConcurrency?: number
+  /** Maximum bytes accepted for one arbitrary file. */
+  maxFileBytes?: number
+  /** Maximum arbitrary files accepted in one submitted message. */
+  maxFilesPerMessage?: number
+  /** Maximum aggregate arbitrary-file bytes accepted in one submitted message. */
+  maxMessageFileBytes?: number
 }
 ```
 
@@ -443,6 +449,34 @@ export interface Config {
 ```
 
 Source: [`packages/client/hmr/src/index.ts:31`](../packages/client/hmr/src/index.ts)
+
+<a id="phoenix-aidsh-code-runtime-python"></a>
+
+## `@phoenix-ai/dsh-code-runtime-python`
+
+```ts config-catalog
+/** Python runtime settings. All execution budgets are deployment-configurable. */
+export interface Config {
+  /** Executable used to launch CPython. */
+  pythonCommand?: string
+  /** CPU limit sent to the child on platforms that expose resource limits. */
+  cpuSeconds?: number
+  /** Address-space limit sent to the child on platforms that expose it. */
+  addressSpaceBytes?: number
+  /** Maximum bytes retained by the child log ledger. */
+  maxLogBytes?: number
+  /** Maximum serialized completion value size. */
+  maxValueBytes?: number
+  /** Maximum combined outer result size. */
+  maxOutputBytes?: number
+  /** Maximum bytes buffered for one inbound protocol frame. */
+  maxFrameBytes?: number
+  /** Wall-clock limit for one run. */
+  maxWallMs?: number
+}
+```
+
+Source: [`packages/code-runtime/code-runtime-python/src/index.ts:31`](../packages/code-runtime/code-runtime-python/src/index.ts)
 
 <a id="phoenix-aidsh-code-runtime-worker-thread"></a>
 
@@ -722,7 +756,25 @@ export interface Config {
 }
 ```
 
-Source: [`packages/goal/goal/src/index.ts:116`](../packages/goal/goal/src/index.ts)
+Source: [`packages/goal/goal/src/index.ts:122`](../packages/goal/goal/src/index.ts)
+
+<a id="phoenix-aidsh-hardness-adapters"></a>
+
+## `@phoenix-ai/dsh-hardness-adapters`
+
+Requires: `hardness` · `tools` · `skills` · `agents` · `approval` · `systemPrompt` · `authorization`
+
+```ts config-catalog
+/** HARDNESS mission completion judge configuration. */
+export interface Config {
+  /** Structured subagent provider used for independent completion review. */
+  judgeProvider?: string
+  /** Register model-facing HARDNESS tools in this scope. */
+  modelTools?: boolean
+}
+```
+
+Source: [`packages/hardness/adapters/src/index.ts:74`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
@@ -739,6 +791,28 @@ export interface Config {
 ```
 
 Source: [`packages/bundle/headless/src/index.ts:31`](../packages/bundle/headless/src/index.ts)
+
+<a id="phoenix-aidsh-home-gateway"></a>
+
+## `@phoenix-ai/dsh-home-gateway`
+
+```ts config-catalog
+/** User-facing plugin configuration; defaults are completed by Schemastery. */
+export interface Config {
+  /** Private or local Home Assistant base URL. */
+  readonly baseUrl?: string
+  /** Environment variable containing the long-lived Home Assistant token. */
+  readonly tokenEnv?: string
+  /** Entity ids that state reads may return and control calls may target. */
+  readonly allowedEntities?: string[]
+  /** Fully qualified service names permitted for control calls. */
+  readonly allowedServices?: string[]
+  /** Maximum duration of one Home Assistant HTTP request. */
+  readonly requestTimeoutMs?: number
+}
+```
+
+Source: [`packages/home/home-gateway/src/index.ts:32`](../packages/home/home-gateway/src/index.ts)
 
 <a id="phoenix-aidsh-hooks-claude-code"></a>
 
@@ -971,6 +1045,8 @@ export interface Config {
   maxRequestFilesBytes?: number
   /** Maximum accumulated base64 image payload after Files API fallback (default 20 MiB). */
   maxInlineRequestImageBytes?: number
+  /** Maximum arbitrary-file bytes projected into one text request per attachment (default 256 KiB). */
+  maxInlineFileBytes?: number
   /** Maximum number of represented images per chat request (default 600). */
   maxImagesPerRequest?: number
   /** Raw-byte removal step after the request exceeds its file bound (default 64 MiB). */
@@ -1122,6 +1198,8 @@ export interface PiAiProviderProfile {
   requestImagePixelBudget?: number
   /** Raw encoded-byte cap for each deterministic inline request version. */
   requestImageMaxBytes?: number
+  /** Maximum bytes of one text attachment projected into a pi-ai request. */
+  maxInlineFileBytes?: number
   /** Provider-owned model-request retry policy; omission uses normal mode with two retries. */
   retryPolicy?: RetryPolicyConfig
 }
@@ -1427,6 +1505,8 @@ export interface StdioConfig {
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
   failOnStartupError: boolean
+  /** Maximum time to wait for initial connection and tool discovery before boot continues. */
+  startupTimeoutMs?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
 }
@@ -1449,6 +1529,8 @@ export interface StreamableHttpConfig {
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
   failOnStartupError: boolean
+  /** Maximum time to wait for initial connection and tool discovery before boot continues. */
+  startupTimeoutMs?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
 }
@@ -1734,6 +1816,24 @@ export interface JsonRpcConfig {
 Depends on: `Readable` (`node:stream`) · `Writable` (`node:stream`)
 
 Source: [`packages/sdk/server/src/index.ts:25`](../packages/sdk/server/src/index.ts)
+
+<a id="phoenix-aidsh-session-learning"></a>
+
+## `@phoenix-ai/dsh-session-learning`
+
+Requires: `sessions`
+
+```ts config-catalog
+/** Plugin configuration for the owner-only learning ledger. */
+export interface Config {
+  /** Absolute or process-relative JSONL path owned by Phoenix. */
+  path: string
+  /** Maximum active records retained by the ledger. */
+  maxRecords?: number
+}
+```
+
+Source: [`packages/session/session-learning/src/index.ts:27`](../packages/session/session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-session-persistence-jsonl"></a>
 
@@ -2811,6 +2911,22 @@ export interface Config {
 
 Source: [`packages/workflow/tool-ralph/src/index.ts:23`](../packages/workflow/tool-ralph/src/index.ts)
 
+<a id="phoenix-aidsh-tool-session-learning"></a>
+
+## `@phoenix-ai/dsh-tool-session-learning`
+
+Requires: `tools` · `systemPrompt` · `learningMemory`
+
+```ts config-catalog
+/** Tool configuration. */
+export interface Config {
+  /** Maximum memories returned by one call. */
+  maxResults?: number
+}
+```
+
+Source: [`packages/session-learning/tool-session-learning/src/index.ts:20`](../packages/session-learning/tool-session-learning/src/index.ts)
+
 <a id="phoenix-aidsh-tool-session-query"></a>
 
 ## `@phoenix-ai/dsh-tool-session-query`
@@ -3125,6 +3241,8 @@ export interface Config {
    * prompting (the deterministic CI/unattended stance).
    */
   readonly policy?: ApprovalPolicy
+  /** Milliseconds before an unanswered request takes its recommendation. */
+  readonly timeoutMs?: number
 }
 
 /**
@@ -3435,7 +3553,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@phoenix-ai/dsh-fs-observation-policy` ([`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts))
 - `@phoenix-ai/dsh-goal-round-driver` — requires `agents` · `goals` · `sessions` ([`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts))
 - `@phoenix-ai/dsh-hardness` ([`packages/hardness/hardness/src/index.ts`](../packages/hardness/hardness/src/index.ts))
-- `@phoenix-ai/dsh-hardness-adapters` — requires `hardness` · `tools` · `skills` · `connection` · `agents` · `approval` · `systemPrompt` ([`packages/hardness/adapters/src/index.ts`](../packages/hardness/adapters/src/index.ts))
 - `@phoenix-ai/dsh-host-directory-picker-auto` — requires `webServer` · `loader` ([`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts))
 - `@phoenix-ai/dsh-host-directory-picker-native` ([`packages/host/directory-picker-native/src/index.ts`](../packages/host/directory-picker-native/src/index.ts))
 - `@phoenix-ai/dsh-host-plugin-inventory` — requires `loader` ([`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts))
@@ -3455,6 +3572,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@phoenix-ai/dsh-terminal` ([`packages/terminal/terminal/src/index.ts`](../packages/terminal/terminal/src/index.ts))
 - `@phoenix-ai/dsh-tool-ask-user` — requires `tools` · `userQuestions` ([`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts))
 - `@phoenix-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
+- `@phoenix-ai/dsh-tool-home-gateway` — requires `tools` · `home` · `systemPrompt` ([`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts))
 - `@phoenix-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
 - `@phoenix-ai/dsh-user-profile` — requires `settings` · `systemPrompt` ([`packages/profile/user-profile/src/index.ts`](../packages/profile/user-profile/src/index.ts))
 - `@phoenix-ai/dsh-user-questions` ([`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts))
@@ -3498,7 +3616,6 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@phoenix-ai/dsh-client-ui-slots` ([`packages/client/ui-slots/src/index.ts`](../packages/client/ui-slots/src/index.ts))
 - `@phoenix-ai/dsh-client-web` ([`packages/client/web/src/index.ts`](../packages/client/web/src/index.ts))
 - `@phoenix-ai/dsh-cmdline` ([`packages/boot/cmdline/src/index.ts`](../packages/boot/cmdline/src/index.ts))
-- `@phoenix-ai/dsh-code-runtime-python` ([`packages/code-runtime/code-runtime-python/src/index.ts`](../packages/code-runtime/code-runtime-python/src/index.ts))
 - `@phoenix-ai/dsh-hardness-atlas-json` ([`packages/hardness/atlas-json/src/index.ts`](../packages/hardness/atlas-json/src/index.ts))
 - `@phoenix-ai/dsh-home-paths` ([`packages/util/home-paths/src/index.ts`](../packages/util/home-paths/src/index.ts))
 - `@phoenix-ai/dsh-hook-protocol` ([`packages/hooks/hook-protocol/src/index.ts`](../packages/hooks/hook-protocol/src/index.ts))

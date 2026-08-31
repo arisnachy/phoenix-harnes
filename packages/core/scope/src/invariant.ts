@@ -1,6 +1,6 @@
 /** Package-owned scoped-dispatch invariants. @module @phoenix-ai/dsh-scope/invariant */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import { carrierKeyOf, isScopeCarrier } from '@phoenix-ai/dsh-scope'
 import { scopedSubjectResolverFor } from './scoped-events.generated.ts'

@@ -69,7 +69,7 @@ export interface CommandSourceMap {
 /** The union over {@link CommandSourceMap} — who issued a command line. */
 export type CommandSource = CommandSourceMap[keyof CommandSourceMap]
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Events {
     /**
      * A command was registered or unregistered. This is an unfiltered registry

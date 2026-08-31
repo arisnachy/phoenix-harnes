@@ -6,8 +6,8 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { Context, Events } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context, Events } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { Agent, RequestErrorAction } from '@phoenix-ai/dsh-agent'
 import type { LlmFailure, ResolvedRetryPolicy } from '@phoenix-ai/dsh-llm'
 import type { SessionEvent } from '@phoenix-ai/dsh-session'

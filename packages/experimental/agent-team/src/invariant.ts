@@ -1,6 +1,6 @@
 /** Package-owned relational checks for Agent Teams durable records. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import { applyTeamEvent, foldTeam, isTeamEvent } from './fold.ts'

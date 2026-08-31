@@ -15,8 +15,8 @@
 
 /* jscpd:ignore-start -- this executor mirrors dsh-bash-local call-for-call by
    design (see this package's README), so the two import the same seam surface */
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { SHELL_SETTINGS_NAMESPACE, ShellExecutor } from '@phoenix-ai/dsh-shell'
 import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellProcessRead, ShellRunResult, CollectedOutput } from '@phoenix-ai/dsh-shell'
 import type { SubprocessCollect, SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@phoenix-ai/dsh-subprocess'

@@ -1,6 +1,6 @@
 /** Test-only Loader plugin that creates a goal at the first real step edge. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-goal'
 
 export const name = 'seed-goal'

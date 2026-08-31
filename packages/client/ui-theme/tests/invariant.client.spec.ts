@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { apply as nodeApply } from '@phoenix-ai/dsh-client-ui-theme'
 import { apply as clientApply, inject, ThemeRuntime } from '@phoenix-ai/dsh-client-ui-theme/client'
 import * as ThemeInvariant from '@phoenix-ai/dsh-client-ui-theme/invariant'

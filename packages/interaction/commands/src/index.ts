@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-commands
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { AttachmentError, admitEncodedImages } from '@phoenix-ai/dsh-attachment'
 import type { EncodedImageAttachment } from '@phoenix-ai/dsh-attachment/types'
@@ -101,7 +101,7 @@ class CommandLayer implements ScopeLayer {
   }
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     commands: CommandRuntime
   }

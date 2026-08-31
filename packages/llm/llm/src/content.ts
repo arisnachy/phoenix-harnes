@@ -40,6 +40,17 @@ export function contentHasImage(content: readonly ContentBlock[]): boolean {
     || (block.type === 'tool-result' && contentHasImage(block.content)))
 }
 
+/**
+ * True when typed model content contains an arbitrary file block, walking
+ * nested tool-result content.
+ * @param content - typed model content blocks.
+ * @returns whether any nested block is a file.
+ */
+export function contentHasFile(content: readonly ContentBlock[]): boolean {
+  return content.some(block => block.type === 'file'
+    || (block.type === 'tool-result' && contentHasFile(block.content)))
+}
+
 /** Base64 length of raw image bytes, including padding. */
 function base64Length(bytes: number): number {
   return Math.ceil(bytes / 3) * 4

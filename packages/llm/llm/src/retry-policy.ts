@@ -7,7 +7,7 @@
  * @module @phoenix-ai/dsh-llm/retry-policy
  */
 
-import z from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import { EMPTY_RESPONSE_CODE } from './error.ts'
 

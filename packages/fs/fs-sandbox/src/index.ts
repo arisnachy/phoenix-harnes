@@ -30,7 +30,7 @@
  * @module @phoenix-ai/dsh-fs-sandbox
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { LocalFileSystem } from '@phoenix-ai/dsh-fs-local'
 import type { Config as LocalConfig } from '@phoenix-ai/dsh-fs-local'
 import { FsError } from '@phoenix-ai/dsh-fs'

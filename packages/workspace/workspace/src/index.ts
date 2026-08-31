@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import { basename } from 'node:path'
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import type { SessionHeader, SessionId } from '@phoenix-ai/dsh-session'
 import type {} from '@phoenix-ai/dsh-session-persistence'
 import type { DomainGlobal, KvTable } from '@phoenix-ai/dsh-storage-domain'
@@ -64,7 +64,7 @@ export class WorkspaceOrderInvalidError extends Error {
 }
 
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     workspaceRegistry: WorkspaceRegistry
   }
@@ -251,6 +251,27 @@ export class WorkspaceRegistry extends Service {
       }
       const state = this.requireState()
       await this.setState({ ...state, archivedSessionIds: [...state.archivedSessionIds, sessionId] })
+    })
+  }
+
+  /**
+   * Remove one session from every workspace account and from the archive set
+   * after its durable log has been deleted by the session owner.
+   * @param sessionId - physically deleted session identity.
+   */
+  forgetSession(sessionId: SessionId): Promise<void> {
+    return this.enqueueOperation(async () => {
+      await Promise.all([...this.entities.values()].map(entity => entity.detachSession(sessionId)))
+      const state = this.requireState()
+      if (state.archivedSessionIds.includes(sessionId)) {
+        await this.setState({
+          ...state,
+          archivedSessionIds: state.archivedSessionIds.filter(id => id !== sessionId),
+        })
+      }
+      this.headers.delete(sessionId)
+      this.sessionPaths.delete(sessionId)
+      this.invalidSessionPaths.delete(sessionId)
     })
   }
 

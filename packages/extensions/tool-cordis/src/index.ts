@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-tool-cordis
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
 import {
   CordisDynamicPackageId, CordisDynamicPluginId,

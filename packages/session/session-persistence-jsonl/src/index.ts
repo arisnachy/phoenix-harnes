@@ -6,8 +6,8 @@
  * @module @phoenix-ai/dsh-session-persistence-jsonl
  */
 
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { readdirSync } from 'node:fs'
 import { open, mkdir, readFile, readdir, realpath, link, rm, stat, truncate } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
@@ -175,6 +175,11 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
   create(meta: SessionHeader): Promise<void> {
     return this.coordinator.create(meta)
+  }
+
+  /** Remove one cold session through the coordinator's serialized path. */
+  override remove(id: SessionId): Promise<boolean> {
+    return this.coordinator.remove(id)
   }
 
   append(id: SessionId, events: readonly SessionEvent[]): Promise<void> {
@@ -446,6 +451,15 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
   /** List valid unique stored sessions' metadata (header line only — no full-log parse). */
   async list(signal?: AbortSignal): Promise<SessionHeader[]> {
     return (await this.listArtifacts(signal)).map(artifact => artifact.header)
+  }
+
+  /** Remove the complete per-session directory after resolving its unique log. */
+  async removeStored(id: SessionId): Promise<boolean> {
+    await this.ensureRootEncoding()
+    const path = await this.findLog(id)
+    if (path === undefined) return false
+    await rm(dirname(path), { recursive: true, force: false })
+    return true
   }
 
   /** List metadata plus a stat-derived identity for each append-only log. */

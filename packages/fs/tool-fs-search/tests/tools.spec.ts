@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { join, sep } from 'node:path'
 import { createUserMessage, CallId } from '@phoenix-ai/dsh-llm'
 import SystemPrompt, { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
@@ -271,10 +271,10 @@ describe('registration', () => {
     expect(ctx.tools.get('grep')?.timeoutMs).toBe(5000)
   })
 
-  it('defaults the timeout budget to 30 seconds', async () => {
+  it('defaults the timeout budget to 60 seconds for recursive searches', async () => {
     const { ctx } = await setup()
-    expect(ctx.tools.get('glob')?.timeoutMs).toBe(30_000)
-    expect(ctx.tools.get('grep')?.timeoutMs).toBe(30_000)
+    expect(ctx.tools.get('glob')?.timeoutMs).toBe(60_000)
+    expect(ctx.tools.get('grep')?.timeoutMs).toBe(60_000)
   })
 
   it('describes the modification-time head when over-cap sampling is disabled', async () => {

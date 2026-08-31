@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { z } from 'zod'
 import Storage from '@phoenix-ai/dsh-storage'
 import InvariantRegistry, { InvariantError } from '@phoenix-ai/dsh-invariants'

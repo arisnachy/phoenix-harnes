@@ -14,9 +14,9 @@
  * @module @phoenix-ai/dsh-session-telemetry
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     sessionTelemetry: SessionTelemetryBackend
   }

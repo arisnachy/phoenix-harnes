@@ -3,7 +3,7 @@
  * @module semantic-checkpoint-agent
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { SessionId } from '@phoenix-ai/dsh-session'
 
 /** Fixture plugin name. */

@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/feedback/command-feedback"
   },
   "type": "module",
@@ -37,11 +37,11 @@
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-session-telemetry": "workspace:^",
     "@phoenix-ai/dsh-anonymous-user-id": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis-plugin-include": "workspace:^",
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-include": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-commands": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
@@ -49,6 +49,6 @@
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-session-telemetry": "workspace:^",
     "@phoenix-ai/dsh-anonymous-user-id": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

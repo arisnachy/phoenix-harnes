@@ -59,6 +59,10 @@ export class AcquisitionRegistry {
       const descriptor = await builder(need, signal)
       if (descriptor === undefined) continue
       const existing = this.hardness.get(descriptor.id)
+      // A provider that returns the same quarantined or broken descriptor is
+      // not an alternative route. Keep searching ATLAS for another provider
+      // instead of reviving the exact strategy that just failed.
+      if (existing?.status === 'quarantined' || existing?.status === 'broken') continue
       if (existing === undefined) this.hardness.register(descriptor)
       this.hardness.transition(descriptor.id, 'testing', 'acquisition/build candidate')
       const preparationId = `prepare:${descriptor.id}:${descriptor.version}`

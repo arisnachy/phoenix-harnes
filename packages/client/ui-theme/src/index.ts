@@ -1,6 +1,6 @@
 /** Host registration for the browser theme preference and pre-plugin palette. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
 import { settingsNamespace } from '@phoenix-ai/dsh-settings'
 import { bootThemeInjection } from './boot-theme.ts'

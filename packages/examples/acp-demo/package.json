@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/examples/acp-demo"
   },
   "type": "module",
@@ -40,8 +40,8 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/cordis-plugin-include": "workspace:^",
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-include": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-acp": "workspace:^",
     "@phoenix-ai/dsh-agent-spine-demo": "workspace:^",
     "@phoenix-ai/dsh-app-boot": "workspace:^",
@@ -52,12 +52,12 @@
     "@phoenix-ai/dsh-session-query-sqlite": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/dsh-agent-instructions": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis-plugin-include": "workspace:^",
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@phoenix-ai/cordis-plugin-include": "workspace:^",
+    "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-acp": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-agent-spine-demo": "workspace:^",
@@ -70,7 +70,7 @@
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/dsh-agent-instructions": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^"
   }
 }

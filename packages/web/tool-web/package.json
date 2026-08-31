@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
     "directory": "packages/web/tool-web"
   },
   "type": "module",
@@ -37,11 +37,11 @@
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/dsh-web": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
     "@joplin/turndown-plugin-gfm": "^1.0.67",
-    "@deepseek-ai/schemastery": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^",
     "turndown": "^7.2.4"
   },
   "devDependencies": {
@@ -58,6 +58,6 @@
     "@phoenix-ai/dsh-web": "workspace:^",
     "@phoenix-ai/dsh-web-fetch-http": "workspace:^",
     "@phoenix-ai/dsh-web-search-exa": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

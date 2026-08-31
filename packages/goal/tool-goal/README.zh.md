@@ -40,7 +40,7 @@ complete 与 blocked 还接受完全一致的当前 Goal Round：来源为 goal 
     judgeProvider: spawn
 ```
 
-`blockedAfterConsecutiveRounds` 必须是正的安全整数。`requireJudge` 启用独立完成认证；`judgeProvider` 指定新的结构化 subagent 提供方。PHOENIX 基础 profile 默认启用这两个 judge 字段。
+`blockedAfterConsecutiveRounds` 必须是正的安全整数。独立完成认证默认启用且应保持启用；`requireJudge` 作为兼容性的显式部署设置保留，但 goal 域始终拒绝没有持久化通过 judge 的完成。`judgeProvider` 指定新的结构化 subagent 提供方。PHOENIX 基础 profile 默认启用这两个 judge 字段。
 
 ## 模型体验
 

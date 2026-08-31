@@ -6,10 +6,12 @@
     { "path": "../hardness" },
     { "path": "../../credentials/authorization" },
     { "path": "../../mcp/mcp-registry" },
+    { "path": "../../llm/llm" },
     { "path": "../../core/tools" },
     { "path": "../../skill/skill" },
     { "path": "../../runtime-diagnostics/invariants" },
     { "path": "../../client/connection/tsconfig.host.json" },
-    { "path": "../../host/apiproxy" }
+    { "path": "../../host/apiproxy" },
+    { "path": "../../subagent/subagent" }
   ]
 }

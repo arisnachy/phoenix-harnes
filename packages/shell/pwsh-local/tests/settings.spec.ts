@@ -1,8 +1,8 @@
 /** The shared `bash` settings section as the pwsh executor family resolves it. */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import type { Fiber } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
+import type { Fiber } from '@phoenix-ai/cordis'
 import { SettingsProvider } from '@phoenix-ai/dsh-settings'
 import type { SettingsNamespace } from '@phoenix-ai/dsh-settings'
 import { SHELL_SETTINGS_NAMESPACE } from '@phoenix-ai/dsh-shell'

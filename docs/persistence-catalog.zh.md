@@ -157,6 +157,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
   toolName: string
   callId?: CallId
   reason?: string
+  deadline?: ApprovalDeadline
 }
 ```
 
@@ -426,6 +427,17 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/goal/goal/src/domain.ts:66`](../packages/goal/goal/src/domain.ts)
 
+<a id="goalcontinuation--log-only"></a>
+
+#### `goal/continuation` — log-only
+
+```ts persistence-catalog
+/** Automatic continuation window; a round cap never completes a goal. */
+'goal/continuation': GoalContinuationWindow
+```
+
+来源：[`packages/goal/goal/src/domain.ts:172`](../packages/goal/goal/src/domain.ts)
+
 <a id="goaljudge--log-only"></a>
 
 #### `goal/judge` — log-only
@@ -460,6 +472,29 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 来源：[`packages/goal/goal/src/domain.ts:102`](../packages/goal/goal/src/domain.ts)
 
 ### `hardness/*`
+
+<a id="hardnessartifact--log-only"></a>
+
+#### `hardness/artifact` — log-only
+
+```ts persistence-catalog
+/** Durable result of a universal HARDNESS artifact execution. */
+'hardness/artifact': HardnessArtifactExecutionEvent
+```
+
+来源：[`packages/hardness/adapters/src/artifact-runtime.ts:19`](../packages/hardness/adapters/src/artifact-runtime.ts)
+
+
+<a id="hardnesskernel--log-only"></a>
+
+#### `hardness/kernel` — log-only
+
+```ts persistence-catalog
+/** Mission Persistence Kernel state transition; never contains credentials or raw arguments. */
+'hardness/kernel': MissionKernelEvent
+```
+
+来源：[`packages/hardness/adapters/src/mission-kernel.ts:115`](../packages/hardness/adapters/src/mission-kernel.ts)
 
 <a id="hardnessmission--log-only"></a>
 
@@ -545,6 +580,19 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 ```
 
 来源：[`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
+
+### `organization-forge/*`
+
+<a id="organization-forgechange--log-only"></a>
+
+#### `organization-forge/change` — log-only
+
+```ts persistence-catalog
+/** Full replayable Organization Forge snapshot. */
+'organization-forge/change': OrganizationForgeChange
+```
+
+来源：[`packages/goal/goal/src/organization-forge.ts:116`](../packages/goal/goal/src/organization-forge.ts)
 
 ### `permission/*`
 
@@ -714,6 +762,19 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 类型：[SessionTitleLlmRequestEventData](subsystems/session-title.zh.md)
 
 来源：[`packages/session/session-title-llm/src/index.ts:43`](../packages/session/session-title-llm/src/index.ts)
+
+### `specialist/*`
+
+<a id="specialistchange--log-only"></a>
+
+#### `specialist/change` — log-only
+
+```ts persistence-catalog
+/** Full replayable specialist-laboratory snapshot. */
+'specialist/change': SpecialistChange
+```
+
+来源：[`packages/goal/goal/src/domain.ts:161`](../packages/goal/goal/src/domain.ts)
 
 ### `step/*`
 

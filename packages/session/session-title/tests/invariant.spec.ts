@@ -1,7 +1,7 @@
 // Title-source invariant: `messageSeqs` is empty iff `source.kind` is `user`.
 // — the durable relationship every appended session/title event must keep.
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import * as SessionTitleInvariantCompanion from '@phoenix-ai/dsh-session-title/invariant'
 import InvariantRegistry, { InvariantError } from '@phoenix-ai/dsh-invariants'
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'

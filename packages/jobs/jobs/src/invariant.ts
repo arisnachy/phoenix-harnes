@@ -1,6 +1,6 @@
 /** Package-owned background-job snapshot invariants. @module @phoenix-ai/dsh-jobs/invariant */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { JobSnapshot } from './types.ts'

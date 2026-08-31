@@ -12,8 +12,22 @@
 | `dsh --profile headless "job"` | 运行一个全新的持久化会话，打印最终答案并退出。 |
 | `dsh web` | `--profile web` 的别名。 |
 | `dsh plugin --profile <name> <pnpm args>` | 通过在 profile 目录中转发给 pnpm 来管理该 profile 的插件。 |
+| `dsh chatgpt-web <start\|status\|stop>` | 启动、检查或停止显式配置的本地 ChatGPT Web Responses 网桥。 |
 
 运行命令时所在的目录将作为默认 workspace 根目录。`web` 和 `headless` profile 在首次使用时会从随附模板自动初始化；其他任何 profile 都必须通过 `dsh plugin` 创建。
+
+## ChatGPT Web 网桥
+
+PHOENIX 可以将本地的 [codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) 网桥作为 `chatgpt-web` 模型路由使用。网桥负责浏览器登录与 cookie；PHOENIX 不会导入或保存这些内容。请使用 JSON argv 数组配置可执行文件，这样不会经过 shell：
+
+```powershell
+$env:PHOENIX_CHATGPT_WEB_COMMAND = '["node","C:\\path\\to\\codex-chatgpt-web\\server.mjs"]'
+$env:PHOENIX_CHATGPT_WEB_URL = 'http://127.0.0.1:17841/v1'
+dsh chatgpt-web start
+dsh chatgpt-web status
+```
+
+只接受 loopback 端点。生命周期记录只保存进程 id 和端点，不保存命令行 secret。`dsh doctor` 可以检查已配置的网桥，但不会启动或修改它。
 
 ## 应用参数
 

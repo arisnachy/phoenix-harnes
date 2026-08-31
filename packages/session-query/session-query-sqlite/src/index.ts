@@ -6,8 +6,8 @@
 
 import { createHash, randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import { Context, Service, type Fiber } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, Service, type Fiber } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type { Session, SessionEvent, SessionHeader, SessionId } from '@phoenix-ai/dsh-session'
 import type SessionPersistence from '@phoenix-ai/dsh-session-persistence'
 import type {
@@ -65,7 +65,7 @@ export {
 /** Boot-context slot for a launcher-owned absolute path to this process's derived query index. */
 export const SESSION_QUERY_SQLITE_PATH_KEY = 'launcherSessionQueryPath'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     /** Launcher-owned absolute path to this process's disposable derived query index. */
     launcherSessionQueryPath?: string

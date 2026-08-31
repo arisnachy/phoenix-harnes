@@ -1,6 +1,6 @@
 import { createUserMessage, createMessage } from '@phoenix-ai/dsh-llm'
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SESSION_FORMAT_VERSION, SessionId } from '@phoenix-ai/dsh-session'
 import type { Session, SessionEvent, SessionHeader, SessionId as SessionIdType } from '@phoenix-ai/dsh-session'
 import SessionPersistence from '@phoenix-ai/dsh-session-persistence'

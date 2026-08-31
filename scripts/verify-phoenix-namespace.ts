@@ -9,17 +9,17 @@ const root = resolve(import.meta.dirname, '..')
 const legacyPackage = /@deepseek-ai\/dsh-[A-Za-z0-9][A-Za-z0-9._-]*/gu
 const packageReference = /@deepseek-ai\/[A-Za-z0-9][A-Za-z0-9._-]*/gu
 const allowedUpstream = new Set([
-  '@deepseek-ai/cordis',
-  '@deepseek-ai/cosmokit',
-  '@deepseek-ai/schemastery',
-  '@deepseek-ai/cordis-plugin-group',
-  '@deepseek-ai/cordis-plugin-hmr',
-  '@deepseek-ai/cordis-plugin-include',
-  '@deepseek-ai/cordis-plugin-loader',
-  '@deepseek-ai/cordis-plugin-logger-console',
-  '@deepseek-ai/cordis-plugin-timer',
+  '@phoenix-ai/cordis',
+  '@phoenix-ai/cosmokit',
+  '@phoenix-ai/schemastery',
+  '@phoenix-ai/cordis-plugin-group',
+  '@phoenix-ai/cordis-plugin-hmr',
+  '@phoenix-ai/cordis-plugin-include',
+  '@phoenix-ai/cordis-plugin-loader',
+  '@phoenix-ai/cordis-plugin-logger-console',
+  '@phoenix-ai/cordis-plugin-timer',
 ])
-const allowedUpstreamPrefixes = ['@deepseek-ai/cordis-plugin-'] as const
+const allowedUpstreamPrefixes = ['@phoenix-ai/cordis-plugin-'] as const
 
 /** One active-file namespace violation. */
 export interface NamespaceViolation {

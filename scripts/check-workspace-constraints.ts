@@ -22,15 +22,15 @@ const workspaceGlobs = [
   { dir: 'apps', depth: 1 },
 ] as const
 const vendoredPackages = new Set([
-  '@deepseek-ai/cordis',
-  '@deepseek-ai/cosmokit',
-  '@deepseek-ai/schemastery',
-  '@deepseek-ai/cordis-plugin-loader',
-  '@deepseek-ai/cordis-plugin-include',
-  '@deepseek-ai/cordis-plugin-group',
-  '@deepseek-ai/cordis-plugin-timer',
-  '@deepseek-ai/cordis-plugin-hmr',
-  '@deepseek-ai/cordis-plugin-logger-console',
+  '@phoenix-ai/cordis',
+  '@phoenix-ai/cosmokit',
+  '@phoenix-ai/schemastery',
+  '@phoenix-ai/cordis-plugin-loader',
+  '@phoenix-ai/cordis-plugin-include',
+  '@phoenix-ai/cordis-plugin-group',
+  '@phoenix-ai/cordis-plugin-timer',
+  '@phoenix-ai/cordis-plugin-hmr',
+  '@phoenix-ai/cordis-plugin-logger-console',
 ])
 const publicLandlockPackages = new Set([
   '@phoenix-ai/node-addon-landlock-run',
@@ -47,7 +47,7 @@ const repositoryUrl = 'git+https://github.com/deepseek-harness/deepseek-harness.
  * {@link repositoryUrl}, which the Landlock packages keep because npm resolves
  * their trusted publishing against the repository that runs the workflow.
  */
-const publishedRepositoryUrl = 'git+https://github.com/deepseek-ai/deepseek-harness.git'
+const publishedRepositoryUrl = 'git+https://github.com/arisnachy/phoenix-harnes.git'
 /** PHOENIX fork source home; fork-owned release members may link here. */
 const phoenixRepositoryUrl = 'git+https://github.com/arisnachy/phoenix-harnes.git'
 const publishedRepositoryUrls = new Set([publishedRepositoryUrl, phoenixRepositoryUrl])
@@ -311,7 +311,7 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
     return errors
   }
 
-  if (manifest.name?.startsWith('@deepseek-ai/')) {
+  if (manifest.name?.startsWith('@phoenix-ai/')) {
     const allowedSources = publicationSourceAllowlist[manifest.name] ?? []
     for (const file of manifest.files ?? []) {
       if (isForbiddenPublicationFile(file) && !allowedSources.includes(file)) {
@@ -320,7 +320,7 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
     }
   }
 
-  if (dir.startsWith('apps/') && manifest.name?.startsWith('@deepseek-ai/')) {
+  if (dir.startsWith('apps/') && manifest.name?.startsWith('@phoenix-ai/')) {
     const expectedFiles = appPackageFiles[manifest.name]
     if (expectedFiles === undefined) {
       errors.push(`${label}: app package has no publication files policy`)
@@ -339,13 +339,13 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
   }
 
   if (dir.startsWith('packages/') && manifest.name?.startsWith('@phoenix-ai/dsh-')) {
-    const peer = manifest.peerDependencies?.['@deepseek-ai/cordis']
-    const dev = manifest.devDependencies?.['@deepseek-ai/cordis']
+    const peer = manifest.peerDependencies?.['@phoenix-ai/cordis']
+    const dev = manifest.devDependencies?.['@phoenix-ai/cordis']
 
-    if (!peer) errors.push(`${label}: @deepseek-ai/cordis must be a peerDependency`)
-    if (!dev) errors.push(`${label}: @deepseek-ai/cordis must also be a devDependency`)
+    if (!peer) errors.push(`${label}: @phoenix-ai/cordis must be a peerDependency`)
+    if (!dev) errors.push(`${label}: @phoenix-ai/cordis must also be a devDependency`)
     if (peer && dev && peer !== dev) {
-      errors.push(`${label}: @deepseek-ai/cordis peer (${peer}) and dev (${dev}) ranges must match`)
+      errors.push(`${label}: @phoenix-ai/cordis peer (${peer}) and dev (${dev}) ranges must match`)
     }
     if (manifest.version !== repositoryVersion) {
       errors.push(`${label}: package.json version must match root version ${repositoryVersion ?? '(missing)'}`)

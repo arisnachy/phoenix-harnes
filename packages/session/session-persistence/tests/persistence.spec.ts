@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { Session, SessionId, isJsonValue } from '@phoenix-ai/dsh-session'
 import type { SessionEvent, SessionHeader } from '@phoenix-ai/dsh-session'
 import {

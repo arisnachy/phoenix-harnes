@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-typert-protocol/types
  */
 
-import type { Context, Events } from '@deepseek-ai/cordis'
+import type { Context, Events } from '@phoenix-ai/cordis'
 
 declare const LOOKUP_HOST: unique symbol
 declare const LOOKUP_WIRE: unique symbol
@@ -484,7 +484,7 @@ export interface TypertRegistryContract {
   readonly contexts: TypertContextRegistry
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     typert: TypertRegistryContract
   }

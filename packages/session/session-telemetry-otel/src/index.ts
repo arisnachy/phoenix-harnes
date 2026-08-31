@@ -13,8 +13,8 @@
  */
 
 import { createRequire } from 'node:module'
-import z from '@deepseek-ai/schemastery'
-import type { Context } from '@deepseek-ai/cordis'
+import z from '@phoenix-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-command-feedback'
 import {
   SessionTelemetryBackend,

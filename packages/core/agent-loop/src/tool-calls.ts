@@ -11,10 +11,11 @@
  * @module dsh-agent-loop/tool-calls
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { assertNever, createToolResultMessage, type ToolCallBlock } from '@phoenix-ai/dsh-llm'
+import { createUserMessage } from '@phoenix-ai/dsh-llm/message'
 import type { Session, UserMessage } from '@phoenix-ai/dsh-session'
-import { TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER, type ToolExecutionInput, type ToolExecutionMode, type ToolExecutionResult, type ToolRunContext } from '@phoenix-ai/dsh-tools'
+import { TOOL_ABORTED, TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER, type ToolExecutionInput, type ToolExecutionMode, type ToolExecutionResult, type ToolRunContext } from '@phoenix-ai/dsh-tools'
 
 /** One tool call after argument parsing, ready to schedule. */
 interface PlannedCall {
@@ -36,6 +37,13 @@ interface GroupOutcome {
   /** Whether any committed result carried {@link ToolExecutionResult.concludesTurn}. */
   concluded: boolean
 }
+
+/** Model-visible instruction that keeps one failed tool attempt from ending a mission. */
+const TOOL_FAILURE_RECOVERY_PROMPT = (toolName: string): string =>
+  `Tool ${JSON.stringify(toolName)} failed in the previous attempt. Do not treat this tool failure as mission failure. `
+  + 'Inspect the exact tool result, diagnose the cause, inspect available alternatives, change strategy and continue '
+  + 'working toward the objective. Do not request approval for routine recovery. Do not claim completion until the '
+  + 'objective and its acceptance evidence are verified.'
 
 /**
  * Schedule one assistant step's tool calls by their live concurrency mode.
@@ -148,12 +156,21 @@ async function runGroup(
       const slot = slots[committed]
       if (slot === undefined) break
       const call = group[committed]
+      if (call === undefined) break
+      const callSeq = callSeqs[committed]
+      if (callSeq === undefined) break
       const result = slot.needsPost
         ? await ctx.tools[TOOL_RUNTIME_SCHEDULER].finalize(slot.exec, slot.result)
         : ctx.tools[TOOL_RUNTIME_SCHEDULER].finish(slot.exec, slot.result)
-      // oxlint-disable-next-line typescript/no-non-null-assertion -- bounded index
-      appendToolResult(session, turn, step, call!.block, result, callSeqs[committed]!)
+      appendToolResult(session, turn, step, call.block, result, callSeq)
       for (const context of result.additionalContexts ?? []) acceptContext(context)
+      if (result.isError && result.error.info?.code !== TOOL_ABORTED
+        && result.error.info?.code !== TOOL_ABORTED_BEFORE_DISPATCH) {
+        acceptContext(createUserMessage({
+          content: [{ type: 'text', text: TOOL_FAILURE_RECOVERY_PROMPT(call.block.name) }],
+          source: { kind: 'plugin', plugin: 'agent-loop' },
+        }))
+      }
       concluded ||= result.concludesTurn === true
       committed++
     }

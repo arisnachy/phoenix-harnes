@@ -1,6 +1,6 @@
 /** Host registration for browser conversation preferences. */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { settingsNamespace } from '@phoenix-ai/dsh-settings'
 import { CONVERSATION_SETTINGS_NAMESPACE, ConversationSettingsSchema } from './submission-settings.ts'
 

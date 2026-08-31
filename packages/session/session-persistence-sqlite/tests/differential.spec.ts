@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import fc from 'fast-check'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

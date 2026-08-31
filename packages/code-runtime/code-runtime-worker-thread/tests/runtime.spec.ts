@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { WorkerThreadCodeRuntime } from '@phoenix-ai/dsh-code-runtime-worker-thread'
 import type { Config } from '@phoenix-ai/dsh-code-runtime-worker-thread'
 import type { CodeBindingFunction, CodeBindingNamespace, CodeRunResult } from '@phoenix-ai/dsh-code-runtime'

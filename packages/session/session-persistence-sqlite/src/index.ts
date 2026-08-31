@@ -4,8 +4,8 @@
  * @module @phoenix-ai/dsh-session-persistence-sqlite
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context, Service } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import type {
   SessionEvent,
   SessionHeader,
@@ -124,6 +124,11 @@ export class SqliteSessionPersistence extends SessionPersistence {
 
   list(signal?: AbortSignal): Promise<SessionHeader[]> {
     return this.store.list(signal)
+  }
+
+  /** Remove one cold session from the SQLite database. */
+  override remove(id: SessionId): Promise<boolean> {
+    return this.coordinator.remove(id)
   }
 
   listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]> {

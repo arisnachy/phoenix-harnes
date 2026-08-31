@@ -2,7 +2,7 @@
 # to the real ACP composition. The model is told not to call them; the scenario
 # pins both assembled request schemas without starting Codex.
 - id: base
-  name: '@deepseek-ai/cordis-plugin-include'
+  name: '@phoenix-ai/cordis-plugin-include'
   config:
     path: ./cordis.yml
     patches:

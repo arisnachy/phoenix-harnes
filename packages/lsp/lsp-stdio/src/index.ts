@@ -11,8 +11,8 @@
  * @module @phoenix-ai/dsh-lsp-stdio
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import type { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { LspError, LspProviderId } from '@phoenix-ai/dsh-lsp'
 import type {
   LspProvider,

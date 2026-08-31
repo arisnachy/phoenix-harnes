@@ -3,7 +3,7 @@
 // without a settings service and AssistantMarkdown reasoning/unknown block arms.
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { cleanup, render } from '@testing-library/react'
 import { makeTranslate } from '@phoenix-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'

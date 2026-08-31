@@ -16,9 +16,9 @@
 
 import { isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { Context, type Fiber } from '@deepseek-ai/cordis'
-import { Include } from '@deepseek-ai/cordis-plugin-include'
-import type { EntryTree } from '@deepseek-ai/cordis-plugin-loader'
+import { Context, type Fiber } from '@phoenix-ai/cordis'
+import { Include } from '@phoenix-ai/cordis-plugin-include'
+import type { EntryTree } from '@phoenix-ai/cordis-plugin-loader'
 import { scopeOf, scopeParentOf, type ScopeKey } from '@phoenix-ai/dsh-scope'
 import { PresetMountError, type AgentPreset } from './preset.ts'
 

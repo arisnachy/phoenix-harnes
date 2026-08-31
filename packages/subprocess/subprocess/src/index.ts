@@ -8,7 +8,7 @@
  * @module @phoenix-ai/dsh-subprocess
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import { DSH_ENV_PREFIX } from './types.ts'
 import type { SubprocessHandle, SubprocessSpawnSpec } from './types.ts'
 import type { SubprocessTerminalHandle, SubprocessTerminalSpawnSpec } from './types.ts'
@@ -79,7 +79,7 @@ export function scrubbedParentEnv(): Record<string, string> {
   return env
 }
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     subprocess: SubprocessRuntime
   }

@@ -4,7 +4,7 @@
  * @module @phoenix-ai/dsh-tool-session-query/operations
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { HarnessError } from '@phoenix-ai/dsh-llm'
 import type { SessionId } from '@phoenix-ai/dsh-session'
 import {

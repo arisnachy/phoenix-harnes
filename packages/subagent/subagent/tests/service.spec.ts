@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { type Agent } from '@phoenix-ai/dsh-agent'
 
 import { HarnessError } from '@phoenix-ai/dsh-llm'

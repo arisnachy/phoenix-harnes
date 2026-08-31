@@ -8,7 +8,7 @@
  * disposal removes the contribution (HMR safety). The same plugin registers
  * its Settings row and invalidates that row on host settings changes.
  */
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { SlotRegistry, type SessionId } from '@phoenix-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'

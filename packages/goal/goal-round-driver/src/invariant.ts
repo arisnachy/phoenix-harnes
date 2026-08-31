@@ -1,7 +1,7 @@
 /** Package-owned goal-round prompt invariants. @module @phoenix-ai/dsh-goal-round-driver/invariant */
 
 import { isDeepStrictEqual } from 'node:util'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { foldGoal, type FoldedGoal, type GoalJudgeAuditEntry, type GoalMessageSource, type GoalView } from '@phoenix-ai/dsh-goal'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'

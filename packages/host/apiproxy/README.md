@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+The \`session.delete({ sessionId })\` RPC is the explicit physical-delete path: it rejects live sessions, removes the durable session record through the persistence coordinator, clears workspace/archive accounting, and never removes the workspace directory. Backends without physical-delete support fail loudly.
+
 The API gateway shared by every client consists of the TypeScript API contract (`src/api/`, zero Node dependencies, importable from the browser), the fetch carrier pair (`src/fetch/`: `toFetchHandler` on the host side, `AbstractApiClient` plus platform subclasses on the client side), and the host-side implementation (`src/api-proxy.ts`: `createApiProxy` plus the default-exported `ApiProxyService` gateway plugin — config `{nativeOpen?, sessionExportCompressionLevel?, coldBlankProbeMaxBytes?}`, provides `ctx.apiProxy`). This package registers no routes; carriers such as HTTP wrap `ctx.apiProxy` themselves. The shipped Web composition lives in [`packages/bundle/web-app/cordis.patch.yml`](../../bundle/web-app/cordis.patch.yml), while its default Agent model selection belongs to [`@phoenix-ai/dsh-agent-default-model`](../../core/agent-default-model/README.md) in the base bundle.
 
 ## The shared Agent default (`agent-default-model` Settings section)

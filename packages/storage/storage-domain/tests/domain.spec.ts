@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { z } from 'zod'
 import Storage, { storageBackendServiceKey } from '@phoenix-ai/dsh-storage'
 import { apply, DomainFacility, defineDomain, domainTable } from '../src/index.ts'

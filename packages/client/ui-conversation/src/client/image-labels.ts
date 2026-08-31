@@ -1,6 +1,6 @@
 /** Attachment error and limit copy owned by the conversation input flow. */
 
-import type { ImageAttachmentLimits } from '@phoenix-ai/dsh-attachment'
+import type { FileAttachmentLimits, ImageAttachmentLimits } from '@phoenix-ai/dsh-attachment'
 import type { Translate } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ConversationKey } from './locales.ts'
 
@@ -22,12 +22,14 @@ export function imageSizeText(bytes: number): string {
  * @param t - the conversation-namespace translate.
  * @param reason - the wire `details.reason` code.
  * @param limits - projected limits interpolated into count/size copy, when known.
+ * @param fileLimits - projected arbitrary-file limits, when known.
  * @returns the banner text.
  */
 export function attachmentErrorText(
   t: Translate<ConversationKey>,
   reason: string,
   limits?: ImageAttachmentLimits,
+  fileLimits?: FileAttachmentLimits,
 ): string {
   switch (reason) {
     case 'MODEL_DOES_NOT_SUPPORT_IMAGES': return t('image.modelUnsupported')
@@ -50,6 +52,18 @@ export function attachmentErrorText(
     case 'IMAGES_TOO_LARGE':
       if (limits !== undefined) return t('image.totalTooLarge', { size: imageSizeText(limits.maxMessageImageBytes) })
       break
+    case 'TOO_MANY_FILES':
+      if (fileLimits !== undefined) return t('file.tooMany', { count: fileLimits.maxFilesPerMessage })
+      break
+    case 'FILE_TOO_LARGE':
+      if (fileLimits !== undefined) return t('file.fileTooLarge', { size: imageSizeText(fileLimits.maxFileBytes) })
+      break
+    case 'FILES_TOO_LARGE':
+      if (fileLimits !== undefined) return t('file.totalTooLarge', { size: imageSizeText(fileLimits.maxMessageFileBytes) })
+      break
+    case 'INVALID_FILE':
+    case 'UNSUPPORTED_FILE_TYPE':
+      return t('file.unsupportedType')
     default: break
   }
   return t('image.sendFailed', { reason })

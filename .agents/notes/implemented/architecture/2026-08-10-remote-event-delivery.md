@@ -33,7 +33,7 @@ All five events ride this path, and their dedicated `HostFrame` variants or Clie
 type-meta gains one **shape predicate**, one **selection seat**, and **one** member on `TypertClientRemote`. No runtime code:
 
 ```ts
-import type { Events } from '@deepseek-ai/cordis'
+import type { Events } from '@phoenix-ai/cordis'
 
 /** Cordis events shaped for one-way remote delivery: no Scope binding, void return. */
 export type TypertForwardableEvent = {

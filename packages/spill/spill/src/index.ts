@@ -14,13 +14,13 @@
  * @module @phoenix-ai/dsh-spill
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service } from '@phoenix-ai/cordis'
 import type { SaveTextSpill, SpillRef } from './types.ts'
 
 export { SpillLocator } from './types.ts'
 export type { SaveTextSpill, SpillOwner, SpillRef, SpillSource } from './types.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     spillStore: SpillStore
   }

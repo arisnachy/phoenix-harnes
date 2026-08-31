@@ -1,27 +1,37 @@
 /** Local durable attachment backend rooted below `DSH_HOME`. @module @phoenix-ai/dsh-attachment-local */
 
 import { join, resolve } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import { AttachmentStore } from '@phoenix-ai/dsh-attachment'
 import type {
+  FileAttachmentLimits,
+  FileAttachmentRef,
   ImageAttachmentLimits,
   ImageAttachmentRef,
   ImageRequestPolicy,
   RequestImageAttachment,
+  SaveFileAttachment,
   SaveImageAttachment,
+  StoredFileAttachment,
   StoredImageAttachment,
 } from '@phoenix-ai/dsh-attachment'
 import { resolveDshHome } from '@phoenix-ai/dsh-home-paths'
 import type { NormalizationPolicy } from './normalization.ts'
 import { CompressionLimiter } from './compression-limiter.ts'
-import { commitPreparedImageFile, prepareImageFile, readImageFile, validateImageFile } from './store.ts'
+import {
+  commitPreparedFileAttachment, commitPreparedImageFile, prepareFileAttachment, prepareImageFile,
+  readFileAttachment, readImageFile, validateImageFile,
+} from './store.ts'
 import { readRequestImageFile, requestImageVariantId } from './request-image.ts'
 
 export { canPassThroughNormalization, normalizeImage } from './normalization.ts'
 export type { NormalizedImage, NormalizationPolicy } from './normalization.ts'
-export { commitPreparedImageFile, prepareImageFile, readImageFile, saveImageFile, validateImageFile } from './store.ts'
-export type { PreparedImageFile } from './store.ts'
+export {
+  commitPreparedFileAttachment, commitPreparedImageFile, prepareFileAttachment, prepareImageFile,
+  readFileAttachment, readImageFile, saveFileAttachment, saveImageFile, validateImageFile,
+} from './store.ts'
+export type { PreparedFileAttachment, PreparedImageFile } from './store.ts'
 export { readRequestImageFile, requestImageDimensions, requestImageVariantId } from './request-image.ts'
 
 /** Default maximum encoded bytes for one submitted image; oversized sources are refused, not shrunk. */
@@ -46,6 +56,12 @@ export const DEFAULT_NORMALIZED_IMAGE_MAX_BYTES = 4 * 1024 * 1024
 export const DEFAULT_IMAGE_COMPRESSION_CONCURRENCY = 2
 /** Maximum configurable native image transformations per store. */
 export const MAX_IMAGE_COMPRESSION_CONCURRENCY = 8
+/** Default maximum encoded bytes for one arbitrary file. */
+export const DEFAULT_MAX_FILE_BYTES = 25 * 1024 * 1024
+/** Default maximum arbitrary files in one prompt. */
+export const DEFAULT_MAX_FILES_PER_MESSAGE = 20
+/** Default maximum aggregate arbitrary-file bytes in one prompt. */
+export const DEFAULT_MAX_MESSAGE_FILE_BYTES = 100 * 1024 * 1024
 
 /** Local attachment backend configuration. */
 export interface Config {
@@ -67,6 +83,12 @@ export interface Config {
   normalizedImageMaxBytes?: number
   /** Maximum simultaneous normalization or request-image transformations in this service instance. */
   imageCompressionConcurrency?: number
+  /** Maximum bytes accepted for one arbitrary file. */
+  maxFileBytes?: number
+  /** Maximum arbitrary files accepted in one submitted message. */
+  maxFilesPerMessage?: number
+  /** Maximum aggregate arbitrary-file bytes accepted in one submitted message. */
+  maxMessageFileBytes?: number
 }
 
 function abortReason(signal: AbortSignal): Error {
@@ -143,11 +165,15 @@ export class LocalAttachmentStore extends AttachmentStore {
     normalizedImageMaxBytes: z.number().step(1).min(1).default(DEFAULT_NORMALIZED_IMAGE_MAX_BYTES),
     imageCompressionConcurrency: z.number().step(1).min(1).max(MAX_IMAGE_COMPRESSION_CONCURRENCY)
       .default(DEFAULT_IMAGE_COMPRESSION_CONCURRENCY),
+    maxFileBytes: z.number().step(1).min(1).default(DEFAULT_MAX_FILE_BYTES),
+    maxFilesPerMessage: z.number().step(1).min(1).default(DEFAULT_MAX_FILES_PER_MESSAGE),
+    maxMessageFileBytes: z.number().step(1).min(1).default(DEFAULT_MAX_MESSAGE_FILE_BYTES),
   })
 
   /** Absolute versioned storage root. */
   readonly root: string
   readonly imageLimits: ImageAttachmentLimits
+  override readonly fileLimits: FileAttachmentLimits
   /** Resolved provider-independent normalization policy. */
   readonly normalizationPolicy: Readonly<NormalizationPolicy>
   /** Resolved instance-level compression limit. */
@@ -165,6 +191,11 @@ export class LocalAttachmentStore extends AttachmentStore {
       maxImagePixels: config.maxImagePixels ?? DEFAULT_MAX_IMAGE_PIXELS,
       maxImageDimension: config.maxImageDimension ?? DEFAULT_MAX_IMAGE_DIMENSION,
       mediaTypes: Object.freeze(['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const),
+    })
+    this.fileLimits = Object.freeze({
+      maxFileBytes: config.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
+      maxFilesPerMessage: config.maxFilesPerMessage ?? DEFAULT_MAX_FILES_PER_MESSAGE,
+      maxMessageFileBytes: config.maxMessageFileBytes ?? DEFAULT_MAX_MESSAGE_FILE_BYTES,
     })
     this.normalizationPolicy = Object.freeze({
       maxDimension: config.normalizedImageMaxDimension ?? DEFAULT_NORMALIZED_IMAGE_MAX_DIMENSION,
@@ -184,6 +215,27 @@ export class LocalAttachmentStore extends AttachmentStore {
 
   async validateImage(input: SaveImageAttachment): Promise<void> {
     await this.compression.run(() => validateImageFile(input, this.imageLimits, this.normalizationPolicy))
+  }
+
+  override async validateFile(input: SaveFileAttachment): Promise<void> {
+    this.validateFileBatch([input])
+    prepareFileAttachment(input, this.fileLimits)
+  }
+
+  override async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]> {
+    this.validateFileBatch(inputs)
+    const prepared = inputs.map(input => prepareFileAttachment(input, this.fileLimits))
+    const refs: FileAttachmentRef[] = []
+    for (const file of prepared) refs.push(await commitPreparedFileAttachment(this.root, file))
+    return refs
+  }
+
+  override async saveFile(input: SaveFileAttachment): Promise<FileAttachmentRef> {
+    return commitPreparedFileAttachment(this.root, prepareFileAttachment(input, this.fileLimits))
+  }
+
+  override async readFile(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachment> {
+    return readFileAttachment(this.root, ref, signal)
   }
 
   override async saveImages(inputs: readonly SaveImageAttachment[]): Promise<readonly ImageAttachmentRef[]> {

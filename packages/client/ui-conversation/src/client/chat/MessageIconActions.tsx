@@ -7,6 +7,7 @@ import {
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { formatLatencySeconds, formatMessageClock, formatRunDuration, formatTokensPerSecond } from './message-chrome.ts'
+import { createSpeechOutput, hasSpeechOutput, type SpeechOutput, type SpeechOutputState } from '../speech-output.ts'
 import { useCalendarDay } from './use-calendar-day.ts'
 import css from './MessageIconActions.module.css'
 
@@ -25,6 +26,8 @@ export interface MessageIconActionsProps {
   clock: 'start' | 'end'
   /** Fork the session at this message; omission hides the branch action. */
   onBranch?: (() => void) | undefined
+  /** Enable browser-native speech output for this message; normally assistant-only. */
+  speak?: boolean | undefined
   /** The message is not a completed transcript tail, so branch stays visible but unavailable. */
   branchUnavailable?: boolean | undefined
   /** Parent layout class composed onto the actions row. */
@@ -45,7 +48,7 @@ export interface MessageIconActionsProps {
  */
 export function MessageIconActions({
   text, time, runMs, ttftMs, tokensPerSecond, clock, onBranch, branchUnavailable = false, className,
-  extraActions, t,
+  speak = false, extraActions, t,
 }: MessageIconActionsProps) {
   const day = useCalendarDay()
   const reasonId = useId()
@@ -75,6 +78,24 @@ export function MessageIconActions({
       }, 1000)
     })
   }, [copied, text])
+  const [speechState, setSpeechState] = useState<SpeechOutputState>(() => (
+    speak && hasSpeechOutput() ? 'idle' : 'unsupported'
+  ))
+  const speechRef = useRef<SpeechOutput | null>(null)
+  useEffect(() => () => {
+    speechRef.current?.dispose()
+    speechRef.current = null
+  }, [])
+  const onSpeak = useCallback(() => {
+    if (speechState === 'speaking') {
+      speechRef.current?.stop()
+      return
+    }
+    if (speechRef.current === null) {
+      speechRef.current = createSpeechOutput(setSpeechState)
+    }
+    speechRef.current.speak(text)
+  }, [speechState, text])
   // The dot is decorative and stays hidden, but its margins separate the
   // readings only on screen: without the flanking spaces a reader hears one
   // run-on string ("Ran for 13sTTFT 0.2s12 tok/s") instead of three facts.
@@ -116,6 +137,22 @@ export function MessageIconActions({
         </button>
       </Tooltip>
       {extraActions}
+      {speak && speechState !== 'unsupported' && text.trim() !== '' && (
+        <Tooltip label={speechState === 'speaking' ? t('message.stopSpeaking') : t('message.speak')} side="bottom">
+          <button
+            type="button"
+            className={css.action}
+            aria-label={speechState === 'speaking' ? t('message.stopSpeaking') : t('message.speak')}
+            aria-pressed={speechState === 'speaking'}
+            data-speaking={speechState === 'speaking' || undefined}
+            onClick={onSpeak}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M2.5 6.25v3.5h2.1L8 12.5v-9L4.6 6.25H2.5Zm7.9-.9a4 4 0 0 1 0 5.3m1.65-6.95a6.5 6.5 0 0 1 0 8.6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.35" />
+            </svg>
+          </button>
+        </Tooltip>
+      )}
       {onBranch !== undefined && (
         <Tooltip label={branchUnavailable ? t('message.branchUnavailable') : t('message.branch')} side="bottom">
           {/* Native disabled buttons do not deliver the hover/focus events Tooltip needs. */}

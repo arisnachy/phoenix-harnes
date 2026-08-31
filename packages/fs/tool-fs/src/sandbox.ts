@@ -10,7 +10,7 @@
  * @module @phoenix-ai/dsh-tool-fs/sandbox
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import type { ToolExecution } from '@phoenix-ai/dsh-tools'
 import type { SandboxExecutionPolicy, SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import { ESCALATION_TARGETS, approveEscalation, escalationHintMarker, sandboxDenialMarker, validateEscalationArgs } from '@phoenix-ai/dsh-sandbox'

@@ -15,7 +15,7 @@
  */
 
 import type { CacheRetention, ChatTemplateKwargValue, ModelThinkingLevel, Provider, ThinkingBudgets, Transport } from '@earendil-works/pi-ai'
-import z from '@deepseek-ai/schemastery'
+import z from '@phoenix-ai/schemastery'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { CredentialRef } from '@phoenix-ai/dsh-credentials'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
@@ -56,6 +56,8 @@ export const DEFAULT_MAX_REQUEST_IMAGE_BYTES = 20 * 1024 * 1024
 export const DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET = 2048 * 2048
 /** Default raw encoded-byte cap before inline base64 expansion. */
 export const DEFAULT_REQUEST_IMAGE_MAX_BYTES = 1024 * 1024
+/** Default raw byte bound for projecting one text attachment into a request. */
+export const DEFAULT_MAX_INLINE_FILE_BYTES = 256 * 1024
 
 /** Context capacity assumed for a model neither configuration nor the catalog sizes. */
 export const DEFAULT_CONTEXT_WINDOW = 262_144
@@ -74,6 +76,41 @@ export const DEFAULT_MAX_TOKENS = 32_768
  * repeating a request that cannot succeed.
  */
 export const DEFAULT_INPUT: readonly PiAiModality[] = ['text']
+
+/** Stable route id for the optional local codex-chatgpt-web bridge. */
+export const CHATGPT_WEB_PROVIDER = 'chatgpt-web'
+/** Default loopback endpoint exposed by codex-chatgpt-web. */
+export const CHATGPT_WEB_DEFAULT_BASE_URL = 'http://127.0.0.1:17841/v1'
+/** The bridge translates its browser session to the OpenAI Responses wire. */
+export const CHATGPT_WEB_DEFAULT_API = 'openai-responses'
+
+/**
+ * Models advertised by the optional bridge before its live `/v1/models` list
+ * is fetched. The values are deliberately capacity estimates used only to
+ * make the route selectable; the bridge remains the authority for availability.
+ */
+const CHATGPT_WEB_DEFAULT_MODELS: PiAiModelProfile[] = [
+  { id: 'gpt-5.6-sol', name: 'ChatGPT Web · GPT-5.6 Sol' },
+  { id: 'gpt-5.6-luna', name: 'ChatGPT Web · GPT-5.6 Luna' },
+]
+
+/**
+ * Return detached defaults for the optional local bridge route.
+ * @returns a fresh ChatGPT Web bridge profile with default models.
+ */
+export function chatgptWebDefaults(): {
+  displayName: string
+  api: string
+  baseURL: string
+  models: PiAiModelProfile[]
+} {
+  return {
+    displayName: 'ChatGPT Web',
+    api: CHATGPT_WEB_DEFAULT_API,
+    baseURL: CHATGPT_WEB_DEFAULT_BASE_URL,
+    models: CHATGPT_WEB_DEFAULT_MODELS.map(model => ({ ...model })),
+  }
+}
 
 export type {
   PiAiCompatProfile,
@@ -171,6 +208,8 @@ export interface PiAiProviderProfile {
   requestImagePixelBudget?: number
   /** Raw encoded-byte cap for each deterministic inline request version. */
   requestImageMaxBytes?: number
+  /** Maximum bytes of one text attachment projected into a pi-ai request. */
+  maxInlineFileBytes?: number
   /** Provider-owned model-request retry policy; omission uses normal mode with two retries. */
   retryPolicy?: RetryPolicyConfig
 }
@@ -192,6 +231,8 @@ export interface ResolvedPiAiProviderProfile
   requestImagePixelBudget: number
   /** Positive raw request-version byte cap after defaulting. */
   requestImageMaxBytes: number
+  /** Positive per-file projection cap after defaulting. */
+  maxInlineFileBytes: number
   /** Immutable retry policy captured with this provider route. */
   retryPolicy: ResolvedRetryPolicy
   /**
@@ -326,6 +367,7 @@ const profile = z.object({
   maxRequestImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_REQUEST_IMAGE_BYTES),
   requestImagePixelBudget: z.number().step(1).min(1).default(DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET),
   requestImageMaxBytes: z.number().step(1).min(1).default(DEFAULT_REQUEST_IMAGE_MAX_BYTES),
+  maxInlineFileBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INLINE_FILE_BYTES),
   retryPolicy: RetryPolicySchema,
 })
 
@@ -384,7 +426,16 @@ export function resolveProfiles(
   }
   const entries = Object.entries(providers ?? {})
   const resolved = new Map<string, ResolvedPiAiProviderProfile>()
-  for (const [provider, source] of entries) {
+  for (const [provider, rawSource] of entries) {
+    const source = provider === CHATGPT_WEB_PROVIDER
+      ? {
+        ...rawSource,
+        ...rawSource.displayName === undefined ? { displayName: chatgptWebDefaults().displayName } : {},
+        ...rawSource.api === undefined ? { api: chatgptWebDefaults().api } : {},
+        ...rawSource.baseURL === undefined ? { baseURL: chatgptWebDefaults().baseURL } : {},
+        ...rawSource.models === undefined ? { models: chatgptWebDefaults().models } : {},
+      }
+      : rawSource
     rejectRemovedFields(provider, source)
     if (provider.length === 0) throw new Error('llm-pi-ai: provider names must be non-empty')
     if (source.baseURL !== undefined && source.baseURL.length === 0) {
@@ -412,6 +463,10 @@ export function resolveProfiles(
     const requestImageMaxBytes = source.requestImageMaxBytes ?? DEFAULT_REQUEST_IMAGE_MAX_BYTES
     if (!Number.isSafeInteger(requestImageMaxBytes) || requestImageMaxBytes <= 0) {
       throw new Error(`llm-pi-ai: provider "${provider}" requestImageMaxBytes must be a positive safe integer`)
+    }
+    const maxInlineFileBytes = source.maxInlineFileBytes ?? DEFAULT_MAX_INLINE_FILE_BYTES
+    if (!Number.isSafeInteger(maxInlineFileBytes) || maxInlineFileBytes <= 0) {
+      throw new Error(`llm-pi-ai: provider "${provider}" maxInlineFileBytes must be a positive safe integer`)
     }
     // Detached from the configuration object because pi-ai types `Model.input`
     // mutable. The schema's explicit default covers an absent key, so an empty
@@ -447,6 +502,7 @@ export function resolveProfiles(
       maxRequestImageBytes,
       requestImagePixelBudget,
       requestImageMaxBytes,
+      maxInlineFileBytes,
       retryPolicy: resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`),
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },

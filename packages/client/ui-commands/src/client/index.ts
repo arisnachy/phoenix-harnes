@@ -28,7 +28,7 @@ export type {
 } from './contract.ts'
 export type { CommandKey } from './locales.ts'
 
-declare module '@deepseek-ai/cordis' {
+declare module '@phoenix-ai/cordis' {
   interface Context {
     commandUi: CommandUiRuntime
   }

@@ -6,8 +6,8 @@
  */
 
 import { expect } from 'vitest'
-import { FiberState, Inject, RegistryService, ValidationError } from '@deepseek-ai/cordis'
-import type { Context, Plugin } from '@deepseek-ai/cordis'
+import { FiberState, Inject, RegistryService, ValidationError } from '@phoenix-ai/cordis'
+import type { Context, Plugin } from '@phoenix-ai/cordis'
 import { AttachmentStore } from '@phoenix-ai/dsh-attachment'
 import type {
   ImageAttachmentLimits,

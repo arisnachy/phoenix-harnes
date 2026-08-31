@@ -18,6 +18,7 @@ const SNAPSHOT_OPERATIONS: ReadonlySet<Exclude<GoalOperation, 'clear'>> = new Se
   'edit',
   'pause',
   'resume',
+  'continue',
   'complete',
   'block',
 ])
@@ -208,7 +209,7 @@ function validateSnapshotTransition(
   if (state.updatedAt === undefined) throw new Error('current goal fold lacks updatedAt')
   if (change.createdAt !== state.createdAt
     || change.updatedAt < state.updatedAt
-    || change.roundsStarted !== state.roundsStarted) {
+    || (change.operation !== 'continue' && change.roundsStarted !== state.roundsStarted)) {
     throw new Error(`goal ${change.operation} does not preserve the current counters and timestamps`)
   }
   switch (change.operation) {
@@ -234,6 +235,13 @@ function validateSnapshotTransition(
       }
       break
     }
+    case 'continue':
+      requireSameDefinition(current, next, change.operation)
+      if ((current.phase !== 'active' && current.blockedReason?.code !== 'round-limit')
+        || next.phase !== 'active' || change.roundsStarted !== 0) {
+        throw new Error('goal continue has an invalid phase transition or continuation counter')
+      }
+      break
     case 'complete':
       requireSameDefinition(current, next, change.operation)
       if (current.phase === 'complete' || next.phase !== 'complete') throw new Error('goal complete has an invalid phase transition')

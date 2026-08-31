@@ -1,10 +1,12 @@
 import type { CapabilityNeed, CapabilityStatus } from '@phoenix-ai/dsh-hardness'
+import { boundContextSummary, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { snapshotJsonValue } from '@phoenix-ai/dsh-session'
 import {
   defineTool,
   ToolArgsError,
   type JsonValue,
   type ToolDefinition,
+  type ToolRunContext,
 } from '@phoenix-ai/dsh-tools'
 import type { CapabilityExecutionContext } from './execution-bridge.ts'
 import type { HardnessMissionResult } from './mission-orchestrator.ts'
@@ -22,7 +24,12 @@ const CAPABILITY_STATUSES = [
 ] as const satisfies readonly CapabilityStatus[]
 
 type HardnessToolResult =
-  | { readonly kind: 'blocked'; readonly reason: string }
+  | {
+    readonly kind: 'blocked'
+    readonly reason: string
+    readonly mission_status: 'ACTIVE' | 'RECOVERING' | 'WAITING_EXTERNAL'
+    readonly next_action: 'repair_and_replan' | 'retry_with_alternative' | 'wait_for_dependency'
+  }
   | {
     readonly kind: 'completed'
     readonly artifact_id: string
@@ -63,12 +70,22 @@ function safeRendered(value: unknown): JsonValue | undefined {
 function projectMissionResult(result: HardnessMissionResult): HardnessToolResult {
   switch (result.kind) {
     case 'blocked':
-      return { kind: 'blocked', reason: result.reason }
+      return {
+        kind: 'blocked',
+        reason: result.reason,
+        mission_status: result.status ?? (result.retryable === true ? 'RECOVERING' : 'WAITING_EXTERNAL'),
+        next_action: result.nextAction ?? (result.retryable === true ? 'retry_with_alternative' : 'wait_for_dependency'),
+      }
     case 'completed':
     {
       const rendered = safeRendered(result.rendered)
       if (rendered === undefined) {
-        return { kind: 'blocked', reason: 'mission produced an unsafe model-facing rendering' }
+        return {
+          kind: 'blocked',
+          reason: 'mission produced an unsafe model-facing rendering',
+          mission_status: 'ACTIVE',
+          next_action: 'repair_and_replan',
+        }
       }
       return {
         kind: 'completed',
@@ -78,6 +95,29 @@ function projectMissionResult(result: HardnessMissionResult): HardnessToolResult
       }
     }
   }
+}
+
+/** Keep a blocked mission visible as recovery work in the next model request. */
+function deferMissionRecovery(exec: ToolRunContext, value: Extract<HardnessToolResult, { kind: 'blocked' }>): void {
+  exec.deferContext(createUserMessage({
+    content: [{
+      type: 'text',
+      text: '<hardness_mission_recovery>\n'
+        + `Mission status: ${value.mission_status}\n`
+        + `Next action: ${value.next_action}\n`
+        + `Reason: ${JSON.stringify(value.reason)}\n`
+        + 'Do not treat this blocked result as mission completion. Keep the original objective active. '
+        + 'Apply WALL_PROTOCOL: inspect the root cause, use the stated next action, and continue until '
+        + 'the final deliverable is independently verified by the judge or the user explicitly cancels.\n'
+        + '</hardness_mission_recovery>',
+    }],
+    source: {
+      kind: 'plugin',
+      plugin: 'hardness-adapters',
+      form: 'notice',
+      summary: boundContextSummary(`HARDNESS ${value.mission_status}: ${value.next_action}`),
+    },
+  }))
 }
 
 function executionContext(exec: { readonly callId: CapabilityExecutionContext['callId']; readonly signal: AbortSignal; readonly agent?: CapabilityExecutionContext['agent'] }): CapabilityExecutionContext {
@@ -96,7 +136,7 @@ function executionContext(exec: { readonly callId: CapabilityExecutionContext['c
 export function createHardnessTool(runner: HardnessMissionRunner): ToolDefinition {
   return defineTool({
     name: 'hardness_run',
-    description: 'Run one governed HARDNESS capability mission.',
+    description: 'Run one governed HARDNESS capability mission. A blocked result is non-terminal: read mission_status and next_action, apply WALL_PROTOCOL, and continue until the final deliverable is independently verified by the judge or the user explicitly cancels.',
     parameters: {
       need: {
         type: 'object',
@@ -121,6 +161,8 @@ export function createHardnessTool(runner: HardnessMissionRunner): ToolDefinitio
             properties: {
               kind: { type: 'string', const: 'blocked', required: true },
               reason: { type: 'string', required: true },
+              mission_status: { type: 'string', enum: ['ACTIVE', 'RECOVERING', 'WAITING_EXTERNAL'], required: true },
+              next_action: { type: 'string', enum: ['repair_and_replan', 'retry_with_alternative', 'wait_for_dependency'], required: true },
             },
           },
           {
@@ -147,7 +189,9 @@ export function createHardnessTool(runner: HardnessMissionRunner): ToolDefinitio
         args: args.arguments,
         context,
       })
-      return projectMissionResult(result)
+      const projected = projectMissionResult(result)
+      if (projected.kind === 'blocked') deferMissionRecovery(exec, projected)
+      return projected
     },
     presentCall(args) {
       return {

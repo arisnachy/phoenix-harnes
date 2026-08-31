@@ -13,7 +13,7 @@
 ## 接口
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { AuthorizationDeclinedError, type AuthorizationSession } from '@phoenix-ai/dsh-authorization'
 import { credentialKey } from '@phoenix-ai/dsh-credentials'
 

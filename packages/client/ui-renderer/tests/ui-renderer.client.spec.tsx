@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup } from '@testing-library/react'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
 import { TestSessions, TestWorkspaces } from '@phoenix-ai/dsh-client-test-runtime'
 import type { Stabilizer } from '@phoenix-ai/dsh-client-test-runtime'

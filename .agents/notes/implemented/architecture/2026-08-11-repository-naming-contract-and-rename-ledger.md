@@ -89,7 +89,7 @@ The tables record public and repository-wide renames. The `Current` column holds
 | `@phoenix-ai/dsh-jsonrpc` | `@phoenix-ai/dsh-sdk-jsonrpc-server` | It is the server half of the SDK protocol. `jsonrpc` alone names an encoding; `sdk-jsonrpc-server` gives the family, mechanism, and role. |
 | `HarnessSdkServer` | `HarnessSdkJsonRpcServer` | The class is one JSON-RPC server implementation, not every possible SDK server. |
 
-Keep `@phoenix-ai/dsh-sdk-client`, `@phoenix-ai/dsh-sdk-protocol`, and `deepseek-harness-sdk-runtime`. Exclude `@deepseek-ai/create-sdk`, `@phoenix-ai/dsh-scripts`, `@phoenix-ai/dsh-helper`, and `@phoenix-ai/dsh-telemetry`; the separate removal decision deletes them and their support graph.
+Keep `@phoenix-ai/dsh-sdk-client`, `@phoenix-ai/dsh-sdk-protocol`, and `deepseek-harness-sdk-runtime`. Exclude `@phoenix-ai/create-sdk`, `@phoenix-ai/dsh-scripts`, `@phoenix-ai/dsh-helper`, and `@phoenix-ai/dsh-telemetry`; the separate removal decision deletes them and their support graph.
 
 ### Shell and terminal
 

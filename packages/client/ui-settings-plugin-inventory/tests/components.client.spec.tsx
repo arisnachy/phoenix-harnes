@@ -34,18 +34,20 @@ function updateProps(
   readUpdateState: UpdateFooterActionInjected['readUpdateState'],
   restartForUpdate: UpdateFooterActionInjected['restartForUpdate'] = async () => ({ accepted: false, status: 'idle' }),
   wide = true,
+  refreshForUpdate: UpdateFooterActionInjected['refreshForUpdate'] = async () => ({ accepted: true }),
 ): UpdateFooterActionProps {
   return {
     wide,
     t,
     readUpdateState,
     restartForUpdate,
+    refreshForUpdate,
   }
 }
 
 const SNAPSHOT = {
   entries: [
-    { entryId: '8a1b2c3d', moduleName: '@deepseek-ai/cordis-plugin-hmr', enabled: true, fiberPhase: 'active' },
+    { entryId: '8a1b2c3d', moduleName: '@phoenix-ai/cordis-plugin-hmr', enabled: true, fiberPhase: 'active' },
     { entryId: 'pending', moduleName: 'cordis:pending-name', enabled: true, fiberPhase: 'pending' },
     { entryId: 'loading', moduleName: '@fixture/loading-name', enabled: true, fiberPhase: 'loading' },
     { entryId: 'failed', moduleName: '@fixture/failed-name', enabled: true, fiberPhase: 'failed' },
@@ -152,7 +154,7 @@ describe('PluginInventorySettingsTab', () => {
 describe('UpdateFooterAction', () => {
   it.each([
     [{ status: 'idle' }, undefined],
-    [{ status: 'checking' }, 'updateChecking'],
+    [{ status: 'checking' }, undefined],
     [{ status: 'current' }, undefined],
     [{ status: 'updated' }, undefined],
     [{ status: 'off' }, undefined],
@@ -167,11 +169,25 @@ describe('UpdateFooterAction', () => {
     [{ status: 'applying' }, 'updateApplying'],
     [{ status: 'rolling-back' }, 'updateRollingBack'],
     [{ status: 'rolled-back' }, 'updateRolledBack'],
-    [{ status: 'paused' }, undefined],
+    [{ status: 'paused' }, 'updatePaused'],
+    [{ status: 'paused', phase: 'development-branch' }, undefined],
+    [{ status: 'paused', detail: 'Automatic updates are disabled on branch codex/full-access-no-approval.' }, undefined],
     [{ status: 'error' }, 'updateError'],
     [{ status: 'rollback-failed' }, 'updateError'],
   ] as Array<[PhoenixUpdateSnapshot, PluginInventoryLocaleKey | undefined]>)('maps %# to stable localized copy', (snapshot, expected) => {
     expect(updateLabelKey(snapshot)).toBe(expected)
+  })
+
+  it('stays invisible during routine checks and transient Host read failures', async () => {
+    const checking = render(<UpdateFooterAction {...updateProps(async () => ({ status: 'checking' }))} />)
+    await act(async () => { await Promise.resolve() })
+    expect(checking.container.textContent).toBe('')
+    checking.unmount()
+
+    const disconnected = render(<UpdateFooterAction {...updateProps(async () => { throw new Error('private read detail') })} />)
+    await act(async () => { await Promise.resolve() })
+    expect(disconnected.container.textContent).toBe('')
+    expect(screen.queryByText('private read detail')).toBeNull()
   })
 
   it('stays absent while current and appears automatically on the next poll', async () => {
@@ -227,13 +243,7 @@ describe('UpdateFooterAction', () => {
     expect(readUpdateState).toHaveBeenCalledTimes(2)
   })
 
-  it('contains Remote read and restart failures without exposing transport detail', async () => {
-    const failedRead = render(<UpdateFooterAction {...updateProps(async () => { throw new Error('private read detail') })} />)
-    expect(await screen.findByRole('status', { name: en.updateChecking })).toBeTruthy()
-    expect(screen.queryByText(en.updateError)).toBeNull()
-    expect(screen.queryByText('private read detail')).toBeNull()
-    failedRead.unmount()
-
+  it('contains restart failures without exposing transport detail', async () => {
     const restartForUpdate = vi.fn<UpdateFooterActionInjected['restartForUpdate']>()
       .mockRejectedValue(new Error('private restart detail'))
     render(<UpdateFooterAction {...updateProps(async () => ({ status: 'ready', target: 'a'.repeat(40) }), restartForUpdate)} />)
@@ -254,7 +264,27 @@ describe('UpdateFooterAction', () => {
     expect(readUpdateState).toHaveBeenCalledTimes(2)
   })
 
-  it('renders the stable update as a progress card with a short target identifier', async () => {
+  it('wakes the updater before retrying a paused or failed state', async () => {
+    const refreshForUpdate = vi.fn<UpdateFooterActionInjected['refreshForUpdate']>(async () => ({ accepted: true }))
+    render(<UpdateFooterAction {...updateProps(async () => ({ status: 'error' }), undefined, true, refreshForUpdate)} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: en.updateRetry }))
+    await waitFor(() => { expect(refreshForUpdate).toHaveBeenCalledOnce() })
+  })
+
+  it('automatically wakes the updater after a durable error', async () => {
+    vi.useFakeTimers()
+    const refreshForUpdate = vi.fn<UpdateFooterActionInjected['refreshForUpdate']>(async () => ({ accepted: true }))
+    const readUpdateState = vi.fn<UpdateFooterActionInjected['readUpdateState']>(async () => ({ status: 'error' }))
+    render(<UpdateFooterAction {...updateProps(readUpdateState, undefined, true, refreshForUpdate)} />)
+    await act(async () => { await Promise.resolve() })
+
+    expect(refreshForUpdate).not.toHaveBeenCalled()
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+    expect(refreshForUpdate).toHaveBeenCalledOnce()
+  })
+
+  it('renders a ready update as a compact restart action', async () => {
     const target = 'b'.repeat(40)
     render(<UpdateFooterAction {...updateProps(async () => ({ status: 'ready', target }))} />)
 
@@ -262,7 +292,7 @@ describe('UpdateFooterAction', () => {
     expect(card.getAttribute('data-update-status')).toBe('ready')
     expect(card.querySelector('[data-update-progress]')?.getAttribute('aria-valuenow')).toBe('100')
     expect(screen.getByText('bbbbbbbbbbbb')).toBeTruthy()
-    expect(screen.getByText(en.updateChannel)).toBeTruthy()
+    expect(screen.queryByText(en.updateChannel)).toBeNull()
   })
 
   it('uses a compact accessible action on the collapsed rail and ignores late reads after unmount', async () => {

@@ -193,7 +193,7 @@ describe('web e2e: settings modal and General preferences', () => {
     await page.keyboard.press('Escape')
 
     // Hold real plugin bundles so the shell-owned loading page remains observable.
-    const pluginPattern = /\/plugins\/@deepseek-ai\/dsh-client-ui-theme\/client\.js(?:\?.*)?$/
+    const pluginPattern = /\/plugins\/@phoenix-ai\/dsh-client-ui-theme\/client\.js(?:\?.*)?$/
     let releaseBundles = (): void => {}
     const bundlesReleased = new Promise<void>((resolve) => { releaseBundles = resolve })
     await page.route(pluginPattern, async (route) => {

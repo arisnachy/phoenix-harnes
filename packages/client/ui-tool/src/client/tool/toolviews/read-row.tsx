@@ -7,7 +7,7 @@
 // yet) and a non-read result render the summary row alone: the read intent is
 // result-side only, so there is no running-state read card to draw.
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@phoenix-ai/cordis'
 import { IconBrowseOutline16 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'

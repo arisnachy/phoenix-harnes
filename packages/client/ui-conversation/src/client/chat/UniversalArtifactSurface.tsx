@@ -15,6 +15,7 @@ export interface UniversalArtifactSurfaceProps {
 export function UniversalArtifactSurface({ artifact, onRun, onStop }: UniversalArtifactSurfaceProps) {
   const [expanded, setExpanded] = useState(false)
   const [running, setRunning] = useState(false)
+  const [copied, setCopied] = useState(false)
   const controllerRef = useRef<AbortController | undefined>(undefined)
   const [contentHeight, setContentHeight] = useState(artifact.size.minHeight)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -41,6 +42,19 @@ export function UniversalArtifactSurface({ artifact, onRun, onStop }: UniversalA
     controllerRef.current?.abort()
     onStop()
   }
+  const serialized = typeof artifact.data === 'string' ? artifact.data : JSON.stringify(artifact.data, null, 2)
+  const copy = (): void => {
+    if (navigator.clipboard === undefined) return
+    void navigator.clipboard.writeText(serialized).then(() => { setCopied(true) }).catch(() => { setCopied(false) })
+  }
+  const download = (): void => {
+    const url = URL.createObjectURL(new Blob([serialized], { type: artifact.mime }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = artifact.title.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'phoenix-artifact'
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
   return (
     <section
       className={`${css.root} ${expanded ? css.expanded : ''}`}
@@ -55,6 +69,8 @@ export function UniversalArtifactSurface({ artifact, onRun, onStop }: UniversalA
           <span>{artifact.language ?? artifact.kind}</span>
         </div>
         <div className={css.controls}>
+          <Button variant="outline" onClick={copy} disabled={navigator.clipboard === undefined}>{copied ? 'Copied' : 'Copy'}</Button>
+          <Button variant="outline" onClick={download}>Download</Button>
           {artifact.executable && onRun !== undefined && <Button variant="outline" onClick={execute} disabled={running}>{running ? 'Running…' : 'Run'}</Button>}
           {artifact.executable && onRun !== undefined && <Button variant="outline" onClick={stop} disabled={!running}>Stop</Button>}
           <Button
