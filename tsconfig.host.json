@@ -315,6 +315,8 @@
     { "path": "./packages/lsp/lsp" },
     { "path": "./packages/lsp/lsp-stdio" },
     { "path": "./packages/lsp/tool-lsp" },
+    { "path": "./packages/phoenix/runtime" },
+    { "path": "./packages/bundle/phoenix" },
     { "path": "./apps/cli" }
   ]
 }

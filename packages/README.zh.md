@@ -18,6 +18,7 @@ npm scope 为 `@phoenix-ai/dsh-*`；Cordis `Service` 子类和函数插件通过
 | [`feedback/`](feedback/README.zh.md) | 人类反馈 | 产品：稳定 API |
 | [`identity/`](identity/README.zh.md) | 共享匿名身份 | 产品：稳定 API |
 | [`llm/`](llm/README.zh.md) | LLM（大语言模型）能力系列：抽象服务 + 提供方适配器 | 产品：稳定 API |
+| [`phoenix/`](phoenix/README.zh.md) | PHOENIX 下游智能层：能力排名、自适应路由、故障转移、效率、安全与本地演进 | 产品：演进中 API |
 | [`e2b/`](e2b/README.zh.md) | E2B 提供方 | POC |
 | [`subprocess/`](subprocess/README.zh.md) | 子进程能力系列：Service Definition + 本地进程树提供方 | 产品：稳定 API |
 | [`shell/`](shell/README.zh.md) | Bash 能力系列：执行器 seam、本地实现、面向模型的工具 | 产品：稳定 API |
