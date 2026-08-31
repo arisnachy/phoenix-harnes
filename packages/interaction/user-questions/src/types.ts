@@ -74,3 +74,53 @@ export interface AskUserQuestionAnswer {
   /** Structured answers keyed by question id. */
   answers: AskUserQuestionAnswerItem[]
 }
+
+/** A recommendation marker accepted from model-authored option labels. */
+const RECOMMENDED_SUFFIX = /\s*(?:\((?:recommended|recomendada?|推荐)\)|（(?:recommended|recomendada?|推荐)）)\s*$/i
+
+/** Conservative labels that must win when a confirmation has no explicit recommendation. */
+const CONSERVATIVE_OPTION = new RegExp(
+  `\\b(?:${[
+    'cancel(?:l|ar|ación|ation)?', 'no', 'not now', 'later', 'reject(?:ed|ion)?', 'deny', 'decline', 'refuse',
+    'stop', 'skip', 'keep', "don't", 'do not', 'never', 'safe', 'read[ -]?only', 'cancelar', 'ahora no',
+    'más tarde', 'rechazar', 'denegar', 'omitir', 'detener', 'mantener', 'nunca', 'solo lectura',
+  ].join('|')})\\b`,
+  'i',
+)
+
+/** Find the option the model or the safe fallback designated for expiry. */
+function recommendedOption(question: AskUserQuestionItem): AskUserQuestionOption | undefined {
+  const options = question.options ?? []
+  return options.find(option => option.recommended === true)
+    ?? options.find(option => RECOMMENDED_SUFFIX.test(option.label))
+    ?? (question.multiSelect === true ? undefined : options.find(option => CONSERVATIVE_OPTION.test(option.label)))
+    ?? (question.multiSelect === true ? undefined : options[0])
+}
+
+/**
+ * Return one deterministic answer for a question that reached its deadline.
+ *
+ * This module contains only wire-safe types and deterministic policy so browser
+ * bundles can inline it without requiring a dynamic module-table row.
+ * @param question - Question whose options determine the automatic answer.
+ * @returns The structured answer for the expired question.
+ */
+export function automaticAnswerForQuestion(question: AskUserQuestionItem): AskUserQuestionAnswerItem {
+  if (question.multiSelect === true) {
+    const selected = (question.options ?? [])
+      .filter(option => option.recommended === true || RECOMMENDED_SUFFIX.test(option.label))
+      .map(option => option.label)
+    return { id: question.id, selected }
+  }
+  const option = recommendedOption(question)
+  return option === undefined ? { id: question.id, selected: [] } : { id: question.id, selected: [option.label] }
+}
+
+/**
+ * Return the complete structured answer applied when a question batch expires.
+ * @param questions - Questions in the pending interaction.
+ * @returns Structured answers for every expired question.
+ */
+export function automaticAnswerForQuestions(questions: readonly AskUserQuestionItem[]): AskUserQuestionAnswer {
+  return { answers: questions.map(automaticAnswerForQuestion) }
+}

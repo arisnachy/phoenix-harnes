@@ -15,7 +15,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { Button, IconEditOutline16, MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
-import { automaticAnswerForQuestion } from '@phoenix-ai/dsh-user-questions'
+import { automaticAnswerForQuestion } from '@phoenix-ai/dsh-user-questions/types'
 import type { PendingQuestion, PlanReview, QuestionComposerProps } from './contract/slots.ts'
 import { QuestionCountdown } from './QuestionCountdown.tsx'
 import css from './PlanReviewPanel.module.css'

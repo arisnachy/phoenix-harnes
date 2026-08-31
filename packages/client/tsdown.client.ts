@@ -58,7 +58,7 @@ function styleInjectionModule(
  * Everything else under @phoenix-ai/* is either a module-table entry
  * (external) or a leak the purity gate rejects.
  */
-export const INLINE_SAFE = /^@phoenix-ai\/dsh-(host-apiproxy|file-reference|session|llm|tools|brand)(\/|$)/
+export const INLINE_SAFE = /^(?:@phoenix-ai\/dsh-(host-apiproxy|file-reference|session|llm|tools|brand)(\/|$)|@phoenix-ai\/dsh-user-questions\/types$)/
 
 /**
  * Vendored framework libraries: rescoped into @phoenix-ai, so the gate below

@@ -102,4 +102,13 @@ describe('ChatGPT Web route defaults', () => {
       'gpt-5.6-luna',
     ])
   })
+
+  it('restores the bridge defaults when the loader materializes an omitted list as empty', () => {
+    const profile = resolveProfiles({ 'chatgpt-web': { models: [] } }).get('chatgpt-web')
+
+    expect(profile?.piProvider.getModels().map(model => model.id)).toEqual([
+      'gpt-5.6-sol',
+      'gpt-5.6-luna',
+    ])
+  })
 })

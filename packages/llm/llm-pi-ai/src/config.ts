@@ -433,7 +433,12 @@ export function resolveProfiles(
         ...rawSource.displayName === undefined ? { displayName: chatgptWebDefaults().displayName } : {},
         ...rawSource.api === undefined ? { api: chatgptWebDefaults().api } : {},
         ...rawSource.baseURL === undefined ? { baseURL: chatgptWebDefaults().baseURL } : {},
-        ...rawSource.models === undefined ? { models: chatgptWebDefaults().models } : {},
+        // The loader materializes an omitted list as `[]`. Treat that form the
+        // same as an omitted list so the optional bridge remains serviceable
+        // after settings have been written and read back.
+        ...rawSource.models === undefined || rawSource.models.length === 0
+          ? { models: chatgptWebDefaults().models }
+          : {},
       }
       : rawSource
     rejectRemovedFields(provider, source)

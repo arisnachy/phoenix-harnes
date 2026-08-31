@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { QuestionDeadline } from '@phoenix-ai/dsh-user-questions'
+import type { QuestionDeadline } from '@phoenix-ai/dsh-user-questions/types'
 import css from './QuestionCountdown.module.css'
 
 /** Props for the quiet, second-readable question deadline. */

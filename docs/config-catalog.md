@@ -3270,7 +3270,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/interaction/user-questions/src/index.ts:110`](../packages/interaction/user-questions/src/index.ts)
+Source: [`packages/interaction/user-questions/src/index.ts:64`](../packages/interaction/user-questions/src/index.ts)
 
 <a id="phoenix-aidsh-web"></a>
 

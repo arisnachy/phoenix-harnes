@@ -6,7 +6,7 @@
 
 包根入口导出 Cordis 插件约定、`PiAiAdapter` 与 `supportedProtocols()`；profile 解析、catalog 物化、提供方构造、回放转换和流转换保留在包内部。
 
-可配置提供方目录还包含可选的 `chatgpt-web` 路由，用于连接本地运行的 [`codex-chatgpt-web`](https://github.com/miuuyy/codex-chatgpt-web) 桥接。添加 `providers.chatgpt-web: {}` 后，Phoenix 会使用桥接默认的 OpenAI Responses 适配器（`http://127.0.0.1:17841/v1`、`gpt-5.6-sol` 和 `gpt-5.6-luna`）；仍然支持覆盖 `baseURL` 或 `models`。该路由不会导入浏览器 Cookie 或凭据。设置 `PHOENIX_CHATGPT_WEB_URL` 为桥接来源后运行 `dsh doctor`，即可检查其 `/v1/models` 端点，同时不会打印响应数据。
+可配置提供方目录还包含可选的 `chatgpt-web` 路由，用于连接本地运行的 [`codex-chatgpt-web`](https://github.com/miuuyy/codex-chatgpt-web) 桥接。添加 `providers.chatgpt-web: {}` 后，Phoenix 会使用桥接默认的 OpenAI Responses 适配器（`http://127.0.0.1:17841/v1`、`gpt-5.6-sol` 和 `gpt-5.6-luna`）；由于设置加载器会把省略的列表物化为空列表，空的 `models` 列表也会采用相同的默认值；仍然支持覆盖 `baseURL` 或提供非空的 `models` 列表。该路由不会导入浏览器 Cookie 或凭据。设置 `PHOENIX_CHATGPT_WEB_URL` 为桥接来源后运行 `dsh doctor`，即可检查其 `/v1/models` 端点，同时不会打印响应数据。
 
 ## 配置
 

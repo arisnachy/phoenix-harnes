@@ -6,7 +6,7 @@ Generic multi-provider adapter for the harness LLM seam backed by [`@earendil-wo
 
 The package root exposes the Cordis plugin contract, `PiAiAdapter`, and `supportedProtocols()`; profile resolution, catalog materialization, provider construction, replay conversion, and stream conversion remain package-internal.
 
-The configurable-provider directory also includes the optional `chatgpt-web` route for a locally running [`codex-chatgpt-web`](https://github.com/miuuyy/codex-chatgpt-web) bridge. Adding `providers.chatgpt-web: {}` activates Phoenix's OpenAI Responses adapter with the bridge defaults (`http://127.0.0.1:17841/v1`, `gpt-5.6-sol`, and `gpt-5.6-luna`); overriding `baseURL` or `models` remains supported. The route does not import browser cookies or credentials. Set `PHOENIX_CHATGPT_WEB_URL` to the bridge origin and run `dsh doctor` to check its `/v1/models` endpoint without printing response data.
+The configurable-provider directory also includes the optional `chatgpt-web` route for a locally running [`codex-chatgpt-web`](https://github.com/miuuyy/codex-chatgpt-web) bridge. Adding `providers.chatgpt-web: {}` activates Phoenix's OpenAI Responses adapter with the bridge defaults (`http://127.0.0.1:17841/v1`, `gpt-5.6-sol`, and `gpt-5.6-luna`); an empty `models` list is treated the same way because the settings loader materializes omitted lists as empty. Overriding `baseURL` or providing a non-empty `models` list remains supported. The route does not import browser cookies or credentials. Set `PHOENIX_CHATGPT_WEB_URL` to the bridge origin and run `dsh doctor` to check its `/v1/models` endpoint without printing response data.
 
 ## Config
 

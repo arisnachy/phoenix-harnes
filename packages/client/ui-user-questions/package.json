@@ -35,9 +35,6 @@
         "@phoenix-ai/dsh-client-locale",
         "@phoenix-ai/dsh-client-ui-conversation"
       ],
-      "external": [
-        "@phoenix-ai/dsh-user-questions"
-      ],
       "platform": "web"
     }
   },

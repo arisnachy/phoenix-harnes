@@ -9,7 +9,7 @@ import {
   PendingQuestion, planReviewOf,
   type QuestionAnswer, type QuestionComposerProps,
 } from './contract/slots.ts'
-import { automaticAnswerForQuestion, automaticAnswerForQuestions } from '@phoenix-ai/dsh-user-questions'
+import { automaticAnswerForQuestion, automaticAnswerForQuestions } from '@phoenix-ai/dsh-user-questions/types'
 import { PlanReviewPanel } from './PlanReviewPanel.tsx'
 import { QuestionCountdown } from './QuestionCountdown.tsx'
 import css from './QuestionComposer.module.css'

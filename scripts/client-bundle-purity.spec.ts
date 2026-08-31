@@ -81,6 +81,10 @@ describe('client bundle purity gate', () => {
     expect(resolveId('@phoenix-ai/dsh-brand')).toBeNull()
   })
 
+  it('lets the pure user-question policy inline without a module-table row', () => {
+    expect(resolveId('@phoenix-ai/dsh-user-questions/types')).toBeNull()
+  })
+
   it('lets exact generated Remote contributions inline without admitting their package implementation', () => {
     expect(resolveId('@phoenix-ai/dsh-goal/remote')).toBeNull()
     expect(() => resolveId('@phoenix-ai/dsh-goal')).toThrow(/purity/)
