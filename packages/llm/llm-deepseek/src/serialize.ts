@@ -8,6 +8,7 @@
 
 import { contentHasFile, contentHasImage, LlmError, offloadRequestImagesWithPolicy, requestImageHandleText } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
+import { projectFileContent } from '@phoenix-ai/dsh-attachment'
 import type { FileAttachmentRef, ImageAttachmentRef, RequestImageAttachment, StoredFileAttachment } from '@phoenix-ai/dsh-attachment'
 import type {
   WireImageContentPart,
@@ -116,13 +117,6 @@ function assertTextOnly(blocks: readonly ContentBlock[]): void {
   }
 }
 
-/** Whether a declared media type normally contains human-readable text. */
-function isTextFile(ref: FileAttachmentRef): boolean {
-  if (ref.mediaType.startsWith('text/')) return true
-  return /^(?:application\/(?:json|javascript|xml|yaml|x-yaml|toml|csv)|image\/svg\+xml)$/iu.test(ref.mediaType)
-    || /\.(?:c|cc|cpp|css|csv|go|html?|java|js|json|md|py|rs|sql|svg|toml|ts|tsx|txt|xml|yaml|yml)$/iu.test(ref.name ?? '')
-}
-
 /** Strip control characters from a model-visible file label. */
 function safeFileName(ref: FileAttachmentRef): string {
   const name = ref.name?.replace(/[\u0000-\u001f\u007f]/g, '').trim()
@@ -147,17 +141,9 @@ function fileText(block: Extract<ContentBlock, { type: 'file' }>, images: ImageS
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
     throw new LlmError('DeepSeek arbitrary-file projection requires a positive byte limit.', 'INVALID_REQUEST')
   }
-  if (!isTextFile(block.attachment)) {
-    return {
-      type: 'text',
-      text: `Attached binary file "${name}" (${mediaType}, ${block.attachment.bytes} bytes); binary contents are not inlined.`,
-    }
-  }
-  const truncated = stored.data.byteLength > maxBytes
-  const data = stored.data.subarray(0, maxBytes)
-  let decoded: string
+  let projection
   try {
-    decoded = new TextDecoder('utf-8', { fatal: true }).decode(data)
+    projection = projectFileContent(block.attachment, stored.data, maxBytes)
   } catch (error: unknown) {
     throw new LlmError(
       `DeepSeek request file "${name}" is not valid UTF-8 text.`,
@@ -165,9 +151,15 @@ function fileText(block: Extract<ContentBlock, { type: 'file' }>, images: ImageS
       { cause: error },
     )
   }
+  if (projection === undefined) {
+    return {
+      type: 'text',
+      text: `Attached binary file "${name}" (${mediaType}, ${block.attachment.bytes} bytes); no safe text projection was found.`,
+    }
+  }
   return {
     type: 'text',
-    text: `Attached file "${name}" (${mediaType}):\n${decoded}${truncated ? `\n[file truncated after ${maxBytes} bytes]` : ''}`,
+    text: `Attached file "${name}" (${mediaType}):\n${projection.text}${projection.truncated ? `\n[file content truncated after ${maxBytes} bytes]` : ''}`,
   }
 }
 

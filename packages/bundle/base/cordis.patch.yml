@@ -90,6 +90,11 @@
     - id: credentials
       name: '@phoenix-ai/dsh-credentials-local'
 
+    # Human-only secret entry point. Its command omits raw input from the
+    # session log and the provider resolves values only inside consumers.
+    - id: secret-vault
+      name: '@phoenix-ai/dsh-secret-vault'
+
     # Interactive provider sign-in (for example ChatGPT/Codex OAuth) is a
     # separate capability from API-key storage. The authorization service owns
     # the human conversation while each provider owns its protocol and writes

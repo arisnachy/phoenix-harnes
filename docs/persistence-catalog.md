@@ -589,7 +589,7 @@ Source: [`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src
 'organization-forge/change': OrganizationForgeChange
 ```
 
-Source: [`packages/goal/goal/src/organization-forge.ts:116`](../packages/goal/goal/src/organization-forge.ts)
+Source: [`packages/goal/goal/src/organization-forge.ts:284`](../packages/goal/goal/src/organization-forge.ts)
 
 ### `permission/*`
 

@@ -40,11 +40,12 @@ function directory(initialProvider: string) {
   }
 }
 
-function propsFor(fakeDirectory: object, authorization: object): CodexQuotaRemainingProps {
+function propsFor(fakeDirectory: object, authorization: object, quotaCacheKey?: object): CodexQuotaRemainingProps {
   return {
     wide: true,
     sessionId: sid,
     authorization,
+    quotaCacheKey,
     directoryFor: () => fakeDirectory,
   } as unknown as CodexQuotaRemainingProps
 }
@@ -230,6 +231,21 @@ describe('CodexQuotaRemaining', () => {
     expect(await screen.findByText('74%')).toBeTruthy()
     const pendingAuthorization = { list: vi.fn(() => new Promise<never>(() => {})) }
     view.rerender(<CodexQuotaRemaining {...propsFor(d.fake, pendingAuthorization)} />)
+
+    expect(screen.getByText('74%')).toBeTruthy()
+  })
+
+  it('restores the cached quota immediately after the Settings slot remounts', async () => {
+    const d = directory('openai-codex')
+    const cacheKey = {}
+    const auth = authorization(26)
+    const view = render(<CodexQuotaRemaining {...propsFor(d.fake, auth, cacheKey)} />)
+
+    expect(await screen.findByText('74%')).toBeTruthy()
+    view.unmount()
+
+    const pendingAuthorization = { list: vi.fn(() => new Promise<never>(() => {})) }
+    render(<CodexQuotaRemaining {...propsFor(d.fake, pendingAuthorization, cacheKey)} />)
 
     expect(screen.getByText('74%')).toBeTruthy()
   })

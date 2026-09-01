@@ -3,7 +3,7 @@
  * PHOENIX stable-only updater for managed installations.
  *
  * Managed installs are production checkouts, not development clones. They
- * follow the promoted stable manifest exactly: an older stable commit is
+ * follow the promoted stable branch exactly: an older stable commit is
  * upgraded, while an accidental checkout ahead of stable (for example from a
  * legacy direct-main updater) is safely realigned back to the promoted target.
  * Candidate install/build/smoke runs in a detached worktree first. A failed
@@ -23,6 +23,9 @@ import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
 const CHANNEL_BRANCH = process.env.PHOENIX_UPDATE_CHANNEL ?? 'phoenix/update-channel'
+// Managed installs follow the promoted branch tip so a stable promotion is
+// visible even when the channel metadata commit is not rewritten.
+const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() || 'stable'
 const CHANNEL_PATH = '.phoenix/channel/stable.json'
 const MANAGED_MARKER = '.phoenix-managed-install'
 const UPDATE_MODE = normalizeMode(process.env.PHOENIX_UPDATE_MODE ?? 'auto')
@@ -103,7 +106,9 @@ function parseManifest(text) {
   if (value.schema !== 1 || value.product !== 'PHOENIX' || value.channel !== 'stable') {
     throw new Error('stable update manifest identity mismatch')
   }
-  if (value.sourceBranch !== 'main') throw new Error('stable update manifest must nominate main')
+  if (!['main', 'stable'].includes(value.sourceBranch)) {
+    throw new Error('stable update manifest must nominate main or stable')
+  }
   if (typeof value.sourceCommit !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.sourceCommit)) {
     throw new Error('stable update manifest contains an invalid sourceCommit')
   }
@@ -120,17 +125,14 @@ function stableTarget(root) {
   ])
   git(root, [
     'fetch', '--quiet', REMOTE,
-    'refs/heads/main:refs/remotes/origin/main',
+    `refs/heads/${STABLE_SOURCE_BRANCH}:refs/remotes/${REMOTE}/${STABLE_SOURCE_BRANCH}`,
   ])
   const manifest = parseManifest(git(root, ['show', `${REMOTE}/${CHANNEL_BRANCH}:${CHANNEL_PATH}`]).stdout)
-  const target = manifest.sourceCommit
+  const target = git(root, ['rev-parse', `${REMOTE}/${STABLE_SOURCE_BRANCH}^{commit}`]).stdout
   if (!git(root, ['cat-file', '-e', `${target}^{commit}`], { allowFailure: true }).ok) {
-    throw new Error(`stable target ${target} is unavailable after fetching origin/main`)
+    throw new Error(`stable target ${target} is unavailable after fetching ${REMOTE}/${STABLE_SOURCE_BRANCH}`)
   }
-  if (!git(root, ['merge-base', '--is-ancestor', target, `${REMOTE}/main`], { allowFailure: true }).ok) {
-    throw new Error(`stable target ${target} is not reachable from ${REMOTE}/main`)
-  }
-  return { manifest, target }
+  return { manifest, target, sourceBranch: STABLE_SOURCE_BRANCH }
 }
 
 function relation(root, current, target) {
@@ -249,8 +251,8 @@ async function main() {
     return
   }
   const branch = git(root, ['branch', '--show-current']).stdout
-  if (branch !== 'main') {
-    console.error(`[PHOENIX STABLE] managed checkout is on ${JSON.stringify(branch)} instead of main; automatic mutation is disabled.`)
+  if (branch !== 'main' && branch !== STABLE_SOURCE_BRANCH) {
+    console.error(`[PHOENIX STABLE] managed checkout is on ${JSON.stringify(branch)} instead of main or ${STABLE_SOURCE_BRANCH}; automatic mutation is disabled.`)
     return
   }
 

@@ -28,7 +28,7 @@ phoenix/evolution-inbox
      PHOENIX installs
 ```
 
-`main` is the stable source of truth, but a new `main` commit is not distributed until the repository's `CI` workflow succeeds for the current `main` head. `.github/workflows/phoenix-stable-update-channel.yml` then publishes the exact 40-character commit SHA to `.phoenix/channel/stable.json` on the isolated `phoenix/update-channel` branch.
+`main` is the integration source of truth. After CI, the promoted `stable` branch is the release pointer consumed by installations. `.github/workflows/phoenix-stable-update-channel.yml` publishes channel identity and audit metadata to `.phoenix/channel/stable.json` on the isolated `phoenix/update-channel` branch; the updater fetches the current exact SHA from `origin/stable`, so a later promotion is detected even when the metadata branch has not changed.
 
 The update channel contains metadata only. Experimental source is never copied into it and clients never install from `phoenix/evolution-inbox`, Codex branches, Claude branches, DeepSeek upstream branches, or a laboratory branch.
 
@@ -39,15 +39,15 @@ Source checkouts run `scripts/phoenix-auto-update.mjs`.
 Default policy is `PHOENIX_UPDATE_MODE=auto`:
 
 1. verify that `origin` is the official PHOENIX repository;
-2. require the checkout to be on `main`;
+2. fetch the promoted `stable` branch (or `PHOENIX_UPDATE_STABLE_BRANCH`);
 3. fetch the stable-channel manifest;
-4. verify the nominated commit is reachable from `origin/main`;
+4. verify the fetched stable commit exists locally;
 5. refuse downgrade or divergent history;
 6. refuse automatic mutation when the worktree contains local changes;
 7. create a detached temporary Git worktree at the candidate commit;
 8. run a frozen dependency install, full build, and CLI smoke test there;
 9. record the current commit at `refs/phoenix/recovery/last-good`;
-10. advance live `main` using `git merge --ff-only` only;
+10. advance a clean live `main` or `stable` checkout using `git merge --ff-only` only;
 11. install, rebuild, and smoke-test the live tree;
 12. if the live step fails, reset to the recovery commit and rebuild the last known-good version.
 
@@ -66,7 +66,7 @@ The next Windows launch also performs an update check before boot. Ordinary netw
 - `PHOENIX_UPDATE_MODE=off` — disable stable-channel checks.
 - `PHOENIX_UPDATE_POLL_MS=<milliseconds>` — watcher interval, clamped to at least one minute.
 
-Development branches are never auto-updated. A developer can therefore work on `phoenix/*`, `codex/*`, or another branch without the stable updater rewriting that branch.
+Development branches are never mutated automatically. They still fetch and report the promoted stable target, so the UI can show that an update exists without rewriting local work. Set `PHOENIX_UPDATE_STABLE_BRANCH=main` only for installations whose release pointer is still named `main`.
 
 ## Recovery and audit
 

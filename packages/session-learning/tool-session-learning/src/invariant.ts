@@ -11,7 +11,9 @@ export const name = 'tool-session-learning-invariant'
 export const inject = ['invariants']
 
 /** The tool is read-only; the ledger validates all persisted memory rows. */
-const install: InvariantInstaller = () => {}
+const install: InvariantInstaller = () => {
+  // No runtime invariant: the learning ledger validates persisted memory rows.
+}
 
 /** Register the package invariant companion. */
 export const apply = (ctx: Context): Promise<() => void> =>

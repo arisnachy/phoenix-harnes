@@ -155,6 +155,7 @@ export function apply(ctx: ClientContext): void {
     const connection = scope.get('connection') as ConnectionHandle
     const quotaInjected = (): CodexQuotaRemainingInjected => ({
       authorization: connection.api.authorization,
+      quotaCacheKey: connection,
     })
     const seat = 'settings.trigger.trailing' as never
     scope.slots.inject(seat, () => scope.slots.register({

@@ -204,6 +204,19 @@ describe('UpdateFooterAction', () => {
     expect(readUpdateState).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps the last durable update visible across a transient Host read failure', async () => {
+    vi.useFakeTimers()
+    const readUpdateState = vi.fn<UpdateFooterActionInjected['readUpdateState']>()
+      .mockResolvedValueOnce({ status: 'available', target: 'c'.repeat(40) })
+      .mockRejectedValueOnce(new Error('temporary transport gap'))
+    const view = render(<UpdateFooterAction {...updateProps(readUpdateState)} />)
+    await act(async () => { await Promise.resolve() })
+    expect(view.container.querySelector('[role="status"]')?.getAttribute('aria-label')).toBe(en.updateAvailable)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1250) })
+    expect(screen.getByRole('status', { name: en.updateAvailable })).toBeTruthy()
+  })
+
   it.each([
     [{ status: 'preparing', phase: 'build' }, 'updateBuild'],
     [{ status: 'restarting', phase: 'restart' }, 'updateRestarting'],

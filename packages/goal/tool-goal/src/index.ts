@@ -8,9 +8,11 @@ import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { GoalId } from '@phoenix-ai/dsh-goal'
 import type {
-  ForgeCriterionStatus, ForgeManagementMode, ForgePhase, ForgeSourceAuditStatus,
+  ForgeCriterionStatus, ForgeDeliverableKind, ForgeDeliverableStatus, ForgeManagementMode, ForgePhase,
+  ForgeResearchKind, ForgeRole, ForgeSourceAuditStatus, ForgeStrategyStatus, ForgeWorkStatus,
   GoalRef, GoalView, OrganizationForgeSnapshot,
 } from '@phoenix-ai/dsh-goal'
+import { nextOrganizationForgeAction } from '@phoenix-ai/dsh-goal'
 import { boundContextSummary, createUserMessage, HarnessError } from '@phoenix-ai/dsh-llm'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { GenericCallView, JsonValue } from '@phoenix-ai/dsh-tools'
@@ -78,12 +80,19 @@ const FORGE_DESCRIPTION =
   + 'solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, '
   + 'and R&D roles active, prefer deterministic automation, and require functional, tested, secure, '
   + 'observable, maintainable, documented evidence plus an independent judge before delivery. Forge is '
-  + 'a modular capability over the mission system, not a replacement for it.'
+  + 'a modular capability over the mission system, not a replacement for it. Start with research; a '
+  + 'failed work item or judge result remains active and nextAction points to the next recovery step. '
+  + 'The final handoff question is not a completion substitute.'
 
 const FORGE_PHASES: readonly ForgePhase[] = ['researching', 'auditing', 'designing', 'building', 'verifying']
 const FORGE_CRITERION_STATUSES: readonly ForgeCriterionStatus[] = ['pending', 'implemented', 'tested', 'verified']
 const FORGE_AUDIT_STATUSES: readonly ForgeSourceAuditStatus[] = ['pending', 'passed', 'needs_changes', 'blocked']
-const FORGE_ACTIONS = ['start', 'get', 'source', 'audit', 'advance', 'criterion', 'judge', 'management'] as const
+const FORGE_AUDIT_STATUS_SET = new Set<string>(FORGE_AUDIT_STATUSES)
+const FORGE_ACTIONS = ['start', 'get', 'research', 'source', 'audit', 'blueprint', 'deliverable', 'work', 'strategy', 'revalidate', 'atlas', 'block', 'advance', 'criterion', 'judge', 'management'] as const
+
+function isForgeAuditStatus(value: string): value is ForgeSourceAuditStatus {
+  return FORGE_AUDIT_STATUS_SET.has(value)
+}
 
 /** Canonical goal-tool output, matching the existing compact Native JSON. */
 type GoalToolValue =
@@ -245,8 +254,13 @@ function specialistValue(value: unknown): { specialist: Record<string, JsonValue
 
 /** Compact model-facing projection of one Organization Forge build. */
 function forgeValue(value: OrganizationForgeSnapshot, includeHandoff = false): Record<string, JsonValue> {
+  const activeView = {
+    ...value,
+    work: value.work.filter(item => item.status === 'active'),
+  }
   return {
-    forge: JSON.parse(JSON.stringify(value)) as JsonValue,
+    forge: JSON.parse(JSON.stringify(activeView)) as JsonValue,
+    nextAction: nextOrganizationForgeAction(value),
     ...includeHandoff ? {
       handoffQuestion: '¿Quieres que Phoenix gestione también este negocio/sistema?',
       managementOptions: ['Entregar', 'Gestión asistida', 'Gestión autónoma'],
@@ -491,11 +505,16 @@ export function apply(ctx: Context, config: Config): void {
         type: 'string',
         required: true,
         enum: FORGE_ACTIONS,
-        description: 'start, get, source, audit, advance, criterion, judge, or management',
+        description: 'start, get, research, source, audit, blueprint, deliverable, work, strategy, revalidate, atlas, block, advance, criterion, judge, or management',
       },
       forge_id: { type: 'string', description: 'Existing Forge build id for non-start actions.' },
       objective: { type: 'string', description: 'Business, organization, or system objective for start.' },
       criteria: { type: 'array', items: { type: 'string' }, description: 'Required delivery criteria for start.' },
+      research_kind: { type: 'string', enum: ['product', 'repository', 'tool', 'component', 'pattern'], description: 'Comparable solution kind.' },
+      research_title: { type: 'string', description: 'Comparable solution title.' },
+      research_summary: { type: 'string', description: 'Secret-free comparable solution summary.' },
+      research_relevance: { type: 'string', description: 'Why the comparable solution matters.' },
+      research_evidence: { type: 'array', items: { type: 'string' }, description: 'Research evidence references.' },
       title: { type: 'string', description: 'Public source title.' },
       locator: { type: 'string', description: 'Public https, atlas, or local source reference without credentials.' },
       license: { type: 'string', description: 'Detected license identifier or policy result.' },
@@ -505,6 +524,33 @@ export function apply(ctx: Context, config: Config): void {
       secrets: { type: 'string', enum: FORGE_AUDIT_STATUSES, description: 'Secret scan result.' },
       vulnerabilities: { type: 'string', enum: FORGE_AUDIT_STATUSES, description: 'Vulnerability audit result.' },
       findings: { type: 'array', items: { type: 'string' }, description: 'Bounded audit or judge findings.' },
+      components: { type: 'array', items: { type: 'string' }, description: 'Blueprint components.' },
+      infrastructure: { type: 'array', items: { type: 'string' }, description: 'Blueprint infrastructure.' },
+      automations: { type: 'array', items: { type: 'string' }, description: 'Blueprint automations.' },
+      workflows: { type: 'array', items: { type: 'string' }, description: 'Blueprint workflows.' },
+      metrics: { type: 'array', items: { type: 'string' }, description: 'Blueprint metrics.' },
+      cost_controls: { type: 'array', items: { type: 'string' }, description: 'Blueprint cost controls.' },
+      quality_targets: { type: 'array', items: { type: 'string' }, description: 'Blueprint quality targets.' },
+      deliverable_id: { type: 'string', description: 'Existing deliverable id when updating evidence status.' },
+      deliverable_name: { type: 'string', description: 'Concrete output name.' },
+      deliverable_kind: { type: 'string', enum: ['software', 'web', 'infrastructure', 'automation', 'workflow', 'agent', 'documentation', 'other'], description: 'Concrete output kind.' },
+      artifact_ref: { type: 'string', description: 'Durable artifact reference.' },
+      deliverable_status: { type: 'string', enum: FORGE_CRITERION_STATUSES, description: 'Deliverable evidence state.' },
+      role: { type: 'string', enum: ['it', 'security', 'rd'], description: 'Phoenix team role for work.' },
+      work_title: { type: 'string', description: 'Durable work item title.' },
+      work_status: { type: 'string', enum: ['active', 'completed', 'failed'], description: 'Recoverable work status.' },
+      strategy_id: { type: 'string', description: 'Strategy referenced by a work item.' },
+      failure_fingerprint: { type: 'string', description: 'Stable failure fingerprint used to prevent repeated approaches.' },
+      strategy_name: { type: 'string', description: 'Alternative strategy name.' },
+      strategy_status: { type: 'string', enum: ['proposed', 'active', 'completed', 'failed'], description: 'Alternative strategy status.' },
+      strategy_summary: { type: 'string', description: 'Alternative strategy summary.' },
+      revalidation_evidence: { type: 'array', items: { type: 'string' }, description: 'Current source revalidation evidence.' },
+      atlas_name: { type: 'string', description: 'Reusable Atlas entry name.' },
+      atlas_summary: { type: 'string', description: 'Secret-free reusable Atlas summary.' },
+      reusable_pattern: { type: 'string', description: 'Secret-free reusable pattern.' },
+      dependency: { type: 'string', description: 'External dependency that blocks progress.' },
+      blocker_reason: { type: 'string', description: 'Why the dependency blocks progress.' },
+      resume_condition: { type: 'string', description: 'Condition that allows the next attempt.' },
       phase: { type: 'string', enum: FORGE_PHASES, description: 'Next Forge lifecycle phase.' },
       criterion_id: { type: 'string', description: 'Criterion id returned by start or get.' },
       criterion_status: { type: 'string', enum: FORGE_CRITERION_STATUSES, description: 'Evidence state.' },
@@ -525,9 +571,11 @@ export function apply(ctx: Context, config: Config): void {
         requireDirectHuman(ctx, execution)
         if (typeof args.objective !== 'string') throw new HarnessError('start requires objective', 'FORGE_INVALID_REQUEST')
         if (args.criteria !== undefined && !Array.isArray(args.criteria)) throw new HarnessError('criteria must be an array', 'FORGE_INVALID_REQUEST')
+        const currentGoal = ctx.goals.get(execution.agent)
         return forgeValue(ledger.start(execution.agent, {
           objective: args.objective,
           ...(args.criteria === undefined ? {} : { criteria: args.criteria }),
+          ...(currentGoal === undefined ? {} : { goalRef: { id: currentGoal.id, revision: currentGoal.revision } }),
         }))
       }
       if (args.action === 'get') {
@@ -540,6 +588,21 @@ export function apply(ctx: Context, config: Config): void {
       }
       if (typeof args.forge_id !== 'string') throw new HarnessError('forge_id is required for this action', 'FORGE_INVALID_REQUEST')
       const forgeId = args.forge_id
+      if (args.action === 'research') {
+        if (!['product', 'repository', 'tool', 'component', 'pattern'].includes(args.research_kind as string)
+          || typeof args.research_title !== 'string' || typeof args.locator !== 'string'
+          || typeof args.research_summary !== 'string' || typeof args.research_relevance !== 'string') {
+          throw new HarnessError('research requires research_kind, research_title, locator, research_summary, and research_relevance', 'FORGE_INVALID_REQUEST')
+        }
+        return forgeValue(ledger.addResearch(execution.agent, forgeId, {
+          kind: args.research_kind as ForgeResearchKind,
+          title: args.research_title,
+          locator: args.locator,
+          summary: args.research_summary,
+          relevance: args.research_relevance,
+          evidence: args.research_evidence ?? [],
+        }))
+      }
       if (args.action === 'source') {
         if (typeof args.title !== 'string' || typeof args.locator !== 'string' || typeof args.license !== 'string') {
           throw new HarnessError('source requires title, locator, and license', 'FORGE_INVALID_REQUEST')
@@ -550,20 +613,113 @@ export function apply(ctx: Context, config: Config): void {
       }
       if (args.action === 'audit') {
         if (args.stage !== 'pre-reuse' && args.stage !== 'post-modification'
-          || typeof args.license !== 'string' || !FORGE_AUDIT_STATUSES.includes(args.license as ForgeSourceAuditStatus)
-          || typeof args.dependencies !== 'string' || !FORGE_AUDIT_STATUSES.includes(args.dependencies as ForgeSourceAuditStatus)
-          || typeof args.secrets !== 'string' || !FORGE_AUDIT_STATUSES.includes(args.secrets as ForgeSourceAuditStatus)
-          || typeof args.vulnerabilities !== 'string' || !FORGE_AUDIT_STATUSES.includes(args.vulnerabilities as ForgeSourceAuditStatus)) {
+          || typeof args.license !== 'string' || !isForgeAuditStatus(args.license)
+          || typeof args.dependencies !== 'string' || !isForgeAuditStatus(args.dependencies)
+          || typeof args.secrets !== 'string' || !isForgeAuditStatus(args.secrets)
+          || typeof args.vulnerabilities !== 'string' || !isForgeAuditStatus(args.vulnerabilities)) {
           throw new HarnessError('audit requires stage, license, dependencies, secrets, and vulnerabilities', 'FORGE_INVALID_REQUEST')
         }
         return forgeValue(ledger.addAudit(execution.agent, forgeId, {
           stage: args.stage,
           ...args.source_id === undefined ? {} : { sourceId: args.source_id },
-          license: args.license as ForgeSourceAuditStatus,
-          dependencies: args.dependencies as ForgeSourceAuditStatus,
-          secrets: args.secrets as ForgeSourceAuditStatus,
-          vulnerabilities: args.vulnerabilities as ForgeSourceAuditStatus,
+          license: args.license,
+          dependencies: args.dependencies,
+          secrets: args.secrets,
+          vulnerabilities: args.vulnerabilities,
           findings: args.findings ?? [],
+          evidence: args.evidence ?? [],
+        }))
+      }
+      if (args.action === 'blueprint') {
+        if (!Array.isArray(args.components) || !Array.isArray(args.infrastructure) || !Array.isArray(args.automations)
+          || !Array.isArray(args.workflows) || !Array.isArray(args.metrics) || !Array.isArray(args.cost_controls)
+          || !Array.isArray(args.quality_targets)) {
+          throw new HarnessError('blueprint requires components, infrastructure, automations, workflows, metrics, cost_controls, and quality_targets', 'FORGE_INVALID_REQUEST')
+        }
+        return forgeValue(ledger.setBlueprint(execution.agent, forgeId, {
+          components: args.components,
+          infrastructure: args.infrastructure,
+          automations: args.automations,
+          workflows: args.workflows,
+          metrics: args.metrics,
+          costControls: args.cost_controls,
+          qualityTargets: args.quality_targets,
+        }))
+      }
+      if (args.action === 'deliverable') {
+        if (typeof args.deliverable_id === 'string') {
+          if (!FORGE_CRITERION_STATUSES.includes(args.deliverable_status as ForgeDeliverableStatus) || !Array.isArray(args.evidence)) {
+            throw new HarnessError('deliverable update requires deliverable_id, deliverable_status, and evidence', 'FORGE_INVALID_REQUEST')
+          }
+          return forgeValue(ledger.markDeliverable(execution.agent, forgeId, args.deliverable_id,
+            args.deliverable_status as ForgeDeliverableStatus, args.evidence))
+        }
+        if (typeof args.deliverable_name !== 'string' || !['software', 'web', 'infrastructure', 'automation', 'workflow', 'agent', 'documentation', 'other'].includes(args.deliverable_kind as string)
+          || typeof args.artifact_ref !== 'string') {
+          throw new HarnessError('deliverable requires deliverable_name, deliverable_kind, and artifact_ref', 'FORGE_INVALID_REQUEST')
+        }
+        return forgeValue(ledger.addDeliverable(execution.agent, forgeId, {
+          name: args.deliverable_name,
+          kind: args.deliverable_kind as ForgeDeliverableKind,
+          artifactRef: args.artifact_ref,
+        }))
+      }
+      if (args.action === 'work') {
+        if (!['it', 'security', 'rd'].includes(args.role as string) || typeof args.work_title !== 'string'
+          || !['active', 'completed', 'failed'].includes(args.work_status as string)) {
+          throw new HarnessError('work requires role, work_title, and work_status', 'FORGE_INVALID_REQUEST')
+        }
+        return forgeValue(ledger.addWork(execution.agent, forgeId, {
+          role: args.role as ForgeRole,
+          title: args.work_title,
+          status: args.work_status as ForgeWorkStatus,
+          ...args.strategy_id === undefined ? {} : { strategyId: args.strategy_id },
+          ...args.failure_fingerprint === undefined ? {} : { failureFingerprint: args.failure_fingerprint },
+          evidence: args.evidence ?? [],
+        }))
+      }
+      if (args.action === 'strategy') {
+        if (typeof args.strategy_name !== 'string' || !['proposed', 'active', 'completed', 'failed'].includes(args.strategy_status as string)
+          || typeof args.strategy_summary !== 'string') {
+          throw new HarnessError('strategy requires strategy_name, strategy_status, and strategy_summary', 'FORGE_INVALID_REQUEST')
+        }
+        return forgeValue(ledger.recordStrategy(execution.agent, forgeId, {
+          name: args.strategy_name,
+          status: args.strategy_status as ForgeStrategyStatus,
+          ...args.failure_fingerprint === undefined ? {} : { failureFingerprint: args.failure_fingerprint },
+          summary: args.strategy_summary,
+          evidence: args.evidence ?? [],
+        }))
+      }
+      if (args.action === 'revalidate') {
+        const revalidationEvidence = args.revalidation_evidence ?? args.evidence
+        if (typeof args.source_id !== 'string' || !Array.isArray(revalidationEvidence)) {
+          throw new HarnessError('revalidate requires source_id and revalidation_evidence', 'FORGE_INVALID_REQUEST')
+        }
+        return forgeValue(ledger.revalidateSource(execution.agent, forgeId, {
+          sourceId: args.source_id,
+          evidence: revalidationEvidence,
+        }))
+      }
+      if (args.action === 'atlas') {
+        if (typeof args.atlas_name !== 'string' || typeof args.atlas_summary !== 'string' || typeof args.reusable_pattern !== 'string') {
+          throw new HarnessError('atlas requires atlas_name, atlas_summary, and reusable_pattern', 'FORGE_INVALID_REQUEST')
+        }
+        return forgeValue(ledger.publishAtlasEntry(execution.agent, forgeId, {
+          name: args.atlas_name,
+          summary: args.atlas_summary,
+          reusablePattern: args.reusable_pattern,
+          ...args.source_id === undefined ? {} : { sourceId: args.source_id },
+        }))
+      }
+      if (args.action === 'block') {
+        if (typeof args.dependency !== 'string' || typeof args.blocker_reason !== 'string' || typeof args.resume_condition !== 'string') {
+          throw new HarnessError('block requires dependency, blocker_reason, and resume_condition', 'FORGE_INVALID_REQUEST')
+        }
+        return forgeValue(ledger.setBlocker(execution.agent, forgeId, {
+          dependency: args.dependency,
+          reason: args.blocker_reason,
+          resumeCondition: args.resume_condition,
         }))
       }
       if (args.action === 'advance') {
@@ -584,7 +740,18 @@ export function apply(ctx: Context, config: Config): void {
           subagents,
           provider: resolved.judgeProvider,
           parent: execution.agent,
-          objective: `Organization Forge review: ${forge.objective}\n${JSON.stringify({ criteria: forge.criteria, sources: forge.sources, audits: forge.audits }).slice(0, 8_000)}`,
+          objective: `Organization Forge review: ${forge.objective}\n${JSON.stringify({
+            revision: forge.revision,
+            research: forge.research,
+            blueprint: forge.blueprint,
+            work: ledger.activeWork(forge),
+            strategies: forge.strategies,
+            deliverables: forge.deliverables,
+            criteria: forge.criteria,
+            sources: forge.sources,
+            audits: forge.audits,
+            atlasEntries: forge.atlasEntries,
+          }).slice(0, 12_000)}`,
           round: forge.revision,
           signal: exec.signal,
         })
@@ -594,15 +761,12 @@ export function apply(ctx: Context, config: Config): void {
         })
         return forgeValue(result, result.phase === 'ready')
       }
-      if (args.action === 'management') {
-        requireDirectHuman(ctx, execution)
-        if (!['handoff', 'assisted', 'autonomous'].includes(args.management_mode as ForgeManagementMode)) {
-          throw new HarnessError('management requires handoff, assisted, or autonomous', 'FORGE_INVALID_REQUEST')
-        }
-        const result = ledger.setManagementMode(execution.agent, forgeId, args.management_mode as ForgeManagementMode)
-        return forgeValue(result)
+      requireDirectHuman(ctx, execution)
+      if (!['handoff', 'assisted', 'autonomous'].includes(args.management_mode as ForgeManagementMode)) {
+        throw new HarnessError('management requires handoff, assisted, or autonomous', 'FORGE_INVALID_REQUEST')
       }
-      throw new HarnessError(`unknown Forge action: ${String(args.action)}`, 'FORGE_INVALID_REQUEST')
+      const result = ledger.setManagementMode(execution.agent, forgeId, args.management_mode as ForgeManagementMode)
+      return forgeValue(result)
     },
     presentCall: args => present(`Organization Forge: ${args.action}`, 'other', args.forge_id ?? args.objective),
   }))
@@ -673,7 +837,6 @@ export function apply(ctx: Context, config: Config): void {
         }
         return specialistValue(ledger.addExperiment(execution.agent, id, { name: args.experiment_name, dataset: args.dataset }))
       }
-      if (args.action !== 'evaluate') throw new HarnessError(`unknown specialist action: ${args.action}`, 'SPECIALIST_INVALID_REQUEST')
       const current = ledger.get(execution.agent, id)
       if (current === undefined) throw new HarnessError(`specialist not found: ${id}`, 'SPECIALIST_INVALID_REQUEST')
       if (resolved.requireJudge) {

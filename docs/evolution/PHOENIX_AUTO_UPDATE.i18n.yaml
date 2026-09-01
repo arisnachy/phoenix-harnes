@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/evolution/PHOENIX_AUTO_UPDATE.md
-PHOENIX_AUTO_UPDATE.md: ec4277a93d425ca580ef6868ba9c2d31817b8ab7
-PHOENIX_AUTO_UPDATE.zh.md: f528db849fc48276e76a8dd90765544fce72d95b
+PHOENIX_AUTO_UPDATE.md: b1aa790fc157940d47e4953391fa937b115dcee5
+PHOENIX_AUTO_UPDATE.zh.md: 2cf9fa7c3620c99607610ce7b085eb7badf0ee22

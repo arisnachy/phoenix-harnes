@@ -33,10 +33,19 @@ type QuotaState = {
 
 type QuotaMeterStyle = CSSProperties & { '--quota-progress': string }
 
+// Keep the last valid account telemetry across sidebar remounts. The host
+// connection supplies the stable cache key; authorization faces can be
+// recreated when the model selector opens and must not make the meter blink.
+// A cache hit lets the selector render immediately while the fresh RPC runs in
+// the background.
+const quotaCache = new WeakMap<object, QuotaState>()
+
 /** Registrant-owned faces needed by the OpenAI/Codex quota meter. */
 export interface CodexQuotaRemainingInjected {
   /** Native authorization catalog carrying account rate-limit telemetry. */
   authorization: AuthorizationClient
+  /** Stable page-connection identity used across slot remounts. */
+  quotaCacheKey?: object
 }
 
 /** Minimal runtime seats actually consumed from the session-maybe Settings outlet. */
@@ -100,9 +109,10 @@ function windowLabel(limit: RateLimitWindow, fallback: string): string {
  * @returns the compact quota chip or null.
  */
 export function CodexQuotaRemaining({
-  wide, authorization,
+  wide, authorization, quotaCacheKey,
 }: CodexQuotaRemainingProps) {
-  const [quota, setQuota] = useState<QuotaState | undefined>()
+  const cacheKey = quotaCacheKey ?? authorization
+  const [quota, setQuota] = useState<QuotaState | undefined>(() => quotaCache.get(cacheKey))
   const [clockMs, setClockMs] = useState(() => Date.now())
   const authorizationRef = useRef(authorization)
   authorizationRef.current = authorization
@@ -144,11 +154,13 @@ export function CodexQuotaRemaining({
           ...secondaryLimit === undefined ? {} : { secondaryLimit },
         }
         const available = Object.keys(nextQuota).length !== 0
-        setQuota(available ? nextQuota : undefined)
+        if (available) {
+          quotaCache.set(cacheKey, nextQuota)
+          setQuota(nextQuota)
+        }
         schedule(available ? QUOTA_REFRESH_MS : QUOTA_STARTUP_RETRY_MS)
       } catch {
         if (!stale) {
-          setQuota(undefined)
           schedule(QUOTA_STARTUP_RETRY_MS)
         }
       }

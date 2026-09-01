@@ -592,7 +592,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'organization-forge/change': OrganizationForgeChange
 ```
 
-来源：[`packages/goal/goal/src/organization-forge.ts:116`](../packages/goal/goal/src/organization-forge.ts)
+来源：[`packages/goal/goal/src/organization-forge.ts:284`](../packages/goal/goal/src/organization-forge.ts)
 
 ### `permission/*`
 

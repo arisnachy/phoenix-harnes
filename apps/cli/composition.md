@@ -42,6 +42,8 @@ flowchart LR
   cfg --> plugin_dsh_base_user_profile
   plugin_dsh_base_credentials["credentials<br/>@phoenix-ai/dsh-credentials-local"]
   cfg --> plugin_dsh_base_credentials
+  plugin_dsh_base_secret_vault["secret-vault<br/>@phoenix-ai/dsh-secret-vault"]
+  cfg --> plugin_dsh_base_secret_vault
   plugin_dsh_base_authorization["authorization<br/>@phoenix-ai/dsh-authorization"]
   cfg --> plugin_dsh_base_authorization
   plugin_dsh_base_authorization_google["authorization-google<br/>@phoenix-ai/dsh-authorization/google"]
@@ -205,6 +207,7 @@ flowchart LR
 | `settings` | `@phoenix-ai/dsh-settings-file` |
 | `user-profile` | `@phoenix-ai/dsh-user-profile` |
 | `credentials` | `@phoenix-ai/dsh-credentials-local` |
+| `secret-vault` | `@phoenix-ai/dsh-secret-vault` |
 | `authorization` | `@phoenix-ai/dsh-authorization` |
 | `authorization-google` | `@phoenix-ai/dsh-authorization/google` |
 | `llm-pi-ai` | `@phoenix-ai/dsh-llm-pi-ai` |

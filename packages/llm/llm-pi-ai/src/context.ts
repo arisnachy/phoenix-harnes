@@ -15,6 +15,7 @@ import type {
   RequestImageAttachment,
   StoredFileAttachment,
 } from '@phoenix-ai/dsh-attachment'
+import { projectFileContent } from '@phoenix-ai/dsh-attachment'
 import type { Context as PiContext, ImageContent, Message as PiMessage, TextContent, Tool as PiTool } from '@earendil-works/pi-ai'
 import { toPiAssistant } from './replay.ts'
 import {
@@ -85,17 +86,9 @@ async function userContent(
           )
         }
         const name = safeFileName(block.attachment)
-        if (!isTextFile(block.attachment)) {
-          content.push({
-            type: 'text',
-            text: `Attached binary file "${name}" (${block.attachment.mediaType}, ${block.attachment.bytes} bytes).\n`,
-          })
-          break
-        }
-        const data = stored.data.subarray(0, maxInlineFileBytes)
-        let decoded: string
+        let projection
         try {
-          decoded = new TextDecoder('utf-8', { fatal: true }).decode(data)
+          projection = projectFileContent(block.attachment, stored.data, maxInlineFileBytes)
         } catch (error: unknown) {
           throw new LlmError(
             `pi-ai request file "${name}" is not valid UTF-8 text.`,
@@ -103,11 +96,17 @@ async function userContent(
             { cause: error },
           )
         }
-        const truncated = stored.data.byteLength > maxInlineFileBytes
+        if (projection === undefined) {
+          content.push({
+            type: 'text',
+            text: `Attached binary file "${name}" (${block.attachment.mediaType}, ${block.attachment.bytes} bytes).\n`,
+          })
+          break
+        }
         content.push({
           type: 'text',
           text: `Attached file "${name}" (${block.attachment.mediaType}, ${block.attachment.bytes} bytes):\n`
-            + `${decoded}${truncated ? `\n[file truncated after ${maxInlineFileBytes} bytes]` : ''}\n`,
+            + `${projection.text}${projection.truncated ? `\n[file content truncated after ${maxInlineFileBytes} bytes]` : ''}\n`,
         })
         break
       }
@@ -136,13 +135,6 @@ function safeFileName(ref: FileAttachmentRef): string {
   return name === undefined || name.length === 0
     ? `attachment-${String(ref.attachmentId).slice(-8)}`
     : name.slice(0, 255)
-}
-
-/** Decide whether an attachment can safely be projected as UTF-8 text. */
-function isTextFile(ref: FileAttachmentRef): boolean {
-  if (ref.mediaType.startsWith('text/')) return true
-  return /^(?:application\/(?:json|javascript|xml|yaml|x-yaml|toml|csv)|image\/svg\+xml)$/iu.test(ref.mediaType)
-    || /\.(?:c|cc|cpp|css|csv|go|html?|java|js|json|md|py|rs|sql|svg|toml|ts|tsx|txt|xml|yaml|yml)$/iu.test(ref.name ?? '')
 }
 
 function collectImageRefs(

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-30-organization-forge.md
-2026-08-30-organization-forge.md: 38adb5d2d8940f5ed2cd29e60ecc7799c47c1bac
-2026-08-30-organization-forge.zh.md: 310a96068683191c4b1ce8cf8c75951923fbb026
+2026-08-30-organization-forge.md: 8703c6031f618ad8942aee4d59a83eb6b531752c
+2026-08-30-organization-forge.zh.md: 45207157446f3f0b153cfb30eb34185ad7e9c37d

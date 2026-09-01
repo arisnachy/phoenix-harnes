@@ -140,6 +140,12 @@ interface GoalChanged {
 }
 ```
 
+## Organization Forge
+
+`ctx.goals.organizationForge` 是用于可选组织和产品构建的事件驱动 `OrganizationForgeLedger`。其 `OrganizationForgeSnapshot` 会在所属会话日志中保存可比较的研究、蓝图、具体交付物、Phoenix IT/Security/R&D 工作、替代策略、来源审计、重新验证证据、已清理的 Atlas 条目、必需标准和独立 judge 结果。完整的面向模型工作流和安全规则由软件包 README 定义。
+
+Forge 生命周期为 `researching`、`auditing`、`designing`、`building`、`verifying`、`ready` 或 `blocked`。进入 `ready` 前必须具备研究、通过的复用前和修改后审计、蓝图、已验证交付物、已验证的必需标准以及独立 judge 的通过结果。失败工作、重复策略指纹或不可用的 judge 都会保留为可恢复状态。blocked Forge 构建会记录依赖、原因、最后尝试时间和恢复条件；外部条件解决后可以重新进入验证。
+
 ## 服务行为
 
 [`GoalService`](../../packages/goal/goal/src/index.ts) 解析创建默认值、从持久 `goal/change` 事件执行严格回放折叠、校验传入的 agent（智能体）是注册表中的确切活跃实例、以比较并设置方式执行变更，并发出 `goal/changed` 通知；监听器故障会被隔离。包 [README](../../packages/goal/goal/README.zh.md) 定义可调用 API 和面向模型的约定。

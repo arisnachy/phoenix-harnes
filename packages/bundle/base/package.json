@@ -57,6 +57,7 @@
     "@phoenix-ai/dsh-compaction-basic": "workspace:^",
     "@phoenix-ai/dsh-compaction-tool-result-pruner": "workspace:^",
     "@phoenix-ai/dsh-credentials-local": "workspace:^",
+    "@phoenix-ai/dsh-secret-vault": "workspace:^",
     "@phoenix-ai/dsh-fs-local": "workspace:^",
     "@phoenix-ai/dsh-fs-observation-policy": "workspace:^",
     "@phoenix-ai/dsh-fs-sandbox": "workspace:^",

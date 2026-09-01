@@ -181,8 +181,9 @@ export function UpdateFooterAction({
     // transport gap as part of the restart instead of inventing an updater error.
     if (restartReconnectGraceActive()) return
     // A transient RPC/network failure is not evidence that an update failed.
-    // Keep polling silently until the durable Host state can be read again.
-    setSnapshot({ status: 'idle' })
+    // Keep the last durable snapshot rendered until a later poll can replace
+    // it. This prevents the update card from disappearing and reappearing.
+    void _error
   }, [])
 
   const reportRestartFailure = useCallback(() => {

@@ -1023,7 +1023,7 @@ glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn �
 
 ### `organization_forge`
 
-Build one organization, business, or system as a durable Organization Forge. Research comparable solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, and R&D roles active, prefer deterministic automation, and require functional, tested, secure, observable, maintainable, documented evidence plus an independent judge before delivery. Forge is a modular capability over the mission system, not a replacement for it.
+Build one organization, business, or system as a durable Organization Forge. Research comparable solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, and R&D roles active, prefer deterministic automation, and require functional, tested, secure, observable, maintainable, documented evidence plus an independent judge before delivery. Forge is a modular capability over the mission system, not a replacement for it. Start with research; a failed work item or judge result remains active and nextAction points to the next recovery step. The final handoff question is not a completion substitute.
 
 ```json
 {
@@ -1031,12 +1031,20 @@ Build one organization, business, or system as a durable Organization Forge. Res
   "properties": {
     "action": {
       "type": "string",
-      "description": "start, get, source, audit, advance, criterion, judge, or management",
+      "description": "start, get, research, source, audit, blueprint, deliverable, work, strategy, revalidate, atlas, block, advance, criterion, judge, or management",
       "enum": [
         "start",
         "get",
+        "research",
         "source",
         "audit",
+        "blueprint",
+        "deliverable",
+        "work",
+        "strategy",
+        "revalidate",
+        "atlas",
+        "block",
         "advance",
         "criterion",
         "judge",
@@ -1054,6 +1062,36 @@ Build one organization, business, or system as a durable Organization Forge. Res
     "criteria": {
       "type": "array",
       "description": "Required delivery criteria for start.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "research_kind": {
+      "type": "string",
+      "description": "Comparable solution kind.",
+      "enum": [
+        "product",
+        "repository",
+        "tool",
+        "component",
+        "pattern"
+      ]
+    },
+    "research_title": {
+      "type": "string",
+      "description": "Comparable solution title."
+    },
+    "research_summary": {
+      "type": "string",
+      "description": "Secret-free comparable solution summary."
+    },
+    "research_relevance": {
+      "type": "string",
+      "description": "Why the comparable solution matters."
+    },
+    "research_evidence": {
+      "type": "array",
+      "description": "Research evidence references.",
       "items": {
         "type": "string"
       }
@@ -1118,6 +1156,170 @@ Build one organization, business, or system as a durable Organization Forge. Res
       "items": {
         "type": "string"
       }
+    },
+    "components": {
+      "type": "array",
+      "description": "Blueprint components.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "infrastructure": {
+      "type": "array",
+      "description": "Blueprint infrastructure.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "automations": {
+      "type": "array",
+      "description": "Blueprint automations.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "workflows": {
+      "type": "array",
+      "description": "Blueprint workflows.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "description": "Blueprint metrics.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cost_controls": {
+      "type": "array",
+      "description": "Blueprint cost controls.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "quality_targets": {
+      "type": "array",
+      "description": "Blueprint quality targets.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "deliverable_id": {
+      "type": "string",
+      "description": "Existing deliverable id when updating evidence status."
+    },
+    "deliverable_name": {
+      "type": "string",
+      "description": "Concrete output name."
+    },
+    "deliverable_kind": {
+      "type": "string",
+      "description": "Concrete output kind.",
+      "enum": [
+        "software",
+        "web",
+        "infrastructure",
+        "automation",
+        "workflow",
+        "agent",
+        "documentation",
+        "other"
+      ]
+    },
+    "artifact_ref": {
+      "type": "string",
+      "description": "Durable artifact reference."
+    },
+    "deliverable_status": {
+      "type": "string",
+      "description": "Deliverable evidence state.",
+      "enum": [
+        "pending",
+        "implemented",
+        "tested",
+        "verified"
+      ]
+    },
+    "role": {
+      "type": "string",
+      "description": "Phoenix team role for work.",
+      "enum": [
+        "it",
+        "security",
+        "rd"
+      ]
+    },
+    "work_title": {
+      "type": "string",
+      "description": "Durable work item title."
+    },
+    "work_status": {
+      "type": "string",
+      "description": "Recoverable work status.",
+      "enum": [
+        "active",
+        "completed",
+        "failed"
+      ]
+    },
+    "strategy_id": {
+      "type": "string",
+      "description": "Strategy referenced by a work item."
+    },
+    "failure_fingerprint": {
+      "type": "string",
+      "description": "Stable failure fingerprint used to prevent repeated approaches."
+    },
+    "strategy_name": {
+      "type": "string",
+      "description": "Alternative strategy name."
+    },
+    "strategy_status": {
+      "type": "string",
+      "description": "Alternative strategy status.",
+      "enum": [
+        "proposed",
+        "active",
+        "completed",
+        "failed"
+      ]
+    },
+    "strategy_summary": {
+      "type": "string",
+      "description": "Alternative strategy summary."
+    },
+    "revalidation_evidence": {
+      "type": "array",
+      "description": "Current source revalidation evidence.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "atlas_name": {
+      "type": "string",
+      "description": "Reusable Atlas entry name."
+    },
+    "atlas_summary": {
+      "type": "string",
+      "description": "Secret-free reusable Atlas summary."
+    },
+    "reusable_pattern": {
+      "type": "string",
+      "description": "Secret-free reusable pattern."
+    },
+    "dependency": {
+      "type": "string",
+      "description": "External dependency that blocks progress."
+    },
+    "blocker_reason": {
+      "type": "string",
+      "description": "Why the dependency blocks progress."
+    },
+    "resume_condition": {
+      "type": "string",
+      "description": "Condition that allows the next attempt."
     },
     "phase": {
       "type": "string",

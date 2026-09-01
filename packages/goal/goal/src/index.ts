@@ -57,7 +57,7 @@ export type * from './types.ts'
 export type * from './domain.ts'
 export type * from './organization-forge.ts'
 export { SpecialistLedger, foldSpecialists } from './specialist.ts'
-export { OrganizationForgeLedger, foldOrganizationForge } from './organization-forge.ts'
+export { OrganizationForgeLedger, foldOrganizationForge, nextOrganizationForgeAction } from './organization-forge.ts'
 export type {
   AddSpecialistExperimentRequest, AddSpecialistSourceRequest, EvaluateSpecialistRequest,
   StartSpecialistRequest,

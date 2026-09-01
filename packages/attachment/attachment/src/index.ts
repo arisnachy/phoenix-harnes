@@ -20,6 +20,8 @@ export { AttachmentError, isImageAdmissionError } from './error.ts'
 export { isFileAdmissionError } from './error.ts'
 export type { AttachmentErrorCode, FileAdmissionErrorCode, ImageAdmissionErrorCode } from './error.ts'
 export { admitEncodedFiles, admitEncodedImages } from './admission.ts'
+export { isTextFile, projectFileContent } from './file-content.ts'
+export type { FileContentFormat, FileContentProjection } from './file-content.ts'
 export type {
   AttachmentId as AttachmentIdType,
   EncodedFileAttachment,

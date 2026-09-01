@@ -14,7 +14,9 @@ export const name = 'session-learning-invariant'
 export const inject = ['invariants']
 
 /** The ledger validates its durable rows and keeps session provenance in each record. */
-const install: InvariantInstaller = () => {}
+const install: InvariantInstaller = () => {
+  // No runtime invariant: the learning ledger validates persisted memory rows.
+}
 
 /** Register the package invariant companion. */
 export const apply = (ctx: Context): Promise<() => void> =>

@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 $repository = 'https://github.com/arisnachy/phoenix-harnes.git'
 $minimumNode = [Version]'22.19.0'
 $stableChannelBranch = 'phoenix/update-channel'
+$stableSourceBranch = 'stable'
 $stableManifestPath = '.phoenix/channel/stable.json'
 
 function Refresh-ProcessPath {
@@ -48,8 +49,8 @@ function Invoke-PhoenixPnpm([string[]]$Arguments) {
 function Get-PhoenixStableManifest {
   & git fetch --quiet origin "refs/heads/$stableChannelBranch`:refs/remotes/origin/$stableChannelBranch"
   if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the PHOENIX stable channel.' }
-  & git fetch --quiet origin 'refs/heads/main:refs/remotes/origin/main'
-  if ($LASTEXITCODE -ne 0) { throw 'Could not fetch PHOENIX main for stable-target verification.' }
+  & git fetch --quiet origin "refs/heads/$stableSourceBranch`:refs/remotes/origin/$stableSourceBranch"
+  if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the PHOENIX promoted stable branch.' }
 
   $manifestSpec = "origin/$stableChannelBranch`:$stableManifestPath"
   $raw = ((& git show $manifestSpec) | Out-String).Trim()
@@ -60,18 +61,16 @@ function Get-PhoenixStableManifest {
   if ($manifest.schema -ne 1 -or $manifest.product -ne 'PHOENIX' -or $manifest.channel -ne 'stable') {
     throw 'PHOENIX stable manifest identity mismatch.'
   }
-  if ($manifest.sourceBranch -ne 'main') {
-    throw 'PHOENIX stable manifest must nominate main.'
+  if ($manifest.sourceBranch -notin @('main', 'stable')) {
+    throw 'PHOENIX stable manifest must nominate main or stable.'
   }
-  $target = [string]$manifest.sourceCommit
+  $target = ((& git rev-parse "origin/$stableSourceBranch^{commit}") | Out-String).Trim()
   if ($target -notmatch '^[0-9a-fA-F]{40}$') {
-    throw 'PHOENIX stable manifest contains an invalid sourceCommit.'
+    throw 'PHOENIX promoted stable branch contains an invalid commit.'
   }
 
   & git cat-file -e "$target^{commit}" 2>$null
   if ($LASTEXITCODE -ne 0) { throw "PHOENIX stable target $target is unavailable." }
-  & git merge-base --is-ancestor $target origin/main
-  if ($LASTEXITCODE -ne 0) { throw "PHOENIX stable target $target is not reachable from origin/main." }
   return $manifest
 }
 
@@ -95,10 +94,10 @@ if ($existingInstall) {
 } else {
   $parent = Split-Path -Parent $resolvedInstallDirectory
   New-Item -ItemType Directory -Force -Path $parent | Out-Null
-  # main is only a transport/bootstrap checkout. Before dependencies are
+  # stable is the release checkout. Before dependencies are
   # installed or PHOENIX is launched, the checkout is reset to the commit
   # nominated by the independently fetched stable channel below.
-  & git clone --branch main --single-branch $repository $resolvedInstallDirectory
+  & git clone --branch $stableSourceBranch --single-branch $repository $resolvedInstallDirectory
   if ($LASTEXITCODE -ne 0) { throw 'Could not clone PHOENIX.' }
 }
 
@@ -110,7 +109,7 @@ try {
 
   $previous = (& git rev-parse HEAD).Trim()
   $manifest = Get-PhoenixStableManifest
-  $target = [string]$manifest.sourceCommit
+  $target = ((& git rev-parse "origin/$stableSourceBranch^{commit}") | Out-String).Trim()
 
   if ($previous -ne $target) {
     & git update-ref refs/phoenix/recovery/pre-install $previous

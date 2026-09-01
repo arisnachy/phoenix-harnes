@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-[`ctx.goals`](../goal/README.zh.md) 的面向模型控制 API：`get_goal`、`create_goal`、`update_goal` 和 `specialist_lab`。[goal 工具 Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-model-facing-goal-tools.zh.md) 负责权限拆分与 Codex 风格用户体验。
+[`ctx.goals`](../goal/README.zh.md) 的面向模型控制 API：`get_goal`、`create_goal`、`update_goal`、`specialist_lab` 和 `organization_forge`。[goal 工具 Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-model-facing-goal-tools.zh.md) 负责权限拆分与 Codex 风格用户体验。
 
 ## 工具
 
@@ -10,6 +10,7 @@
 - `create_goal(objective, max_goal_rounds?)` 根据人类直接发起的顶层轮次创建一个 goal。模型可以推断长期运行的 goal 意图，而无需精确命令短语；非人类轮次和 subagent 会在执行时被拒绝。
  - `update_goal(goal_id, revision, action, objective?, max_goal_rounds?, blocked_reason?)` 支持 `edit`、`pause`、`resume`、`complete` 和 `blocked`。替换值只属于 `edit`；`blocked_reason` 只有在 action 为 `blocked` 时才必填，并以稳定代码 `model-reported` 持久化。严格 schema 下的空字符串和零填充值视为省略，而有意义的值仍限定到各自 action。
 - `specialist_lab(action, ...)` 为指定主题维护有界且可重放的实验室。`start` 创建档案，随后 `source`、`hypothesis` 和 `experiment` 追加证据；`evaluate` 记录 judge 反馈，并将档案推进到 `ready`、`improving` 或 `blocked`。评估失败不代表完成；下一轮必须处理已记录的改进项。
+- `organization_forge(action, ...)` 维护模块化组织构建。根据证据依次使用 `start`、`research`、`source`、`audit`、`blueprint`、`deliverable`、`work`、`strategy`、`revalidate`、`atlas`、`block`、`advance`、`criterion` 和 `judge`。结果包含 `nextAction`；失败工作、重复失败指纹、judge 发现和外部阻塞都会作为可恢复的持久状态保留。只有在 judge 通过且标准和交付物完成验证后，`management` 才可用，并展示 `Entregar`、`Gestión asistida` 或 `Gestión autónoma` 选择。
 
 启用 `requireJudge` 后，`evaluate` 会使用与 goal 完成检查相同的只读工具白名单，启动一个新的结构化 subagent。Judge 会收到持久化的实验室证据，其结果会写入 specialist 快照。非 pass 结果还会作为模型上下文推迟到下一次有界循环，因此不需要再次向用户请求确认。
 

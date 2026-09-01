@@ -2795,7 +2795,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/goal/tool-goal/src/index.ts:26`](../packages/goal/tool-goal/src/index.ts)
+Source: [`packages/goal/tool-goal/src/index.ts:33`](../packages/goal/tool-goal/src/index.ts)
 
 <a id="phoenix-aidsh-tool-jobs"></a>
 
@@ -3574,6 +3574,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@phoenix-ai/dsh-lsp` ([`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts))
 - `@phoenix-ai/dsh-mcp-connector-registry` ([`packages/mcp/mcp-registry/src/index.ts`](../packages/mcp/mcp-registry/src/index.ts))
 - `@phoenix-ai/dsh-schedule` — requires `agents` · `sessions` · `tools` · `sessionPersistence` ([`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts))
+- `@phoenix-ai/dsh-secret-vault` — requires `commands` · `credentials` ([`packages/credentials/secret-vault/src/index.ts`](../packages/credentials/secret-vault/src/index.ts))
 - `@phoenix-ai/dsh-session` ([`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts))
 - `@phoenix-ai/dsh-session-checkpoint-policy` — requires `llm` · `sessionPersistence` · `sessions` · `tools` ([`packages/session/session-checkpoint-policy/src/index.ts`](../packages/session/session-checkpoint-policy/src/index.ts))
 - `@phoenix-ai/dsh-session-log-export` — requires `commands` ([`packages/session-query/session-log-export/src/index.ts`](../packages/session-query/session-log-export/src/index.ts))

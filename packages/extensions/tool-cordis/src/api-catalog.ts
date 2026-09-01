@@ -3049,12 +3049,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AdapterRegistrationHandle {\n    (): void;\n    replace(providers: string[]): void;\n}',
   },
   {
-    name: 'AddForgeAuditRequest',
-    declaration: 'export interface AddForgeAuditRequest {\n    readonly stage: \'pre-reuse\' | \'post-modification\';\n    readonly sourceId?: string;\n    readonly license: ForgeSourceAuditStatus;\n    readonly dependencies: ForgeSourceAuditStatus;\n    readonly secrets: ForgeSourceAuditStatus;\n    readonly vulnerabilities: ForgeSourceAuditStatus;\n    readonly findings?: readonly string[];\n}',
+    name: 'AddForgeDeliverableRequest',
+    declaration: 'export interface AddForgeDeliverableRequest {\n    readonly name: string;\n    readonly kind: ForgeDeliverableKind;\n    readonly artifactRef: string;\n}',
   },
   {
-    name: 'AddForgeSourceRequest',
-    declaration: 'export interface AddForgeSourceRequest {\n    readonly title: string;\n    readonly locator: string;\n    readonly license: string;\n}',
+    name: 'AddForgeResearchRequest',
+    declaration: 'export interface AddForgeResearchRequest {\n    readonly kind: ForgeResearchKind;\n    readonly title: string;\n    readonly locator: string;\n    readonly summary: string;\n    readonly relevance: string;\n    readonly evidence?: readonly string[];\n}',
+  },
+  {
+    name: 'AddForgeWorkRequest',
+    declaration: 'export interface AddForgeWorkRequest {\n    readonly role: ForgeRole;\n    readonly title: string;\n    readonly status: ForgeWorkStatus;\n    readonly strategyId?: string;\n    readonly failureFingerprint?: string;\n    readonly evidence?: readonly string[];\n}',
   },
   {
     name: 'AddSpecialistExperimentRequest',
@@ -3629,6 +3633,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ForgeCriterionStatus = \'pending\' | \'implemented\' | \'tested\' | \'verified\';',
   },
   {
+    name: 'ForgeDeliverableKind',
+    declaration: 'export type ForgeDeliverableKind = \'software\' | \'web\' | \'infrastructure\' | \'automation\' | \'workflow\' | \'agent\' | \'documentation\' | \'other\';',
+  },
+  {
+    name: 'ForgeDeliverableStatus',
+    declaration: 'export type ForgeDeliverableStatus = ForgeCriterionStatus;',
+  },
+  {
     name: 'ForgeManagementMode',
     declaration: 'export type ForgeManagementMode = \'handoff\' | \'assisted\' | \'autonomous\';',
   },
@@ -3637,8 +3649,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ForgePhase = \'researching\' | \'auditing\' | \'designing\' | \'building\' | \'verifying\' | \'ready\' | \'blocked\';',
   },
   {
+    name: 'ForgeResearchKind',
+    declaration: 'export type ForgeResearchKind = \'product\' | \'repository\' | \'tool\' | \'component\' | \'pattern\';',
+  },
+  {
+    name: 'ForgeRole',
+    declaration: 'export type ForgeRole = \'it\' | \'security\' | \'rd\';',
+  },
+  {
     name: 'ForgeSourceAuditStatus',
     declaration: 'export type ForgeSourceAuditStatus = \'pending\' | \'passed\' | \'needs_changes\' | \'blocked\';',
+  },
+  {
+    name: 'ForgeStrategyStatus',
+    declaration: 'export type ForgeStrategyStatus = \'proposed\' | \'active\' | \'completed\' | \'failed\';',
+  },
+  {
+    name: 'ForgeWorkStatus',
+    declaration: 'export type ForgeWorkStatus = \'active\' | \'completed\' | \'failed\';',
   },
   {
     name: 'FsDirEntry',
@@ -4141,12 +4169,28 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
   },
   {
+    name: 'OrganizationForgeAtlasEntry',
+    declaration: 'export interface OrganizationForgeAtlasEntry {\n    readonly id: string;\n    readonly name: string;\n    readonly summary: string;\n    readonly reusablePattern: string;\n    readonly sourceId?: string;\n    readonly revalidatedAt: number;\n    readonly publishedAt: number;\n}',
+  },
+  {
     name: 'OrganizationForgeAudit',
-    declaration: 'export interface OrganizationForgeAudit {\n    readonly id: string;\n    readonly stage: \'pre-reuse\' | \'post-modification\';\n    readonly sourceId?: string;\n    readonly license: ForgeSourceAuditStatus;\n    readonly dependencies: ForgeSourceAuditStatus;\n    readonly secrets: ForgeSourceAuditStatus;\n    readonly vulnerabilities: ForgeSourceAuditStatus;\n    readonly findings: readonly string[];\n    readonly reviewedAt: number;\n}',
+    declaration: 'export interface OrganizationForgeAudit {\n    readonly id: string;\n    readonly stage: \'pre-reuse\' | \'post-modification\';\n    readonly sourceId?: string;\n    readonly license: ForgeSourceAuditStatus;\n    readonly dependencies: ForgeSourceAuditStatus;\n    readonly secrets: ForgeSourceAuditStatus;\n    readonly vulnerabilities: ForgeSourceAuditStatus;\n    readonly findings: readonly string[];\n    readonly evidence: readonly string[];\n    readonly reviewedAt: number;\n}',
+  },
+  {
+    name: 'OrganizationForgeBlocker',
+    declaration: 'export interface OrganizationForgeBlocker {\n    readonly dependency: string;\n    readonly reason: string;\n    readonly lastAttemptedAt: number;\n    readonly resumeCondition: string;\n}',
+  },
+  {
+    name: 'OrganizationForgeBlueprint',
+    declaration: 'export interface OrganizationForgeBlueprint {\n    readonly components: readonly string[];\n    readonly infrastructure: readonly string[];\n    readonly automations: readonly string[];\n    readonly workflows: readonly string[];\n    readonly metrics: readonly string[];\n    readonly costControls: readonly string[];\n    readonly qualityTargets: readonly string[];\n}',
   },
   {
     name: 'OrganizationForgeCriterion',
     declaration: 'export interface OrganizationForgeCriterion {\n    readonly id: string;\n    readonly label: string;\n    readonly required: boolean;\n    readonly status: ForgeCriterionStatus;\n    readonly evidence: readonly string[];\n}',
+  },
+  {
+    name: 'OrganizationForgeDeliverable',
+    declaration: 'export interface OrganizationForgeDeliverable {\n    readonly id: string;\n    readonly name: string;\n    readonly kind: ForgeDeliverableKind;\n    readonly artifactRef: string;\n    readonly status: ForgeDeliverableStatus;\n    readonly evidence: readonly string[];\n    readonly updatedAt: number;\n}',
   },
   {
     name: 'OrganizationForgeJudge',
@@ -4154,15 +4198,27 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'OrganizationForgeLedger',
-    declaration: 'export class OrganizationForgeLedger {\n    get(agent: Agent, forgeId: string): OrganizationForgeSnapshot | undefined;\n    list(agent: Agent): readonly OrganizationForgeSnapshot[];\n    start(agent: Agent, request: StartOrganizationForgeRequest): OrganizationForgeSnapshot;\n    addSource(agent: Agent, forgeId: string, request: AddForgeSourceRequest): OrganizationForgeSnapshot;\n    addAudit(agent: Agent, forgeId: string, request: AddForgeAuditRequest): OrganizationForgeSnapshot;\n    advance(agent: Agent, forgeId: string, phase: Exclude<ForgePhase, \'ready\' | \'blocked\'>): OrganizationForgeSnapshot;\n    markCriterion(agent: Agent, forgeId: string, criterionId: string, criterionStatus: ForgeCriterionStatus, evidence: readonly string[]): OrganizationForgeSnapshot;\n    judge(agent: Agent, forgeId: string, result: OrganizationForgeJudge): OrganizationForgeSnapshot;\n    setManagementMode(agent: Agent, forgeId: string, managementMode: ForgeManagementMode): OrganizationForgeSnapshot;\n}',
+    declaration: 'export class OrganizationForgeLedger {\n    get(agent: Agent, forgeId: string): OrganizationForgeSnapshot | undefined;\n    list(agent: Agent): readonly OrganizationForgeSnapshot[];\n    start(agent: Agent, request: StartOrganizationForgeRequest): OrganizationForgeSnapshot;\n    addResearch(agent: Agent, forgeId: string, request: AddForgeResearchRequest): OrganizationForgeSnapshot;\n    setBlueprint(agent: Agent, forgeId: string, request: SetForgeBlueprintRequest): OrganizationForgeSnapshot;\n    addDeliverable(agent: Agent, forgeId: string, request: AddForgeDeliverableRequest): OrganizationForgeSnapshot;\n    markDeliverable(agent: Agent, forgeId: string, deliverableId: string, deliverableState: ForgeDeliverableStatus, evidence: readonly string[]): OrganizationForgeSnapshot;\n    addWork(agent: Agent, forgeId: string, request: AddForgeWorkRequest): OrganizationForgeSnapshot;\n    recordStrategy(agent: Agent, forgeId: string, request: RecordForgeStrategyRequest): OrganizationForgeSnapshot;\n    activeWork(snapshot: OrganizationForgeSnapshot): readonly OrganizationForgeWorkItem[];\n    revalidateSource(agent: Agent, forgeId: string, request: RevalidateForgeSourceRequest): OrganizationForgeSnapshot;\n    publishAtlasEntry(agent: Agent, forgeId: string, request: PublishForgeAtlasEntryRequest): OrganizationForgeSnapshot;\n    setBlocker(agent: Agent, forgeId: string, request: SetForgeBlockerRequest): OrganizationForgeSnapshot;\n    addSource(agent: Agent, forgeId: string, request: AddForgeSour /* …truncated — full shape in source */',
+  },
+  {
+    name: 'OrganizationForgeResearch',
+    declaration: 'export interface OrganizationForgeResearch {\n    readonly id: string;\n    readonly kind: ForgeResearchKind;\n    readonly title: string;\n    readonly locator: string;\n    readonly summary: string;\n    readonly relevance: string;\n    readonly evidence: readonly string[];\n    readonly addedAt: number;\n}',
   },
   {
     name: 'OrganizationForgeSnapshot',
-    declaration: 'export interface OrganizationForgeSnapshot {\n    readonly id: string;\n    readonly revision: number;\n    readonly objective: string;\n    readonly phase: ForgePhase;\n    readonly criteria: readonly OrganizationForgeCriterion[];\n    readonly sources: readonly OrganizationForgeSource[];\n    readonly audits: readonly OrganizationForgeAudit[];\n    readonly teams: {\n        readonly it: boolean;\n        readonly security: boolean;\n        readonly rd: boolean;\n    };\n    readonly managementMode?: ForgeManagementMode;\n    readonly judge?: OrganizationForgeJudge;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n}',
+    declaration: 'export interface OrganizationForgeSnapshot {\n    readonly id: string;\n    readonly goalRef?: GoalRef;\n    readonly revision: number;\n    readonly objective: string;\n    readonly phase: ForgePhase;\n    readonly criteria: readonly OrganizationForgeCriterion[];\n    readonly research: readonly OrganizationForgeResearch[];\n    readonly sources: readonly OrganizationForgeSource[];\n    readonly audits: readonly OrganizationForgeAudit[];\n    readonly blueprint?: OrganizationForgeBlueprint;\n    readonly deliverables: readonly OrganizationForgeDeliverable[];\n    readonly work: readonly OrganizationForgeWorkItem[];\n    readonly strategies: readonly OrganizationForgeStrategy[];\n    readonly atlasEntries: readonly OrganizationForgeAtlasEntry[];\n    readonly blocker?: OrganizationForgeBlocker;\n    readonly teams: {\n        readonly it: boolean;\n        readonly security: boolean;\n        readonly rd: boolean;\n    };\n    readonly managementMode?: ForgeManagementMode;\n    readonly judge?: OrganizationForgeJudge;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n}',
   },
   {
     name: 'OrganizationForgeSource',
-    declaration: 'export interface OrganizationForgeSource {\n    readonly id: string;\n    readonly title: string;\n    readonly locator: string;\n    readonly license: string;\n    readonly auditStatus: ForgeSourceAuditStatus;\n    readonly addedAt: number;\n}',
+    declaration: 'export interface OrganizationForgeSource {\n    readonly id: string;\n    readonly title: string;\n    readonly locator: string;\n    readonly license: string;\n    readonly auditStatus: ForgeSourceAuditStatus;\n    readonly revalidatedAt?: number;\n    readonly revalidationEvidence?: readonly string[];\n    readonly addedAt: number;\n}',
+  },
+  {
+    name: 'OrganizationForgeStrategy',
+    declaration: 'export interface OrganizationForgeStrategy {\n    readonly id: string;\n    readonly name: string;\n    readonly status: ForgeStrategyStatus;\n    readonly failureFingerprint?: string;\n    readonly summary: string;\n    readonly evidence: readonly string[];\n    readonly createdAt: number;\n}',
+  },
+  {
+    name: 'OrganizationForgeWorkItem',
+    declaration: 'export interface OrganizationForgeWorkItem {\n    readonly id: string;\n    readonly role: ForgeRole;\n    readonly title: string;\n    readonly status: ForgeWorkStatus;\n    readonly strategyId?: string;\n    readonly failureFingerprint?: string;\n    readonly evidence: readonly string[];\n    readonly updatedAt: number;\n}',
   },
   {
     name: 'PermissionSelect',
@@ -4253,6 +4309,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PruneResult {\n    readonly pruned: readonly PrunedEntry[];\n    readonly charsRemoved: number;\n}',
   },
   {
+    name: 'PublishForgeAtlasEntryRequest',
+    declaration: 'export interface PublishForgeAtlasEntryRequest {\n    readonly name: string;\n    readonly summary: string;\n    readonly reusablePattern: string;\n    readonly sourceId?: string;\n}',
+  },
+  {
     name: 'QuestionDeadline',
     declaration: 'export interface QuestionDeadline {\n    readonly requestedAt: number;\n    readonly expiresAt: number;\n}',
   },
@@ -4271,6 +4331,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ReasoningEffortId',
     declaration: 'export type ReasoningEffortId = Branded<\'ReasoningEffortId\'>;',
+  },
+  {
+    name: 'RecordForgeStrategyRequest',
+    declaration: 'export interface RecordForgeStrategyRequest {\n    readonly name: string;\n    readonly status: ForgeStrategyStatus;\n    readonly failureFingerprint?: string;\n    readonly summary: string;\n    readonly evidence?: readonly string[];\n}',
   },
   {
     name: 'RedactedSecret',
@@ -4331,6 +4395,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ResumeAgentOptions',
     declaration: 'export interface ResumeAgentOptions {\n    readonly resumeSessionId: SessionId;\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
+  },
+  {
+    name: 'RevalidateForgeSourceRequest',
+    declaration: 'export interface RevalidateForgeSourceRequest {\n    readonly sourceId: string;\n    readonly evidence: readonly string[];\n}',
   },
   {
     name: 'RpcError',
@@ -4681,6 +4749,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionTitleUserMessage {\n    readonly seq: number;\n    readonly text: string;\n}',
   },
   {
+    name: 'SetForgeBlockerRequest',
+    declaration: 'export interface SetForgeBlockerRequest {\n    readonly dependency: string;\n    readonly reason: string;\n    readonly resumeCondition: string;\n}',
+  },
+  {
+    name: 'SetForgeBlueprintRequest',
+    declaration: 'export type SetForgeBlueprintRequest = OrganizationForgeBlueprint;',
+  },
+  {
     name: 'SettingsApplies',
     declaration: 'export type SettingsApplies = \'live\' | \'restart\';',
   },
@@ -4854,7 +4930,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'StartOrganizationForgeRequest',
-    declaration: 'export interface StartOrganizationForgeRequest {\n    readonly objective: string;\n    readonly criteria?: readonly string[];\n}',
+    declaration: 'export interface StartOrganizationForgeRequest {\n    readonly objective: string;\n    readonly criteria?: readonly string[];\n    readonly goalRef?: GoalRef;\n}',
   },
   {
     name: 'StartSpecialistRequest',

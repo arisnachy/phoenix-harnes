@@ -4,7 +4,7 @@
  *
  * Invariants:
  * - only the official stable channel can nominate a commit;
- * - only a clean `main` worktree can be updated automatically;
+ * - only a clean `main` or promoted `stable` worktree can be updated automatically;
  * - the nominated commit must be reachable from the configured main remote;
  * - candidates are validated in a persistent short-path staging worktree;
  * - client-only changes use an incremental client build; critical changes stay full;
@@ -26,6 +26,9 @@ import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
 const CHANNEL_BRANCH = process.env.PHOENIX_UPDATE_CHANNEL ?? 'phoenix/update-channel'
+// The promoted PHOENIX artifact lives on `stable`. Keep this override for
+// installations that publish the stable artifact from a different branch.
+const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() || 'stable'
 const CHANNEL_PATH = '.phoenix/channel/stable.json'
 const DEFAULT_POLL_MS = 60 * 1000
 const MIN_POLL_MS = 15 * 1000
@@ -144,7 +147,9 @@ function parseManifest(text) {
   if (value.schema !== 1 || value.product !== 'PHOENIX' || value.channel !== 'stable') {
     throw new Error('stable update manifest identity mismatch')
   }
-  if (value.sourceBranch !== 'main') throw new Error('stable update manifest must nominate main')
+  if (!['main', 'stable'].includes(value.sourceBranch)) {
+    throw new Error('stable update manifest must nominate main or stable')
+  }
   if (typeof value.sourceCommit !== 'string' || !/^[0-9a-f]{40}$/i.test(value.sourceCommit)) {
     throw new Error('stable update manifest contains an invalid sourceCommit')
   }
@@ -193,12 +198,14 @@ function fetchStableManifest(root) {
 }
 
 function fetchTarget(root, manifest) {
-  const mainCommit = fetchBranchCommit(root, manifest.sourceBranch, manifest.sourceBranch)
-  const target = manifest.sourceCommit
+  // The channel manifest is the signed identity/metadata record. The promoted
+  // branch is the moving release pointer. Reading only manifest.sourceCommit
+  // made later commits on origin/stable invisible until somebody published a
+  // second channel commit, which is the failure this watcher must avoid.
+  const target = fetchBranchCommit(root, STABLE_SOURCE_BRANCH, STABLE_SOURCE_BRANCH)
   const exists = git(root, ['cat-file', '-e', `${target}^{commit}`], { allowFailure: true })
-  if (!exists.ok) throw new Error(`stable target ${target} is not available after fetching ${REMOTE}/${manifest.sourceBranch}`)
-  const onMain = git(root, ['merge-base', '--is-ancestor', target, mainCommit], { allowFailure: true })
-  if (!onMain.ok) throw new Error(`stable target ${target} is not reachable from ${REMOTE}/${manifest.sourceBranch}`)
+  if (!exists.ok) throw new Error(`stable target ${target} is not available after fetching ${REMOTE}/${STABLE_SOURCE_BRANCH}`)
+  return target
 }
 
 function relation(root, current, target) {
@@ -212,12 +219,11 @@ function inspectUpdate(root) {
   if (UPDATE_MODE === 'off') return { status: 'off' }
   if (!remoteMatchesExpected(root)) return { status: 'foreign-remote' }
   const branch = currentBranch(root)
-  if (branch !== 'main') return { status: 'development-branch', branch }
   const manifest = fetchStableManifest(root)
-  fetchTarget(root, manifest)
+  const target = fetchTarget(root, manifest)
   const current = currentCommit(root)
-  const state = relation(root, current, manifest.sourceCommit)
-  return { status: state, current, target: manifest.sourceCommit, manifest }
+  const state = relation(root, current, target)
+  return { status: state, branch, current, target, manifest, sourceBranch: STABLE_SOURCE_BRANCH }
 }
 
 function recoveryRef(root, commit) {
@@ -242,6 +248,10 @@ function updateFacts(inspection) {
     target: inspection.target,
     channelPublishedAt: inspection.manifest.publishedAt,
   }
+}
+
+function canMutateBranch(branch) {
+  return branch === 'main' || branch === STABLE_SOURCE_BRANCH
 }
 
 function changedFiles(root, current, target) {
@@ -490,6 +500,16 @@ function rollback(root, previous, failedTarget, cause) {
 
 function applyUpdate(root, inspection, options = {}) {
   if (inspection.status !== 'upgrade') return false
+  if (!canMutateBranch(inspection.branch)) {
+    console.error(`[PHOENIX UPDATE] stable update detected on branch ${inspection.branch}; refusing to mutate a development checkout.`)
+    writeState(root, {
+      status: 'available',
+      phase: 'development-branch',
+      ...updateFacts(inspection),
+      detail: `Stable update detected. Switch this checkout to main or ${STABLE_SOURCE_BRANCH} to activate it.`,
+    })
+    return false
+  }
   if (!cleanWorktree(root)) {
     console.error('[PHOENIX UPDATE] update available, but this checkout has local changes. Auto-update is paused to protect user work.')
     writeState(root, {
@@ -733,13 +753,6 @@ async function watch(root, parentPid) {
             detail: 'This checkout is ahead of the promoted stable version.',
           })
           break
-        case 'development-branch':
-          writeState(root, {
-            status: 'paused',
-            phase: 'development-branch',
-            detail: `Automatic updates are disabled on branch ${inspection.branch}.`,
-          })
-          break
         case 'foreign-remote':
         case 'diverged':
           writeState(root, {
@@ -829,9 +842,6 @@ async function main() {
       return
     case 'ahead':
       if (args.includes('--check')) console.log('PHOENIX checkout is ahead of the stable channel; no downgrade will be attempted.')
-      return
-    case 'development-branch':
-      if (args.includes('--check')) console.log(`PHOENIX auto-update is disabled on development branch ${inspection.branch}.`)
       return
     case 'foreign-remote':
       console.error(`[PHOENIX UPDATE] ${REMOTE} is not the official ${EXPECTED_REPOSITORY} repository; automatic updates are disabled.`)

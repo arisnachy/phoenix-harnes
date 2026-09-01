@@ -140,6 +140,12 @@ interface GoalChanged {
 }
 ```
 
+## Organization Forge
+
+`ctx.goals.organizationForge` is the event-backed `OrganizationForgeLedger` for optional organization and product construction. Its `OrganizationForgeSnapshot` keeps comparable research, a blueprint, concrete deliverables, Phoenix IT/Security/R&D work, alternative strategies, source audits, revalidation evidence, sanitized Atlas entries, required criteria, and the independent judge result in the owning session log. The package README defines the full model-facing workflow and security rules.
+
+The Forge lifecycle is `researching`, `auditing`, `designing`, `building`, `verifying`, `ready`, or `blocked`. Research, passing pre-reuse and post-modification audits, a blueprint, verified deliverables, verified required criteria, and a passing independent judge are required before `ready`. A failed work item, repeated strategy fingerprint, or unavailable judge remains recoverable state. A blocked Forge build records its dependency, reason, last attempt, and resume condition, then can re-enter verification when the external condition is resolved.
+
 ## Service behavior
 
 [`GoalService`](../../packages/goal/goal/src/index.ts) resolves creation defaults, folds strict replay from durable `goal/change` events, enforces exact-live-agent identity and compare-and-set mutations, and emits contained `goal/changed` notifications. The package [README](../../packages/goal/goal/README.md) defines the callable API and model-visible contract.

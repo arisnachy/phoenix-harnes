@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-31-attachment-update-vault-quota.md
+2026-08-31-attachment-update-vault-quota.md: 63a1c373a46bc5a711c5169b28c14d2ab8af51ea
+2026-08-31-attachment-update-vault-quota.zh.md: 4e49df66aaf5f7d52bf54e3aeb2123ac977bf344

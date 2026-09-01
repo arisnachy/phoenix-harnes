@@ -28,7 +28,7 @@ phoenix/evolution-inbox
      PHOENIX installs
 ```
 
-`main` 是稳定的事实来源，但新的 `main` commit 只有在仓库针对当前 `main` head 的 `CI` workflow 成功后才会被分发。随后，`.github/workflows/phoenix-stable-update-channel.yml` 会把精确的 40 字符 commit SHA 发布到隔离的 `phoenix/update-channel` branch 中的 `.phoenix/channel/stable.json`。
+`main` 是集成事实来源。CI 成功后，晋升的 `stable` branch 才是安装所使用的发布指针。`.github/workflows/phoenix-stable-update-channel.yml` 会把通道身份和审计元数据发布到隔离的 `phoenix/update-channel` branch 的 `.phoenix/channel/stable.json`；更新器直接获取 `origin/stable` 的当前精确 SHA，因此即使元数据 branch 没有变化，后续晋升也会被检测到。
 
 更新通道只包含元数据。实验性源码绝不会被复制到其中，客户端也绝不会从 `phoenix/evolution-inbox`、Codex branches、Claude branches、DeepSeek upstream branches 或 laboratory branch 安装。
 
@@ -39,15 +39,15 @@ phoenix/evolution-inbox
 默认策略是 `PHOENIX_UPDATE_MODE=auto`：
 
 1. 验证 `origin` 是官方 PHOENIX 仓库；
-2. 要求 checkout 位于 `main`；
+2. 获取晋升的 `stable` branch（或 `PHOENIX_UPDATE_STABLE_BRANCH`）；
 3. 获取稳定通道 manifest；
-4. 验证指定 commit 可从 `origin/main` 到达；
+4. 验证获取到的 stable commit 已存在于本地；
 5. 拒绝降级或分叉历史；
 6. 当 worktree 包含本地修改时拒绝自动变更；
 7. 在候选 commit 上创建分离的临时 Git worktree；
 8. 在其中执行 frozen dependency install、完整 build 和 CLI smoke test；
 9. 将当前 commit 记录到 `refs/phoenix/recovery/last-good`；
-10. 仅使用 `git merge --ff-only` 推进实时 `main`；
+10. 仅使用 `git merge --ff-only` 推进干净的实时 `main` 或 `stable` checkout；
 11. 安装、重建并对实时 worktree 执行 smoke test；
 12. 如果实时步骤失败，则重置到 recovery commit 并重建最后一个已知良好版本。
 
@@ -66,7 +66,7 @@ CLI 会启动低频更新 watcher。默认轮询间隔为十分钟。当新的�
 - `PHOENIX_UPDATE_MODE=off` — 禁用稳定通道检查。
 - `PHOENIX_UPDATE_POLL_MS=<milliseconds>` — watcher 间隔，最短限制为一分钟。
 
-开发 branches 永远不会被自动更新。因此，开发者可以在 `phoenix/*`、`codex/*` 或其他 branch 上工作，而稳定更新器不会重写该 branch。
+开发 branches 永远不会被自动修改，但仍会获取并报告晋升的 stable target，让 UI 能显示有更新而不重写本地工作。只有发布指针仍名为 `main` 的安装才应设置 `PHOENIX_UPDATE_STABLE_BRANCH=main`。
 
 ## 恢复与审计
 
