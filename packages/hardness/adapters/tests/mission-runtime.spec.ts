@@ -4,6 +4,8 @@ import HardnessRegistry from '@phoenix-ai/dsh-hardness/src/index.ts'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { HardnessService } from '@phoenix-ai/dsh-hardness'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
+import type { ToolRuntime } from '@phoenix-ai/dsh-tools'
+import type { Session } from '@phoenix-ai/dsh-session'
 import { AcquisitionRegistry } from '../src/acquisition-registry.ts'
 import { OpenClawCapabilityBroker } from '../src/openclaw/broker.ts'
 import { createHardnessAcquisition, installHardnessMissionRuntime } from '../src/mission-runtime.ts'
@@ -19,7 +21,8 @@ describe('HARDNESS production mission runtime', () => {
       return async () => {}
     })
     const connection: HostConnectionHandle = { rpc: { handle } as never }
-    const agent = { session: { append: vi.fn() } } as unknown as Agent
+    const append = vi.fn<Session['append']>()
+    const agent = { session: { append } } as unknown as Agent
     const runtime = { language: 'typescript', isolation: 'worker-thread', run: vi.fn(async () => ({ logs: ['ok'], value: 1 })) }
     installHardnessMissionRuntime({
       connection,
@@ -34,7 +37,7 @@ describe('HARDNESS production mission runtime', () => {
       sessionId: 'session-code', artifactId: 'artifact-code', callId: 'call-code', language: 'typescript', program: 'return 1',
     }, new AbortController().signal)).resolves.toMatchObject({ ok: true, value: { kind: 'execution', result: { value: 1 } } })
     expect(runtime.run).toHaveBeenCalledWith(expect.objectContaining({ program: 'return 1', bindings: [] }))
-    expect((agent.session as unknown as { append?: ReturnType<typeof vi.fn> }).append).toHaveBeenCalledWith('hardness/artifact', {
+    expect(append).toHaveBeenCalledWith('hardness/artifact', {
       artifactId: 'artifact-code', callId: 'call-code', language: 'typescript', result: { logs: ['ok'], value: 1 },
     })
     await ctx.fiber.dispose()
@@ -54,9 +57,11 @@ describe('HARDNESS production mission runtime', () => {
       return async () => {}
     })
     const connection: HostConnectionHandle = { rpc: { handle } as never }
-    const session = { append: vi.fn(), events: [] }
+    const append = vi.fn<Session['append']>()
+    const session = { append, events: [] }
     const agent = { session } as unknown as Agent
-    const tools = { execute: vi.fn(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'weather', mime: 'text/html', data: '<h1>Sunny</h1>' } } })) }
+    const execute = vi.fn<ToolRuntime['execute']>(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'weather', mime: 'text/html', data: '<h1>Sunny</h1>' } } }))
+    const tools = { execute }
     const approval = { request: vi.fn(async () => 'allowed-once' as const) }
     const judgeStart = vi.fn(async () => ({
       id: 'judge-run' as never,
@@ -86,7 +91,7 @@ describe('HARDNESS production mission runtime', () => {
     expect(approval.request).toHaveBeenCalled()
     expect(tools.execute).toHaveBeenCalledOnce()
     expect(judgeStart).toHaveBeenCalledOnce()
-    const eventTypes = session.append.mock.calls.map(([type]) => type)
+    const eventTypes = vi.mocked(session.append).mock.calls.map(([type]) => type)
     expect(eventTypes[0]).toBe('hardness/kernel')
     expect(eventTypes.at(-1)).toBe('hardness/kernel')
     expect(eventTypes.filter(type => type === 'hardness/kernel')).toHaveLength(7)
@@ -118,7 +123,8 @@ describe('HARDNESS production mission runtime', () => {
     const connection: HostConnectionHandle = { rpc: { handle } as never }
     const agent = { session: { append: vi.fn(), events: [] } } as unknown as Agent
     const approval = { request: vi.fn(async () => 'allowed-once' as const) }
-    const tools = { execute: vi.fn() }
+    const execute = vi.fn<ToolRuntime['execute']>()
+    const tools = { execute }
     const judge = async () => ({
       verdict: 'pass' as const, summary: 'verified', evidence: ['search-result'], requiredChanges: [],
       criteria: [
@@ -133,7 +139,7 @@ describe('HARDNESS production mission runtime', () => {
       agents: { get: id => id === 'session-openclaw' ? agent : undefined },
       approval: approval as never,
       hardness,
-      tools: tools as never,
+      tools,
       acquisition,
       executor: broker,
       judge,

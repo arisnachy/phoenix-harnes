@@ -31,7 +31,7 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
       <div className={styles.body}>
         <span className={styles.visuallyHidden}>{artifact.mime}</span>
         <UniversalArtifactSurface
-          artifact={{ ...universal, executable: artifact.executable === true, ...result === undefined ? {} : { result } }}
+          artifact={{ ...universal, executable: artifact.executable, ...result === undefined ? {} : { result } }}
           {...runArtifact !== undefined && code !== undefined
             ? { onRun: async (signal) => {
               const value = await runArtifact({

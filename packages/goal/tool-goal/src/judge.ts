@@ -1,7 +1,8 @@
 /** Independent, read-only completion judge for long-running goals. */
 
-import type { Agent } from '@phoenix-ai/dsh-agent'
-import type { ContentBlock } from '@phoenix-ai/dsh-llm'
+import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
+import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
+import type { ContentBlock, LlmRuntime } from '@phoenix-ai/dsh-llm'
 import type { GoalJudgeAuditEntry } from '@phoenix-ai/dsh-goal'
 import type { Session } from '@phoenix-ai/dsh-session'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
@@ -65,6 +66,51 @@ function readStructured(value: unknown): GoalJudgeResult | undefined {
 
 const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
 
+const REASONING_RANK = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const
+
+/**
+ * Resolve the model route for an independent judge without silently inheriting
+ * the worker's route. Codex parents use the dedicated Luna xhigh route; every
+ * other provider keeps the exact selected model and effort. When an effort was
+ * not persisted, the provider catalog supplies the highest advertised level.
+ * @param input - Parent agent, optional LLM capability lookup, and cancellation signal.
+ * @returns Explicit child-agent options, or an empty override when the parent has no route yet.
+ */
+export async function resolveGoalJudgeAgentOptions(input: {
+  readonly parent: Agent
+  readonly llm?: Pick<LlmRuntime, 'resolveModelInfo'>
+  readonly signal: AbortSignal
+}): Promise<AgentOptions> {
+  const { provider, model, reasoningEffort } = input.parent.options
+  if (provider === undefined || model === undefined) return {}
+  if (provider === 'openai-codex') {
+    return {
+      provider: 'openai-codex',
+      model: 'gpt-5.6-luna',
+      reasoningEffort: ReasoningEffortId('xhigh'),
+    }
+  }
+  if (reasoningEffort !== undefined) return { provider, model, reasoningEffort }
+  if (input.llm !== undefined) {
+    try {
+      const resolved = await input.llm.resolveModelInfo(provider, model, input.signal)
+      const effort = resolved.reasoning?.efforts
+        .map(candidate => candidate.id)
+        .sort((left, right) => rankReasoningEffort(right) - rankReasoningEffort(left))[0]
+      if (effort !== undefined) return { provider, model, reasoningEffort: effort }
+    } catch {
+      // A capability lookup is advisory; the child can still use the exact
+      // provider/model route and let its adapter report a real failure.
+    }
+  }
+  return { provider, model }
+}
+
+function rankReasoningEffort(value: string): number {
+  const rank = REASONING_RANK.indexOf(value as typeof REASONING_RANK[number])
+  return rank === -1 ? -1 : rank
+}
+
 function unavailable(): GoalJudgeResult {
   return { verdict: 'blocked', summary: WAITING_SUMMARY, findings: [], requiredChanges: [] }
 }
@@ -76,6 +122,7 @@ function unavailable(): GoalJudgeResult {
  */
 export async function judgeGoalCompletion(input: {
   readonly subagents: GoalJudgeRuntime | undefined
+  readonly llm?: Pick<LlmRuntime, 'resolveModelInfo'>
   readonly provider: string
   readonly parent: Agent
   readonly objective: string
@@ -111,6 +158,11 @@ export async function judgeGoalCompletion(input: {
       prompt,
       parent: input.parent,
       signal: input.signal,
+      agentOptions: await resolveGoalJudgeAgentOptions({
+        parent: input.parent,
+        ...input.llm === undefined ? {} : { llm: input.llm },
+        signal: input.signal,
+      }),
       outputSchema: GOAL_JUDGE_OUTPUT_SCHEMA,
       toolFilter: { allow: [...READ_ONLY_TOOLS] },
     })

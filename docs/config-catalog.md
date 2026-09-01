@@ -1826,12 +1826,12 @@ Requires: `sessions`
 export interface Config {
   /** Absolute or process-relative JSONL path owned by Phoenix. */
   path: string
-  /** Maximum active records retained by the ledger. */
+  /** Compatibility limit for bounded legacy queries; canonical records are never pruned. */
   maxRecords?: number
 }
 ```
 
-Source: [`packages/session/session-learning/src/index.ts:27`](../packages/session/session-learning/src/index.ts)
+Source: [`packages/session/session-learning/src/index.ts:44`](../packages/session/session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-session-persistence-jsonl"></a>
 
@@ -3271,6 +3271,54 @@ export interface Config {
 ```
 
 Source: [`packages/interaction/user-questions/src/index.ts:64`](../packages/interaction/user-questions/src/index.ts)
+
+<a id="phoenix-aidsh-voice"></a>
+
+## `@phoenix-ai/dsh-voice`
+
+```ts config-catalog
+/** Configurable limits and provider preference for one host. */
+export interface VoiceRuntimeConfig {
+  /** Keep false to disable all host-side voice output. */
+  readonly enabled?: boolean
+  /** Default BCP 47 language. */
+  readonly language?: string
+  /** Maximum pending important events. */
+  readonly maxQueue?: number
+  /** Maximum spoken characters per event. */
+  readonly maxChars?: number
+  /** Preferred TTS provider, normally `kokoro` when configured. */
+  readonly ttsProvider?: string
+  /** Preferred STT provider. */
+  readonly sttProvider?: string
+}
+```
+
+Source: [`packages/voice/voice/src/index.ts:114`](../packages/voice/voice/src/index.ts)
+
+<a id="phoenix-aidsh-voice-local"></a>
+
+## `@phoenix-ai/dsh-voice-local`
+
+Requires: `voice`
+
+```ts config-catalog
+/** Local voice plugin configuration. */
+export interface Config {
+  /** Optional local Kokoro command; absence leaves Kokoro unavailable. */
+  readonly kokoroCommand?: string
+  /** Arguments for the Kokoro command. */
+  readonly kokoroArgs?: string[]
+  /** Optional local STT command; absence leaves host STT unavailable. */
+  readonly sttCommand?: string
+  /** Arguments for the STT command. */
+  readonly sttArgs?: string[]
+  /** Whether to register the platform fallback after Kokoro. */
+  readonly systemTts?: boolean
+}
+```
+
+Source: [`packages/voice/voice-local/src/index.ts:134`](../packages/voice/voice-local/src/index.ts)
 
 <a id="phoenix-aidsh-web"></a>
 

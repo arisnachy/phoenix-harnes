@@ -1270,6 +1270,12 @@ importers:
       '@phoenix-ai/dsh-user-questions':
         specifier: workspace:^
         version: link:../../interaction/user-questions
+      '@phoenix-ai/dsh-voice':
+        specifier: workspace:^
+        version: link:../../voice/voice
+      '@phoenix-ai/dsh-voice-local':
+        specifier: workspace:^
+        version: link:../../voice/voice-local
       '@phoenix-ai/dsh-web':
         specifier: workspace:^
         version: link:../../web/web
@@ -5101,6 +5107,9 @@ importers:
       '@phoenix-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
       '@phoenix-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
@@ -8709,6 +8718,38 @@ importers:
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+
+  packages/voice/voice:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+
+  packages/voice/voice-local:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-voice':
+        specifier: workspace:^
+        version: link:../voice
 
   packages/web/tool-web:
     dependencies:

@@ -17,7 +17,7 @@ function agentFor(session: Session): Agent {
     send: () => {},
     followup: () => {},
     steer: () => {},
-    inject: input => inbox.append('next-step', input),
+    inject: (input) => { inbox.append('next-step', input) },
     cancel: () => {},
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),

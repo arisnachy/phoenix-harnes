@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { UserProfileRowFace } from './profile-controller.ts'
+import type { AssistantGender } from './types.ts'
 import css from './UserProfileRow.module.css'
 import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 
@@ -48,6 +49,14 @@ export function UserProfileRow(props: UserProfileRowProps) {
         <div className={css.body}>
           {!state.writable ? <p className={css.notice}>{t('readOnly')}</p> : null}
           <p className={css.privacy}>{t('privacy')}</p>
+          <ProfileInput id="profile-assistant-name" label={t('assistantName')} hint={t('assistantNameHint')} value={field('assistantName').text} invalid={field('assistantName').invalid} disabled={disabled} onChange={(value) => { props.edit('assistantName', value) }} />
+          <label className={css.label} htmlFor="profile-assistant-gender">{t('assistantGender')}</label>
+          <select id="profile-assistant-gender" className={css.input} value={state.assistantGender} disabled={disabled} onChange={(event) => { props.setAssistantGender(event.target.value as AssistantGender) }}>
+            <option value="neutral">{t('assistantGenderNeutral')}</option>
+            <option value="feminine">{t('assistantGenderFeminine')}</option>
+            <option value="masculine">{t('assistantGenderMasculine')}</option>
+          </select>
+          <p className={css.hint}>{t('assistantGenderHint')}</p>
           <ProfileInput id="profile-preferred-name" label={t('preferredName')} hint={t('preferredNameHint')} value={field('preferredName').text} invalid={field('preferredName').invalid} disabled={disabled} onChange={(value) =>{  props.edit('preferredName', value) }} />
           <ProfileInput id="profile-date-of-birth" label={t('dateOfBirth')} hint={t('dateOfBirthHint')} value={field('dateOfBirth').text} invalid={field('dateOfBirth').invalid} disabled={disabled} type="date" onChange={(value) =>{  props.edit('dateOfBirth', value) }} />
           <ProfileInput id="profile-gender" label={t('gender')} hint={t('genderHint')} value={field('gender').text} invalid={field('gender').invalid} disabled={disabled} onChange={(value) =>{  props.edit('gender', value) }} />

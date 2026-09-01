@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
-import { judgeGoalCompletion, recordGoalJudge } from '../src/judge.ts'
+import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
+import { judgeGoalCompletion, recordGoalJudge, resolveGoalJudgeAgentOptions } from '../src/judge.ts'
 
-const parent = { id: SessionId('judge-parent') } as never
+const parent = { id: SessionId('judge-parent'), options: {} } as never
 
 function provider() {
   return {
@@ -11,6 +12,88 @@ function provider() {
 }
 
 describe('goal completion judge', () => {
+  it('routes an OpenAI Codex parent to the Luna xhigh judge model', async () => {
+    await expect(resolveGoalJudgeAgentOptions({
+      parent: {
+        id: SessionId('codex-parent'),
+        options: { provider: 'openai-codex', model: 'gpt-5.6-sol' },
+      } as never,
+      signal: new AbortController().signal,
+    })).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-5.6-luna',
+      reasoningEffort: 'xhigh',
+    })
+  })
+
+  it('keeps the selected route and reasoning effort for other providers', async () => {
+    await expect(resolveGoalJudgeAgentOptions({
+      parent: {
+        id: SessionId('provider-parent'),
+        options: { provider: 'openrouter', model: 'openai/gpt-oss-120b', reasoningEffort: 'high' },
+      } as never,
+      signal: new AbortController().signal,
+    })).resolves.toEqual({
+      provider: 'openrouter',
+      model: 'openai/gpt-oss-120b',
+      reasoningEffort: 'high',
+    })
+  })
+
+  it('selects the highest advertised reasoning level when another provider omitted it', async () => {
+    const resolveModelInfo = vi.fn(async () => ({
+      provider: 'anthropic',
+      id: 'claude-opus',
+      name: 'Claude Opus',
+      reasoning: {
+        efforts: [
+          { id: ReasoningEffortId('medium'), name: 'Medium' },
+          { id: ReasoningEffortId('ultra'), name: 'Ultra' },
+          { id: ReasoningEffortId('high'), name: 'High' },
+        ],
+      },
+    }))
+    await expect(resolveGoalJudgeAgentOptions({
+      parent: {
+        id: SessionId('provider-parent-with-catalog'),
+        options: { provider: 'anthropic', model: 'claude-opus' },
+      } as never,
+      llm: { resolveModelInfo },
+      signal: new AbortController().signal,
+    })).resolves.toEqual({
+      provider: 'anthropic',
+      model: 'claude-opus',
+      reasoningEffort: 'ultra',
+    })
+    expect(resolveModelInfo).toHaveBeenCalledWith('anthropic', 'claude-opus', expect.any(AbortSignal))
+  })
+
+  it('passes the resolved Codex judge route to the fresh child run', async () => {
+    const start = vi.fn(async (_name: string, request: Record<string, unknown>) => ({
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed' as const,
+        structured: { verdict: 'pass', summary: 'verified', findings: [], required_changes: [] },
+      }),
+      dispose: async () => {},
+      request,
+    }))
+    await judgeGoalCompletion({
+      subagents: { getProvider: () => provider() as never, start: start as never },
+      provider: 'spawn',
+      parent: {
+        id: SessionId('codex-parent'),
+        options: { provider: 'openai-codex', model: 'gpt-5.6-sol' },
+      } as never,
+      objective: 'Finish the feature',
+      round: 3,
+      signal: new AbortController().signal,
+    })
+    expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
+      agentOptions: { provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'xhigh' },
+    }))
+  })
+
   it('runs a fresh structured read-only review and returns pass', async () => {
     const start = vi.fn(async (_name: string, request: Record<string, unknown>) => ({
       result: Promise.resolve({
@@ -43,6 +126,7 @@ describe('goal completion judge', () => {
     })
     expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
       label: 'goal-completion-judge',
+      agentOptions: {},
       toolFilter: { allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] },
       outputSchema: expect.objectContaining({ required: ['verdict', 'summary', 'findings', 'required_changes'] }) as unknown,
     }))

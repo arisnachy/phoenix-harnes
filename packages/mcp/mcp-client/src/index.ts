@@ -15,7 +15,6 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
-import type { McpConnectorRegistry } from '@phoenix-ai/dsh-mcp-connector-registry'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
@@ -174,7 +173,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // The registry is a model-facing status projection, not a required part of
   // the transport seam. Keeping the lookup optional preserves minimal test and
   // embedded compositions while the base profile mounts the shared service.
-  const mcpConnectors = ctx.get('mcpConnectors') as McpConnectorRegistry | undefined
+  const mcpConnectors = ctx.get('mcpConnectors')
   const registration = mcpConnectors?.register({
     serverName: config.serverName,
     transport: config.transport,

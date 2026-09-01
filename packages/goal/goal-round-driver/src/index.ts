@@ -358,6 +358,10 @@ export function apply(ctx: Context): void {
         if ((attempt?.phase === 'queued' || attempt?.phase === 'claimed' || attempt?.cancelled)
           && goal?.phase === 'active' && goal.activation === 'armed') {
           state.attempt = undefined
+          // An explicit cancellation is a user lifecycle decision, not a
+          // failed mission. Preserve the durable goal and disarm only the
+          // process-local driver until the user resumes it. Provider errors
+          // and token limits use their dedicated automatic recovery paths.
           try {
             ctx.goals.pause(agent, goalRef(goal))
           } catch (error: unknown) {

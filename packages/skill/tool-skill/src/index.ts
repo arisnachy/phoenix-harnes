@@ -89,7 +89,6 @@ export const Config: z<Config> = z.object({
 export function apply(ctx: Context, config: Config = {}): void {
   const catalogDescriptionMaxLength = config.catalogDescriptionMaxLength ?? DEFAULT_CATALOG_DESCRIPTION_MAX_LENGTH
   const locale = config.locale ?? 'es'
-  if (locale !== 'es' && locale !== 'en') throw new Error('locale must be "es" or "en"')
   const englishOverlayRoot = config.englishOverlayRoot ?? join(homedir(), '.agents', 'skills-en')
   const englishOverlays = locale === 'en'
     ? readEnglishOverlayCatalog(englishOverlayRoot)

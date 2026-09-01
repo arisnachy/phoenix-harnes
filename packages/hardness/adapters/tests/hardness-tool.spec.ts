@@ -9,7 +9,9 @@ const callId = CallId('hardness-call-1')
 const signal = new AbortController().signal
 const agent = { id: 'agent-1' } as unknown as Agent
 
-function execution(): ToolRunContext {
+function execution() {
+  const deferContext = vi.fn<ToolRunContext['deferContext']>()
+  const concludeTurn = vi.fn<ToolRunContext['concludeTurn']>()
   return {
     callId,
     rootCallId: callId,
@@ -18,13 +20,15 @@ function execution(): ToolRunContext {
     token: Symbol('tool-token') as never,
     signal,
     agent,
-    deferContext: vi.fn(),
-    concludeTurn: vi.fn(),
+    deferContext,
+    concludeTurn,
   }
 }
 
-function runnerReturning(result: HardnessMissionResult): { runner: HardnessMissionRunner; run: ReturnType<typeof vi.fn> } {
-  const run = vi.fn(async () => result)
+type HardnessRunMock = ReturnType<typeof vi.fn<HardnessMissionRunner['run']>>
+
+function runnerReturning(result: HardnessMissionResult): { runner: HardnessMissionRunner; run: HardnessRunMock } {
+  const run = vi.fn<HardnessMissionRunner['run']>(async () => result)
   return { runner: { run }, run }
 }
 
@@ -139,10 +143,11 @@ describe('hardness_run tool adapter', () => {
         mission_status: 'RECOVERING',
         next_action: 'retry_with_alternative',
       })
-    expect(exec.deferContext).toHaveBeenCalledWith(expect.objectContaining({
-      source: expect.objectContaining({ plugin: 'hardness-adapters' }),
-      content: [expect.objectContaining({ type: 'text', text: expect.stringContaining('Do not treat this blocked result as mission completion') })],
-    }))
+    const { deferContext } = exec
+    expect(deferContext).toHaveBeenCalledWith(expect.objectContaining({
+      source: expect.objectContaining({ plugin: 'hardness-adapters' }) as unknown,
+      content: [expect.objectContaining({ type: 'text', text: expect.stringContaining('Do not treat this blocked result as mission completion') as unknown }) as unknown],
+    }) as unknown)
     expect(run).toHaveBeenCalledOnce()
   })
 

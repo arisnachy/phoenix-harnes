@@ -150,6 +150,26 @@
       config:
         path: !!js dshHomePath('memory', 'learning.jsonl')
 
+    # Voice is a silent-by-default side channel. Only authorization, verified
+    # mission completion, explicit discoveries/help, and real blocks are
+    # announced; ordinary tools and progress never reach it.
+    - id: voice
+      name: '@phoenix-ai/dsh-voice'
+      config:
+        enabled: !!js process.env.PHOENIX_VOICE_ENABLED !== '0'
+        language: !!js process.env.PHOENIX_VOICE_LANGUAGE ?? 'es-DO'
+        maxQueue: 3
+        maxChars: 480
+        ttsProvider: kokoro
+    - id: voice-local
+      name: '@phoenix-ai/dsh-voice-local'
+      config:
+        kokoroCommand: !!js process.env.PHOENIX_KOKORO_COMMAND
+        kokoroArgs: []
+        sttCommand: !!js process.env.PHOENIX_STT_COMMAND
+        sttArgs: []
+        systemTts: true
+
     # Durable image bytes live outside the append-only session log. Messages
     # keep content-addressed references that this shared backend resolves for
     # provider requests and authorized history reads.

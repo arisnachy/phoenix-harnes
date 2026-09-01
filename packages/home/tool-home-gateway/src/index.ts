@@ -3,7 +3,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import type { HomeControlRequest, HomeDevice } from '@phoenix-ai/dsh-home-gateway'
 import { defineTool } from '@phoenix-ai/dsh-tools'
-import type { GenericCallView, JsonValue, PreToolDecision } from '@phoenix-ai/dsh-tools'
+import type { GenericCallView, PreToolDecision } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-home-gateway'
 
@@ -112,7 +112,7 @@ export function apply(ctx: Context): void {
       const request: HomeControlRequest = {
         entityId: args.entity_id,
         service: args.service,
-        data: args.data as Record<string, JsonValue>,
+        data: args.data,
       }
       return { result: await ctx.home.control(request, exec.signal) }
     },

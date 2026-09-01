@@ -146,9 +146,7 @@ export function createHardnessMissionRunner(deps: Omit<HardnessMissionRuntimeDep
       tools: deps.tools,
       approval,
       artifacts,
-      ...typeof input.context.agent?.session?.append === 'function'
-        ? { audit: createHardnessMissionAudit(input.context.agent.session) }
-        : {},
+      ...(input.context.agent === undefined ? {} : { audit: createHardnessMissionAudit(input.context.agent.session) }),
       ...(deps.executor === undefined ? {} : { executor: deps.executor }),
       ...(judge === undefined ? {} : { judge }),
       need: input.need,

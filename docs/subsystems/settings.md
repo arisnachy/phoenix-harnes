@@ -287,6 +287,11 @@ getRedacted(): UserProfileRedacted
  * @returns a detached projection safe to include in model context.
  */
 getConsented(): UserProfileConsented
+
+/** Return the configured assistant identity with defaults always materialized.
+ * @returns name and presentation mode used by the model persona.
+ */
+getAssistantIdentity(): AssistantIdentity
 ```
 
 Source: [`packages/profile/user-profile/src/index.ts`](../../packages/profile/user-profile/src/index.ts)

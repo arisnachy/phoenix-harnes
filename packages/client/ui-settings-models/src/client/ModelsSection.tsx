@@ -209,6 +209,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   // (`llm-pi-ai/openai-codex` → `openai-codex`): the same join the cards use.
   const [accountFlows, setAccountFlows] = useState<ReadonlyMap<string, AccountFlow>>(() => new Map())
   const [flowNonce, setFlowNonce] = useState(0)
+  const [reordering, setReordering] = useState(false)
+  const [orderFailure, setOrderFailure] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     if (api.authorization === undefined) return
@@ -329,11 +331,20 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   // one whose schema names the protocols one may speak; without it mounted
   // there is nothing to declare and the entry point stays disabled.
   const protocols = protocolChoices(state.namespaces.get('llm-pi-ai'), schema)
+  const moveProvider = (provider: string, direction: 'up' | 'down'): void => {
+    if (reordering) return
+    setReordering(true)
+    setOrderFailure(undefined)
+    void controller.moveProvider(provider, direction)
+      .catch((error: unknown) => { setOrderFailure(messageOf(error)) })
+      .finally(() => { setReordering(false) })
+  }
 
   return (
     <div className={styles['section']}>
       <h2 className={styles['title']}>{t('title')}</h2>
       <p className={styles['intro']}>{t('intro')}</p>
+      <p className={styles['intro']}>{t('providerOrder')}</p>
       {api.authorization === undefined
         ? null
         : (
@@ -351,8 +362,9 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
             {providerCopy(t('savedProvider'), savedIdentity)}
           </p>
         )}
+      {orderFailure === undefined ? null : <p className={styles['notice']} role="status">{`${t('orderSaveFailed')}: ${orderFailure}`}</p>}
       <ul className={styles['rows']}>
-        {configured.map((row) => {
+        {configured.map((row, index) => {
           const target = targetOf(row)
           const namespace = state.namespaces.get(target.settingsNs)
           /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
@@ -413,6 +425,22 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                       : null}
                 </span>
                 <span className={styles['rowActions']}>
+                  <button
+                    type="button"
+                    className={styles['iconButton']}
+                    aria-label={`${t('moveUp')}: ${row.entry.displayName}`}
+                    title={t('moveUp')}
+                    disabled={!state.writable || reordering || index === 0}
+                    onClick={() => { moveProvider(row.entry.provider, 'up') }}
+                  >↑</button>
+                  <button
+                    type="button"
+                    className={styles['iconButton']}
+                    aria-label={`${t('moveDown')}: ${row.entry.displayName}`}
+                    title={t('moveDown')}
+                    disabled={!state.writable || reordering || index === configured.length - 1}
+                    onClick={() => { moveProvider(row.entry.provider, 'down') }}
+                  >↓</button>
                   <button
                     type="button"
                     className={styles['secondaryButton']}

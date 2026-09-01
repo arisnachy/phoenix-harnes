@@ -4,6 +4,8 @@ English | [中文](README.zh.md)
 
 Browser settings row for the local user profile. The row keeps drafts local until Save, exposes general profile fields and family entries, and requires independent consent before a field can be projected into model context by the Host profile service.
 
+The row also edits KIRA's assistant name and masculine, feminine, or neutral presentation. The Models settings page owns the adjacent-arrow editor for provider order; it persists the order in the same local preference namespace so the conversation model selector receives it from the Host.
+
 ## Model Experience
 
 ### Profile settings row

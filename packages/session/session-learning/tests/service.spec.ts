@@ -120,4 +120,30 @@ describe('LearningMemoryService', () => {
     expect(result?.kind).toBe('preference')
     expect(result?.confidence).toBeGreaterThanOrEqual(0.9)
   })
+
+  it('archives every durable session event with project provenance and preserves project isolation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-cognitive-service-'))
+    roots.push(root)
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
+    const alpha = ctx.sessions.create(SessionId('cognitive-alpha'), { meta: { cwd: 'C:\\workspace\\alpha' } })
+    const beta = ctx.sessions.create(SessionId('cognitive-beta'), { meta: { cwd: 'C:\\workspace\\beta' } })
+    alpha.append('turn/start', { turn: 1 })
+    alpha.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Remember the alpha sandbox decision.' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    beta.append('turn/start', { turn: 1 })
+    beta.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Remember the beta sandbox decision.' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+
+    await ctx.learningMemory.ready()
+    expect(ctx.learningMemory.allCognitiveRecords().length).toBeGreaterThanOrEqual(4)
+    expect(ctx.learningMemory.searchCognitive('alpha decision', 10, { projectId: 'alpha' }).every(hit => hit.record.projectId === 'alpha')).toBe(true)
+    expect(ctx.learningMemory.searchCognitive('beta', 10, { projectId: 'alpha' })).toEqual([])
+    expect(ctx.learningMemory.timeline({ projectId: 'beta' }).every(record => record.provenance.projectId === 'beta')).toBe(true)
+  })
 })

@@ -75,10 +75,14 @@ export function conversationalSpeechText(text: string): string {
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/(["']?)(?:api[_-]?(?:key|secret)|access[_-]?token|auth(?:orization)?|auth[_-]?token|client[_-]?secret|password|private[_-]?key|refresh[_-]?token|secret|session[_-]?token|token)\1\s*[:=]\s*(?:bearer\s+)?(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)/gi, '[redacted]')
     .replace(/^\s*#{1,6}\s*/gm, '')
     .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/[>*_~`]/g, '')
+    .replace(/[>*_~`|{}[\]\\]/g, ' ')
+    .replace(/[\p{Extended_Pictographic}\u200D\uFE0F]/gu, ' ')
     .replace(/\s+/g, ' ')
+    .replace(/\s+([.,!?;:])/g, '$1')
     .trim()
 }
 
@@ -92,8 +96,12 @@ function bestVoice(synthesis: SpeechSynthesisLike, language: string): SpeechSynt
     const voiceLanguage = voice.lang.toLowerCase()
     const voiceBase = voiceLanguage.split('-')[0]
     if (voiceBase !== base) continue
-    const natural = /natural|neural|premium|enhanced|aria|samantha|sofia|jenny/i.test(voice.name) ? 4 : 0
-    const score = (voiceLanguage === target ? 20 : 10) + (voice.localService === true ? 3 : 0) + natural
+    const natural = /natural|neural|premium|enhanced/i.test(voice.name) ? 4 : 0
+    const feminine = [
+      'aria', 'samantha', 'sofia', 'sofía', 'jenny', 'sabina', 'zira', 'karen', 'susan',
+      'helena', 'luciana', 'marisol', 'paulina', 'ava', 'emma', 'laura', 'female', 'feminine', 'mujer',
+    ].some(name => voice.name.toLowerCase().includes(name)) ? 12 : 0
+    const score = feminine * 100 + (voiceLanguage === target ? 18 : 10) + (voice.localService === true ? 3 : 0) + natural
     if (best === undefined || score > best.score) best = { voice, score }
   }
   return best?.voice
@@ -159,8 +167,8 @@ export function createSpeechOutput(
         onState('unsupported')
         return
       }
-      synthesis.cancel()
       const current = ++epoch
+      synthesis.cancel()
       const utterance = new Utterance(transcript)
       const selectedLanguage = language?.trim() || defaultLanguage()
       utterance.lang = selectedLanguage

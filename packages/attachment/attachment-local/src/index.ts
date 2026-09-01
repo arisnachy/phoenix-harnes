@@ -217,9 +217,10 @@ export class LocalAttachmentStore extends AttachmentStore {
     await this.compression.run(() => validateImageFile(input, this.imageLimits, this.normalizationPolicy))
   }
 
-  override async validateFile(input: SaveFileAttachment): Promise<void> {
+  override validateFile(input: SaveFileAttachment): Promise<void> {
     this.validateFileBatch([input])
     prepareFileAttachment(input, this.fileLimits)
+    return Promise.resolve()
   }
 
   override async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]> {

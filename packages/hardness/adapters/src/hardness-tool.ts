@@ -1,4 +1,4 @@
-import type { CapabilityNeed, CapabilityStatus } from '@phoenix-ai/dsh-hardness'
+import type { CapabilityStatus } from '@phoenix-ai/dsh-hardness'
 import { boundContextSummary, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { snapshotJsonValue } from '@phoenix-ai/dsh-session'
 import {
@@ -185,7 +185,7 @@ export function createHardnessTool(runner: HardnessMissionRunner): ToolDefinitio
       }
       const context = executionContext(exec)
       const result = await runner.run({
-        need: args.need as CapabilityNeed,
+        need: args.need,
         args: args.arguments,
         context,
       })

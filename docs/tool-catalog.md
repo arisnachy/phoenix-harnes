@@ -1820,7 +1820,7 @@ Source: [`packages/session-learning/tool-session-learning/src/index.ts`](../pack
 
 ### `memory_search`
 
-Search Phoenix persistent learning memory and return bounded records with source session, event, and confidence.
+Search Phoenix cognitive memory with bounded provenance, layers, project, temporal, entity, and confidence data.
 
 ```json
 {
@@ -1833,6 +1833,36 @@ Search Phoenix persistent learning memory and return bounded records with source
     "limit": {
       "type": "integer",
       "description": "Optional result count, capped by the configured maximum."
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Optional project filter. Automatic recall is scoped to the current project."
+    },
+    "layer": {
+      "type": "string",
+      "description": "Optional memory-layer filter.",
+      "enum": [
+        "autobiographical",
+        "working",
+        "episodic",
+        "semantic",
+        "procedural",
+        "prospective",
+        "associative",
+        "temporal"
+      ]
+    },
+    "from": {
+      "type": "integer",
+      "description": "Optional inclusive Unix-millisecond lower bound."
+    },
+    "to": {
+      "type": "integer",
+      "description": "Optional inclusive Unix-millisecond upper bound."
+    },
+    "include_history": {
+      "type": "boolean",
+      "description": "Include superseded values while preserving their provenance."
     }
   }
 }

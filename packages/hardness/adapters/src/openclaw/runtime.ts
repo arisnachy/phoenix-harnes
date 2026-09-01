@@ -25,10 +25,13 @@ export interface OpenClawRuntimeStatus extends CompatibilityReport {
 export interface OpenClawCompatibilityRuntimeOptions {
   catalog?: readonly OpenClawExtensionCatalogEntry[]
   environment?: CompatibilityEnvironment
-  loadManifest: (entry: OpenClawExtensionCatalogEntry) => unknown | Promise<unknown>
+  loadManifest: (entry: OpenClawExtensionCatalogEntry) => OpenClawManifestInput | Promise<OpenClawManifestInput>
   activateExtension: (descriptor: PhoenixExtensionDescriptor) => void | Promise<void>
   deactivateExtension?: (descriptor: PhoenixExtensionDescriptor) => void | Promise<void>
 }
+
+/** Untrusted manifest values accepted so malformed extensions can be isolated. */
+export type OpenClawManifestInput = Record<string, unknown> | boolean | null | undefined
 
 /** Lazy discovery and activation surface for OpenClaw extensions. */
 export interface OpenClawCompatibilityRuntime {

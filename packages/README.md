@@ -6,7 +6,7 @@ npm scope: `@phoenix-ai/dsh-*`; Cordis `Service` subclasses and function plugins
 
 ## Hierarchy
 
-Groups hold `packages/<group>/<pkg>/`; names stay `@phoenix-ai/dsh-<pkg>`. **Group READMEs own package/ctx-key maps.**
+Groups hold packages; names stay `@phoenix-ai/dsh-<pkg>`. **Group READMEs own package/ctx-key maps.**
 
 | Group | Role | Release expectation |
 |---|---|---|
@@ -50,6 +50,7 @@ Groups hold `packages/<group>/<pkg>/`; names stay `@phoenix-ai/dsh-<pkg>`. **Gro
 | [`storage/`](storage/README.md) | Non-session storage hub + backends + domain form | Product — stable API |
 | [`workspace/`](workspace/README.md) | Workspace entity | Product — stable API |
 | [`home/`](home/README.md) | Private-network Home Assistant capability and model-facing tools | Product — stable API |
+| [`voice/`](voice/README.md) | Voice | Stable |
 | [`sdk/`](sdk/README.md) | Out-of-process runtime SDK: JSON-RPC protocol, TypeScript client, and server plugin | Product — stable API |
 | [`acp/`](acp/README.md) | Automation-only Agent Client Protocol server | Product — stable API |
 | [`interaction/`](interaction/README.md) | Human-collaboration plane: approval/interaction seams, permission preset, commands, ask-user tool | Product — stable API |
@@ -60,7 +61,7 @@ Groups hold `packages/<group>/<pkg>/`; names stay `@phoenix-ai/dsh-<pkg>`. **Gro
 | [`test-support/`](test-support/README.md) | Support infrastructure (testkits, invariants, replay, Loader smokes) | Support — lower compatibility expectations |
 | [`util/`](util/README.md) | Low-level zero-dependency utilities shared across groups (`Branded<B>`, Harness home/path helpers, timeout, retention) | Support — small, stable, harness-dep-free |
 
-New packages join existing groups; new groups update their README and this table.
+New packages update their group README and this table.
 
 ## Dependencies
 

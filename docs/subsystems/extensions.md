@@ -305,6 +305,66 @@ list(): readonly McpConnectorEntry[]
 
 Source: [`packages/mcp/mcp-registry/src/index.ts`](../../packages/mcp/mcp-registry/src/index.ts)
 
+<a id="ctxvoice--voiceruntime"></a>
+
+### `ctx.voice` — `VoiceRuntime`
+
+Provider registry and non-blocking important-event announcement queue.
+
+```ts cordis-catalog
+/**
+ * Register a TTS provider and dispose it with its contributing fiber.
+ * @param provider - Provider implementation with a unique id.
+ * @returns A synchronous disposer for the registration.
+ */
+registerTextToSpeechProvider(provider: VoiceTextToSpeechProvider): () => void
+
+/**
+ * Register an STT provider and dispose it with its contributing fiber.
+ * @param provider - Provider implementation with a unique id.
+ * @returns A synchronous disposer for the registration.
+ */
+registerSpeechToTextProvider(provider: VoiceSpeechToTextProvider): () => void
+
+/**
+ * Queue one important event and return immediately; provider work is detached.
+ * @param event - Important event with display-formatted output.
+ * @returns Immediate queue receipt; it never waits for audio.
+ */
+announce(event: VoiceImportantEvent): VoiceAnnouncementReceipt
+
+/**
+ * Dispatch one important event through the Cordis event seam.
+ * @param event - Important event with display-formatted output.
+ */
+emitImportant(event: VoiceImportantEvent): void
+
+/**
+ * Cancel a queued or currently speaking announcement.
+ * @param id - Queue identity returned by {@link announce}.
+ * @returns Whether an announcement was found and cancelled.
+ */
+cancel(id: VoiceAnnouncementId): boolean
+
+/** Abort current speech and discard queued speech. */
+stop(): void
+
+/**
+ * Transcribe audio through the selected provider without entering the TTS queue.
+ * @param request - Audio bytes and capture metadata.
+ * @returns The provider transcript.
+ */
+async transcribe(request: VoiceTranscriptionRequest): Promise<VoiceTranscript>
+
+/**
+ * Report current side-channel state for UI and diagnostics.
+ * @returns Current queue, speaking, and selected-provider state.
+ */
+status(): VoiceRuntimeStatus
+```
+
+Source: [`packages/voice/voice/src/index.ts`](../../packages/voice/voice/src/index.ts)
+
 <a id="cordis-events"></a>
 
 ### `cordis/*` events
@@ -410,4 +470,25 @@ A pending Client activation request left the answerable state.
 ```
 
 Source: [`packages/extensions/cordis-host-runner/src/types.ts`](../../packages/extensions/cordis-host-runner/src/types.ts)
+
+<a id="voice-events"></a>
+
+### `voice/*` events
+
+<a id="voiceimportant--emit"></a>
+
+#### `voice/important` — emit
+
+Emit one explicit important event for the asynchronous voice side channel.
+
+```ts cordis-catalog
+/**
+ * Emit one explicit important event for the asynchronous voice side channel.
+ * @param event - event selected for spoken output.
+ * @mode emit
+ */
+'voice/important'(event: VoiceImportantEvent): void
+```
+
+Source: [`packages/voice/voice/src/index.ts`](../../packages/voice/voice/src/index.ts)
 <!-- END GENERATED cordis-surface -->

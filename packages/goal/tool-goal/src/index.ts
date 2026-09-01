@@ -180,7 +180,10 @@ function guidance(blockedAfter: number, requireJudge: boolean): string {
     + 'a durable judge has passed the exact current goal revision.'
     + (requireJudge
       ? ' Completion is gated by an independent read-only judge: a self-reported complete result '
-        + 'remains active until the judge returns pass; use its required_changes as the next work list.'
+        + 'remains active until the judge returns pass; use its required_changes as the next work list. '
+        + 'When the exact deliverable is ready, call update_goal with action complete in the same round so '
+        + 'the judge activates; never end a supposedly finished round with prose alone. A blocked or rejected '
+        + 'judge is a recovery event, not mission completion: continue with a materially improved strategy.'
       : '')
 }
 
@@ -421,12 +424,14 @@ export function apply(ctx: Context, config: Config): void {
       let judge: GoalJudgeResult | undefined
       if (args.action === 'complete' && resolved.requireJudge) {
         const subagents = ctx.get('subagents')
+        const llm = ctx.get('llm', false)
         const currentGoal = ctx.goals.get(execution.agent)
         if (currentGoal === undefined || currentGoal.id !== ref.id || currentGoal.revision !== ref.revision) {
           throw new HarnessError('goal completion judge requires the current goal revision', 'GOAL_TOOL_STALE_REVISION')
         }
         judge = await judgeGoalCompletion({
           subagents,
+          ...llm === undefined ? {} : { llm },
           provider: resolved.judgeProvider,
           parent: execution.agent,
           objective: currentGoal.objective,
@@ -736,8 +741,10 @@ export function apply(ctx: Context, config: Config): void {
         const forge = ledger.get(execution.agent, forgeId)
         if (forge === undefined) throw new HarnessError(`Forge not found: ${forgeId}`, 'FORGE_NOT_FOUND')
         const subagents = ctx.get('subagents')
+        const llm = ctx.get('llm', false)
         const judge = await judgeGoalCompletion({
           subagents,
+          ...llm === undefined ? {} : { llm },
           provider: resolved.judgeProvider,
           parent: execution.agent,
           objective: `Organization Forge review: ${forge.objective}\n${JSON.stringify({
@@ -841,8 +848,10 @@ export function apply(ctx: Context, config: Config): void {
       if (current === undefined) throw new HarnessError(`specialist not found: ${id}`, 'SPECIALIST_INVALID_REQUEST')
       if (resolved.requireJudge) {
         const subagents = ctx.get('subagents')
+        const llm = ctx.get('llm', false)
         const judge = await judgeGoalCompletion({
           subagents,
+          ...llm === undefined ? {} : { llm },
           provider: resolved.judgeProvider,
           parent: execution.agent,
           objective: specialistReviewObjective(current),

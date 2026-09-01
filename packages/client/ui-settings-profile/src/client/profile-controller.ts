@@ -1,18 +1,19 @@
 /** Staged browser form over the Host's user-profile settings namespace. */
 
 import { createSnapshotStore, type SettingsScope, type SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
-import type { UserProfileConsent, UserProfileFamilyMember, UserProfileRowState, UserProfileSettings } from './types.ts'
+import type { AssistantGender, UserProfileConsent, UserProfileFamilyMember, UserProfileRowState, UserProfileSettings } from './types.ts'
 
 /** Settings namespace join key; it intentionally does not import the Host package. */
 export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile'
 
-const FIELDS = ['preferredName', 'dateOfBirth', 'gender', 'pronouns', 'tone'] as const
+const FIELDS = ['assistantName', 'preferredName', 'dateOfBirth', 'gender', 'pronouns', 'tone'] as const
 type TextField = typeof FIELDS[number]
 type ConsentField = keyof UserProfileConsent
 
 /** Actions injected into the row component. */
 export interface UserProfileRowActions {
   edit: (field: TextField | 'family', text: string) => void
+  setAssistantGender: (value: AssistantGender) => void
   setConsent: (field: ConsentField, value: boolean) => void
   save: () => void
   discard: () => void
@@ -25,6 +26,8 @@ export interface UserProfileRowFace extends UserProfileRowActions {
 }
 
 interface Draft {
+  assistantName: string
+  assistantGender: AssistantGender
   preferredName: string
   dateOfBirth: string
   gender: string
@@ -44,7 +47,10 @@ const EMPTY_CONSENT: UserProfileConsent = {
 }
 
 function emptyDraft(): Draft {
-  return { preferredName: '', dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '', consent: { ...EMPTY_CONSENT } }
+  return {
+    assistantName: 'KIRA', assistantGender: 'neutral', preferredName: '', dateOfBirth: '', gender: '',
+    pronouns: '', tone: '', family: '', consent: { ...EMPTY_CONSENT },
+  }
 }
 
 function textValue(value: unknown): string {
@@ -54,6 +60,8 @@ function textValue(value: unknown): string {
 function toDraft(value: UserProfileSettings | undefined): Draft {
   if (value === undefined) return emptyDraft()
   return {
+    assistantName: textValue(value.assistantName) || 'KIRA',
+    assistantGender: value.assistantGender,
     preferredName: textValue(value.preferredName),
     dateOfBirth: textValue(value.dateOfBirth),
     gender: textValue(value.gender),
@@ -116,6 +124,7 @@ export class UserProfileForm {
     return {
       hooks: { userProfile: this.store },
       edit: (field, text) => { this.edit(field, text) },
+      setAssistantGender: (value) => { this.setAssistantGender(value) },
       setConsent: (field, value) => { this.setConsent(field, value) },
       save: () => { void this.save() },
       discard: () => { this.discard() },
@@ -133,6 +142,12 @@ export class UserProfileForm {
 
   private edit(field: TextField | 'family', text: string): void {
     this.draft[field] = text
+    this.failed = false
+    this.publish()
+  }
+
+  private setAssistantGender(value: AssistantGender): void {
+    this.draft.assistantGender = value
     this.failed = false
     this.publish()
   }
@@ -156,7 +171,7 @@ export class UserProfileForm {
     this.failed = false
     this.publish()
     let ok = true
-    for (const field of [...FIELDS, 'family' as const, 'consent' as const]) {
+    for (const field of [...FIELDS, 'assistantGender' as const, 'family' as const, 'consent' as const]) {
       try {
         await this.scope.unset(field)
       } catch {
@@ -181,13 +196,20 @@ export class UserProfileForm {
     this.publish()
     let ok = true
     const values: Record<string, unknown> = {
+      assistantName: this.draft.assistantName.trim(),
       preferredName: this.draft.preferredName.trim(),
       dateOfBirth: this.draft.dateOfBirth.trim(),
       gender: this.draft.gender.trim(),
       pronouns: this.draft.pronouns.trim(),
       tone: this.draft.tone.trim(),
+      assistantGender: this.draft.assistantGender,
       family: parseFamily(this.draft.family),
       consent: this.draft.consent,
+    }
+    try {
+      await this.scope.set('assistantGender', values.assistantGender)
+    } catch {
+      ok = false
     }
     for (const field of FIELDS) {
       try {
@@ -222,7 +244,9 @@ export class UserProfileForm {
   }
 
   private invalidAgainst(value: UserProfileSettings): boolean {
-    return this.draft.dateOfBirth.trim() !== textValue(value.dateOfBirth)
+    return this.draft.assistantName.trim() !== textValue(value.assistantName)
+      || this.draft.assistantGender !== value.assistantGender
+      || this.draft.dateOfBirth.trim() !== textValue(value.dateOfBirth)
       || this.draft.family.trim() !== (value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '')
   }
 
@@ -231,6 +255,7 @@ export class UserProfileForm {
     const next = toDraft(this.source)
     return FIELDS.some(field => this.draft[field].trim() !== next[field].trim())
       || this.draft.family.trim() !== next.family.trim()
+      || this.draft.assistantGender !== next.assistantGender
       || (Object.keys(EMPTY_CONSENT) as ConsentField[]).some(field => this.draft.consent[field] !== next.consent[field])
   }
 
@@ -242,6 +267,8 @@ export class UserProfileForm {
       invalid: this.invalid(),
       saving: this.saving,
       failed: this.failed,
+      assistantName: fieldState(this.draft.assistantName),
+      assistantGender: this.draft.assistantGender,
       preferredName: fieldState(this.draft.preferredName),
       dateOfBirth: fieldState(this.draft.dateOfBirth, this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())),
       gender: fieldState(this.draft.gender),

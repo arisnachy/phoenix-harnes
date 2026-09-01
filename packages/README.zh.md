@@ -6,7 +6,7 @@ npm scope 为 `@phoenix-ai/dsh-*`；Cordis `Service` 子类和函数插件通过
 
 ## 层级结构
 
-包按组置于 `packages/<group>/<pkg>/`；包名仍为 `@phoenix-ai/dsh-<pkg>`。**组 README 负责包／ctx 键映射。**
+包按组置于 packages；包名仍为 `@phoenix-ai/dsh-<pkg>`。**组 README 负责包／ctx 键映射。**
 
 | 组 | 职责 | 发布预期 |
 |---|---|---|
@@ -50,6 +50,7 @@ npm scope 为 `@phoenix-ai/dsh-*`；Cordis `Service` 子类和函数插件通过
 | [`storage/`](storage/README.zh.md) | 非会话存储中枢 + 后端 + 领域形式 | 产品：稳定 API |
 | [`workspace/`](workspace/README.zh.md) | Workspace 实体 | 产品：稳定 API |
 | [`home/`](home/README.zh.md) | 私有网络 Home Assistant 能力和面向模型的工具 | 产品：稳定 API |
+| [`voice/`](voice/README.zh.md) | Voice | 稳定 |
 | [`sdk/`](sdk/README.zh.md) | 进程外运行时 SDK：JSON-RPC 协议、TypeScript 客户端和服务器插件 | 产品：稳定 API |
 | [`acp/`](acp/README.zh.md) | 仅面向自动化的 ACP（Agent Client Protocol）服务器 | 产品：稳定 API |
 | [`interaction/`](interaction/README.zh.md) | 人机协作平面：批准／交互 seam、权限预设、命令、询问用户的工具 | 产品：稳定 API |
@@ -60,7 +61,7 @@ npm scope 为 `@phoenix-ai/dsh-*`；Cordis `Service` 子类和函数插件通过
 | [`test-support/`](test-support/README.zh.md) | 支持基础设施（testkit、不变式、回放、Loader 冒烟测试） | 支持：兼容性预期较低 |
 | [`util/`](util/README.zh.md) | 组间共享的低层零依赖工具（`Branded<B>`、Harness home／路径辅助函数、超时、留存） | 支持：小型、稳定、无 harness 依赖 |
 
-新包加入现有组；新组更新其 README 和此表。
+新包更新其组 README 和此表。
 
 ## 依赖
 

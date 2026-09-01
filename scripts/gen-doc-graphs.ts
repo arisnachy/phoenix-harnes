@@ -304,6 +304,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'UI front ends provide the active human-answer provider; tool-ask-user pauses a tool call on the provider-neutral ask() promise.',
   },
   {
+    key: 'voice',
+    pkg: 'voice',
+    title: 'Asynchronous voice side channel',
+    mode: 'seam',
+    implementations: ['voice-local'],
+    note: 'The voice service filters important events and queues speech outside the execution loop; local providers supply optional Kokoro, platform TTS, and command-backed STT adapters.',
+  },
+  {
     key: 'planMode',
     pkg: 'plan-mode',
     title: 'Plan collaboration state',

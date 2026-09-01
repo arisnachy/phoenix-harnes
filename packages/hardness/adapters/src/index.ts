@@ -2,6 +2,8 @@ import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
 import type { HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'
+import type {} from '@phoenix-ai/dsh-mcp-registry'
+import type { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'
 import { indexSkills } from './skill-adapter.ts'
 import { indexTools } from './tool-adapter.ts'
 import { indexOpenClawExtensions } from './openclaw-adapter.ts'
@@ -13,8 +15,6 @@ import {
 import { installHardnessProtocol, type HardnessPromptRegistrar } from './protocol.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
-import type { AuthorizationService } from '@phoenix-ai/dsh-authorization'
-import type { McpConnectorRegistry } from '@phoenix-ai/dsh-mcp-connector-registry'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 
 export { indexTools } from './tool-adapter.ts'
@@ -112,8 +112,8 @@ function requiredServices(ctx: Context) {
   const agents = ctx.get('agents')
   const approval = ctx.get('approval')
   const systemPrompt = ctx.get('systemPrompt') as HardnessPromptRegistrar | undefined
-  const authorization = ctx.get('authorization') as AuthorizationService | undefined
-  const mcpConnectors = ctx.get('mcpConnectors') as McpConnectorRegistry | undefined
+  const authorization = ctx.get('authorization')
+  const mcpConnectors = ctx.get('mcpConnectors')
   if (hardness === undefined || tools === undefined || skills === undefined
     || agents === undefined || approval === undefined || systemPrompt === undefined) {
     throw new Error('hardness-adapters requires hardness, tools, skills, agents, approval, and systemPrompt services')
@@ -145,7 +145,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     }
     const acquisition = createHardnessAcquisition(hardness)
     const codeRuntime = ctx.get('codeRuntime')
-    const pythonCodeRuntime = ctx.get('pythonCodeRuntime')
+    const pythonCodeRuntime = ctx.get('pythonCodeRuntime') as CodeRuntime | undefined
     const subagents = ctx.get('subagents') as Pick<SubagentRuntime, 'getProvider' | 'start'> | undefined
     const missionRunner = createHardnessMissionRunner({
       hardness, tools, acquisition, approval,
@@ -160,7 +160,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     let activeConnection: HostConnectionHandle | undefined
     let missionDispose: (() => Promise<void>) | undefined
     const syncMissionRuntime = (): void => {
-      const connection = ctx.get('connection') as HostConnectionHandle | undefined
+      const connection = ctx.get('connection')
       if (connection === activeConnection) return
       const previousDispose = missionDispose
       activeConnection = undefined

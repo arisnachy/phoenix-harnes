@@ -54,6 +54,10 @@ flowchart LR
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_session_learning["session-learning<br/>@phoenix-ai/dsh-session-learning"]
   cfg --> plugin_dsh_base_session_learning
+  plugin_dsh_base_voice["voice<br/>@phoenix-ai/dsh-voice"]
+  cfg --> plugin_dsh_base_voice
+  plugin_dsh_base_voice_local["voice-local<br/>@phoenix-ai/dsh-voice-local"]
+  cfg --> plugin_dsh_base_voice_local
   plugin_dsh_base_attachment_local["attachment-local<br/>@phoenix-ai/dsh-attachment-local"]
   cfg --> plugin_dsh_base_attachment_local
   plugin_dsh_base_session_query_sqlite["session-query-sqlite<br/>@phoenix-ai/dsh-session-query-sqlite"]
@@ -213,6 +217,8 @@ flowchart LR
 | `llm-pi-ai` | `@phoenix-ai/dsh-llm-pi-ai` |
 | `session-persistence-jsonl` | `@phoenix-ai/dsh-session-persistence-jsonl` |
 | `session-learning` | `@phoenix-ai/dsh-session-learning` |
+| `voice` | `@phoenix-ai/dsh-voice` |
+| `voice-local` | `@phoenix-ai/dsh-voice-local` |
 | `attachment-local` | `@phoenix-ai/dsh-attachment-local` |
 | `session-query-sqlite` | `@phoenix-ai/dsh-session-query-sqlite` |
 | `session-projection` | `@phoenix-ai/dsh-session-projection` |

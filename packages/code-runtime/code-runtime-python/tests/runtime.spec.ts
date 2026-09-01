@@ -24,7 +24,7 @@ async function setup(config: Config = {}) {
   const ctx = new Context()
   const command = process.platform === 'win32' ? 'python' : 'python3'
   await ctx.plugin(PythonCodeRuntime, { maxWallMs: 10_000, ...config, pythonCommand: command })
-  return { ctx, runtime: ctx.pythonCodeRuntime as PythonCodeRuntime }
+  return { ctx, runtime: ctx.pythonCodeRuntime }
 }
 
 function tools(functions: Record<string, (args: unknown) => Promise<unknown>>): CodeBindingNamespace[] {

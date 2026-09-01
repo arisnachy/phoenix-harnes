@@ -698,11 +698,10 @@ export class PersistenceCoordinator<TornMarker = unknown> {
       if (this.live.size > 0 && [...this.live.keys()].some(session => session.id === id)) {
         throw new Error(`cannot remove session "${id}" while it is live`)
       }
-      const removeStored = this.backend.removeStored
-      if (removeStored === undefined) {
+      if (this.backend.removeStored === undefined) {
         throw new Error(`session persistence backend "${this.backend.name}" does not support physical deletion`)
       }
-      const removed = await removeStored.call(this.backend, id)
+      const removed = await this.backend.removeStored(id)
       if (removed) {
         this.states.delete(id)
         this.preparations.invalidate(id)

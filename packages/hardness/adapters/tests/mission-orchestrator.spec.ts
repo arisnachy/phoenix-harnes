@@ -2,10 +2,13 @@ import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import HardnessRegistry from '@phoenix-ai/dsh-hardness/src/index.ts'
 import type { CapabilityId, HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'
+import type { ToolRuntime } from '@phoenix-ai/dsh-tools'
 import { AcquisitionRegistry } from '../src/acquisition-registry.ts'
 import { ArtifactRuntime } from '../src/artifact-runtime.ts'
 import { runHardnessMission } from '../src/mission-orchestrator.ts'
 import { LabMode, SelfImprovementLedger } from '../src/lab-mode.ts'
+import type { HardnessMissionAuditWriter } from '../src/mission-audit.ts'
+import type { HardnessMissionJudge } from '../src/mission-orchestrator.ts'
 
 const descriptor = { id: 'tool:weather' as CapabilityId, kind: 'weather', name: 'Weather', description: 'fixture', inputs: ['city'], outputs: ['forecast'], dependencies: [], requiredPermissions: [], provider: 'fixture', location: 'tool-registry', version: '1', compatibility: [], limitations: [], modalities: ['native'], status: 'experimental' } as const
 
@@ -18,12 +21,14 @@ describe('HARDNESS mission orchestrator', () => {
     const ledger = new SelfImprovementLedger()
     const acquisition = new AcquisitionRegistry(hardness, { lab, ledger })
     acquisition.register(async need => need.kind === 'weather' ? descriptor : undefined)
-    const tools = { execute: vi.fn(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'forecast', mime: 'text/plain', data: 'sunny' } } })) }
+    const execute = vi.fn<ToolRuntime['execute']>(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'forecast', mime: 'text/plain', data: 'sunny' } } }))
+    const tools = { execute }
     const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
     const artifacts = new ArtifactRuntime()
     artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
-    const audit = { record: vi.fn() }
-    const judge = vi.fn(async () => ({
+    const record = vi.fn<HardnessMissionAuditWriter['record']>()
+    const audit = { record }
+    const judge = vi.fn<HardnessMissionJudge>(async () => ({
       verdict: 'pass' as const,
       summary: 'artifact satisfies the mission objective',
       evidence: ['forecast'],
@@ -39,11 +44,11 @@ describe('HARDNESS mission orchestrator', () => {
 
     expect(result).toMatchObject({ kind: 'completed', artifact: { id: 'forecast' }, rendered: { kind: 'text' } })
     expect(tools.execute).toHaveBeenCalledTimes(1)
-    expect(judge).toHaveBeenCalledWith(expect.objectContaining({ artifactId: 'forecast', evidenceId: expect.any(String) }))
+    expect(judge).toHaveBeenCalledWith(expect.objectContaining({ artifactId: 'forecast', evidenceId: expect.any(String) as unknown }) as unknown)
     expect(hardness.get(descriptor.id)?.status).toBe('verified')
     expect(hardness.evidenceFor(descriptor.id)).toHaveLength(1)
     expect(hardness.evidenceFor(descriptor.id)[0]).toMatchObject({ outcome: 'passed', artifactRefs: ['forecast'] })
-    expect(audit.record.mock.calls.map(([entry]) => [entry.step, entry.outcome])).toEqual([
+    expect(record.mock.calls.map(([entry]) => [entry.step, entry.outcome])).toEqual([
       ['inspect', 'completed'],
       ['resolve', 'completed'],
       ['plan', 'completed'],
@@ -64,11 +69,13 @@ describe('HARDNESS mission orchestrator', () => {
     const hardness = ctx.get('hardness') as HardnessService
     const acquisition = new AcquisitionRegistry(hardness)
     acquisition.register(async need => need.kind === 'weather' ? descriptor : undefined)
-    const tools = { execute: vi.fn(async () => ({ isError: true as const, error: { message: 'provider failed' }, content: [{ type: 'text' as const, text: 'provider failed' }] })) }
+    const execute = vi.fn<ToolRuntime['execute']>(async () => ({ isError: true as const, error: { message: 'provider failed' }, content: [{ type: 'text' as const, text: 'provider failed' }] }))
+    const tools = { execute }
     const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
     const artifacts = new ArtifactRuntime()
     artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
-    const audit = { record: vi.fn() }
+    const record = vi.fn<HardnessMissionAuditWriter['record']>()
+    const audit = { record }
 
     const result = await runHardnessMission({ hardness, acquisition, tools, approval, artifacts, audit, need: { kind: 'weather', inputs: ['city'], outputs: ['forecast'] }, args: { city: 'Madrid' }, context: { callId: 'mission-fail' as never, signal: new AbortController().signal } })
 
@@ -76,7 +83,7 @@ describe('HARDNESS mission orchestrator', () => {
     expect(hardness.get(descriptor.id)?.status).toBe('quarantined')
     expect(hardness.evidenceFor(descriptor.id)).toHaveLength(1)
     expect(hardness.evidenceFor(descriptor.id)[0]).toMatchObject({ outcome: 'failed' })
-    expect(audit.record.mock.calls.map(([entry]) => [entry.step, entry.outcome])).toEqual([
+    expect(record.mock.calls.map(([entry]) => [entry.step, entry.outcome])).toEqual([
       ['inspect', 'completed'],
       ['resolve', 'completed'],
       ['plan', 'completed'],
@@ -97,12 +104,13 @@ describe('HARDNESS mission orchestrator', () => {
     const hardness = ctx.get('hardness') as HardnessService
     const acquisition = new AcquisitionRegistry(hardness)
     acquisition.register(async need => need.kind === 'weather' ? descriptor : undefined)
-    const tools = { execute: vi.fn(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'forecast', mime: 'text/plain', data: 'sunny' } } })) }
+    const execute = vi.fn<ToolRuntime['execute']>(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'forecast', mime: 'text/plain', data: 'sunny' } } }))
+    const tools = { execute }
     const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
     const artifacts = new ArtifactRuntime()
     artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
     const session = { events: [], append: vi.fn() }
-    const judge = vi.fn(async () => ({
+    const judge = vi.fn<HardnessMissionJudge>(async () => ({
       verdict: 'needs_changes' as const,
       summary: 'the result needs an independently reproducible check',
       evidence: ['forecast'],
@@ -118,7 +126,7 @@ describe('HARDNESS mission orchestrator', () => {
       context: { callId: 'mission-judge-changes' as never, signal: new AbortController().signal, agent: { session } as never },
     })
 
-    expect(result).toMatchObject({ kind: 'blocked', reason: expect.stringContaining('add a reproducible verification') })
+    expect(result).toMatchObject({ kind: 'blocked', reason: expect.stringContaining('add a reproducible verification') as unknown })
     expect(judge).toHaveBeenCalledOnce()
     expect(hardness.get(descriptor.id)?.status).not.toBe('verified')
     expect(session.append).toHaveBeenCalledWith('hardness/kernel', expect.objectContaining({ kind: 'judge', status: 'ACTIVE' }))
@@ -133,13 +141,14 @@ describe('HARDNESS mission orchestrator', () => {
     const acquisition = new AcquisitionRegistry(hardness)
     acquisition.register(async need => need.kind === 'weather' ? descriptor : undefined)
     acquisition.register(async need => need.kind === 'weather' ? alternate : undefined)
-    const tools = { execute: vi.fn()
+    const execute = vi.fn<ToolRuntime['execute']>()
       .mockResolvedValueOnce({ isError: true as const, error: { message: 'provider failed' }, content: [] })
-      .mockResolvedValueOnce({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'forecast', mime: 'text/plain', data: 'sunny' } } }) }
+      .mockResolvedValueOnce({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'forecast', mime: 'text/plain', data: 'sunny' } } })
+    const tools = { execute }
     const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
     const artifacts = new ArtifactRuntime()
     artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
-    const judge = vi.fn(async () => ({
+    const judge = vi.fn<HardnessMissionJudge>(async () => ({
       verdict: 'pass' as const,
       summary: 'alternate provider delivered a verified result',
       evidence: ['forecast'],
@@ -183,7 +192,7 @@ describe('HARDNESS mission orchestrator', () => {
       context: { callId: 'mission-no-judge' as never, signal: new AbortController().signal },
     })
 
-    expect(result).toMatchObject({ kind: 'blocked', reason: expect.stringContaining('independent judge') })
+    expect(result).toMatchObject({ kind: 'blocked', reason: expect.stringContaining('independent judge') as unknown })
     expect(hardness.get(descriptor.id)?.status).not.toBe('verified')
     await ctx.fiber.dispose()
   })

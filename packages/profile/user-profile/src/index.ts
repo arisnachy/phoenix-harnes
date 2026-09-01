@@ -8,7 +8,7 @@ import {
   deriveAge, mergeUserProfile, validateUserProfile, validateUserProfileUpdate,
 } from './schema.ts'
 import type {
-  UserProfileConsented, UserProfileRedacted, UserProfileSettings, UserProfileUpdate, UserProfileView,
+  AssistantIdentity, UserProfileConsented, UserProfileRedacted, UserProfileSettings, UserProfileUpdate, UserProfileView,
 } from './types.ts'
 
 export * from './schema.ts'
@@ -73,6 +73,11 @@ export class UserProfileService extends Service {
       order: -50,
       text: () => renderConsentedProfile(this.getConsented()),
     })
+    ctx.systemPrompt.context({
+      name: 'user-profile:assistant-identity',
+      order: -49,
+      text: () => renderAssistantIdentity(this.getAssistantIdentity()),
+    })
   }
 
   /** Return a detached local view; no derived age is persisted.
@@ -125,6 +130,17 @@ export class UserProfileService extends Service {
     return consented
   }
 
+  /** Return the configured assistant identity with defaults always materialized.
+   * @returns name and presentation mode used by the model persona.
+   */
+  getAssistantIdentity(): AssistantIdentity {
+    const profile = this.scope.get()
+    return {
+      name: profile.assistantName,
+      gender: profile.assistantGender,
+    }
+  }
+
   private view(): UserProfileView {
     const profile = structuredClone(this.scope.get())
     return {
@@ -133,6 +149,14 @@ export class UserProfileService extends Service {
       consented: this.getConsented(),
     }
   }
+}
+
+function renderAssistantIdentity(identity: AssistantIdentity): string {
+  return 'Assistant identity:\n'
+    + `Name: ${identity.name}\n`
+    + `Gender presentation: ${identity.gender}\n`
+    + 'Use a warm, natural conversational voice with concise human phrasing. '
+    + 'Do not claim to be a human; remain transparent that you are an AI assistant.'
 }
 
 export { DEFAULT_USER_PROFILE_CONSENT }

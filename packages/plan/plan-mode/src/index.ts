@@ -367,7 +367,7 @@ export class PlanModeController extends Service {
             },
           ],
         },
-        render: (_args, value) => value && typeof value === 'object' && 'outcome' in value
+        render: (_args, value) => 'outcome' in value
           ? [{ type: 'text', text: 'Plan mode is already inactive; continue execution without another plan review.' }]
           : [{ type: 'text', text: 'Plan approved — plan mode exited; carry out the plan starting with your next step.' }],
       },

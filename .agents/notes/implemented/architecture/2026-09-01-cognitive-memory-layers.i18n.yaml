@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-01-cognitive-memory-layers.md
+2026-09-01-cognitive-memory-layers.md: 382b2445932d8f3ef2402ff447d96219cea83b62
+2026-09-01-cognitive-memory-layers.zh.md: 976913b7691ff168b3dc909a8a4f54c03189304c

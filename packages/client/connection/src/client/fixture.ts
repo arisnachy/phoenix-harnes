@@ -3218,10 +3218,10 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.selectModel': return this.api.sessions.selectModel(request)
       case 'session.rename': return this.api.sessions.rename(request)
       case 'session.delete': {
-        const remove = this.api.sessions.delete
-        return remove === undefined
-          ? Promise.reject(new Error('session deletion is not configured'))
-          : remove(request)
+        if (this.api.sessions.delete === undefined) {
+          return Promise.reject(new Error('session deletion is not configured'))
+        }
+        return this.api.sessions.delete(request)
       }
       case 'session.fork': return this.api.sessions.fork(request)
       case 'session.prompt': return this.api.sessions.prompt(request)

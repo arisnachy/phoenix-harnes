@@ -47,6 +47,8 @@ export interface ModelsSettingsState {
   rows: readonly ProviderRow[]
   /** Namespace views by ns, for the editor's schema/layers/secrets. */
   namespaces: ReadonlyMap<string, SettingsNamespaceView>
+  /** Provider route order persisted in the local user-profile namespace. */
+  providerOrder: readonly string[]
 }
 
 /**
@@ -104,11 +106,37 @@ function apiKeyEnvOf(
   return typeof ref === 'string' && ref.length > 0 ? ref : undefined
 }
 
+/** Read and sanitize the optional provider order from the shared profile view.
+ * @param namespace - mirrored user-profile namespace, when available.
+ * @returns unique non-empty provider route ids.
+ */
+export function providerOrderOf(namespace: SettingsNamespaceView | undefined): string[] {
+  const value = namespace?.value
+  if (typeof value !== 'object' || value === null) return []
+  const order = (value as { modelProviderOrder?: unknown }).modelProviderOrder
+  if (!Array.isArray(order)) return []
+  return [...new Set(order.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== ''))]
+}
+
+/** Sort provider rows by the user's order while retaining new routes at the end.
+ * @param rows - provider rows returned by the host directory.
+ * @param providerOrder - preferred route order from user settings.
+ * @returns a detached ordered row list.
+ */
+export function orderProviderRows(rows: readonly ProviderRow[], providerOrder: readonly string[]): ProviderRow[] {
+  const rank = new Map(providerOrder.map((provider, index) => [provider, index]))
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => (rank.get(left.row.entry.provider) ?? providerOrder.length + left.index)
+      - (rank.get(right.row.entry.provider) ?? providerOrder.length + right.index))
+    .map(entry => entry.row)
+}
+
 /** The models settings page controller (one per settings surface). */
 export class ModelsSettingsStore {
   /** The snapshot the section renders from (uSES-safe store). */
   readonly store: SnapshotStore<ModelsSettingsState> = createSnapshotStore<ModelsSettingsState>({
-    status: 'idle', error: null, credentialError: null, writable: false, rows: [], namespaces: new Map(),
+    status: 'idle', error: null, credentialError: null, writable: false, rows: [], namespaces: new Map(), providerOrder: [],
   })
 
   /** Latest load wins; an older response never overwrites a newer one. */
@@ -176,7 +204,9 @@ export class ModelsSettingsStore {
         credential: undefined,
       }
     })
-    const refs = [...new Set(rows.flatMap(row => row.apiKeyEnv === undefined ? [] : [row.apiKeyEnv]))]
+    const providerOrder = providerOrderOf(namespaces.get('user-profile'))
+    const orderedRows = orderProviderRows(rows, providerOrder)
+    const refs = [...new Set(orderedRows.flatMap(row => row.apiKeyEnv === undefined ? [] : [row.apiKeyEnv]))]
     let credentials: Record<string, CredentialView> = {}
     let credentialError: string | null = null
     if (refs.length > 0) {
@@ -197,14 +227,43 @@ export class ModelsSettingsStore {
       s.error = null
       s.credentialError = credentialError
       s.writable = writable
-      s.rows = rows.map(row => ({
+      s.rows = orderedRows.map(row => ({
         ...row,
         ...row.apiKeyEnv !== undefined && credentials[row.apiKeyEnv] !== undefined
           ? { credential: credentials[row.apiKeyEnv] }
           : {},
       }))
       s.namespaces = namespaces
+      s.providerOrder = providerOrder
     })
+  }
+
+  /** Persist one adjacent provider move and refresh from the host mirror.
+   * @param provider - provider route being moved.
+   * @param direction - adjacent move direction.
+   * @returns after the host mutation and fresh directory are observed.
+   */
+  async moveProvider(provider: string, direction: 'up' | 'down'): Promise<void> {
+    const state = this.store.getSnapshot()
+    if (!state.writable) throw new Error('provider order is read-only')
+    const order = state.rows.map(row => row.entry.provider)
+    const index = order.indexOf(provider)
+    if (index < 0) throw new Error(`provider "${provider}" is not available`)
+    const nextIndex = direction === 'up' ? index - 1 : index + 1
+    if (nextIndex < 0 || nextIndex >= order.length) return
+    const next = [...order]
+    const moved = next[index]
+    const displaced = next[nextIndex]
+    /* v8 ignore next -- the index bounds above guarantee both entries exist. */
+    if (moved === undefined || displaced === undefined) return
+    next[index] = displaced
+    next[nextIndex] = moved
+    const response = await this.api.settings.mutate({
+      ns: 'user-profile',
+      ops: [{ op: 'set', path: ['modelProviderOrder'], value: next }],
+    })
+    if (!response.result.ok) throw new Error(response.result.error.message)
+    await this.load()
   }
 }
 

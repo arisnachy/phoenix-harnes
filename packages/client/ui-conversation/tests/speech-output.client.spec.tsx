@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { makeTranslate } from '@phoenix-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
+import { conversationalSpeechText } from '../src/client/speech-output.ts'
 import type { SpeechOutputScope, SpeechSynthesisUtteranceLike } from '../src/client/speech-output.ts'
 import { MessageIconActions } from '../src/client/chat/MessageIconActions.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -22,6 +23,10 @@ class FakeUtterance implements SpeechSynthesisUtteranceLike {
 }
 
 describe('assistant speech output control', () => {
+  it('adapts formatted responses to natural speech', () => {
+    expect(conversationalSpeechText('# Listo ✅\n\n[Abrir](https://example.com) api_key=hidden')).toBe('Listo Abrir redacted')
+  })
+
   it('exposes read-aloud and stop controls on an assistant action row', () => {
     const descriptorSynthesis = Object.getOwnPropertyDescriptor(window, 'speechSynthesis')
     const descriptorUtterance = Object.getOwnPropertyDescriptor(window, 'SpeechSynthesisUtterance')

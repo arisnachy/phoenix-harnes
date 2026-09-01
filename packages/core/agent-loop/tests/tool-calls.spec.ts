@@ -120,10 +120,10 @@ describe('tool-call scheduler: grouping and barriers', () => {
       && message.content[0].text.includes('Do not treat this tool failure as mission failure'))
     expect(recoveryMessage?.content[0]).toMatchObject({
       type: 'text',
-      text: expect.stringContaining('Do not treat this tool failure as mission failure'),
+      text: expect.stringContaining('Do not treat this tool failure as mission failure') as unknown,
     })
     expect(recoveryMessage?.content[0]).toMatchObject({
-      text: expect.stringContaining('change strategy and continue'),
+      text: expect.stringContaining('change strategy and continue') as unknown,
     })
     expect(events(agent).some(event => event.type === 'user/message'
       && event.data.source.kind === 'plugin'
@@ -448,7 +448,7 @@ describe('tool-call scheduler: ordered middleware and additional contexts', () =
       .map(e => ((e.data as { content: { text: string }[] }).content[0]!).text)
     expect(contextTexts.slice(0, 2)).toEqual(['ctx-c1', 'ctx-c2'])
     expect(contextTexts.slice(2)).toEqual([
-      expect.stringContaining('Before calling more tools, send the user a brief progress update'),
+      expect.stringContaining('Before calling more tools, send the user a brief progress update') as unknown,
     ])
     const lastResult = log.findLastIndex(e => e.type === 'tool/result')
     const firstContext = log.findIndex(e => e.type === 'user/message' && e.data.source.kind === 'plugin')
@@ -610,7 +610,7 @@ describe('tool-call scheduler: abort handling', () => {
       .toEqual([
         { type: 'text', text: 'ctx-c1' },
         { type: 'text', text: 'ctx-c2' },
-        { type: 'text', text: expect.stringContaining('Before calling more tools, send the user a brief progress update') },
+        { type: 'text', text: expect.stringContaining('Before calling more tools, send the user a brief progress update') as unknown },
       ])
 
     const idle = waitForIdle(ctx, agent)
@@ -626,7 +626,7 @@ describe('tool-call scheduler: abort handling', () => {
       .toEqual([
         'ctx-c1',
         'ctx-c2',
-        expect.stringContaining('Before calling more tools, send the user a brief progress update'),
+        expect.stringContaining('Before calling more tools, send the user a brief progress update') as unknown,
       ])
   })
 

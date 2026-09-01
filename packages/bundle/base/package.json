@@ -99,6 +99,8 @@
     "@phoenix-ai/dsh-jobs-local": "workspace:^",
     "@phoenix-ai/dsh-tool-call-timeout-policy": "workspace:^",
     "@phoenix-ai/dsh-token-meter": "workspace:^",
+    "@phoenix-ai/dsh-voice": "workspace:^",
+    "@phoenix-ai/dsh-voice-local": "workspace:^",
     "@phoenix-ai/dsh-tool-bash": "workspace:^",
     "@phoenix-ai/dsh-tool-fs": "workspace:^",
     "@phoenix-ai/dsh-tool-fs-search": "workspace:^",

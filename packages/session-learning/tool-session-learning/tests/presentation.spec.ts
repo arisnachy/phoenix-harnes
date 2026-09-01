@@ -72,4 +72,22 @@ describe('automatic memory context', () => {
       }],
     })
   })
+
+  it('neutralizes prompt variable delimiters inside untrusted memory text', () => {
+    const context = formatRecentMemoryContext([{
+      id: 'memory-unsafe' as never,
+      sessionId: 'session-1',
+      eventSeq: 7,
+      kind: 'lesson',
+      summary: '{{A=3;while(A!=3){A++}}',
+      sourceEventType: 'memory/explicit',
+      confidence: 0.9,
+      occurredAt: 100,
+      recordedAt: 101,
+      status: 'active',
+    }])
+
+    expect(context).toContain('{ {A=3;while(A!=3){A++} }')
+    expect(context).not.toContain('summary":"{{A=3')
+  })
 })

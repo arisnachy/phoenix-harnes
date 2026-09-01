@@ -1065,15 +1065,62 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'Durable high-confidence memories followed by recent evidence.',
       },
       {
+        signature: 'searchCognitive(query: string = \'\', limit: number = 50, filters: Omit<CognitiveMemoryQuery, \'query\' | \'limit\'> = {}): CognitiveMemoryHit[]',
+        description: 'Search cognitive memory with project, temporal, entity, and layer filters.',
+        parameters: [{ name: 'query', description: 'Words to match against normalized memory content.' }, { name: 'limit', description: 'Maximum number of ranked hits.' }, { name: 'filters', description: 'Optional metadata and lifecycle filters.' }],
+        returns: 'Ranked cognitive memory hits with explainable reasons.',
+      },
+      {
+        signature: 'recallCognitive(query: Omit<CognitiveMemoryQuery, \'limit\'> & { limit?: number } = {}): CognitiveMemoryHit[]',
+        description: 'Read bounded, project-scoped cognitive context for automatic recall.',
+        parameters: [{ name: 'query', description: 'Optional query and filter set.' }],
+        returns: 'Ranked active cognitive memory hits.',
+      },
+      {
+        signature: 'timeline(query: Pick<CognitiveMemoryQuery, \'projectId\' | \'sessionId\' | \'from\' | \'to\' | \'includeHistory\'> = {}): CognitiveMemoryRecord[]',
+        description: 'Read a chronological cognitive timeline, retaining superseded history when requested.',
+        parameters: [{ name: 'query', description: 'Project, session, time, and history filters.' }],
+        returns: 'Cognitive records ordered by source occurrence.',
+      },
+      {
+        signature: 'workingMemory(limit: number = 20): CognitiveMemoryRecord[]',
+        description: 'Read the latest working-memory records for the current project.',
+        parameters: [{ name: 'limit', description: 'Maximum number of records.' }],
+        returns: 'Active working-memory records.',
+      },
+      {
+        signature: 'allCognitiveRecords(): CognitiveMemoryRecord[]',
+        description: 'Return all canonical cognitive records for diagnostics and audit.',
+        parameters: [],
+        returns: 'All records, including explicit forget tombstone state.',
+      },
+      {
+        signature: 'currentProjectId(): string | undefined',
+        description: 'Read the project used to isolate automatic model recall.',
+        parameters: [],
+        returns: 'The current project identifier, when the active session has one.',
+      },
+      {
         signature: 'remember(input: MemoryRecordInput): Promise<MemoryRecord>',
         description: 'Store an explicit, bounded lesson supplied by the model or user workflow.',
         parameters: [{ name: 'input', description: 'Memory record to persist.' }],
         returns: 'The persisted memory record.',
       },
       {
+        signature: 'rememberCognitive(input: CognitiveMemoryInput): Promise<CognitiveMemoryRecord>',
+        description: 'Store an explicit cognitive record for a verified lesson or user preference.',
+        parameters: [{ name: 'input', description: 'Redacted cognitive memory input.' }],
+        returns: 'The persisted cognitive record.',
+      },
+      {
         signature: 'forget(id: MemoryId): Promise<void>',
         description: 'Forget one memory while preserving an auditable tombstone.',
         parameters: [{ name: 'id', description: 'Memory identity to forget.' }],
+      },
+      {
+        signature: 'forgetCognitive(id: MemoryId): Promise<void>',
+        description: 'Forget a cognitive record only when an explicit caller requests it.',
+        parameters: [{ name: 'id', description: 'Cognitive memory identity to tombstone.' }],
       },
     ],
   },
@@ -2395,6 +2442,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
         returns: 'a detached projection safe to include in model context.',
       },
+      {
+        signature: 'getAssistantIdentity(): AssistantIdentity',
+        description: 'Return the configured assistant identity with defaults always materialized.',
+        parameters: [],
+        returns: 'name and presentation mode used by the model persona.',
+      },
     ],
   },
   {
@@ -2414,6 +2467,59 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'Questions, owner agent, and abort signal.' }],
         returns: 'The answer chosen or typed by the human.',
         throws: ['{UserQuestionError} code `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when that live agent is owned by another agent.'],
+      },
+    ],
+  },
+  {
+    key: 'voice',
+    summary: 'Provider registry and non-blocking important-event announcement queue.',
+    description: 'Provider registry and non-blocking important-event announcement queue.',
+    methods: [
+      {
+        signature: 'registerTextToSpeechProvider(provider: VoiceTextToSpeechProvider): () => void',
+        description: 'Register a TTS provider and dispose it with its contributing fiber.',
+        parameters: [{ name: 'provider', description: 'Provider implementation with a unique id.' }],
+        returns: 'A synchronous disposer for the registration.',
+      },
+      {
+        signature: 'registerSpeechToTextProvider(provider: VoiceSpeechToTextProvider): () => void',
+        description: 'Register an STT provider and dispose it with its contributing fiber.',
+        parameters: [{ name: 'provider', description: 'Provider implementation with a unique id.' }],
+        returns: 'A synchronous disposer for the registration.',
+      },
+      {
+        signature: 'announce(event: VoiceImportantEvent): VoiceAnnouncementReceipt',
+        description: 'Queue one important event and return immediately; provider work is detached.',
+        parameters: [{ name: 'event', description: 'Important event with display-formatted output.' }],
+        returns: 'Immediate queue receipt; it never waits for audio.',
+      },
+      {
+        signature: 'emitImportant(event: VoiceImportantEvent): void',
+        description: 'Dispatch one important event through the Cordis event seam.',
+        parameters: [{ name: 'event', description: 'Important event with display-formatted output.' }],
+      },
+      {
+        signature: 'cancel(id: VoiceAnnouncementId): boolean',
+        description: 'Cancel a queued or currently speaking announcement.',
+        parameters: [{ name: 'id', description: 'Queue identity returned by {@link announce}.' }],
+        returns: 'Whether an announcement was found and cancelled.',
+      },
+      {
+        signature: 'stop(): void',
+        description: 'Abort current speech and discard queued speech.',
+        parameters: [],
+      },
+      {
+        signature: 'async transcribe(request: VoiceTranscriptionRequest): Promise<VoiceTranscript>',
+        description: 'Transcribe audio through the selected provider without entering the TTS queue.',
+        parameters: [{ name: 'request', description: 'Audio bytes and capture metadata.' }],
+        returns: 'The provider transcript.',
+      },
+      {
+        signature: 'status(): VoiceRuntimeStatus',
+        description: 'Report current side-channel state for UI and diagnostics.',
+        parameters: [],
+        returns: 'Current queue, speaking, and selected-provider state.',
       },
     ],
   },
@@ -2985,6 +3091,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'exec', description: 'the execution object that traversed the pipeline.' }, { name: 'result', description: 'a deep-frozen snapshot of the final returned result.' }],
   },
   {
+    name: 'voice/important',
+    mode: 'emit',
+    signature: '\'voice/important\'(event: VoiceImportantEvent): void',
+    summary: 'Emit one explicit important event for the asynchronous voice side channel.',
+    description: 'Emit one explicit important event for the asynchronous voice side channel.',
+    parameters: [{ name: 'event', description: 'event selected for spoken output.' }],
+  },
+  {
     name: 'webserver/index-inject',
     mode: 'emit',
     signature: '\'webserver/index-inject\'(table: IndexInjection[]): void',
@@ -3165,6 +3279,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AssembledSection {\n    name: string;\n    text: string;\n}',
   },
   {
+    name: 'AssistantIdentity',
+    declaration: 'export interface AssistantIdentity {\n    name: string;\n    gender: AssistantGender;\n}',
+  },
+  {
     name: 'AssistantMessage',
     declaration: 'export interface AssistantMessage extends Message {\n    readonly role: \'assistant\';\n    readonly source: ModelMessageSource;\n}',
   },
@@ -3307,6 +3425,46 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CodeRunResult',
     declaration: 'export interface CodeRunResult {\n    value?: CodeJsonValue;\n    logs: string[];\n    error?: CodeRunFailure;\n}',
+  },
+  {
+    name: 'CognitiveMemoryEntity',
+    declaration: 'export interface CognitiveMemoryEntity {\n    readonly type: \'person\' | \'project\' | \'file\' | \'tool\' | \'model\' | \'mission\' | \'concept\' | \'event\';\n    readonly value: string;\n    readonly normalized: string;\n}',
+  },
+  {
+    name: 'CognitiveMemoryHit',
+    declaration: 'export interface CognitiveMemoryHit {\n    readonly record: CognitiveMemoryRecord;\n    readonly score: number;\n    readonly reasons: readonly string[];\n}',
+  },
+  {
+    name: 'CognitiveMemoryInput',
+    declaration: 'export interface CognitiveMemoryInput {\n    readonly sessionId: string;\n    readonly eventSeq: number;\n    readonly kind: CognitiveMemoryKind;\n    readonly layers: readonly CognitiveMemoryLayer[];\n    readonly content: string;\n    readonly summary: string;\n    readonly sourceEventType: string;\n    readonly occurredAt: number;\n    readonly projectId?: string;\n    readonly subject?: string;\n    readonly value?: string;\n    readonly entities?: readonly CognitiveMemoryEntity[];\n    readonly relations?: readonly CognitiveMemoryRelation[];\n    readonly confidence: number;\n    readonly importance: number;\n}',
+  },
+  {
+    name: 'CognitiveMemoryKind',
+    declaration: 'export type CognitiveMemoryKind = MemoryKind | \'event\' | \'conversation\' | \'decision\' | \'fact\' | \'mission\' | \'pending\';',
+  },
+  {
+    name: 'CognitiveMemoryLayer',
+    declaration: 'export type CognitiveMemoryLayer = \'autobiographical\' | \'working\' | \'episodic\' | \'semantic\' | \'procedural\' | \'prospective\' | \'associative\' | \'temporal\';',
+  },
+  {
+    name: 'CognitiveMemoryProvenance',
+    declaration: 'export interface CognitiveMemoryProvenance {\n    readonly sessionId: string;\n    readonly eventSeq: number;\n    readonly sourceEventType: string;\n    readonly sourceUri: string;\n    readonly occurredAt: number;\n    readonly projectId?: string;\n}',
+  },
+  {
+    name: 'CognitiveMemoryQuery',
+    declaration: 'export interface CognitiveMemoryQuery {\n    readonly query?: string;\n    readonly layers?: readonly CognitiveMemoryLayer[];\n    readonly projectId?: string;\n    readonly sessionId?: string;\n    readonly entity?: string;\n    readonly from?: number;\n    readonly to?: number;\n    readonly includeHistory?: boolean;\n    readonly limit?: number;\n}',
+  },
+  {
+    name: 'CognitiveMemoryRecord',
+    declaration: 'export interface CognitiveMemoryRecord {\n    readonly id: MemoryId;\n    readonly sessionId: string;\n    readonly eventSeq: number;\n    readonly kind: CognitiveMemoryKind;\n    readonly layers: readonly CognitiveMemoryLayer[];\n    readonly content: string;\n    readonly summary: string;\n    readonly subject?: string;\n    readonly value?: string;\n    readonly projectId?: string;\n    readonly entities: readonly CognitiveMemoryEntity[];\n    readonly relations: readonly CognitiveMemoryRelation[];\n    readonly provenance: CognitiveMemoryProvenance;\n    readonly confidence: number;\n    readonly importance: number;\n    readonly frequency: number;\n    readonly validFrom: number;\n    readonly validUntil?: number;\n    readonly recordedAt: number;\n    readonly lastObservedAt: number;\n    readonly status: CognitiveMemoryStatus;\n    readonly supersedes?: MemoryId;\n    readonly supersededBy?: MemoryId;\n}',
+  },
+  {
+    name: 'CognitiveMemoryRelation',
+    declaration: 'export interface CognitiveMemoryRelation {\n    readonly type: \'about\' | \'caused\' | \'resolvedBy\' | \'dependsOn\' | \'partOf\' | \'mentions\' | \'contradicts\' | \'supersedes\';\n    readonly from: string;\n    readonly to: string;\n}',
+  },
+  {
+    name: 'CognitiveMemoryStatus',
+    declaration: 'export type CognitiveMemoryStatus = \'active\' | \'superseded\' | \'obsolete\' | \'forgotten\';',
   },
   {
     name: 'CollectedOutput',
@@ -5438,7 +5596,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'UserProfileUpdate',
-    declaration: 'export interface UserProfileUpdate {\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
+    declaration: 'export interface UserProfileUpdate {\n    assistantName?: string | null;\n    assistantGender?: AssistantGender | null;\n    modelProviderOrder?: string[] | null;\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
   },
   {
     name: 'UserProfileView',
@@ -5447,6 +5605,46 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UserQuestionProvider',
     declaration: 'export interface UserQuestionProvider {\n    ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>;\n}',
+  },
+  {
+    name: 'VoiceAnnouncementId',
+    declaration: 'export type VoiceAnnouncementId = string & {\n    readonly __voiceAnnouncementId: unique symbol;\n};',
+  },
+  {
+    name: 'VoiceAnnouncementReceipt',
+    declaration: 'export interface VoiceAnnouncementReceipt {\n    readonly id: VoiceAnnouncementId;\n    readonly accepted: boolean;\n    readonly reason?: \'disabled\' | \'not-important\' | \'empty\' | \'queue-full\' | \'duplicate\' | \'no-provider\';\n    readonly text?: string;\n}',
+  },
+  {
+    name: 'VoiceEventKind',
+    declaration: 'export type VoiceEventKind = \'mission-completed\' | \'discovery\' | \'blocked\' | \'help\' | \'authorization\';',
+  },
+  {
+    name: 'VoiceImportantEvent',
+    declaration: 'export interface VoiceImportantEvent {\n    readonly kind: VoiceEventKind;\n    readonly displayOutput: string;\n    readonly dedupeKey?: string;\n    readonly language?: string;\n}',
+  },
+  {
+    name: 'VoiceRuntimeStatus',
+    declaration: 'export interface VoiceRuntimeStatus {\n    readonly enabled: boolean;\n    readonly queued: number;\n    readonly speaking: boolean;\n    readonly ttsProvider?: string;\n    readonly sttProvider?: string;\n}',
+  },
+  {
+    name: 'VoiceSpeechToTextProvider',
+    declaration: 'export interface VoiceSpeechToTextProvider {\n    readonly id: string;\n    readonly priority: number;\n    available(): boolean;\n    transcribe(request: VoiceTranscriptionRequest): Promise<VoiceTranscript>;\n}',
+  },
+  {
+    name: 'VoiceSynthesisRequest',
+    declaration: 'export interface VoiceSynthesisRequest {\n    readonly text: string;\n    readonly language: string;\n    readonly signal?: AbortSignal;\n}',
+  },
+  {
+    name: 'VoiceTextToSpeechProvider',
+    declaration: 'export interface VoiceTextToSpeechProvider {\n    readonly id: string;\n    readonly priority: number;\n    available(): boolean;\n    speak(request: VoiceSynthesisRequest): Promise<void>;\n}',
+  },
+  {
+    name: 'VoiceTranscript',
+    declaration: 'export interface VoiceTranscript {\n    readonly text: string;\n    readonly language?: string;\n    readonly confidence?: number;\n}',
+  },
+  {
+    name: 'VoiceTranscriptionRequest',
+    declaration: 'export interface VoiceTranscriptionRequest {\n    readonly audio: Uint8Array;\n    readonly mimeType: string;\n    readonly language?: string;\n    readonly signal?: AbortSignal;\n}',
   },
   {
     name: 'WebBootEntry',

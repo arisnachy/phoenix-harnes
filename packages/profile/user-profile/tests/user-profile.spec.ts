@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_ASSISTANT_GENDER,
+  DEFAULT_ASSISTANT_NAME,
   DEFAULT_USER_PROFILE_CONSENT,
   deriveAge,
   mergeUserProfile,
@@ -11,6 +13,8 @@ import type { UserProfileSettings } from '@phoenix-ai/dsh-user-profile'
 
 function profile(overrides: Partial<UserProfileSettings> = {}): UserProfileSettings {
   return {
+    assistantName: DEFAULT_ASSISTANT_NAME,
+    assistantGender: DEFAULT_ASSISTANT_GENDER,
     consent: { ...DEFAULT_USER_PROFILE_CONSENT },
     ...overrides,
   }
@@ -47,6 +51,22 @@ describe('user profile validation and projection helpers', () => {
   it('clears optional values through null updates', () => {
     const next = mergeUserProfile(profile({ preferredName: 'Aris' }), { preferredName: null })
     expect(next).not.toHaveProperty('preferredName')
+  })
+
+  it('keeps a configurable assistant identity with safe defaults', () => {
+    const next = mergeUserProfile(profile(), {
+      assistantName: 'Nova',
+      assistantGender: 'feminine',
+    })
+
+    expect(next.assistantName).toBe('Nova')
+    expect(next.assistantGender).toBe('feminine')
+    expect(profile().assistantName).toBe('KIRA')
+    expect(profile().assistantGender).toBe('neutral')
+  })
+
+  it('rejects an assistant gender outside the supported presentation modes', () => {
+    expect(() => { validateUserProfileUpdate({ assistantGender: 'robot' }) }).toThrow('assistantGender')
   })
 
   it('rejects unknown consent keys and control characters', () => {

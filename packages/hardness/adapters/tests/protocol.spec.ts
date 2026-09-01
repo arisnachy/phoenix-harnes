@@ -14,7 +14,7 @@ describe('HARDNESS model protocol prompt adapter', () => {
     expect(systemPrompt.section).toHaveBeenCalledWith({
       name: 'hardness:operating-protocol',
       order: 150,
-      text: expect.stringContaining('<phoenix_hardness_protocol>'),
+      text: expect.stringContaining('<phoenix_hardness_protocol>') as unknown,
     })
     expect(returned).toBe(dispose)
     returned()

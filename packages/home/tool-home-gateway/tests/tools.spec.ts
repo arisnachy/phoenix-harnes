@@ -71,7 +71,8 @@ describe('Home Assistant model-facing tools', () => {
       signal,
     })
     expect(result.isError).toBe(true)
-    expect(result.content[0]).toMatchObject({ text: expect.stringContaining('requires approval') })
+    const content = result.content as readonly { readonly text?: unknown }[]
+    expect(content[0]).toMatchObject({ text: expect.stringContaining('requires approval') as unknown })
     expect(controlled).toBe(false)
   })
 })

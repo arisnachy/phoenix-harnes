@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  createSpeechOutput, hasSpeechOutput, type SpeechOutputScope, type SpeechSynthesisUtteranceLike,
+  createSpeechOutput, hasSpeechOutput, type SpeechSynthesisUtteranceLike,
 } from '../src/client/speech-output.ts'
 
 class FakeUtterance implements SpeechSynthesisUtteranceLike {
@@ -17,7 +17,7 @@ class FakeUtterance implements SpeechSynthesisUtteranceLike {
 function scope() {
   const speak = vi.fn<(utterance: SpeechSynthesisUtteranceLike) => void>()
   const cancel = vi.fn()
-  const value: SpeechOutputScope = {
+  const value = {
     speechSynthesis: {
       speak,
       cancel,
@@ -63,6 +63,89 @@ describe('speech output adapter', () => {
     expect(utterance?.rate).toBe(0.96)
     expect(utterance?.pitch).toBe(1.02)
     expect(utterance?.volume).toBe(0.98)
+  })
+
+  it('redacts bearer credentials before sending text to speech', () => {
+    const { value, speak } = scope()
+    const output = createSpeechOutput(() => {}, 'es-DO', value)
+
+    output.speak('Authorization: Bearer sk-secret-123')
+
+    expect(speak.mock.calls[0]?.[0].text).toBe('redacted')
+  })
+
+  it('redacts credential values in JSON-shaped text', () => {
+    const { value, speak } = scope()
+    const output = createSpeechOutput(() => {}, 'es-DO', value)
+    const escapedJson = '{"api_key":"escaped' + String.fromCharCode(92) + '"key"}'
+    const credentialKeys = [
+      'api_secret', 'access_token', 'auth', 'auth_token', 'private_key',
+      'refresh_token', 'secret', 'session_token', 'token',
+    ]
+
+    output.speak('{"api_key":"hidden-key","password":"hidden-password","client_secret":"hidden-client","auth_token":"hidden-auth"}')
+    output.speak(escapedJson)
+    credentialKeys.forEach((key, index) => {
+      output.speak(`{"${key}":"hidden-${index}"}`)
+    })
+
+    const spokenTexts = speak.mock.calls.map(([utterance]) => utterance.text)
+    expect(spokenTexts[0]).not.toContain('hidden-key')
+    expect(spokenTexts[0]).not.toContain('hidden-password')
+    expect(spokenTexts[0]).not.toContain('hidden-client')
+    expect(spokenTexts[0]).not.toContain('hidden-auth')
+    expect(spokenTexts[1]).not.toContain('escaped')
+    expect(spokenTexts[1]).not.toContain('key')
+    credentialKeys.forEach((_, index) => {
+      expect(spokenTexts[index + 2]).not.toContain(`hidden-${index}`)
+    })
+  })
+
+  it('prefers a known feminine voice over a masculine exact-language voice', () => {
+    const { value, speak } = scope()
+    value.speechSynthesis = {
+      ...value.speechSynthesis,
+      getVoices: () => [
+        { name: 'Microsoft Raul', lang: 'es-DO', localService: true },
+        { name: 'Microsoft Sabina Online (Natural)', lang: 'es-MX', localService: true },
+      ],
+    }
+    const output = createSpeechOutput(() => {}, 'es-DO', value)
+
+    output.speak('Hola arisnachy')
+
+    expect(speak.mock.calls[0]?.[0].voice?.name).toBe('Microsoft Sabina Online (Natural)')
+  })
+
+  it('prefers an available feminine voice for Spanish speech', () => {
+    const { value, speak } = scope()
+    value.speechSynthesis = {
+      ...value.speechSynthesis,
+      getVoices: () => [
+        { name: 'Natural Spanish', lang: 'es-ES', localService: true },
+        { name: 'Microsoft Sabina Online (Natural)', lang: 'es-MX', localService: true },
+      ],
+    }
+    const output = createSpeechOutput(() => {}, 'es-DO', value)
+
+    output.speak('Hola arisnachy')
+
+    expect(speak.mock.calls[0]?.[0].voice?.name).toBe('Microsoft Sabina Online (Natural)')
+  })
+
+  it('ignores synchronous completion from cancelled speech when replacing it', () => {
+    const { value, speak } = scope()
+    const states: string[] = []
+    value.speechSynthesis.cancel.mockImplementation(() => {
+      speak.mock.calls[0]?.[0].onend?.()
+    })
+    const output = createSpeechOutput((state) => { states.push(state) }, 'es-DO', value)
+
+    output.speak('first')
+    output.speak('second')
+
+    expect(states).toEqual(['speaking', 'speaking'])
+    expect(speak.mock.calls.at(-1)?.[0].text).toBe('second')
   })
 
   it('stops active speech, ignores blank text, and is safe without browser support', () => {

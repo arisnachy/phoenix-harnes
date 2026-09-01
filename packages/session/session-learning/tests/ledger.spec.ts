@@ -74,14 +74,14 @@ describe('MemoryLedger', () => {
     expect((await readFile(value.path, 'utf8')).trim().split('\n')).toHaveLength(2)
   })
 
-  it('persists the active-record limit across reloads', async () => {
+  it('keeps canonical records across reloads even when the compatibility limit is small', async () => {
     const value = new MemoryLedger((await ledger()).path, 1)
     await value.load()
     await value.remember({ sessionId: 's', eventSeq: 1, kind: 'success', summary: 'first', sourceEventType: 'turn/end', confidence: 1, occurredAt: 1 })
     await value.remember({ sessionId: 's', eventSeq: 2, kind: 'success', summary: 'second', sourceEventType: 'turn/end', confidence: 1, occurredAt: 2 })
     const restored = new MemoryLedger(value.path, 1)
     await restored.load()
-    expect(await restored.search('first')).toEqual([])
+    expect((await restored.search('first'))).toHaveLength(1)
     expect((await restored.search('second'))).toHaveLength(1)
   })
 })

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { createSubagentMissionJudge } from '../src/mission-judge.ts'
 
 function input() {
@@ -22,7 +23,7 @@ function input() {
 describe('HARDNESS subagent mission judge', () => {
   it('requests a fresh structured read-only review and disposes it', async () => {
     const dispose = vi.fn(async () => {})
-    const start = vi.fn(async () => ({
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
       id: 'judge-run' as never,
       localAgent: undefined,
       result: Promise.resolve({
@@ -57,7 +58,7 @@ describe('HARDNESS subagent mission judge', () => {
     })
     expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
       label: 'hardness-mission-judge',
-      outputSchema: expect.objectContaining({ required: ['verdict', 'summary', 'evidence', 'required_changes', 'criteria', 'quality'] }),
+      outputSchema: expect.objectContaining({ required: ['verdict', 'summary', 'evidence', 'required_changes', 'criteria', 'quality'] }) as unknown,
       toolFilter: { allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] },
     }))
     expect(dispose).toHaveBeenCalledOnce()

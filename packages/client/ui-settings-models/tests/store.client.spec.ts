@@ -1,5 +1,5 @@
 /** Page-store join: directory × namespaces × credentials, with last-good rows on failure. */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
 import { SettingsDescribeMirror } from '@phoenix-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { settingsSchema } from './settings-schema.client.ts'
@@ -21,6 +21,15 @@ const DIRECTORY = [
 ]
 
 const NAMESPACES = [
+  {
+    ns: 'user-profile',
+    schema: {},
+    value: { modelProviderOrder: ['openai', 'deepseek-official'] },
+    user: { modelProviderOrder: ['openai', 'deepseek-official'] },
+    applies: 'live' as const,
+    secrets: [],
+    revision: 0,
+  },
   {
     ns: 'llm-deepseek',
     schema: {},
@@ -56,6 +65,7 @@ function api(overrides: {
       describe: overrides.describeSettings ?? (() => Promise.resolve(ok({ writable: true, hasDocument: false, namespaces: NAMESPACES }))),
       update: () => Promise.resolve(fail('unused')),
       replace: () => Promise.resolve(fail('unused')),
+      mutate: () => Promise.resolve(fail('unused')),
     },
     credentials: {
       describe: (payload: { refs: string[] }) => {
@@ -81,7 +91,8 @@ describe('ModelsSettingsStore', () => {
     expect(state.status).toBe('ready')
     expect(state.writable).toBe(true)
     expect(state.credentialError).toBeNull()
-    expect(seenRefs).toEqual([['DEEPSEEK_API_KEY', 'OPENAI_API_KEY']])
+    expect(seenRefs).toEqual([['OPENAI_API_KEY', 'DEEPSEEK_API_KEY']])
+    expect(state.rows.map(row => row.entry.provider)).toEqual(['openai', 'deepseek-official', 'anthropic', 'ghost'])
     const byProvider = new Map(state.rows.map(row => [row.entry.provider, row]))
     expect(byProvider.get('deepseek-official')).toMatchObject({
       configured: true,
@@ -99,6 +110,20 @@ describe('ModelsSettingsStore', () => {
     expect(byProvider.get('anthropic')?.apiKeyEnv).toBeUndefined()
     expect(byProvider.get('ghost')).toMatchObject({ configured: false, removable: false })
     expect(state.namespaces.get('llm-pi-ai')?.ns).toBe('llm-pi-ai')
+  })
+
+  it('persists provider order and reloads the ordered directory', async () => {
+    const { face, mirror } = api()
+    const mutate = vi.fn(() => Promise.resolve(ok({ revision: 1, value: {} })))
+    ;(face as { settings: { mutate: typeof mutate } }).settings.mutate = mutate
+    const store = new ModelsSettingsStore(face, settingsSchema, mirror)
+    await store.load()
+
+    await expect(store.moveProvider('deepseek-official', 'up')).resolves.toBeUndefined()
+    expect(mutate).toHaveBeenCalledWith({
+      ns: 'user-profile',
+      ops: [{ op: 'set', path: ['modelProviderOrder'], value: ['deepseek-official', 'openai', 'anthropic', 'ghost'] }],
+    })
   })
 
   it('degrades the credential badge, not the page, when the credential domain fails', async () => {

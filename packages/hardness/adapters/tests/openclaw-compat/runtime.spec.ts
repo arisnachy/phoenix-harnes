@@ -93,13 +93,13 @@ describe('OpenClaw compatibility runtime', () => {
       loadManifest: async donorEntry => donorEntry.id === 'a2a'
         ? { name: 'missing id' }
         : { id: donorEntry.id, name: donorEntry.id },
-      activateExtension: async descriptor => {
+      activateExtension: async (descriptor) => {
         if (descriptor.id === 'workboard') throw new Error('worker unavailable')
       },
     })
     expect(await runtime.status('a2a')).toEqual({
       id: 'a2a', status: 'INCOMPATIBLE_CONTRACT',
-      reasons: expect.arrayContaining([expect.stringMatching(/id/i)]), active: false,
+      reasons: expect.arrayContaining([expect.stringMatching(/id/i)]) as unknown, active: false,
     })
     expect(await runtime.activate('workboard')).toEqual({
       id: 'workboard', status: 'ACTIVATION_FAILED', reasons: ['worker unavailable'], active: false,

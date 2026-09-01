@@ -167,6 +167,8 @@
     { "path": "./packages/workspace/workspace" },
     { "path": "./packages/home/home-gateway" },
     { "path": "./packages/home/tool-home-gateway" },
+    { "path": "./packages/voice/voice" },
+    { "path": "./packages/voice/voice-local" },
     { "path": "./packages/session/session-title" },
     { "path": "./packages/session/session-title-llm" },
     { "path": "./packages/session/session-title-first-prompt-llm" },

@@ -19,7 +19,7 @@ export interface ResolvedStructuredProvider {
 }
 
 function canReview(provider: SubagentProvider): boolean {
-  return provider.capabilities.outputSchema === true && provider.capabilities.toolFilter === true
+  return provider.capabilities.outputSchema && provider.capabilities.toolFilter
 }
 
 /**
@@ -40,5 +40,5 @@ export function resolveStructuredProvider(
     const provider = registry.getProvider(name)
     return provider === undefined || !canReview(provider) ? [] : [{ name, provider }]
   })
-  return candidates.find(candidate => candidate.provider.inheritsParentContext !== true) ?? candidates[0]
+  return candidates.find(candidate => !candidate.provider.inheritsParentContext) ?? candidates[0]
 }

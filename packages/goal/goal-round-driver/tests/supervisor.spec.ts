@@ -38,8 +38,8 @@ describe('durable goal supervisor', () => {
   it('rejects unbounded or malformed checkpoint data before append', () => {
     const session = Session.create(SessionId('goal-supervisor-invalid'))
 
-    expect(() => recordGoalSupervisor(session, { ...checkpoint, lastError: 'x'.repeat(501) })).toThrow(TypeError)
-    expect(() => recordGoalSupervisor(session, { ...checkpoint, attempts: -1 })).toThrow(TypeError)
+    expect(() => { recordGoalSupervisor(session, { ...checkpoint, lastError: 'x'.repeat(501) }) }).toThrow(TypeError)
+    expect(() => { recordGoalSupervisor(session, { ...checkpoint, attempts: -1 }) }).toThrow(TypeError)
     expect(session.events).toHaveLength(0)
   })
 })

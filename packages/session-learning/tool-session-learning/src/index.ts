@@ -8,7 +8,7 @@ import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-session-learning'
-import type { MemoryKind } from '@phoenix-ai/dsh-session-learning'
+import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
 import { formatMemorySearchResult, formatRecentMemoryContext } from './presentation.ts'
 
 /** Cordis plugin name. */
@@ -50,23 +50,40 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:recent-learning-memory',
     order: 118,
-    text: () => formatRecentMemoryContext(ctx.learningMemory.recall(8)),
+    text: () => formatRecentMemoryContext(ctx.learningMemory.recallCognitive({ limit: 8 })),
     interpolateVariables: false,
   })
   ctx.tools.register(defineTool({
     name: 'memory_search',
-    description: 'Search Phoenix persistent learning memory and return bounded records with source session, event, and confidence.',
+    description: 'Search Phoenix cognitive memory with bounded provenance, layers, project, temporal, entity, and confidence data.',
     parameters: {
       query: { type: 'string', description: 'Words to find in memory summaries or provenance. Omit to list recent memories.' },
       limit: { type: 'integer', description: 'Optional result count, capped by the configured maximum.' },
+      project_id: { type: 'string', description: 'Optional project filter. Automatic recall is scoped to the current project.' },
+      layer: { type: 'string', enum: ['autobiographical', 'working', 'episodic', 'semantic', 'procedural', 'prospective', 'associative', 'temporal'], description: 'Optional memory-layer filter.' },
+      from: { type: 'integer', description: 'Optional inclusive Unix-millisecond lower bound.' },
+      to: { type: 'integer', description: 'Optional inclusive Unix-millisecond upper bound.' },
+      include_history: { type: 'boolean', description: 'Include superseded values while preserving their provenance.' },
     },
     output: MEMORY_OUTPUT,
     isConcurrencySafe: () => true,
-    execute: async (args) => {
+    execute: (args) => {
       const requested = args.limit ?? maxResults
       if (!Number.isSafeInteger(requested) || requested < 1) throw new TypeError('limit must be a positive safe integer')
-      const records = await ctx.learningMemory.search(args.query ?? '', Math.min(requested, maxResults))
-      return formatMemorySearchResult(records)
+      const filters: {
+        projectId?: string
+        layers?: readonly CognitiveMemoryLayer[]
+        from?: number
+        to?: number
+        includeHistory?: boolean
+      } = {}
+      if (args.project_id !== undefined) filters.projectId = args.project_id
+      if (args.layer !== undefined) filters.layers = [args.layer]
+      if (args.from !== undefined) filters.from = args.from
+      if (args.to !== undefined) filters.to = args.to
+      if (args.include_history !== undefined) filters.includeHistory = args.include_history
+      const records = ctx.learningMemory.searchCognitive(args.query ?? '', Math.min(requested, maxResults), filters)
+      return Promise.resolve(formatMemorySearchResult(records))
     },
     presentCall: args => ({ card: 'generic', title: 'Search memory', kind: 'read', rawInput: args.query ?? '' }),
   }))
@@ -95,7 +112,7 @@ export function apply(ctx: Context, config: Config): void {
       const memory = await ctx.learningMemory.remember({
         sessionId: String(execution.agent.session.id),
         eventSeq: execution.agent.session.seq,
-        kind: args.kind as MemoryKind,
+        kind: args.kind,
         summary: args.summary,
         sourceEventType: 'tool/memory_remember',
         confidence,

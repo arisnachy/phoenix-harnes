@@ -44,7 +44,7 @@ function text(value: string, field: string): string {
 
 function list(values: readonly string[], field: string): readonly string[] {
   if (!Array.isArray(values) || values.length === 0) throw new TypeError(`${field} must not be empty`)
-  return values.map((value, index) => text(value, `${field}[${index}]`))
+  return values.map((value: string, index: number) => text(value, `${field}[${index}]`))
 }
 
 function maxIterations(value: number | undefined): number {
@@ -55,9 +55,7 @@ function maxIterations(value: number | undefined): number {
 
 function profileFromEvent(event: SessionEvent): SpecialistProfile | undefined {
   if (event.type !== 'specialist/change') return undefined
-  const value = event.data as SpecialistChange
-  if (value.kind !== 'specialist/change' || value.version !== 1 || typeof value.specialist?.id !== 'string') return undefined
-  return value.specialist
+  return event.data.specialist
 }
 
 /**
@@ -191,7 +189,7 @@ export class SpecialistLedger {
   evaluate(agent: Agent, specialistId: string, request: EvaluateSpecialistRequest): SpecialistProfile {
     const current = this.require(agent, specialistId)
     if (!Number.isFinite(request.score) || request.score < 0 || request.score > 1) throw new TypeError('score must be between 0 and 1')
-    const passed = request.passed === true
+    const passed = request.passed
     const verdict: SpecialistJudge['verdict'] = passed
       ? 'pass'
       : request.blocked === true || current.iterations + 1 >= current.maxIterations

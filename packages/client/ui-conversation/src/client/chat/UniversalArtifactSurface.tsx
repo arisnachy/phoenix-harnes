@@ -43,9 +43,11 @@ export function UniversalArtifactSurface({ artifact, onRun, onStop }: UniversalA
     onStop()
   }
   const serialized = typeof artifact.data === 'string' ? artifact.data : JSON.stringify(artifact.data, null, 2)
+  const clipboard = Reflect.get(navigator, 'clipboard') as { writeText?: (value: string) => Promise<void> } | undefined
+  const canCopy = typeof clipboard?.writeText === 'function'
   const copy = (): void => {
-    if (navigator.clipboard === undefined) return
-    void navigator.clipboard.writeText(serialized).then(() => { setCopied(true) }).catch(() => { setCopied(false) })
+    if (!canCopy || typeof clipboard.writeText !== 'function') return
+    void clipboard.writeText(serialized).then(() => { setCopied(true) }).catch(() => { setCopied(false) })
   }
   const download = (): void => {
     const url = URL.createObjectURL(new Blob([serialized], { type: artifact.mime }))
@@ -69,7 +71,7 @@ export function UniversalArtifactSurface({ artifact, onRun, onStop }: UniversalA
           <span>{artifact.language ?? artifact.kind}</span>
         </div>
         <div className={css.controls}>
-          <Button variant="outline" onClick={copy} disabled={navigator.clipboard === undefined}>{copied ? 'Copied' : 'Copy'}</Button>
+          <Button variant="outline" onClick={copy} disabled={!canCopy}>{copied ? 'Copied' : 'Copy'}</Button>
           <Button variant="outline" onClick={download}>Download</Button>
           {artifact.executable && onRun !== undefined && <Button variant="outline" onClick={execute} disabled={running}>{running ? 'Running…' : 'Run'}</Button>}
           {artifact.executable && onRun !== undefined && <Button variant="outline" onClick={stop} disabled={!running}>Stop</Button>}

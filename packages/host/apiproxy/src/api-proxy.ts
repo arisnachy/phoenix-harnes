@@ -72,6 +72,7 @@ import type {} from '@phoenix-ai/dsh-jobs'
 import type { JobSnapshot } from '@phoenix-ai/dsh-jobs'
 // Type-only: resolves `ctx.get('sessionProjectionCache')` (the cold listing column).
 import type {} from '@phoenix-ai/dsh-session-projection-cache'
+import { orderModelProviderGroups, readProviderOrder } from './model-order.ts'
 // GoalError narrows domain rejections to their stable codes at the wire boundary.
 import { GoalError } from '@phoenix-ai/dsh-goal'
 import type { GoalRef as CoreGoalRef } from '@phoenix-ai/dsh-goal'
@@ -366,8 +367,10 @@ async function buildModelCatalog(ctx: Context): Promise<{
       return { kind: 'failure' as const, failure }
     }
   }))
+  const groups = catalog.flatMap(item => item.kind === 'group' ? [item.group] : []).filter(group => group.models.length > 0)
+  const profile = ctx.get('userProfile', false) as { get(): { profile: { modelProviderOrder?: readonly string[] } } } | undefined
   return {
-    groups: catalog.flatMap(item => item.kind === 'group' ? [item.group] : []).filter(group => group.models.length > 0),
+    groups: orderModelProviderGroups(groups, readProviderOrder(profile)),
     failures: catalog.flatMap(item => item.kind === 'failure' ? [item.failure] : []),
   }
 }
@@ -2784,9 +2787,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
-        const ref = referencedImage(state.events, String(attachmentId))
-          ?? referencedFile(state.events, String(attachmentId))
-        if (ref === undefined) {
+        const imageRef = referencedImage(state.events, String(attachmentId))
+        const fileRef = imageRef === undefined ? referencedFile(state.events, String(attachmentId)) : undefined
+        const attachment = imageRef === undefined
+          ? fileRef === undefined ? undefined : { kind: 'file' as const, ref: fileRef }
+          : { kind: 'image' as const, ref: imageRef }
+        if (attachment === undefined) {
           return err(request, {
             code: 'attachment-error',
             message: 'Attachment is not referenced by this session.',
@@ -2794,9 +2800,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         }
         try {
-          const stored = ref.mediaType.startsWith('image/')
-            ? await ctx.attachments.readImage(ref as ImageAttachmentRef)
-            : await ctx.attachments.readFile(ref as FileAttachmentRef)
+          const stored = attachment.kind === 'image'
+            ? await ctx.attachments.readImage(attachment.ref)
+            : await ctx.attachments.readFile(attachment.ref)
           return ok(request, {
             attachment: stored.ref,
             data: Buffer.from(stored.data).toString('base64'),

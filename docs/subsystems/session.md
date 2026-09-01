@@ -649,6 +649,48 @@ recent(limit: number = 20): MemoryRecord[]
 recall(limit: number = 20): MemoryRecord[]
 
 /**
+ * Search cognitive memory with project, temporal, entity, and layer filters.
+ * @param query - Words to match against normalized memory content.
+ * @param limit - Maximum number of ranked hits.
+ * @param filters - Optional metadata and lifecycle filters.
+ * @returns Ranked cognitive memory hits with explainable reasons.
+ */
+searchCognitive(query: string = '', limit: number = 50, filters: Omit<CognitiveMemoryQuery, 'query' | 'limit'> = {}): CognitiveMemoryHit[]
+
+/**
+ * Read bounded, project-scoped cognitive context for automatic recall.
+ * @param query - Optional query and filter set.
+ * @returns Ranked active cognitive memory hits.
+ */
+recallCognitive(query: Omit<CognitiveMemoryQuery, 'limit'> & { limit?: number } = {}): CognitiveMemoryHit[]
+
+/**
+ * Read a chronological cognitive timeline, retaining superseded history when requested.
+ * @param query - Project, session, time, and history filters.
+ * @returns Cognitive records ordered by source occurrence.
+ */
+timeline(query: Pick<CognitiveMemoryQuery, 'projectId' | 'sessionId' | 'from' | 'to' | 'includeHistory'> = {}): CognitiveMemoryRecord[]
+
+/**
+ * Read the latest working-memory records for the current project.
+ * @param limit - Maximum number of records.
+ * @returns Active working-memory records.
+ */
+workingMemory(limit: number = 20): CognitiveMemoryRecord[]
+
+/**
+ * Return all canonical cognitive records for diagnostics and audit.
+ * @returns All records, including explicit forget tombstone state.
+ */
+allCognitiveRecords(): CognitiveMemoryRecord[]
+
+/**
+ * Read the project used to isolate automatic model recall.
+ * @returns The current project identifier, when the active session has one.
+ */
+currentProjectId(): string | undefined
+
+/**
  * Store an explicit, bounded lesson supplied by the model or user workflow.
  * @param input - Memory record to persist.
  * @returns The persisted memory record.
@@ -656,10 +698,23 @@ recall(limit: number = 20): MemoryRecord[]
 remember(input: MemoryRecordInput): Promise<MemoryRecord>
 
 /**
+ * Store an explicit cognitive record for a verified lesson or user preference.
+ * @param input - Redacted cognitive memory input.
+ * @returns The persisted cognitive record.
+ */
+rememberCognitive(input: CognitiveMemoryInput): Promise<CognitiveMemoryRecord>
+
+/**
  * Forget one memory while preserving an auditable tombstone.
  * @param id - Memory identity to forget.
  */
 forget(id: MemoryId): Promise<void>
+
+/**
+ * Forget a cognitive record only when an explicit caller requests it.
+ * @param id - Cognitive memory identity to tombstone.
+ */
+forgetCognitive(id: MemoryId): Promise<void>
 ```
 
 Source: [`packages/session/session-learning/src/index.ts`](../../packages/session/session-learning/src/index.ts)

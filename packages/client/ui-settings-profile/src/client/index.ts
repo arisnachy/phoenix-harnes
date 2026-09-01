@@ -9,7 +9,7 @@ import { en, es, zh, type UserProfileLocaleKey } from './locales.ts'
 import type { UserProfileSettings } from './types.ts'
 
 export type { UserProfileRowProps } from './UserProfileRow.tsx'
-export type { UserProfileRowState, UserProfileSettings } from './types.ts'
+export type { AssistantGender, UserProfileRowState, UserProfileSettings } from './types.ts'
 export type { UserProfileLocaleKey } from './locales.ts'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {

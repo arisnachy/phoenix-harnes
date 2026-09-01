@@ -41,14 +41,14 @@ describe('bounded goal strategies', () => {
 
   it('rejects malformed selections before they enter durable history', () => {
     const session = Session.create(SessionId('goal-strategy-invalid'))
-    expect(() => recordGoalStrategy(session, {
+    expect(() => { recordGoalStrategy(session, {
       goalId: '', revision: 1, round: 1,
       strategy: 'baseline', reason: 'invalid',
-    })).toThrow(TypeError)
-    expect(() => recordGoalStrategy(session, {
+    }) }).toThrow(TypeError)
+    expect(() => { recordGoalStrategy(session, {
       goalId: 'goal', revision: 1, round: 1,
       strategy: 'baseline', reason: 'x'.repeat(501),
-    })).toThrow(TypeError)
+    }) }).toThrow(TypeError)
     expect(session.events).toHaveLength(0)
   })
 })

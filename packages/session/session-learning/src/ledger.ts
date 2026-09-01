@@ -54,14 +54,13 @@ const MAX_SUMMARY_LENGTH = 4_096
 export class MemoryLedger {
   /** Resolved JSONL path used by this ledger. */
   readonly path: string
-  private readonly maxRecords: number
   private readonly records = new Map<MemoryId, MemoryRecord>()
   private readonly sourceIndex = new Map<string, MemoryId>()
   private writeChain: Promise<void> = Promise.resolve()
 
   /**
    * @param path - JSONL path owned by the ledger.
-   * @param maxRecords - maximum retained records; must be a positive safe integer.
+   * @param maxRecords - retained for configuration compatibility; it never deletes canonical records.
    */
   constructor(path: string, maxRecords = DEFAULT_MAX_RECORDS) {
     if (path.trim() === '') throw new TypeError('memory ledger path must be non-empty')
@@ -69,7 +68,6 @@ export class MemoryLedger {
       throw new TypeError('memory ledger maxRecords must be a positive safe integer')
     }
     this.path = resolve(path)
-    this.maxRecords = maxRecords
   }
 
   /** Load and validate the append-only ledger, treating an absent file as empty. */
@@ -94,7 +92,6 @@ export class MemoryLedger {
       }
       this.applyRow(validateRow(row, index + 1))
     }
-    this.enforceLimit()
   }
 
   /**
@@ -119,7 +116,6 @@ export class MemoryLedger {
     }
     await this.append({ op: 'upsert', record })
     this.applyRow({ op: 'upsert', record })
-    this.enforceLimit()
     return record
   }
 
@@ -130,6 +126,7 @@ export class MemoryLedger {
    * @returns newest matching records first.
    */
   async search(query = '', limit = 50): Promise<MemoryRecord[]> {
+    await this.writeChain
     if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError('memory search limit must be a positive safe integer')
     const tokens = query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean)
     return [...this.records.values()]
@@ -208,14 +205,6 @@ export class MemoryLedger {
     this.sourceIndex.set(sourceKeyOf(row.record), row.record.id)
   }
 
-  private enforceLimit(): void {
-    const active = [...this.records.values()].filter(record => record.status === 'active')
-    if (active.length <= this.maxRecords) return
-    active.sort((left, right) => left.recordedAt - right.recordedAt)
-    for (const record of active.slice(0, active.length - this.maxRecords)) {
-      this.records.set(record.id, { ...record, status: 'forgotten' })
-    }
-  }
 }
 
 function sourceKeyOf(input: Pick<MemoryRecord, 'sessionId' | 'eventSeq' | 'kind'>): string {
@@ -251,7 +240,7 @@ function validateRow(value: unknown, line: number): LedgerRow {
     }
     validateInput(input)
     if (!Number.isFinite(candidate.recordedAt) || candidate.recordedAt < 0) throw new TypeError(`memory ledger row ${line} has invalid recordedAt`)
-    return { op: 'upsert', record: { ...input, id: candidate.id as MemoryId, recordedAt: candidate.recordedAt, status: 'active' } }
+    return { op: 'upsert', record: { ...input, id: candidate.id, recordedAt: candidate.recordedAt, status: 'active' } }
   }
   if (row.op === 'forget' && typeof row.id === 'string' && typeof row.forgottenAt === 'number' && Number.isFinite(row.forgottenAt)) {
     return { op: 'forget', id: row.id as MemoryId, forgottenAt: row.forgottenAt }

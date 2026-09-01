@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { ToolRuntime } from '@phoenix-ai/dsh-tools'
+import type { HardnessService } from '@phoenix-ai/dsh-hardness'
+import type { CapabilityApproval, CapabilityExecutor } from '../src/execution-bridge.ts'
 import { executeCapabilityNeed } from '../src/execution-bridge.ts'
 
 const toolSurface = { id: 'tool:echo@1:visual', need: { kind: 'echo' }, capabilityId: 'tool:echo', capabilityVersion: '1', modality: 'visual', inputs: [], outputs: [], requiredPermissions: [], verification: 'verified' } as const
@@ -6,16 +9,16 @@ const openclawSurface = { id: 'openclaw:brave@2026.8.1:native', need: { kind: 'w
 
 describe('HARDNESS execution bridge', () => {
   it('approves then delegates the verified tool route to ctx.tools.execute', async () => {
-    const execute = vi.fn(async () => ({ value: null, content: [], isError: false as const }))
+    const execute = vi.fn<ToolRuntime['execute']>(async () => ({ value: null, content: [], isError: false as const }))
     const route = vi.fn(() => ({ kind: 'route', route: { need: toolSurface.need, capability: { id: 'tool:echo', version: '1', status: 'verified' }, modality: 'visual', requiredPermissions: [] } }))
     const projectSurface = vi.fn(() => toolSurface)
-    const broker = { request: vi.fn(async () => ({ kind: 'approved', grants: [] })) }
-    await expect(executeCapabilityNeed({ route, surface: projectSurface } as never, { execute } as never, broker as never, toolSurface.need, { text: 'hi' }, { callId: 'c1' as never, signal: new AbortController().signal })).resolves.toMatchObject({ kind: 'executed', surface: toolSurface })
+    const broker: CapabilityApproval = { request: vi.fn<CapabilityApproval['request']>(async () => ({ kind: 'approved', grants: [] })) }
+    await expect(executeCapabilityNeed({ route, surface: projectSurface } as unknown as Pick<HardnessService, 'route' | 'surface'>, { execute }, broker, toolSurface.need, { text: 'hi' }, { callId: 'c1' as never, signal: new AbortController().signal })).resolves.toMatchObject({ kind: 'executed', surface: toolSurface })
     expect(execute).toHaveBeenCalledWith(expect.objectContaining({ name: 'echo', arguments: { text: 'hi' } }))
   })
 
   it('approves then delegates a non-tool OpenClaw route to the external executor', async () => {
-    const tools = { execute: vi.fn() }
+    const tools = { execute: vi.fn<ToolRuntime['execute']>() }
     const route = vi.fn(() => ({ kind: 'route', route: { need: openclawSurface.need, capability: { id: 'openclaw:brave', version: '2026.8.1', status: 'testing' }, modality: 'native', requiredPermissions: [] } }))
     const projectSurface = vi.fn(() => openclawSurface)
     const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
@@ -25,7 +28,7 @@ describe('HARDNESS execution bridge', () => {
     }
 
     await expect(executeCapabilityNeed(
-      { route, surface: projectSurface } as never,
+      { route, surface: projectSurface } as unknown as Pick<HardnessService, 'route' | 'surface'>,
       tools as never,
       approval,
       openclawSurface.need,
@@ -42,34 +45,35 @@ describe('HARDNESS execution bridge', () => {
   it('does not execute an OpenClaw side effect after approval is denied', async () => {
     const route = vi.fn(() => ({ kind: 'route', route: { need: openclawSurface.need, capability: { id: 'openclaw:brave', version: '2026.8.1', status: 'testing' }, modality: 'native', requiredPermissions: [] } }))
     const projectSurface = vi.fn(() => openclawSurface)
-    const approval = { request: vi.fn(async () => ({ kind: 'denied' as const, reason: 'user denied' })) }
-    const external = { supports: vi.fn(() => true), execute: vi.fn() }
+    const approval: CapabilityApproval = { request: vi.fn<CapabilityApproval['request']>(async () => ({ kind: 'denied', reason: 'user denied' })) }
+    const externalExecute = vi.fn<CapabilityExecutor['execute']>()
+    const external: CapabilityExecutor = { supports: vi.fn(() => true), execute: externalExecute }
 
     await expect(executeCapabilityNeed(
-      { route, surface: projectSurface } as never,
-      { execute: vi.fn() } as never,
+      { route, surface: projectSurface } as unknown as Pick<HardnessService, 'route' | 'surface'>,
+      { execute: vi.fn<ToolRuntime['execute']>() },
       approval,
       openclawSurface.need,
       {},
       { callId: 'c3' as never, signal: new AbortController().signal },
       external,
     )).resolves.toEqual({ kind: 'denied', reason: 'user denied' })
-    expect(external.execute).not.toHaveBeenCalled()
+    expect(externalExecute).not.toHaveBeenCalled()
   })
 
   it('runs the pre-execution gate after approval and before the side effect', async () => {
     const order: string[] = []
-    const execute = vi.fn(async () => {
+    const execute = vi.fn<ToolRuntime['execute']>(async () => {
       order.push('execute')
       return { value: null, content: [], isError: false as const }
     })
     const route = vi.fn(() => ({ kind: 'route', route: { need: toolSurface.need, capability: { id: 'tool:echo', version: '1', status: 'verified' }, modality: 'visual', requiredPermissions: [] } }))
     const projectSurface = vi.fn(() => toolSurface)
-    const approval = { request: vi.fn(async () => { order.push('approved'); return { kind: 'approved' as const, grants: [] } }) }
+    const approval: CapabilityApproval = { request: vi.fn<CapabilityApproval['request']>(async () => { order.push('approved'); return { kind: 'approved', grants: [] } }) }
 
     await expect(executeCapabilityNeed(
-      { route, surface: projectSurface } as never,
-      { execute } as never,
+      { route, surface: projectSurface } as unknown as Pick<HardnessService, 'route' | 'surface'>,
+      { execute },
       approval,
       toolSurface.need,
       {},
@@ -81,14 +85,14 @@ describe('HARDNESS execution bridge', () => {
   })
 
   it('can abort after approval without executing the capability', async () => {
-    const execute = vi.fn()
+    const execute = vi.fn<ToolRuntime['execute']>()
     const route = vi.fn(() => ({ kind: 'route', route: { need: toolSurface.need, capability: { id: 'tool:echo', version: '1', status: 'verified' }, modality: 'visual', requiredPermissions: [] } }))
     const projectSurface = vi.fn(() => toolSurface)
-    const approval = { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) }
+    const approval: CapabilityApproval = { request: vi.fn<CapabilityApproval['request']>(async () => ({ kind: 'approved', grants: [] })) }
 
     await expect(executeCapabilityNeed(
-      { route, surface: projectSurface } as never,
-      { execute } as never,
+      { route, surface: projectSurface } as unknown as Pick<HardnessService, 'route' | 'surface'>,
+      { execute },
       approval,
       toolSurface.need,
       {},
