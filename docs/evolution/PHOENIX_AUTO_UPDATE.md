@@ -42,12 +42,12 @@ Default policy is `PHOENIX_UPDATE_MODE=auto`:
 2. fetch the promoted `stable` branch (or `PHOENIX_UPDATE_STABLE_BRANCH`);
 3. fetch the stable-channel manifest;
 4. verify the fetched stable commit exists locally;
-5. refuse downgrade or divergent history;
+5. refuse downgrade; permit unrelated release history only for a managed `main` or `stable` checkout;
 6. refuse automatic mutation when the worktree contains local changes;
 7. create a detached temporary Git worktree at the candidate commit;
 8. run a frozen dependency install, full build, and CLI smoke test there;
 9. record the current commit at `refs/phoenix/recovery/last-good`;
-10. advance a clean live `main` or `stable` checkout using `git merge --ff-only` only;
+10. advance a clean live `main` or `stable` checkout with `git merge --ff-only`, or replace unrelated history in a managed release checkout with `git reset --hard` after the same preflight and recovery checks;
 11. install, rebuild, and smoke-test the live tree;
 12. if the live step fails, reset to the recovery commit and rebuild the last known-good version.
 
@@ -66,7 +66,7 @@ The next Windows launch also performs an update check before boot. Ordinary netw
 - `PHOENIX_UPDATE_MODE=off` — disable stable-channel checks.
 - `PHOENIX_UPDATE_POLL_MS=<milliseconds>` — watcher interval, clamped to at least one minute.
 
-Development branches are never mutated automatically. They still fetch and report the promoted stable target, so the UI can show that an update exists without rewriting local work. Set `PHOENIX_UPDATE_STABLE_BRANCH=main` only for installations whose release pointer is still named `main`.
+Development branches are never mutated automatically. They still fetch and report the promoted stable target, so the UI can show that an update exists without rewriting local work. A clean checkout marked with `.phoenix-managed-install` may replace unrelated legacy release history, retaining the previous SHA at `refs/phoenix/recovery/pre-stable-realign` before activation. Set `PHOENIX_UPDATE_STABLE_BRANCH=main` only for installations whose release pointer is still named `main`.
 
 ## Recovery and audit
 

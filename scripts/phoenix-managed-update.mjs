@@ -18,6 +18,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { classifyStableUpdate } from './phoenix-update-policy.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
@@ -142,6 +143,16 @@ function relation(root, current, target) {
   return 'diverged'
 }
 
+function stableUpdateAction(state, branch) {
+  return classifyStableUpdate({
+    status: state,
+    branch,
+    managed: true,
+    mode: UPDATE_MODE,
+    stableBranch: STABLE_SOURCE_BRANCH,
+  })
+}
+
 function buildAndSmoke(root, label) {
   console.error(`[PHOENIX STABLE] ${label}: installing locked dependencies...`)
   pnpm(root, ['install', '--frozen-lockfile'], { inherit: true })
@@ -211,26 +222,27 @@ function applyStable(root, current, target, manifest, state) {
     return
   }
 
-  const action = state === 'ahead' ? 'realigning managed install to stable' : 'installing stable update'
+  const replacement = state === 'ahead' || state === 'diverged'
+  const action = replacement ? 'realigning managed install to stable' : 'installing stable update'
   console.error(`[PHOENIX STABLE] ${action}: ${current.slice(0, 12)} -> ${target.slice(0, 12)}`)
   git(root, ['diff', '--check', current, target])
   stageCandidate(root, target)
   if (!cleanWorktree(root)) throw new Error('worktree changed during stable preflight; refusing live mutation')
 
-  if (state === 'ahead') {
+  if (replacement) {
     git(root, ['update-ref', 'refs/phoenix/recovery/pre-stable-realign', current])
   } else {
     git(root, ['update-ref', 'refs/phoenix/recovery/last-good', current])
   }
 
   try {
-    if (state === 'upgrade') git(root, ['merge', '--ff-only', target], { inherit: true })
+    if (!replacement) git(root, ['merge', '--ff-only', target], { inherit: true })
     else git(root, ['reset', '--hard', target], { inherit: true })
     buildAndSmoke(root, `live stable ${target.slice(0, 12)}`)
     git(root, ['update-ref', 'refs/phoenix/recovery/last-good', target])
     writeState(root, {
       status: 'updated',
-      phase: state === 'ahead' ? 'realigned' : 'complete',
+      phase: replacement ? 'realigned' : 'complete',
       previous: current,
       current: target,
       channelPublishedAt: manifest.publishedAt,
@@ -260,8 +272,8 @@ async function main() {
   const { manifest, target } = stableTarget(root)
   const state = relation(root, current, target)
   if (state === 'current') return
-  if (state === 'diverged') {
-    console.error('[PHOENIX STABLE] managed main diverged from the stable target; automatic mutation is disabled to prevent data loss.')
+  if (stableUpdateAction(state, branch) === 'pause') {
+    console.error('[PHOENIX STABLE] managed checkout cannot be aligned to the stable target safely.')
     return
   }
   applyStable(root, current, target, manifest, state)

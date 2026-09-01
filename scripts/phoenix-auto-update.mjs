@@ -21,6 +21,7 @@ import {
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { classifyStableUpdate } from './phoenix-update-policy.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
@@ -38,6 +39,7 @@ const STATE_FILE = 'phoenix-update-state.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const REFRESH_REQUEST_FILE = 'phoenix-update-refresh-request.json'
+const MANAGED_MARKER = '.phoenix-managed-install'
 const UPDATE_MODE = normalizeMode(process.env.PHOENIX_UPDATE_MODE ?? 'auto')
 
 function normalizeMode(value) {
@@ -137,6 +139,10 @@ function currentCommit(root) {
 
 function cleanWorktree(root) {
   return git(root, ['status', '--porcelain=v1', '--untracked-files=all']).stdout.length === 0
+}
+
+function isManagedInstall(root) {
+  return existsSync(join(root, MANAGED_MARKER))
 }
 
 function parseManifest(text) {
@@ -252,6 +258,20 @@ function updateFacts(inspection) {
 
 function canMutateBranch(branch) {
   return branch === 'main' || branch === STABLE_SOURCE_BRANCH
+}
+
+function stableUpdateAction(root, inspection) {
+  return classifyStableUpdate({
+    status: inspection.status,
+    branch: inspection.branch,
+    managed: isManagedInstall(root),
+    mode: UPDATE_MODE,
+    stableBranch: STABLE_SOURCE_BRANCH,
+  })
+}
+
+function canReplaceDiverged(root, inspection) {
+  return stableUpdateAction(root, inspection) === 'replace'
 }
 
 function changedFiles(root, current, target) {
@@ -499,7 +519,8 @@ function rollback(root, previous, failedTarget, cause) {
 }
 
 function applyUpdate(root, inspection, options = {}) {
-  if (inspection.status !== 'upgrade') return false
+  const replacingDivergedRelease = inspection.status === 'diverged'
+  if (inspection.status !== 'upgrade' && !canReplaceDiverged(root, inspection)) return false
   if (!canMutateBranch(inspection.branch)) {
     console.error(`[PHOENIX UPDATE] stable update detected on branch ${inspection.branch}; refusing to mutate a development checkout.`)
     writeState(root, {
@@ -507,6 +528,16 @@ function applyUpdate(root, inspection, options = {}) {
       phase: 'development-branch',
       ...updateFacts(inspection),
       detail: `Stable update detected. Switch this checkout to main or ${STABLE_SOURCE_BRANCH} to activate it.`,
+    })
+    return false
+  }
+  if (replacingDivergedRelease && !isManagedInstall(root)) {
+    console.error('[PHOENIX UPDATE] the stable checkout has unrelated history but is not marked as managed; refusing to replace it automatically.')
+    writeState(root, {
+      status: 'paused',
+      phase: 'diverged',
+      ...updateFacts(inspection),
+      detail: 'The stable checkout has unrelated Git history. A managed installation is required before PHOENIX can replace it safely.',
     })
     return false
   }
@@ -529,7 +560,8 @@ function applyUpdate(root, inspection, options = {}) {
   const previous = inspection.current
   const target = inspection.target
   const plan = updatePlan(root, inspection)
-  console.error(`[PHOENIX UPDATE] activating stable update (${plan.mode}): ${previous.slice(0, 12)} -> ${target.slice(0, 12)}`)
+  const action = replacingDivergedRelease ? 'replacing divergent managed release' : 'activating stable update'
+  console.error(`[PHOENIX UPDATE] ${action} (${plan.mode}): ${previous.slice(0, 12)} -> ${target.slice(0, 12)}`)
   git(root, ['diff', '--check', previous, target])
   if (!options.prepared || !preparedCandidateValid(root, target)) stageCandidate(root, inspection)
   if (!cleanWorktree(root)) throw new Error('worktree changed during preflight; refusing live update')
@@ -537,7 +569,8 @@ function applyUpdate(root, inspection, options = {}) {
   recoveryRef(root, previous)
   try {
     writeState(root, { status: 'applying', phase: 'activate', ...updateFacts(inspection) })
-    git(root, ['merge', '--ff-only', target], { inherit: true })
+    if (replacingDivergedRelease) git(root, ['reset', '--hard', target], { inherit: true })
+    else git(root, ['merge', '--ff-only', target], { inherit: true })
     buildAndSmoke(root, `live ${target.slice(0, 12)}`, plan, (phase) => {
       writeState(root, { status: 'applying', phase, ...updateFacts(inspection) })
     })
@@ -651,7 +684,7 @@ async function finishAfterParentExit(root, pending, preparedTarget) {
     let shouldRelaunch = true
     try {
       const fresh = inspectUpdate(root)
-      if (fresh.status === 'upgrade') {
+      if (fresh.status === 'upgrade' || canReplaceDiverged(root, fresh)) {
         if (fresh.target !== request.target) {
           throw new Error(`restart target changed from ${request.target} to ${fresh.target}`)
         }
@@ -675,7 +708,7 @@ async function finishAfterParentExit(root, pending, preparedTarget) {
   if (pending !== undefined && UPDATE_MODE === 'auto') {
     try {
       const fresh = inspectUpdate(root)
-      if (fresh.status === 'upgrade') {
+      if (fresh.status === 'upgrade' || canReplaceDiverged(root, fresh)) {
         applyUpdate(root, fresh, { prepared: preparedTarget === fresh.target || preparedCandidateValid(root, fresh.target) })
       }
     } catch (error) {
@@ -722,12 +755,40 @@ async function watch(root, parentPid) {
     }
 
     try {
-      switch (inspection.status) {
-        case 'upgrade':
+      const action = stableUpdateAction(root, inspection)
+      switch (action) {
+        case 'development':
+          pending = undefined
+          preparedTarget = undefined
+          clearPrepared(root)
+          writeState(root, {
+            status: 'available',
+            phase: 'development-branch',
+            ...updateFacts(inspection),
+            detail: `Stable update ${inspection.target.slice(0, 12)} is available, but development branch ${inspection.branch} is protected.`,
+          })
+          break
+        case 'pause':
+          pending = undefined
+          preparedTarget = undefined
+          clearPrepared(root)
+          writeState(root, {
+            status: 'paused',
+            phase: inspection.status,
+            ...updateFacts(inspection),
+            detail: inspection.status === 'diverged'
+              ? 'The stable checkout has unrelated Git history and is not marked as managed.'
+              : 'The PHOENIX checkout cannot be changed automatically.',
+          })
+          break
+        case 'notify':
           pending = inspection
-          if (UPDATE_MODE === 'notify') {
-            writeState(root, { status: 'available', phase: 'notify', ...updateFacts(inspection) })
-          } else if (preparedTarget !== inspection.target) {
+          writeState(root, { status: 'available', phase: 'notify', ...updateFacts(inspection) })
+          break
+        case 'apply':
+        case 'replace':
+          pending = inspection
+          if (preparedTarget !== inspection.target) {
             if (announcedTarget !== inspection.target) {
               announcedTarget = inspection.target
               console.error(`[PHOENIX UPDATE] new stable version ${inspection.target.slice(0, 12)} detected.`)
@@ -738,36 +799,39 @@ async function watch(root, parentPid) {
             writeState(root, { status: 'ready', phase: 'ready', ...updateFacts(inspection) })
           }
           break
-        case 'current':
-          pending = undefined
-          preparedTarget = undefined
-          clearPrepared(root)
-          writeState(root, { status: 'current', phase: 'idle', current: inspection.current })
+        case 'unchanged':
+          switch (inspection.status) {
+            case 'current':
+              pending = undefined
+              preparedTarget = undefined
+              clearPrepared(root)
+              writeState(root, { status: 'current', phase: 'idle', current: inspection.current })
+              break
+            case 'ahead':
+              writeState(root, {
+                status: 'paused',
+                phase: 'ahead',
+                current: inspection.current,
+                target: inspection.target,
+                detail: 'This checkout is ahead of the promoted stable version.',
+              })
+              break
+            case 'foreign-remote':
+              writeState(root, {
+                status: 'paused',
+                phase: inspection.status,
+                detail: 'The configured Git remote is not the official PHOENIX repository.',
+              })
+              break
+            case 'off':
+              writeState(root, { status: 'off', phase: 'off' })
+              return
+            default:
+              throw new Error(`unhandled watcher state ${JSON.stringify(inspection.status)}`)
+          }
           break
-        case 'ahead':
-          writeState(root, {
-            status: 'paused',
-            phase: 'ahead',
-            current: inspection.current,
-            target: inspection.target,
-            detail: 'This checkout is ahead of the promoted stable version.',
-          })
-          break
-        case 'foreign-remote':
-        case 'diverged':
-          writeState(root, {
-            status: 'paused',
-            phase: inspection.status,
-            detail: inspection.status === 'foreign-remote'
-              ? 'The configured Git remote is not the official PHOENIX repository.'
-              : 'Local main diverged from the promoted stable version.',
-          })
-          break
-        case 'off':
-          writeState(root, { status: 'off', phase: 'off' })
-          return
         default:
-          throw new Error(`unhandled watcher state ${JSON.stringify(inspection.status)}`)
+          throw new Error(`unhandled stable update action ${JSON.stringify(action)}`)
       }
     } catch (error) {
       console.error(`[PHOENIX UPDATE] watcher check failed safely: ${error instanceof Error ? error.message : String(error)}`)
@@ -833,9 +897,15 @@ async function main() {
       if (args.includes('--check')) console.log(`PHOENIX is current at ${inspection.current}`)
       return
     case 'upgrade':
+    case 'diverged':
+      if (inspection.status === 'diverged' && !canReplaceDiverged(root, inspection)) {
+        if (args.includes('--check')) console.log('PHOENIX stable checkout history is not safely replaceable; managed installation required.')
+        return
+      }
       if (args.includes('--check')) {
         const plan = updatePlan(root, inspection)
-        console.log(`PHOENIX update available (${plan.mode}): ${inspection.current} -> ${inspection.target}`)
+        const action = inspection.status === 'diverged' ? 'replacement available' : `update available (${plan.mode})`
+        console.log(`PHOENIX ${action}: ${inspection.current} -> ${inspection.target}`)
         return
       }
       applyUpdate(root, inspection)
@@ -845,9 +915,6 @@ async function main() {
       return
     case 'foreign-remote':
       console.error(`[PHOENIX UPDATE] ${REMOTE} is not the official ${EXPECTED_REPOSITORY} repository; automatic updates are disabled.`)
-      return
-    case 'diverged':
-      console.error('[PHOENIX UPDATE] local main has diverged from the stable channel. Automatic update is disabled to prevent data loss.')
       return
     default:
       throw new Error(`unhandled updater state ${JSON.stringify(inspection.status)}`)

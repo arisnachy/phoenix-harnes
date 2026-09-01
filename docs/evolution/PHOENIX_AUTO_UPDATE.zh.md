@@ -42,12 +42,12 @@ phoenix/evolution-inbox
 2. 获取晋升的 `stable` branch（或 `PHOENIX_UPDATE_STABLE_BRANCH`）；
 3. 获取稳定通道 manifest；
 4. 验证获取到的 stable commit 已存在于本地；
-5. 拒绝降级或分叉历史；
+5. 拒绝降级；只有受管的 `main` 或 `stable` checkout 才允许替换不相关的发布历史；
 6. 当 worktree 包含本地修改时拒绝自动变更；
 7. 在候选 commit 上创建分离的临时 Git worktree；
 8. 在其中执行 frozen dependency install、完整 build 和 CLI smoke test；
 9. 将当前 commit 记录到 `refs/phoenix/recovery/last-good`；
-10. 仅使用 `git merge --ff-only` 推进干净的实时 `main` 或 `stable` checkout；
+10. 使用 `git merge --ff-only` 推进干净的实时 `main` 或 `stable` checkout；对于受管发布 checkout，在相同的 preflight 与 recovery 检查通过后，可使用 `git reset --hard` 替换不相关历史；
 11. 安装、重建并对实时 worktree 执行 smoke test；
 12. 如果实时步骤失败，则重置到 recovery commit 并重建最后一个已知良好版本。
 
@@ -66,7 +66,7 @@ CLI 会启动低频更新 watcher。默认轮询间隔为十分钟。当新的�
 - `PHOENIX_UPDATE_MODE=off` — 禁用稳定通道检查。
 - `PHOENIX_UPDATE_POLL_MS=<milliseconds>` — watcher 间隔，最短限制为一分钟。
 
-开发 branches 永远不会被自动修改，但仍会获取并报告晋升的 stable target，让 UI 能显示有更新而不重写本地工作。只有发布指针仍名为 `main` 的安装才应设置 `PHOENIX_UPDATE_STABLE_BRANCH=main`。
+开发 branches 永远不会被自动修改，但仍会获取并报告晋升的 stable target，让 UI 能显示有更新而不重写本地工作。带有 `.phoenix-managed-install` 标记的干净 checkout 可以替换不相关的旧发布历史；激活前会把旧 SHA 保留在 `refs/phoenix/recovery/pre-stable-realign`。只有发布指针仍名为 `main` 的安装才应设置 `PHOENIX_UPDATE_STABLE_BRANCH=main`。
 
 ## 恢复与审计
 
