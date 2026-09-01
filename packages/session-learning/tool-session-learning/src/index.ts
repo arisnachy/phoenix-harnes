@@ -50,7 +50,11 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:recent-learning-memory',
     order: 118,
-    text: () => formatRecentMemoryContext(ctx.learningMemory.recallCognitive({ limit: 8 })),
+    // Keep automatic prompt assembly on the bounded legacy ledger. Cognitive
+    // search indexes every durable event and can be very large; scanning that
+    // full index synchronously here makes every user message pay the cost.
+    // Explicit memory_search still exposes cognitive recall when requested.
+    text: () => formatRecentMemoryContext(ctx.learningMemory.recall(8)),
     interpolateVariables: false,
   })
   ctx.tools.register(defineTool({
