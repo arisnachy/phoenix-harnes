@@ -239,7 +239,10 @@ create(agent: Agent, request: CreateGoalRequest): GoalView
 @Remote('continue') continueWindow(agent: Agent, ref: GoalRef): GoalView
 
 /**
- * Mark a current non-complete goal complete and disarm it.
+ * Mark a current non-complete goal complete and disarm it. Completion is
+ * fail-closed on the latest executable/adversarial certification while a
+ * settled semantic PASS is monotonic for the exact revision: a later
+ * provider outage cannot erase evidence that already passed.
  * @param agent - owning live agent.
  * @param ref - expected current revision.
  * @returns the completed view.

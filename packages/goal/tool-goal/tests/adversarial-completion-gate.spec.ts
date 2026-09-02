@@ -114,8 +114,12 @@ describe('adversarial completion tester', () => {
       agentOptions: { provider: 'anthropic', model: 'claude-opus', reasoningEffort: 'high' },
       toolFilter: { allow: [] },
     })
-    expect(JSON.stringify(design?.prompt)).toContain('Ship a reliable CLI artifact')
-    expect(JSON.stringify(design?.prompt)).not.toMatch(/builder test|existing test|workspace test/i)
+    const designPrompt = JSON.stringify(design?.prompt)
+    expect(designPrompt).toContain('Original requirement only')
+    expect(designPrompt).toContain('Ship a reliable CLI artifact')
+    expect(designPrompt).toMatch(/cannot inspect/i)
+    expect(designPrompt).not.toContain('corrupt-config')
+    expect(designPrompt).not.toContain('alternate-format')
 
     const execute = starts[1]?.request
     expect(execute).toMatchObject({
