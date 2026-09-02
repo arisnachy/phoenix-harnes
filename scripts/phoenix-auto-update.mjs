@@ -409,14 +409,9 @@ function preparedCandidateValid(root, target) {
 }
 
 function ensureDependencies(root, label, plan, onPhase) {
-  const installed = existsSync(join(root, 'node_modules', '.pnpm'))
-  if (installed && !dependencyGraphChanged(plan.files)) {
-    console.error(`[PHOENIX UPDATE] ${label}: reusing installed dependencies.`)
-    return
-  }
   onPhase('dependencies')
-  console.error(`[PHOENIX UPDATE] ${label}: installing locked dependencies...`)
-  corepack(root, ['pnpm', 'install', '--frozen-lockfile'], { inherit: true })
+  console.error(`[PHOENIX UPDATE] ${label}: reconciling locked dependencies for ${plan.mode} candidate...`)
+  corepack(root, ['pnpm', 'install', '--frozen-lockfile', '--prod=false'], { inherit: true })
 }
 
 function buildAndSmoke(root, label, plan, onPhase = () => {}) {
