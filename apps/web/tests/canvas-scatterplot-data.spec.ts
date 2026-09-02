@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error The public demo module is JavaScript loaded by the browser.
 import { createPoints, GROUPS, POINT_COUNT } from '../public/demos/canvas-scatterplot-data.js'
 
 type ScatterPoint = { index: number; x: number; y: number; group: string }
