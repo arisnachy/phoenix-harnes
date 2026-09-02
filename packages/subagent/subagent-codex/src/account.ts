@@ -181,10 +181,12 @@ export function codexAccountTelemetry(snapshot: CodexAccountSnapshot): Authoriza
   if (accountType === undefined) return undefined
 
   const rateResponse = maybeObject(snapshot.rateLimits)
-  const limits = maybeObject(rateResponse?.rateLimits)
-  const primaryLimit = limitWindow(limits?.primary)
-  const secondaryLimit = limitWindow(limits?.secondary)
-  const rawCredits = maybeObject(limits?.credits)
+  const limitsById = maybeObject(rateResponse?.rateLimitsByLimitId)
+  const codexLimits = maybeObject(limitsById?.codex)
+  const legacyLimits = maybeObject(rateResponse?.rateLimits)
+  const primaryLimit = limitWindow(codexLimits?.primary) ?? limitWindow(legacyLimits?.primary)
+  const secondaryLimit = limitWindow(codexLimits?.secondary) ?? limitWindow(legacyLimits?.secondary)
+  const rawCredits = maybeObject(codexLimits?.credits) ?? maybeObject(legacyLimits?.credits)
   const hasCredits = rawCredits?.hasCredits
   const unlimited = rawCredits?.unlimited
   const creditBalance = optionalString(rawCredits?.balance)
