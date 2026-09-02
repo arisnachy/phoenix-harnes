@@ -21,7 +21,7 @@ const root = resolve(process.cwd())
 const hostArgs = process.argv.slice(2)
 const updater = join(root, 'scripts', 'phoenix-auto-update.mjs')
 const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
-const activator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
+const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const WATCHER_RESTART_DELAY_MS = 1000
 
@@ -198,10 +198,21 @@ function superviseWatcher(host) {
   }
 }
 
+function preparedActivator() {
+  const stage = persistentStage()
+  const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')
+  if (sameRepository(stage) && existsSync(stagedActivator)) return stagedActivator
+  return liveActivator
+}
+
 function activatePrepared() {
+  const activator = preparedActivator()
   if (!existsSync(activator)) {
     console.error('[PHOENIX UPDATE] supervised activator is missing; refusing restart.')
     return 1
+  }
+  if (activator !== liveActivator) {
+    console.error('[PHOENIX UPDATE] using the verified staged activator for prepared self-update compatibility...')
   }
   const result = spawnSync(process.execPath, [activator], {
     cwd: root,
