@@ -55,12 +55,15 @@ describe('completion verifier visibility', () => {
     } as never
 
     const visible = filterCompletionVerifierSessionState(state)
-    expect(visible.subagentsByParent.parent?.entries).toEqual([
+    const [parentCatalog] = Object.values(visible.subagentsByParent)
+    const visibleIds = new Set(Object.values(visible.byId).map(session => String(session.id)))
+
+    expect(parentCatalog?.entries).toEqual([
       child('judge-current', 'goal-completion-judge', 'running'),
       child('researcher-history', 'researcher', 'inactive'),
     ])
-    expect(visible.byId['judge-old']).toBeUndefined()
-    expect(visible.byId['judge-current']).toBeDefined()
-    expect(visible.byId['researcher-history']).toBeDefined()
+    expect(visibleIds.has('judge-old')).toBe(false)
+    expect(visibleIds.has('judge-current')).toBe(true)
+    expect(visibleIds.has('researcher-history')).toBe(true)
   })
 })
