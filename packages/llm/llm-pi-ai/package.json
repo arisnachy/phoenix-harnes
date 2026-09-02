@@ -39,9 +39,7 @@
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-settings": "workspace:^",
-    "@phoenix-ai/dsh-subprocess": "workspace:^",
     "@phoenix-ai/dsh-timeout": "workspace:^",
-    "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
@@ -57,9 +55,7 @@
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-llm-deepseek": "workspace:^",
     "@phoenix-ai/dsh-settings": "workspace:^",
-    "@phoenix-ai/dsh-subprocess": "workspace:^",
     "@phoenix-ai/dsh-timeout": "workspace:^",
-    "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^"
   }
 }
