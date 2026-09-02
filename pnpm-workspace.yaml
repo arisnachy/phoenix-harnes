@@ -1,3 +1,5 @@
+# PHOENIX updater bootstrap: changing this workspace manifest forces legacy
+# stable updaters to refresh frozen pnpm workspace links before this release builds.
 packages:
   - vendor/*
   - packages/*/*
