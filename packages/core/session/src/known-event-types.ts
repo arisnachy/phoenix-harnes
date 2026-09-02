@@ -34,6 +34,7 @@ export const KNOWN_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set([
   'goal/change',
   'goal/completion-gate',
   'goal/continuation',
+  'goal/false-pass',
   'goal/judge',
   'goal/strategy',
   'goal/supervisor',
