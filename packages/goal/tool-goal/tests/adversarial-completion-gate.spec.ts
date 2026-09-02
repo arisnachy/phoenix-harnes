@@ -20,6 +20,14 @@ const passingChecks = {
   cleanRoom: 'pass' as const,
 }
 
+const passingLedger = [{
+  criterionId: 'REQ-001',
+  criterion: 'The shipped CLI handles malformed and alternate input formats.',
+  mandatory: true,
+  status: 'verified' as const,
+  evidence: ['clean-room smoke + adversarial corrupt/alternate input tests'],
+}]
+
 describe('adversarial completion tester', () => {
   it('designs fresh attacks from only the original requirement, then executes them with the parent model in a clean-room gate', async () => {
     const starts: Array<{ name: string; request: Record<string, unknown> }> = []
@@ -54,6 +62,13 @@ describe('adversarial completion tester', () => {
               artifact_integrity: 'pass',
               clean_room: 'pass',
             },
+            evidence_ledger: [{
+              criterion_id: 'REQ-001',
+              criterion: 'The shipped CLI handles malformed and alternate input formats.',
+              mandatory: true,
+              status: 'verified',
+              evidence: ['clean-room smoke + adversarial corrupt/alternate input tests'],
+            }],
             artifact_fingerprint: 'sha256:artifact',
             clean_room_evidence: 'Packaged, extracted into a fresh temporary directory, and verified there.',
             findings: [],
@@ -81,6 +96,7 @@ describe('adversarial completion tester', () => {
     })
 
     expect(result.checks).toEqual(passingChecks)
+    expect(result.evidenceLedger).toEqual(passingLedger)
     expect(result.artifactFingerprint).toBe('sha256:artifact')
     expect(starts).toHaveLength(2)
 
@@ -99,6 +115,7 @@ describe('adversarial completion tester', () => {
       agentOptions: { provider: 'anthropic', model: 'claude-opus', reasoningEffort: 'high' },
     })
     expect(JSON.stringify(execute?.prompt)).toContain('corrupt-config')
+    expect(JSON.stringify(execute?.prompt)).toContain('evidence_ledger')
     expect(JSON.stringify(execute?.prompt)).toMatch(/temporary|clean.room|extract/i)
     expect(execute?.toolFilter).toEqual(expect.objectContaining({
       allow: expect.arrayContaining(['bash', 'read', 'glob', 'grep']),
@@ -130,7 +147,9 @@ describe('adversarial completion tester', () => {
                 round: 2,
                 attemptId: 'gate-pass',
                 checks: passingChecks,
+                evidenceLedger: passingLedger,
                 artifactFingerprint: 'sha256:same-artifact',
+                cleanRoomEvidence: 'verified clean copy',
                 findings: [],
                 proceduralLessons: [],
               },
