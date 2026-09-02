@@ -134,7 +134,8 @@ export function codexDoctorSupportsImageGeneration(output: string): boolean {
     || /stored[_ -]auth[_ -]mode[^,}\]]*chatgpt/.test(normalized)
   )
   const imageEnabled = (
-    /image_generation[^,}\]]*enabled/.test(normalized)
+    /enabled feature flags[^}\]]*image_generation/.test(normalized)
+    || /image_generation[^,}\]]*enabled/.test(normalized)
     || /image generation[^,}\]]*enabled/.test(normalized)
     || /image_generation[^,}\]]*true/.test(normalized)
   )
