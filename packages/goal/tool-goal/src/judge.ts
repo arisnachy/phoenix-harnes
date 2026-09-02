@@ -3,7 +3,7 @@
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock, LlmRuntime } from '@phoenix-ai/dsh-llm'
 import type { GoalJudgeAuditEntry } from '@phoenix-ai/dsh-goal'
-import type { Session } from '@phoenix-ai/dsh-session'
+import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
 import {
@@ -129,6 +129,53 @@ function enforceGate(result: GoalJudgeResult, gate: GoalCompletionGateResult): G
   }
 }
 
+function gateIsInfrastructureOnlyBlocked(gate: GoalCompletionGateResult): boolean {
+  return Object.values(gate.checks).every(status => status === 'blocked')
+}
+
+function sessionGatePassed(event: SessionEvent<'goal/completion-gate'>): boolean {
+  return Object.values(event.data.checks).every(status => status === 'pass')
+    && event.data.artifactFingerprint.trim().length > 0
+}
+
+/**
+ * Persist executable/adversarial evidence only when this review is for the
+ * current goal objective. Specialist/Forge reviews reuse this Judge but must
+ * not masquerade as goal completion certification.
+ *
+ * A fully blocked infrastructure attempt is non-destructive after an exact
+ * revision already has a passing gate: inability to launch a provider later
+ * is not evidence that a previously certified artifact regressed. A real
+ * verifier FAIL is still appended and therefore invalidates the older gate.
+ */
+function recordCompletionGate(parent: Agent, objective: string, round: number, gate: GoalCompletionGateResult): void {
+  const current = parent.session.events.findLast(event =>
+    event.type === 'goal/change' && event.data.operation !== 'clear')
+  if (current?.type !== 'goal/change' || current.data.operation === 'clear') return
+  if (current.data.goal.objective !== objective) return
+
+  const goalId = current.data.goal.id
+  const revision = current.data.goal.revision
+  const settledPass = parent.session.events.some((event): event is SessionEvent<'goal/completion-gate'> =>
+    event.type === 'goal/completion-gate'
+      && event.data.goalId === goalId
+      && event.data.revision === revision
+      && sessionGatePassed(event))
+  if (settledPass && gateIsInfrastructureOnlyBlocked(gate)) return
+
+  parent.session.append('goal/completion-gate', {
+    goalId,
+    revision,
+    round,
+    attemptId: `gate-${goalId}-${revision}-${round}-${parent.session.seq}`,
+    checks: { ...gate.checks },
+    artifactFingerprint: gate.artifactFingerprint,
+    cleanRoomEvidence: gate.cleanRoomEvidence,
+    findings: [...gate.findings],
+    proceduralLessons: [...gate.proceduralLessons],
+  })
+}
+
 /**
  * Run the adversarial Tester first, then a fresh read-only Judge. A Judge PASS
  * is accepted only when the six programmatic gate checks also pass.
@@ -153,6 +200,7 @@ export async function judgeGoalCompletion(input: {
     round: input.round,
     signal: input.signal,
   })
+  recordCompletionGate(input.parent, input.objective, input.round, gate)
   const provider = reviewProvider(subagents, input.provider, input.parent)
   if (provider === undefined) return enforceGate(unavailable(), gate)
 
