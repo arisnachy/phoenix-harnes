@@ -23,6 +23,11 @@ export interface GoalJudgeResult {
   readonly requiredChanges: readonly string[]
 }
 
+interface SettledGoalPass {
+  readonly result: GoalJudgeResult
+  readonly artifactFingerprint: string
+}
+
 /** Deployment-independent judge output schema. */
 export const GOAL_JUDGE_OUTPUT_SCHEMA: ObjectJsonSchema = {
   type: 'object',
@@ -138,6 +143,45 @@ function sessionGatePassed(event: SessionEvent<'goal/completion-gate'>): boolean
     && event.data.artifactFingerprint.trim().length > 0
 }
 
+/** Find a PASS whose executable gate certifies the exact same goal revision. */
+function settledGoalPass(parent: Agent, objective: string): SettledGoalPass | undefined {
+  const current = parent.session.events.findLast(event =>
+    event.type === 'goal/change' && event.data.operation !== 'clear')
+  if (current?.type !== 'goal/change' || current.data.operation === 'clear'
+    || current.data.goal.objective !== objective) return undefined
+  const goalId = current.data.goal.id
+  const revision = current.data.goal.revision
+  const gate = parent.session.events.findLast((event): event is SessionEvent<'goal/completion-gate'> =>
+    event.type === 'goal/completion-gate'
+      && event.data.goalId === goalId
+      && event.data.revision === revision
+      && sessionGatePassed(event))
+  if (gate === undefined) return undefined
+  const judge = parent.session.events.findLast((event): event is SessionEvent<'goal/judge'> =>
+    event.type === 'goal/judge'
+      && event.data.goalId === goalId
+      && event.data.revision === revision
+      && event.data.verdict === 'pass')
+  if (judge === undefined) return undefined
+  return {
+    artifactFingerprint: gate.data.artifactFingerprint,
+    result: {
+      verdict: 'pass',
+      summary: judge.data.summary,
+      findings: [...judge.data.findings],
+      requiredChanges: [],
+    },
+  }
+}
+
+/** Whether an unavailable current review may safely reuse a durable PASS. */
+function mayReuseSettledPass(settled: SettledGoalPass | undefined, gate: GoalCompletionGateResult): settled is SettledGoalPass {
+  if (settled === undefined) return false
+  if (gateIsInfrastructureOnlyBlocked(gate)) return true
+  return completionGatePassed(gate)
+    && gate.artifactFingerprint === settled.artifactFingerprint
+}
+
 /**
  * Persist executable/adversarial evidence only when this review is for the
  * current goal objective. Specialist/Forge reviews reuse this Judge but must
@@ -189,8 +233,9 @@ export async function judgeGoalCompletion(input: {
   readonly round: number
   readonly signal: AbortSignal
 }): Promise<GoalJudgeResult> {
+  const settled = settledGoalPass(input.parent, input.objective)
   const subagents = input.subagents
-  if (subagents === undefined) return unavailable()
+  if (subagents === undefined) return settled?.result ?? unavailable()
   const gate = await runAdversarialCompletionGate({
     subagents,
     ...input.llm === undefined ? {} : { llm: input.llm },
@@ -201,8 +246,11 @@ export async function judgeGoalCompletion(input: {
     signal: input.signal,
   })
   recordCompletionGate(input.parent, input.objective, input.round, gate)
+  if (mayReuseSettledPass(settled, gate) && gateIsInfrastructureOnlyBlocked(gate)) return settled.result
   const provider = reviewProvider(subagents, input.provider, input.parent)
-  if (provider === undefined) return enforceGate(unavailable(), gate)
+  if (provider === undefined) {
+    return mayReuseSettledPass(settled, gate) ? settled.result : enforceGate(unavailable(), gate)
+  }
 
   const prompt: ContentBlock[] = [{
     type: 'text',
@@ -244,6 +292,7 @@ export async function judgeGoalCompletion(input: {
   } finally {
     if (run !== undefined) await run.dispose()
   }
+  if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) return settled.result
   return enforceGate(judged, gate)
 }
 
