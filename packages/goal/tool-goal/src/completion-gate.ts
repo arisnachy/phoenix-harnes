@@ -8,6 +8,8 @@ import { resolveGoalJudgeAgentOptions } from './judge-route.ts'
 
 /** Machine verdict for one independently checked completion dimension. */
 export type CompletionCheckStatus = 'pass' | 'fail' | 'blocked'
+/** Requirement-level evidence state used by the completion ledger. */
+export type CompletionEvidenceStatus = 'pending' | 'implemented' | 'tested' | 'verified' | 'failed' | 'blocked_external'
 
 /** Six machine-required checks that must all pass before DONE is possible. */
 export interface CompletionGateChecks {
@@ -19,9 +21,19 @@ export interface CompletionGateChecks {
   readonly cleanRoom: CompletionCheckStatus
 }
 
+/** One original requirement mapped to independent evidence. */
+export interface CompletionEvidenceEntry {
+  readonly criterionId: string
+  readonly criterion: string
+  readonly mandatory: boolean
+  readonly status: CompletionEvidenceStatus
+  readonly evidence: readonly string[]
+}
+
 /** Durable-worthy evidence returned by the adversarial tester. */
 export interface GoalCompletionGateResult {
   readonly checks: CompletionGateChecks
+  readonly evidenceLedger: readonly CompletionEvidenceEntry[]
   readonly artifactFingerprint: string
   readonly cleanRoomEvidence: string
   readonly findings: readonly string[]
@@ -37,8 +49,9 @@ type CompletionRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
 
 const MAX_TEXT = 2_000
-const MAX_ITEMS = 16
+const MAX_ITEMS = 32
 const EXECUTION_TOOLS = ['bash', 'read', 'read_image', 'glob', 'grep'] as const
+const EVIDENCE_STATUSES = ['pending', 'implemented', 'tested', 'verified', 'failed', 'blocked_external'] as const
 
 const DESIGN_SCHEMA: ObjectJsonSchema = {
   type: 'object',
@@ -77,12 +90,27 @@ const EXECUTION_SCHEMA: ObjectJsonSchema = {
       },
       required: ['requirements', 'builder_tests', 'adversarial_tests', 'startup', 'artifact_integrity', 'clean_room'],
     },
+    evidence_ledger: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          criterion_id: { type: 'string' },
+          criterion: { type: 'string' },
+          mandatory: { type: 'boolean' },
+          status: { type: 'string', enum: [...EVIDENCE_STATUSES] },
+          evidence: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['criterion_id', 'criterion', 'mandatory', 'status', 'evidence'],
+      },
+    },
     artifact_fingerprint: { type: 'string' },
     clean_room_evidence: { type: 'string' },
     findings: { type: 'array', items: { type: 'string' } },
     procedural_lessons: { type: 'array', items: { type: 'string' } },
   },
-  required: ['checks', 'artifact_fingerprint', 'clean_room_evidence', 'findings', 'procedural_lessons'],
+  required: ['checks', 'evidence_ledger', 'artifact_fingerprint', 'clean_room_evidence', 'findings', 'procedural_lessons'],
 }
 
 function normalizedText(value: unknown): value is string {
@@ -111,6 +139,32 @@ function check(value: unknown): CompletionCheckStatus | undefined {
   return value === 'pass' || value === 'fail' || value === 'blocked' ? value : undefined
 }
 
+function evidenceStatus(value: unknown): CompletionEvidenceStatus | undefined {
+  return typeof value === 'string' && EVIDENCE_STATUSES.includes(value as CompletionEvidenceStatus)
+    ? value as CompletionEvidenceStatus
+    : undefined
+}
+
+function readLedger(value: unknown): CompletionEvidenceEntry[] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_ITEMS) return undefined
+  const entries: CompletionEvidenceEntry[] = []
+  for (const item of value) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) return undefined
+    const record = item as Record<string, unknown>
+    const status = evidenceStatus(record.status)
+    if (!normalizedText(record.criterion_id) || !normalizedText(record.criterion)
+      || typeof record.mandatory !== 'boolean' || status === undefined || !normalizedList(record.evidence)) return undefined
+    entries.push({
+      criterionId: record.criterion_id,
+      criterion: record.criterion,
+      mandatory: record.mandatory,
+      status,
+      evidence: record.evidence,
+    })
+  }
+  return entries
+}
+
 function readExecution(value: unknown): GoalCompletionGateResult | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
@@ -123,14 +177,17 @@ function readExecution(value: unknown): GoalCompletionGateResult | undefined {
   const startup = check(checks.startup)
   const artifactIntegrity = check(checks.artifact_integrity)
   const cleanRoom = check(checks.clean_room)
+  const evidenceLedger = readLedger(record.evidence_ledger)
   if (requirements === undefined || builderTests === undefined || adversarialTests === undefined
     || startup === undefined || artifactIntegrity === undefined || cleanRoom === undefined
+    || evidenceLedger === undefined
     || !normalizedText(record.artifact_fingerprint)
     || !normalizedText(record.clean_room_evidence)
     || !normalizedList(record.findings)
     || !normalizedList(record.procedural_lessons)) return undefined
   return {
     checks: { requirements, builderTests, adversarialTests, startup, artifactIntegrity, cleanRoom },
+    evidenceLedger,
     artifactFingerprint: record.artifact_fingerprint,
     cleanRoomEvidence: record.clean_room_evidence,
     findings: record.findings,
@@ -141,10 +198,12 @@ function readExecution(value: unknown): GoalCompletionGateResult | undefined {
 /**
  * Check whether every required completion dimension has concrete evidence.
  * @param result - structured evidence returned by the independent tester.
- * @returns true only when all six checks, artifact identity, and clean-room evidence pass.
+ * @returns true only when all six checks, mandatory criteria, artifact identity, and clean-room evidence pass.
  */
 export function completionGatePassed(result: GoalCompletionGateResult): boolean {
   return Object.values(result.checks).every(value => value === 'pass')
+    && result.evidenceLedger.length > 0
+    && result.evidenceLedger.every(entry => !entry.mandatory || entry.status === 'verified')
     && result.artifactFingerprint.length > 0
     && result.cleanRoomEvidence.length > 0
 }
@@ -159,6 +218,13 @@ function unavailable(reason: string): GoalCompletionGateResult {
       artifactIntegrity: 'blocked',
       cleanRoom: 'blocked',
     },
+    evidenceLedger: [{
+      criterionId: 'VERIFIER-INFRA',
+      criterion: 'Independent verifier infrastructure is available.',
+      mandatory: true,
+      status: 'blocked_external',
+      evidence: [reason],
+    }],
     artifactFingerprint: 'unavailable',
     cleanRoomEvidence: reason,
     findings: [reason],
@@ -255,6 +321,8 @@ export async function runAdversarialCompletionGate(input: {
       + `Fresh adversarial cases designed without workspace access: ${JSON.stringify(cases)}\n\n`
       + 'Act as the independent completion Tester, not the Builder. Inspect the implementation only now. Verify all six dimensions separately: '
       + 'requirements, Builder-owned tests, fresh adversarial tests, startup, artifact integrity, and clean-room verification. '
+      + 'Build an evidence_ledger from the original requirement. Give every acceptance criterion a stable criterion_id, literal criterion text, mandatory flag, '
+      + 'status, and concrete evidence references. Mandatory criteria are verified only when current reproducible evidence demonstrates them; Builder prose is not evidence. '
       + 'For adversarial tests, turn the supplied cases into new executable checks; do not merely rerun or rename existing Builder tests. '
       + 'Actively try to break the solution with edge conditions, corrupt/partial input, supported alternate representations, and unexpected real-world conditions. '
       + 'Then create the final deliverable exactly as a user would receive it. Compute a stable fingerprint for that packaged artifact. '
