@@ -58,6 +58,35 @@ export interface GoalJudgeAuditEntry {
   readonly requiredChanges: readonly string[]
 }
 
+/** One independently verified dimension of the mechanical DONE gate. */
+export type GoalCompletionCheckStatus = 'pass' | 'fail' | 'blocked'
+
+/** Six completion dimensions that must all pass for the exact goal revision. */
+export interface GoalCompletionChecks {
+  readonly requirements: GoalCompletionCheckStatus
+  readonly builderTests: GoalCompletionCheckStatus
+  readonly adversarialTests: GoalCompletionCheckStatus
+  readonly startup: GoalCompletionCheckStatus
+  readonly artifactIntegrity: GoalCompletionCheckStatus
+  readonly cleanRoom: GoalCompletionCheckStatus
+}
+
+/**
+ * Durable evidence from the independent adversarial completion workflow.
+ * It certifies one exact goal revision and one concrete deliverable identity.
+ */
+export interface GoalCompletionGateAuditEntry {
+  readonly goalId: string
+  readonly revision: number
+  readonly round: number
+  readonly attemptId: string
+  readonly checks: GoalCompletionChecks
+  readonly artifactFingerprint: string
+  readonly cleanRoomEvidence?: string
+  readonly findings: readonly string[]
+  readonly proceduralLessons: readonly string[]
+}
+
 /** Durable checkpoint for one goal supervisor lifecycle. */
 export interface GoalSupervisorCheckpoint {
   readonly goalId: string
@@ -164,6 +193,8 @@ declare module '@phoenix-ai/dsh-session/types' {
     'goal/change': GoalChangeMeta
     /** One independent completion review; it never changes goal state itself. */
     'goal/judge': GoalJudgeAuditEntry
+    /** Independent executable/adversarial certification for one exact goal revision. */
+    'goal/completion-gate': GoalCompletionGateAuditEntry
     /** Latest bounded supervisor checkpoint for a goal. */
     'goal/supervisor': GoalSupervisorCheckpoint
     /** Strategy selected before one continuation prompt is admitted. */
@@ -209,6 +240,7 @@ export type GoalErrorCode =
   | 'GOAL_INVALID_EDIT'
   | 'GOAL_INVALID_TRANSITION'
   | 'GOAL_COMPLETION_NOT_VERIFIED'
+  | 'GOAL_COMPLETION_GATE_NOT_VERIFIED'
 
 declare module '@phoenix-ai/cordis' {
   interface Events {
