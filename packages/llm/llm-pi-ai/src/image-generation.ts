@@ -4,8 +4,8 @@
  * The active text model is deliberately irrelevant: a free OpenRouter model,
  * DeepSeek, or another route may still ask this tool for a visual. The bridge
  * delegates the raster work to the locally installed Codex CLI, which owns the
- * ChatGPT subscription authentication and the hosted `image_generation` tool.
- * It never falls back to an OPENAI_API_KEY or another separately billed route.
+ * ChatGPT subscription authentication and the hosted image-generation tool.
+ * It never forwards an OPENAI_API_KEY or another separately billed credential.
  * @module dsh-llm-pi-ai/image-generation
  */
 
@@ -13,15 +13,19 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, extname, join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
-import type { ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
-import type {} from '@phoenix-ai/dsh-subprocess'
-import { defineTool } from '@phoenix-ai/dsh-tools'
+import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
+import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 
+/** Stable failure classes used by the image bridge's diagnostics and tests. */
 export type CodexImageFailureKind = 'quota' | 'runtime'
 
+/** Metadata for one raster observed in Codex's generated-image directory. */
 export interface GeneratedImageCandidate {
+  /** Absolute host path to the candidate raster. */
   readonly path: string
+  /** Last-modified timestamp used to detect a fresh generation. */
   readonly mtimeMs: number
+  /** Encoded byte length used as part of the freshness stamp. */
   readonly bytes: number
 }
 
@@ -29,6 +33,72 @@ interface ProcessResult {
   readonly exitCode: number | null
   readonly stdout: string
   readonly stderr: string
+}
+
+interface ImageSubprocessReader {
+  readFrom(fromByte: number): { text: string }
+}
+
+interface ImageSubprocessHandle {
+  readonly collected: {
+    readonly stdout?: ImageSubprocessReader
+    readonly stderr?: ImageSubprocessReader
+  }
+  readonly done: Promise<{ exitCode: number | null }>
+}
+
+interface ImageSubprocessService {
+  resolveExecutable(command: string, env?: Readonly<Record<string, string>>, signal?: AbortSignal): Promise<string>
+  spawn(spec: {
+    argv: readonly string[]
+    cwd: string
+    stdio: {
+      stdin: 'ignore' | { readonly data: string }
+      stdout: { maxBytes: number }
+      stderr: { maxBytes: number }
+    }
+    graceMs: number
+    signal?: AbortSignal
+  }): ImageSubprocessHandle
+}
+
+interface ImageToolDefinition {
+  readonly name: string
+  readonly description: string
+  readonly parameters: Record<string, unknown>
+  readonly output: {
+    readonly schema: Record<string, unknown>
+    render(args: unknown, value: unknown): ContentBlock[]
+  }
+  readonly timeoutMs: number
+  execute(args: unknown, exec: { readonly signal: AbortSignal }): Promise<unknown>
+}
+
+interface ImageToolRegistry {
+  register(definition: ImageToolDefinition): () => void
+}
+
+interface ImageRuntimeContext {
+  readonly tools: ImageToolRegistry
+  readonly subprocess: ImageSubprocessService
+  readonly attachments: AttachmentStore
+}
+
+type ImageSize = 'auto' | '1024x1024' | '1536x1024' | '1024x1536'
+type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
+type ImageBackground = 'auto' | 'opaque' | 'transparent'
+
+interface ImageGenerationArgs {
+  readonly prompt: string
+  readonly size?: ImageSize
+  readonly quality?: ImageQuality
+  readonly background?: ImageBackground
+}
+
+interface ImageGenerationValue {
+  readonly provider: 'codex'
+  readonly model: string
+  readonly attachment: ImageAttachmentRef
 }
 
 /**
@@ -47,6 +117,8 @@ export const imageGenerationToolDescription =
  * Recognize the current Codex doctor posture without interpreting token-meter
  * usage as provider quota. Image generation is subscription-safe only when the
  * CLI reports stored ChatGPT auth and the built-in image feature enabled.
+ * @param output - Complete stdout/stderr text from `codex doctor --json`.
+ * @returns Whether the report verifies ChatGPT auth and enabled image generation.
  */
 export function codexDoctorSupportsImageGeneration(output: string): boolean {
   let normalized: string
@@ -69,7 +141,11 @@ export function codexDoctorSupportsImageGeneration(output: string): boolean {
   return chatgptAuth && imageEnabled
 }
 
-/** Classify only known quota/rate-limit text as capacity exhaustion. */
+/**
+ * Classify only known quota/rate-limit text as capacity exhaustion.
+ * @param message - Provider/CLI diagnostic text.
+ * @returns `quota` for known capacity-limit signals, otherwise `runtime`.
+ */
 export function classifyCodexImageFailure(message: string): CodexImageFailureKind {
   return /too\s*many\s*requests|rate[ _-]?limit|usage[ _-]?limit|quota|credits? exhausted|429/i.test(message)
     ? 'quota'
@@ -81,6 +157,9 @@ export function classifyCodexImageFailure(message: string): CodexImageFailureKin
  * uses opaque unique filenames; newest-wins also handles a successful call that
  * emits more than one intermediate raster while still returning exactly one
  * durable PHOENIX attachment.
+ * @param baseline - Pre-generation path-to-stamp snapshot.
+ * @param candidates - Rasters visible after generation.
+ * @returns The newest changed raster, or `undefined` when nothing new exists.
  */
 export function selectFreshGeneratedImage(
   baseline: ReadonlyMap<string, string>,
@@ -139,14 +218,19 @@ async function listGeneratedImages(root: string): Promise<GeneratedImageCandidat
   return found
 }
 
+function servicesOf(ctx: Context): ImageRuntimeContext {
+  return ctx as unknown as ImageRuntimeContext
+}
+
 async function runCodex(
   ctx: Context,
   argvTail: readonly string[],
   stdin: string | undefined,
   signal: AbortSignal,
 ): Promise<ProcessResult> {
-  const executable = await ctx.subprocess.resolveExecutable('codex', undefined, signal)
-  const handle = ctx.subprocess.spawn({
+  const subprocess = servicesOf(ctx).subprocess
+  const executable = await subprocess.resolveExecutable('codex', undefined, signal)
+  const handle = subprocess.spawn({
     argv: [executable, ...argvTail],
     cwd: process.cwd(),
     stdio: {
@@ -175,7 +259,7 @@ async function assertCodexImageAvailable(ctx: Context, signal: AbortSignal): Pro
   const report = `${doctor.stdout}\n${doctor.stderr}`
   if (!codexDoctorSupportsImageGeneration(report)) {
     throw new Error(
-      'image_generation: Codex is present, but PHOENIX could not verify both ChatGPT/Codex authentication and the built-in image_generation capability. Sign in to Codex with ChatGPT and enable/update image generation before retrying; PHOENIX will not fall back to a separately billed API key.',
+      'image_generation: Codex is present, but PHOENIX could not verify both ChatGPT/Codex authentication and the built-in image-generation capability. Sign in to Codex with ChatGPT and enable/update image generation before retrying; PHOENIX will not fall back to a separately billed API key.',
     )
   }
 }
@@ -188,13 +272,14 @@ function generationPrompt(
 ): string {
   return [
     'You are the PHOENIX image worker.',
-    'Use the built-in image_generation tool exactly once and generate a real raster image.',
+    'Use the built-in image_gen tool exactly once and generate a real raster image.',
+    'Do not use the API/CLI image fallback and do not request OPENAI_API_KEY.',
     'Do not create SVG, HTML, CSS, canvas code, a placeholder, or a text-only substitute.',
     'Do not modify project files and do not use web search.',
-    'If the image tool fails, report the failure instead of claiming success.',
-    `Requested size: ${size}.`,
-    `Requested quality: ${quality}.`,
-    `Requested background: ${background}.`,
+    'If the built-in image tool is unavailable or fails, report the failure instead of claiming success.',
+    `Requested size/aspect guidance: ${size}.`,
+    `Requested quality guidance: ${quality}.`,
+    `Requested background guidance: ${background}.`,
     `Image request: ${prompt}`,
     'After the image tool finishes, end the task.',
   ].join('\n')
@@ -214,65 +299,102 @@ async function waitForFreshImage(
   return undefined
 }
 
-/** Register the model-facing image tool when the normal tools/subprocess/attachment stack is composed. */
+function imageGenerationArgs(args: unknown): ImageGenerationArgs {
+  if (typeof args !== 'object' || args === null || Array.isArray(args)) {
+    throw new Error('image_generation: arguments must be an object')
+  }
+  const value = args as Record<string, unknown>
+  if (typeof value.prompt !== 'string') throw new Error('image_generation: prompt must be a string')
+  return {
+    prompt: value.prompt,
+    ...(typeof value.size === 'string' ? { size: value.size as ImageSize } : {}),
+    ...(typeof value.quality === 'string' ? { quality: value.quality as ImageQuality } : {}),
+    ...(typeof value.background === 'string' ? { background: value.background as ImageBackground } : {}),
+  }
+}
+
+function imageGenerationValue(value: unknown): ImageGenerationValue {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('image_generation: invalid rendered result')
+  }
+  return value as unknown as ImageGenerationValue
+}
+
+/**
+ * Register the model-facing image tool when the normal tools/subprocess/
+ * attachment stack is composed. Runtime services are accessed through this
+ * narrow structural boundary so `llm-pi-ai` does not acquire package-graph
+ * dependencies merely to contribute one optional tool.
+ * @param ctx - Context whose image-related services were already injected.
+ */
 export function installCodexImageGeneration(ctx: Context): void {
-  ctx.tools.register(defineTool({
+  const services = servicesOf(ctx)
+  services.tools.register({
     name: 'image_generation',
     description: imageGenerationToolDescription,
     parameters: {
-      prompt: {
-        type: 'string',
-        required: true,
-        description: 'Complete visual brief for the one image to generate.',
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'Complete visual brief for the one image to generate.',
+        },
+        size: {
+          type: 'string',
+          enum: ['auto', '1024x1024', '1536x1024', '1024x1536'],
+          description: 'Requested image size/aspect guidance. Omit for auto.',
+        },
+        quality: {
+          type: 'string',
+          enum: ['auto', 'low', 'medium', 'high'],
+          description: 'Requested generation-quality guidance. Omit for auto.',
+        },
+        background: {
+          type: 'string',
+          enum: ['auto', 'opaque', 'transparent'],
+          description: 'Requested background guidance. Omit for auto.',
+        },
       },
-      size: {
-        type: 'string',
-        enum: ['auto', '1024x1024', '1536x1024', '1024x1536'],
-        description: 'Requested image size/aspect. Omit for auto.',
-      },
-      quality: {
-        type: 'string',
-        enum: ['auto', 'low', 'medium', 'high'],
-        description: 'Requested generation quality. Omit for auto.',
-      },
-      background: {
-        type: 'string',
-        enum: ['auto', 'opaque', 'transparent'],
-        description: 'Requested background mode. Omit for auto.',
-      },
+      required: ['prompt'],
     },
     output: {
       schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          provider: { type: 'string', required: true, const: 'codex' },
-          model: { type: 'string', required: true },
+          provider: { type: 'string', const: 'codex' },
+          model: { type: 'string' },
           attachment: {
             type: 'object',
-            required: true,
             additionalProperties: true,
             properties: {
-              attachmentId: { type: 'string', required: true },
-              mediaType: { type: 'string', required: true },
-              bytes: { type: 'integer', required: true },
-              width: { type: 'integer', required: true },
-              height: { type: 'integer', required: true },
+              attachmentId: { type: 'string' },
+              mediaType: { type: 'string' },
+              bytes: { type: 'integer' },
+              width: { type: 'integer' },
+              height: { type: 'integer' },
               name: { type: 'string' },
             },
+            required: ['attachmentId', 'mediaType', 'bytes', 'width', 'height'],
           },
         },
+        required: ['provider', 'model', 'attachment'],
       },
-      render: (_args, value) => [
-        {
-          type: 'text',
-          text: `Generated image with Codex (${value.attachment.width}×${value.attachment.height}, ${value.attachment.mediaType}).`,
-        },
-        { type: 'image', attachment: value.attachment as ImageAttachmentRef },
-      ],
+      render: (_args, value) => {
+        const result = imageGenerationValue(value)
+        return [
+          {
+            type: 'text',
+            text: `Generated image with Codex (${result.attachment.width}×${result.attachment.height}, ${result.attachment.mediaType}).`,
+          },
+          { type: 'image', attachment: result.attachment },
+        ]
+      },
     },
     timeoutMs: 180_000,
-    async execute(args, exec) {
+    async execute(rawArgs, exec) {
+      const args = imageGenerationArgs(rawArgs)
       const prompt = args.prompt.trim()
       if (prompt.length === 0) throw new Error('image_generation: prompt must not be empty')
       if (prompt.length > 32_000) throw new Error('image_generation: prompt exceeds the 32,000-character safety bound')
@@ -325,22 +447,16 @@ export function installCodexImageGeneration(ctx: Context): void {
       const mediaType = mediaTypeOf(generated.path)
       if (mediaType === undefined) throw new Error('image_generation: generated file has an unsupported image type')
       const data = await readFile(generated.path)
-      const attachment = await ctx.attachments.saveImage({
+      const attachment = await services.attachments.saveImage({
         data,
         mediaType,
         name: basename(generated.path),
       })
       return {
         provider: 'codex' as const,
-        model: 'gpt-image',
+        model: 'codex-built-in-image-gen',
         attachment,
       }
     },
-    presentCall: args => ({
-      card: 'generic',
-      title: 'Generate image',
-      kind: 'other',
-      rawInput: { prompt: args.prompt, size: args.size ?? 'auto', quality: args.quality ?? 'auto' },
-    }),
-  }))
+  })
 }
