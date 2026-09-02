@@ -14,6 +14,8 @@ const COMPLETION_VERIFIER_LABELS = new Set([
 /**
  * Keep ordinary subagent history, but retire settled completion workers from
  * the lineage surface. A new running verifier remains visible immediately.
+ * @param entries - catalog entries visible under one parent session.
+ * @returns entries suitable for the active-lineage surface.
  */
 export function filterVisibleSubagentEntries(entries: readonly CatalogEntry[]): CatalogEntry[] {
   return entries.filter(entry => entry.kind !== 'child'
@@ -26,6 +28,8 @@ export function filterVisibleSubagentEntries(entries: readonly CatalogEntry[]): 
  * Produce the lineage-only session view. Hidden verifier ids are removed from
  * `byId` as well as catalog rows so descendant counters cannot retain stale
  * completed judges after the row itself disappears.
+ * @param state - unmodified durable client session-list snapshot.
+ * @returns a lineage-only view with settled completion workers removed.
  */
 export function filterCompletionVerifierSessionState(state: SessionListState): SessionListState {
   const hidden = new Set<SessionId>()
