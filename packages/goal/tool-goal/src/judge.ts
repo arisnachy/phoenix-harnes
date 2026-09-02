@@ -223,6 +223,8 @@ function recordCompletionGate(parent: Agent, objective: string, round: number, g
 /**
  * Run the adversarial Tester first, then a fresh read-only Judge. A Judge PASS
  * is accepted only when the six programmatic gate checks also pass.
+ * @param input - subagent runtime, active model route, original objective, round, and cancellation signal.
+ * @returns the independent semantic verdict after enforcing executable gate evidence.
  */
 export async function judgeGoalCompletion(input: {
   readonly subagents: GoalJudgeRuntime | undefined
@@ -300,6 +302,8 @@ export async function judgeGoalCompletion(input: {
  * Append one bounded, secret-free judge result to the owning session log.
  * A settled PASS for one exact goal revision is monotonic: later infrastructure
  * outages or stale blocked reviews cannot shadow that verified decision.
+ * @param session - owning durable session log.
+ * @param entry - bounded independent judge result for one exact goal revision.
  */
 export function recordGoalJudge(session: Session, entry: GoalJudgeAuditEntry): void {
   const settledPass = session.events.some(event => event.type === 'goal/judge'
