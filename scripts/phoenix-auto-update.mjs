@@ -289,6 +289,10 @@ function dependencyGraphChanged(files) {
   ))
 }
 
+function canReuseDependencies(installed, plan) {
+  return installed && plan.mode === 'none' && !dependencyGraphChanged(plan.files)
+}
+
 function documentationOnly(files) {
   return files.length > 0 && files.every(file => (
     file.startsWith('docs/')
@@ -410,12 +414,16 @@ function preparedCandidateValid(root, target) {
 
 function ensureDependencies(root, label, plan, onPhase) {
   const installed = existsSync(join(root, 'node_modules', '.pnpm'))
-  if (installed && !dependencyGraphChanged(plan.files)) {
-    console.error(`[PHOENIX UPDATE] ${label}: reusing installed dependencies.`)
+  // Persistent staging worktrees can retain stale pnpm workspace links even
+  // when the lockfile and package manifests are unchanged. Any update that
+  // compiles code must refresh the frozen install before building. Only a
+  // documentation-only update may safely reuse an existing dependency tree.
+  if (canReuseDependencies(installed, plan)) {
+    console.error(`[PHOENIX UPDATE] ${label}: reusing installed dependencies for documentation-only update.`)
     return
   }
   onPhase('dependencies')
-  console.error(`[PHOENIX UPDATE] ${label}: installing locked dependencies...`)
+  console.error(`[PHOENIX UPDATE] ${label}: refreshing locked dependencies...`)
   corepack(root, ['pnpm', 'install', '--frozen-lockfile'], { inherit: true })
 }
 
@@ -865,6 +873,15 @@ function selfTest() {
     rejected = true
   }
   if (!rejected) throw new Error('identity rejection self-test failed')
+
+  const fullPlan = { mode: 'full', files: ['apps/web/src/example.ts'] }
+  const clientPlan = { mode: 'client', files: ['packages/client/src/example.ts'] }
+  const docsPlan = { mode: 'none', files: ['README.md'] }
+  if (canReuseDependencies(true, fullPlan)) throw new Error('full build must refresh dependencies')
+  if (canReuseDependencies(true, clientPlan)) throw new Error('client build must refresh dependencies')
+  if (!canReuseDependencies(true, docsPlan)) throw new Error('documentation-only update should reuse installed dependencies')
+  if (canReuseDependencies(false, docsPlan)) throw new Error('missing dependencies must always be installed')
+
   console.log('PHOENIX updater self-test: PASS')
 }
 
