@@ -42,11 +42,7 @@ function refOf(goal: { id: GoalRef['id']; revision: number }): GoalRef {
 }
 
 function appendGate(session: Session, ref: GoalRef): void {
-  // Cast deliberately keeps this regression runnable against the pre-feature
-  // build: RED must come from behavior, not from a missing event-map type.
-  const append = session.append.bind(session) as (type: string, data: unknown) => unknown
-  append('goal/completion-gate', {
-    callId: 'gate-call',
+  session.append('goal/completion-gate', {
     goalId: ref.id,
     revision: ref.revision,
     round: 1,
@@ -59,7 +55,15 @@ function appendGate(session: Session, ref: GoalRef): void {
       artifactIntegrity: 'pass',
       cleanRoom: 'pass',
     },
+    evidenceLedger: [{
+      criterionId: 'REQ-001',
+      criterion: 'Ship a verified artifact.',
+      mandatory: true,
+      status: 'verified',
+      evidence: ['clean-room verification'],
+    }],
     artifactFingerprint: 'sha256:test-artifact',
+    cleanRoomEvidence: 'verified extracted artifact in a clean temporary directory',
     findings: [],
     proceduralLessons: [],
   })
