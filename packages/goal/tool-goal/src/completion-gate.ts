@@ -6,6 +6,7 @@ import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
 import { resolveGoalJudgeAgentOptions } from './judge-route.ts'
 
+/** Machine verdict for one independently checked completion dimension. */
 export type CompletionCheckStatus = 'pass' | 'fail' | 'blocked'
 
 /** Six machine-required checks that must all pass before DONE is possible. */
@@ -137,7 +138,11 @@ function readExecution(value: unknown): GoalCompletionGateResult | undefined {
   }
 }
 
-/** True only when every completion dimension has concrete passing evidence. */
+/**
+ * Check whether every required completion dimension has concrete evidence.
+ * @param result - structured evidence returned by the independent tester.
+ * @returns true only when all six checks, artifact identity, and clean-room evidence pass.
+ */
 export function completionGatePassed(result: GoalCompletionGateResult): boolean {
   return Object.values(result.checks).every(value => value === 'pass')
     && result.artifactFingerprint.length > 0
@@ -195,6 +200,8 @@ async function runStructured(
  * requirement and invents fresh attacks. Stage two executes those attacks,
  * packages the deliverable, verifies a clean extracted copy, and reports all
  * six completion dimensions.
+ * @param input - verifier runtime, active model route, original objective, round, and cancellation signal.
+ * @returns structured independent evidence for the exact completion attempt.
  */
 export async function runAdversarialCompletionGate(input: {
   readonly subagents: CompletionRuntime | undefined
