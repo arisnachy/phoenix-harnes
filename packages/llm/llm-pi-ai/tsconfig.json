@@ -36,12 +36,6 @@
       "path": "../../settings/settings"
     },
     {
-      "path": "../../subprocess/subprocess"
-    },
-    {
-      "path": "../../core/tools"
-    },
-    {
       "path": "../../runtime-diagnostics/invariants"
     },
     {
