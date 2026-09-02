@@ -2,9 +2,9 @@
   "schema": 1,
   "product": "PHOENIX",
   "channel": "stable",
-  "sourceBranch": "main",
-  "sourceCommit": "1af03759039a83a0952d8c9786ab3381e6400bdc",
-  "publishedAt": "2026-09-01T04:47:31Z",
+  "sourceBranch": "stable",
+  "sourceCommit": "2f6d6cb971b75300b8c47faa7a9f3cd273068605",
+  "publishedAt": "2026-09-02T04:14:00Z",
   "minimumNode": "22.19.0",
   "policy": {
     "installMode": "auto",
