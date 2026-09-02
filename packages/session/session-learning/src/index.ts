@@ -351,7 +351,7 @@ function cognitiveObservationFor(session: Session, event: SessionEvent): Cogniti
   const error = isErrorEvent(event, content)
   const success = isSuccessEvent(event)
   const prospective = /\b(?:goal|mission|pending|blocked|blocker|unfinished|follow[- ]?up|pendiente|misión|bloqueo)\b/iu.test(content)
-  const procedural = event.type === 'goal/false-pass'
+  const procedural = String(event.type) === 'goal/false-pass'
     || event.type.startsWith('tool/')
     || error
     || /\b(?:strategy|workflow|skill|estrategia|flujo|habilidad)\b/iu.test(content)
