@@ -919,7 +919,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'complete\') complete(agent: Agent, ref: GoalRef): GoalView',
-        description: 'Mark a current non-complete goal complete and disarm it.',
+        description: 'Mark a current non-complete goal complete and disarm it. Completion is fail-closed on the latest executable/adversarial certification while a settled semantic PASS is monotonic for the exact revision: a later provider outage cannot erase evidence that already passed.',
         parameters: [{ name: 'agent', description: 'owning live agent.' }, { name: 'ref', description: 'expected current revision.' }],
         returns: 'the completed view.',
       },
