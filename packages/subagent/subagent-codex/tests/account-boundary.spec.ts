@@ -101,4 +101,35 @@ describe('native Codex managed-account boundary', () => {
     expect(JSON.stringify(telemetry)).not.toContain('must-not-cross')
     expect(JSON.stringify(telemetry)).not.toContain('drop-me')
   })
+
+  it('prefers the modern Codex rateLimitsByLimitId bucket over an empty legacy snapshot', () => {
+    const telemetry = codexAccountTelemetry({
+      account: {
+        type: 'chatgpt',
+        email: 'person@example.test',
+        planType: 'plus',
+      },
+      requiresOpenaiAuth: true,
+      rateLimits: {
+        rateLimits: {
+          limitId: null,
+          primary: null,
+          secondary: null,
+        },
+        rateLimitsByLimitId: {
+          codex: {
+            limitId: 'codex',
+            primary: { usedPercent: 31, windowDurationMins: 10080, resetsAt: 1_800_000_000 },
+            secondary: null,
+          },
+        },
+      },
+    })
+
+    expect(telemetry).toMatchObject({
+      kind: 'account',
+      provider: 'Codex',
+      primaryLimit: { usedPercent: 31, windowDurationMins: 10080, resetsAt: 1_800_000_000 },
+    })
+  })
 })
