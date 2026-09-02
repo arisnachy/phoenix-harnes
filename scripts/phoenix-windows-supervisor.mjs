@@ -12,7 +12,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, unlinkSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
@@ -35,6 +35,16 @@ function gitValue(cwd, args) {
   if (result.status !== 0 || typeof result.stdout !== 'string') return undefined
   const value = result.stdout.trim()
   return value.length === 0 ? undefined : value
+}
+
+function gitClean(cwd) {
+  const result = spawnSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
+    cwd,
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+  return result.status === 0 && typeof result.stdout === 'string' && result.stdout.trim().length === 0
 }
 
 function absoluteGitPath(cwd, value) {
@@ -77,9 +87,20 @@ function restartRequestPath() {
   return gitDir === undefined ? undefined : join(gitDir, RESTART_REQUEST_FILE)
 }
 
-function restartRequested() {
+function restartRequestTarget() {
   const path = restartRequestPath()
-  return path !== undefined && existsSync(path)
+  if (path === undefined || !existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
+    return value.target
+  } catch {
+    return undefined
+  }
+}
+
+function restartRequested() {
+  return restartRequestTarget() !== undefined
 }
 
 function clearRestartRequest() {
@@ -199,9 +220,16 @@ function superviseWatcher(host) {
 }
 
 function preparedActivator() {
+  const target = restartRequestTarget()
   const stage = persistentStage()
   const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')
-  if (sameRepository(stage) && existsSync(stagedActivator)) return stagedActivator
+  if (
+    target !== undefined
+    && sameRepository(stage)
+    && gitClean(stage)
+    && gitValue(stage, ['rev-parse', 'HEAD']) === target
+    && existsSync(stagedActivator)
+  ) return stagedActivator
   return liveActivator
 }
 
