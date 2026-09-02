@@ -39,6 +39,6 @@ describe('false-pass procedural memory', () => {
       layers: ['procedural'],
     })
 
-    expect(hits.some(hit => hit.record.sourceEventType === 'goal/false-pass')).toBe(true)
+    expect(hits.some(hit => hit.record.provenance.sourceEventType === 'goal/false-pass')).toBe(true)
   })
 })
