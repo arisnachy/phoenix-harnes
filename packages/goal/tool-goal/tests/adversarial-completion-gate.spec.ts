@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { SessionId } from '@phoenix-ai/dsh-session'
-import { runAdversarialCompletionGate } from '../src/completion-gate.ts'
+import { completionGatePassed, runAdversarialCompletionGate } from '../src/completion-gate.ts'
 import { judgeGoalCompletion } from '../src/judge.ts'
 
 function provider() {
@@ -26,6 +26,14 @@ const passingLedger = [{
   mandatory: true,
   status: 'verified' as const,
   evidence: ['clean-room smoke + adversarial corrupt/alternate input tests'],
+}]
+
+const optionalOnlyLedger = [{
+  criterionId: 'NICE-001',
+  criterion: 'Optional presentation polish.',
+  mandatory: false,
+  status: 'verified' as const,
+  evidence: ['visual review'],
 }]
 
 describe('adversarial completion tester', () => {
@@ -122,6 +130,26 @@ describe('adversarial completion tester', () => {
     }))
   })
 
+  it('requires at least one verified mandatory criterion before the gate can pass', () => {
+    expect(completionGatePassed({
+      checks: passingChecks,
+      evidenceLedger: passingLedger,
+      artifactFingerprint: 'sha256:artifact',
+      cleanRoomEvidence: 'verified clean copy',
+      findings: [],
+      proceduralLessons: [],
+    })).toBe(true)
+
+    expect(completionGatePassed({
+      checks: passingChecks,
+      evidenceLedger: optionalOnlyLedger,
+      artifactFingerprint: 'sha256:artifact',
+      cleanRoomEvidence: 'verified clean copy',
+      findings: [],
+      proceduralLessons: [],
+    })).toBe(false)
+  })
+
   it('reuses an exact-revision certified PASS when the verifier provider is temporarily unavailable', async () => {
     const objective = 'Ship the verified artifact.'
     const goalId = 'goal-certified'
@@ -180,5 +208,60 @@ describe('adversarial completion tester', () => {
       findings: [],
       requiredChanges: [],
     })
+  })
+
+  it('does not reuse a historical PASS whose gate has no mandatory criterion', async () => {
+    const objective = 'Ship the verified artifact.'
+    const goalId = 'goal-weak-history'
+    const result = await judgeGoalCompletion({
+      subagents: undefined,
+      provider: 'spawn',
+      parent: {
+        options: { provider: 'anthropic', model: 'claude-opus' },
+        session: {
+          events: [
+            {
+              type: 'goal/change',
+              data: {
+                operation: 'create',
+                goal: { id: goalId, revision: 1, objective },
+              },
+            },
+            {
+              type: 'goal/completion-gate',
+              data: {
+                goalId,
+                revision: 1,
+                round: 2,
+                attemptId: 'gate-weak',
+                checks: passingChecks,
+                evidenceLedger: optionalOnlyLedger,
+                artifactFingerprint: 'sha256:weak-artifact',
+                cleanRoomEvidence: 'nominal clean copy',
+                findings: [],
+                proceduralLessons: [],
+              },
+            },
+            {
+              type: 'goal/judge',
+              data: {
+                goalId,
+                revision: 1,
+                round: 2,
+                verdict: 'pass',
+                summary: 'Weak historical pass.',
+                findings: [],
+                requiredChanges: [],
+              },
+            },
+          ],
+        },
+      } as never,
+      objective,
+      round: 2,
+      signal: new AbortController().signal,
+    })
+
+    expect(result.verdict).toBe('blocked')
   })
 })

@@ -107,10 +107,13 @@ function gateFailures(gate: GoalCompletionGateResult): string[] {
   }
   const checks = (Object.entries(gate.checks) as [keyof GoalCompletionGateResult['checks'], GoalCompletionGateResult['checks'][keyof GoalCompletionGateResult['checks']]][])
     .flatMap(([key, status]) => status === 'pass' ? [] : [`${labels[key]} = ${status}`])
+  const missingMandatory = gate.evidenceLedger.some(entry => entry.mandatory)
+    ? []
+    : ['evidence ledger has no mandatory criterion from the original requirement']
   const criteria = gate.evidenceLedger
     .filter(entry => entry.mandatory && entry.status !== 'verified')
     .map(entry => `${entry.criterionId} = ${entry.status}: ${entry.criterion}`)
-  return [...checks, ...criteria]
+  return [...checks, ...missingMandatory, ...criteria]
 }
 
 function enforceGate(result: GoalJudgeResult, gate: GoalCompletionGateResult): GoalJudgeResult {
@@ -141,6 +144,7 @@ function gateIsInfrastructureOnlyBlocked(gate: GoalCompletionGateResult): boolea
 function sessionGatePassed(event: SessionEvent<'goal/completion-gate'>): boolean {
   return Object.values(event.data.checks).every(status => status === 'pass')
     && event.data.evidenceLedger.length > 0
+    && event.data.evidenceLedger.some(entry => entry.mandatory)
     && event.data.evidenceLedger.every(entry => !entry.mandatory || entry.status === 'verified')
     && event.data.artifactFingerprint.trim().length > 0
 }
@@ -188,10 +192,13 @@ function fingerprintFailure(gate: GoalCompletionGateResult): string {
   const checkPart = Object.entries(gate.checks)
     .filter(([, status]) => status !== 'pass')
     .map(([key, status]) => `${key}:${status}`)
+  const mandatoryPart = gate.evidenceLedger.some(entry => entry.mandatory)
+    ? []
+    : ['mandatory-evidence:missing']
   const criterionPart = gate.evidenceLedger
     .filter(entry => entry.mandatory && entry.status !== 'verified')
     .map(entry => `${entry.criterionId}:${entry.status}`)
-  return [...checkPart, ...criterionPart, gate.findings[0] ?? 'unknown-failure'].join('|').slice(0, 500)
+  return [...checkPart, ...mandatoryPart, ...criterionPart, gate.findings[0] ?? 'unknown-failure'].join('|').slice(0, 500)
 }
 
 /** Persist executable evidence and record a FALSE_PASS when later valid evidence disproves it. */
