@@ -168,15 +168,18 @@ export class WorkspaceRuntime implements IWorkspaces {
    * The shared New Session action behind the shell entry points (sidebar
    * button, workspace browser): resolve the target Workspace — explicit wins,
    * then the current Session's Workspace, then the recent-Workspace
-   * projection — connect its blank session and navigate there; with no
-   * Workspace at all, clear the selection into the New Session view state.
-   * Connect failures are non-fatal (console diagnostics; the current view
-   * stays usable).
+   * projection — and navigate to a blank session. Existing parked blanks are
+   * reused normally, except when the reusable blank is already the current
+   * selection: reopening the same SessionId is an inert UI action, so an
+   * explicit New Session gesture creates a fresh session in that Workspace.
+   * With no Workspace at all, clear the selection into the New Session view
+   * state. Failures are non-fatal (console diagnostics; the current view stays usable).
    * @param workspaceId - explicit target Workspace for scoped actions.
    */
   startSession(workspaceId?: WorkspaceId): void {
     const workspace = this.list.getSnapshot()
-    const current = this.sessions.list.getSnapshot().current
+    const sessions = this.sessions.list.getSnapshot()
+    const current = sessions.current
     const currentWorkspaceId = current === undefined
       ? undefined
       : workspace.items.find(item => item.sessionIds.includes(current))?.workspaceId
@@ -185,7 +188,13 @@ export class WorkspaceRuntime implements IWorkspaces {
       this.sessions.clear()
       return
     }
-    void this.connectWorkspace(target).then(
+    const currentIsTargetBlank = current !== undefined
+      && currentWorkspaceId === target
+      && sessions.byId[current]?.blank === true
+    const nextSession = currentIsTargetBlank
+      ? this.sessions.create({ workspaceId: target })
+      : this.connectWorkspace(target)
+    void nextSession.then(
       (sessionId) => { this.sessions.open(sessionId) },
       (reason: unknown) => { console.warn('new session failed:', reason) },
     )
