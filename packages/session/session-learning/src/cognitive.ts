@@ -255,20 +255,27 @@ export class CognitiveMemoryLedger {
       .filter(record => query.to === undefined || record.provenance.occurredAt <= query.to)
       .filter(record => query.entity === undefined || hasEntity(record, query.entity))
 
+    if (candidates.length === 0) return []
+    const bounds = recencyBounds(candidates)
+    const hasQuery = queryTokens.length > 0
     const scored = candidates.flatMap((record) => {
-      const textTokens = tokenize(`${record.summary} ${record.content} ${record.subject ?? ''} ${record.value ?? ''} ${record.entities.map(entity => entity.value).join(' ')}`)
-      const overlap = queryTokens.filter(token => textTokens.has(token)).length
+      const textTokens = hasQuery
+        ? tokenize(`${record.summary} ${record.content} ${record.subject ?? ''} ${record.value ?? ''} ${record.entities.map(entity => entity.value).join(' ')}`)
+        : undefined
+      const overlap = hasQuery && textTokens !== undefined
+        ? queryTokens.filter(token => textTokens.has(token)).length
+        : 0
       const entityMatches = query.entity === undefined
-        ? queryTokens.filter(token => record.entities.some(entity => entity.normalized === token)).length
+        ? hasQuery ? queryTokens.filter(token => record.entities.some(entity => entity.normalized === token)).length : 0
         : 1
-      const relationMatches = queryTokens.filter(token => record.relations.some(relation =>
-        relation.from === token || relation.to === token,
-      )).length
-      if (queryTokens.length > 0 && overlap === 0 && entityMatches === 0 && relationMatches === 0) return []
-      const lexicalScore = queryTokens.length === 0 ? 0 : overlap / queryTokens.length
-      const entityScore = queryTokens.length === 0 ? 0 : Math.min(1, entityMatches / queryTokens.length)
-      const relationScore = queryTokens.length === 0 ? 0 : Math.min(1, relationMatches / queryTokens.length)
-      const recencyScore = recency(record.lastObservedAt, candidates)
+      const relationMatches = hasQuery
+        ? queryTokens.filter(token => record.relations.some(relation => relation.from === token || relation.to === token)).length
+        : 0
+      if (hasQuery && overlap === 0 && entityMatches === 0 && relationMatches === 0) return []
+      const lexicalScore = hasQuery ? overlap / queryTokens.length : 0
+      const entityScore = hasQuery ? Math.min(1, entityMatches / queryTokens.length) : query.entity === undefined ? 0 : 1
+      const relationScore = hasQuery ? Math.min(1, relationMatches / queryTokens.length) : 0
+      const recencyScore = recency(record.lastObservedAt, bounds)
       const score = lexicalScore * 0.5 + entityScore * 0.15 + relationScore * 0.1
         + record.importance * 0.1 + record.confidence * 0.1 + Math.min(1, Math.log2(record.frequency + 1) / 8) * 0.05 + recencyScore * 0.05
       const reasons = [
@@ -440,11 +447,24 @@ function hasEntity(record: CognitiveMemoryRecord, query: string): boolean {
   return record.entities.some(entity => entity.normalized === target || entity.normalized.includes(target))
 }
 
-function recency(observedAt: number, candidates: readonly CognitiveMemoryRecord[]): number {
-  const newest = Math.max(...candidates.map(record => record.lastObservedAt), observedAt)
-  const oldest = Math.min(...candidates.map(record => record.lastObservedAt), observedAt)
-  if (newest === oldest) return 1
-  return (observedAt - oldest) / (newest - oldest)
+interface RecencyBounds {
+  readonly oldest: number
+  readonly newest: number
+}
+
+function recencyBounds(candidates: readonly CognitiveMemoryRecord[]): RecencyBounds {
+  let oldest = Number.POSITIVE_INFINITY
+  let newest = Number.NEGATIVE_INFINITY
+  for (const record of candidates) {
+    if (record.lastObservedAt < oldest) oldest = record.lastObservedAt
+    if (record.lastObservedAt > newest) newest = record.lastObservedAt
+  }
+  return { oldest, newest }
+}
+
+function recency(observedAt: number, bounds: RecencyBounds): number {
+  if (bounds.newest === bounds.oldest) return 1
+  return (observedAt - bounds.oldest) / (bounds.newest - bounds.oldest)
 }
 
 function tokenize(value: string): Set<string> {

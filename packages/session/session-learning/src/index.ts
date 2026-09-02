@@ -79,16 +79,30 @@ export class LearningMemoryService extends Service {
     this.cognitive = new CognitiveMemoryLedger(cognitivePath(config.path))
   }
 
-  /** Load memory and install the durable session-event observer. */
+  /** Load memory without holding Phoenix boot on large historical ledgers. */
   protected async [Service.init](): Promise<void> {
-    await Promise.all([this.ledger.load(), this.cognitive.load()])
-    for (const session of this.ctx.sessions.list()) this.observeSession(session)
+    for (const session of this.ctx.sessions.list()) this.setCurrentSession(session)
+
+    const loading = Promise.all([this.ledger.load(), this.cognitive.load()])
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        this.ctx.logger.warn(`learning-memory: startup load degraded but Phoenix will remain available: ${String(error)}`)
+      })
+    this.operationTail = loading
+
     this.ctx.on('session/created', (session) => { this.observeSession(session) })
     this.ctx.on('session/event', (session, event) => { void this.queue(() => this.observeEvent(session, event)) })
     this.ctx.on('agent/error', ({ agent, turn, step, error }) => {
       void this.queue(() => this.observeAgentError(agent.session, turn, step, error))
     })
     this.ctx.effect(() => async () => this.ready(), 'learningMemory.flush')
+
+    // Historical replay remains durable and idempotent, but it is deliberately
+    // scheduled after loading instead of blocking Service.init. This keeps the
+    // web/client bootstrap responsive even with a very large memory archive.
+    void loading.then(() => {
+      for (const session of this.ctx.sessions.list()) this.observeSession(session)
+    })
   }
 
   /** Wait until all queued learning writes have reached the ledger. */
