@@ -4,10 +4,12 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
+const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() || 'stable'
 const STATE_FILE = 'phoenix-update-state.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
@@ -131,7 +133,10 @@ function validatePrepared(root) {
     throw new Error(`restart target ${request.target} differs from prepared target ${prepared.target}`)
   }
   if (!remoteMatchesExpected(root)) throw new Error(`configured remote ${REMOTE} is not the official PHOENIX repository`)
-  if (git(root, ['branch', '--show-current']).stdout !== 'main') throw new Error('prepared activation is allowed only on main')
+  const branch = git(root, ['branch', '--show-current']).stdout
+  if (!isManagedReleaseBranch(branch, STABLE_SOURCE_BRANCH)) {
+    throw new Error(`prepared activation is allowed only on main or ${STABLE_SOURCE_BRANCH}; current branch is ${branch || '(detached)'}`)
+  }
   if (!cleanWorktree(root)) throw new Error('live checkout changed after preparation; refusing activation')
 
   const current = git(root, ['rev-parse', 'HEAD']).stdout
@@ -191,11 +196,12 @@ function activate() {
   console.error(`[PHOENIX UPDATE] supervised activation (${prepared.mode}): ${current.slice(0, 12)} -> ${target.slice(0, 12)}`)
   git(root, ['diff', '--check', current, target])
 
-  // Prove a prepared client artifact set is internally consistent before main
-  // is mutated. Validation failures therefore stay cheap and require no rollback.
+  // Prove a prepared client artifact set is internally consistent before the
+  // managed release checkout is mutated. Validation failures therefore stay
+  // cheap and require no rollback.
   if (prepared.mode === 'client') {
     writeState(root, { status: 'applying', phase: 'verify', current, target })
-    console.error('[PHOENIX UPDATE] verifying prepared client artifacts before touching live main...')
+    console.error('[PHOENIX UPDATE] verifying prepared client artifacts before touching the live release checkout...')
     node(root, ['--import', 'tsx/esm', 'scripts/promote-client-artifacts.ts', '--from', stage, '--verify-only'], { inherit: true })
   }
 
