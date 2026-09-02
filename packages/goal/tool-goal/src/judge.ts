@@ -1,13 +1,19 @@
-/** Independent, read-only completion judge for long-running goals. */
+/** Independent completion judge backed by an adversarial clean-room gate. */
 
-import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
-import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
+import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock, LlmRuntime } from '@phoenix-ai/dsh-llm'
 import type { GoalJudgeAuditEntry } from '@phoenix-ai/dsh-goal'
-import type { Session } from '@phoenix-ai/dsh-session'
+import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
-import { resolveStructuredProvider } from '@phoenix-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
+import {
+  completionGatePassed,
+  runAdversarialCompletionGate,
+  type GoalCompletionGateResult,
+} from './completion-gate.ts'
+import { resolveGoalJudgeAgentOptions } from './judge-route.ts'
+
+export { resolveGoalJudgeAgentOptions } from './judge-route.ts'
 
 /** Structured decision produced by the independent goal judge. */
 export interface GoalJudgeResult {
@@ -15,6 +21,11 @@ export interface GoalJudgeResult {
   readonly summary: string
   readonly findings: readonly string[]
   readonly requiredChanges: readonly string[]
+}
+
+interface SettledGoalPass {
+  readonly result: GoalJudgeResult
+  readonly artifactFingerprint: string
 }
 
 /** Deployment-independent judge output schema. */
@@ -32,7 +43,8 @@ export const GOAL_JUDGE_OUTPUT_SCHEMA: ObjectJsonSchema = {
 
 const READ_ONLY_TOOLS = ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] as const
 const MAX_TEXT = 2_000
-const MAX_ITEMS = 12
+const MAX_ITEMS = 16
+const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
 type GoalJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
 
@@ -64,61 +76,174 @@ function readStructured(value: unknown): GoalJudgeResult | undefined {
   return result
 }
 
-const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
-
-const REASONING_RANK = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const
-
-/**
- * Resolve the model route for an independent judge without silently inheriting
- * the worker's route. Codex parents use the dedicated Luna xhigh route; every
- * other provider keeps the exact selected model and effort. When an effort was
- * not persisted, the provider catalog supplies the highest advertised level.
- * @param input - Parent agent, optional LLM capability lookup, and cancellation signal.
- * @returns Explicit child-agent options, or an empty override when the parent has no route yet.
- */
-export async function resolveGoalJudgeAgentOptions(input: {
-  readonly parent: Agent
-  readonly llm?: Pick<LlmRuntime, 'resolveModelInfo'>
-  readonly signal: AbortSignal
-}): Promise<AgentOptions> {
-  const { provider, model, reasoningEffort } = input.parent.options
-  if (provider === undefined || model === undefined) return {}
-  if (provider === 'openai-codex') {
-    return {
-      provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: ReasoningEffortId('xhigh'),
-    }
-  }
-  if (reasoningEffort !== undefined) return { provider, model, reasoningEffort }
-  if (input.llm !== undefined) {
-    try {
-      const resolved = await input.llm.resolveModelInfo(provider, model, input.signal)
-      const effort = resolved.reasoning?.efforts
-        .map(candidate => candidate.id)
-        .sort((left, right) => rankReasoningEffort(right) - rankReasoningEffort(left))[0]
-      if (effort !== undefined) return { provider, model, reasoningEffort: effort }
-    } catch {
-      // A capability lookup is advisory; the child can still use the exact
-      // provider/model route and let its adapter report a real failure.
-    }
-  }
-  return { provider, model }
-}
-
-function rankReasoningEffort(value: string): number {
-  const rank = REASONING_RANK.indexOf(value as typeof REASONING_RANK[number])
-  return rank === -1 ? -1 : rank
-}
-
 function unavailable(): GoalJudgeResult {
   return { verdict: 'blocked', summary: WAITING_SUMMARY, findings: [], requiredChanges: [] }
 }
 
+function canReview(runtime: GoalJudgeRuntime, name: string): boolean {
+  const provider = runtime.getProvider(name)
+  return provider !== undefined
+    && provider.capabilities.outputSchema
+    && provider.capabilities.toolFilter
+}
+
+function reviewProvider(runtime: GoalJudgeRuntime, requested: string, parent: Agent): string | undefined {
+  const nonCodex = parent.options.provider !== 'openai-codex'
+  const names = [...new Set([requested, ...(runtime.list?.() ?? [])])]
+    .filter(name => !(nonCodex && name.toLowerCase() === 'luna'))
+    .filter(name => canReview(runtime, name))
+  const fresh = names.find((name) => runtime.getProvider(name)?.inheritsParentContext !== true)
+  return fresh ?? names[0]
+}
+
+function gateFailures(gate: GoalCompletionGateResult): string[] {
+  const labels: Record<keyof GoalCompletionGateResult['checks'], string> = {
+    requirements: 'requirements',
+    builderTests: 'builder tests',
+    adversarialTests: 'adversarial tests',
+    startup: 'startup',
+    artifactIntegrity: 'artifact integrity',
+    cleanRoom: 'clean-room verification',
+  }
+  const checks = (Object.entries(gate.checks) as [keyof GoalCompletionGateResult['checks'], GoalCompletionGateResult['checks'][keyof GoalCompletionGateResult['checks']]][])
+    .flatMap(([key, status]) => status === 'pass' ? [] : [`${labels[key]} = ${status}`])
+  const criteria = gate.evidenceLedger
+    .filter(entry => entry.mandatory && entry.status !== 'verified')
+    .map(entry => `${entry.criterionId} = ${entry.status}: ${entry.criterion}`)
+  return [...checks, ...criteria]
+}
+
+function enforceGate(result: GoalJudgeResult, gate: GoalCompletionGateResult): GoalJudgeResult {
+  if (completionGatePassed(gate)) return result
+  const failures = gateFailures(gate)
+  const blockerFindings = [
+    ...failures.map(failure => `BLOCKER: ${failure}`),
+    ...gate.findings.map(finding => `BLOCKER: ${finding}`),
+    ...gate.proceduralLessons.map(lesson => `Procedural lesson: ${lesson}`),
+  ].slice(0, MAX_ITEMS)
+  const required = [
+    ...failures.map(failure => `Repair and re-run the full adversarial completion gate: ${failure}.`),
+    ...result.requiredChanges,
+  ].slice(0, MAX_ITEMS)
+  return {
+    verdict: result.verdict === 'blocked' ? 'blocked' : 'needs_changes',
+    summary: `Adversarial completion workflow failed; DONE is forbidden until the clean-room gate passes. ${result.summary}`.slice(0, MAX_TEXT),
+    findings: blockerFindings.length > 0 ? blockerFindings : ['BLOCKER: completion gate did not produce complete passing evidence.'],
+    requiredChanges: required.length > 0 ? required : ['Repair the candidate and repeat the complete adversarial gate from the original requirement.'],
+  }
+}
+
+function gateIsInfrastructureOnlyBlocked(gate: GoalCompletionGateResult): boolean {
+  return Object.values(gate.checks).every(status => status === 'blocked')
+    && gate.evidenceLedger.every(entry => entry.status === 'blocked_external')
+}
+
+function sessionGatePassed(event: SessionEvent<'goal/completion-gate'>): boolean {
+  return Object.values(event.data.checks).every(status => status === 'pass')
+    && event.data.evidenceLedger.length > 0
+    && event.data.evidenceLedger.every(entry => !entry.mandatory || entry.status === 'verified')
+    && event.data.artifactFingerprint.trim().length > 0
+}
+
+/** Find a PASS whose semantic review happened after its exact executable gate. */
+function settledGoalPass(parent: Agent, objective: string): SettledGoalPass | undefined {
+  const current = parent.session.events.findLast(event =>
+    event.type === 'goal/change' && event.data.operation !== 'clear')
+  if (current?.type !== 'goal/change' || current.data.operation === 'clear'
+    || current.data.goal.objective !== objective) return undefined
+  const goalId = current.data.goal.id
+  const revision = current.data.goal.revision
+  const gateIndex = parent.session.events.findLastIndex((event): event is SessionEvent<'goal/completion-gate'> =>
+    event.type === 'goal/completion-gate'
+      && event.data.goalId === goalId
+      && event.data.revision === revision
+      && sessionGatePassed(event))
+  if (gateIndex < 0) return undefined
+  const gate = parent.session.events[gateIndex] as SessionEvent<'goal/completion-gate'>
+  const judge = parent.session.events.slice(gateIndex + 1).findLast((event): event is SessionEvent<'goal/judge'> =>
+    event.type === 'goal/judge'
+      && event.data.goalId === goalId
+      && event.data.revision === revision
+      && event.data.verdict === 'pass')
+  if (judge === undefined) return undefined
+  return {
+    artifactFingerprint: gate.data.artifactFingerprint,
+    result: {
+      verdict: 'pass',
+      summary: judge.data.summary,
+      findings: [...judge.data.findings],
+      requiredChanges: [],
+    },
+  }
+}
+
+function mayReuseSettledPass(settled: SettledGoalPass | undefined, gate: GoalCompletionGateResult): settled is SettledGoalPass {
+  if (settled === undefined) return false
+  if (gateIsInfrastructureOnlyBlocked(gate)) return true
+  return completionGatePassed(gate)
+    && gate.artifactFingerprint === settled.artifactFingerprint
+}
+
+function fingerprintFailure(gate: GoalCompletionGateResult): string {
+  const checkPart = Object.entries(gate.checks)
+    .filter(([, status]) => status !== 'pass')
+    .map(([key, status]) => `${key}:${status}`)
+  const criterionPart = gate.evidenceLedger
+    .filter(entry => entry.mandatory && entry.status !== 'verified')
+    .map(entry => `${entry.criterionId}:${entry.status}`)
+  return [...checkPart, ...criterionPart, gate.findings[0] ?? 'unknown-failure'].join('|').slice(0, 500)
+}
+
+/** Persist executable evidence and record a FALSE_PASS when later valid evidence disproves it. */
+function recordCompletionGate(parent: Agent, objective: string, round: number, gate: GoalCompletionGateResult): void {
+  const current = parent.session.events.findLast(event =>
+    event.type === 'goal/change' && event.data.operation !== 'clear')
+  if (current?.type !== 'goal/change' || current.data.operation === 'clear') return
+  if (current.data.goal.objective !== objective) return
+
+  const goalId = current.data.goal.id
+  const revision = current.data.goal.revision
+  const previousPass = parent.session.events.findLast((event): event is SessionEvent<'goal/completion-gate'> =>
+    event.type === 'goal/completion-gate'
+      && event.data.goalId === goalId
+      && event.data.revision === revision
+      && sessionGatePassed(event))
+  if (previousPass !== undefined && gateIsInfrastructureOnlyBlocked(gate)) return
+
+  if (previousPass !== undefined && !completionGatePassed(gate)) {
+    parent.session.append('goal/false-pass', {
+      goalId,
+      revision,
+      detectedRound: round,
+      priorArtifactFingerprint: previousPass.data.artifactFingerprint,
+      observedArtifactFingerprint: gate.artifactFingerprint,
+      failureFingerprint: fingerprintFailure(gate),
+      findings: [...gate.findings],
+      candidateProceduralLessons: gate.proceduralLessons.length > 0
+        ? [...gate.proceduralLessons]
+        : ['A previously certified completion failed later executable verification; add the discovered failure class to regression coverage.'],
+    })
+  }
+
+  parent.session.append('goal/completion-gate', {
+    goalId,
+    revision,
+    round,
+    attemptId: `gate-${goalId}-${revision}-${round}-${parent.session.seq}`,
+    checks: { ...gate.checks },
+    evidenceLedger: gate.evidenceLedger.map(entry => ({ ...entry, evidence: [...entry.evidence] })),
+    artifactFingerprint: gate.artifactFingerprint,
+    cleanRoomEvidence: gate.cleanRoomEvidence,
+    findings: [...gate.findings],
+    proceduralLessons: [...gate.proceduralLessons],
+  })
+}
+
 /**
- * Run one fresh, read-only structured judge and always release its child.
- * @param input - Judge provider, parent agent, objective, round, and abort signal.
- * @returns Structured pass, repair, or blocked verdict.
+ * Run the adversarial Tester first, then a fresh read-only Judge. A Judge PASS
+ * is accepted only when the programmatic gate and requirement ledger pass.
+ * @param input - subagent runtime, active model route, original objective, round, and cancellation signal.
+ * @returns the independent semantic verdict after enforcing executable gate evidence.
  */
 export async function judgeGoalCompletion(input: {
   readonly subagents: GoalJudgeRuntime | undefined
@@ -129,31 +254,46 @@ export async function judgeGoalCompletion(input: {
   readonly round: number
   readonly signal: AbortSignal
 }): Promise<GoalJudgeResult> {
+  const settled = settledGoalPass(input.parent, input.objective)
   const subagents = input.subagents
-  if (subagents === undefined) return unavailable()
-  const resolved = resolveStructuredProvider({
-    getProvider: name => subagents.getProvider(name),
-    list: () => subagents.list?.() ?? [],
-  }, input.provider)
-  if (resolved === undefined) return unavailable()
+  if (subagents === undefined) return settled?.result ?? unavailable()
+  const gate = await runAdversarialCompletionGate({
+    subagents,
+    ...input.llm === undefined ? {} : { llm: input.llm },
+    provider: input.provider,
+    parent: input.parent,
+    objective: input.objective,
+    round: input.round,
+    signal: input.signal,
+  })
+  recordCompletionGate(input.parent, input.objective, input.round, gate)
+  if (mayReuseSettledPass(settled, gate) && gateIsInfrastructureOnlyBlocked(gate)) return settled.result
+  const provider = reviewProvider(subagents, input.provider, input.parent)
+  if (provider === undefined) {
+    return mayReuseSettledPass(settled, gate) ? settled.result : enforceGate(unavailable(), gate)
+  }
+
   const prompt: ContentBlock[] = [{
     type: 'text',
     text: '<goal_judge>\n'
-      + `Objective: ${JSON.stringify(input.objective)}\n`
-      + `Candidate completion round: ${input.round}\n\n`
-      + 'Act as an independent completion judge. Inspect the current workspace and durable session evidence '
-      + 'using only read-only tools. Do not edit files, run commands, call other agents, or change goal state. '
-      + 'Decide whether the whole objective is complete, not whether the latest response sounds confident. '
-      + 'Return pass only when concrete evidence covers the entire objective. Return needs_changes with specific '
-      + 'required_changes when useful work remains. For product, UI, document, or visual objectives, use web_search '
-      + 'and web_fetch to inspect comparable work when available and require evidence that the result meets or exceeds '
-      + 'the relevant bar. Return blocked only when review cannot proceed because a '
-      + 'concrete external condition prevents evaluation.\n'
+      + `Original objective: ${JSON.stringify(input.objective)}\n`
+      + `Candidate completion round: ${input.round}\n`
+      + `Independent adversarial gate evidence: ${JSON.stringify(gate)}\n\n`
+      + 'Act as the final independent completion Judge. Inspect the current workspace and durable session evidence using only read-only tools. '
+      + 'Do not edit files, run commands, call other agents, or change goal state. Treat the original requirement as authoritative. '
+      + 'Cross-check the Evidence Ledger, Builder tests, independently generated adversarial tests, packaged artifact fingerprint, startup behavior, '
+      + 'and clean-room evidence. Builder prose such as “all tests pass” is never evidence by itself. Mark every inconsistency as a BLOCKER finding. '
+      + 'Return pass only when the whole objective is literally satisfied, every mandatory criterion is verified, every gate dimension passed, and the '
+      + 'delivered artifact is an excellent real-world solution rather than merely a nominal-case implementation. Consider real-world variability, edge cases, '
+      + 'corrupt inputs, alternate supported formats, unexpected conditions, and whether a new user receiving only the final artifact can actually use it. '
+      + 'Return needs_changes for repairable implementation/artifact defects. Return blocked only for a concrete external dependency that genuinely prevents verification.\n'
       + '</goal_judge>',
   }]
+
   let run
+  let judged: GoalJudgeResult = unavailable()
   try {
-    run = await subagents.start(resolved.name, {
+    run = await subagents.start(provider, {
       label: 'goal-completion-judge',
       prompt,
       parent: input.parent,
@@ -167,21 +307,29 @@ export async function judgeGoalCompletion(input: {
       toolFilter: { allow: [...READ_ONLY_TOOLS] },
     })
     const result = await run.result
-    if (result.stopReason !== 'completed') return unavailable()
-    return readStructured(result.structured) ?? unavailable()
+    if (result.stopReason === 'completed') judged = readStructured(result.structured) ?? unavailable()
   } catch {
-    return unavailable()
+    judged = unavailable()
   } finally {
     if (run !== undefined) await run.dispose()
   }
+  if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) return settled.result
+  return enforceGate(judged, gate)
 }
 
 /**
  * Append one bounded, secret-free judge result to the owning session log.
- * @param session - Session that owns the goal audit trail.
- * @param entry - Structured verdict and bounded review details.
+ * A later infrastructure-only BLOCKED cannot shadow an already settled PASS;
+ * real `needs_changes` remains durable for repair/replay.
+ * @param session - owning durable session log.
+ * @param entry - bounded independent judge result for one exact goal revision.
  */
 export function recordGoalJudge(session: Session, entry: GoalJudgeAuditEntry): void {
+  const settledPass = session.events.some(event => event.type === 'goal/judge'
+    && event.data.goalId === entry.goalId
+    && event.data.revision === entry.revision
+    && event.data.verdict === 'pass')
+  if (settledPass && entry.verdict === 'blocked') return
   session.append('goal/judge', {
     ...entry,
     findings: [...entry.findings],

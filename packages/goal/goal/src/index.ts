@@ -396,7 +396,10 @@ export class GoalService extends TypertRemoteService {
   }
 
   /**
-   * Mark a current non-complete goal complete and disarm it.
+   * Mark a current non-complete goal complete and disarm it. Completion is
+   * fail-closed on the latest executable/adversarial certification while a
+   * settled semantic PASS is monotonic for the exact revision: a later
+   * provider outage cannot erase evidence that already passed.
    * @param agent - owning live agent.
    * @param ref - expected current revision.
    * @returns the completed view.
@@ -405,10 +408,26 @@ export class GoalService extends TypertRemoteService {
   complete(agent: Agent, ref: GoalRef): GoalView {
     const cache = this.prepareMutation(agent)
     const current = this.expectCurrent(cache, ref)
-    const judge = agent.session.events.findLast((event): event is SessionEvent<'goal/judge'> =>
-      event.type === 'goal/judge' && event.data.goalId === current.id && event.data.revision === current.revision,
+    const gate = agent.session.events.findLast((event): event is SessionEvent<'goal/completion-gate'> =>
+      event.type === 'goal/completion-gate'
+      && event.data.goalId === current.id
+      && event.data.revision === current.revision,
     )
-    if (judge?.data.verdict !== 'pass') {
+    const gatePassed = gate !== undefined
+      && Object.values(gate.data.checks).every(status => status === 'pass')
+      && gate.data.artifactFingerprint.trim().length > 0
+    if (!gatePassed) {
+      throw new GoalError(
+        `goal "${current.id}" requires a passing adversarial completion gate for the exact deliverable before completion`,
+        'GOAL_COMPLETION_GATE_NOT_VERIFIED',
+      )
+    }
+    const judgePassed = agent.session.events.some(event =>
+      event.type === 'goal/judge'
+      && event.data.goalId === current.id
+      && event.data.revision === current.revision
+      && event.data.verdict === 'pass')
+    if (!judgePassed) {
       throw new GoalError(
         `goal "${current.id}" requires an independent passing judge before completion`,
         'GOAL_COMPLETION_NOT_VERIFIED',

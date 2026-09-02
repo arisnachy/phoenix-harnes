@@ -58,6 +58,60 @@ export interface GoalJudgeAuditEntry {
   readonly requiredChanges: readonly string[]
 }
 
+/** One independently verified dimension of the mechanical DONE gate. */
+export type GoalCompletionCheckStatus = 'pass' | 'fail' | 'blocked'
+
+/** Six completion dimensions that must all pass for the exact goal revision. */
+export interface GoalCompletionChecks {
+  readonly requirements: GoalCompletionCheckStatus
+  readonly builderTests: GoalCompletionCheckStatus
+  readonly adversarialTests: GoalCompletionCheckStatus
+  readonly startup: GoalCompletionCheckStatus
+  readonly artifactIntegrity: GoalCompletionCheckStatus
+  readonly cleanRoom: GoalCompletionCheckStatus
+}
+
+/** Requirement-level state in the durable evidence ledger. */
+export type GoalEvidenceStatus = 'pending' | 'implemented' | 'tested' | 'verified' | 'failed' | 'blocked_external'
+
+/** One original acceptance criterion mapped to reproducible evidence. */
+export interface GoalEvidenceLedgerEntry {
+  readonly criterionId: string
+  readonly criterion: string
+  readonly mandatory: boolean
+  readonly status: GoalEvidenceStatus
+  readonly evidence: readonly string[]
+}
+
+/**
+ * Durable evidence from the independent adversarial completion workflow.
+ * It certifies one exact goal revision and one concrete deliverable identity.
+ */
+export interface GoalCompletionGateAuditEntry {
+  readonly goalId: string
+  readonly revision: number
+  readonly round: number
+  readonly attemptId: string
+  readonly checks: GoalCompletionChecks
+  readonly evidenceLedger: readonly GoalEvidenceLedgerEntry[]
+  readonly artifactFingerprint: string
+  readonly cleanRoomEvidence?: string
+  readonly findings: readonly string[]
+  readonly proceduralLessons: readonly string[]
+}
+
+/** A previously accepted PASS disproved by later valid executable evidence. */
+export interface GoalFalsePassAuditEntry {
+  readonly goalId: string
+  readonly revision: number
+  readonly detectedRound: number
+  readonly priorArtifactFingerprint: string
+  readonly observedArtifactFingerprint: string
+  readonly failureFingerprint: string
+  readonly findings: readonly string[]
+  readonly candidateProceduralLessons: readonly string[]
+}
+
 /** Durable checkpoint for one goal supervisor lifecycle. */
 export interface GoalSupervisorCheckpoint {
   readonly goalId: string
@@ -158,12 +212,14 @@ declare module '@phoenix-ai/dsh-llm' {
 
 declare module '@phoenix-ai/dsh-session/types' {
   interface SessionEventMap {
-    /**
-     * Complete post-mutation goal state or clear tombstone.
-     */
+    /** Complete post-mutation goal state or clear tombstone. */
     'goal/change': GoalChangeMeta
     /** One independent completion review; it never changes goal state itself. */
     'goal/judge': GoalJudgeAuditEntry
+    /** Independent executable/adversarial certification for one exact goal revision. */
+    'goal/completion-gate': GoalCompletionGateAuditEntry
+    /** A later valid verification disproved an earlier accepted PASS. */
+    'goal/false-pass': GoalFalsePassAuditEntry
     /** Latest bounded supervisor checkpoint for a goal. */
     'goal/supervisor': GoalSupervisorCheckpoint
     /** Strategy selected before one continuation prompt is admitted. */
@@ -209,6 +265,7 @@ export type GoalErrorCode =
   | 'GOAL_INVALID_EDIT'
   | 'GOAL_INVALID_TRANSITION'
   | 'GOAL_COMPLETION_NOT_VERIFIED'
+  | 'GOAL_COMPLETION_GATE_NOT_VERIFIED'
 
 declare module '@phoenix-ai/cordis' {
   interface Events {
