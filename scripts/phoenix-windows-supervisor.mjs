@@ -12,7 +12,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, unlinkSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
@@ -21,7 +21,7 @@ const root = resolve(process.cwd())
 const hostArgs = process.argv.slice(2)
 const updater = join(root, 'scripts', 'phoenix-auto-update.mjs')
 const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
-const activator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
+const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const WATCHER_RESTART_DELAY_MS = 1000
 
@@ -35,6 +35,16 @@ function gitValue(cwd, args) {
   if (result.status !== 0 || typeof result.stdout !== 'string') return undefined
   const value = result.stdout.trim()
   return value.length === 0 ? undefined : value
+}
+
+function gitClean(cwd) {
+  const result = spawnSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
+    cwd,
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+  return result.status === 0 && typeof result.stdout === 'string' && result.stdout.trim().length === 0
 }
 
 function absoluteGitPath(cwd, value) {
@@ -77,9 +87,20 @@ function restartRequestPath() {
   return gitDir === undefined ? undefined : join(gitDir, RESTART_REQUEST_FILE)
 }
 
-function restartRequested() {
+function restartRequestTarget() {
   const path = restartRequestPath()
-  return path !== undefined && existsSync(path)
+  if (path === undefined || !existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
+    return value.target
+  } catch {
+    return undefined
+  }
+}
+
+function restartRequested() {
+  return restartRequestTarget() !== undefined
 }
 
 function clearRestartRequest() {
@@ -198,10 +219,28 @@ function superviseWatcher(host) {
   }
 }
 
+function preparedActivator() {
+  const target = restartRequestTarget()
+  const stage = persistentStage()
+  const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')
+  if (
+    target !== undefined
+    && sameRepository(stage)
+    && gitClean(stage)
+    && gitValue(stage, ['rev-parse', 'HEAD']) === target
+    && existsSync(stagedActivator)
+  ) return stagedActivator
+  return liveActivator
+}
+
 function activatePrepared() {
+  const activator = preparedActivator()
   if (!existsSync(activator)) {
     console.error('[PHOENIX UPDATE] supervised activator is missing; refusing restart.')
     return 1
+  }
+  if (activator !== liveActivator) {
+    console.error('[PHOENIX UPDATE] using the verified staged activator for prepared self-update compatibility...')
   }
   const result = spawnSync(process.execPath, [activator], {
     cwd: root,
