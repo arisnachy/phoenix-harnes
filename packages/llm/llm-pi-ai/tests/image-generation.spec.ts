@@ -7,7 +7,26 @@ import {
 } from '../src/image-generation.ts'
 
 describe('Codex image generation bridge', () => {
-  it('recognizes ChatGPT-authenticated Codex with image generation enabled', () => {
+  it('recognizes the current Codex doctor JSON shape with ChatGPT auth and image generation enabled', () => {
+    expect(codexDoctorSupportsImageGeneration(JSON.stringify({
+      checks: {
+        'auth.storage': {
+          details: [
+            'stored auth mode: chatgpt',
+            'stored API key: false',
+            'stored ChatGPT tokens: true',
+          ],
+        },
+        'config.load': {
+          details: [
+            'enabled feature flags: apps, image_generation, shell_tool',
+          ],
+        },
+      },
+    }))).toBe(true)
+  })
+
+  it('also accepts the legacy/compact enabled marker used by older doctor fixtures', () => {
     expect(codexDoctorSupportsImageGeneration(JSON.stringify({
       auth: { credentials: { 'stored ChatGPT tokens': true, 'stored auth mode': 'chatgpt' } },
       config: { load: { image_generation: 'enabled' } },
@@ -22,6 +41,12 @@ describe('Codex image generation bridge', () => {
     expect(codexDoctorSupportsImageGeneration(JSON.stringify({
       auth: { credentials: { 'stored ChatGPT tokens': true, 'stored auth mode': 'chatgpt' } },
       config: { load: { image_generation: 'disabled' } },
+    }))).toBe(false)
+    expect(codexDoctorSupportsImageGeneration(JSON.stringify({
+      checks: {
+        'auth.storage': { details: ['stored auth mode: chatgpt', 'stored ChatGPT tokens: true'] },
+        'config.load': { details: ['enabled feature flags: apps, shell_tool'] },
+      },
     }))).toBe(false)
   })
 
