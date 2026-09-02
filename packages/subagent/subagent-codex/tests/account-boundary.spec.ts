@@ -17,6 +17,11 @@ describe('native Codex managed-account boundary', () => {
     expect(accountSource).toContain('account/usage/read')
   })
 
+  it('keeps optional token-activity failure from suppressing rate-limit telemetry', () => {
+    expect(accountSource).toContain('readOptionalCodexUsage')
+    expect(accountSource).toContain("connection.request('account/usage/read'")
+  })
+
   it('uses Codex Apps RPCs only as an optional connector catalog', () => {
     expect(accountSource).toContain('app/list')
     expect(accountSource).toContain('app/installed')
