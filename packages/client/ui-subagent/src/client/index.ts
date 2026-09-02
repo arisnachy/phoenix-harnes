@@ -1,12 +1,16 @@
 /** Web subagent catalog, navigation, and addressed-session composer owner. */
+import { createElement } from 'react'
 import type {
   ClientContext, SessionId, SubagentAddress,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ComposerChainProps } from '@phoenix-ai/dsh-client-ui-conversation/client'
-import { SubagentHeaderLineage, type SubagentCatalogInjected } from './SubagentHeaderLineage.tsx'
+import {
+  SubagentHeaderLineage, type SubagentCatalogInjected, type SubagentHeaderLineageProps,
+} from './SubagentHeaderLineage.tsx'
 import {
   SubagentReadOnlyComposer, type SubagentReadOnlyMatch,
 } from './SubagentReadOnlyComposer.tsx'
+import { filterCompletionVerifierSessionState } from './completion-verifier-visibility.ts'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import { en, NS, zh, type SubagentKey } from './locales.ts'
 
@@ -23,6 +27,10 @@ export type {
 export type {
   SubagentReadOnlyComposerProps, SubagentReadOnlyMatch,
 } from './SubagentReadOnlyComposer.tsx'
+export {
+  filterCompletionVerifierSessionState,
+  filterVisibleSubagentEntries,
+} from './completion-verifier-visibility.ts'
 
 /** Required services for conversation slots and session navigation. */
 export const inject = ['sessions', 'slots', 'locale']
@@ -37,6 +45,18 @@ function selectReadOnlySubagent(owner: ComposerChainProps): SubagentReadOnlyMatc
   // its input is disabled there, but the same primary Stop stays available so
   // the child can be interrupted. Once it stops, this takeover returns.
   return owner.session?.running === true ? null : { reason: 'parent-unavailable' }
+}
+
+/**
+ * Give only this lineage surface the transient-worker-filtered session view.
+ * The underlying durable session catalog remains untouched and navigable by
+ * other history/debugging surfaces.
+ */
+function CompletionAwareSubagentHeaderLineage(props: SubagentHeaderLineageProps) {
+  const useSessions: typeof props.useSessions = selector => props.useSessions(
+    state => selector(filterCompletionVerifierSessionState(state)),
+  )
+  return createElement(SubagentHeaderLineage, { ...props, useSessions })
 }
 
 /**
@@ -63,7 +83,7 @@ export function apply(ctx: ClientContext): void {
       name: 'conversation.session.header.lineage',
       locale: NS,
       inject: catalogActions,
-    }, SubagentHeaderLineage),
+    }, CompletionAwareSubagentHeaderLineage),
   )
   ctx.slots.inject(
     'conversation.composer',
