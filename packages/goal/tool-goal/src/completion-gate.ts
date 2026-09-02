@@ -203,6 +203,7 @@ function readExecution(value: unknown): GoalCompletionGateResult | undefined {
 export function completionGatePassed(result: GoalCompletionGateResult): boolean {
   return Object.values(result.checks).every(value => value === 'pass')
     && result.evidenceLedger.length > 0
+    && result.evidenceLedger.some(entry => entry.mandatory)
     && result.evidenceLedger.every(entry => !entry.mandatory || entry.status === 'verified')
     && result.artifactFingerprint.length > 0
     && result.cleanRoomEvidence.length > 0
@@ -322,7 +323,8 @@ export async function runAdversarialCompletionGate(input: {
       + 'Act as the independent completion Tester, not the Builder. Inspect the implementation only now. Verify all six dimensions separately: '
       + 'requirements, Builder-owned tests, fresh adversarial tests, startup, artifact integrity, and clean-room verification. '
       + 'Build an evidence_ledger from the original requirement. Give every acceptance criterion a stable criterion_id, literal criterion text, mandatory flag, '
-      + 'status, and concrete evidence references. Mandatory criteria are verified only when current reproducible evidence demonstrates them; Builder prose is not evidence. '
+      + 'status, and concrete evidence references. At least one criterion must be mandatory; never classify every original requirement as optional. '
+      + 'Mandatory criteria are verified only when current reproducible evidence demonstrates them; Builder prose is not evidence. '
       + 'For adversarial tests, turn the supplied cases into new executable checks; do not merely rerun or rename existing Builder tests. '
       + 'Actively try to break the solution with edge conditions, corrupt/partial input, supported alternate representations, and unexpected real-world conditions. '
       + 'Then create the final deliverable exactly as a user would receive it. Compute a stable fingerprint for that packaged artifact. '
