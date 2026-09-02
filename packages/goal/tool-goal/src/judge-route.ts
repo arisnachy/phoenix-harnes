@@ -11,6 +11,8 @@ const REASONING_RANK = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'ma
  * Codex parents use Luna xhigh. Every non-Codex parent keeps the exact active
  * provider and model, with the same effort or the highest advertised effort
  * when the parent omitted one.
+ * @param input - parent route, optional model catalog, and cancellation signal.
+ * @returns independent child options preserving the intended model policy.
  */
 export async function resolveGoalJudgeAgentOptions(input: {
   readonly parent: Agent
