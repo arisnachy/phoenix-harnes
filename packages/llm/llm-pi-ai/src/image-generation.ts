@@ -17,7 +17,7 @@ import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoen
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 
 /** Stable failure classes used by the image bridge's diagnostics and tests. */
-export type CodexImageFailureKind = 'quota' | 'runtime'
+export type CodexImageFailureKind = 'quota' | 'auth' | 'capability' | 'runtime'
 
 /** Metadata for one raster observed in Codex's generated-image directory. */
 export interface GeneratedImageCandidate {
@@ -69,6 +69,7 @@ interface ImageToolDefinition {
   readonly output: {
     readonly schema: Record<string, unknown>
     render(args: unknown, value: unknown): ContentBlock[]
+    presentationMeta?(args: unknown, value: unknown): Record<string, unknown>
   }
   readonly timeoutMs: number
   execute(args: unknown, exec: { readonly signal: AbortSignal }): Promise<unknown>
@@ -114,11 +115,11 @@ export const imageGenerationToolDescription =
   + 'Generate one distinct final visual per call. Do not create decorative images that are irrelevant to the requested deliverable.'
 
 /**
- * Recognize the current Codex doctor posture without interpreting token-meter
- * usage as provider quota. Image generation is subscription-safe only when the
- * CLI reports stored ChatGPT auth and the built-in image feature enabled.
+ * Recognize a known Codex doctor posture for diagnostics. Doctor output is not
+ * the execution authority because newer Codex versions may change this JSON
+ * before PHOENIX learns the new diagnostic representation.
  * @param output - Complete stdout/stderr text from `codex doctor --json`.
- * @returns Whether the report verifies ChatGPT auth and enabled image generation.
+ * @returns Whether the report is a known ChatGPT-authenticated, image-enabled posture.
  */
 export function codexDoctorSupportsImageGeneration(output: string): boolean {
   let normalized: string
@@ -143,14 +144,21 @@ export function codexDoctorSupportsImageGeneration(output: string): boolean {
 }
 
 /**
- * Classify only known quota/rate-limit text as capacity exhaustion.
+ * Classify provider diagnostics from the real image-worker execution.
  * @param message - Provider/CLI diagnostic text.
- * @returns `quota` for known capacity-limit signals, otherwise `runtime`.
+ * @returns Stable failure category used for user-facing recovery guidance.
  */
 export function classifyCodexImageFailure(message: string): CodexImageFailureKind {
-  return /too\s*many\s*requests|rate[ _-]?limit|usage[ _-]?limit|quota|credits? exhausted|429/i.test(message)
-    ? 'quota'
-    : 'runtime'
+  if (/too\s*many\s*requests|rate[ _-]?limit|usage[ _-]?limit|quota|credits? exhausted|429/i.test(message)) {
+    return 'quota'
+  }
+  if (/sign[ -]?in|login required|not authenticated|authentication required|unauthorized|chatgpt[^\n]*auth|\b401\b|forbidden/i.test(message)) {
+    return 'auth'
+  }
+  if (/image_generation[^\n]*(disabled|unavailable)|image generation[^\n]*(disabled|unavailable)|feature[^\n]*(not enabled|disabled)|unknown (feature|tool)[^\n]*(image|image_generation)|image_gen[^\n]*not available/i.test(message)) {
+    return 'capability'
+  }
+  return 'runtime'
 }
 
 /**
@@ -250,18 +258,13 @@ async function runCodex(
   }
 }
 
-async function assertCodexImageAvailable(ctx: Context, signal: AbortSignal): Promise<void> {
-  let doctor: ProcessResult
+async function probeCodexImagePosture(ctx: Context, signal: AbortSignal): Promise<void> {
   try {
-    doctor = await runCodex(ctx, ['doctor', '--json'], undefined, signal)
-  } catch (error) {
-    throw new Error(`image_generation: Codex CLI is not available: ${error instanceof Error ? error.message : String(error)}`)
-  }
-  const report = `${doctor.stdout}\n${doctor.stderr}`
-  if (!codexDoctorSupportsImageGeneration(report)) {
-    throw new Error(
-      'image_generation: Codex is present, but PHOENIX could not verify both ChatGPT/Codex authentication and the built-in image-generation capability. Sign in to Codex with ChatGPT and enable/update image generation before retrying; PHOENIX will not fall back to a separately billed API key.',
-    )
+    await runCodex(ctx, ['doctor', '--json'], undefined, signal)
+  } catch (_doctorProbeFailed) {
+    signal.throwIfAborted()
+    // Doctor is advisory. The real `codex exec --enable image_generation`
+    // attempt below is authoritative and can succeed across diagnostic changes.
   }
 }
 
@@ -319,6 +322,48 @@ function imageGenerationValue(value: unknown): ImageGenerationValue {
     throw new Error('image_generation: invalid rendered result')
   }
   return value as unknown as ImageGenerationValue
+}
+
+function imageArtifactMeta(value: unknown): Record<string, unknown> {
+  const result = imageGenerationValue(value)
+  const attachment = {
+    attachmentId: result.attachment.attachmentId,
+    mediaType: result.attachment.mediaType,
+    bytes: result.attachment.bytes,
+    width: result.attachment.width,
+    height: result.attachment.height,
+    ...(result.attachment.name === undefined ? {} : { name: result.attachment.name }),
+  }
+  return {
+    artifact: {
+      id: String(result.attachment.attachmentId),
+      mime: result.attachment.mediaType,
+      data: {
+        provider: result.provider,
+        model: result.model,
+        attachment,
+      },
+    },
+  }
+}
+
+function imageFailureError(kind: CodexImageFailureKind, combined: string): Error {
+  switch (kind) {
+    case 'quota':
+      return new Error(
+        'image_generation: the Codex/ChatGPT image allowance is currently rate-limited or exhausted. No separately billed API fallback was attempted.',
+      )
+    case 'auth':
+      return new Error(
+        'image_generation: Codex is installed, but the real image worker reports that ChatGPT/Codex authentication is unavailable. Sign in to Codex with ChatGPT and retry; no separately billed API fallback was attempted.',
+      )
+    case 'capability':
+      return new Error(
+        'image_generation: Codex is installed, but the real image worker reports that built-in image generation is unavailable or disabled. Update/enable Codex image generation and retry; no separately billed API fallback was attempted.',
+      )
+    case 'runtime':
+      return new Error(`image_generation: Codex image worker failed${combined === '' ? '' : `: ${combined.slice(-2000)}`}`)
+  }
 }
 
 /**
@@ -392,6 +437,7 @@ export function installCodexImageGeneration(ctx: Context): void {
           { type: 'image', attachment: result.attachment },
         ]
       },
+      presentationMeta: (_args, value) => imageArtifactMeta(value),
     },
     timeoutMs: 180_000,
     async execute(rawArgs, exec) {
@@ -400,46 +446,40 @@ export function installCodexImageGeneration(ctx: Context): void {
       if (prompt.length === 0) throw new Error('image_generation: prompt must not be empty')
       if (prompt.length > 32_000) throw new Error('image_generation: prompt exceeds the 32,000-character safety bound')
 
-      await assertCodexImageAvailable(ctx, exec.signal)
+      await probeCodexImagePosture(ctx, exec.signal)
       const generatedRoot = join(codexHome(), 'generated_images')
       const baselineCandidates = await listGeneratedImages(generatedRoot)
       const baseline = new Map(baselineCandidates.map(candidate => [candidate.path, stamp(candidate)]))
 
-      const run = await runCodex(ctx, [
-        'exec',
-        '--ignore-user-config',
-        '--ephemeral',
-        '--skip-git-repo-check',
-        '--enable',
-        'image_generation',
-        '-s',
-        'read-only',
-        '-',
-      ], generationPrompt(
-        prompt,
-        args.size ?? 'auto',
-        args.quality ?? 'auto',
-        args.background ?? 'auto',
-      ), exec.signal)
+      let run: ProcessResult
+      try {
+        run = await runCodex(ctx, [
+          'exec',
+          '--ignore-user-config',
+          '--ephemeral',
+          '--skip-git-repo-check',
+          '--enable',
+          'image_generation',
+          '-s',
+          'read-only',
+          '-',
+        ], generationPrompt(
+          prompt,
+          args.size ?? 'auto',
+          args.quality ?? 'auto',
+          args.background ?? 'auto',
+        ), exec.signal)
+      } catch (error) {
+        throw new Error(`image_generation: Codex CLI/image worker is not available: ${error instanceof Error ? error.message : String(error)}`)
+      }
 
       const combined = `${run.stdout}\n${run.stderr}`.trim()
-      if (run.exitCode !== 0) {
-        if (classifyCodexImageFailure(combined) === 'quota') {
-          throw new Error(
-            'image_generation: the Codex/ChatGPT image allowance is currently rate-limited or exhausted. No separately billed API fallback was attempted.',
-          )
-        }
-        throw new Error(`image_generation: Codex image worker failed${combined === '' ? '' : `: ${combined.slice(-2000)}`}`)
-      }
+      if (run.exitCode !== 0) throw imageFailureError(classifyCodexImageFailure(combined), combined)
 
       const generated = await waitForFreshImage(generatedRoot, baseline, exec.signal)
       if (generated === undefined) {
         const kind = classifyCodexImageFailure(combined)
-        if (kind === 'quota') {
-          throw new Error(
-            'image_generation: Codex reported an image quota/rate limit and produced no new raster. No separately billed API fallback was attempted.',
-          )
-        }
+        if (kind !== 'runtime') throw imageFailureError(kind, combined)
         throw new Error(
           'image_generation: Codex exited without exposing a new generated raster. PHOENIX refuses to claim success without a verifiable image artifact.',
         )
