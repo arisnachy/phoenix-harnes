@@ -67,7 +67,10 @@ jobs:
             }
             c.workspaces['packages/bundle/headless'] = {
               ...(c.workspaces['packages/bundle/headless'] ?? {}),
-              ignoreDependencies: ['@phoenix-ai/dsh-code-runtime-python'],
+              ignoreDependencies: [
+                '@phoenix-ai/dsh-code-runtime-python',
+                '@phoenix-ai/dsh-code-runtime-worker-thread',
+              ],
             }
           })
 
