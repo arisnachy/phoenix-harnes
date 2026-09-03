@@ -11,9 +11,9 @@ export interface MissionDebtBootstrap {
 }
 
 const MAX_EVIDENCE = 500
-const PENDING_HEADING = /^(?:[-*]\s*)?(?:\*\*)?(?:pendiente(?:s)?|pending|remaining|to\s+do|todo)(?:\*\*)?\s*:/iu
-const UNRESOLVED_PHRASE = /\b(?:(?:todav[ií]a|a[uú]n)\s+no|not\s+yet|still\s+not|still\s+needs?\s+to|still\s+need\s+to|remains?\s+to\s+be)\b/iu
-const RESOLVED_PENDING = /\b(?:no\s+(?:hay|queda(?:n)?|existe(?:n)?)\s+(?:nada\s+)?pendiente(?:s)?|nothing\s+(?:is\s+)?pending|no\s+pending\s+(?:work|items?))\b/iu
+const PENDING_HEADING = /^(?:[-*]\s*)?(?:\*\*)?(?:pendiente(?:s)?|pending|remaining|to\s+do|todo|siguiente\s+paso|pr[oó]ximo\s+paso|next\s+steps?)(?:\*\*)?\s*:/iu
+const UNRESOLVED_PHRASE = /\b(?:(?:todav[ií]a|a[uú]n)\s+no|not\s+yet|still\s+not|still\s+needs?\s+to|still\s+need\s+to|remains?\s+to\s+be|falta(?:n)?\s+(?:por\s+)?|queda(?:n)?\s+por\s+|hay\s+que\s+)\b/iu
+const RESOLVED_PENDING = /\b(?:no\s+(?:hay|queda(?:n)?|existe(?:n)?)\s+(?:nada\s+)?pendiente(?:s)?|no\s+falta\s+nada(?:\s+por\s+hacer)?|no\s+queda\s+nada\s+por\s+(?:hacer|configurar|verificar)|nothing\s+(?:is\s+)?pending|no\s+pending\s+(?:work|items?)|no\s+next\s+steps?(?:\s+remain)?)\b/iu
 
 /** Return text carried by one message-like durable payload. */
 function messageText(value: unknown): string {
