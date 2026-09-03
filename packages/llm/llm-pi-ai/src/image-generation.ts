@@ -3,15 +3,16 @@
  *
  * The active text model is deliberately irrelevant: a free OpenRouter model,
  * DeepSeek, or another route may still ask this tool for a visual. The bridge
- * delegates the raster work to the locally installed Codex CLI, which owns the
- * ChatGPT subscription authentication and the hosted image-generation tool.
- * It never forwards an OPENAI_API_KEY or another separately billed credential.
+ * delegates the raster work to the Codex CLI shipped with PHOENIX when the
+ * command is not visible on PATH. Codex owns the ChatGPT subscription
+ * authentication and the hosted image-generation tool. It never forwards an
+ * OPENAI_API_KEY or another separately billed credential.
  * @module dsh-llm-pi-ai/image-generation
  */
 
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { access, readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, extname, join } from 'node:path'
+import { basename, extname, join, posix, win32 } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -154,6 +155,37 @@ export function classifyCodexImageFailure(message: string): CodexImageFailureKin
 }
 
 /**
+ * Return package-local Codex wrapper candidates that do not depend on PATH.
+ * PHOENIX already installs @openai/codex for its Codex subagent; source-tree
+ * launches therefore have a deterministic wrapper even when the parent app's
+ * PATH omits npm/pnpm launchers. Common npm locations keep installed Windows
+ * deployments working as well. Environment overrides are explicit, never
+ * inferred credentials.
+ * @param cwd - PHOENIX process working directory.
+ * @param env - Environment paths/overrides used only to locate the executable.
+ * @returns Ordered absolute candidate paths.
+ */
+export function codexImageExecutableCandidates(
+  cwd: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string[] {
+  const pathApi = /^[A-Za-z]:[\\/]/.test(cwd) ? win32 : posix
+  const candidates = [
+    env.PHOENIX_CODEX_BIN?.trim(),
+    env.CODEX_BIN?.trim(),
+    pathApi.join(cwd, 'packages', 'subagent', 'subagent-codex', 'node_modules', '@openai', 'codex', 'bin', 'codex.js'),
+    pathApi.join(cwd, 'node_modules', '@openai', 'codex', 'bin', 'codex.js'),
+    env.APPDATA === undefined
+      ? undefined
+      : pathApi.join(env.APPDATA, 'npm', 'node_modules', '@openai', 'codex', 'bin', 'codex.js'),
+    env.PNPM_HOME === undefined
+      ? undefined
+      : pathApi.join(env.PNPM_HOME, 'node_modules', '@openai', 'codex', 'bin', 'codex.js'),
+  ]
+  return [...new Set(candidates.filter((candidate): candidate is string => candidate !== undefined && candidate.length > 0))]
+}
+
+/**
  * Select a file that was absent or changed since the pre-call snapshot. Codex
  * uses opaque unique filenames; newest-wins also handles a successful call that
  * emits more than one intermediate raster while still returning exactly one
@@ -223,6 +255,29 @@ function servicesOf(ctx: Context): ImageRuntimeContext {
   return ctx as unknown as ImageRuntimeContext
 }
 
+async function resolveCodexArgv(
+  subprocess: ImageSubprocessService,
+  argvTail: readonly string[],
+  signal: AbortSignal,
+): Promise<readonly string[]> {
+  try {
+    const executable = await subprocess.resolveExecutable('codex', undefined, signal)
+    return [executable, ...argvTail]
+  } catch (pathError) {
+    for (const candidate of codexImageExecutableCandidates(process.cwd())) {
+      try {
+        await access(candidate)
+      } catch {
+        continue
+      }
+      return candidate.toLowerCase().endsWith('.js')
+        ? [process.execPath, candidate, ...argvTail]
+        : [candidate, ...argvTail]
+    }
+    throw pathError
+  }
+}
+
 async function runCodex(
   ctx: Context,
   argvTail: readonly string[],
@@ -230,9 +285,9 @@ async function runCodex(
   signal: AbortSignal,
 ): Promise<ProcessResult> {
   const subprocess = servicesOf(ctx).subprocess
-  const executable = await subprocess.resolveExecutable('codex', undefined, signal)
+  const argv = await resolveCodexArgv(subprocess, argvTail, signal)
   const handle = subprocess.spawn({
-    argv: [executable, ...argvTail],
+    argv,
     cwd: process.cwd(),
     stdio: {
       stdin: stdin === undefined ? 'ignore' : { data: stdin },
