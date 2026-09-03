@@ -65,4 +65,71 @@ describe('HARDNESS acquisition/build registry', () => {
     expect(hardness.get(alternateDescriptor.id)?.status).toBe('testing')
     await ctx.fiber.dispose()
   })
+
+  it('prepares an already indexed tool whose name exactly matches the requested capability kind', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const imageTool = {
+      id: 'tool:image_generation' as CapabilityId,
+      kind: 'tool',
+      name: 'image_generation',
+      description: 'Generate an actual image.',
+      inputs: [],
+      outputs: [],
+      dependencies: [],
+      requiredPermissions: [],
+      provider: 'dsh-tools',
+      location: 'tool-registry',
+      version: '1.0.0',
+      compatibility: [],
+      limitations: [],
+      modalities: ['native'],
+      status: 'experimental',
+    } as const
+    hardness.register(imageTool)
+    const registry = new AcquisitionRegistry(hardness)
+
+    const result = await registry.acquireOrBuild({
+      kind: 'image_generation',
+      inputs: ['brief visual de Kira'],
+      outputs: ['imagen fotorealista'],
+      requiredStatus: 'verified',
+    })
+
+    expect(result).toMatchObject({ kind: 'built', capability: { id: imageTool.id, status: 'testing' } })
+    expect(hardness.get(imageTool.id)?.status).toBe('testing')
+    await ctx.fiber.dispose()
+  })
+
+  it('does not downgrade an exact-name tool that already earned verified status', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const imageTool = {
+      id: 'tool:image_generation' as CapabilityId,
+      kind: 'tool',
+      name: 'image_generation',
+      description: 'Generate an actual image.',
+      inputs: [],
+      outputs: [],
+      dependencies: [],
+      requiredPermissions: [],
+      provider: 'dsh-tools',
+      location: 'tool-registry',
+      version: '1.0.0',
+      compatibility: [],
+      limitations: [],
+      modalities: ['native'],
+      status: 'verified',
+    } as const
+    hardness.register(imageTool)
+    const registry = new AcquisitionRegistry(hardness)
+
+    const result = await registry.acquireOrBuild({ kind: 'image_generation', requiredStatus: 'testing' })
+
+    expect(result.kind).toBe('missing')
+    expect(hardness.get(imageTool.id)?.status).toBe('verified')
+    await ctx.fiber.dispose()
+  })
 })
