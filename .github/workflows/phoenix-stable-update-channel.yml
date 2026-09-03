@@ -2,7 +2,7 @@ name: PHOENIX Stable Update Channel
 
 on:
   workflow_run:
-    workflows: [PHOENIX main guard]
+    workflows: [CI]
     types: [completed]
     branches: [main]
   workflow_dispatch:
