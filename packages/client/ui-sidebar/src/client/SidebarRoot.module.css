@@ -177,11 +177,46 @@
   letter-spacing: 0.18em !important;
 }
 
+/* The fallback keeps the literal PHOENIX text in the DOM for the existing
+   slot contract, but paints the visible mark from vector masks. The main mask
+   inherits the theme ink; the second mask is the ember accent on the X. */
 .fallbackBrandName {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 154px;
+  height: 24px;
+  overflow: hidden;
+  color: inherit;
+  font-size: 0;
+  line-height: 0;
+  letter-spacing: 0;
   white-space: nowrap;
+}
+
+.fallbackBrandName::before,
+.fallbackBrandName::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+.fallbackBrandName::before {
+  background: currentColor;
+  -webkit-mask-image: url('/phoenix-wordmark-mask.svg');
+  mask-image: url('/phoenix-wordmark-mask.svg');
+}
+
+.fallbackBrandName::after {
+  background: #e46a2a;
+  -webkit-mask-image: url('/phoenix-wordmark-accent.svg');
+  mask-image: url('/phoenix-wordmark-accent.svg');
 }
 
 .iconButton {
