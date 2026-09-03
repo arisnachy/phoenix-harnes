@@ -38,6 +38,8 @@ export function renderGoalRoundPrompt(
       + '`exit_plan_mode` unless plan mode is explicitly active, and do not ask for a new approval '
       + 'for routine work. If a tool fails, record the exact failure, inspect alternatives, change '
       + 'strategy, and immediately continue; do not stop or ask the user to approve the recovery. '
+      + 'Any explicit pending, remaining, not-yet-completed, TODO, or follow-up item required by the objective is internal mission debt, never a valid handoff or completion state. '
+      + 'If the needed tool or capability does not exist, inspect ATLAS, connectors, and alternate routes first; when the runtime permits, acquire or build the smallest governed helper, test it, use it, and retain the failure-to-solution lesson before continuing. '
       + 'If `ask_user_question` returns after its deadline, treat the selected recommendation as an '
       + 'automatic decision for this step, never as mission completion, cancellation, or a blocker; '
       + 'continue the mission and change strategy if that decision is not sufficient. '
