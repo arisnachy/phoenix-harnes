@@ -111,18 +111,23 @@ describe('SidebarRoot shell', () => {
     expect(container.querySelector('svg')).not.toBeNull()
   })
 
-  it('uses the compact sans-serif PHOENIX wordmark styling in the sidebar', () => {
+  it('uses the refined spaced PHOENIX wordmark styling in the sidebar', () => {
     const css = readFileSync(resolve(process.cwd(), 'packages/client/ui-sidebar/src/client/SidebarRoot.module.css'), 'utf8')
     const brandName = css.match(/\.brandName\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
 
-    expect(brandName).toContain('font-family: ui-sans-serif')
-    expect(brandName).toContain('font-size: 19px')
-    expect(brandName).toContain('font-weight: 650')
-    expect(brandName).toContain('letter-spacing: -0.03em')
+    expect(brandName).toContain("font-family: 'Avenir Next', Inter")
+    expect(brandName).toContain('font-size: 20px')
+    expect(brandName).toContain('font-weight: 600')
+    expect(brandName).toContain('letter-spacing: 0.18em')
+    expect(brandName).toContain('border-left: 1px solid var(--dsw-alias-border-l2)')
     expect(brandName).toContain('white-space: nowrap')
 
+    const brandMark = css.match(/\.brandMark img\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
+    expect(brandMark).toContain('width: 42px')
+    expect(brandMark).toContain('height: 42px')
+
     const officialBrandName = css.match(/\.brandName\s*>\s*\[role=['"]img['"]\]\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
-    expect(officialBrandName).toContain('letter-spacing: -0.03em !important')
+    expect(officialBrandName).toContain('letter-spacing: 0.18em !important')
     expect(officialBrandName).toContain('font-size: inherit !important')
   })
 
