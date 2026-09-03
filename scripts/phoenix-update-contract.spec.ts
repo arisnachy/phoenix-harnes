@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import './promote-client-artifacts.ts'
 
 const root = process.cwd()
 
@@ -25,5 +26,19 @@ describe('prepared client self-update contract', () => {
     const promoter = source('scripts/promote-client-artifacts.ts')
 
     expect(promoter).toContain("if (source === root && !values['verify-only'])")
+  })
+})
+
+describe('stable release publication contract', () => {
+  it('moves stable to the exact approved main SHA with lease protection before publishing metadata', () => {
+    const workflow = source('.github/workflows/phoenix-stable-update-channel.yml')
+    const synchronize = workflow.indexOf('name: Synchronize stable release pointer')
+    const publish = workflow.indexOf('name: Publish stable manifest')
+
+    expect(synchronize).toBeGreaterThan(-1)
+    expect(publish).toBeGreaterThan(synchronize)
+    expect(workflow).toContain('--force-with-lease="refs/heads/stable:$stable_sha"')
+    expect(workflow).toContain('origin "$TARGET_SHA:refs/heads/stable"')
+    expect(workflow).toContain('"sourceBranch": "stable"')
   })
 })
