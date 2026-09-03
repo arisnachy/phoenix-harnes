@@ -202,7 +202,11 @@ function activate() {
   if (prepared.mode === 'client') {
     writeState(root, { status: 'applying', phase: 'verify', current, target })
     console.error('[PHOENIX UPDATE] verifying prepared client artifacts before touching the live release checkout...')
-    node(stage, ['--import', 'tsx/esm', 'scripts/promote-client-artifacts.ts', '--from', stage, '--verify-only'], { inherit: true })
+    const stagedPromoter = join(stage, 'scripts', 'promote-client-artifacts.ts')
+    if (!existsSync(stagedPromoter)) {
+      throw new Error(`prepared update is missing its client artifact promoter: ${stagedPromoter}`)
+    }
+    node(stage, ['--import', 'tsx/esm', stagedPromoter, '--from', stage, '--verify-only'], { inherit: true })
   }
 
   git(root, ['update-ref', 'refs/phoenix/recovery/last-good', current])
@@ -215,7 +219,11 @@ function activate() {
     if (prepared.mode === 'client') {
       writeState(root, { status: 'applying', phase: 'promote', current, target })
       console.error('[PHOENIX UPDATE] promoting already-built client artifacts from verified staging...')
-      node(root, ['--import', 'tsx/esm', 'scripts/promote-client-artifacts.ts', '--from', stage], { inherit: true })
+      const livePromoter = join(root, 'scripts', 'promote-client-artifacts.ts')
+      if (!existsSync(livePromoter)) {
+        throw new Error(`activated update is missing its client artifact promoter: ${livePromoter}`)
+      }
+      node(root, ['--import', 'tsx/esm', livePromoter, '--from', stage], { inherit: true })
     } else if (prepared.mode === 'full') {
       writeState(root, { status: 'applying', phase: 'build', current, target })
       corepack(root, ['pnpm', 'run', 'build'], { inherit: true })
