@@ -12,6 +12,20 @@ import type { HardnessMissionJudge } from '../src/mission-orchestrator.ts'
 
 const descriptor = { id: 'tool:weather' as CapabilityId, kind: 'weather', name: 'Weather', description: 'fixture', inputs: ['city'], outputs: ['forecast'], dependencies: [], requiredPermissions: [], provider: 'fixture', location: 'tool-registry', version: '1', compatibility: [], limitations: [], modalities: ['native'], status: 'experimental' } as const
 
+function passingJudge(): HardnessMissionJudge {
+  return async () => ({
+    verdict: 'pass' as const,
+    summary: 'artifact satisfies the mission objective',
+    evidence: ['forecast'],
+    requiredChanges: [],
+    criteria: [
+      { id: 'artifact-produced', verdict: 'pass' as const, evidence: ['forecast'], findings: [] },
+      { id: 'artifact-rendered', verdict: 'pass' as const, evidence: ['forecast'], findings: [] },
+    ],
+    quality: { verdict: 'pass' as const, summary: 'complete and reproducible', evidence: ['forecast'], findings: [] },
+  })
+}
+
 describe('HARDNESS mission orchestrator', () => {
   it('promotes a prepared capability only after successful execution and artifact verification', async () => {
     const ctx = new Context()
@@ -28,17 +42,7 @@ describe('HARDNESS mission orchestrator', () => {
     artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
     const record = vi.fn<HardnessMissionAuditWriter['record']>()
     const audit = { record }
-    const judge = vi.fn<HardnessMissionJudge>(async () => ({
-      verdict: 'pass' as const,
-      summary: 'artifact satisfies the mission objective',
-      evidence: ['forecast'],
-      requiredChanges: [],
-      criteria: [
-        { id: 'artifact-produced', verdict: 'pass' as const, evidence: ['forecast'], findings: [] },
-        { id: 'artifact-rendered', verdict: 'pass' as const, evidence: ['forecast'], findings: [] },
-      ],
-      quality: { verdict: 'pass' as const, summary: 'complete and reproducible', evidence: ['forecast'], findings: [] },
-    }))
+    const judge = vi.fn<HardnessMissionJudge>(passingJudge())
 
     const result = await runHardnessMission({ hardness, acquisition, tools, approval, artifacts, audit, judge, need: { kind: 'weather', inputs: ['city'], outputs: ['forecast'] }, args: { city: 'Madrid' }, context: { callId: 'mission-1' as never, signal: new AbortController().signal } })
 
@@ -60,6 +64,39 @@ describe('HARDNESS mission orchestrator', () => {
     ])
     expect(lab.snapshot().experiments).toHaveLength(1)
     expect(ledger.snapshot()).toHaveLength(1)
+    await ctx.fiber.dispose()
+  })
+
+  it('executes a freshly prepared testing capability once to earn a requested verified status', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const acquisition = new AcquisitionRegistry(hardness)
+    acquisition.register(async need => need.kind === 'weather' ? descriptor : undefined)
+    const execute = vi.fn<ToolRuntime['execute']>(async () => ({
+      isError: false as const,
+      value: null,
+      content: [],
+      meta: { artifact: { id: 'forecast', mime: 'text/plain', data: 'sunny' } },
+    }))
+    const artifacts = new ArtifactRuntime()
+    artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
+
+    const result = await runHardnessMission({
+      hardness,
+      acquisition,
+      tools: { execute },
+      approval: { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) },
+      artifacts,
+      judge: passingJudge(),
+      need: { kind: 'weather', inputs: ['city'], outputs: ['forecast'], requiredStatus: 'verified' },
+      args: { city: 'Madrid' },
+      context: { callId: 'mission-bootstrap-verified' as never, signal: new AbortController().signal },
+    })
+
+    expect(result).toMatchObject({ kind: 'completed', artifact: { id: 'forecast' } })
+    expect(execute).toHaveBeenCalledOnce()
+    expect(hardness.get(descriptor.id)?.status).toBe('verified')
     await ctx.fiber.dispose()
   })
 
