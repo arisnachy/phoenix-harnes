@@ -35,6 +35,9 @@ import { LocalTerminalHandle } from './terminal.ts'
  * Explicit PATH entries still win; these directories are only appended after
  * normal PATH resolution. Keeping the fallback generic also fixes other
  * user-installed CLIs without hard-coding a Codex-specific executable path.
+ * @param env - Child environment used for case-insensitive Windows lookup.
+ * @param platform - Platform override used by tests; defaults to the host platform.
+ * @returns Ordered, de-duplicated per-user executable directories.
  */
 export function supplementalExecutableDirectories(
   env: Readonly<NodeJS.ProcessEnv>,
@@ -62,6 +65,9 @@ export function supplementalExecutableDirectories(
  * Resolve the explicit Codex Desktop executable hint when the app exposes it.
  * This is intentionally opt-in and command-specific: generic subprocess
  * resolution must not reinterpret arbitrary environment variables as binaries.
+ * @param env - Child environment that may expose `CODEX_CLI_PATH`.
+ * @param platform - Platform override used for Windows environment-key semantics.
+ * @returns The trimmed configured Codex executable path, or `undefined` when absent.
  */
 export function codexExecutableOverride(
   env: Readonly<NodeJS.ProcessEnv>,
@@ -75,6 +81,10 @@ export function codexExecutableOverride(
  * Build the Windows Codex Desktop executable directories. Current desktop
  * builds keep the CLI below `%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\<hash>`;
  * the direct bin root is retained for forward/backward-compatible layouts.
+ * @param env - Child environment used to locate `LOCALAPPDATA`.
+ * @param childDirectories - One-level directory names observed below the Codex bin root.
+ * @param platform - Platform override used by tests; defaults to the host platform.
+ * @returns Ordered, de-duplicated Codex Desktop executable directories.
  */
 export function windowsCodexDesktopExecutableDirectories(
   env: Readonly<NodeJS.ProcessEnv>,
