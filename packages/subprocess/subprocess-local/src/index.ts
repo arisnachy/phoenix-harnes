@@ -217,7 +217,7 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
     this.terminals.add(handle)
     const release = async (): Promise<void> => {
       await handle.terminate()
-      this.terminals.delete(terminal as never)
+      this.terminals.delete(handle)
     }
     void handle.done.then(release, release).catch(() => {})
     return handle
