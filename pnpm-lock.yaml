@@ -1114,6 +1114,9 @@ importers:
       '@phoenix-ai/dsh-llm-retry':
         specifier: workspace:^
         version: link:../../llm/llm-retry
+      '@phoenix-ai/dsh-mcp-connector-registry':
+        specifier: workspace:^
+        version: link:../../mcp/mcp-registry
       '@phoenix-ai/dsh-permission-presets':
         specifier: workspace:^
         version: link:../../interaction/permission-presets
@@ -2000,6 +2003,9 @@ importers:
       '@phoenix-ai/dsh-plan-mode':
         specifier: workspace:^
         version: link:../../plan/plan-mode
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
       '@phoenix-ai/dsh-session-projection':
         specifier: workspace:^
         version: link:../../session/session-projection
@@ -2018,6 +2024,9 @@ importers:
       '@phoenix-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../core/tools
+      '@phoenix-ai/dsh-user-approval':
+        specifier: workspace:^
+        version: link:../../interaction/user-approval
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
@@ -9178,6 +9187,9 @@ importers:
       '@phoenix-ai/dsh-agent-loop':
         specifier: workspace:^
         version: link:../../packages/core/agent-loop
+      '@phoenix-ai/dsh-agent-presets':
+        specifier: workspace:^
+        version: link:../../packages/preset/agent-presets
       '@phoenix-ai/dsh-agent-spine-demo':
         specifier: workspace:^
         version: link:../../packages/examples/agent-spine-demo
@@ -9187,6 +9199,9 @@ importers:
       '@phoenix-ai/dsh-anonymous-user-id':
         specifier: workspace:^
         version: link:../../packages/identity/anonymous-user-id
+      '@phoenix-ai/dsh-api-gateway':
+        specifier: workspace:^
+        version: link:../../packages/api/gateway
       '@phoenix-ai/dsh-app-boot':
         specifier: workspace:^
         version: link:../../packages/boot/app-boot
@@ -9205,6 +9220,9 @@ importers:
       '@phoenix-ai/dsh-brand':
         specifier: workspace:^
         version: link:../../packages/util/brand
+      '@phoenix-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../../packages/client/connection
       '@phoenix-ai/dsh-code-runtime':
         specifier: workspace:^
         version: link:../../packages/code-runtime/code-runtime
@@ -9235,6 +9253,9 @@ importers:
       '@phoenix-ai/dsh-credentials':
         specifier: workspace:^
         version: link:../../packages/credentials/credentials
+      '@phoenix-ai/dsh-file-reference':
+        specifier: workspace:^
+        version: link:../../packages/context/file-reference
       '@phoenix-ai/dsh-fs':
         specifier: workspace:^
         version: link:../../packages/fs/fs
@@ -9253,6 +9274,12 @@ importers:
       '@phoenix-ai/dsh-goal-round-driver':
         specifier: workspace:^
         version: link:../../packages/goal/goal-round-driver
+      '@phoenix-ai/dsh-hardness':
+        specifier: workspace:^
+        version: link:../../packages/hardness/hardness
+      '@phoenix-ai/dsh-hardness-adapters':
+        specifier: workspace:^
+        version: link:../../packages/hardness/adapters
       '@phoenix-ai/dsh-home-paths':
         specifier: workspace:^
         version: link:../../packages/util/home-paths
@@ -9265,6 +9292,15 @@ importers:
       '@phoenix-ai/dsh-hooks-codex':
         specifier: workspace:^
         version: link:../../packages/hooks/hooks-codex
+      '@phoenix-ai/dsh-host-apiproxy':
+        specifier: workspace:^
+        version: link:../../packages/host/apiproxy
+      '@phoenix-ai/dsh-host-plugin-inventory':
+        specifier: workspace:^
+        version: link:../../packages/host/plugin-inventory
+      '@phoenix-ai/dsh-host-webserver':
+        specifier: workspace:^
+        version: link:../../packages/host/webserver
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../packages/runtime-diagnostics/invariants
@@ -9295,6 +9331,9 @@ importers:
       '@phoenix-ai/dsh-mcp-connector-registry':
         specifier: workspace:^
         version: link:../../packages/mcp/mcp-registry
+      '@phoenix-ai/dsh-message-feedback':
+        specifier: workspace:^
+        version: link:../../packages/feedback/message-feedback
       '@phoenix-ai/dsh-output-retention':
         specifier: workspace:^
         version: link:../../packages/util/output-retention
@@ -9340,6 +9379,9 @@ importers:
       '@phoenix-ai/dsh-session-checkpoint-policy':
         specifier: workspace:^
         version: link:../../packages/session/session-checkpoint-policy
+      '@phoenix-ai/dsh-session-learning':
+        specifier: workspace:^
+        version: link:../../packages/session/session-learning
       '@phoenix-ai/dsh-session-persistence':
         specifier: workspace:^
         version: link:../../packages/session/session-persistence
@@ -9382,6 +9424,12 @@ importers:
       '@phoenix-ai/dsh-spill':
         specifier: workspace:^
         version: link:../../packages/spill/spill
+      '@phoenix-ai/dsh-storage':
+        specifier: workspace:^
+        version: link:../../packages/storage/storage
+      '@phoenix-ai/dsh-storage-domain':
+        specifier: workspace:^
+        version: link:../../packages/storage/storage-domain
       '@phoenix-ai/dsh-subagent':
         specifier: workspace:^
         version: link:../../packages/subagent/subagent
@@ -9448,6 +9496,9 @@ importers:
       '@phoenix-ai/dsh-tool-ralph':
         specifier: workspace:^
         version: link:../../packages/workflow/tool-ralph
+      '@phoenix-ai/dsh-tool-session-learning':
+        specifier: workspace:^
+        version: link:../../packages/session-learning/tool-session-learning
       '@phoenix-ai/dsh-tool-skill':
         specifier: workspace:^
         version: link:../../packages/skill/tool-skill
@@ -9475,6 +9526,9 @@ importers:
       '@phoenix-ai/dsh-typert-protocol':
         specifier: workspace:^
         version: link:../../packages/typert/protocol
+      '@phoenix-ai/dsh-typert-registry':
+        specifier: workspace:^
+        version: link:../../packages/typert/registry
       '@phoenix-ai/dsh-user-approval':
         specifier: workspace:^
         version: link:../../packages/interaction/user-approval

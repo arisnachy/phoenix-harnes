@@ -155,6 +155,8 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@phoenix-ai/dsh-client-ui-theme': ['lib/styles'],
   // The CPython side ships as source .py files, published as-is rather than built.
   '@phoenix-ai/dsh-code-runtime-python': ['py/**/*.py'],
+  '@phoenix-ai/dsh-session-learning': ['lib/ledger.js'],
+  '@phoenix-ai/dsh-tool-session-learning': ['lib/presentation.js'],
   // The Python runtime uses a distinct closed-resolution bin; the public CLI
   // keeps config-owned bare-package resolution through lib/bin.js.
   '@phoenix-ai/dsh-sdk-jsonrpc-demo': ['lib/packaged-bin.js'],

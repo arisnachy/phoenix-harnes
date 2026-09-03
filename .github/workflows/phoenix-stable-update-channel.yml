@@ -2,10 +2,9 @@ name: PHOENIX Stable Update Channel
 
 on:
   workflow_run:
-    workflows: [PHOENIX main guard]
+    workflows: [CI]
     types: [completed]
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,22 +15,17 @@ concurrency:
 
 jobs:
   publish:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Resolve green main commit
         id: target
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            target="${GITHUB_SHA}"
-          else
-            target="$WORKFLOW_SHA"
-          fi
+          target="$WORKFLOW_SHA"
           if [[ ! "$target" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Invalid target SHA: $target" >&2
             exit 1
@@ -65,6 +59,24 @@ jobs:
         if: steps.freshness.outputs.publish == 'true'
         run: node scripts/phoenix-auto-update.mjs --self-test
 
+      - name: Synchronize stable release pointer
+        if: steps.freshness.outputs.publish == 'true'
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin stable --quiet
+          stable_sha="$(git rev-parse origin/stable)"
+          if [[ "$stable_sha" == "$TARGET_SHA" ]]; then
+            echo "stable already points to $TARGET_SHA"
+            exit 0
+          fi
+          git cat-file -e "$TARGET_SHA^{commit}"
+          git push \
+            --force-with-lease="refs/heads/stable:$stable_sha" \
+            origin "$TARGET_SHA:refs/heads/stable"
+
       - name: Publish stable manifest
         if: steps.freshness.outputs.publish == 'true'
         shell: bash
@@ -87,7 +99,7 @@ jobs:
             "schema": 1,
             "product": "PHOENIX",
             "channel": "stable",
-            "sourceBranch": "main",
+            "sourceBranch": "stable",
             "sourceCommit": "$TARGET_SHA",
             "publishedAt": "$PUBLISHED_AT",
             "minimumNode": "22.19.0",
@@ -116,5 +128,6 @@ jobs:
         run: |
           echo "### PHOENIX stable update published" >> "$GITHUB_STEP_SUMMARY"
           echo "- commit: \`${{ steps.target.outputs.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- branch: \`stable\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- channel: \`phoenix/update-channel\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- clients: auto-update after local preflight and recovery checkpoint" >> "$GITHUB_STEP_SUMMARY"

@@ -78,7 +78,6 @@
         "**/*.ts"
       ],
       "ignoreDependencies": [
-        "@phoenix-ai/.+",
         "@phoenix-ai/.+"
       ]
     },
@@ -659,18 +658,18 @@
         "tests/**/*.ts"
       ]
     },
-    "packages/bundle/base": {
-      "ignoreDependencies": [
-        "@phoenix-ai/.+",
-        "@phoenix-ai/.+"
-      ]
-    },
     "packages/bundle/headless": {
       "ignoreDependencies": [
+        "@phoenix-ai/dsh-code-runtime-python",
         "@phoenix-ai/dsh-code-runtime-worker-thread"
       ]
     },
     "packages/bundle/web-app": {
+      "ignoreDependencies": [
+        "@phoenix-ai/.+"
+      ]
+    },
+    "packages/bundle/base": {
       "ignoreDependencies": [
         "@phoenix-ai/.+"
       ]

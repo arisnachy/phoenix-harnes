@@ -126,7 +126,8 @@
     "@phoenix-ai/dsh-web-search-free": "workspace:^",
     "@phoenix-ai/dsh-web-search-openrouter": "workspace:^",
     "@phoenix-ai/dsh-workflow-worker-thread": "workspace:^",
-    "@phoenix-ai/dsh-agent-instructions": "workspace:^"
+    "@phoenix-ai/dsh-agent-instructions": "workspace:^",
+    "@phoenix-ai/dsh-mcp-connector-registry": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",

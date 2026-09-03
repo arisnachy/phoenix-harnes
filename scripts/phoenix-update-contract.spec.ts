@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import './promote-client-artifacts.ts'
 
 const root = process.cwd()
 
@@ -25,5 +26,32 @@ describe('prepared client self-update contract', () => {
     const promoter = source('scripts/promote-client-artifacts.ts')
 
     expect(promoter).toContain("if (source === root && !values['verify-only'])")
+  })
+})
+
+// Stable publication requires full-CI provenance for the exact current main SHA; no manual bypass is accepted.
+describe('stable release publication contract', () => {
+  it('moves stable to the exact approved main SHA with lease protection before publishing metadata', () => {
+    const workflow = source('.github/workflows/phoenix-stable-update-channel.yml')
+    const synchronize = workflow.indexOf('name: Synchronize stable release pointer')
+    const publish = workflow.indexOf('name: Publish stable manifest')
+
+    expect(synchronize).toBeGreaterThan(-1)
+    expect(publish).toBeGreaterThan(synchronize)
+    expect(workflow).toContain('--force-with-lease="refs/heads/stable:$stable_sha"')
+    expect(workflow).toContain('origin "$TARGET_SHA:refs/heads/stable"')
+    expect(workflow).toContain('"sourceBranch": "stable"')
+  })
+
+  it('publishes stable only after the complete CI matrix passes on the current main SHA', () => {
+    const ci = source('.github/workflows/ci.yml')
+    const publisher = source('.github/workflows/phoenix-stable-update-channel.yml')
+
+    expect(ci).toContain('push:\n    branches: [main]')
+    expect(ci).not.toContain("if: github.event_name == 'pull_request'")
+    expect(publisher).toContain('workflows: [CI]')
+    expect(publisher).toContain('branches: [main]')
+    expect(publisher).not.toContain('workflow_dispatch:')
+    expect(publisher).toContain("if: github.event.workflow_run.conclusion == 'success'")
   })
 })

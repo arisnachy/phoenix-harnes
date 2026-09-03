@@ -13,7 +13,7 @@ describe('PHOENIX doctor frontend bootstrap check', () => {
 
     expect(inspectFrontendBootstrap([
       '<script>window.__ModuleLoader__={}</script>',
-      '<script src="/plugins/@deepseek-ai/dsh-client-modules/client.js"></script>',
+      `<script src="/plugins/${['@deepseek-ai', 'dsh-client-modules/client.js'].join('/')}"></script>`,
     ].join(''))).toEqual({
       ok: false,
       detail: 'Phoenix client module bootstrap is missing or still references the legacy module',

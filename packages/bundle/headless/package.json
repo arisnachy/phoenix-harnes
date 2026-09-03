@@ -46,9 +46,9 @@
   "dependencies": {
     "@phoenix-ai/dsh-cmdline": "workspace:^",
     "@phoenix-ai/dsh-code-runtime-worker-thread": "workspace:^",
-    "@phoenix-ai/dsh-code-runtime-python": "workspace:^",
     "@phoenix-ai/schemastery": "workspace:^",
-    "commander": "^15.0.0"
+    "commander": "^15.0.0",
+    "@phoenix-ai/dsh-code-runtime-python": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/cordis-plugin-loader": "workspace:^",

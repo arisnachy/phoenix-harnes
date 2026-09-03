@@ -419,13 +419,22 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 #### `goal/change` — log-only
 
 ```ts persistence-catalog
-/**
- * Complete post-mutation goal state or clear tombstone.
- */
+/** Complete post-mutation goal state or clear tombstone. */
 'goal/change': GoalChangeMeta
 ```
 
-来源：[`packages/goal/goal/src/domain.ts:66`](../packages/goal/goal/src/domain.ts)
+来源：[`packages/goal/goal/src/domain.ts:216`](../packages/goal/goal/src/domain.ts)
+
+<a id="goalcompletion-gate--log-only"></a>
+
+#### `goal/completion-gate` — log-only
+
+```ts persistence-catalog
+/** Independent executable/adversarial certification for one exact goal revision. */
+'goal/completion-gate': GoalCompletionGateAuditEntry
+```
+
+来源：[`packages/goal/goal/src/domain.ts:220`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalcontinuation--log-only"></a>
 
@@ -436,7 +445,18 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'goal/continuation': GoalContinuationWindow
 ```
 
-来源：[`packages/goal/goal/src/domain.ts:172`](../packages/goal/goal/src/domain.ts)
+来源：[`packages/goal/goal/src/domain.ts:228`](../packages/goal/goal/src/domain.ts)
+
+<a id="goalfalse-pass--log-only"></a>
+
+#### `goal/false-pass` — log-only
+
+```ts persistence-catalog
+/** A later valid verification disproved an earlier accepted PASS. */
+'goal/false-pass': GoalFalsePassAuditEntry
+```
+
+来源：[`packages/goal/goal/src/domain.ts:222`](../packages/goal/goal/src/domain.ts)
 
 <a id="goaljudge--log-only"></a>
 
@@ -447,7 +467,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'goal/judge': GoalJudgeAuditEntry
 ```
 
-来源：[`packages/goal/goal/src/domain.ts:91`](../packages/goal/goal/src/domain.ts)
+来源：[`packages/goal/goal/src/domain.ts:218`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalstrategy--log-only"></a>
 
@@ -458,7 +478,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'goal/strategy': GoalStrategySelection
 ```
 
-来源：[`packages/goal/goal/src/domain.ts:104`](../packages/goal/goal/src/domain.ts)
+来源：[`packages/goal/goal/src/domain.ts:226`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalsupervisor--log-only"></a>
 
@@ -469,7 +489,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'goal/supervisor': GoalSupervisorCheckpoint
 ```
 
-来源：[`packages/goal/goal/src/domain.ts:102`](../packages/goal/goal/src/domain.ts)
+来源：[`packages/goal/goal/src/domain.ts:224`](../packages/goal/goal/src/domain.ts)
 
 ### `hardness/*`
 
@@ -774,7 +794,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'specialist/change': SpecialistChange
 ```
 
-来源：[`packages/goal/goal/src/domain.ts:161`](../packages/goal/goal/src/domain.ts)
+来源：[`packages/goal/goal/src/domain.ts:230`](../packages/goal/goal/src/domain.ts)
 
 ### `step/*`
 

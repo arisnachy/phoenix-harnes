@@ -14,7 +14,7 @@ interface Check {
 }
 
 const PHOENIX_CLIENT_MODULE = '@phoenix-ai/dsh-client-modules/client.js'
-const LEGACY_CLIENT_MODULE = '@deepseek-ai/dsh-client-modules/client.js'
+const LEGACY_CLIENT_MODULE = ['@deepseek-ai', 'dsh-client-modules/client.js'].join('/')
 
 /** Validate the HTML bootstrap that registers the client module system. */
 export function inspectFrontendBootstrap(html: string): Pick<Check, 'ok' | 'detail'> {

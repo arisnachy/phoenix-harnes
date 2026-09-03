@@ -1548,7 +1548,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:98`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:105`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 
@@ -3320,7 +3320,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/voice/voice-local/src/index.ts:134`](../packages/voice/voice-local/src/index.ts)
+Source: [`packages/voice/voice-local/src/index.ts:149`](../packages/voice/voice-local/src/index.ts)
 
 <a id="phoenix-aidsh-web"></a>
 
