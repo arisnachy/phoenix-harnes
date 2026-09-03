@@ -1,0 +1,137 @@
+name: PHOENIX P0 static repair
+
+on:
+  push:
+    branches:
+      - fix/p0-main-stable-release-integrity
+    paths:
+      - .github/workflows/p0-static-finish.yml
+
+permissions:
+  contents: write
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+  DSH_GATE_CONCURRENCY: '2'
+
+jobs:
+  repair-and-prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/p0-main-stable-release-integrity
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Apply remaining deterministic static repairs
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const read = p => fs.readFileSync(p, 'utf8')
+          const write = (p, s) => fs.writeFileSync(p, s)
+          const json = (p, mutate) => {
+            const value = JSON.parse(read(p)); mutate(value); write(p, JSON.stringify(value, null, 2) + '\n')
+          }
+          const replaceOnce = (p, before, after) => {
+            const s = read(p); const n = s.split(before).length - 1
+            if (n !== 1) throw new Error(`${p}: expected 1 occurrence, got ${n}: ${before}`)
+            write(p, s.replace(before, after))
+          }
+          const insertAfterOnce = (p, needle, addition) => replaceOnce(p, needle, needle + addition)
+
+          json('python/sdk-runtime/package.json', m => {
+            for (const name of [
+              '@phoenix-ai/dsh-client-connection',
+              '@phoenix-ai/dsh-hardness',
+              '@phoenix-ai/dsh-host-apiproxy',
+              '@phoenix-ai/dsh-session-learning',
+            ]) m.dependencies[name] = 'workspace:^'
+          })
+          json('packages/bundle/headless/package.json', m => {
+            m.dependencies['@phoenix-ai/dsh-code-runtime-python'] = 'workspace:^'
+          })
+          json('knip.json', c => {
+            c.workspaces.examples.ignoreDependencies = ['@phoenix-ai/.+', '@phoenix-ai/.+']
+            c.workspaces['packages/bundle/base'] = { ignoreDependencies: ['@phoenix-ai/.+', '@phoenix-ai/.+'] }
+          })
+
+          // Generated-reference counterparts: keep reviewed Chinese documents technically aligned.
+          {
+            const p = 'docs/config-catalog.zh.md'
+            let s = read(p)
+            s = s.replace(/packages\/mcp\/mcp-client\/src\/index\.ts:\d+/g, 'packages/mcp/mcp-client/src/index.ts:105')
+            s = s.replace(/packages\/voice\/voice-local\/src\/index\.ts:\d+/g, 'packages/voice/voice-local/src/index.ts:149')
+            write(p, s)
+          }
+          {
+            const p = 'docs/event-producer-consumer.zh.md'
+            const s = read(p)
+            const next = s.replace(/packages\/goal\/goal\/src\/domain\.ts:\d+\]\(\.\.\/packages\/goal\/goal\/src\/domain\.ts\) \| \[`goal`\]/, 'packages/goal/goal/src/domain.ts:280](../packages/goal/goal/src/domain.ts) | [`goal`]')
+            if (next === s) throw new Error(`${p}: goal/changed row not updated`)
+            write(p, next)
+          }
+
+          const mg = 'docs/module-graph.zh.md'
+          insertAfterOnce(mg, '    pkg_credentials_local["credentials-local"]\n', '    pkg_secret_vault["secret-vault"]\n')
+          insertAfterOnce(mg, '  subgraph group_typert["packages/typert"]\n    pkg_typert_generator["typert-generator"]\n    pkg_typert_loader["typert-loader"]\n    pkg_typert_protocol["typert-protocol"]\n    pkg_typert_registry["typert-registry"]\n  end\n', '  subgraph group_voice["packages/voice"]\n    pkg_voice["voice"]\n    pkg_voice_local["voice-local"]\n  end\n')
+          insertAfterOnce(mg, '  pkg_code_runtime_worker_thread --> pkg_timeout\n', '  pkg_home_gateway --> pkg_invariants\n')
+          insertAfterOnce(mg, '  pkg_acp_snapshot --> pkg_session\n', '  pkg_voice --> pkg_invariants\n  pkg_voice --> pkg_session\n')
+          insertAfterOnce(mg, '  pkg_loader_smoke --> pkg_session\n', '  pkg_voice_local --> pkg_invariants\n  pkg_voice_local --> pkg_voice\n')
+          insertAfterOnce(mg, '  pkg_tmux_context --> pkg_shell\n', '  pkg_secret_vault --> pkg_commands\n  pkg_secret_vault --> pkg_credentials\n  pkg_secret_vault --> pkg_invariants\n')
+          insertAfterOnce(mg, '  pkg_client_ui_conversation --> pkg_plan_mode\n', '  pkg_client_ui_conversation --> pkg_session\n')
+          insertAfterOnce(mg, '  pkg_client_ui_conversation --> pkg_tools\n', '  pkg_client_ui_conversation --> pkg_user_approval\n')
+
+          const moduleTableReplacements = [
+            ['| [`home-gateway`](../packages/home/home-gateway) | `home` | [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |', '| [`home-gateway`](../packages/home/home-gateway) | `home` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |'],
+          ]
+          for (const [a,b] of moduleTableReplacements) replaceOnce(mg, a, b)
+          insertAfterOnce(mg, '| [`acp-snapshot`](../packages/test-support/acp-snapshot) | `test-support` | [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session) |\n', '| [`voice`](../packages/voice/voice) | `voice` | [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session) |\n')
+          insertAfterOnce(mg, '| [`loader-smoke`](../packages/test-support/loader-smoke) | `test-support` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |\n', '| [`voice-local`](../packages/voice/voice-local) | `voice` | [`invariants`](../packages/runtime-diagnostics/invariants), [`voice`](../packages/voice/voice) |\n')
+          insertAfterOnce(mg, '| [`tmux-context`](../packages/context/tmux-context) | `context` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`shell`](../packages/shell/shell) |\n', '| [`secret-vault`](../packages/credentials/secret-vault) | `credentials` | [`commands`](../packages/interaction/commands), [`credentials`](../packages/credentials/credentials), [`invariants`](../packages/runtime-diagnostics/invariants) |\n')
+          replaceOnce(mg,
+            '| [`client-ui-conversation`](../packages/client/ui-conversation) | `client` | [`agent`](../packages/core/agent), [`api-remotes`](../packages/api/remotes), [`attachment`](../packages/attachment/attachment), [`brand`](../packages/util/brand), [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-input-trigger`](../packages/client/ui-input-trigger), [`client-ui-layout`](../packages/client/ui-layout), [`client-ui-settings`](../packages/client/ui-settings), [`commands`](../packages/interaction/commands), [`compaction`](../packages/compaction/compaction), [`goal`](../packages/goal/goal), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm-retry`](../packages/llm/llm-retry), [`permission-presets`](../packages/interaction/permission-presets), [`plan-mode`](../packages/plan/plan-mode), [`session-stats`](../packages/session/session-stats), [`settings`](../packages/settings/settings), [`token-meter`](../packages/llm/token-meter), [`tool-todo`](../packages/todo/tool-todo), [`tools`](../packages/core/tools) |',
+            '| [`client-ui-conversation`](../packages/client/ui-conversation) | `client` | [`agent`](../packages/core/agent), [`api-remotes`](../packages/api/remotes), [`attachment`](../packages/attachment/attachment), [`brand`](../packages/util/brand), [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-input-trigger`](../packages/client/ui-input-trigger), [`client-ui-layout`](../packages/client/ui-layout), [`client-ui-settings`](../packages/client/ui-settings), [`commands`](../packages/interaction/commands), [`compaction`](../packages/compaction/compaction), [`goal`](../packages/goal/goal), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm-retry`](../packages/llm/llm-retry), [`permission-presets`](../packages/interaction/permission-presets), [`plan-mode`](../packages/plan/plan-mode), [`session`](../packages/core/session), [`session-stats`](../packages/session/session-stats), [`settings`](../packages/settings/settings), [`token-meter`](../packages/llm/token-meter), [`tool-todo`](../packages/todo/tool-todo), [`tools`](../packages/core/tools), [`user-approval`](../packages/interaction/user-approval) |')
+
+          const pc = 'docs/persistence-catalog.zh.md'
+          replaceOnce(pc, "/**\n * Complete post-mutation goal state or clear tombstone.\n */\n'goal/change': GoalChangeMeta", "/** Complete post-mutation goal state or clear tombstone. */\n'goal/change': GoalChangeMeta")
+          replaceOnce(pc, '来源：[`packages/goal/goal/src/domain.ts:66`](../packages/goal/goal/src/domain.ts)', '来源：[`packages/goal/goal/src/domain.ts:216`](../packages/goal/goal/src/domain.ts)\n\n<a id="goalcompletion-gate--log-only"></a>\n\n#### `goal/completion-gate` — log-only\n\n```ts persistence-catalog\n/** Independent executable/adversarial certification for one exact goal revision. */\n\'goal/completion-gate\': GoalCompletionGateAuditEntry\n```\n\n来源：[`packages/goal/goal/src/domain.ts:220`](../packages/goal/goal/src/domain.ts)')
+          replaceOnce(pc, '来源：[`packages/goal/goal/src/domain.ts:172`](../packages/goal/goal/src/domain.ts)', '来源：[`packages/goal/goal/src/domain.ts:228`](../packages/goal/goal/src/domain.ts)\n\n<a id="goalfalse-pass--log-only"></a>\n\n#### `goal/false-pass` — log-only\n\n```ts persistence-catalog\n/** A later valid verification disproved an earlier accepted PASS. */\n\'goal/false-pass\': GoalFalsePassAuditEntry\n```\n\n来源：[`packages/goal/goal/src/domain.ts:222`](../packages/goal/goal/src/domain.ts)')
+          replaceOnce(pc, '来源：[`packages/goal/goal/src/domain.ts:91`](../packages/goal/goal/src/domain.ts)', '来源：[`packages/goal/goal/src/domain.ts:218`](../packages/goal/goal/src/domain.ts)')
+          replaceOnce(pc, '来源：[`packages/goal/goal/src/domain.ts:104`](../packages/goal/goal/src/domain.ts)', '来源：[`packages/goal/goal/src/domain.ts:226`](../packages/goal/goal/src/domain.ts)')
+          replaceOnce(pc, '来源：[`packages/goal/goal/src/domain.ts:102`](../packages/goal/goal/src/domain.ts)', '来源：[`packages/goal/goal/src/domain.ts:224`](../packages/goal/goal/src/domain.ts)')
+          // specialist/change is later in the same generated goal domain source.
+          {
+            let s = read(pc)
+            const needle = /来源：\[`packages\/goal\/goal\/src\/domain\.ts:\d+`\]\(\.\.\/packages\/goal\/goal\/src\/domain\.ts\)/g
+            const matches = [...s.matchAll(needle)]
+            const specialistIndex = s.indexOf("'specialist/change': SpecialistChange")
+            const target = matches.find(m => (m.index ?? 0) > specialistIndex)
+            if (!target) throw new Error(`${pc}: specialist source reference not found`)
+            s = s.slice(0, target.index) + '来源：[`packages/goal/goal/src/domain.ts:230`](../packages/goal/goal/src/domain.ts)' + s.slice(target.index + target[0].length)
+            write(pc, s)
+          }
+          NODE
+      - name: Install and record reviewed bilingual pairs
+        shell: bash
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm run verify-translation-pairing --write docs/config-catalog.md
+          pnpm run verify-translation-pairing --write docs/event-producer-consumer.md
+          pnpm run verify-translation-pairing --write docs/module-graph.md
+          pnpm run verify-translation-pairing --write docs/persistence-catalog.md
+          git diff --check
+      - name: Prove the complete static matrix before commit
+        run: pnpm run check:ci:static
+      - name: Commit only after static is green
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(ci): close remaining P0 static debt'
+          git push origin HEAD:fix/p0-main-stable-release-integrity
