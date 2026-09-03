@@ -35,8 +35,14 @@ describe('mission debt bootstrap', () => {
   it.each([
     ['**Pendiente:** copiar el parche al perfil y verificar el buzón.'],
     ['El alias de entrada todavía no está verificado.'],
+    ['Falta copiar el parche al perfil.'],
+    ['Queda por verificar el buzón de producción.'],
+    ['Hay que configurar la variable de entorno.'],
+    ['Siguiente paso: verificar el alias de entrada.'],
     ['Pending: verify the production mailbox.'],
     ['The production mailbox is not yet verified.'],
+    ['Next step: verify the production mailbox.'],
+    ['We still need to configure the environment variable.'],
   ])('turns explicit unresolved executable work into mission debt: %s', (finalText) => {
     expect(missionDebtBootstrap(executableTurn(finalText), 1)).toEqual({
       objective: 'Configura Hostinger y verifica el buzón',
@@ -44,8 +50,12 @@ describe('mission debt bootstrap', () => {
     })
   })
 
-  it('does not classify an explicit no-debt statement as unresolved work', () => {
-    expect(missionDebtBootstrap(executableTurn('Listo. No hay nada pendiente.'), 1)).toBeUndefined()
+  it.each([
+    ['Listo. No hay nada pendiente.'],
+    ['Listo. No falta nada por hacer.'],
+    ['Done. No next steps remain.'],
+  ])('does not classify an explicit no-debt statement as unresolved work: %s', (finalText) => {
+    expect(missionDebtBootstrap(executableTurn(finalText), 1)).toBeUndefined()
   })
 
   it('does not bootstrap a mission when no executable tool work occurred', () => {
