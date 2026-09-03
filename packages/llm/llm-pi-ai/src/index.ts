@@ -66,6 +66,7 @@ import { catalogProviderIds } from './catalog.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
+import { installCodexImageGeneration } from './image-generation.ts'
 import { registerPiAiFlows } from './login.ts'
 
 export { PiAiAdapter } from './adapter.ts'
@@ -84,6 +85,13 @@ export type {
 export { CHATGPT_WEB_DEFAULT_API, CHATGPT_WEB_DEFAULT_BASE_URL, CHATGPT_WEB_PROVIDER, chatgptWebDefaults } from './config.ts'
 export { recordKeyFor } from './auth.ts'
 export { supportedProtocols } from './provider.ts'
+export {
+  classifyCodexImageFailure,
+  codexDoctorSupportsImageGeneration,
+  imageGenerationToolDescription,
+  installCodexImageGeneration,
+  selectFreshGeneratedImage,
+} from './image-generation.ts'
 
 export const name = 'llm-pi-ai'
 export const inject = ['llm']
@@ -218,6 +226,13 @@ export function apply(ctx: Context, config: Config): void {
   // composition without it (headless, ACP) simply has no surface to sign in
   // from, while everything else this plugin does still works.
   ctx.inject(['authorization'], (authorized) => { registerPiAiFlows(authorized, auth) })
+  // Image generation is an orthogonal Codex-hosted capability. The active text
+  // route may be OpenRouter/free, DeepSeek, or another provider; once the normal
+  // tools/subprocess/attachment stack is composed, the model sees this tool and
+  // the generated raster is committed through the durable attachment store.
+  ctx.inject(['tools', 'subprocess', 'attachments'], (imageCtx) => {
+    installCodexImageGeneration(imageCtx)
+  })
   // The full installed catalog is configurable from the moment the plugin
   // mounts — dormant or not — so configuration surfaces can offer every
   // pi-ai provider before any route exists. Hand-declared routes join it as
