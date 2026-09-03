@@ -10,7 +10,7 @@
 
 import { constants } from 'node:fs'
 import { access, stat } from 'node:fs/promises'
-import { delimiter, extname, isAbsolute, resolve } from 'node:path'
+import { delimiter, extname, isAbsolute, resolve, win32 } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
 import * as nodePty from 'node-pty'
 import type { IPtyForkOptions } from 'node-pty'
@@ -26,6 +26,37 @@ import type { LocalSubprocessHandle, SpawnInternals } from './spawn.ts'
 import { createProcessInspector } from './process-inspector.ts'
 import type { ProcessInspector } from './process-inspector.ts'
 import { LocalTerminalHandle } from './terminal.ts'
+
+/**
+ * Windows package managers commonly install command shims outside the PATH
+ * inherited by GUI-launched applications. Search those per-user CLI homes as
+ * a fallback so a valid local install remains discoverable from Phoenix.
+ *
+ * Explicit PATH entries still win; these directories are only appended after
+ * normal PATH resolution. Keeping the fallback generic also fixes other
+ * user-installed CLIs without hard-coding a Codex-specific executable path.
+ */
+export function supplementalExecutableDirectories(
+  env: Readonly<NodeJS.ProcessEnv>,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  if (platform !== 'win32') return []
+  const appData = environmentValue(env, 'APPDATA', platform)?.trim()
+  const localAppData = environmentValue(env, 'LOCALAPPDATA', platform)?.trim()
+  const pnpmHome = environmentValue(env, 'PNPM_HOME', platform)?.trim()
+  const candidates = [
+    pnpmHome,
+    appData ? win32.join(appData, 'npm') : undefined,
+    localAppData ? win32.join(localAppData, 'pnpm') : undefined,
+  ].filter((value): value is string => value !== undefined && value.length > 0)
+  const seen = new Set<string>()
+  return candidates.filter((candidate) => {
+    const normalized = candidate.toLowerCase()
+    if (seen.has(normalized)) return false
+    seen.add(normalized)
+    return true
+  })
+}
 
 /**
  * Local subprocess service: detached process trees, Node-shaped stdio
@@ -110,7 +141,7 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
     signal?.throwIfAborted()
     const environment = childEnv(env)
     const absolute = isAbsolute(command)
-    if (!absolute && (command.includes('/') || (process.platform === 'win32' && command.includes('\\')))) {
+    if (!absolute && (command.includes('/') || (process.platform === 'win32' && command.includes('\\'))) {
       throw new Error(
         `subprocess-local: command ${JSON.stringify(command)} is a relative path; use an absolute path or a bare PATH name`,
       )
@@ -125,7 +156,7 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
         signal?.throwIfAborted()
         return candidate
       } catch {
-        // Try the next PATH candidate; the final miss receives one stable error.
+        // Try the next PATH/user-CLI candidate; the final miss receives one stable error.
       }
     }
     signal?.throwIfAborted()
@@ -139,8 +170,17 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
     const extensions = process.platform === 'win32' && extname(command) === ''
       ? (environmentValue(env, 'PATHEXT') ?? '.COM;.EXE;.BAT;.CMD').split(';')
       : ['']
-    return path.split(delimiter).flatMap(directory =>
-      extensions.map(extension => resolve(process.cwd(), directory, command + extension)))
+    const directories = [
+      ...path.split(delimiter).filter(directory => directory.length > 0),
+      ...supplementalExecutableDirectories(env),
+    ]
+    const seen = new Set<string>()
+    return directories.flatMap((directory) => {
+      const normalized = process.platform === 'win32' ? directory.toLowerCase() : directory
+      if (seen.has(normalized)) return []
+      seen.add(normalized)
+      return extensions.map(extension => resolve(process.cwd(), directory, command + extension))
+    })
   }
 
   spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
@@ -177,17 +217,21 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
     this.terminals.add(handle)
     const release = async (): Promise<void> => {
       await handle.terminate()
-      this.terminals.delete(handle)
+      this.terminals.delete(terminal as never)
     }
     void handle.done.then(release, release).catch(() => {})
     return handle
   }
 }
 
-/** Read a Windows environment key using the platform's case-insensitive semantics. */
-function environmentValue(env: NodeJS.ProcessEnv, name: 'PATH' | 'PATHEXT'): string | undefined {
+/** Read an environment key using Windows' case-insensitive semantics when applicable. */
+function environmentValue(
+  env: Readonly<NodeJS.ProcessEnv>,
+  name: string,
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
   const exact = env[name]
-  if (exact !== undefined || process.platform !== 'win32') return exact
+  if (exact !== undefined || platform !== 'win32') return exact
   const normalized = name.toUpperCase()
   return Object.entries(env).find(([key]) => key.toUpperCase() === normalized)?.[1]
 }
