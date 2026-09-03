@@ -76,6 +76,9 @@
       ],
       "project": [
         "**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@phoenix-ai/.+"
       ]
     },
     "packages/host/directory-picker-auto": {
@@ -657,10 +660,16 @@
     },
     "packages/bundle/headless": {
       "ignoreDependencies": [
+        "@phoenix-ai/dsh-code-runtime-python",
         "@phoenix-ai/dsh-code-runtime-worker-thread"
       ]
     },
     "packages/bundle/web-app": {
+      "ignoreDependencies": [
+        "@phoenix-ai/.+"
+      ]
+    },
+    "packages/bundle/base": {
       "ignoreDependencies": [
         "@phoenix-ai/.+"
       ]

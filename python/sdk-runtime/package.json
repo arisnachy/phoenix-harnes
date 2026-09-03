@@ -125,6 +125,19 @@
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/schemastery": "workspace:^",
     "@phoenix-ai/dsh-hardness-adapters": "workspace:^",
-    "@phoenix-ai/dsh-tool-session-learning": "workspace:^"
+    "@phoenix-ai/dsh-tool-session-learning": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^",
+    "@phoenix-ai/dsh-hardness": "workspace:^",
+    "@phoenix-ai/dsh-host-apiproxy": "workspace:^",
+    "@phoenix-ai/dsh-session-learning": "workspace:^",
+    "@phoenix-ai/dsh-agent-presets": "workspace:^",
+    "@phoenix-ai/dsh-api-gateway": "workspace:^",
+    "@phoenix-ai/dsh-file-reference": "workspace:^",
+    "@phoenix-ai/dsh-host-plugin-inventory": "workspace:^",
+    "@phoenix-ai/dsh-host-webserver": "workspace:^",
+    "@phoenix-ai/dsh-message-feedback": "workspace:^",
+    "@phoenix-ai/dsh-storage": "workspace:^",
+    "@phoenix-ai/dsh-storage-domain": "workspace:^",
+    "@phoenix-ai/dsh-typert-registry": "workspace:^"
   }
 }
