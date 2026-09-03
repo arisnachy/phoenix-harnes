@@ -41,4 +41,13 @@ describe('stable release publication contract', () => {
     expect(workflow).toContain('origin "$TARGET_SHA:refs/heads/stable"')
     expect(workflow).toContain('"sourceBranch": "stable"')
   })
+
+  it('requires the full repository baseline before a main SHA can become a release candidate', () => {
+    const guard = source('.github/workflows/phoenix-main-guard.yml')
+    const baseline = guard.indexOf('run: pnpm run check:all')
+    const build = guard.indexOf('run: pnpm run build')
+
+    expect(baseline).toBeGreaterThan(-1)
+    expect(build).toBeGreaterThan(baseline)
+  })
 })
