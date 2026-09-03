@@ -42,12 +42,13 @@ describe('stable release publication contract', () => {
     expect(workflow).toContain('"sourceBranch": "stable"')
   })
 
-  it('requires the full repository baseline before a main SHA can become a release candidate', () => {
-    const guard = source('.github/workflows/phoenix-main-guard.yml')
-    const baseline = guard.indexOf('run: pnpm run check:all')
-    const build = guard.indexOf('run: pnpm run build')
+  it('publishes stable only after the complete CI matrix passes on the current main SHA', () => {
+    const ci = source('.github/workflows/ci.yml')
+    const publisher = source('.github/workflows/phoenix-stable-update-channel.yml')
 
-    expect(baseline).toBeGreaterThan(-1)
-    expect(build).toBeGreaterThan(baseline)
+    expect(ci).toContain('push:\n    branches: [main]')
+    expect(ci).not.toContain("if: github.event_name == 'pull_request'")
+    expect(publisher).toContain('workflows: [CI]')
+    expect(publisher).toContain('branches: [main]')
   })
 })
