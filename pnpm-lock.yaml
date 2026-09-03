@@ -1114,6 +1114,9 @@ importers:
       '@phoenix-ai/dsh-llm-retry':
         specifier: workspace:^
         version: link:../../llm/llm-retry
+      '@phoenix-ai/dsh-mcp-connector-registry':
+        specifier: workspace:^
+        version: link:../../mcp/mcp-registry
       '@phoenix-ai/dsh-permission-presets':
         specifier: workspace:^
         version: link:../../interaction/permission-presets
@@ -1301,9 +1304,6 @@ importers:
       '@phoenix-ai/dsh-cmdline':
         specifier: workspace:^
         version: link:../../boot/cmdline
-      '@phoenix-ai/dsh-code-runtime-python':
-        specifier: workspace:^
-        version: link:../../code-runtime/code-runtime-python
       '@phoenix-ai/dsh-code-runtime-worker-thread':
         specifier: workspace:^
         version: link:../../code-runtime/code-runtime-worker-thread
@@ -2000,6 +2000,9 @@ importers:
       '@phoenix-ai/dsh-plan-mode':
         specifier: workspace:^
         version: link:../../plan/plan-mode
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
       '@phoenix-ai/dsh-session-projection':
         specifier: workspace:^
         version: link:../../session/session-projection
@@ -2018,6 +2021,9 @@ importers:
       '@phoenix-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../core/tools
+      '@phoenix-ai/dsh-user-approval':
+        specifier: workspace:^
+        version: link:../../interaction/user-approval
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
@@ -9253,6 +9259,9 @@ importers:
       '@phoenix-ai/dsh-goal-round-driver':
         specifier: workspace:^
         version: link:../../packages/goal/goal-round-driver
+      '@phoenix-ai/dsh-hardness-adapters':
+        specifier: workspace:^
+        version: link:../../packages/hardness/adapters
       '@phoenix-ai/dsh-home-paths':
         specifier: workspace:^
         version: link:../../packages/util/home-paths
@@ -9448,6 +9457,9 @@ importers:
       '@phoenix-ai/dsh-tool-ralph':
         specifier: workspace:^
         version: link:../../packages/workflow/tool-ralph
+      '@phoenix-ai/dsh-tool-session-learning':
+        specifier: workspace:^
+        version: link:../../packages/session-learning/tool-session-learning
       '@phoenix-ai/dsh-tool-skill':
         specifier: workspace:^
         version: link:../../packages/skill/tool-skill

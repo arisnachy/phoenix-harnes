@@ -11,7 +11,7 @@ import { writeFileAtomic } from '@phoenix-ai/dsh-atomic-write'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 
 /** Default endpoint exposed by the local `codex-chatgpt-web` bridge. */
-export const DEFAULT_CHATGPT_WEB_URL = 'http://127.0.0.1:17841/v1'
+const DEFAULT_CHATGPT_WEB_URL = 'http://127.0.0.1:17841/v1'
 
 /** The persisted ownership record format. */
 export interface ChatGptWebBridgeState {

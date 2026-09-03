@@ -76,10 +76,6 @@
       ],
       "project": [
         "**/*.ts"
-      ],
-      "ignoreDependencies": [
-        "@phoenix-ai/.+",
-        "@phoenix-ai/.+"
       ]
     },
     "packages/host/directory-picker-auto": {
@@ -657,12 +653,6 @@
       "project": [
         "src/**/*.ts",
         "tests/**/*.ts"
-      ]
-    },
-    "packages/bundle/base": {
-      "ignoreDependencies": [
-        "@phoenix-ai/.+",
-        "@phoenix-ai/.+"
       ]
     },
     "packages/bundle/headless": {
