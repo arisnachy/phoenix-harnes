@@ -29,7 +29,7 @@ describe('prepared client self-update contract', () => {
   })
 })
 
-// Stable publication is intentionally pinned to a successful full-CI run for the exact main SHA.
+// Stable publication requires full-CI provenance for the exact current main SHA; no manual bypass is accepted.
 describe('stable release publication contract', () => {
   it('moves stable to the exact approved main SHA with lease protection before publishing metadata', () => {
     const workflow = source('.github/workflows/phoenix-stable-update-channel.yml')
