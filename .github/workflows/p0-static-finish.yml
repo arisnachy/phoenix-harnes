@@ -68,13 +68,11 @@ jobs:
             s = s.replace(/packages\/voice\/voice-local\/src\/index\.ts:\d+/g, 'packages/voice/voice-local/src/index.ts:149')
             write(p, s)
           }
-          {
-            const p = 'docs/event-producer-consumer.zh.md'
-            const s = read(p)
-            const next = s.replace(/packages\/goal\/goal\/src\/domain\.ts:\d+\]\(\.\.\/packages\/goal\/goal\/src\/domain\.ts\) \| \[`goal`\]/, 'packages/goal/goal/src/domain.ts:280](../packages/goal/goal/src/domain.ts) | [`goal`]')
-            if (next === s) throw new Error(`${p}: goal/changed row not updated`)
-            write(p, next)
-          }
+          replaceOnce(
+            'docs/event-producer-consumer.zh.md',
+            'packages/goal/goal/src/domain.ts:209',
+            'packages/goal/goal/src/domain.ts:280',
+          )
 
           const mg = 'docs/module-graph.zh.md'
           insertAfterOnce(mg, '    pkg_credentials_local["credentials-local"]\n', '    pkg_secret_vault["secret-vault"]\n')
@@ -86,10 +84,9 @@ jobs:
           insertAfterOnce(mg, '  pkg_client_ui_conversation --> pkg_plan_mode\n', '  pkg_client_ui_conversation --> pkg_session\n')
           insertAfterOnce(mg, '  pkg_client_ui_conversation --> pkg_tools\n', '  pkg_client_ui_conversation --> pkg_user_approval\n')
 
-          const moduleTableReplacements = [
-            ['| [`home-gateway`](../packages/home/home-gateway) | `home` | [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |', '| [`home-gateway`](../packages/home/home-gateway) | `home` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |'],
-          ]
-          for (const [a,b] of moduleTableReplacements) replaceOnce(mg, a, b)
+          replaceOnce(mg,
+            '| [`home-gateway`](../packages/home/home-gateway) | `home` | [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |',
+            '| [`home-gateway`](../packages/home/home-gateway) | `home` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |')
           insertAfterOnce(mg, '| [`acp-snapshot`](../packages/test-support/acp-snapshot) | `test-support` | [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session) |\n', '| [`voice`](../packages/voice/voice) | `voice` | [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session) |\n')
           insertAfterOnce(mg, '| [`loader-smoke`](../packages/test-support/loader-smoke) | `test-support` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |\n', '| [`voice-local`](../packages/voice/voice-local) | `voice` | [`invariants`](../packages/runtime-diagnostics/invariants), [`voice`](../packages/voice/voice) |\n')
           insertAfterOnce(mg, '| [`tmux-context`](../packages/context/tmux-context) | `context` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`shell`](../packages/shell/shell) |\n', '| [`secret-vault`](../packages/credentials/secret-vault) | `credentials` | [`commands`](../packages/interaction/commands), [`credentials`](../packages/credentials/credentials), [`invariants`](../packages/runtime-diagnostics/invariants) |\n')
@@ -104,7 +101,6 @@ jobs:
           replaceOnce(pc, '来源：[`packages/goal/goal/src/domain.ts:91`](../packages/goal/goal/src/domain.ts)', '来源：[`packages/goal/goal/src/domain.ts:218`](../packages/goal/goal/src/domain.ts)')
           replaceOnce(pc, '来源：[`packages/goal/goal/src/domain.ts:104`](../packages/goal/goal/src/domain.ts)', '来源：[`packages/goal/goal/src/domain.ts:226`](../packages/goal/goal/src/domain.ts)')
           replaceOnce(pc, '来源：[`packages/goal/goal/src/domain.ts:102`](../packages/goal/goal/src/domain.ts)', '来源：[`packages/goal/goal/src/domain.ts:224`](../packages/goal/goal/src/domain.ts)')
-          // specialist/change is later in the same generated goal domain source.
           {
             let s = read(pc)
             const needle = /来源：\[`packages\/goal\/goal\/src\/domain\.ts:\d+`\]\(\.\.\/packages\/goal\/goal\/src\/domain\.ts\)/g
