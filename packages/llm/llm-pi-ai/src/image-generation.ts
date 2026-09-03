@@ -110,6 +110,7 @@ export const imageGenerationToolDescription =
   'Generate an actual image with PHOENIX using the user\'s locally authenticated Codex/ChatGPT image capability. '
   + 'Use this whenever the user explicitly asks to create, draw, design, render, visualize, or generate an image, logo, banner, poster, cover, illustration, mockup, UI concept, diagram, thumbnail, or other visual asset. '
   + 'Also use it when completing a project whose required deliverables materially include visual assets such as branding, a hero image, application/web artwork, presentation graphics, or marketing creative. '
+  + 'Pass the complete visual request in prompt. Governed HARDNESS recovery may supply the same request as brief or objective; PHOENIX normalizes those aliases before invoking Codex. '
   + 'Do not return only an image prompt when the user asked for the actual image and this tool is available. '
   + 'The image backend is independent of the active text model, so use it even when the current language model is OpenRouter/free, DeepSeek, or another non-Codex route. '
   + 'Generate one distinct final visual per call. Do not create decorative images that are irrelevant to the requested deliverable.'
@@ -308,9 +309,18 @@ function imageGenerationArgs(args: unknown): ImageGenerationArgs {
     throw new Error('image_generation: arguments must be an object')
   }
   const value = args as Record<string, unknown>
-  if (typeof value.prompt !== 'string') throw new Error('image_generation: prompt must be a string')
+  const prompt = typeof value.prompt === 'string'
+    ? value.prompt
+    : typeof value.brief === 'string'
+      ? value.brief
+      : typeof value.objective === 'string'
+        ? value.objective
+        : undefined
+  if (prompt === undefined) {
+    throw new Error('image_generation: prompt, brief, or objective must be a string')
+  }
   return {
-    prompt: value.prompt,
+    prompt,
     ...(typeof value.size === 'string' ? { size: value.size as ImageSize } : {}),
     ...(typeof value.quality === 'string' ? { quality: value.quality as ImageQuality } : {}),
     ...(typeof value.background === 'string' ? { background: value.background as ImageBackground } : {}),
@@ -384,7 +394,15 @@ export function installCodexImageGeneration(ctx: Context): void {
       properties: {
         prompt: {
           type: 'string',
-          description: 'Complete visual brief for the one image to generate.',
+          description: 'Canonical complete visual brief for the one image to generate.',
+        },
+        brief: {
+          type: 'string',
+          description: 'Governed HARDNESS alias for prompt. Used when a mission supplies its visual brief as arguments.brief.',
+        },
+        objective: {
+          type: 'string',
+          description: 'Fallback governed HARDNESS alias when the visual request is supplied as arguments.objective.',
         },
         size: {
           type: 'string',
@@ -402,7 +420,6 @@ export function installCodexImageGeneration(ctx: Context): void {
           description: 'Requested background guidance. Omit for auto.',
         },
       },
-      required: ['prompt'],
     },
     output: {
       schema: {
