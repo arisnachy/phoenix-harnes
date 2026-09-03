@@ -79,8 +79,10 @@ export class AcquisitionRegistry {
   /**
    * Prepare the first provider that can satisfy a need. Existing tools whose
    * canonical id is exactly `tool:<need.kind>` are valid local acquisition
-   * candidates, so a model-facing tool does not become an external dependency
-   * merely because its generic ATLAS descriptor kind is `tool`.
+   * candidates while they are still experimental/testing, so a model-facing
+   * tool does not become an external dependency merely because its generic
+   * ATLAS descriptor kind is `tool`. Already verified tools are never
+   * downgraded by this fallback path.
    * Preparation only advances the capability to `testing`; successful real
    * execution is the sole source of passed evidence and later verification.
    * @param need - capability requirements that were not already routable.
@@ -105,7 +107,7 @@ export class AcquisitionRegistry {
 
     if (need.kind !== undefined) {
       const tool = this.hardness.get(`tool:${need.kind}` as CapabilityId)
-      if (tool?.kind === 'tool' && tool.status !== 'quarantined' && tool.status !== 'broken') {
+      if (tool?.kind === 'tool' && (tool.status === 'experimental' || tool.status === 'testing')) {
         return this.prepareCandidate(tool, need)
       }
     }
