@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -16,7 +18,6 @@ concurrency:
 
 jobs:
   node-24:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     name: node 24 / static
     env:
@@ -37,11 +38,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run static gates
         env:
-          DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
+          DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: pnpm run check:ci:static
 
   node-24-coverage:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     name: node 24 / coverage
     env:
@@ -76,7 +76,6 @@ jobs:
         run: pnpm run check:ci:coverage
 
   node-24-consumers:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     name: node 24 / snapshots and artifacts
     env:
@@ -115,7 +114,6 @@ jobs:
         run: pnpm run check:ci:consumers
 
   node-compat:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     name: node ${{ matrix.node }}
     env:
@@ -142,7 +140,6 @@ jobs:
         run: pnpm run check:node-compat
 
   python-sdk:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     name: python 3.10 / keyless SDK
     steps:
@@ -157,7 +154,6 @@ jobs:
         run: uv run --python 3.10 --group test --project python/sdk pytest
 
   windows:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     name: windows node 24 / wine blocking
     timeout-minutes: 30
@@ -185,7 +181,6 @@ jobs:
         run: wineserver -k 2>/dev/null || true
 
   windows-native:
-    if: github.event_name == 'pull_request'
     runs-on: windows-latest
     name: windows node 24 / native required
     timeout-minutes: 120
@@ -219,7 +214,7 @@ jobs:
     name: all checks passed
     runs-on: ubuntu-latest
     needs: [node-24, node-24-coverage, node-24-consumers, node-compat, python-sdk, windows, windows-native]
-    if: always() && github.event_name == 'pull_request'
+    if: always()
     steps:
       - name: Fail if any needed job did not succeed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
