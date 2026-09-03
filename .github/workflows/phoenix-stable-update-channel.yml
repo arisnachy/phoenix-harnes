@@ -5,7 +5,6 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,22 +15,17 @@ concurrency:
 
 jobs:
   publish:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Resolve green main commit
         id: target
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            target="${GITHUB_SHA}"
-          else
-            target="$WORKFLOW_SHA"
-          fi
+          target="$WORKFLOW_SHA"
           if [[ ! "$target" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Invalid target SHA: $target" >&2
             exit 1
