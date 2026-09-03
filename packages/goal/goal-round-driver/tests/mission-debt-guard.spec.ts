@@ -101,6 +101,32 @@ describe('mission debt stop fence', () => {
     expect(test.agent.session.events.some(event => event.type === 'tool/call')).toBe(true)
   })
 
+  it('retries durable goal persistence instead of letting unresolved work settle', async () => {
+    const test = await harness([
+      toolCallResponse('patch-retry', 'patch_profile', {}),
+      textResponse('Parche preparado.\n\n**Pendiente:** copiarlo al perfil y verificar el buzón.'),
+      textResponse('Reintentando la persistencia interna de la misión.'),
+    ])
+    const originalCreate = test.ctx.goals.create.bind(test.ctx.goals)
+    const create = vi.spyOn(test.ctx.goals, 'create')
+      .mockImplementationOnce(() => { throw new Error('temporary store failure') })
+      .mockImplementation((agent, input) => originalCreate(agent, input))
+    test.ctx.on('goal/changed', ({ agent, change }) => {
+      if (agent === test.agent && change.operation === 'create') test.ctx.goals.disarm(agent)
+    })
+
+    send(test.agent, 'Configura Hostinger y verifica el buzón')
+    await test.agent.whenIdle()
+
+    expect(create).toHaveBeenCalledTimes(2)
+    expect(test.adapter.requests).toHaveLength(3)
+    expect(test.ctx.goals.get(test.agent)).toMatchObject({
+      objective: 'Configura Hostinger y verifica el buzón',
+      phase: 'active',
+      activation: 'disarmed',
+    })
+  })
+
   it('allows verified executable work to end normally when the final response carries no debt', async () => {
     const test = await harness([
       toolCallResponse('patch-2', 'patch_profile', {}),
