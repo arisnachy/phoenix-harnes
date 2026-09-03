@@ -282,9 +282,18 @@ function missionKernel(input: HardnessMissionInput, lockedGoal: MissionGoalLock)
   return new MissionPersistenceKernel({ missionId: stableMissionId, revision: 1, goal: lockedGoal, writer }, prior)
 }
 
+function executionNeedAfterAcquisition(need: CapabilityNeed, preparedStatus: string | undefined): CapabilityNeed {
+  if (need.requiredStatus !== 'verified' || preparedStatus !== 'testing') return need
+  const { requiredStatus: _requiredStatus, ...executionNeed } = need
+  return executionNeed
+}
+
 /**
  * Execute one mission through acquisition, approval, real execution, artifact
- * verification, and evidence-backed promotion or quarantine.
+ * verification, and evidence-backed promotion or quarantine. A capability
+ * prepared as `testing` may execute once even when the final need requires
+ * `verified`; that execution is the only legitimate way to produce the passed
+ * evidence required for promotion.
  * @param input - Live services, declared need, arguments, and execution context.
  * @returns Completed rendered artifact or the governed reason the mission was blocked.
  */
@@ -294,6 +303,7 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
   kernel.start()
   if (!auditEntry(input, { step: 'inspect', outcome: 'completed' })) return auditUnavailable()
   const initial = input.hardness.route(input.need)
+  let executionNeed = input.need
   if (initial.kind !== 'route') {
     const acquired = await input.acquisition.acquireOrBuild(input.need, input.context.signal)
     if (acquired.kind !== 'built') {
@@ -303,9 +313,10 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
         fingerprint: `capability-unavailable:${input.need.kind ?? 'unknown'}`, blocked: true, routes: recoveryRoutes('capability') })
       return blocked(input, 'resolve', reason, 'capability-unavailable')
     }
+    executionNeed = executionNeedAfterAcquisition(input.need, acquired.capability.status)
   }
 
-  const routed = input.hardness.route(input.need)
+  const routed = input.hardness.route(executionNeed)
   if (routed.kind !== 'route') {
     const reason = routed.reasons.join('; ')
     kernel.dependencyMissing(input.need.kind ?? 'capability', reason)
@@ -329,7 +340,7 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
       input.hardness,
       input.tools,
       input.approval,
-      input.need,
+      executionNeed,
       input.args,
       input.context,
       input.executor,

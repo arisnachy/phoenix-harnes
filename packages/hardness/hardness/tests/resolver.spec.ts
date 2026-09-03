@@ -56,4 +56,39 @@ describe('HARDNESS capability resolver', () => {
 
     await ctx.fiber.dispose()
   })
+
+  it('routes an exact tool name as a semantic capability kind without treating descriptive need text as atlas tags', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const service = ctx.get('hardness') as HardnessService | undefined
+    if (service === undefined) throw new Error('hardness service missing')
+    const imageTool: CapabilityDescriptor = {
+      id: 'tool:image_generation' as CapabilityId,
+      kind: 'tool',
+      name: 'image_generation',
+      description: 'Generate an actual image.',
+      inputs: [],
+      outputs: [],
+      dependencies: [],
+      requiredPermissions: [],
+      provider: 'dsh-tools',
+      location: 'tool-registry',
+      version: '1.0.0',
+      compatibility: [],
+      limitations: [],
+      modalities: ['native'],
+      status: 'testing',
+    }
+    service.register(imageTool)
+
+    const available = service.resolveNeed({
+      kind: 'image_generation',
+      inputs: ['brief visual de Kira'],
+      outputs: ['imagen fotorealista'],
+    })
+
+    expect(available.kind).toBe('have')
+    expect(available.capability?.id).toBe(imageTool.id)
+    await ctx.fiber.dispose()
+  })
 })
