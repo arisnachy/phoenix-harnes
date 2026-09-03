@@ -62,9 +62,11 @@ describe('Codex image generation bridge', () => {
     }))).toBe(false)
   })
 
-  it('classifies quota failures without silently falling back to billed API usage', () => {
+  it('classifies real worker failures without silently falling back to billed API usage', () => {
     expect(classifyCodexImageFailure('TooManyRequests: image_gen usage limit reached')).toBe('quota')
     expect(classifyCodexImageFailure('429 rate limit exceeded')).toBe('quota')
+    expect(classifyCodexImageFailure('authentication required; sign in to ChatGPT')).toBe('auth')
+    expect(classifyCodexImageFailure('image_generation is disabled in this build')).toBe('capability')
     expect(classifyCodexImageFailure('codex: command failed')).toBe('runtime')
   })
 
@@ -85,9 +87,10 @@ describe('Codex image generation bridge', () => {
     expect(imageGenerationToolDescription).toContain('project')
     expect(imageGenerationToolDescription).toContain('logo')
     expect(imageGenerationToolDescription).toContain('active text model')
+    expect(imageGenerationToolDescription).toContain('brief or objective')
   })
 
-  it('attempts the real Codex image worker when doctor cannot recognize a valid newer posture', async () => {
+  it('attempts the real Codex image worker when doctor cannot recognize a valid newer posture and accepts a HARDNESS brief alias', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-image-generation-'))
     const previousHome = process.env.CODEX_HOME
     process.env.CODEX_HOME = root
@@ -140,7 +143,12 @@ describe('Codex image generation bridge', () => {
       if (tool === undefined) throw new Error('image_generation tool was not registered')
 
       await expect(tool.execute(
-        { prompt: 'A small test image' },
+        {
+          objective: 'Generate the requested image',
+          brief: 'A small test image',
+          size: '1024x1024',
+          quality: 'high',
+        },
         { signal: new AbortController().signal },
       )).resolves.toMatchObject({ provider: 'codex', attachment: { attachmentId: 'image-1' } })
       expect(spawns).toBe(2)
