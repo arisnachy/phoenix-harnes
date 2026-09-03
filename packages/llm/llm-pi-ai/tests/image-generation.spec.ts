@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   classifyCodexImageFailure,
   codexDoctorSupportsImageGeneration,
+  codexImageExecutableCandidates,
   imageGenerationToolDescription,
   selectFreshGeneratedImage,
 } from '../src/image-generation.ts'
@@ -48,6 +49,15 @@ describe('Codex image generation bridge', () => {
         'config.load': { details: ['enabled feature flags: apps, shell_tool'] },
       },
     }))).toBe(false)
+  })
+
+  it('discovers the Codex package already shipped with PHOENIX without requiring PATH', () => {
+    const candidates = codexImageExecutableCandidates('C:\\phoenix', {
+      APPDATA: 'C:\\Users\\test\\AppData\\Roaming',
+      PNPM_HOME: 'C:\\Users\\test\\AppData\\Local\\pnpm',
+    })
+    expect(candidates).toContain('C:\\phoenix\\packages\\subagent\\subagent-codex\\node_modules\\@openai\\codex\\bin\\codex.js')
+    expect(candidates).toContain('C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js')
   })
 
   it('classifies quota failures without silently falling back to billed API usage', () => {
