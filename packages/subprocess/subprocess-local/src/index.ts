@@ -9,8 +9,8 @@
  */
 
 import { constants } from 'node:fs'
-import { access, stat } from 'node:fs/promises'
-import { delimiter, extname, isAbsolute, resolve } from 'node:path'
+import { access, readdir, stat } from 'node:fs/promises'
+import { delimiter, extname, isAbsolute, resolve, win32 } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
 import * as nodePty from 'node-pty'
 import type { IPtyForkOptions } from 'node-pty'
@@ -26,6 +26,74 @@ import type { LocalSubprocessHandle, SpawnInternals } from './spawn.ts'
 import { createProcessInspector } from './process-inspector.ts'
 import type { ProcessInspector } from './process-inspector.ts'
 import { LocalTerminalHandle } from './terminal.ts'
+
+/**
+ * Windows package managers commonly install command shims outside the PATH
+ * inherited by GUI-launched applications. Search those per-user CLI homes as
+ * a fallback so a valid local install remains discoverable from Phoenix.
+ *
+ * Explicit PATH entries still win; these directories are only appended after
+ * normal PATH resolution. Keeping the fallback generic also fixes other
+ * user-installed CLIs without hard-coding a Codex-specific executable path.
+ */
+export function supplementalExecutableDirectories(
+  env: Readonly<NodeJS.ProcessEnv>,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  if (platform !== 'win32') return []
+  const appData = environmentValue(env, 'APPDATA', platform)?.trim()
+  const localAppData = environmentValue(env, 'LOCALAPPDATA', platform)?.trim()
+  const pnpmHome = environmentValue(env, 'PNPM_HOME', platform)?.trim()
+  const candidates = [
+    pnpmHome,
+    appData ? win32.join(appData, 'npm') : undefined,
+    localAppData ? win32.join(localAppData, 'pnpm') : undefined,
+  ].filter((value): value is string => value !== undefined && value.length > 0)
+  const seen = new Set<string>()
+  return candidates.filter((candidate) => {
+    const normalized = candidate.toLowerCase()
+    if (seen.has(normalized)) return false
+    seen.add(normalized)
+    return true
+  })
+}
+
+/**
+ * Resolve the explicit Codex Desktop executable hint when the app exposes it.
+ * This is intentionally opt-in and command-specific: generic subprocess
+ * resolution must not reinterpret arbitrary environment variables as binaries.
+ */
+export function codexExecutableOverride(
+  env: Readonly<NodeJS.ProcessEnv>,
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
+  const configured = environmentValue(env, 'CODEX_CLI_PATH', platform)?.trim()
+  return configured && configured.length > 0 ? configured : undefined
+}
+
+/**
+ * Build the Windows Codex Desktop executable directories. Current desktop
+ * builds keep the CLI below `%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\<hash>`;
+ * the direct bin root is retained for forward/backward-compatible layouts.
+ */
+export function windowsCodexDesktopExecutableDirectories(
+  env: Readonly<NodeJS.ProcessEnv>,
+  childDirectories: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  if (platform !== 'win32') return []
+  const localAppData = environmentValue(env, 'LOCALAPPDATA', platform)?.trim()
+  if (!localAppData) return []
+  const root = win32.join(localAppData, 'OpenAI', 'Codex', 'bin')
+  const seen = new Set<string>()
+  return [root, ...childDirectories.map(directory => win32.join(root, directory))]
+    .filter((directory) => {
+      const normalized = directory.toLowerCase()
+      if (seen.has(normalized)) return false
+      seen.add(normalized)
+      return true
+    })
+}
 
 /**
  * Local subprocess service: detached process trees, Node-shaped stdio
@@ -115,9 +183,20 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
         `subprocess-local: command ${JSON.stringify(command)} is a relative path; use an absolute path or a bare PATH name`,
       )
     }
-    const candidates = absolute ? [command] : this.executableCandidates(command, environment)
+    const explicitCodex = !absolute && command.toLowerCase() === 'codex'
+      ? codexExecutableOverride(environment)
+      : undefined
+    const candidates = absolute ? [command] : [
+      ...(explicitCodex && isAbsolute(explicitCodex) ? [explicitCodex] : []),
+      ...this.executableCandidates(command, environment),
+      ...await this.codexDesktopExecutableCandidates(command, environment, signal),
+    ]
+    const seen = new Set<string>()
     for (const candidate of candidates) {
       signal?.throwIfAborted()
+      const normalized = process.platform === 'win32' ? candidate.toLowerCase() : candidate
+      if (seen.has(normalized)) continue
+      seen.add(normalized)
       try {
         const info = await stat(candidate)
         if (!info.isFile()) continue
@@ -125,13 +204,13 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
         signal?.throwIfAborted()
         return candidate
       } catch {
-        // Try the next PATH candidate; the final miss receives one stable error.
+        // Try the next PATH/user-CLI/Desktop candidate; the final miss receives one stable error.
       }
     }
     signal?.throwIfAborted()
     throw new Error(absolute
       ? `subprocess-local: command ${JSON.stringify(command)} is not an executable file`
-      : `subprocess-local: command ${JSON.stringify(command)} was not found on PATH`)
+      : `subprocess-local: command ${JSON.stringify(command)} was not found on PATH or a supported user CLI location`)
   }
 
   private executableCandidates(command: string, env: NodeJS.ProcessEnv): string[] {
@@ -139,8 +218,41 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
     const extensions = process.platform === 'win32' && extname(command) === ''
       ? (environmentValue(env, 'PATHEXT') ?? '.COM;.EXE;.BAT;.CMD').split(';')
       : ['']
-    return path.split(delimiter).flatMap(directory =>
-      extensions.map(extension => resolve(process.cwd(), directory, command + extension)))
+    const directories = [
+      ...path.split(delimiter).filter(directory => directory.length > 0),
+      ...supplementalExecutableDirectories(env),
+    ]
+    const seen = new Set<string>()
+    return directories.flatMap((directory) => {
+      const normalized = process.platform === 'win32' ? directory.toLowerCase() : directory
+      if (seen.has(normalized)) return []
+      seen.add(normalized)
+      return extensions.map(extension => resolve(process.cwd(), directory, command + extension))
+    })
+  }
+
+  private async codexDesktopExecutableCandidates(
+    command: string,
+    env: NodeJS.ProcessEnv,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    if (process.platform !== 'win32' || command.toLowerCase() !== 'codex') return []
+    signal?.throwIfAborted()
+    const localAppData = environmentValue(env, 'LOCALAPPDATA', 'win32')?.trim()
+    if (!localAppData) return []
+    const root = win32.join(localAppData, 'OpenAI', 'Codex', 'bin')
+    let childDirectories: string[] = []
+    try {
+      const entries = await readdir(root, { withFileTypes: true })
+      childDirectories = entries.filter(entry => entry.isDirectory()).map(entry => entry.name)
+    } catch {
+      // Desktop Codex is optional. A missing/inaccessible app directory simply
+      // leaves normal PATH/npm/pnpm discovery authoritative.
+    }
+    signal?.throwIfAborted()
+    const extensions = (environmentValue(env, 'PATHEXT', 'win32') ?? '.COM;.EXE;.BAT;.CMD').split(';')
+    return windowsCodexDesktopExecutableDirectories(env, childDirectories, 'win32')
+      .flatMap(directory => extensions.map(extension => win32.join(directory, command + extension)))
   }
 
   spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
@@ -184,10 +296,14 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
   }
 }
 
-/** Read a Windows environment key using the platform's case-insensitive semantics. */
-function environmentValue(env: NodeJS.ProcessEnv, name: 'PATH' | 'PATHEXT'): string | undefined {
+/** Read an environment key using Windows' case-insensitive semantics when applicable. */
+function environmentValue(
+  env: Readonly<NodeJS.ProcessEnv>,
+  name: string,
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
   const exact = env[name]
-  if (exact !== undefined || process.platform !== 'win32') return exact
+  if (exact !== undefined || platform !== 'win32') return exact
   const normalized = name.toUpperCase()
   return Object.entries(env).find(([key]) => key.toUpperCase() === normalized)?.[1]
 }
