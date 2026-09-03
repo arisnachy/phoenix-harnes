@@ -2,13 +2,13 @@ import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import HardnessRegistry from '@phoenix-ai/dsh-hardness/src/index.ts'
 import type { Agent } from '@phoenix-ai/dsh-agent'
-import type { HardnessService } from '@phoenix-ai/dsh-hardness'
+import type { CapabilityId, HardnessService } from '@phoenix-ai/dsh-hardness'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
 import type { ToolRuntime } from '@phoenix-ai/dsh-tools'
 import type { Session } from '@phoenix-ai/dsh-session'
 import { AcquisitionRegistry } from '../src/acquisition-registry.ts'
 import { OpenClawCapabilityBroker } from '../src/openclaw/broker.ts'
-import { createHardnessAcquisition, installHardnessMissionRuntime } from '../src/mission-runtime.ts'
+import { createHardnessAcquisition, createHardnessMissionRunner, installHardnessMissionRuntime } from '../src/mission-runtime.ts'
 
 describe('HARDNESS production mission runtime', () => {
   it('runs a code artifact through the isolated runtime endpoint', async () => {
@@ -96,6 +96,77 @@ describe('HARDNESS production mission runtime', () => {
     expect(eventTypes.at(-1)).toBe('hardness/kernel')
     expect(eventTypes.filter(type => type === 'hardness/kernel')).toHaveLength(7)
     expect(eventTypes.filter(type => type === 'hardness/mission')).toHaveLength(8)
+    await ctx.fiber.dispose()
+  })
+
+  it('renders a generated raster through the production HARDNESS artifact runtime', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const imageCapability = {
+      id: 'tool:image_generation' as CapabilityId,
+      kind: 'image_generation',
+      name: 'image_generation',
+      description: 'Generate an actual image.',
+      inputs: [],
+      outputs: [],
+      dependencies: [],
+      requiredPermissions: [],
+      provider: 'dsh-tools',
+      location: 'tool-registry',
+      version: '1.0.0',
+      compatibility: [],
+      limitations: [],
+      modalities: ['native'],
+      status: 'verified',
+    } as const
+    hardness.register(imageCapability)
+    const execute = vi.fn<ToolRuntime['execute']>(async () => ({
+      isError: false as const,
+      value: null,
+      content: [{ type: 'image' as const, attachment: { attachmentId: 'image-1' as never, mediaType: 'image/png' as const, bytes: 3, width: 1, height: 1 } }],
+      meta: {
+        artifact: {
+          id: 'image-1',
+          mime: 'image/png',
+          data: {
+            provider: 'codex',
+            model: 'codex-built-in-image-gen',
+            attachment: { attachmentId: 'image-1', mediaType: 'image/png', bytes: 3, width: 1, height: 1 },
+          },
+        },
+      },
+    }))
+    const judge = async () => ({
+      verdict: 'pass' as const,
+      summary: 'verified image',
+      evidence: ['image-1'],
+      requiredChanges: [],
+      criteria: [
+        { id: 'artifact-produced', verdict: 'pass' as const, evidence: ['image-1'], findings: [] },
+        { id: 'artifact-rendered', verdict: 'pass' as const, evidence: ['image-1'], findings: [] },
+      ],
+      quality: { verdict: 'pass' as const, summary: 'complete image', evidence: ['image-1'], findings: [] },
+    })
+    const agent = { session: { append: vi.fn(), events: [] } } as unknown as Agent
+    const runner = createHardnessMissionRunner({
+      hardness,
+      tools: { execute },
+      acquisition: new AcquisitionRegistry(hardness),
+      approval: { request: vi.fn(async () => 'allowed-once' as const) } as never,
+      judge,
+    })
+
+    await expect(runner.run({
+      need: { kind: 'image_generation' },
+      args: { prompt: 'Kira portrait' },
+      context: { callId: 'call-image' as never, signal: new AbortController().signal, agent },
+    })).resolves.toMatchObject({
+      kind: 'completed',
+      artifact: { id: 'image-1', mime: 'image/png' },
+      rendered: { kind: 'hardness-image', artifactId: 'image-1', mime: 'image/png' },
+    })
+    expect(execute).toHaveBeenCalledOnce()
     await ctx.fiber.dispose()
   })
 

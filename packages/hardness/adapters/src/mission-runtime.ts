@@ -112,6 +112,14 @@ function createArtifacts(): ArtifactRuntime {
   ]) {
     artifacts.register(mime, artifact => ({ kind: 'hardness-artifact', artifactId: artifact.id }))
   }
+  for (const mime of ['image/png', 'image/jpeg', 'image/webp', 'image/gif']) {
+    artifacts.register(mime, artifact => ({
+      kind: 'hardness-image',
+      artifactId: artifact.id,
+      mime: artifact.mime,
+      data: artifact.data,
+    }))
+  }
   return artifacts
 }
 
@@ -204,7 +212,8 @@ export function installHardnessMissionRuntime(deps: HardnessMissionRuntimeDepend
 }
 
 /**
- * Build an acquisition registry from explicit providers; nothing is discovered implicitly.
+ * Build an acquisition registry from explicit providers; registered tools are
+ * also eligible through the acquisition registry's exact-name bridge.
  * @param hardness - HARDNESS registry that owns prepared capability descriptors.
  * @param builders - Explicit native acquisition providers to register in order.
  * @param openclaw - Optional OpenClaw broker used as a lazy acquisition provider.
