@@ -1,0 +1,72 @@
+name: PHOENIX P0 temporary main sync
+
+on:
+  push:
+    branches:
+      - fix/p0-main-stable-release-integrity
+    paths:
+      - .github/workflows/p0-sync-main.yml
+
+permissions:
+  contents: write
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/p0-main-stable-release-integrity
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Merge current main without hiding source conflicts
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_status=$?
+          set -e
+          if (( merge_status != 0 )); then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            printf 'Merge conflicts:\n%s\n' "$conflicts"
+            while IFS= read -r path; do
+              [[ -z "$path" ]] && continue
+              case "$path" in
+                docs/config-catalog.md|docs/module-graph.md|pnpm-lock.yaml)
+                  git checkout --theirs -- "$path"
+                  git add "$path"
+                  ;;
+                *)
+                  echo "::error::Unexpected source conflict: $path"
+                  exit 1
+                  ;;
+              esac
+            done <<< "$conflicts"
+          fi
+          if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
+            echo '::error::Unresolved merge conflicts remain'
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+      - name: Regenerate contracts against merged source
+        shell: bash
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm run prepare:change
+          git diff --check
+      - name: Commit synchronized P0 branch
+        shell: bash
+        run: |
+          git add -A
+          git commit -m 'merge: synchronize P0 with current main'
+          git push origin HEAD:fix/p0-main-stable-release-integrity
