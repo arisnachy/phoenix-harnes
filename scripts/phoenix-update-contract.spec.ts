@@ -50,5 +50,7 @@ describe('stable release publication contract', () => {
     expect(ci).not.toContain("if: github.event_name == 'pull_request'")
     expect(publisher).toContain('workflows: [CI]')
     expect(publisher).toContain('branches: [main]')
+    expect(publisher).not.toContain('workflow_dispatch:')
+    expect(publisher).toContain("if: github.event.workflow_run.conclusion == 'success'")
   })
 })
