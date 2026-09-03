@@ -65,13 +65,20 @@ describe('FishLogo', () => {
 })
 
 describe('BrandWordmark', () => {
-  it('can render the name artwork with or without its leading mark', () => {
+  it('renders the geometric PHOENIX artwork with the ember X accent and optional leading mark', () => {
     const view = render(<primitives.BrandWordmark />)
     expect(view.getByRole('img', { name: 'PHOENIX' })).toBeTruthy()
     expect(view.container.querySelector('img')?.getAttribute('src')).toBe('/phoenix-emblem.png')
 
+    const artwork = view.container.querySelector('svg[data-phoenix-wordmark]')
+    expect(artwork).not.toBeNull()
+    expect(artwork?.getAttribute('viewBox')).toBe('0 0 290 42')
+    expect(artwork?.querySelector('[data-phoenix-wordmark-ink]')?.getAttribute('stroke')).toBe('currentColor')
+    expect(artwork?.querySelector('[data-phoenix-wordmark-accent]')?.getAttribute('stroke')).toBe('#e46a2a')
+    expect(view.queryByText('PHOENIX')).toBeNull()
+
     view.rerender(<primitives.BrandWordmark includeMark={false} />)
     expect(view.container.querySelector('img')).toBeNull()
-    expect(view.getByText('PHOENIX')).toBeTruthy()
+    expect(view.container.querySelector('svg[data-phoenix-wordmark]')).not.toBeNull()
   })
 })
