@@ -1,15 +1,27 @@
 /**
  * Local Chromium-browser MCP connector (Chrome or Microsoft Edge).
  *
- * It talks only to a browser instance that the user explicitly launched with
- * the DevTools Protocol enabled. It never reads Chrome profile files or
- * credentials. Mutating actions require explicit PHOENIX_BROWSER_ALLOW_ACTIONS=true.
+ * It attaches only to loopback CDP endpoints. When no user-provided endpoint
+ * exists, PHOENIX can start a dedicated Chromium instance with an isolated
+ * temporary profile; personal Chrome/Edge profile files are never opened.
+ * Mutating actions require explicit PHOENIX_BROWSER_ALLOW_ACTIONS=true.
  */
+import { spawn, type ChildProcess } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 const DEFAULT_PORTS = [9222, 9223, 9224]
+const CDP_READY_TIMEOUT_MS = 12_000
+let managedBrowser: ChildProcess | undefined
+let managedProfileDir: string | undefined
+let managedEndpoint: string | undefined
+let managedLaunch: Promise<string> | undefined
+let cleanupRegistered = false
+
 const cdpBase = (): string => {
   const raw = (process.env.PHOENIX_BROWSER_CDP_URL?.trim()
     || process.env.DSH_CHROME_CDP_URL?.trim() || '').replace(/\/$/, '')
@@ -22,9 +34,72 @@ const cdpBase = (): string => {
 }
 const actionsAllowed = () => process.env.PHOENIX_BROWSER_ALLOW_ACTIONS === 'true'
   || process.env.DSH_CHROME_ALLOW_ACTIONS === 'true'
+const autostartAllowed = () => process.env.PHOENIX_BROWSER_AUTOSTART !== 'false'
+  && process.env.DSH_CHROME_AUTOSTART !== 'false'
 
 function isLoopback(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
+}
+
+/** Build Chrome/Edge flags for PHOENIX's isolated CDP browser. */
+export function buildDedicatedBrowserArgs(profileDir: string, headless = false): string[] {
+  return [
+    '--remote-debugging-port=0',
+    '--remote-debugging-address=127.0.0.1',
+    `--user-data-dir=${profileDir}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-sync',
+    ...(headless ? ['--headless=new'] : []),
+    'about:blank',
+  ]
+}
+
+function browserExecutableCandidates(): string[] {
+  const configured = process.env.PHOENIX_BROWSER_EXECUTABLE?.trim()
+    || process.env.DSH_CHROME_EXECUTABLE?.trim()
+  const candidates = configured ? [configured] : []
+
+  if (process.platform === 'win32') {
+    const roots = [
+      process.env.PROGRAMFILES,
+      process.env['PROGRAMFILES(X86)'],
+      process.env.LOCALAPPDATA,
+      'C:\\Program Files',
+      'C:\\Program Files (x86)',
+    ].filter((value): value is string => Boolean(value))
+    for (const root of roots) {
+      candidates.push(
+        join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      )
+    }
+  } else if (process.platform === 'darwin') {
+    candidates.push(
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    )
+  } else {
+    candidates.push(
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/microsoft-edge',
+      '/usr/bin/microsoft-edge-stable',
+    )
+  }
+
+  return [...new Set(candidates)]
+}
+
+function browserExecutable(): string {
+  const executable = browserExecutableCandidates().find(candidate => existsSync(candidate))
+  if (executable) return executable
+  throw new Error(
+    'CDP_NO_LISTO: no se encontró Chrome/Edge/Chromium. Configura PHOENIX_BROWSER_EXECUTABLE con la ruta del navegador.',
+  )
 }
 
 type Tab = { id: string; title: string; url: string; webSocketDebuggerUrl?: string; type?: string }
@@ -34,6 +109,70 @@ async function json<T>(url: string): Promise<T> {
   const response = await fetch(url, { signal: AbortSignal.timeout(2500) })
   if (!response.ok) throw new Error(`El navegador respondió HTTP ${response.status}`)
   return await response.json() as T
+}
+
+function cleanupManagedBrowser(): void {
+  try { managedBrowser?.kill() } catch { /* best effort */ }
+  managedBrowser = undefined
+  managedEndpoint = undefined
+  const profileDir = managedProfileDir
+  managedProfileDir = undefined
+  if (profileDir) {
+    try { rmSync(profileDir, { recursive: true, force: true }) } catch { /* browser may still be releasing files */ }
+  }
+}
+
+async function waitForManagedEndpoint(profileDir: string): Promise<string> {
+  const activePortPath = join(profileDir, 'DevToolsActivePort')
+  const deadline = Date.now() + CDP_READY_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    if (existsSync(activePortPath)) {
+      try {
+        const [rawPort] = readFileSync(activePortPath, 'utf8').split(/\r?\n/)
+        const port = Number(rawPort)
+        if (Number.isInteger(port) && port > 0 && port <= 65535) {
+          const candidate = `http://127.0.0.1:${port}`
+          await json(`${candidate}/json/version`)
+          return candidate
+        }
+      } catch { /* file can appear before the endpoint accepts connections */ }
+    }
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  throw new Error('CDP_NO_LISTO: el navegador dedicado no publicó DevToolsActivePort a tiempo')
+}
+
+async function launchDedicatedBrowser(): Promise<string> {
+  if (managedLaunch) return await managedLaunch
+  managedLaunch = (async () => {
+    const executable = browserExecutable()
+    const profileDir = mkdtempSync(join(tmpdir(), 'phoenix-browser-'))
+    const headless = process.env.PHOENIX_BROWSER_HEADLESS === 'true'
+      || process.env.DSH_CHROME_HEADLESS === 'true'
+    const child = spawn(executable, buildDedicatedBrowserArgs(profileDir, headless), {
+      stdio: 'ignore',
+      windowsHide: false,
+    })
+    managedBrowser = child
+    managedProfileDir = profileDir
+    let spawnError: Error | undefined
+    child.once('error', error => { spawnError = error })
+    if (!cleanupRegistered) {
+      cleanupRegistered = true
+      process.once('exit', cleanupManagedBrowser)
+    }
+    try {
+      const base = await waitForManagedEndpoint(profileDir)
+      managedEndpoint = base
+      return base
+    } catch (error) {
+      const exitDetail = child.exitCode === null ? '' : `; proceso terminó con código ${child.exitCode}`
+      const spawnDetail = spawnError ? `; ${spawnError.message}` : ''
+      cleanupManagedBrowser()
+      throw new Error(`CDP_NO_LISTO: no se pudo iniciar el navegador dedicado${exitDetail}${spawnDetail}: ${String(error)}`)
+    }
+  })().finally(() => { managedLaunch = undefined })
+  return await managedLaunch
 }
 
 async function endpoint(): Promise<string> {
@@ -46,7 +185,13 @@ async function endpoint(): Promise<string> {
     const candidate = `http://127.0.0.1:${port}`
     try { await json(`${candidate}/json/version`); return candidate } catch { /* try next port */ }
   }
-  throw new Error('Chrome/Edge no está expuesto por CDP. Inícialo con --remote-debugging-port=9222 o configura PHOENIX_BROWSER_CDP_URL.')
+  if (managedEndpoint) {
+    try { await json(`${managedEndpoint}/json/version`); return managedEndpoint } catch { cleanupManagedBrowser() }
+  }
+  if (autostartAllowed()) return await launchDedicatedBrowser()
+  throw new Error(
+    'CDP_NO_LISTO: Chrome/Edge no está expuesto por CDP. Activa autostart o inicia un perfil aislado con --remote-debugging-port.',
+  )
 }
 
 async function tabs(): Promise<Tab[]> {
@@ -69,7 +214,7 @@ async function cdp<T = unknown>(tab: Tab, method: string, params: Record<string,
   const id = Math.floor(Math.random() * 2_000_000_000)
   return await new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => { socket.close(); reject(new Error(`Tiempo agotado ejecutando ${method}`)) }, 10_000)
-    socket.addEventListener('open', () =>{  socket.send(JSON.stringify({ id, method, params })) })
+    socket.addEventListener('open', () => { socket.send(JSON.stringify({ id, method, params })) })
     socket.addEventListener('message', (event) => {
       const message = JSON.parse(String(event.data)) as CdpResponse
       if (message.id !== id) return
@@ -86,12 +231,12 @@ async function evaluate(tab: Tab, expression: string): Promise<unknown> {
 }
 
 const server = new McpServer(
-  { name: 'phoenix-browser-connector', version: '0.2.0' },
+  { name: 'phoenix-browser-connector', version: '0.3.0' },
   { capabilities: { tools: {} } },
 )
 
 server.registerTool('status', {
-  description: 'Comprueba si existe una sesión Chrome o Edge CDP explícitamente habilitada.',
+  description: 'Comprueba CDP y, si hace falta, inicia el navegador dedicado aislado de PHOENIX.',
   inputSchema: {},
 }, async () => {
   try {
