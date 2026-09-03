@@ -197,12 +197,12 @@ function activate() {
   git(root, ['diff', '--check', current, target])
 
   // Prove a prepared client artifact set is internally consistent before the
-  // managed release checkout is mutated. Validation failures therefore stay
-  // cheap and require no rollback.
+  // managed release checkout is mutated. Use the prepared target's own helper,
+  // so older live checkouts do not need to know about newer updater internals.
   if (prepared.mode === 'client') {
     writeState(root, { status: 'applying', phase: 'verify', current, target })
     console.error('[PHOENIX UPDATE] verifying prepared client artifacts before touching the live release checkout...')
-    node(root, ['--import', 'tsx/esm', 'scripts/promote-client-artifacts.ts', '--from', stage, '--verify-only'], { inherit: true })
+    node(stage, ['--import', 'tsx/esm', 'scripts/promote-client-artifacts.ts', '--from', stage, '--verify-only'], { inherit: true })
   }
 
   git(root, ['update-ref', 'refs/phoenix/recovery/last-good', current])
