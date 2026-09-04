@@ -1,6 +1,9 @@
 /**
  * Shared ownership of one E2B sandbox. Capability adapters await the same SDK
  * handle, so filesystem and process operations inhabit one remote Linux world.
+ * The runtime can create or reconnect to an existing sandbox and has an
+ * explicit disposal-retention policy, making long-horizon execution resumable
+ * without changing the historical kill-on-dispose default.
  * @module @phoenix-ai/dsh-e2b
  */
 
@@ -18,6 +21,9 @@ export {
   SandboxNotFoundError,
 } from 'e2b'
 export type { CommandHandle, CommandResult, EntryInfo } from 'e2b'
+
+/** What PHOENIX should do with a live remote sandbox when this runtime disposes. */
+export type E2BRetention = 'kill' | 'pause' | 'retain'
 
 /**
  * Quote one opaque argument for the SDK's unavoidable `/bin/bash -l -c` layer.
@@ -45,11 +51,45 @@ export interface Config {
   apiKey?: string
   /** Shared remote working directory, created before adapters receive the sandbox. */
   cwd?: string
-  /** E2B sandbox lifetime in milliseconds; expiry always deletes the sandbox. */
+  /** E2B sandbox lifetime in milliseconds. */
   timeoutMs?: number
+  /** Existing sandbox id to reconnect to instead of creating a new sandbox. */
+  sandboxId?: string
+  /** What disposal does with the live sandbox. Default `kill` preserves historical behavior. */
+  retention?: E2BRetention
+  /** Pause rather than kill a newly-created sandbox when its E2B timeout elapses. */
+  autoPause?: boolean
 }
 
-interface ResolvedConfig {
+/** Pure lifecycle subset used by config/UI/tests without requiring an API key. */
+export interface E2BLifecycleConfig {
+  sandboxId: string | undefined
+  retention: E2BRetention
+  autoPause: boolean
+}
+
+/**
+ * Resolve and validate the lifecycle-only configuration.
+ * @param config - User/deployment configuration.
+ * @returns Explicit lifecycle values with backward-compatible defaults.
+ */
+export function resolveE2BLifecycleConfig(config: Pick<Config, 'sandboxId' | 'retention' | 'autoPause' | 'cwd' | 'timeoutMs'>): E2BLifecycleConfig {
+  const sandboxId = config.sandboxId?.trim()
+  if (config.sandboxId !== undefined && sandboxId === '') {
+    throw new Error('dsh-e2b: sandboxId must be a non-empty string when configured')
+  }
+  const retention = config.retention ?? 'kill'
+  if (retention !== 'kill' && retention !== 'pause' && retention !== 'retain') {
+    throw new Error(`dsh-e2b: unsupported retention policy ${String(retention)}`)
+  }
+  return {
+    sandboxId,
+    retention,
+    autoPause: config.autoPause ?? false,
+  }
+}
+
+interface ResolvedConfig extends E2BLifecycleConfig {
   apiKey: string
   cwd: string
   timeoutMs: number
@@ -58,6 +98,8 @@ interface ResolvedConfig {
 interface SchemaResolvedConfig extends Config {
   cwd: string
   timeoutMs: number
+  retention: E2BRetention
+  autoPause: boolean
 }
 
 declare module '@phoenix-ai/cordis' {
@@ -67,15 +109,19 @@ declare module '@phoenix-ai/cordis' {
 }
 
 /**
- * Creates one lazily consumable E2B SDK handle and deletes the sandbox at
- * timeout or disposal. Creation begins at plugin construction; adapters await
- * {@link getSandbox} before their first operation.
+ * Owns one lazily consumable E2B SDK handle. The runtime either creates a
+ * sandbox or reconnects to `sandboxId`; reconnecting a paused E2B sandbox
+ * resumes it through the SDK. Adapters await {@link getSandbox} before their
+ * first operation.
  */
 export class E2BRuntime extends Service {
   static Config: z<Config> = z.object({
     apiKey: z.string(),
     cwd: z.string().default('/home/user/workspace'),
     timeoutMs: z.number().default(300_000),
+    sandboxId: z.string(),
+    retention: z.union(['kill', 'pause', 'retain'] as const).default('kill'),
+    autoPause: z.boolean().default(false),
   })
 
   /** Validated remote working directory shared by provider adapters. */
@@ -92,10 +138,12 @@ export class E2BRuntime extends Service {
     // Schemastery fills these fields before construction; the type does not encode that step.
     const resolved = config as SchemaResolvedConfig
     const apiKey = config.apiKey ?? process.env.E2B_API_KEY
+    const lifecycle = resolveE2BLifecycleConfig(resolved)
     this.config = {
       apiKey: apiKey ?? '',
       cwd: resolved.cwd,
       timeoutMs: resolved.timeoutMs,
+      ...lifecycle,
     }
     this.validate()
     this.cwd = this.config.cwd
@@ -111,21 +159,17 @@ export class E2BRuntime extends Service {
       try {
         sandbox = await this.ready
       } catch (_sandboxSetupFailure) {
-        // open() either acquired no sandbox or already made the POC's one rollback attempt.
+        // open() either acquired no sandbox or already rolled back a newly-created one.
         return
       }
-      try {
-        await sandbox.kill()
-      } catch (error: unknown) {
-        if (!(error instanceof SandboxNotFoundError)) throw error
-      }
+      await this.release(sandbox)
     }, 'e2b sandbox teardown')
   }
 
   /**
    * Return the shared live SDK handle.
-   * @returns the created sandbox after the configured cwd exists.
-   * @throws when E2B rejects creation or the service is disposing.
+   * @returns the created or reconnected sandbox after the configured cwd exists.
+   * @throws when E2B rejects creation/connection or the service is disposing.
    */
   async getSandbox(): Promise<Sandbox> {
     if (this.disposed) throw new Error('E2B sandbox service is disposing')
@@ -134,6 +178,16 @@ export class E2BRuntime extends Service {
     // oxlint-disable-next-line typescript/no-unnecessary-condition -- Awaiting readiness yields to disposal.
     if (this.disposed) throw new Error('E2B sandbox service is disposing')
     return sandbox
+  }
+
+  /** Return the durable E2B identity callers can persist for a later reconnect. */
+  async getSandboxId(): Promise<string> {
+    return (await this.getSandbox()).sandboxId
+  }
+
+  /** The configured retention stance, useful to diagnostics without exposing credentials. */
+  get retention(): E2BRetention {
+    return this.config.retention
   }
 
   private validate(): void {
@@ -148,14 +202,21 @@ export class E2BRuntime extends Service {
     }
   }
 
+  /** Create/reconnect, then idempotently establish PHOENIX's private remote directories. */
   private async open(): Promise<Sandbox> {
-    const sandbox = await Sandbox.create({
-      apiKey: this.config.apiKey,
-      timeoutMs: this.config.timeoutMs,
-      secure: true,
-      lifecycle: { onTimeout: 'kill' },
-    })
+    const reconnecting = this.config.sandboxId !== undefined
+    const sandbox = reconnecting
+      ? await Sandbox.connect(this.config.sandboxId as string, { apiKey: this.config.apiKey })
+      : await Sandbox.create({
+          apiKey: this.config.apiKey,
+          timeoutMs: this.config.timeoutMs,
+          secure: true,
+          lifecycle: { onTimeout: this.config.autoPause ? 'pause' : 'kill' },
+        })
     try {
+      // A reconnect adopts this runtime's requested lease from now, rather
+      // than silently inheriting an arbitrary remaining timeout.
+      if (reconnecting) await sandbox.setTimeout(this.config.timeoutMs)
       await sandbox.files.makeDir(this.cwd)
       await sandbox.files.makeDir(this.runtimeRoot)
       const runtimeRoot = await sandbox.files.getInfo(this.runtimeRoot)
@@ -168,13 +229,31 @@ export class E2BRuntime extends Service {
       )
       return sandbox
     } catch (error: unknown) {
-      try {
-        await sandbox.kill()
-      } catch (_sandboxSetupRollbackFailure) {
-        // TODO(e2b-setup-rollback): Add retry state only if a real double failure
-        // outlives E2B's configured sandbox timeout.
+      // Never destroy a sandbox supplied by id merely because this PHOENIX
+      // process failed to adopt it. Newly-created sandboxes retain the old
+      // fail-closed rollback behavior.
+      if (!reconnecting) {
+        try {
+          await sandbox.kill()
+        } catch (_sandboxSetupRollbackFailure) {
+          // The remote lease will still expire under E2B's lifecycle policy.
+        }
       }
       throw error
+    }
+  }
+
+  /** Apply the explicit disposal retention policy; missing sandboxes are already released. */
+  private async release(sandbox: Sandbox): Promise<void> {
+    if (this.config.retention === 'retain') return
+    try {
+      if (this.config.retention === 'pause') {
+        await sandbox.betaPause()
+        return
+      }
+      await sandbox.kill()
+    } catch (error: unknown) {
+      if (!(error instanceof SandboxNotFoundError)) throw error
     }
   }
 }
