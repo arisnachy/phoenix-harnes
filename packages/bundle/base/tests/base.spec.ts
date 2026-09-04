@@ -49,6 +49,7 @@ describe('dsh-base bundle', () => {
     expect(rows.find(row => row.id === 'llm-pi-ai')?.config).toEqual({
       providers: {
         openrouter: { apiKeyEnv: 'OPENROUTER_API_KEY' },
+        'chatgpt-web': {},
       },
     })
   })

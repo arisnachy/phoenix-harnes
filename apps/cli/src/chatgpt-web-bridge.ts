@@ -5,8 +5,11 @@
  * @module @phoenix-ai/dsh/chatgpt-web-bridge
  */
 
+import { existsSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process'
+import { homedir, platform } from 'node:os'
+import { join } from 'node:path'
 import { writeFileAtomic } from '@phoenix-ai/dsh-atomic-write'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 
@@ -25,6 +28,11 @@ export interface ChatGptWebBridgeConfig {
   readonly baseUrl: string
   readonly command?: readonly [string, ...string[]]
   readonly cwd?: string
+}
+
+interface DiscoveredChatGptWebRuntime {
+  readonly command: readonly [string, ...string[]]
+  readonly cwd: string
 }
 
 /** Public bridge status used by the CLI and future settings surfaces. */
@@ -69,6 +77,37 @@ export function parseChatGptWebCommand(value: string | undefined): readonly [str
   return parsed as [string, ...string[]]
 }
 
+function installedRuntimeRoots(env: NodeJS.ProcessEnv, platformName: NodeJS.Platform): readonly string[] {
+  if (platformName !== 'win32') return []
+  const roots = [
+    env.LOCALAPPDATA === undefined ? undefined : join(env.LOCALAPPDATA, 'Programs', 'Codex Web GPT', 'resources', 'runtime'),
+    env.ProgramFiles === undefined ? undefined : join(env.ProgramFiles, 'Codex Web GPT', 'resources', 'runtime'),
+    join(homedir(), '.codex-chatgpt-web', 'active'),
+  ]
+  return roots.filter((root): root is string => root !== undefined)
+}
+
+function hasChatGptWebSetup(env: NodeJS.ProcessEnv): boolean {
+  const home = env.CODEX_CHATGPT_WEB_HOME?.trim() || join(homedir(), '.codex-chatgpt-web')
+  return existsSync(join(home, 'config.json'))
+}
+
+/** Find the packaged Windows runtime only when its browser dependency is present. */
+export function discoverChatGptWebRuntime(
+  env: NodeJS.ProcessEnv = process.env,
+  platformName: NodeJS.Platform = platform(),
+): DiscoveredChatGptWebRuntime | undefined {
+  for (const root of installedRuntimeRoots(env, platformName)) {
+    const bun = join(root, 'runtime', 'bun.exe')
+    const app = join(root, 'app', 'cli.js')
+    const browserDependency = join(root, 'app', 'node_modules', 'playwright-core', 'package.json')
+    if (existsSync(bun) && existsSync(app) && existsSync(browserDependency)) {
+      return { command: [bun, app, 'serve'], cwd: join(root, 'app') }
+    }
+  }
+  return undefined
+}
+
 function isLoopback(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
 }
@@ -86,8 +125,13 @@ export function resolveChatGptWebConfig(env: NodeJS.ProcessEnv = process.env): C
     || parsed.username !== '' || parsed.password !== '') {
     throw new Error('PHOENIX_CHATGPT_WEB_URL must use a loopback URL without embedded credentials')
   }
-  const command = parseChatGptWebCommand(env.PHOENIX_CHATGPT_WEB_COMMAND)
-  const cwd = env.PHOENIX_CHATGPT_WEB_CWD?.trim()
+  const configuredCommand = parseChatGptWebCommand(env.PHOENIX_CHATGPT_WEB_COMMAND)
+  const discovered = configuredCommand === undefined && hasChatGptWebSetup(env)
+    ? discoverChatGptWebRuntime(env)
+    : undefined
+  const command = configuredCommand ?? discovered?.command
+  const configuredCwd = env.PHOENIX_CHATGPT_WEB_CWD?.trim()
+  const cwd = configuredCwd === undefined || configuredCwd === '' ? discovered?.cwd : configuredCwd
   return {
     baseUrl,
     ...(command === undefined ? {} : { command }),
@@ -166,7 +210,9 @@ export class ChatGptWebBridge {
   /** Start the configured argv without a shell and record only non-secret ownership data. */
   async start(): Promise<ChatGptWebBridgeStatus> {
     const command = this.dependencies.config.command
-    if (command === undefined) throw new Error('ChatGPT Web bridge is not configured; set PHOENIX_CHATGPT_WEB_COMMAND to a JSON argv array')
+    if (command === undefined) {
+      throw new Error('ChatGPT Web bridge is not configured; open Codex Web GPT and complete Setup > Browser-only, or set PHOENIX_CHATGPT_WEB_COMMAND to a JSON argv array')
+    }
     const previous = await this.readOwnedState()
     if (previous !== undefined && this.processIsRunning(previous.pid)) {
       return { status: 'starting', pid: previous.pid, baseUrl: previous.baseUrl, detail: 'ChatGPT Web bridge is already running' }
@@ -244,7 +290,7 @@ export async function runChatGptWebBridge(args: readonly string[]): Promise<numb
     return 1
   }
   if (args[0] === '--help' || args[0] === '-h') {
-    process.stdout.write('Usage: dsh chatgpt-web <start|status|stop>\n\nSet PHOENIX_CHATGPT_WEB_COMMAND to a JSON argv array to enable start.\n')
+    process.stdout.write('Usage: dsh chatgpt-web <start|status|stop>\n\nOn Windows, the installed Codex Web GPT runtime is discovered automatically after Setup > Browser-only. Otherwise set PHOENIX_CHATGPT_WEB_COMMAND to a JSON argv array.\n')
     return 0
   }
   try {

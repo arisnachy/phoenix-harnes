@@ -19,7 +19,7 @@ The invoking directory is the default workspace root. The `web` and `headless` p
 
 ## ChatGPT Web bridge
 
-PHOENIX can use the local [codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) bridge as the `chatgpt-web` model route. The bridge owns browser login and cookies; PHOENIX never imports or stores them. Configure its executable as a JSON argv array so no shell is involved:
+PHOENIX can use the local [codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) bridge as the `chatgpt-web` model route. The bridge owns browser login and cookies; PHOENIX never imports or stores them. On Windows, complete `Setup > Browser-only` in the installed Codex Web GPT launcher; `dsh chatgpt-web start` then discovers the complete packaged runtime automatically. An incomplete runtime is ignored. A manual JSON argv configuration remains available for other installations:
 
 ```powershell
 $env:PHOENIX_CHATGPT_WEB_COMMAND = '["node","C:\\path\\to\\codex-chatgpt-web\\server.mjs"]'
@@ -27,6 +27,8 @@ $env:PHOENIX_CHATGPT_WEB_URL = 'http://127.0.0.1:17841/v1'
 dsh chatgpt-web start
 dsh chatgpt-web status
 ```
+
+Browser-only uses the signed-in ChatGPT Web session and does not require a paid model API key. It still requires an eligible ChatGPT account, browser sign-in, and the local bridge to be running; `dsh chatgpt-web status` must report `ready` before selecting the route.
 
 Only loopback endpoints are accepted. The lifecycle record stores the process id and endpoint, never command-line secrets. `dsh doctor` checks a configured bridge without starting or modifying it.
 

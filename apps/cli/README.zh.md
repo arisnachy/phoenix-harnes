@@ -19,7 +19,7 @@
 
 ## ChatGPT Web 网桥
 
-PHOENIX 可以将本地的 [codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) 网桥作为 `chatgpt-web` 模型路由使用。网桥负责浏览器登录与 cookie；PHOENIX 不会导入或保存这些内容。请使用 JSON argv 数组配置可执行文件，这样不会经过 shell：
+PHOENIX 可以将本地的 [codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) 网桥作为 `chatgpt-web` 模型路由使用。网桥负责浏览器登录与 cookie；PHOENIX 不会导入或保存这些内容。在 Windows 上，请先在已安装的 Codex Web GPT 启动器中完成 `Setup > Browser-only`；随后 `dsh chatgpt-web start` 会自动发现完整的打包运行时，并忽略不完整的安装。其他安装仍可使用 JSON argv 配置：
 
 ```powershell
 $env:PHOENIX_CHATGPT_WEB_COMMAND = '["node","C:\\path\\to\\codex-chatgpt-web\\server.mjs"]'
@@ -27,6 +27,8 @@ $env:PHOENIX_CHATGPT_WEB_URL = 'http://127.0.0.1:17841/v1'
 dsh chatgpt-web start
 dsh chatgpt-web status
 ```
+
+Browser-only 使用已登录的 ChatGPT Web 会话，不需要付费模型 API 密钥；仍然需要符合条件的 ChatGPT 账户、浏览器登录以及正在运行的本地网桥。选择该路由前，`dsh chatgpt-web status` 必须报告 `ready`。
 
 只接受 loopback 端点。生命周期记录只保存进程 id 和端点，不保存命令行 secret。`dsh doctor` 可以检查已配置的网桥，但不会启动或修改它。
 
