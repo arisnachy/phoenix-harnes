@@ -22,7 +22,7 @@ export interface Config {
   /** Provider name on `ctx.subagents` (default `spawn`). */
   providerName: string
   /** Isolate one-shot children in Git worktrees when the parent cwd is a repository. */
-  worktreeIsolation: boolean
+  worktreeIsolation?: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -46,5 +46,5 @@ class SpawnInProcessProvider implements SubagentProvider {
 }
 
 export function apply(ctx: Context, config: Config): void {
-  ctx.subagents.registerProvider(new SpawnInProcessProvider(config.providerName, config.worktreeIsolation))
+  ctx.subagents.registerProvider(new SpawnInProcessProvider(config.providerName, config.worktreeIsolation ?? true))
 }
