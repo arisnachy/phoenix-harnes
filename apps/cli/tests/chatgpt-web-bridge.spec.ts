@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   ChatGptWebBridge,
+  discoverChatGptWebRuntime,
   parseChatGptWebCommand,
   resolveChatGptWebConfig,
 } from '../src/chatgpt-web-bridge.ts'
@@ -37,6 +38,37 @@ describe('ChatGPT Web bridge configuration', () => {
     expect(() => resolveChatGptWebConfig({
       PHOENIX_CHATGPT_WEB_URL: 'https://bridge.example/v1',
     })).toThrow(/loopback/u)
+  })
+
+  it('discovers the complete packaged Windows runtime without selecting an incomplete install', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-chatgpt-web-runtime-'))
+    tempDirectories.push(directory)
+    const root = join(directory, 'Programs', 'Codex Web GPT', 'resources', 'runtime')
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await mkdir(join(root, 'app', 'node_modules', 'playwright-core'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'bun.exe'), '')
+    await writeFile(join(root, 'app', 'cli.js'), '')
+    await writeFile(join(root, 'app', 'node_modules', 'playwright-core', 'package.json'), '{}')
+
+    expect(discoverChatGptWebRuntime({ LOCALAPPDATA: directory }, 'win32')).toEqual({
+      command: [
+        join(root, 'runtime', 'bun.exe'),
+        join(root, 'app', 'cli.js'),
+        'serve',
+      ],
+      cwd: join(root, 'app'),
+    })
+
+    await writeFile(join(directory, 'config.json'), '{}')
+    expect(resolveChatGptWebConfig({ LOCALAPPDATA: directory, CODEX_CHATGPT_WEB_HOME: directory })).toEqual({
+      baseUrl: 'http://127.0.0.1:17841/v1',
+      command: [
+        join(root, 'runtime', 'bun.exe'),
+        join(root, 'app', 'cli.js'),
+        'serve',
+      ],
+      cwd: join(root, 'app'),
+    })
   })
 })
 
