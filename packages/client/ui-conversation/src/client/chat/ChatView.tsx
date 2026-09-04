@@ -477,6 +477,7 @@ export function ChatView({
               inspectCall={inspectCall}
               forkAt={forkAt}
               renderMessageImages={renderMessageImages}
+              loadImage={loadImage}
               fileMentions={fileMentions}
               workspaceFileMentions={workspaceFileMentions}
               {...runArtifact === undefined ? {} : { runArtifact }}

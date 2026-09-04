@@ -1346,7 +1346,7 @@ export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFo
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:254`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:260`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="phoenix-aidsh-llm-replay"></a>
 
@@ -1546,7 +1546,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:106`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:105`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 
@@ -3318,7 +3318,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/voice/voice-local/src/index.ts:134`](../packages/voice/voice-local/src/index.ts)
+Source: [`packages/voice/voice-local/src/index.ts:149`](../packages/voice/voice-local/src/index.ts)
 
 <a id="phoenix-aidsh-web"></a>
 

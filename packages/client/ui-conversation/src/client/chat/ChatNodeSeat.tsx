@@ -18,7 +18,7 @@ type RoutedChatNodeOwner = {
 /** Subscribe and dispatch one stable Context key without observing sibling Nodes. */
 export const ChatNodeSeat = memo(function ChatNodeSeat({
   nodeKey, selectedCallId, cwd, openFile, inspectCall, forkAt,
-  renderMessageImages, fileMentions, workspaceFileMentions, runArtifact, useSession, renderSlot, t,
+  renderMessageImages, loadImage, fileMentions, workspaceFileMentions, runArtifact, useSession, renderSlot, t,
 }: ChatNodeSeatProps) {
   const node = useSession(snapshot => snapshot.chat.nodes.get(nodeKey))
   const routedNode = node as ChatNode | undefined
@@ -32,10 +32,11 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       forkAt,
       ...runArtifact === undefined ? {} : { runArtifact },
       renderMessageImages,
+      ...loadImage === undefined ? {} : { loadImage },
       fileMentions,
       workspaceFileMentions,
     }, [
-    node, selectedCallId, cwd, openFile, inspectCall, forkAt, renderMessageImages, fileMentions, runArtifact,
+    node, selectedCallId, cwd, openFile, inspectCall, forkAt, renderMessageImages, loadImage, fileMentions, runArtifact,
     workspaceFileMentions,
   ])
   if (routedNode === undefined || owner === null) return null

@@ -438,6 +438,8 @@ export interface ChatNodeOwnerProps {
   forkAt: (seq: number) => void
   /** Render a historical image group through the attachment slot. */
   renderMessageImages: RenderMessageImages
+  /** Resolve one historical image attachment to a browser-loadable URL. */
+  loadImage?: (attachment: ImageAttachmentRef) => Promise<string>
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
   /** Workspace-path vocabulary for ordinary assistant prose; optional for legacy compositions. */
   workspaceFileMentions?: ((owner: ChatWorkspaceFileMentionOwner) => MarkdownFileMentions | undefined) | undefined

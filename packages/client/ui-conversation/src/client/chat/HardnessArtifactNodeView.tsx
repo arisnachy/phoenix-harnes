@@ -6,7 +6,7 @@ import styles from './HardnessArtifactNodeView.module.css'
 
 /** ChatGPT-style inline artifact card. It never owns or replaces the conversation surface. */
 export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
-  node, runArtifact,
+  node, runArtifact, renderMessageImages, loadImage,
 }: ChatNodeViewProps<'hardness-artifact'>) {
   const artifact = node.data
   const [result, setResult] = useState<Readonly<Record<string, unknown>> | undefined>(artifact.result)
@@ -45,6 +45,8 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
             } }
             : {}}
           onStop={() => {}}
+          renderMessageImages={renderMessageImages}
+          {...loadImage === undefined ? {} : { loadImage }}
         />
       </div>
     </article>

@@ -3,13 +3,7 @@
   gap: 12px;
   width: 100%;
   min-width: 0;
-  max-height: 640px;
-  overflow: auto;
   color: #1d2a3a;
-}
-
-.expanded {
-  max-height: min(760px, 78vh);
 }
 
 .header {
