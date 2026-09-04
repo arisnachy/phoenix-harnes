@@ -358,7 +358,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/attachment/attachment-local/src/index.ts:51`](../packages/attachment/attachment-local/src/index.ts)
+Source: [`packages/attachment/attachment-local/src/index.ts:67`](../packages/attachment/attachment-local/src/index.ts)
 
 <a id="phoenix-aidsh-bash-local"></a>
 
@@ -630,12 +630,21 @@ export interface Config {
   apiKey?: string
   /** Shared remote working directory, created before adapters receive the sandbox. */
   cwd?: string
-  /** E2B sandbox lifetime in milliseconds; expiry always deletes the sandbox. */
+  /** E2B sandbox lifetime in milliseconds. */
   timeoutMs?: number
+  /** Existing sandbox id to reconnect to instead of creating a new sandbox. */
+  sandboxId?: string
+  /** What disposal does with the live sandbox. Default `kill` preserves historical behavior. */
+  retention?: E2BRetention
+  /** Pause rather than kill a newly-created sandbox when its E2B timeout elapses. */
+  autoPause?: boolean
 }
+
+/** What PHOENIX should do with a live remote sandbox when this runtime disposes. */
+export type E2BRetention = 'kill' | 'pause' | 'retain'
 ```
 
-Source: [`packages/e2b/e2b/src/index.ts:43`](../packages/e2b/e2b/src/index.ts)
+Source: [`packages/e2b/e2b/src/index.ts:49`](../packages/e2b/e2b/src/index.ts)
 
 <a id="phoenix-aidsh-experimental-agent-team"></a>
 
@@ -756,7 +765,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/goal/goal/src/index.ts:122`](../packages/goal/goal/src/index.ts)
+Source: [`packages/goal/goal/src/index.ts:130`](../packages/goal/goal/src/index.ts)
 
 <a id="phoenix-aidsh-hardness-adapters"></a>
 
@@ -774,7 +783,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:74`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:89`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
@@ -1092,7 +1101,7 @@ export interface DeepSeekCatalogModel {
 
 Depends on: [`ModelModality`](../packages/llm/llm/src/index.ts) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
 
-Source: [`packages/llm/llm-deepseek/src/index.ts:106`](../packages/llm/llm-deepseek/src/index.ts)
+Source: [`packages/llm/llm-deepseek/src/index.ts:108`](../packages/llm/llm-deepseek/src/index.ts)
 
 <a id="phoenix-aidsh-llm-pi-ai"></a>
 
@@ -1348,7 +1357,7 @@ export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFo
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:213`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:260`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="phoenix-aidsh-llm-replay"></a>
 
@@ -1548,7 +1557,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:98`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:105`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 
@@ -1833,7 +1842,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/session/session-learning/src/index.ts:27`](../packages/session/session-learning/src/index.ts)
+Source: [`packages/session/session-learning/src/index.ts:44`](../packages/session/session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-session-persistence-jsonl"></a>
 
@@ -2473,14 +2482,16 @@ Source: [`packages/subagent/subagent-dsh-sdk/src/index.ts:29`](../packages/subag
 Requires: `subagents`
 
 ```ts config-catalog
-/** Config: the registry name to register the provider under. */
+/** Configuration for the in-process fork provider. */
 export interface Config {
   /** Provider name on `ctx.subagents` (default `fork`). */
   providerName: string
+  /** Isolate one-shot children in Git worktrees when the parent cwd is a repository. */
+  worktreeIsolation?: boolean
 }
 ```
 
-Source: [`packages/subagent/subagent-fork-in-process/src/index.ts:31`](../packages/subagent/subagent-fork-in-process/src/index.ts)
+Source: [`packages/subagent/subagent-fork-in-process/src/index.ts:25`](../packages/subagent/subagent-fork-in-process/src/index.ts)
 
 <a id="phoenix-aidsh-subagent-spawn-in-process"></a>
 
@@ -2489,14 +2500,16 @@ Source: [`packages/subagent/subagent-fork-in-process/src/index.ts:31`](../packag
 Requires: `subagents`
 
 ```ts config-catalog
-/** Config: the registry name to register the provider under. */
+/** Configuration for the in-process spawn provider. */
 export interface Config {
   /** Provider name on `ctx.subagents` (default `spawn`). */
   providerName: string
+  /** Isolate one-shot children in Git worktrees when the parent cwd is a repository. */
+  worktreeIsolation?: boolean
 }
 ```
 
-Source: [`packages/subagent/subagent-spawn-in-process/src/index.ts:25`](../packages/subagent/subagent-spawn-in-process/src/index.ts)
+Source: [`packages/subagent/subagent-spawn-in-process/src/index.ts:22`](../packages/subagent/subagent-spawn-in-process/src/index.ts)
 
 <a id="phoenix-aidsh-subprocess-e2b"></a>
 
@@ -2539,7 +2552,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:186`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:190`](../packages/core/system-prompt/src/index.ts)
 
 <a id="phoenix-aidsh-terminal-bash"></a>
 
@@ -2865,7 +2878,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/shell/tool-pwsh/src/index.ts:52`](../packages/shell/tool-pwsh/src/index.ts)
+Source: [`packages/shell/tool-pwsh/src/index.ts:53`](../packages/shell/tool-pwsh/src/index.ts)
 
 <a id="phoenix-aidsh-tool-pwsh-persistent"></a>
 
@@ -3209,7 +3222,7 @@ export interface Config {
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:654`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:655`](../packages/core/tools/src/index.ts)
 
 <a id="phoenix-aidsh-typert-loader"></a>
 
@@ -3258,7 +3271,7 @@ export interface Config {
 export type ApprovalPolicy = 'ask' | 'never'
 ```
 
-Source: [`packages/interaction/user-approval/src/index.ts:177`](../packages/interaction/user-approval/src/index.ts)
+Source: [`packages/interaction/user-approval/src/index.ts:221`](../packages/interaction/user-approval/src/index.ts)
 
 <a id="phoenix-aidsh-user-questions"></a>
 
@@ -3272,7 +3285,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/interaction/user-questions/src/index.ts:110`](../packages/interaction/user-questions/src/index.ts)
+Source: [`packages/interaction/user-questions/src/index.ts:64`](../packages/interaction/user-questions/src/index.ts)
 
 <a id="phoenix-aidsh-voice"></a>
 
@@ -3320,7 +3333,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/voice/voice-local/src/index.ts:134`](../packages/voice/voice-local/src/index.ts)
+Source: [`packages/voice/voice-local/src/index.ts:149`](../packages/voice/voice-local/src/index.ts)
 
 <a id="phoenix-aidsh-web"></a>
 
