@@ -18,6 +18,7 @@ import { startInProcessRun } from '@phoenix-ai/dsh-subagent-in-process-driver'
 export const name = 'subagent-spawn-in-process'
 export const inject = ['subagents']
 
+/** Configuration for the in-process spawn provider. */
 export interface Config {
   /** Provider name on `ctx.subagents` (default `spawn`). */
   providerName: string
