@@ -30,6 +30,46 @@ jobs:
           pnpm run gen-module-graph
           pnpm run gen-doc-graphs
           pnpm run gen-cordis-catalog
+      - name: Sync generated bilingual technical blocks
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          english = Path('docs/config-catalog.md').read_text(encoding='utf-8')
+          chinese_path = Path('docs/config-catalog.zh.md')
+          chinese = chinese_path.read_text(encoding='utf-8')
+
+          fence_re = re.compile(r'```ts config-catalog\n.*?\n```', re.S)
+          en_fences = fence_re.findall(english)
+          zh_fences = fence_re.findall(chinese)
+          if len(en_fences) != len(zh_fences):
+              raise SystemExit(f'config catalog fence count mismatch: {len(en_fences)} != {len(zh_fences)}')
+          iterator = iter(en_fences)
+          chinese = fence_re.sub(lambda _match: next(iterator), chinese)
+
+          source_re = re.compile(r'^Source: .*$', re.M)
+          en_sources = source_re.findall(english)
+          zh_sources = source_re.findall(chinese)
+          if len(en_sources) != len(zh_sources):
+              raise SystemExit(f'config catalog Source count mismatch: {len(en_sources)} != {len(zh_sources)}')
+          source_iterator = iter(en_sources)
+          chinese = source_re.sub(lambda _match: next(source_iterator), chinese)
+          chinese_path.write_text(chinese, encoding='utf-8')
+
+          graph = Path('docs/module-graph.md').read_text(encoding='utf-8')
+          graph_zh_path = Path('docs/module-graph.zh.md')
+          graph_zh = graph_zh_path.read_text(encoding='utf-8')
+          mermaid_re = re.compile(r'```mermaid\n.*?\n```', re.S)
+          graph_blocks = mermaid_re.findall(graph)
+          graph_zh_blocks = mermaid_re.findall(graph_zh)
+          if len(graph_blocks) != 1 or len(graph_zh_blocks) != 1:
+              raise SystemExit('module graph must contain exactly one mermaid block per language')
+          graph_zh = mermaid_re.sub(graph_blocks[0], graph_zh, count=1)
+          graph_zh_path.write_text(graph_zh, encoding='utf-8')
+          PY
+          pnpm run verify-translation-pairing --write docs/config-catalog.md docs/module-graph.md
       - name: Commit generated outputs
         run: |
           git config user.name 'github-actions[bot]'
