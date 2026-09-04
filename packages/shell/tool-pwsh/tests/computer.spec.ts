@@ -40,6 +40,18 @@ describe('Computer Use argument contract', () => {
     expect(invocation.env.PHX_ACTION).toBe('type')
   })
 
+  it('pins the x64-safe Win32 INPUT union and STA host', () => {
+    const invocation = windowsComputerInvocation({ action: 'screenshot' })
+    expect(invocation.argv).toContain('-STA')
+    const encoded = invocation.argv.at(-1)
+    expect(encoded).toBeDefined()
+    const driver = Buffer.from(encoded as string, 'base64').toString('utf16le')
+    expect(driver).toContain('[FieldOffset(0)] public MOUSEINPUT mi;')
+    expect(driver).toContain('[FieldOffset(0)] public KEYBDINPUT ki;')
+    expect(driver).toContain('[FieldOffset(0)] public HARDWAREINPUT hi;')
+    expect(driver).toContain('Marshal.SizeOf(typeof(INPUT))')
+  })
+
   it('rejects key strings outside the closed combo grammar', () => {
     expect(() => validateComputerArgs({ action: 'key', keys: 'CTRL+L;calc.exe' })).toThrow(/unsupported/i)
   })
