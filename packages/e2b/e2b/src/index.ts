@@ -180,7 +180,10 @@ export class E2BRuntime extends Service {
     return sandbox
   }
 
-  /** Return the durable E2B identity callers can persist for a later reconnect. */
+  /**
+   * Return the durable E2B identity callers can persist for a later reconnect.
+   * @returns The live sandbox id after setup/reconnect succeeds.
+   */
   async getSandboxId(): Promise<string> {
     return (await this.getSandbox()).sandboxId
   }
