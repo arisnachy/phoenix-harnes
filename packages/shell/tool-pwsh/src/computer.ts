@@ -72,14 +72,22 @@ function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
   return (ctx as unknown as { attachments?: AttachmentWriter }).attachments
 }
 
-/** Map the existing sandbox authority onto desktop authority. */
+/**
+ * Map the existing sandbox authority onto desktop authority.
+ * @param mode - Effective sandbox mode for the current session/deployment.
+ * @returns Desktop authority that is never wider than the sandbox authority.
+ */
 export function computerModeForSandbox(mode: SandboxMode | undefined): ComputerMode {
   if (mode === 'read-only') return 'observe'
   if (mode === 'workspace-write' || mode === 'danger-full-access') return 'interact'
   return 'off'
 }
 
-/** Fail closed when an action is outside the current desktop authority. */
+/**
+ * Fail closed when an action is outside the current desktop authority.
+ * @param mode - Effective Computer Use authority.
+ * @param action - Requested closed-set desktop action.
+ */
 export function assertComputerActionAllowed(mode: ComputerMode, action: ComputerAction): void {
   if (mode === 'off') {
     throw new Error('Computer Use is disabled by the current permission mode.')
@@ -104,7 +112,10 @@ function assertOptionalPointPair(args: ComputerToolArgs): void {
 
 const KEY_COMBO = /^[A-Za-z0-9_+\-]+$/u
 
-/** Validate cross-field action requirements before touching the OS. */
+/**
+ * Validate cross-field action requirements before touching the OS.
+ * @param args - Model-facing desktop action and its action-specific fields.
+ */
 export function validateComputerArgs(args: ComputerToolArgs): void {
   switch (args.action) {
     case 'screenshot':
@@ -380,7 +391,11 @@ function putNumber(env: Record<string, string>, key: string, value: number | und
   if (value !== undefined) env[key] = String(value)
 }
 
-/** Build the injection-safe native invocation. Model-provided strings travel only as environment values. */
+/**
+ * Build the injection-safe native invocation; model strings travel only as environment values.
+ * @param args - Validated model-facing Computer Use arguments.
+ * @returns Fixed PowerShell executable/argv plus isolated environment values.
+ */
 export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvocation {
   validateComputerArgs(args)
   const env: Record<string, string> = { PHX_ACTION: args.action }
@@ -399,7 +414,12 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   }
 }
 
-/** Execute one fixed Windows desktop action and return stdout (base64 PNG for screenshot). */
+/**
+ * Execute one fixed Windows desktop action and return driver stdout.
+ * @param args - Validated Computer Use operation to execute.
+ * @param signal - Optional cancellation signal forwarded to the PowerShell process.
+ * @returns Trimmed stdout; screenshots return base64 PNG bytes.
+ */
 export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: AbortSignal): Promise<string> {
   if (process.platform !== 'win32') {
     throw new Error(`Computer Use Windows driver is unavailable on ${process.platform}`)
@@ -450,7 +470,10 @@ async function authorizeComputerAction(
   }
 }
 
-/** Register the model-facing Computer Use tool on Windows compositions. */
+/**
+ * Register the model-facing Computer Use tool on Windows compositions.
+ * @param ctx - PHOENIX composition carrying tools, shell policy, and optional attachments/approval capabilities.
+ */
 export function registerComputerTool(ctx: Context): void {
   if (process.platform !== 'win32') return
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
