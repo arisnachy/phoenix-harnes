@@ -29,12 +29,20 @@ function safeIdentity(sessionId: string): string {
   return slug
 }
 
-/** Branch namespace owned by PHOENIX subagent worktrees. */
+/**
+ * Return the branch namespace owned by one PHOENIX subagent worktree.
+ * @param sessionId - Opaque child session identity to normalize.
+ * @returns Deterministic Git branch name under the `phoenix/` namespace.
+ */
 export function worktreeBranchName(sessionId: string): string {
   return `phoenix/${safeIdentity(sessionId)}`
 }
 
-/** Filesystem leaf owned by one PHOENIX subagent worktree. */
+/**
+ * Return the filesystem leaf owned by one PHOENIX subagent worktree.
+ * @param sessionId - Opaque child session identity to normalize.
+ * @returns Deterministic path-safe worktree leaf.
+ */
 export function worktreePathName(sessionId: string): string {
   return safeIdentity(sessionId)
 }
@@ -71,6 +79,9 @@ async function discoverRepositoryRoot(cwd: string): Promise<string | undefined> 
  * Create an isolated Git worktree for a child. Non-Git workspaces return
  * `undefined`; once a repository is discovered, creation errors are fatal so
  * requested isolation never silently degrades into shared writes.
+ * @param parentCwd - Parent session working directory, when one is known.
+ * @param sessionId - Child session identity used for branch and path naming.
+ * @returns A releasable worktree lease, or `undefined` outside Git workspaces.
  */
 export async function createSubagentWorktree(
   parentCwd: string | undefined,
