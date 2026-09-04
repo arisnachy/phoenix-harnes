@@ -14,9 +14,25 @@ describe('E2B lifecycle configuration', () => {
     expect(resolveE2BLifecycleConfig({
       cwd: '/work',
       timeoutMs: 300_000,
-      sandboxId: 'sbx_123',
+      sandboxId: '  sbx_123  ',
       retention: 'pause',
       autoPause: true,
     })).toMatchObject({ sandboxId: 'sbx_123', retention: 'pause', autoPause: true })
+  })
+
+  it('rejects an empty reconnect identity', () => {
+    expect(() => resolveE2BLifecycleConfig({
+      cwd: '/work',
+      timeoutMs: 300_000,
+      sandboxId: '   ',
+    })).toThrow(/sandboxId.*non-empty/i)
+  })
+
+  it('fails closed on an unknown retention value at the runtime boundary', () => {
+    expect(() => resolveE2BLifecycleConfig({
+      cwd: '/work',
+      timeoutMs: 300_000,
+      retention: 'archive' as never,
+    })).toThrow(/unsupported retention/i)
   })
 })
