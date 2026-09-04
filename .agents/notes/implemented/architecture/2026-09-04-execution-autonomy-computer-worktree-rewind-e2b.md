@@ -1,44 +1,39 @@
-# Execution autonomy: Computer Use, worktrees, rewind, and E2B lifecycle
+# Agent Note: Execution autonomy for Computer Use, worktrees, rewind, and E2B
 
-Date: 2026-09-04
 Status: implemented
 
-## Scope
+English | [中文](2026-09-04-execution-autonomy-computer-worktree-rewind-e2b.zh.md)
 
-PHOENIX closes four execution-lifecycle gaps without replacing the existing permission, session, subagent, or remote-runtime seams: Windows Computer Use, Git worktree isolation for one-shot in-process subagents, non-destructive session fork/rewind commands, and reconnectable E2B ownership.
+## Problem
+
+PHOENIX had strong permission, session, subagent, and remote-runtime primitives but lacked a coherent product path for Windows desktop control, isolated parallel filesystem work, user-facing rewind, and resumable E2B ownership. Adding those capabilities independently risked duplicating authority knobs, destroying child work during teardown, mutating session history, or accidentally deleting a user-owned remote sandbox.
 
 Search anchors: `computer use`, `worktree`, `rewind`, `E2B`.
 
-## Computer Use
+## Decision
 
-`@phoenix-ai/dsh-tool-pwsh` registers a Windows-only `computer` tool with the closed action vocabulary `screenshot`, `move`, `click`, `double_click`, `drag`, `type`, `key`, and `scroll`. Model-provided values travel only through environment variables into one fixed PowerShell/C# driver; they are never interpolated into executable source.
+`@phoenix-ai/dsh-tool-pwsh` registers a Windows-only `computer` tool with the closed action vocabulary `screenshot`, `move`, `click`, `double_click`, `drag`, `type`, `key`, and `scroll`. Model-provided values travel only through environment variables into one fixed PowerShell/C# driver and are never interpolated into executable source. Desktop authority derives from the existing sandbox policy instead of adding another durable permission knob: `read-only` is observe-only, while `workspace-write` and `danger-full-access` permit interaction. Interactive actions under `workspace-write` use the existing approval service; `danger-full-access` is the explicit no-prompt authority. Missing authority fails closed. Screenshots are stored through the optional attachment capability and deferred into model context as image content.
 
-Desktop authority derives from the session's existing sandbox policy instead of introducing another durable permission knob. `read-only` maps to observe-only, while `workspace-write` and `danger-full-access` map to interact. Interactive actions under `workspace-write` use the existing approval service; `danger-full-access` is the explicit no-prompt authority. Missing sandbox/approval facts fail closed. Screenshot output is stored through the optional attachment capability and injected into the session as a model-visible image so the next step can ground coordinates.
+`@phoenix-ai/dsh-subagent-in-process-driver` creates a deterministic branch and linked Git worktree for one-shot children when isolation is enabled. The shipped spawn and fork providers enable it by default. Non-Git workspaces remain unchanged; once Git is detected, worktree creation failure is fatal rather than silently degrading to shared writes. Teardown removes only clean worktrees, preserves dirty worktrees, and retains the branch so committed child work is never destroyed by lifecycle cleanup. Continuable fork sessions remain shared-workspace because that path is owned by the continuation manager rather than the one-shot driver.
 
-The Windows implementation uses user32 input primitives and a virtual-screen PNG capture. The plugin is not registered on non-Windows hosts.
+`@phoenix-ai/dsh-session-checkpoint-policy` contributes `/fork [event-seq]` and `/rewind [completed-turns]` when the commands capability is present. Both call the existing append-only `sessions.fork()` primitive, so the source session and its future remain intact. A rewind boundary is the preceding completed `turn/end` event because `SessionStore.fork()` takes an inclusive event sequence and rejects boundaries that end inside an open turn. Conversation rewind deliberately does not pretend to roll back arbitrary filesystem state; Git worktrees provide filesystem isolation for parallel child work.
 
-## Git worktree isolation
+`@phoenix-ai/dsh-e2b` accepts an existing `sandboxId`, reconnects through the SDK, reapplies the configured timeout, and exposes the live sandbox id for persistence. Disposal supports explicit `kill`, `pause`, and `retain` policies, with `kill` remaining the backward-compatible default. Newly created sandboxes still roll back on setup failure, while a reconnected user-supplied sandbox is never destroyed merely because PHOENIX failed to adopt it.
 
-`@phoenix-ai/dsh-subagent-in-process-driver` can create a deterministic branch and linked worktree for a one-shot child. The shipped spawn and fork providers enable this by default. Non-Git workspaces remain unchanged; once a Git repository is detected, creation failure is fatal rather than silently falling back to shared writes.
+## Alternatives considered
 
-Teardown removes only clean worktrees. Dirty worktrees are preserved. The child branch is retained even after a clean worktree is removed so committed work is not destroyed by lifecycle cleanup.
+**A separate durable `computer/mode` permission knob** — rejected because it could drift from the already persisted sandbox and approval policy. Reusing those facts makes desktop authority inherit naturally through the existing session and subagent permission model.
 
-Continuable fork sessions are unchanged because they are owned by the continuation manager rather than the one-shot driver.
+**Shared working directories for parallel one-shot subagents** — rejected as the default because concurrent writes can collide and make ownership ambiguous. Git worktrees provide repository-native isolation without copying the repository manually.
 
-## Session rewind and fork
+**Destructive rewind by truncating the session log or resetting files** — rejected because PHOENIX sessions are append-only and arbitrary filesystem rollback cannot be inferred safely. Rewind therefore forks history non-destructively.
 
-`@phoenix-ai/dsh-session-checkpoint-policy` contributes `/fork [event-seq]` and `/rewind [completed-turns]` when the commands capability is present. Both operations call the existing append-only `sessions.fork()` primitive; neither truncates or rewrites the source session.
+**Always killing E2B sandboxes on disposal** — retained as the default but no longer the only policy; long-horizon workflows need explicit pause or retain semantics and safe reconnect.
 
-A rewind boundary is the preceding completed `turn/end` event, because `SessionStore.fork()` takes an inclusive event sequence and rejects a boundary ending inside an open turn. Filesystem rollback is intentionally not implied by conversation rewind; Git worktrees provide filesystem isolation for parallel agent work.
+## Consequences
 
-## E2B lifecycle
-
-`@phoenix-ai/dsh-e2b` accepts an existing `sandboxId`, reconnects with the SDK, reapplies the configured timeout, and exposes the live sandbox id for persistence. Disposal has explicit `kill`, `pause`, and `retain` policies. `kill` remains the default for backward compatibility. Newly created sandboxes still roll back on setup failure, while a user-supplied reconnected sandbox is never destroyed merely because PHOENIX failed to adopt it.
-
-## Safety invariants
-
-- Desktop input is impossible under observe-only authority.
-- Desktop actions are a closed, validated vocabulary; model strings never become PowerShell source.
-- Worktree teardown never deletes dirty child work.
-- Rewind preserves the original session and future.
-- E2B retention is explicit and defaults to historical kill-on-dispose behavior.
+- Desktop input is impossible under observe-only authority, and the model receives only a closed validated action surface rather than arbitrary host commands.
+- One-shot Git subagents receive isolated checkouts by default, while dirty or committed work survives cleanup.
+- `/fork` and `/rewind` preserve the original conversation and future instead of rewriting history.
+- E2B sessions can survive a PHOENIX process lifecycle when the caller explicitly chooses `pause` or `retain`, while historical `kill` behavior remains the default.
+- Windows Computer Use is the first built-in desktop actuator; non-Windows hosts do not register it.
