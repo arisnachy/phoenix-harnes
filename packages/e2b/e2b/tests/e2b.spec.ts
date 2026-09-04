@@ -13,15 +13,20 @@ import InvariantRegistry from '@phoenix-ai/dsh-invariants'
 
 const sdk = vi.hoisted(() => ({
   create: vi.fn(),
+  connect: vi.fn(),
 }))
 
 vi.mock('e2b', async (importOriginal) => {
   const actual = await importOriginal<typeof import('e2b')>()
   // The mock replaces only the SDK's static factory surface and is never constructed.
-  // oxlint-disable-next-line typescript/no-extraneous-class -- The SDK contract is a class with a static factory.
+  // oxlint-disable-next-line typescript/no-extraneous-class -- The SDK contract is a class with static factories.
   class FakeSandbox {
     static create(...args: unknown[]): unknown {
       return sdk.create(...args)
+    }
+
+    static connect(...args: unknown[]): unknown {
+      return sdk.connect(...args)
     }
   }
   return { ...actual, Sandbox: FakeSandbox }
@@ -33,6 +38,8 @@ interface SandboxFixture {
   getInfo: ReturnType<typeof vi.fn>
   run: Mock<RunCommand>
   kill: ReturnType<typeof vi.fn>
+  setTimeout: ReturnType<typeof vi.fn>
+  betaPause: ReturnType<typeof vi.fn>
 }
 
 type RunCommand = (
@@ -45,17 +52,22 @@ function fakeSandbox(id = 'sandbox-1'): SandboxFixture {
   const getInfo = vi.fn().mockResolvedValue({ type: FileType.DIR })
   const run = vi.fn<RunCommand>().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
   const kill = vi.fn().mockResolvedValue(undefined)
+  const setTimeout = vi.fn().mockResolvedValue(undefined)
+  const betaPause = vi.fn().mockResolvedValue(undefined)
   const sandbox = {
     sandboxId: id,
     files: { makeDir, getInfo },
     commands: { run },
     kill,
+    setTimeout,
+    betaPause,
   } as unknown as SandboxType
-  return { sandbox, makeDir, getInfo, run, kill }
+  return { sandbox, makeDir, getInfo, run, kill, setTimeout, betaPause }
 }
 
 beforeEach(() => {
   sdk.create.mockReset()
+  sdk.connect.mockReset()
   vi.unstubAllEnvs()
 })
 
@@ -77,6 +89,8 @@ describe('E2BRuntime', () => {
 
     const service = ctx.e2b
     await expect(service.getSandbox()).resolves.toBe(fixture.sandbox)
+    await expect(service.getSandboxId()).resolves.toBe('sandbox-1')
+    expect(service.retention).toBe('kill')
     expect(service.cwd).toBe('/home/user/workspace')
     expect(service.runtimeRoot).toBe('/home/user/workspace/.dsh-e2b')
     expect(sdk.create).toHaveBeenCalledWith({
@@ -98,6 +112,109 @@ describe('E2BRuntime', () => {
     await fiber.dispose()
     expect(fixture.kill).toHaveBeenCalledOnce()
     await expect(service.getSandbox()).rejects.toThrow(/disposing/)
+  })
+
+  it('creates auto-pausing sandboxes when explicitly configured', async () => {
+    const fixture = fakeSandbox('auto-pause')
+    sdk.create.mockResolvedValue(fixture.sandbox)
+    const ctx = new Context()
+    const fiber = await ctx.plugin(E2BRuntime, { apiKey: 'test-key', autoPause: true })
+    await ctx.e2b.getSandbox()
+
+    expect(sdk.create).toHaveBeenCalledWith({
+      apiKey: 'test-key',
+      timeoutMs: 300_000,
+      secure: true,
+      lifecycle: { onTimeout: 'pause' },
+    })
+    await fiber.dispose()
+  })
+
+  it('reconnects an existing sandbox, adopts its timeout, and preserves its id', async () => {
+    const fixture = fakeSandbox('existing-sandbox')
+    sdk.connect.mockResolvedValue(fixture.sandbox)
+    const ctx = new Context()
+    const fiber = await ctx.plugin(E2BRuntime, {
+      apiKey: 'test-key',
+      sandboxId: '  existing-sandbox  ',
+      timeoutMs: 90_000,
+    })
+
+    await expect(ctx.e2b.getSandbox()).resolves.toBe(fixture.sandbox)
+    await expect(ctx.e2b.getSandboxId()).resolves.toBe('existing-sandbox')
+    expect(sdk.connect).toHaveBeenCalledWith('existing-sandbox', { apiKey: 'test-key' })
+    expect(sdk.create).not.toHaveBeenCalled()
+    expect(fixture.setTimeout).toHaveBeenCalledWith(90_000)
+
+    await fiber.dispose()
+    expect(fixture.kill).toHaveBeenCalledOnce()
+  })
+
+  it('never destroys a user-supplied sandbox when adoption setup fails', async () => {
+    const fixture = fakeSandbox('external-sandbox')
+    fixture.makeDir.mockRejectedValueOnce(new Error('adoption failed'))
+    sdk.connect.mockResolvedValue(fixture.sandbox)
+    const ctx = new Context()
+    const fiber = await ctx.plugin(E2BRuntime, { apiKey: 'test-key', sandboxId: 'external-sandbox' })
+
+    await expect(ctx.e2b.getSandbox()).rejects.toThrow('adoption failed')
+    expect(fixture.kill).not.toHaveBeenCalled()
+    await fiber.dispose()
+    expect(fixture.kill).not.toHaveBeenCalled()
+  })
+
+  it('never destroys a user-supplied sandbox when timeout adoption fails', async () => {
+    const fixture = fakeSandbox('external-timeout')
+    fixture.setTimeout.mockRejectedValueOnce(new Error('timeout adoption failed'))
+    sdk.connect.mockResolvedValue(fixture.sandbox)
+    const ctx = new Context()
+    const fiber = await ctx.plugin(E2BRuntime, { apiKey: 'test-key', sandboxId: 'external-timeout' })
+
+    await expect(ctx.e2b.getSandbox()).rejects.toThrow('timeout adoption failed')
+    expect(fixture.makeDir).not.toHaveBeenCalled()
+    expect(fixture.kill).not.toHaveBeenCalled()
+    await fiber.dispose()
+  })
+
+  it('pauses a live sandbox on disposal when retention is pause', async () => {
+    const fixture = fakeSandbox('paused-sandbox')
+    sdk.create.mockResolvedValue(fixture.sandbox)
+    const ctx = new Context()
+    const fiber = await ctx.plugin(E2BRuntime, { apiKey: 'test-key', retention: 'pause' })
+    await ctx.e2b.getSandbox()
+    expect(ctx.e2b.retention).toBe('pause')
+
+    await fiber.dispose()
+    expect(fixture.betaPause).toHaveBeenCalledOnce()
+    expect(fixture.kill).not.toHaveBeenCalled()
+  })
+
+  it('retains a live sandbox untouched on disposal when retention is retain', async () => {
+    const fixture = fakeSandbox('retained-sandbox')
+    sdk.create.mockResolvedValue(fixture.sandbox)
+    const ctx = new Context()
+    const fiber = await ctx.plugin(E2BRuntime, { apiKey: 'test-key', retention: 'retain' })
+    await ctx.e2b.getSandbox()
+    expect(ctx.e2b.retention).toBe('retain')
+
+    await fiber.dispose()
+    expect(fixture.betaPause).not.toHaveBeenCalled()
+    expect(fixture.kill).not.toHaveBeenCalled()
+  })
+
+  it('accepts an already-missing sandbox while pausing on disposal', async () => {
+    const fixture = fakeSandbox('missing-pause')
+    fixture.betaPause.mockRejectedValue(new SandboxNotFoundError('already gone'))
+    sdk.create.mockResolvedValue(fixture.sandbox)
+    const ctx = new Context()
+    const errors: unknown[] = []
+    ctx.logger.error = ((error: unknown) => { errors.push(error) }) as typeof ctx.logger.error
+    const fiber = await ctx.plugin(E2BRuntime, { apiKey: 'test-key', retention: 'pause' })
+    await ctx.e2b.getSandbox()
+
+    await fiber.dispose()
+    expect(fixture.betaPause).toHaveBeenCalledOnce()
+    expect(errors).toEqual([])
   })
 
   it('rejects handle acquisition when disposal starts during setup', async () => {
@@ -218,6 +335,7 @@ describe('E2BRuntime', () => {
     const ctx = new Context()
     await expect(ctx.plugin(E2BRuntime, config)).rejects.toThrow(message)
     expect(sdk.create).not.toHaveBeenCalled()
+    expect(sdk.connect).not.toHaveBeenCalled()
   })
 
   it('requires a key when both config and the environment omit it', async () => {
