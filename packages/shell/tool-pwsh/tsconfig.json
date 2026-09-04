@@ -27,9 +27,6 @@
       "path": "../../core/agent"
     },
     {
-      "path": "../../attachment/attachment"
-    },
-    {
       "path": "../../shell/shell"
     },
     {
