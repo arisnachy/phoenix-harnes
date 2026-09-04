@@ -33,7 +33,6 @@
   "license": "MIT",
   "peerDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
-    "@phoenix-ai/dsh-attachment": "workspace:^",
     "@phoenix-ai/dsh-shell": "workspace:^",
     "@phoenix-ai/dsh-shell-env": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
@@ -51,7 +50,6 @@
   },
   "devDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
-    "@phoenix-ai/dsh-attachment": "workspace:^",
     "@phoenix-ai/dsh-shell": "workspace:^",
     "@phoenix-ai/dsh-shell-env": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
