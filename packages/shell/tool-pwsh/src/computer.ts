@@ -15,11 +15,10 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { Context } from '@phoenix-ai/cordis'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
-import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
-import type {} from '@phoenix-ai/dsh-attachment'
+import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@phoenix-ai/dsh-sandbox-policy'
-import { defineTool } from '@phoenix-ai/dsh-tools'
+import { defineTool, type ToolRunContext } from '@phoenix-ai/dsh-tools'
 
 const execFileAsync = promisify(execFile)
 
@@ -37,8 +36,10 @@ export type ComputerAction =
   | 'key'
   | 'scroll'
 
+/** Mouse buttons accepted by the Windows driver. */
 export type ComputerButton = 'left' | 'right' | 'middle'
 
+/** Model-facing arguments for one desktop operation. */
 export interface ComputerToolArgs {
   action: ComputerAction
   x?: number
@@ -55,6 +56,20 @@ interface ComputerInvocation {
   file: string
   argv: readonly string[]
   env: Readonly<Record<string, string>>
+}
+
+interface DesktopImageAttachment {
+  readonly width: number
+  readonly height: number
+}
+
+interface AttachmentWriter {
+  saveImage(input: { data: Buffer; mediaType: 'image/png'; name: string }): Promise<DesktopImageAttachment>
+}
+
+/** Resolve the optional attachment capability without adding a hard package edge. */
+function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
+  return (ctx as unknown as { attachments?: AttachmentWriter }).attachments
 }
 
 /** Map the existing sandbox authority onto desktop authority. */
@@ -176,9 +191,14 @@ public static class PhoenixDesktop {
     public InputUnion U;
   }
 
-  [StructLayout(LayoutKind.Explicit)]
-  private struct InputUnion {
-    [FieldOffset(0)] public KEYBDINPUT ki;
+  [StructLayout(LayoutKind.Sequential)]
+  private struct MOUSEINPUT {
+    public int dx;
+    public int dy;
+    public uint mouseData;
+    public uint dwFlags;
+    public uint time;
+    public UIntPtr dwExtraInfo;
   }
 
   [StructLayout(LayoutKind.Sequential)]
@@ -188,6 +208,20 @@ public static class PhoenixDesktop {
     public uint dwFlags;
     public uint time;
     public UIntPtr dwExtraInfo;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct HARDWAREINPUT {
+    public uint uMsg;
+    public ushort wParamL;
+    public ushort wParamH;
+  }
+
+  [StructLayout(LayoutKind.Explicit)]
+  private struct InputUnion {
+    [FieldOffset(0)] public MOUSEINPUT mi;
+    [FieldOffset(0)] public KEYBDINPUT ki;
+    [FieldOffset(0)] public HARDWAREINPUT hi;
   }
 
   public static void EnableDpiAwareness() {
@@ -360,7 +394,7 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   if (args.keys !== undefined) env.PHX_KEYS = args.keys
   return {
     file: 'powershell.exe',
-    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', ENCODED_WINDOWS_DRIVER],
+    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', ENCODED_WINDOWS_DRIVER],
     env,
   }
 }
@@ -372,18 +406,13 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
   }
   signal?.throwIfAborted()
   const invocation = windowsComputerInvocation(args)
-  const { stdout, stderr } = await execFileAsync(invocation.file, [...invocation.argv], {
+  const { stdout } = await execFileAsync(invocation.file, [...invocation.argv], {
     encoding: 'utf8',
     windowsHide: true,
     maxBuffer: 64 * 1024 * 1024,
     env: { ...process.env, ...invocation.env },
     ...signal === undefined ? {} : { signal },
   })
-  if (stderr.trim().length > 0) {
-    // PowerShell can write non-fatal progress to stderr, but this driver sets
-    // ErrorActionPreference=Stop; preserve diagnostics only when no stdout was expected.
-    if (args.action !== 'screenshot' && stdout.trim().length === 0) return ''
-  }
   return stdout.trim()
 }
 
@@ -395,7 +424,7 @@ function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; r
 
 async function authorizeComputerAction(
   ctx: Context,
-  exec: { agent?: { session: { events: readonly unknown[] }; inject: (message: unknown) => void }; callId?: unknown; signal: AbortSignal },
+  exec: ToolRunContext,
   action: ComputerAction,
   sandboxMode: SandboxMode | undefined,
 ): Promise<void> {
@@ -408,9 +437,9 @@ async function authorizeComputerAction(
   if (approval === undefined) throw new Error('Computer input requires the approval service; refusing action')
   const risk = inputRisk(action)
   const outcome = await approval.request({
-    agent: agent as never,
+    agent,
     toolName: 'computer',
-    callId: exec.callId as never,
+    callId: exec.callId,
     reason: `Allow PHOENIX to perform desktop ${action.replace('_', ' ')}?`,
     risk: risk.risk,
     reversible: risk.reversible,
@@ -474,17 +503,18 @@ export function registerComputerTool(ctx: Context): void {
         if (output.length === 0) throw new Error('Computer screenshot driver returned no image bytes')
         const bytes = Buffer.from(output, 'base64')
         if (bytes.length === 0) throw new Error('Computer screenshot decoded to an empty image')
-        const attachments = ctx.get('attachments')
+        const attachments = attachmentWriter(ctx)
         if (attachments === undefined) throw new Error('Computer screenshot requires the attachment service')
-        const attachment: ImageAttachmentRef = await attachments.saveImage({
+        const attachment = await attachments.saveImage({
           data: bytes,
           mediaType: 'image/png',
           name: 'phoenix-desktop.png',
         })
-        exec.agent.inject(createUserMessage({
+        const imageBlock = { type: 'image', attachment } as unknown as ContentBlock
+        exec.deferContext(createUserMessage({
           content: [
             { type: 'text', text: `PHOENIX desktop screenshot (${attachment.width}x${attachment.height}).` },
-            { type: 'image', attachment },
+            imageBlock,
           ],
           source: { kind: 'plugin', plugin: 'computer-use' },
         }))
