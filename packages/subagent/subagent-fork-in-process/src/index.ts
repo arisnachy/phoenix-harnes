@@ -21,6 +21,7 @@ import { startInProcessRun } from '@phoenix-ai/dsh-subagent-in-process-driver'
 export const name = 'subagent-fork-in-process'
 export const inject = ['subagents']
 
+/** Configuration for the in-process fork provider. */
 export interface Config {
   /** Provider name on `ctx.subagents` (default `fork`). */
   providerName: string
