@@ -2,12 +2,12 @@
  * Shared driver for in-process ONE-SHOT subagent providers. The agent factory's
  * creation transaction owns unpublished setup and rollback; after publication
  * the returned AgentHandle is the one quiescent lifecycle owner held by the
- * provider's caller.
+ * provider's caller. Optional Git-worktree isolation gives each child its own
+ * filesystem checkout while preserving dirty/committed work on teardown.
  *
  * Continuable children never come through here: the continuation manager
  * composes and drives them directly, so this driver owns exactly one turn with
  * one result.
- *
  * @module @phoenix-ai/dsh-subagent-in-process-driver
  */
 
@@ -38,29 +38,29 @@ import {
   attachStructuredRuntime,
   type StructuredAttachment,
 } from './structured.ts'
+import { createSubagentWorktree, type SubagentWorktreeLease } from './worktree.ts'
 
 export {
   STRUCTURED_OUTPUT_TOOL,
   STRUCTURED_OUTPUT_INSTRUCTION,
 } from './structured.ts'
+export {
+  createSubagentWorktree,
+  worktreeBranchName,
+  worktreePathName,
+} from './worktree.ts'
+export type { SubagentWorktreeLease, WorktreeReleaseResult } from './worktree.ts'
 
 /** Map a session turn outcome to the subagent seam's terminal vocabulary. */
 function toStopReason(reason: TurnEndReason | undefined): SubagentStopReason {
   switch (reason?.kind) {
-    case 'completed':
-      return 'completed'
-    case 'max-tokens':
-      return 'max-tokens'
-    case 'aborted':
-      return 'aborted'
-    // A pre-step rejection discarded the claimed prompt: the task was
-    // declined, and the caller must not read the run as done.
-    case 'blocked':
-      return 'refusal'
+    case 'completed': return 'completed'
+    case 'max-tokens': return 'max-tokens'
+    case 'aborted': return 'aborted'
+    case 'blocked': return 'refusal'
     case 'error':
     case 'interrupted':
-    default:
-      return 'error'
+    default: return 'error'
   }
 }
 
@@ -68,6 +68,8 @@ function toStopReason(reason: TurnEndReason | undefined): SubagentStopReason {
 export interface InProcessRunOptions {
   /** Completed-turn seed for fork, or undefined for a fresh spawn. */
   readonly seed?: SessionEvent[]
+  /** Give this one-shot child its own Git worktree when the parent cwd belongs to Git. */
+  readonly worktreeIsolation?: boolean
 }
 
 /** Error used when cancellation wins before the child publication boundary. */
@@ -89,15 +91,8 @@ function attachDescriptorAppend(childCtx: Context, descriptor: SubagentDescripto
 }
 
 /**
- * Establish and drive one in-process one-shot child. Fulfillment means the agent
- * is already published in the registry and transfers its turn, cancellation,
- * and disposal work through the returned run. Rejection means the agent
- * factory's unpublished creation transaction reached quiescence without
- * publishing a child. Every start appends its resolved descriptor inside the
- * child's initial turn.
- * @param request - the trusted typed start request, including its required signal.
- * @param options - the optional fork seed.
- * @returns a published holder-owned run.
+ * Establish and drive one in-process one-shot child. When requested and the
+ * parent lives in Git, the child is created with an isolated worktree cwd.
  */
 export async function startInProcessRun(
   request: ResolvedSubagentStartRequest,
@@ -112,9 +107,15 @@ export async function startInProcessRun(
   const seed = options.seed
   const activationBoundary = seed?.length ?? 0
 
-  // Capture before the first await: a later parent switch belongs to the
-  // parent's future.
+  // Capture before the first await: a later parent switch belongs to the parent's future.
   const inherited = captureDelegatedPolicyOverrides(parent)
+  const worktree = options.worktreeIsolation === true
+    ? await createSubagentWorktree(parent.session.header.cwd, childId)
+    : undefined
+  if (request.signal.aborted) {
+    await worktree?.release()
+    throw prePublicationAbort()
+  }
 
   let structured: StructuredAttachment | undefined
   const setup = (childCtx: Context): void => {
@@ -129,14 +130,23 @@ export async function startInProcessRun(
     attachDescriptorAppend(childCtx, request.descriptor)
   }
 
-  const handle = await parent.ctx.agents.create({
-    sessionId: childId,
-    meta: childSessionMeta(parent, childDepth, activationBoundary),
-    ...seed !== undefined ? { seed } : {},
-    agentOptions: resolveChildAgentOptions(parent, request.agentOptions, childDepth),
-    signal: request.signal,
-    setup,
-  })
+  let handle: AgentHandle
+  try {
+    handle = await parent.ctx.agents.create({
+      sessionId: childId,
+      meta: {
+        ...childSessionMeta(parent, childDepth, activationBoundary),
+        ...worktree === undefined ? {} : { cwd: worktree.cwd },
+      },
+      ...seed !== undefined ? { seed } : {},
+      agentOptions: resolveChildAgentOptions(parent, request.agentOptions, childDepth),
+      signal: request.signal,
+      setup,
+    })
+  } catch (error: unknown) {
+    await worktree?.release()
+    throw error
+  }
   return drivePublishedRun(
     handle,
     request.signal,
@@ -144,13 +154,11 @@ export async function startInProcessRun(
     childId,
     activationBoundary,
     structured,
+    worktree,
   )
 }
 
-/**
- * Wrap a published child in the single run lifecycle that owns signal handoff,
- * one turn, result settlement, and quiescent disposal.
- */
+/** Wrap a published child in the single run lifecycle that owns signal handoff, turn, result, and cleanup. */
 function drivePublishedRun(
   handle: AgentHandle,
   signal: AbortSignal,
@@ -158,6 +166,7 @@ function drivePublishedRun(
   childId: SessionId,
   boundary: number,
   structured: StructuredAttachment | undefined,
+  worktree: SubagentWorktreeLease | undefined,
 ): SubagentRun {
   const child = handle.agent
   const flags = { cancelled: false }
@@ -166,9 +175,6 @@ function drivePublishedRun(
     child.cancel({ kind: 'parent' })
   }
   signal.addEventListener('abort', onAbort, { once: true })
-  // Agent creation detaches its creation-only listener before returning. The
-  // post-registration check closes that handoff without treating an already
-  // published child as a failed start.
   if (signal.aborted) onAbort()
 
   const result: Promise<SubagentResult> = (async () => {
@@ -196,10 +202,11 @@ function drivePublishedRun(
       signal.removeEventListener('abort', onAbort)
       flags.cancelled = true
       const settlements = await Promise.allSettled([handle.dispose(), result])
+      const worktreeSettlement = await Promise.allSettled([worktree?.release() ?? Promise.resolve('already-gone')])
       const disposal = settlements[0]
-      // The result channel owns run faults; disposal reports only failure to
-      // release the published handle after both operations settle.
       if (disposal.status === 'rejected') throw disposal.reason
+      const worktreeDisposal = worktreeSettlement[0]
+      if (worktreeDisposal?.status === 'rejected') throw worktreeDisposal.reason
     },
   }
 }
@@ -212,16 +219,9 @@ function readResult(
   structured?: { captured?: { value: unknown } | undefined },
 ): SubagentResult {
   const own = child.session.events.slice(boundary)
-  // `droppedUnrun` is deliberately unread: a one-shot prompt is claimed by its
-  // awaited first turn almost immediately, and the owner's own teardown is the
-  // `cancelled` flag below. A cancellation with no accounting turn resolves
-  // `error` through `toStopReason(undefined)`, which never overstates success.
   const lastEnd = foldConsumedWork(own).end
-  // The seam's canonical selection rule; a partial answer survives cancel and truncation.
   const output: ContentBlock[] = finalAssistantOutput(own) ?? []
   const recorded = toStopReason(lastEnd?.data.reason)
-  // Disposal can tear the owner down before the loop records its ordinary
-  // `aborted` end, yielding `disposed` instead.
   const stopReason: SubagentStopReason = cancelled && recorded !== 'completed' ? 'aborted' : recorded
   if (structured !== undefined) {
     if (structured.captured !== undefined) {
