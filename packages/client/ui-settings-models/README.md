@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+The `chatgpt-web` route is the exception to the API-key field: its card identifies the local `codex-chatgpt-web` tunnel, shows the effective bridge URL, and keeps the route selectable with no paid model credential. Browser authentication remains owned by the bridge; PHOENIX only sends the non-secret local authorization marker required by the Responses protocol. Start or inspect the bridge with `dsh chatgpt-web start` / `dsh chatgpt-web status` after configuring `PHOENIX_CHATGPT_WEB_COMMAND` when automatic lifecycle management is needed.
+
 Configured provider cards include compact up and down controls. The selected order is persisted as `user-profile.modelProviderOrder`; the Host applies it to every advisory `session.models` response, so both the Settings list and the conversation selector show the same order while newly available routes remain visible.
 
 Models settings and product-onboarding plugin. The same client Cordis plugin registers the Models page plus two ordered first-run dialogs: a versioned internal-testing notice and the conditional official-DeepSeek credential step. Both steps share one modal wrapper and remain sequenced by `settings.onboarding`. The Models plane joins three wire domains into one shared snapshot — `llm.providers` (the configurable-provider directory with each route's live/dormant state), `settings.describe` (serialized schemas, layered redacted values, secret slots), and `credentials.describe` (value-free configured/source/writable badges) — and renders provider rows with one editor card at a time, without presenting route liveness as provider status.

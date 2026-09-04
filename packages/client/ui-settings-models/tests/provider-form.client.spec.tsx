@@ -1338,6 +1338,29 @@ describe('hand-declared providers', () => {
 })
 
 describe('API key field', () => {
+  it('uses the local ChatGPT Web tunnel without rendering an API key field', async () => {
+    const { mutate } = await mountSection({
+      providers: {
+        'chatgpt-web': {
+          api: 'openai-responses',
+          baseURL: 'http://127.0.0.1:17841/v1',
+          models: [{ id: 'gpt-5.6-luna' }],
+        },
+      },
+      declaredRoutes: ['chatgpt-web'],
+    })
+    openEditor('chatgpt-web')
+
+    expect(screen.queryByLabelText(en.keyInput)).toBeNull()
+    expect(screen.getByRole('status').textContent).toBe(
+      en.chatgptWebTunnelHint.replace('{url}', 'http://127.0.0.1:17841/v1'),
+    )
+
+    fireEvent.click(screen.getByText(en.apply))
+    await Promise.resolve()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
   it('stores an OpenRouter key from the Models page under its credential reference', async () => {
     const { mutate, set } = await mountSection({
       providers: { openrouter: { apiKeyEnv: 'OPENROUTER_API_KEY' } },

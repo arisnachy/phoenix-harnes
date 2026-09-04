@@ -82,7 +82,13 @@ export type {
   PiAiThinkingFormat,
   ResolvedPiAiProviderProfile,
 } from './config.ts'
-export { CHATGPT_WEB_DEFAULT_API, CHATGPT_WEB_DEFAULT_BASE_URL, CHATGPT_WEB_PROVIDER, chatgptWebDefaults } from './config.ts'
+export {
+  CHATGPT_WEB_DEFAULT_API,
+  CHATGPT_WEB_DEFAULT_BASE_URL,
+  CHATGPT_WEB_LOCAL_AUTHORIZATION,
+  CHATGPT_WEB_PROVIDER,
+  chatgptWebDefaults,
+} from './config.ts'
 export { recordKeyFor } from './auth.ts'
 export { supportedProtocols } from './provider.ts'
 export {

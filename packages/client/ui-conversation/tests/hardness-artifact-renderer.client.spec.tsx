@@ -2,7 +2,7 @@
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { HardnessArtifactNodeView } from '../src/client/chat/HardnessArtifactNodeView.tsx'
 
 function props(data: {
@@ -80,6 +80,44 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.getAllByText('Preview ready').length).toBeGreaterThan(0)
     fireEvent.click(screen.getAllByRole('button', { name: 'Reload preview' }).at(-1)!)
     expect(screen.getAllByText('Loading preview').length).toBeGreaterThan(0)
+  })
+
+  it('lets an HTML preview grow beyond the old compact height cap', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'app-tall',
+      mime: 'text/html',
+      title: 'Tall report',
+      data: '<main style="height:980px">Report</main>',
+    })} />)
+
+    const frame = screen.getByTitle('Tall report') as HTMLIFrameElement
+    fireEvent(window, new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'phoenix-artifact-height', height: 980 },
+    }))
+
+    expect(frame.style.height).toBe('980px')
+  })
+
+  it('renders a Codex image attachment through the session image slot', () => {
+    const attachment = {
+      attachmentId: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      mediaType: 'image/png', bytes: 4, width: 1, height: 1, name: 'generated.png',
+    }
+    const renderMessageImages = vi.fn(() => <div data-testid="artifact-images" />)
+    render(<HardnessArtifactNodeView
+      {...props({
+        artifactId: 'image-1',
+        mime: 'image/png',
+        title: 'HARDNESS result',
+        data: { provider: 'codex', model: 'codex-built-in-image-gen', attachment },
+      })}
+      renderMessageImages={renderMessageImages}
+    />)
+
+    expect(screen.getByTestId('artifact-images')).toBeTruthy()
+    expect(screen.queryByText(/"provider": "codex"/)).toBeNull()
+    expect(renderMessageImages).toHaveBeenCalledWith({ images: [{ attachment }], align: 'start' })
   })
 
   it('normalizes complete HTML documents before placing them in srcDoc', () => {

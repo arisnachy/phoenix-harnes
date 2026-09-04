@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { HardnessArtifactValue } from '../conversation-nodes/hardness-artifact.ts'
+import type { RenderMessageImages } from '../contract/slots.ts'
 import styles from './HardnessArtifactNodeView.module.css'
 
 interface ArtifactBodyProps {
@@ -8,6 +10,7 @@ interface ArtifactBodyProps {
   readonly expanded: boolean
   readonly title: string
   readonly executable?: boolean
+  readonly renderMessageImages?: RenderMessageImages
 }
 
 type JsonRecord = Readonly<Record<string, unknown>>
@@ -44,6 +47,26 @@ function safeHref(value: unknown): string | undefined {
 function autoLoadable(value: string): boolean {
   return value.startsWith('/') || value.startsWith('./') || value.startsWith('../')
     || value.startsWith('blob:') || value.startsWith('data:')
+}
+
+function imageAttachment(value: unknown): ImageAttachmentRef | undefined {
+  if (!isRecord(value)) return undefined
+  if (typeof value.attachmentId !== 'string' || value.attachmentId.trim() === '') return undefined
+  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(value.mediaType as string)) return undefined
+  if (typeof value.bytes !== 'number' || !Number.isInteger(value.bytes) || value.bytes <= 0) return undefined
+  if (typeof value.width !== 'number' || !Number.isInteger(value.width) || value.width <= 0) return undefined
+  if (typeof value.height !== 'number' || !Number.isInteger(value.height) || value.height <= 0) return undefined
+  return value as unknown as ImageAttachmentRef
+}
+
+function ImageAttachmentPreview({ attachment, renderMessageImages }: {
+  readonly attachment: ImageAttachmentRef
+  readonly renderMessageImages?: RenderMessageImages
+}) {
+  if (renderMessageImages === undefined) {
+    return <p className={styles.note}>Image attachment is available, but no image renderer is configured.</p>
+  }
+  return renderMessageImages({ images: [{ attachment }], align: 'start' })
 }
 
 function TablePreview({ record }: { readonly record: JsonRecord }) {
@@ -256,8 +279,7 @@ function MiniApp({ html, expanded, title, executable = false }: MiniAppProps) {
       if (typeof event.data !== 'object' || event.data === null) return
       const message = event.data as Record<string, unknown>
       if (message.type !== 'phoenix-artifact-height' || typeof message.height !== 'number' || !Number.isFinite(message.height)) return
-      const maximum = expanded ? 760 : 640
-      setFrameHeight(Math.round(Math.max(160, Math.min(maximum, message.height))))
+      setFrameHeight(Math.round(Math.max(160, message.height)))
     }
     window.addEventListener('message', onMessage)
     return () => { window.removeEventListener('message', onMessage) }
@@ -350,12 +372,20 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
   return <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
 }
 
-function RecordPreview({ record, mime, expanded, title }: {
+function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
   readonly record: JsonRecord
   readonly mime: string
   readonly expanded: boolean
   readonly title: string
+  readonly renderMessageImages?: RenderMessageImages
 }) {
+  const attachment = imageAttachment(record.attachment)
+  if (attachment !== undefined) {
+    return <ImageAttachmentPreview
+      attachment={attachment}
+      {...renderMessageImages === undefined ? {} : { renderMessageImages }}
+    />
+  }
   if (Array.isArray(record.blocks)) {
     return (
       <div className={styles.stack}>
@@ -377,7 +407,7 @@ function RecordPreview({ record, mime, expanded, title }: {
   return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
 }
 
-export function HardnessArtifactBody({ mime, data, expanded, title, executable = false }: ArtifactBodyProps) {
+export function HardnessArtifactBody({ mime, data, expanded, title, executable = false, renderMessageImages }: ArtifactBodyProps) {
   if (typeof data === 'string') {
     if (mime === 'text/html' || mime === 'application/vnd.hardness.app+html') return <MiniApp html={data} expanded={expanded} title={title} executable={executable} />
     if (mime.startsWith('image/')) {
@@ -393,5 +423,11 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
     }
     return <pre className={mime.includes('json') ? styles.code : styles.text}>{data}</pre>
   }
-  return <RecordPreview record={data} mime={mime} expanded={expanded} title={title} />
+  return <RecordPreview
+    record={data}
+    mime={mime}
+    expanded={expanded}
+    title={title}
+    {...renderMessageImages === undefined ? {} : { renderMessageImages }}
+  />
 }

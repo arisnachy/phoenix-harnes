@@ -59,6 +59,10 @@ import type {
 } from '@phoenix-ai/dsh-llm'
 import type { AttachmentStore } from '@phoenix-ai/dsh-attachment'
 import { idleWatchdog, timeoutOf } from '@phoenix-ai/dsh-timeout'
+import {
+  CHATGPT_WEB_LOCAL_AUTHORIZATION,
+  CHATGPT_WEB_PROVIDER,
+} from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
 import { toPiContext } from './context.ts'
@@ -202,13 +206,24 @@ function reasoningInfo(
 }
 
 /** Merge deployment headers while removing case-insensitive attribution collisions. */
-function requestHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
+function requestHeaders(
+  provider: string,
+  headers: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
   const attribution = attributionHeaders()
   const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
-  return {
+  const merged = {
     ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
     ...attribution,
   }
+  const hasResponsesAuth = Object.entries(merged).some(([name, value]) =>
+    (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'cf-aig-authorization')
+    && value.trim().length > 0,
+  )
+  if (provider === CHATGPT_WEB_PROVIDER && !hasResponsesAuth) {
+    merged.Authorization = CHATGPT_WEB_LOCAL_AUTHORIZATION
+  }
+  return merged
 }
 
 /**
@@ -402,7 +417,7 @@ export class PiAiAdapter extends LlmAdapter {
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
-        headers: requestHeaders(profile.headers),
+        headers: requestHeaders(profile.provider, profile.headers),
       }
       const events = platformKeyFallback
         // The collection dispatches the codex route to the Codex wire no

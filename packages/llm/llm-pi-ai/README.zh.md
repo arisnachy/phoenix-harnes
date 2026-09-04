@@ -6,7 +6,9 @@
 
 包根入口导出 Cordis 插件约定、`PiAiAdapter` 与 `supportedProtocols()`；profile 解析、catalog 物化、提供方构造、回放转换和流转换保留在包内部。
 
-可配置提供方目录还包含可选的 `chatgpt-web` 路由，用于连接本地运行的 [`codex-chatgpt-web`](https://github.com/miuuyy/codex-chatgpt-web) 桥接。添加 `providers.chatgpt-web: {}` 后，Phoenix 会使用桥接默认的 OpenAI Responses 适配器（`http://127.0.0.1:17841/v1`、`gpt-5.6-sol` 和 `gpt-5.6-luna`）；由于设置加载器会把省略的列表物化为空列表，空的 `models` 列表也会采用相同的默认值；仍然支持覆盖 `baseURL` 或提供非空的 `models` 列表。该路由不会导入浏览器 Cookie 或凭据。设置 `PHOENIX_CHATGPT_WEB_URL` 为桥接来源后运行 `dsh doctor`，即可检查其 `/v1/models` 端点，同时不会打印响应数据。
+可配置提供方目录还包含可选的 `chatgpt-web` 路由，用于连接本地运行的 [`codex-chatgpt-web`](https://github.com/miuuyy/codex-chatgpt-web) 桥接。添加 `providers.chatgpt-web: {}` 后，Phoenix 会使用桥接默认的 OpenAI Responses 适配器（`http://127.0.0.1:17841/v1`、`gpt-5.6-sol` 和 `gpt-5.6-luna`）；由于设置加载器会把省略的列表物化为空列表，空的 `models` 列表也会采用相同的默认值；仍然支持覆盖 `baseURL` 或提供非空的 `models` 列表。该路由不会导入浏览器 Cookie、凭据或模型 API 密钥；由于 pi-ai 的 OpenAI Responses 预检要求认证标头，它只发送非秘密的本地回环授权标记，桥接本身仍使用浏览器会话认证。设置 `PHOENIX_CHATGPT_WEB_URL` 为桥接来源后运行 `dsh doctor`，即可检查其 `/v1/models` 端点，同时不会打印响应数据。
+
+`image_generation` 工具会把每个成功生成的 Codex 栅格图持久化到耐久附件存储，并同时返回绝对本地路径和附件引用。后续步骤中，模型可以把该路径传给 `read_image` 来检查图片，或将生成的资源嵌入另一项交付物；该路径是本地主机元数据，不是 bearer URL。
 
 ## 配置
 
@@ -213,7 +215,7 @@ pi-ai 事件会变为 harness 推理、文本、工具调用、usage 与 finish 
 - **路由的 catalog 不会自我刷新**：catalog 就是 `settings.yaml` 所写的内容，因此模型列表的新鲜度只到最近一次编辑为止。这里没有任何环节会去问提供方它服务哪些模型；路由要多一个模型，得有人写进去。
 - **每条路由只有一种协议格式**：`api` 作用于整条路由，因此混合协议的 catalog 路由（跨 Responses 与 Chat Completions 的 OpenAI 式 catalog）无法承载另一种协议的模型，向这类路由添加它未描述的模型必须点名 `api` 并把全部模型一起迁过去。把该提供方拆成两个路由键是变通办法。
 - **模态声明不经验证**：没有任何环节会去询问端点接受什么，因此声明了网关并不提供的 `image` 的模型会在 prompt 准入后被提供方拒绝。持久图片会留在历史中，同一个错误声明的模型可能再次失败。系统仍允许切换到纯文本模型，因为共享 LLM 运行时会在该次请求中把图片引用投影为稳定文本。
-- **未认证路由取决于其协议**：不点名凭据会让路由解析为「已配置但无密钥」，但 pi-ai 的 OpenAI 兼容实现仍要求 API key 或 `Authorization` 标头，因此无鉴权的本地服务需要一个由 `apiKeyEnv` 引用的占位凭据，或在 `headers` 中给出 `Authorization` 条目。
+- **未认证路由取决于其协议**：不点名凭据会让路由解析为「已配置但无密钥」，但 pi-ai 的 OpenAI 兼容实现仍要求 API key 或 `Authorization` 标头。`chatgpt-web` 会自动提供非秘密的本地回环标记；其他无鉴权的本地服务需要一个由 `apiKeyEnv` 引用的占位凭据，或在 `headers` 中给出 `Authorization` 条目。
 - **不支持 `GenerateOptions.stop`**：pi-ai 的通用流选项无法保证所有提供方都支持 stop sequence，因此适配器会拒绝该字段。
 - **历史中的 `system` 消息使用 pi-ai 通用上下文转换**：提供方特定位置由 pi-ai 决定，而非由 harness 拥有的协议覆盖决定。
 - **无法获取提供方 HTTP 状态**：pi-ai 错误事件不会在所有提供方上公开稳定 HTTP 状态；失败只公开稳定 harness 错误 code。

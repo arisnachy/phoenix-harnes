@@ -44,6 +44,10 @@ type EditorLayout = 'deepseek' | 'pi-ai' | 'unknown'
 
 /** The public DeepSeek endpoint shown as the deepseek base-URL placeholder. */
 const DEEPSEEK_PUBLIC_BASE_URL = 'https://api.deepseek.com'
+/** Stable route id for the local ChatGPT Web tunnel. */
+const CHATGPT_WEB_PROVIDER = 'chatgpt-web'
+/** Default endpoint exposed by the local ChatGPT Web tunnel. */
+const CHATGPT_WEB_DEFAULT_BASE_URL = 'http://127.0.0.1:17841/v1'
 
 /** Props of {@link ProviderEditor}. */
 export interface ProviderEditorProps {
@@ -194,6 +198,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const fallback = schema.getPath(namespace.value, settingsPath)
   const disabled = props.readOnly || busy
   const layout = layoutOf(namespace.ns)
+  const isChatGptWeb = props.provider === CHATGPT_WEB_PROVIDER
   const keyRef = refFor(schema, namespace, settingsPath, props.provider)
   const oauth = props.oauth
   /** An account-only flow replaces the key field with its sign-in buttons. */
@@ -214,6 +219,10 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
 
   useEffect(() => {
     let stale = false
+    if (isChatGptWeb) {
+      setKeyState(undefined)
+      return () => { stale = true }
+    }
     setKeyState(undefined)
     // The key state is a placeholder hint, not a precondition for editing:
     // neither a business rejection nor a transport failure may reach the
@@ -227,7 +236,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       () => undefined,
     )
     return () => { stale = true }
-  }, [api.credentials, keyRef, authRefresh])
+  }, [api.credentials, isChatGptWeb, keyRef, authRefresh])
 
   const stringAt = (source: unknown, key: string): string | undefined => {
     const value = schema.getPath(source, [key])
@@ -403,6 +412,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     const signInDisabled = disabled || attempt?.status === 'pending'
     return (
       <>
+        {isChatGptWeb
+          ? (
+            <p role="status" className={styles['advancedHint']}>
+              {t('chatgptWebTunnelHint').replace('{url}', probeBaseURL ?? CHATGPT_WEB_DEFAULT_BASE_URL)}
+            </p>
+          )
+          : null}
         {/* The provider's account flow, when the deployment registers one:
             an inline sign-in that never routes an OAuth grant through the
             API-key input. An account-only flow (no api-key method) is the
@@ -439,7 +455,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             {authFailure === undefined ? null : <p className={styles['error']}>{authFailure}</p>}
           </div>
         )}
-        {oauthOnly ? null : (
+        {oauthOnly || isChatGptWeb ? null : (
           <div className={styles['field']}>
             <span className={styles['fieldLabel']}>{t('keyInput')}</span>
             <input

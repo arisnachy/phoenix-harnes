@@ -11,7 +11,7 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, extname, join } from 'node:path'
+import { basename, extname, join, resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -99,6 +99,8 @@ interface ImageGenerationArgs {
 interface ImageGenerationValue {
   readonly provider: 'codex'
   readonly model: string
+  /** Absolute local path the next tool call can reopen with `read_image`. */
+  readonly path: string
   readonly attachment: ImageAttachmentRef
 }
 
@@ -110,6 +112,9 @@ export const imageGenerationToolDescription =
   'Generate an actual image with PHOENIX using the user\'s locally authenticated Codex/ChatGPT image capability. '
   + 'Use this whenever the user explicitly asks to create, draw, design, render, visualize, or generate an image, logo, banner, poster, cover, illustration, mockup, UI concept, diagram, thumbnail, or other visual asset. '
   + 'Also use it when completing a project whose required deliverables materially include visual assets such as branding, a hero image, application/web artwork, presentation graphics, or marketing creative. '
+  + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, include type-appropriate imagery when it materially improves the requested result: for example a hero image for a landing page, product or subject imagery for a catalog, or charts and diagrams for a report when supported by real data. '
+  + 'When the artifact format can embed governed image attachments, wire the generated asset into the final artifact; otherwise return the image as a governed visual artifact and do not pretend that a text-only page contains it. Do not invent data, add unrelated decoration, or rely on arbitrary external image URLs. '
+  + 'The successful result includes both a durable attachment and the absolute local path of the generated raster; reuse that path with read_image when the image must be inspected or embedded in a later deliverable. '
   + 'Pass the complete visual request in prompt. Governed HARDNESS recovery may supply the same request as brief or objective; PHOENIX normalizes those aliases before invoking Codex. '
   + 'Do not return only an image prompt when the user asked for the actual image and this tool is available. '
   + 'The image backend is independent of the active text model, so use it even when the current language model is OpenRouter/free, DeepSeek, or another non-Codex route. '
@@ -153,10 +158,17 @@ export function classifyCodexImageFailure(message: string): CodexImageFailureKin
   if (/too\s*many\s*requests|rate[ _-]?limit|usage[ _-]?limit|quota|credits? exhausted|429/i.test(message)) {
     return 'quota'
   }
-  if (/sign[ -]?in|login required|not authenticated|authentication required|unauthorized|chatgpt[^\n]*auth|\b401\b|forbidden/i.test(message)) {
+  if (
+    /sign[ -]?in|login required|not authenticated|authentication required/i.test(message)
+    || /unauthorized|chatgpt[^\n]*auth|\b401\b|forbidden/i.test(message)
+  ) {
     return 'auth'
   }
-  if (/image_generation[^\n]*(disabled|unavailable)|image generation[^\n]*(disabled|unavailable)|feature[^\n]*(not enabled|disabled)|unknown (feature|tool)[^\n]*(image|image_generation)|image_gen[^\n]*not available/i.test(message)) {
+  if (
+    /image_generation[^\n]*(disabled|unavailable)|image generation[^\n]*(disabled|unavailable)/i.test(message)
+    || /feature[^\n]*(not enabled|disabled)|unknown (feature|tool)[^\n]*(image|image_generation)/i.test(message)
+    || /image_gen[^\n]*not available/i.test(message)
+  ) {
     return 'capability'
   }
   return 'runtime'
@@ -197,7 +209,7 @@ function mediaTypeOf(path: string): ImageMediaType | undefined {
 
 function codexHome(): string {
   const configured = process.env.CODEX_HOME?.trim()
-  return configured && configured.length > 0 ? configured : join(homedir(), '.codex')
+  return configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.codex')
 }
 
 async function listGeneratedImages(root: string): Promise<GeneratedImageCandidate[]> {
@@ -351,6 +363,7 @@ function imageArtifactMeta(value: unknown): Record<string, unknown> {
       data: {
         provider: result.provider,
         model: result.model,
+        path: result.path,
         attachment,
       },
     },
@@ -428,6 +441,7 @@ export function installCodexImageGeneration(ctx: Context): void {
         properties: {
           provider: { type: 'string', const: 'codex' },
           model: { type: 'string' },
+          path: { type: 'string', required: true },
           attachment: {
             type: 'object',
             additionalProperties: true,
@@ -442,14 +456,14 @@ export function installCodexImageGeneration(ctx: Context): void {
             required: ['attachmentId', 'mediaType', 'bytes', 'width', 'height'],
           },
         },
-        required: ['provider', 'model', 'attachment'],
+        required: ['provider', 'model', 'path', 'attachment'],
       },
       render: (_args, value) => {
         const result = imageGenerationValue(value)
         return [
           {
             type: 'text',
-            text: `Generated image with Codex (${result.attachment.width}×${result.attachment.height}, ${result.attachment.mediaType}).`,
+            text: `Generated image with Codex (${result.attachment.width}×${result.attachment.height}, ${result.attachment.mediaType}).\n<path>${result.path}</path>`,
           },
           { type: 'image', attachment: result.attachment },
         ]
@@ -513,6 +527,7 @@ export function installCodexImageGeneration(ctx: Context): void {
       return {
         provider: 'codex' as const,
         model: 'codex-built-in-image-gen',
+        path: generated.path,
         attachment,
       }
     },

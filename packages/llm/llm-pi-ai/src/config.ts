@@ -83,6 +83,12 @@ export const CHATGPT_WEB_PROVIDER = 'chatgpt-web'
 export const CHATGPT_WEB_DEFAULT_BASE_URL = 'http://127.0.0.1:17841/v1'
 /** The bridge translates its browser session to the OpenAI Responses wire. */
 export const CHATGPT_WEB_DEFAULT_API = 'openai-responses'
+/**
+ * Non-secret local marker required by pi-ai's OpenAI Responses preflight. The
+ * bridge authenticates the browser session, so this value is never a model
+ * credential and is sent only to the loopback route.
+ */
+export const CHATGPT_WEB_LOCAL_AUTHORIZATION = 'Bearer phoenix-chatgpt-web'
 
 /**
  * Models advertised by the optional bridge before its live `/v1/models` list

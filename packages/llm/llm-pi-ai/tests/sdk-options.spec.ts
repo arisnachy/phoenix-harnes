@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StreamChunk } from '@phoenix-ai/dsh-llm'
 
 const streamSimple = vi.hoisted(() => vi.fn())
+const responseStreamSimple = vi.hoisted(() => vi.fn())
 
 // A hand-declared route is built by `createProvider` over the protocol table in
 // `src/provider.ts`, so the table's lazy api module is the SDK boundary this
@@ -10,12 +11,18 @@ const streamSimple = vi.hoisted(() => vi.fn())
 vi.mock('@earendil-works/pi-ai/api/openai-completions.lazy', () => ({
   openAICompletionsApi: () => ({ stream: streamSimple, streamSimple }),
 }))
+vi.mock('@earendil-works/pi-ai/api/openai-responses.lazy', () => ({
+  openAIResponsesApi: () => ({ stream: responseStreamSimple, streamSimple: responseStreamSimple }),
+}))
 
 import { PiAiAdapter } from '../src/adapter.ts'
 import { resolveProfiles } from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
 
-afterEach(() => { streamSimple.mockReset() })
+afterEach(() => {
+  streamSimple.mockReset()
+  responseStreamSimple.mockReset()
+})
 
 /** A hand-declared OpenAI-compatible route with one fully described model. */
 function gatewayAdapter(): PiAiAdapter {
@@ -32,11 +39,24 @@ function gatewayAdapter(): PiAiAdapter {
   })
 }
 
-async function drain(adapter: PiAiAdapter): Promise<StreamChunk[]> {
+/** The local ChatGPT Web route has browser auth and no model API key. */
+function chatgptWebAdapter(): PiAiAdapter {
+  return new PiAiAdapter({
+    profiles: () => resolveProfiles({ 'chatgpt-web': {} }),
+    resolveApiKey: () => Promise.resolve(undefined),
+    auth: memoryAuth(),
+  })
+}
+
+async function drain(
+  adapter: PiAiAdapter,
+  provider = 'local-gateway',
+  model = 'local-model',
+): Promise<StreamChunk[]> {
   const chunks: StreamChunk[] = []
   for await (const chunk of adapter.stream({
-    provider: 'local-gateway',
-    model: 'local-model',
+    provider,
+    model,
     messages: [],
   })) chunks.push(chunk)
   return chunks
@@ -70,6 +90,18 @@ describe('pi-ai SDK retry boundary', () => {
       baseUrl: 'http://127.0.0.1:9/v1',
       contextWindow: 8192,
       maxTokens: 1024,
+    })
+  })
+
+  it('satisfies pi-ai auth validation for ChatGPT Web without a model API key', async () => {
+    responseStreamSimple.mockImplementation(() => { throw new Error('mock SDK boundary') })
+
+    await drain(chatgptWebAdapter(), 'chatgpt-web', 'gpt-5.6-luna')
+
+    expect(responseStreamSimple).toHaveBeenCalledOnce()
+    expect(responseStreamSimple.mock.calls[0]?.[2]).toMatchObject({
+      maxRetries: 0,
+      headers: { Authorization: 'Bearer phoenix-chatgpt-web' },
     })
   })
 })

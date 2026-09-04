@@ -14,6 +14,10 @@ import {
 type CapturedImageTool = {
   readonly execute: (args: unknown, exec: { readonly signal: AbortSignal }) => Promise<unknown>
   readonly output: {
+    readonly schema: {
+      readonly properties: Record<string, unknown>
+      readonly required: readonly string[]
+    }
     readonly presentationMeta?: (args: unknown, value: unknown) => unknown
   }
 }
@@ -86,6 +90,11 @@ describe('Codex image generation bridge', () => {
     expect(imageGenerationToolDescription).toContain('actual image')
     expect(imageGenerationToolDescription).toContain('project')
     expect(imageGenerationToolDescription).toContain('logo')
+    expect(imageGenerationToolDescription).toContain('webpage')
+    expect(imageGenerationToolDescription).toContain('report')
+    expect(imageGenerationToolDescription).toContain('type-appropriate')
+    expect(imageGenerationToolDescription).toContain('hero')
+    expect(imageGenerationToolDescription).toContain('charts')
     expect(imageGenerationToolDescription).toContain('active text model')
     expect(imageGenerationToolDescription).toContain('brief or objective')
   })
@@ -112,11 +121,11 @@ describe('Codex image generation bridge', () => {
             const done = doctor
               ? Promise.resolve({ exitCode: 0 })
               : (async () => {
-                  const generated = join(root, 'generated_images')
-                  await mkdir(generated, { recursive: true })
-                  await writeFile(join(generated, 'fresh.png'), Buffer.from([1, 2, 3]))
-                  return { exitCode: 0 }
-                })()
+                const generated = join(root, 'generated_images')
+                await mkdir(generated, { recursive: true })
+                await writeFile(join(generated, 'fresh.png'), Buffer.from([1, 2, 3]))
+                return { exitCode: 0 }
+              })()
             return {
               done,
               collected: {
@@ -142,7 +151,7 @@ describe('Codex image generation bridge', () => {
       installCodexImageGeneration(context)
       if (tool === undefined) throw new Error('image_generation tool was not registered')
 
-      await expect(tool.execute(
+      const result = await tool.execute(
         {
           objective: 'Generate the requested image',
           brief: 'A small test image',
@@ -150,7 +159,12 @@ describe('Codex image generation bridge', () => {
           quality: 'high',
         },
         { signal: new AbortController().signal },
-      )).resolves.toMatchObject({ provider: 'codex', attachment: { attachmentId: 'image-1' } })
+      )
+      expect(result).toMatchObject({
+        provider: 'codex',
+        path: join(root, 'generated_images', 'fresh.png'),
+        attachment: { attachmentId: 'image-1' },
+      })
       expect(spawns).toBe(2)
     } finally {
       if (previousHome === undefined) delete process.env.CODEX_HOME
@@ -174,9 +188,12 @@ describe('Codex image generation bridge', () => {
     installCodexImageGeneration(context)
     if (tool === undefined) throw new Error('image_generation tool was not registered')
 
+    expect(tool.output.schema.properties.path).toMatchObject({ type: 'string', required: true })
+    expect(tool.output.schema.required).toContain('path')
     expect(tool.output.presentationMeta?.({}, {
       provider: 'codex',
       model: 'codex-built-in-image-gen',
+      path: 'C:/workspace/generated_images/portrait.png',
       attachment: {
         attachmentId: 'image-2',
         mediaType: 'image/png',
@@ -192,6 +209,7 @@ describe('Codex image generation bridge', () => {
         data: {
           provider: 'codex',
           model: 'codex-built-in-image-gen',
+          path: 'C:/workspace/generated_images/portrait.png',
           attachment: {
             attachmentId: 'image-2',
             mediaType: 'image/png',
