@@ -93,6 +93,9 @@ function attachDescriptorAppend(childCtx: Context, descriptor: SubagentDescripto
 /**
  * Establish and drive one in-process one-shot child. When requested and the
  * parent lives in Git, the child is created with an isolated worktree cwd.
+ * @param request - Fully resolved child request and parent-agent context.
+ * @param options - One-shot seed and optional Git-worktree isolation policy.
+ * @returns The published child run with result and disposal lifecycle.
  */
 export async function startInProcessRun(
   request: ResolvedSubagentStartRequest,
