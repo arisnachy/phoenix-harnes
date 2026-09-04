@@ -1,0 +1,38 @@
+name: Temporary autonomy verification
+
+on:
+  push:
+    branches: [tmp/autonomy-generator]
+    paths:
+      - .github/workflows/tmp-autonomy-verify.yml
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: tmp/autonomy-generator
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused execution-autonomy tests
+        run: >-
+          pnpm vitest run
+          packages/e2b/e2b/tests/e2b.spec.ts
+          packages/e2b/e2b/tests/lifecycle.spec.ts
+          packages/session/session-checkpoint-policy/tests/rewind.spec.ts
+          packages/shell/tool-pwsh/tests/computer.spec.ts
+          packages/subagent/subagent-in-process-driver/tests/worktree.spec.ts
+      - name: Generated contract checks
+        run: |
+          pnpm run verify-config-catalog
+          pnpm run verify-cordis-catalog
+          pnpm run verify-translation-pairing docs/config-catalog.md docs/subsystems/subprocess.md .agents/notes/implemented/architecture/2026-09-04-execution-autonomy-computer-worktree-rewind-e2b.md
+          pnpm run verify-agent-note-format
+          pnpm run verify-md-wrap
