@@ -27,6 +27,9 @@
       "path": "../../core/agent"
     },
     {
+      "path": "../../attachment/attachment"
+    },
+    {
       "path": "../../shell/shell"
     },
     {
@@ -37,9 +40,6 @@
     },
     {
       "path": "../../core/system-prompt"
-    },
-    {
-      "path": "../../shell/shell-env"
     },
     {
       "path": "../../interaction/user-approval"
