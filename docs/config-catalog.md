@@ -628,12 +628,21 @@ export interface Config {
   apiKey?: string
   /** Shared remote working directory, created before adapters receive the sandbox. */
   cwd?: string
-  /** E2B sandbox lifetime in milliseconds; expiry always deletes the sandbox. */
+  /** E2B sandbox lifetime in milliseconds. */
   timeoutMs?: number
+  /** Existing sandbox id to reconnect to instead of creating a new sandbox. */
+  sandboxId?: string
+  /** What disposal does with the live sandbox. Default `kill` preserves historical behavior. */
+  retention?: E2BRetention
+  /** Pause rather than kill a newly-created sandbox when its E2B timeout elapses. */
+  autoPause?: boolean
 }
+
+/** What PHOENIX should do with a live remote sandbox when this runtime disposes. */
+export type E2BRetention = 'kill' | 'pause' | 'retain'
 ```
 
-Source: [`packages/e2b/e2b/src/index.ts:43`](../packages/e2b/e2b/src/index.ts)
+Source: [`packages/e2b/e2b/src/index.ts:49`](../packages/e2b/e2b/src/index.ts)
 
 <a id="phoenix-aidsh-experimental-agent-team"></a>
 
@@ -2471,14 +2480,16 @@ Source: [`packages/subagent/subagent-dsh-sdk/src/index.ts:29`](../packages/subag
 Requires: `subagents`
 
 ```ts config-catalog
-/** Config: the registry name to register the provider under. */
+/** Configuration for the in-process fork provider. */
 export interface Config {
   /** Provider name on `ctx.subagents` (default `fork`). */
   providerName: string
+  /** Isolate one-shot children in Git worktrees when the parent cwd is a repository. */
+  worktreeIsolation?: boolean
 }
 ```
 
-Source: [`packages/subagent/subagent-fork-in-process/src/index.ts:31`](../packages/subagent/subagent-fork-in-process/src/index.ts)
+Source: [`packages/subagent/subagent-fork-in-process/src/index.ts:25`](../packages/subagent/subagent-fork-in-process/src/index.ts)
 
 <a id="phoenix-aidsh-subagent-spawn-in-process"></a>
 
@@ -2487,14 +2498,16 @@ Source: [`packages/subagent/subagent-fork-in-process/src/index.ts:31`](../packag
 Requires: `subagents`
 
 ```ts config-catalog
-/** Config: the registry name to register the provider under. */
+/** Configuration for the in-process spawn provider. */
 export interface Config {
   /** Provider name on `ctx.subagents` (default `spawn`). */
   providerName: string
+  /** Isolate one-shot children in Git worktrees when the parent cwd is a repository. */
+  worktreeIsolation?: boolean
 }
 ```
 
-Source: [`packages/subagent/subagent-spawn-in-process/src/index.ts:25`](../packages/subagent/subagent-spawn-in-process/src/index.ts)
+Source: [`packages/subagent/subagent-spawn-in-process/src/index.ts:22`](../packages/subagent/subagent-spawn-in-process/src/index.ts)
 
 <a id="phoenix-aidsh-subprocess-e2b"></a>
 
@@ -2863,7 +2876,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/shell/tool-pwsh/src/index.ts:52`](../packages/shell/tool-pwsh/src/index.ts)
+Source: [`packages/shell/tool-pwsh/src/index.ts:53`](../packages/shell/tool-pwsh/src/index.ts)
 
 <a id="phoenix-aidsh-tool-pwsh-persistent"></a>
 
