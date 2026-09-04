@@ -260,15 +260,21 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.e2b` — `E2BRuntime`
 
-Creates one lazily consumable E2B SDK handle and deletes the sandbox at timeout or disposal. Creation begins at plugin construction; adapters await getSandbox before their first operation.
+Owns one lazily consumable E2B SDK handle. The runtime either creates a sandbox or reconnects to `sandboxId`; reconnecting a paused E2B sandbox resumes it through the SDK. Adapters await getSandbox before their first operation.
 
 ```ts cordis-catalog
 /**
  * Return the shared live SDK handle.
- * @returns the created sandbox after the configured cwd exists.
- * @throws when E2B rejects creation or the service is disposing.
+ * @returns the created or reconnected sandbox after the configured cwd exists.
+ * @throws when E2B rejects creation/connection or the service is disposing.
  */
 async getSandbox(): Promise<Sandbox>
+
+/**
+ * Return the durable E2B identity callers can persist for a later reconnect.
+ * @returns The live sandbox id after setup/reconnect succeeds.
+ */
+async getSandboxId(): Promise<string>
 ```
 
 Source: [`packages/e2b/e2b/src/index.ts`](../../packages/e2b/e2b/src/index.ts)

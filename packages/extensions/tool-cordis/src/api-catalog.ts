@@ -733,8 +733,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'e2b',
-    summary: 'Creates one lazily consumable E2B SDK handle and deletes the sandbox at timeout or disposal.',
-    description: 'Creates one lazily consumable E2B SDK handle and deletes the sandbox at timeout or disposal. Creation begins at plugin construction; adapters await getSandbox before their first operation.',
+    summary: 'Owns one lazily consumable E2B SDK handle.',
+    description: 'Owns one lazily consumable E2B SDK handle. The runtime either creates a sandbox or reconnects to `sandboxId`; reconnecting a paused E2B sandbox resumes it through the SDK. Adapters await getSandbox before their first operation.',
     methods: [
       {
         signature: 'readonly cwd: string',
@@ -750,8 +750,14 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'async getSandbox(): Promise<Sandbox>',
         description: 'Return the shared live SDK handle.',
         parameters: [],
-        returns: 'the created sandbox after the configured cwd exists.',
-        throws: ['when E2B rejects creation or the service is disposing.'],
+        returns: 'the created or reconnected sandbox after the configured cwd exists.',
+        throws: ['when E2B rejects creation/connection or the service is disposing.'],
+      },
+      {
+        signature: 'async getSandboxId(): Promise<string>',
+        description: 'Return the durable E2B identity callers can persist for a later reconnect.',
+        parameters: [],
+        returns: 'The live sandbox id after setup/reconnect succeeds.',
       },
     ],
   },
