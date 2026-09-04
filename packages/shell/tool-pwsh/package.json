@@ -1,6 +1,6 @@
 {
   "name": "@phoenix-ai/dsh-tool-pwsh",
-  "description": "Model-facing pwsh tool over the bash executor seam",
+  "description": "Model-facing pwsh and guarded Windows Computer Use tools",
   "version": "0.1.1-rc.2",
   "publishConfig": {
     "access": "public"

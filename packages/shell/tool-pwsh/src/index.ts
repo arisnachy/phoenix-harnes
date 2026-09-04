@@ -36,6 +36,7 @@ import type { SandboxPolicyService } from '@phoenix-ai/dsh-sandbox-policy'
 import type { ShellRunResult } from '@phoenix-ai/dsh-shell'
 import { parseExitStatus } from '@phoenix-ai/dsh-shell'
 import { processOutcome } from './background.ts'
+import { registerComputerTool } from './computer.ts'
 import { renderPwshProcessRead, renderPwshResult } from './render.ts'
 import type { RenderablePwshResult } from './render.ts'
 
@@ -215,9 +216,8 @@ export function apply(ctx: Context, config: Config = {}): void {
    * guard (the fields are unadvertised without a sandboxing executor, yet
    * schema validation checks advertised keys only, so an unadvertised
    * `sandbox_permissions` still reaches execute) and the approval
-   * ingredients. The shared policy resolver is required whenever the
-   * executor advertises confinement, so a split composition fails at
-   * tool-plugin load.
+   * ingredients. The shared policy resolver is required whenever the executor
+   * advertises confinement, so a split composition fails at tool-plugin load.
    */
   const approvePwshEscalation = (
     mode: string,
@@ -443,4 +443,6 @@ export function apply(ctx: Context, config: Config = {}): void {
     },
     /* jscpd:ignore-end */
   }))
+
+  registerComputerTool(ctx)
 }
