@@ -188,6 +188,7 @@ flowchart TD
     pkg_authorization["authorization"]
     pkg_credentials["credentials"]
     pkg_credentials_local["credentials-local"]
+    pkg_secret_vault["secret-vault"]
   end
   subgraph group_e2b["packages/e2b"]
     pkg_e2b["e2b"]
@@ -348,6 +349,10 @@ flowchart TD
     pkg_typert_loader["typert-loader"]
     pkg_typert_protocol["typert-protocol"]
     pkg_typert_registry["typert-registry"]
+  end
+  subgraph group_voice["packages/voice"]
+    pkg_voice["voice"]
+    pkg_voice_local["voice-local"]
   end
   subgraph group_workflow["packages/workflow"]
     pkg_tool_ralph["tool-ralph"]
@@ -510,6 +515,7 @@ flowchart TD
   pkg_code_runtime_worker_thread --> pkg_invariants
   pkg_code_runtime_worker_thread --> pkg_session
   pkg_code_runtime_worker_thread --> pkg_timeout
+  pkg_home_gateway --> pkg_invariants
   pkg_home_gateway --> pkg_llm
   pkg_home_gateway --> pkg_session
   pkg_persona --> pkg_invariants
@@ -530,6 +536,8 @@ flowchart TD
   pkg_session_projection --> pkg_session
   pkg_acp_snapshot --> pkg_invariants
   pkg_acp_snapshot --> pkg_session
+  pkg_voice --> pkg_invariants
+  pkg_voice --> pkg_session
   pkg_llm_retry --> pkg_agent
   pkg_llm_retry --> pkg_brand
   pkg_llm_retry --> pkg_invariants
@@ -655,6 +663,8 @@ flowchart TD
   pkg_loader_smoke --> pkg_invariants
   pkg_loader_smoke --> pkg_llm
   pkg_loader_smoke --> pkg_session
+  pkg_voice_local --> pkg_invariants
+  pkg_voice_local --> pkg_voice
   pkg_workflow --> pkg_agent
   pkg_workflow --> pkg_brand
   pkg_workflow --> pkg_invariants
@@ -720,6 +730,9 @@ flowchart TD
   pkg_tmux_context --> pkg_invariants
   pkg_tmux_context --> pkg_session
   pkg_tmux_context --> pkg_shell
+  pkg_secret_vault --> pkg_commands
+  pkg_secret_vault --> pkg_credentials
+  pkg_secret_vault --> pkg_invariants
   pkg_fs_e2b --> pkg_e2b
   pkg_fs_e2b --> pkg_fs
   pkg_fs_e2b --> pkg_invariants
