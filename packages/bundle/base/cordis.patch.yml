@@ -1,7 +1,7 @@
-# The dsh-base bundle patch: the shared core of every dsh profile, applied as
-# ONE insert over the empty profile root. Later bundle patches and the user's
-# profile cordis.patch.yml address these rows by id, with the last write
-# winning per row.
+# The PHOENIX base bundle patch: the shared core of every PHOENIX profile,
+# applied as ONE insert over the empty profile root. Later bundle patches and
+# the user's profile cordis.patch.yml address these rows by id, with the last
+# write winning per row.
 #
 # A patch replaces the targeted row's whole `config` rather than merging into
 # it, so a row whose value differs by mode does NOT live here: it belongs to
@@ -72,9 +72,17 @@
     - id: llm-retry
       name: '@phoenix-ai/dsh-llm-retry'
 
-    # User-settings document (`$DSH_HOME/settings.yaml`, hot-reloaded): a
-    # `llm-deepseek:` or `llm-pi-ai:` section there overrides the adapter entries
-    # below without a restart, and is what the web Models page writes.
+    # Provider-scoped compliance and credential-egress boundary. OpenAI rules
+    # apply only to OpenAI/Codex routes; unrelated providers remain governed by
+    # their own contracts. Generated secrets are blocked before any provider
+    # egress. The legacy browser-session ChatGPT transport is refused; the
+    # official native Codex app-server bridge remains the ChatGPT subscription path.
+    - id: openai-policy-firewall
+      name: '@phoenix-ai/dsh-openai-policy-firewall'
+
+    # User-settings document (`$DSH_HOME/settings.yaml`, hot-reloaded): provider
+    # sections override adapter entries below without a restart, and are what
+    # the web Models page writes.
     - id: settings
       name: '@phoenix-ai/dsh-settings-file'
 
@@ -126,17 +134,14 @@
     # OPENROUTER_API_KEY environment variable; no secret is stored in this tree.
     # Omitting `models` intentionally exposes pi-ai's installed OpenRouter catalog,
     # including `openrouter/free`, while Settings -> Models can replace the route
-    # catalog or add other providers without restarting the app.
+    # catalog or add other providers without restarting the app. The historical
+    # ChatGPT browser-session route is intentionally not shipped in this base.
     - id: llm-pi-ai
       name: '@phoenix-ai/dsh-llm-pi-ai'
       config:
         providers:
           openrouter:
             apiKeyEnv: OPENROUTER_API_KEY
-          # Optional local ChatGPT Web bridge. It exposes selectable bridge
-          # models immediately; requests remain loopback-only and fail clearly
-          # until the user configures PHOENIX_CHATGPT_WEB_COMMAND and starts it.
-          chatgpt-web: {}
 
     - id: session-persistence-jsonl
       name: '@phoenix-ai/dsh-session-persistence-jsonl'
@@ -196,32 +201,21 @@
     - id: session-projection
       name: '@phoenix-ai/dsh-session-projection'
 
-    # Session telemetry is mounted but disabled by default. DSH_TELEMETRY_MODE
-    # explicitly opts into FULL or FEEDBACK_ONLY reporting; uploading mirrors
-    # session-log records onto OTLP/HTTP logs with no session-telemetry/record redaction
-    # rule, so exports are the raw captured copy. The deployment stance, env
-    # seams, and follow-ups are pinned in the default-off Agent Note.
-    # DSH_TELEMETRY_OTLP_URL overrides the production endpoint. A non-empty
-    # DSH_TELEMETRY_DISABLED — any value, including '0'/'false' — opts the
-    # process out (the launchers patch the row disabled; config cannot disable
-    # a row). Exports carry the harness home's anonymous user id ($DSH_HOME/.anonymous-user-id,
-    # random UUID; delete the file to reset the identity) as the Resource's
-    # user.id. The exporter/processor values normally bound the shutdown drain
-    # to ~1s against an unreachable collector: exporter.timeoutMillis is both
-    # the per-attempt socket timeout and the retry deadline (1s effectively
-    # disables the SDK's 5-try backoff), while maxExportBatchSize == maxQueueSize
-    # (both explicit) makes the drain a single batch. The SDK awaits
-    # exporter.forceFlush() outside exportTimeoutMillis, so the backend's 3s
-    # shutdownTimeoutMillis is the load-bearing outer bound when a transport
-    # promise never settles. Every CLI exit path drains it by disposing the root
-    # on SIGINT/SIGTERM.
+    # Universal telemetry is local/no-op by default. No vendor endpoint is
+    # embedded in PHOENIX. External OTLP export requires an explicit operator
+    # endpoint through PHOENIX_TELEMETRY_ENDPOINT (the historical
+    # DSH_TELEMETRY_OTLP_URL name remains an explicit compatibility alias only).
+    # Without an endpoint, mode is forced to DISABLED even if a mode variable is
+    # present. This prevents an old environment setting from silently restoring
+    # network telemetry. When an endpoint is intentionally supplied, the
+    # operator can choose PHOENIX_TELEMETRY_MODE (or the legacy mode alias).
     - id: session-telemetry-otel
       name: '@phoenix-ai/dsh-session-telemetry-otel'
       config:
-        mode: !!js process.env.DSH_TELEMETRY_MODE || 'DISABLED'
+        mode: !!js "(process.env.PHOENIX_TELEMETRY_ENDPOINT ?? process.env.DSH_TELEMETRY_OTLP_URL) ? (process.env.PHOENIX_TELEMETRY_MODE ?? process.env.DSH_TELEMETRY_MODE ?? 'FULL') : 'DISABLED'"
         shutdownTimeoutMillis: 3000
         exporter:
-          url: !!js process.env.DSH_TELEMETRY_OTLP_URL ?? 'https://harness-telemetry.deepseeksvc.com/v1/logs'
+          url: !!js process.env.PHOENIX_TELEMETRY_ENDPOINT ?? process.env.DSH_TELEMETRY_OTLP_URL ?? 'http://127.0.0.1:4318/v1/logs'
           compression: gzip
           timeoutMillis: 1000
         processor:
@@ -595,9 +589,9 @@
     - id: fs-sandbox
       name: '@phoenix-ai/dsh-fs-sandbox'
 
-    # The native DeepSeek adapter. No key or endpoint is inlined: both resolve per
-    # request from the `llm-deepseek:` settings section over this entry, with the
-    # key coming from the credential store below. Thinking defaults are a deployment
-    # choice.
+    # DeepSeek remains an optional first-class provider because PHOENIX is
+    # universal. No DeepSeek key, endpoint, telemetry destination, or provider
+    # output is shared with another route automatically. Its key and endpoint
+    # resolve only when this provider is explicitly configured and selected.
     - id: llm-deepseek
       name: '@phoenix-ai/dsh-llm-deepseek'
