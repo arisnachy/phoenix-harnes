@@ -592,14 +592,11 @@ export function registerComputerTool(ctx: Context): void {
   if (process.platform !== 'win32') return
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
   const deploymentDefault = ctx.shell.sandboxMode
-  const systemPrompt = ctx.get('systemPrompt')
 
-  systemPrompt?.section({
-    id: 'computer-use.tool-guide',
-    priority: 317,
-    render() {
-      return { 'Computer Use routing': computerUseGuidance() }
-    },
+  ctx.systemPrompt.section({
+    name: 'tool:computer-use',
+    order: 104,
+    text: computerUseGuidance().join('\n'),
   })
 
   ctx.tools.register(defineTool({
