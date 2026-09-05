@@ -1,20 +1,28 @@
 <p align="center">
-  <img src="docs/phoenix-logo.svg" alt="PHOENIX — Universal AI Harness" width="520">
+  <img src="apps/web/public/phoenix-wordmark.png" alt="PHOENIX — Universal AI Harness" width="520">
 </p>
 
 # PHOENIX
 
 English | [中文](README.zh.md)
 
-**PHOENIX is a universal, provider-agnostic AI agent harness for local-first and bring-your-own-provider workflows.**
+**PHOENIX is an independent, universal, provider-agnostic AI agent harness for local-first and bring-your-own-provider workflows.**
 
-It is being built around intelligent model selection, durable continuity, repository intelligence, tools, multi-agent execution, recovery, evaluation, and bounded self-improvement. Capabilities land incrementally and are not presented as complete until their repository gates are green.
+PHOENIX is built around intelligent model selection, durable continuity, repository intelligence, tools, multi-agent execution, recovery, evaluation, and bounded self-improvement. No model provider defines or controls PHOENIX's product identity. Providers are interchangeable execution backends selected by the operator.
 
 ## Development status
 
-PHOENIX is under active development. Its product identity is PHOENIX across the repository presentation, Web UI, PWA metadata, browser title, and visual system.
+PHOENIX is under active development. Its product identity is PHOENIX across the repository presentation, Web UI, PWA metadata, browser title, installers, and visual system.
 
-Some internal package and CLI identifiers are intentionally retained for compatibility with the upstream runtime while PHOENIX evolves through isolated, testable downstream layers. Those implementation details do not define the product identity.
+Some internal package and CLI identifiers are retained temporarily for runtime compatibility while migration continues. They are implementation details, not product identity or provider affiliation.
+
+## Trust and provider boundaries
+
+PHOENIX is designed to remain universal while applying provider-specific rules at the provider boundary. OpenAI/Codex routes are protected by a dedicated policy firewall; unrelated providers remain governed by their own contracts and configuration. Provider credentials are resolved per request, generated secret material is blocked before provider egress, adapter-private replay state does not cross unrelated adapter boundaries, and external telemetry is disabled unless an operator explicitly configures an OTLP endpoint.
+
+The legacy browser-session **ChatGPT Web** transport is not part of the shipped base profile. ChatGPT subscription access uses the native official Codex app-server bridge; OpenAI API access remains a separate API-key path.
+
+See [PHOENIX Provider Trust Boundaries](docs/security/PHOENIX_PROVIDER_TRUST_BOUNDARIES.md).
 
 ## Run
 
@@ -86,11 +94,11 @@ Windows installation, IDE packaging, native sandbox boundaries, and continuity s
 
 For agents, follow [AGENTS.md](AGENTS.md).
 
-## Upstream foundation and attribution
+## Project identity and third-party notices
 
-PHOENIX is a downstream evolution built on [DeepSeek Harness](https://github.com/arisnachy/phoenix-harnes), the MIT-licensed open-source agent harness developed by [DeepSeek AI](https://deepseek.com). Its plugin architecture is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
+PHOENIX is developed and distributed as an independent universal AI agent harness. Historical source provenance, inherited copyright notices, and third-party licenses are preserved where required; those notices describe code provenance and do **not** imply product affiliation, sponsorship, control, or endorsement by any model provider.
 
-PHOENIX does not claim authorship of upstream code. Upstream attribution and license notices are preserved while PHOENIX-specific work remains clearly separated as downstream evolution.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and provenance details.
 
 ## License
 
