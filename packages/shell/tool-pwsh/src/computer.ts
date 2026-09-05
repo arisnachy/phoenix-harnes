@@ -70,7 +70,7 @@ export function declaresImageInput(modalities: readonly string[] | undefined): b
 }
 
 function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
-  return (ctx as unknown as { attachments?: AttachmentWriter }).attachments
+  return ctx.get('attachments') as AttachmentWriter | undefined
 }
 
 function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; reversible: boolean } {
