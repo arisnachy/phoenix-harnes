@@ -52,6 +52,28 @@ export interface ComputerToolArgs {
   delta?: number
 }
 
+/** One titled top-level application window reported by Windows. */
+export interface VisibleDesktopWindow {
+  process: string
+  title: string
+  pid: number
+}
+
+/** Virtual-screen metadata emitted with a desktop screenshot. */
+export interface ComputerScreenBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** Parsed screenshot payload used by visual and text-only models alike. */
+export interface ComputerScreenshotOutput {
+  pngBase64: string
+  screen?: ComputerScreenBounds
+  visibleWindows: VisibleDesktopWindow[]
+}
+
 interface ComputerInvocation {
   file: string
   argv: readonly string[]
@@ -70,6 +92,20 @@ interface AttachmentWriter {
 /** Resolve the optional attachment capability without adding a hard package edge. */
 function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
   return (ctx as unknown as { attachments?: AttachmentWriter }).attachments
+}
+
+/**
+ * Stable routing guidance that teaches weaker models when Computer Use wins.
+ * @returns System-prompt rules for desktop observation/control and text-only fallback.
+ */
+export function computerUseGuidance(): string[] {
+  return [
+    'For Windows desktop, screen, visible-window/application, mouse, keyboard, click, drag, scroll, typing, or explicit Computer Use requests, use the `computer` tool directly when it is available.',
+    'Desktop Computer Use takes precedence over web-recon/browser skills and generic `Pwsh`; do not load web-recon or improvise a PowerShell screenshot when `computer` can perform the requested desktop action.',
+    'For observation-only requests, call `computer` with action `screenshot`. A screenshot never clicks or types and does not require interactive approval in observe mode.',
+    'The screenshot result includes a textual inventory of titled application windows. On a text-only model, use that inventory instead of trying to reopen the PNG with generic `Pwsh`, OCR, or asking the user what is visible.',
+    'Use generic `Pwsh` for desktop work only when the `computer` tool is unavailable or explicitly reports that the requested operation is unsupported.',
+  ]
 }
 
 /**
@@ -357,12 +393,13 @@ switch ($action) {
     if ($bounds.Width -le 0 -or $bounds.Height -le 0) { throw 'desktop has no capturable virtual screen' }
     $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $bounds.Width, $bounds.Height
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $png = $null
     try {
       $graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size, [System.Drawing.CopyPixelOperation]::SourceCopy)
       $stream = New-Object System.IO.MemoryStream
       try {
         $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
-        [Convert]::ToBase64String($stream.ToArray())
+        $png = [Convert]::ToBase64String($stream.ToArray())
       } finally {
         $stream.Dispose()
       }
@@ -370,6 +407,19 @@ switch ($action) {
       $graphics.Dispose()
       $bitmap.Dispose()
     }
+    $windows = @(Get-Process | ForEach-Object {
+      try {
+        $title = $_.MainWindowTitle
+        if ($_.MainWindowHandle -ne [IntPtr]::Zero -and -not [string]::IsNullOrWhiteSpace($title)) {
+          [ordered]@{ process = $_.ProcessName; title = $title; pid = $_.Id }
+        }
+      } catch { }
+    } | Sort-Object process, pid | Select-Object -First 50)
+    [ordered]@{
+      png = $png
+      screen = [ordered]@{ x = $bounds.X; y = $bounds.Y; width = $bounds.Width; height = $bounds.Height }
+      visibleWindows = $windows
+    } | ConvertTo-Json -Depth 4 -Compress
   }
   'move' { [PhoenixDesktop]::Move([int]$env:PHX_X, [int]$env:PHX_Y) }
   'click' { [PhoenixDesktop]::Click([int]$env:PHX_X, [int]$env:PHX_Y, $button, 1) }
@@ -414,11 +464,75 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   }
 }
 
+function cleanWindow(value: unknown): VisibleDesktopWindow | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const record = value as Record<string, unknown>
+  if (typeof record.process !== 'string' || typeof record.title !== 'string' || typeof record.pid !== 'number') return undefined
+  if (!Number.isSafeInteger(record.pid)) return undefined
+  const process = record.process.replace(/\s+/gu, ' ').trim().slice(0, 128)
+  const title = record.title.replace(/\s+/gu, ' ').trim().slice(0, 240)
+  if (process.length === 0 || title.length === 0) return undefined
+  return { process, title, pid: record.pid }
+}
+
+function cleanScreen(value: unknown): ComputerScreenBounds | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const record = value as Record<string, unknown>
+  const keys = ['x', 'y', 'width', 'height'] as const
+  if (!keys.every((key) => typeof record[key] === 'number' && Number.isSafeInteger(record[key]))) return undefined
+  if ((record.width as number) <= 0 || (record.height as number) <= 0) return undefined
+  return {
+    x: record.x as number,
+    y: record.y as number,
+    width: record.width as number,
+    height: record.height as number,
+  }
+}
+
+/**
+ * Parse current JSON screenshot output while accepting the original raw-base64 format.
+ * @param output - Trimmed stdout returned by the fixed Windows driver.
+ * @returns PNG bytes as base64 plus safe textual desktop metadata.
+ */
+export function parseComputerScreenshotOutput(output: string): ComputerScreenshotOutput {
+  const trimmed = output.trim()
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>
+    if (typeof parsed.png === 'string' && parsed.png.length > 0) {
+      const windows = Array.isArray(parsed.visibleWindows)
+        ? parsed.visibleWindows.map(cleanWindow).filter((item): item is VisibleDesktopWindow => item !== undefined).slice(0, 50)
+        : []
+      const screen = cleanScreen(parsed.screen)
+      return {
+        pngBase64: parsed.png,
+        ...(screen === undefined ? {} : { screen }),
+        visibleWindows: windows,
+      }
+    }
+  } catch {
+    // Backward compatibility with the first Computer Use driver contract.
+  }
+  return { pngBase64: trimmed, visibleWindows: [] }
+}
+
+function visibleWindowSummary(output: ComputerScreenshotOutput): string {
+  const dimensions = output.screen === undefined
+    ? ''
+    : ` Virtual desktop: ${output.screen.width}x${output.screen.height} at (${output.screen.x}, ${output.screen.y}).`
+  if (output.visibleWindows.length === 0) {
+    return `Desktop screenshot captured.${dimensions} Windows reported no titled top-level application windows.`
+  }
+  const windows = output.visibleWindows
+    .map((window) => `- ${window.process} (PID ${window.pid}): ${window.title}`)
+    .join('\n')
+  return `Desktop screenshot captured.${dimensions}\nVisible application windows reported by Windows:\n${windows}`
+}
+
 /**
  * Execute one fixed Windows desktop action and return driver stdout.
  * @param args - Validated Computer Use operation to execute.
  * @param signal - Optional cancellation signal forwarded to the PowerShell process.
- * @returns Trimmed stdout; screenshots return base64 PNG bytes.
+ * @returns Trimmed stdout; screenshots return JSON containing PNG bytes and visible-window metadata.
  */
 export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: AbortSignal): Promise<string> {
   if (process.platform !== 'win32') {
@@ -479,9 +593,15 @@ export function registerComputerTool(ctx: Context): void {
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
   const deploymentDefault = ctx.shell.sandboxMode
 
+  ctx.systemPrompt.section({
+    name: 'tool:computer-use',
+    order: 104,
+    text: computerUseGuidance().join('\n'),
+  })
+
   ctx.tools.register(defineTool({
     name: 'computer',
-    description: 'Control the Windows desktop with a closed action set. Use screenshot to observe the current virtual desktop; the screenshot is injected as a durable image attachment for the next model step. Input actions are move, click, double_click, drag, type, key, and scroll. read-only permission is observe-only; workspace-write allows input through user approval; danger-full-access allows input without prompts. Never guess coordinates when a fresh screenshot can ground them.',
+    description: 'Observe or control the Windows desktop with a closed action set. Prefer this tool over web-recon/browser skills or generic Pwsh for desktop/screen/window/mouse/keyboard requests. Use screenshot to observe the virtual desktop; it returns both a durable PNG attachment and a textual visible-window inventory so text-only models can still identify applications. Input actions are move, click, double_click, drag, type, key, and scroll. read-only permission is observe-only; workspace-write allows input through user approval; danger-full-access allows input without prompts. Never guess coordinates when a fresh screenshot can ground them.',
     parameters: {
       action: {
         type: 'string',
@@ -505,13 +625,14 @@ export function registerComputerTool(ctx: Context): void {
         properties: {
           action: { type: 'string', required: true },
           status: { type: 'string', required: true, const: 'ok' },
+          summary: { type: 'string' },
         },
       },
       render: (_args, value) => [{
         type: 'text',
-        text: value.action === 'screenshot'
+        text: value.summary ?? (value.action === 'screenshot'
           ? 'Desktop screenshot captured and attached for the next model step.'
-          : `Desktop ${value.action} completed.`,
+          : `Desktop ${value.action} completed.`),
       }],
     },
     async execute(args: ComputerToolArgs, exec) {
@@ -524,7 +645,8 @@ export function registerComputerTool(ctx: Context): void {
       if (args.action === 'screenshot') {
         if (exec.agent === undefined) throw new Error('Computer screenshot requires an owning agent session')
         if (output.length === 0) throw new Error('Computer screenshot driver returned no image bytes')
-        const bytes = Buffer.from(output, 'base64')
+        const screenshot = parseComputerScreenshotOutput(output)
+        const bytes = Buffer.from(screenshot.pngBase64, 'base64')
         if (bytes.length === 0) throw new Error('Computer screenshot decoded to an empty image')
         const attachments = attachmentWriter(ctx)
         if (attachments === undefined) throw new Error('Computer screenshot requires the attachment service')
@@ -533,14 +655,16 @@ export function registerComputerTool(ctx: Context): void {
           mediaType: 'image/png',
           name: 'phoenix-desktop.png',
         })
+        const summary = visibleWindowSummary(screenshot)
         const imageBlock = { type: 'image', attachment } as unknown as ContentBlock
         exec.deferContext(createUserMessage({
           content: [
-            { type: 'text', text: `PHOENIX desktop screenshot (${attachment.width}x${attachment.height}).` },
+            { type: 'text', text: `${summary}\nThe PNG follows for image-capable models; text-only models should answer from the window inventory above.` },
             imageBlock,
           ],
           source: { kind: 'plugin', plugin: 'computer-use' },
         }))
+        return { action: args.action, status: 'ok' as const, summary }
       }
       return { action: args.action, status: 'ok' as const }
     },
