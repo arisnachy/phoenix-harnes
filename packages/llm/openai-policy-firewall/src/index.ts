@@ -118,9 +118,15 @@ function containsGeneratedSecret(options: GenerateOptions): boolean {
   return SECRET_PATTERNS.some(pattern => pattern.test(text))
 }
 
-const REVERSE_ENGINEERING = [
-  /\b(?:reverse engineer|decompile|model extraction|model stealing|extract (?:the )?(?:model )?weights?|steal (?:the )?model|clone (?:the )?model|reconstruct (?:the )?model)\b/i,
-  /\b(?:ingenier[ií]a inversa|extraer (?:los )?pesos|extracci[oó]n (?:del )?modelo|robar (?:el )?modelo|clonar (?:el )?modelo|reconstruir (?:el )?modelo)\b/i,
+const OPENAI_TARGET_EN = String.raw`(?:openai|chatgpt|codex|gpt|the underlying model|the openai model|your openai model|openai's model)`
+const OPENAI_TARGET_ES = String.raw`(?:openai|chatgpt|codex|gpt|el modelo subyacente de openai|el modelo de openai|tu modelo de openai)`
+const REVERSE_ENGINEERING: readonly RegExp[] = [
+  /\b(?:model extraction|model stealing|extract (?:the )?(?:model )?weights?|steal (?:the )?model|clone (?:the )?model|reconstruct (?:the )?model)\b/i,
+  /\b(?:extracci[oó]n (?:del )?modelo|extraer (?:los )?pesos|robar (?:el )?modelo|clonar (?:el )?modelo|reconstruir (?:el )?modelo)\b/i,
+  new RegExp(String.raw`\b(?:reverse engineer|decompile)\b.{0,100}\b${OPENAI_TARGET_EN}\b`, 'i'),
+  new RegExp(String.raw`\b${OPENAI_TARGET_EN}\b.{0,100}\b(?:reverse engineer|decompile)\b`, 'i'),
+  new RegExp(String.raw`\b(?:ingenier[ií]a inversa|descompilar)\b.{0,100}\b${OPENAI_TARGET_ES}\b`, 'i'),
+  new RegExp(String.raw`\b${OPENAI_TARGET_ES}\b.{0,100}\b(?:ingenier[ií]a inversa|descompilar)\b`, 'i'),
 ]
 const SAFEGUARD_BYPASS = [
   /\b(?:bypass|circumvent|evade)\b.{0,80}\b(?:safety|safeguards?|guardrails?|rate[ -]?limits?|usage limits?|protective measures?)\b/i,
@@ -174,7 +180,7 @@ export function evaluateProviderPolicy(options: GenerateOptions): PolicyViolatio
     return {
       code: OPENAI_POLICY_BLOCKED,
       rule: 'reverse-engineering-or-model-extraction',
-      message: 'PHOENIX blocked an OpenAI request whose stated objective is model extraction or reverse engineering.',
+      message: 'PHOENIX blocked an OpenAI request whose stated objective is model extraction or reverse engineering of OpenAI services or models.',
     }
   }
   if (matchesAny(text, SAFEGUARD_BYPASS)) {
