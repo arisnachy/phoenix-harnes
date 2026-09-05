@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** ToolCallTree-owned root/subcall markers and selection projection. */
+/** ToolCallTree-owned root/subcall markers, selection, and generic result media projection. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import type { HostDescription } from '@phoenix-ai/dsh-client-connection/client'
@@ -45,6 +45,7 @@ function props(
     openFile: vi.fn(),
     inspectCall: vi.fn(),
     forkAt: vi.fn(),
+    renderMessageImages: vi.fn(() => null),
     fileMentions: vi.fn(),
     useHostDescription: (selector => selector(description)) as ToolTreeProps['useHostDescription'],
     t,
@@ -88,5 +89,33 @@ describe('ToolCallTree', () => {
       version: '0', cwd: '/tmp', attachedSessions: 0, home: '/h', canOpenPath: false,
     })} />)
     expect(view.getByText('~/docs/a.ts')).toBeTruthy()
+  })
+
+  it('projects generated image result blocks through the conversation image renderer', () => {
+    const block = {
+      ...root('image-1', { name: 'image_generation', argsRaw: '{"prompt":"phoenix"}' }),
+      content: [
+        { type: 'text' as const, text: 'Generated image with Codex (1254×1254, image/png).' },
+        {
+          type: 'image' as const,
+          attachment: {
+            attachmentId: 'sha256:image-1',
+            mediaType: 'image/png' as const,
+            bytes: 1_782_298,
+            width: 1254,
+            height: 1254,
+            name: 'generated.png',
+          },
+        },
+      ],
+    } satisfies ToolResultNode
+    const renderMessageImages = vi.fn<ToolTreeProps['renderMessageImages']>(() => <div data-testid="generated-image" />)
+    const view = render(<ToolCallTree {...props(block)} renderMessageImages={renderMessageImages} />)
+
+    expect(renderMessageImages).toHaveBeenCalledWith({
+      images: [{ attachment: block.content[1].attachment }],
+      align: 'start',
+    })
+    expect(view.getByTestId('generated-image')).toBeTruthy()
   })
 })

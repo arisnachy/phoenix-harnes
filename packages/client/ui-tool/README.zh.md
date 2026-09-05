@@ -16,6 +16,8 @@ Client 工具展示插件。`ui-conversation` 通过 `conversation.chat.node` �
 
 通用行把已知工具名称归类为 search、read、shell、write、edit、code 或 generic 变体。运行中、成功、失败和中断状态只来自冻结的 call/result slice。只有用户调用 Host 打开文件回调时，文件路径才相对会话 `cwd` 解析；展示代码不读取会话服务。
 
+已完成的通用工具结果也可以携带持久化的 `image` 内容块。这些块不会再被压平成 JSON 文本：`ToolCallTree` 会把 conversation 的图片 renderer 传入 generic fallback，再通过 `renderMessageImages` 投影每个持久化 attachment 引用。因此 authorization、加载、图库展示和 URL 生命周期仍由 attachment 插件负责；普通文本和未知的非图片结果块继续使用通用行 fallback。
+
 ## 原子工具视图
 
 拥有该视图的业务包将其 wire 工具名称注册进 `tool.call.toolview`：
