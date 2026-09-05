@@ -1,20 +1,28 @@
 <p align="center">
-  <img src="docs/phoenix-logo.svg" alt="PHOENIX — Universal AI Harness" width="520">
+  <img src="apps/web/public/phoenix-wordmark.png" alt="PHOENIX — Universal AI Harness" width="520">
 </p>
 
 # PHOENIX
 
 [English](README.md) | 中文
 
-**PHOENIX 是一个通用、与模型提供方无关的 AI agent harness，面向 local-first 与自带 provider 的工作流。**
+**PHOENIX 是一个独立、通用、与模型提供方无关的 AI agent harness，面向 local-first 与自带 provider 的工作流。**
 
-项目围绕智能模型选择、持久连续性、仓库智能、工具、多 agent 执行、恢复、评估和有边界的自我改进构建。各项能力会逐步落地；在仓库 gate 真正通过之前，不会把它们描述成已完成。
+PHOENIX 围绕智能模型选择、持久连续性、仓库智能、工具、多 agent 执行、恢复、评估和有边界的自我改进构建。任何模型提供方都不定义或控制 PHOENIX 的产品身份；provider 是由操作者选择的可替换执行后端。
 
 ## 开发状态
 
-PHOENIX 正在积极开发。仓库展示、Web UI、PWA 元数据、浏览器标题和视觉系统均以 PHOENIX 作为产品身份。
+PHOENIX 正在积极开发。仓库展示、Web UI、PWA 元数据、浏览器标题、安装器与视觉系统均以 PHOENIX 作为产品身份。
 
-为保持与上游运行时兼容，部分内部包名和 CLI 标识会暂时保留；PHOENIX 则通过彼此隔离、可测试的下游层持续演进。这些实现细节不定义产品身份。
+部分内部包名和 CLI 标识会在迁移期间暂时保留以维持运行时兼容性。它们属于实现细节，不代表产品身份或与任何 provider 的隶属关系。
+
+## 信任与 provider 边界
+
+PHOENIX 保持通用架构，同时在 provider 边界应用 provider-specific 规则。OpenAI/Codex 路由由专用 policy firewall 保护；其他 provider 继续遵循其各自的合同与配置。凭据按请求解析，生成上下文中的疑似有效 secret 会在 provider egress 之前被阻断，不相关 adapter 之间不会共享 adapter-private replay state，外部 telemetry 只有在操作者显式配置 OTLP endpoint 后才会启用。
+
+旧的 browser-session **ChatGPT Web** transport 不再属于默认 base profile。ChatGPT subscription 使用原生官方 Codex app-server bridge；OpenAI API 仍保持独立 API-key 路径。
+
+参见 [PHOENIX Provider Trust Boundaries](docs/security/PHOENIX_PROVIDER_TRUST_BOUNDARIES.md)。
 
 ## Run
 
@@ -86,11 +94,11 @@ Windows 安装、IDE 打包、原生 sandbox 边界与 continuity 状态参见 [
 
 面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
 
-## 上游基础与署名
+## 项目身份与第三方声明
 
-PHOENIX 是基于 [DeepSeek Harness](https://github.com/arisnachy/phoenix-harnes) 构建的下游演进项目；该项目是由 [DeepSeek AI](https://deepseek.com) 开发并采用 MIT 许可证的开源 agent harness。其插件架构由 [Cordis](https://github.com/cordiverse/cordis) 驱动，设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
+PHOENIX 作为独立、通用的 AI agent harness 开发与分发。依法需要保留的历史源码来源、版权声明和第三方许可证会继续保留；这些声明描述的是代码来源，并不代表任何模型 provider 对 PHOENIX 的隶属、赞助、控制或背书。
 
-PHOENIX 不声称拥有上游代码的作者身份。上游署名与许可证声明会被保留，同时 PHOENIX 专属工作会明确作为下游演进进行区分。
+归属与 provenance 详情参见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 许可证
 
