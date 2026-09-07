@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { CodexModelListTransport } from '../src/codex-discovery.ts'
-import { readCodexModelPage } from '../src/codex-discovery.ts'
+import { encodeCodexWireFrame, readCodexModelPage } from '../src/codex-discovery.ts'
 import { discoverModels } from '../src/discovery.ts'
 
 describe('openai-codex live model discovery', () => {
@@ -44,6 +44,26 @@ describe('openai-codex live model discovery', () => {
     await discoverModels({ provider: 'openai-codex', signal: controller.signal }, undefined, { list })
 
     expect(list).toHaveBeenCalledWith(controller.signal)
+  })
+})
+
+describe('Codex app-server wire protocol', () => {
+  it('writes JSONL requests without the jsonrpc member Codex omits on its wire', () => {
+    const frame = encodeCodexWireFrame({
+      id: 2,
+      method: 'model/list',
+      params: { cursor: null, limit: 100, includeHidden: false },
+    })
+
+    expect(frame.endsWith('\n')).toBe(true)
+    expect(JSON.parse(frame)).toEqual({
+      id: 2,
+      method: 'model/list',
+      params: { cursor: null, limit: 100, includeHidden: false },
+    })
+    expect(frame).not.toContain('jsonrpc')
+    expect(() => encodeCodexWireFrame({ jsonrpc: '2.0', method: 'initialized' }))
+      .toThrow(/must omit the jsonrpc member/)
   })
 })
 
