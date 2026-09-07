@@ -2,22 +2,20 @@
  * Answering "which models can this provider serve?" for the configuration
  * surface's "fetch available models" action.
  *
- * A route the installed pi-ai catalog ships is answered **from that catalog**,
- * with no network call at all: pi-ai's registry is the authoritative list for
- * its own providers, and it carries the capacities a listing endpoint would
- * not disclose. Only a route the catalog does not describe — a gateway, a
- * self-hosted server — is interrogated over the wire.
+ * Most routes the installed pi-ai catalog ships are answered from that catalog,
+ * with no network call at all: those entries carry capacities a listing endpoint
+ * would not disclose. Two providers are deliberately live: OpenRouter reads its
+ * fast-moving public directory, while `openai-codex` asks the locally
+ * authenticated Codex app-server because availability is account-scoped and the
+ * bundled pi-ai snapshot is not authoritative for that user.
  *
- * Neither path is a catalog refresh. Nothing here is stored: the request
- * carries a draft the user is still editing, and the reply is candidate
- * metadata the surface offers for adoption. `settings.yaml` remains the only
- * thing that decides what a route serves.
+ * Nothing here is stored: the request carries a draft the user is still editing,
+ * and the reply is candidate metadata the surface offers for adoption.
+ * `settings.yaml` remains the only thing that decides what a route serves.
  *
- * Only OpenAI-compatible protocols are interrogated. Their listing is the one
- * shape a gateway, a self-hosted server, and the official endpoints all agree
- * on, which is the case this action exists for; every other protocol reports
- * that it cannot be interrogated so the surface falls back to hand-entry
- * rather than guessing a response shape.
+ * Only OpenAI-compatible custom endpoints are interrogated with `GET /models`.
+ * Codex is intentionally not treated as one of those endpoints: its OAuth and
+ * account-aware catalog are owned by the Codex app-server `model/list` protocol.
  *
  * @module dsh-llm-pi-ai/discovery
  */
@@ -26,6 +24,8 @@ import { INVALID_CREDENTIAL_CODE, LlmError, normalizeApiKey } from '@phoenix-ai/
 import type { LlmDiscoveredModel, LlmModelDiscoveryRequest } from '@phoenix-ai/dsh-llm'
 import { attributionHeaders } from '@phoenix-ai/dsh-llm'
 import { catalogModels } from './catalog.ts'
+import { codexModelListTransport } from './codex-discovery.ts'
+import type { CodexModelListTransport } from './codex-discovery.ts'
 
 /**
  * Protocols whose model listing this module can read: the two that speak
@@ -192,14 +192,20 @@ function usableProbeKey(raw: string): string {
  *   network. A configuration surface never holds a stored secret — it edits a
  *   redacted descriptor — so without this an already-configured route would be
  *   interrogated unauthenticated and answer 401.
- * @returns the advertised models in endpoint order.
- * @throws LlmError when the protocol has no readable listing, the endpoint
- *   refuses or fails the request, or the reply is not a model listing.
+ * @param codexModels - live Codex account catalog transport; injectable for tests.
+ * @returns the advertised models in provider order.
+ * @throws LlmError when discovery is unsupported or the provider refuses/fails.
  */
 export async function discoverModels(
   request: LlmModelDiscoveryRequest,
   storedApiKey?: () => Promise<string | undefined>,
+  codexModels: CodexModelListTransport = codexModelListTransport,
 ): Promise<readonly LlmDiscoveredModel[]> {
+  // Codex availability is account-scoped and evolves independently of the
+  // pi-ai dependency snapshot. Ask the user's own authenticated Codex before
+  // considering the installed registry; failure is loud, never a stale fallback.
+  if (request.provider === 'openai-codex') return codexModels.list(request.signal)
+
   const baseURL = request.baseURL
     ?? (request.provider === 'openrouter' ? OPENROUTER_BASE_URL : undefined)
   // A catalog route already has its answer, and a better one: the installed
@@ -270,9 +276,9 @@ export async function discoverModels(
       'DISCOVERY_FAILED',
     )
   }
-  let text: string
+  let textBody: string
   try {
-    text = await readBounded(response, url)
+    textBody = await readBounded(response, url)
   } catch (error: unknown) {
     // Cancellation during the body read rejects with the abort reason, which
     // may be any value; the caller gets the same coded failure it would have
@@ -284,7 +290,7 @@ export async function discoverModels(
   }
   let body: unknown
   try {
-    body = JSON.parse(text)
+    body = JSON.parse(textBody)
   } catch (error: unknown) {
     throw new LlmError(`${url} did not answer with JSON`, 'DISCOVERY_FAILED', { cause: error })
   }
