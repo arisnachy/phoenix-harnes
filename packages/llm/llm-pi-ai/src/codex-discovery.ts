@@ -55,6 +55,9 @@ function text(value: unknown): string | undefined {
  * Map one app-server `model/list` result into PHOENIX discovery rows.
  * The `model` field is the value Codex actually sends to turns; `id` is only a
  * compatibility fallback for older app-server builds.
+ *
+ * @param result - Raw `model/list` result returned by the Codex app-server.
+ * @returns Visible PHOENIX discovery rows and the optional pagination cursor.
  */
 export function readCodexModelPage(result: unknown): {
   models: LlmDiscoveredModel[]
@@ -196,6 +199,9 @@ function terminate(child: ChildProcessWithoutNullStreams, lines: ReadlineInterfa
  * Ask the locally authenticated Codex installation for the account-visible
  * model catalog. The handshake follows app-server protocol ordering exactly:
  * initialize response, initialized notification, then model/list requests.
+ *
+ * @param signal - Optional cancellation signal from the Settings discovery request.
+ * @returns The visible, account-scoped models reported by the local Codex app-server.
  */
 export async function listCodexModels(signal?: AbortSignal): Promise<readonly LlmDiscoveredModel[]> {
   let child: ChildProcessWithoutNullStreams
