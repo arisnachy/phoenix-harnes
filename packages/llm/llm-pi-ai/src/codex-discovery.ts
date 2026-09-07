@@ -52,6 +52,22 @@ function text(value: unknown): string | undefined {
 }
 
 /**
+ * Encode one newline-delimited Codex app-server frame.
+ * Codex uses JSON-RPC semantics but deliberately omits the `jsonrpc` member on
+ * its stdio wire, so accepting that member here would let a mock validate a
+ * frame the real CLI does not promise to accept.
+ *
+ * @param frame - Request or notification fields accepted by the Codex wire.
+ * @returns One JSONL frame terminated by a newline.
+ */
+export function encodeCodexWireFrame(frame: Readonly<Record<string, unknown>>): string {
+  if ('jsonrpc' in frame) {
+    throw new LlmError('Codex app-server wire frames must omit the jsonrpc member', 'DISCOVERY_FAILED')
+  }
+  return `${JSON.stringify(frame)}\n`
+}
+
+/**
  * Map one app-server `model/list` result into PHOENIX discovery rows.
  * The `model` field is the value Codex actually sends to turns; `id` is only a
  * compatibility fallback for older app-server builds.
@@ -126,9 +142,12 @@ function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
   return finishProcessSetup(spawn('codex', ['app-server', '--listen', 'stdio://'], common))
 }
 
-function writeFrame(child: ChildProcessWithoutNullStreams, frame: unknown): Promise<void> {
+function writeFrame(
+  child: ChildProcessWithoutNullStreams,
+  frame: Readonly<Record<string, unknown>>,
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    child.stdin.write(`${JSON.stringify(frame)}\n`, (error) => {
+    child.stdin.write(encodeCodexWireFrame(frame), (error) => {
       if (error === null || error === undefined) resolve()
       else reject(error)
     })
@@ -216,7 +235,6 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
   let requestId = 1
   try {
     await writeFrame(child, {
-      jsonrpc: '2.0',
       id: requestId,
       method: 'initialize',
       params: {
@@ -225,13 +243,12 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
       },
     })
     await readResponse(iterator, requestId, signal)
-    await writeFrame(child, { jsonrpc: '2.0', method: 'initialized' })
+    await writeFrame(child, { method: 'initialized' })
 
     let cursor: string | undefined
     for (let pageNumber = 0; pageNumber < MAX_PAGES; pageNumber += 1) {
       requestId += 1
       await writeFrame(child, {
-        jsonrpc: '2.0',
         id: requestId,
         method: 'model/list',
         params: {
