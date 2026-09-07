@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-06-live-openai-codex-model-discovery.md
+2026-09-06-live-openai-codex-model-discovery.md: 628317af8bfe4d0f25b56836f78632902cde701c
+2026-09-06-live-openai-codex-model-discovery.zh.md: 2b4e9b1c0f4005f3c3b8513ae80931548ead15fc
