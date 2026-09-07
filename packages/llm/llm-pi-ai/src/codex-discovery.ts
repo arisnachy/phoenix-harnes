@@ -93,6 +93,16 @@ function codexEnvironment(): NodeJS.ProcessEnv {
   return env
 }
 
+function finishProcessSetup(child: ChildProcessWithoutNullStreams): ChildProcessWithoutNullStreams {
+  // Codex diagnostics are not part of model discovery, but stderr must still be
+  // drained or a chatty app-server could fill its pipe and block stdout.
+  child.stderr.resume()
+  // Spawn failures are observed through stdout closure/timeout below; owning an
+  // error listener prevents Node from treating ENOENT/EACCES as an uncaught event.
+  child.on('error', () => {})
+  return child
+}
+
 function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
   const common = {
     cwd: process.cwd(),
@@ -102,10 +112,15 @@ function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
   }
   if (process.platform === 'win32') {
     const shell = process.env.ComSpec ?? 'cmd.exe'
-    // Fixed command text only: no user-controlled value crosses cmd.exe.
-    return spawn(shell, ['/d', '/s', '/c', 'codex app-server --listen stdio://'], common)
+    // Fixed command text only: no user-controlled value crosses cmd.exe. This
+    // also handles npm's `codex.cmd` shim, which cannot be execFile'd directly.
+    return finishProcessSetup(spawn(
+      shell,
+      ['/d', '/s', '/c', 'codex app-server --listen stdio://'],
+      common,
+    ))
   }
-  return spawn('codex', ['app-server', '--listen', 'stdio://'], common)
+  return finishProcessSetup(spawn('codex', ['app-server', '--listen', 'stdio://'], common))
 }
 
 function writeFrame(child: ChildProcessWithoutNullStreams, frame: unknown): Promise<void> {
@@ -130,7 +145,7 @@ async function nextLine(
       reject(new LlmError('Codex model discovery aborted by caller', 'ABORTED'))
     }
     signal?.addEventListener('abort', aborted, { once: true })
-    iterator.next().then(resolve, reject).finally(() => {
+    void iterator.next().then(resolve, reject).finally(() => {
       clearTimeout(timer)
       signal?.removeEventListener('abort', aborted)
     })
@@ -171,7 +186,7 @@ async function readResponse(
   }
 }
 
-async function terminate(child: ChildProcessWithoutNullStreams, lines: ReadlineInterface): Promise<void> {
+function terminate(child: ChildProcessWithoutNullStreams, lines: ReadlineInterface): void {
   lines.close()
   child.stdin.end()
   if (child.exitCode === null && child.signalCode === null) child.kill()
@@ -195,6 +210,7 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
   let requestId = 1
   try {
     await writeFrame(child, {
+      jsonrpc: '2.0',
       id: requestId,
       method: 'initialize',
       params: {
@@ -203,12 +219,13 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
       },
     })
     await readResponse(iterator, requestId, signal)
-    await writeFrame(child, { method: 'initialized' })
+    await writeFrame(child, { jsonrpc: '2.0', method: 'initialized' })
 
     let cursor: string | undefined
     for (let pageNumber = 0; pageNumber < MAX_PAGES; pageNumber += 1) {
       requestId += 1
       await writeFrame(child, {
+        jsonrpc: '2.0',
         id: requestId,
         method: 'model/list',
         params: {
@@ -233,7 +250,7 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
     if (error instanceof LlmError) throw error
     throw new LlmError('Codex model discovery failed', 'DISCOVERY_FAILED', { cause: error })
   } finally {
-    await terminate(child, lines)
+    terminate(child, lines)
   }
 }
 
