@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inspectChatGptWebHealth, inspectFrontendBootstrap } from '../src/doctor.ts'
+import { inspectChatGptWebHealth, inspectFrontendBootstrap, inspectUpdateState } from '../src/doctor.ts'
 
 describe('PHOENIX doctor frontend bootstrap check', () => {
   it('accepts the Phoenix client-modules bootstrap and rejects the legacy module', () => {
@@ -24,6 +24,22 @@ describe('PHOENIX doctor frontend bootstrap check', () => {
     expect(inspectFrontendBootstrap('<html><body>PHOENIX</body></html>')).toEqual({
       ok: false,
       detail: 'Phoenix client module bootstrap is missing or still references the legacy module',
+    })
+  })
+})
+
+describe('PHOENIX doctor updater-state check', () => {
+  it('treats a missing updater state file as a healthy idle updater', () => {
+    expect(inspectUpdateState(false)).toEqual({
+      ok: true,
+      detail: 'no pending update state; updater idle',
+    })
+  })
+
+  it('accepts a discoverable updater state file', () => {
+    expect(inspectUpdateState(true)).toEqual({
+      ok: true,
+      detail: 'state file discoverable',
     })
   })
 })

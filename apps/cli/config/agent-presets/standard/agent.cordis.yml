@@ -286,6 +286,26 @@
         subagentProvider: spawn
         maxRounds: 64
 
+# ── MCP integrations ────────────────────────────────────────────────────────
+
+# Official Blender Lab MCP server. Opt-in because Blender's own documentation
+# warns that the connector executes model-generated Python inside Blender without
+# guards. The user installs/enables the Blender 5.1+ Lab add-on and official MCP
+# server separately; PHOENIX only owns the MCP client bridge and tool namespace.
+- id: mcp-blender
+  name: '@phoenix-ai/dsh-mcp-client'
+  disabled: !!js process.env.PHOENIX_BLENDER_MCP_ENABLED !== '1'
+  config:
+    transport: stdio
+    serverName: blender
+    command: !!js process.env.PHOENIX_BLENDER_MCP_COMMAND ?? 'blender-mcp'
+    args: []
+    env: {}
+    cwd: ''
+    toolCallTimeoutMs: 120000
+    failOnStartupError: false
+    startupTimeoutMs: 5000
+
 # ── remaining model-facing rows ─────────────────────────────────────────────
 
 - id: tool-ask-user
