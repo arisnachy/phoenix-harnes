@@ -8,6 +8,8 @@
 
 该引导程序可以运行，但尚未使用 Authenticode 签名。可信签名发布需要外部发布者证书，因此仍属于发布凭据 gate。
 
+更新预检和已准备更新的激活要求通过 HTTPS 或 SSH 访问配置中指定的确切 GitHub 所有者与仓库。仓库名称后缀、仿冒主机、查询字符串及其他传输方式会在获取或激活更新之前被拒绝。
+
 ## VS Code 与 Cursor
 
 运行 `pnpm run package:vscode`，然后通过**扩展 → 从 VSIX 安装**来安装 `dist/phoenix-hardness-vscode.vsix`。Explorer 面板可以安装或更新 PHOENIX、启动本地运行时并打开 Web 界面。它不会读取 provider 凭据。

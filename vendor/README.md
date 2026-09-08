@@ -49,6 +49,8 @@ Keep this log exhaustive — every divergence from upstream must be listed.
 17. **`@phoenix-ai` rescope**: every vendored manifest `name`, every internal dependency entry among the vendored set, and every module specifier that reaches them use the scoped names in the manifest table's `npm name` column. Directory names, version numbers, and dependency ranges are unchanged, and no upstream runtime identifier is renamed — `Symbol.for('schemastery')` and Schemastery's `vendor:` metadata field keep their upstream values. Re-apply with `pnpm run rescope-vendor --apply` after a sync; the table's two name columns are the mapping, restated for consumers in [docs/rescope.md](../docs/rescope.md).
 18. **Entry `disabled` interpolation in `loader/src/config/entry.ts`**: a `disabled: !!js` expression evaluates against the loader context at every mount decision; the raw node stays in the options, so write-back keeps the `!!js` form. `disabled` is the only interpolated metadata field. Covered by `packages/boot/app-boot/tests/user-patches.spec.ts` and `apps/cli/tests/windows-shell.spec.ts`.
 
+19. **Published source repository metadata**: all nine package manifests identify `arisnachy/phoenix-harnes` and their existing `vendor/<package>` directory as the source of PHOENIX's patched artifacts. The upstream repositories, commit pins, versions and MIT licenses remain unchanged; package publication metadata does not replace upstream provenance.
+
 ## Sync procedure
 
 To update a vendored package from upstream:

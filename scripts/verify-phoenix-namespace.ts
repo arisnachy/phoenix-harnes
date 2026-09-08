@@ -20,6 +20,20 @@ const allowedUpstream = new Set([
   '@phoenix-ai/cordis-plugin-timer',
 ])
 const allowedUpstreamPrefixes = ['@phoenix-ai/cordis-plugin-'] as const
+const legacyClientModule = ['@deepseek-ai', 'dsh-client-modules/client.js'].join('/')
+const legacyClientPackage = ['@deepseek-ai', 'dsh-client-modules'].join('/')
+const allowedLegacyReferences = [
+  {
+    file: 'apps/cli/src/doctor.ts',
+    line: `const LEGACY_CLIENT_MODULE = '${legacyClientModule}'`,
+    reference: legacyClientPackage,
+  },
+  {
+    file: 'apps/cli/tests/doctor.spec.ts',
+    line: `      '<script src="/plugins/${legacyClientModule}"></script>',`,
+    reference: legacyClientPackage,
+  },
+] as const
 
 /** One active-file namespace violation. */
 export interface NamespaceViolation {
@@ -46,6 +60,12 @@ function excluded(file: string): boolean {
     || file.endsWith('.map')
 }
 
+function isAllowedLegacyReference(file: string, line: string, reference: string): boolean {
+  return allowedLegacyReferences.some(candidate => candidate.file === file
+    && candidate.line === line
+    && candidate.reference === reference)
+}
+
 /** Scan one source file for Phoenix-owned or unknown DeepSeek package names. */
 export function findNamespaceViolations(file: string, source: string): NamespaceViolation[] {
   const violations: NamespaceViolation[] = []
@@ -54,6 +74,7 @@ export function findNamespaceViolations(file: string, source: string): Namespace
     for (const match of line.matchAll(packageReference)) {
       const reference = match[0]
       if (allowedUpstream.has(reference) || allowedUpstreamPrefixes.some(prefix => reference.startsWith(prefix))) continue
+      if (isAllowedLegacyReference(file, line, reference)) continue
       legacyPackage.lastIndex = 0
       if (legacyPackage.test(reference) || !allowedUpstream.has(reference)) {
         violations.push({ file, line: index + 1, reference })

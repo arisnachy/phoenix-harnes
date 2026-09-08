@@ -52,6 +52,8 @@
     "@phoenix-ai/schemastery": "workspace:^"
   },
   "peerDependencies": {
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-user-approval": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-api-remotes": "workspace:^",
@@ -77,6 +79,8 @@
     "@phoenix-ai/dsh-tool-todo": "workspace:^"
   },
   "devDependencies": {
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-user-approval": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-api-remotes": "workspace:^",

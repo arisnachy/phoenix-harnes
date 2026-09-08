@@ -649,6 +649,15 @@ recent(limit: number = 20): MemoryRecord[]
 recall(limit: number = 20): MemoryRecord[]
 
 /**
+ * Read automatic continuity for the requesting session's exact project directory.
+ * Unknown historical sessions and sessions without an absolute cwd cannot share context.
+ * @param session - Session whose model request is being assembled.
+ * @param limit - Maximum number of eligible memories, applied after isolation.
+ * @returns Durable memories from this session and known sessions with the same cwd.
+ */
+recallForSession(session: Session, limit: number = 20): MemoryRecord[]
+
+/**
  * Search cognitive memory with project, temporal, entity, and layer filters.
  * @param query - Words to match against normalized memory content.
  * @param limit - Maximum number of ranked hits.

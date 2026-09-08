@@ -249,7 +249,7 @@ async function runStructured(
   runtime: CompletionRuntime,
   provider: string,
   request: Parameters<CompletionRuntime['start']>[1],
-): Promise<unknown | undefined> {
+): Promise<unknown> {
   let run
   try {
     run = await runtime.start(provider, request)

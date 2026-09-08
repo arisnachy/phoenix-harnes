@@ -19,7 +19,7 @@ Event-sourced same-session goal state. The service retains one current completio
 
 `ctx.goals` accepts only the exact live `Agent` instance registered under its id. `get()` returns a detached `GoalView`; mutations use a `GoalRef { id, revision }` compare-and-set fence and reject stale refs. The service exposes create, edit, pause, resume, complete, block, and clear verbs through the generated region of [goal.md](../../../docs/subsystems/goal.md#cordis-surface). Creation default resolution is internal. `disarm()` is the lifecycle-only exception: it removes process-local continuation authority without writing a revision or emitting a mutation.
 
-Independent completion reviews are durable `goal/judge` events owned by this domain. The domain rejects every direct completion unless the current goal has a durable passing judge; continuation consumers can replay the latest non-passing review and carry its bounded findings and required changes into a repair round after a process restart.
+Independent completion reviews are durable `goal/judge` events owned by this domain. The domain rejects every direct completion unless the latest judge for the current goal revision is passing; continuation consumers can replay the latest non-passing review and carry its bounded findings and required changes into a repair round after a process restart.
 
 The service also exposes `ctx.goals.specialists`, an event-backed `SpecialistLedger`. The `specialist_lab` tool records one bounded topic laboratory: sources, hypotheses, reproducible experiments, evaluations, and judge feedback. Only a passing evaluation enters `ready`; failed evaluations enter `improving` and eventually `blocked` at the configured iteration cap.
 

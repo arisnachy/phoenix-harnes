@@ -157,11 +157,13 @@ export class MemoryLedger {
   /**
    * Read bounded continuity context with durable lessons ahead of noisy recent activity.
    * @param limit - Maximum number of records to return.
+   * @param sessionIds - Eligible source sessions; omitted only for an explicit unscoped read.
    * @returns High-confidence durable records followed by newest active observations.
    */
-  recall(limit = 20): MemoryRecord[] {
+  recall(limit = 20, sessionIds?: ReadonlySet<string>): MemoryRecord[] {
     if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError('memory recall limit must be a positive safe integer')
-    const active = [...this.records.values()].filter(record => record.status === 'active')
+    const active = [...this.records.values()].filter(record => record.status === 'active'
+      && (sessionIds === undefined || sessionIds.has(record.sessionId)))
     const durable = active
       .filter(record => (record.kind === 'preference' || record.kind === 'lesson' || record.kind === 'skill') && record.confidence >= 0.8)
       .sort((left, right) => right.confidence - left.confidence || right.recordedAt - left.recordedAt || right.occurredAt - left.occurredAt)

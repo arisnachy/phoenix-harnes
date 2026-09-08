@@ -195,6 +195,8 @@ function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
     ...exportDefault(manifest, './client') === './lib/client.js' ? ['lib/client.js'] : [],
     // runtime's shell-held loader subpath ships as its own bundle beside the client half.
     ...exportDefault(manifest, './loader') === './lib/loader.js' ? ['lib/loader.js'] : [],
+    // The public memory ledger subpath has a separately bundled runtime entry.
+    ...exportDefault(manifest, './ledger') === './lib/ledger.js' ? ['lib/ledger.js'] : [],
     // A store subpath ships its own bundle (single-entry builds; no shared chunk).
     ...exportDefault(manifest, './store') === './lib/store/index.js' ? ['lib/store/index.js'] : [],
     // A surface bundle's startup row is its own bundle: the Loader imports it

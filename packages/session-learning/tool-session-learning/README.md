@@ -11,7 +11,7 @@ Model-facing `memory_search` and `memory_remember` tools over PHOENIX's persiste
   name: '@phoenix-ai/dsh-tool-session-learning'
 ```
 
-The tool requires `tools`, `systemPrompt`, and `learningMemory`. Search is read-only; remember cannot change prompts, permissions, tools, or credentials. Search supports project, layer, time-window, and superseded-history filters. Automatic context is bounded to eight project-scoped cognitive records and excludes raw conversation records.
+The tool requires `tools`, `systemPrompt`, and `learningMemory`. Search is read-only; remember cannot change prompts, permissions, tools, or credentials. Search supports project, layer, time-window, and superseded-history filters. Automatic context selects at most eight legacy-ledger records for the requesting agent's workspace, then excludes raw conversation records. Assemblies without an agent receive no automatic memories.
 
 ## Model Experience
 
@@ -24,7 +24,7 @@ The tool requires `tools`, `systemPrompt`, and `learningMemory`. Search is read-
 ##### Automatic continuity context
 
 ```markdown
-Each model assembly receives up to eight active project-scoped cognitive records as untrusted read-only evidence. Raw conversation records remain excluded from automatic injection; use memory_search with a project or time filter when the task requires them.
+Each agent assembly receives bounded untrusted read-only evidence from its own session and known sessions with the same normalized absolute workspace path. Raw conversation records remain excluded from automatic injection; use memory_search with a project or time filter when the task requires them.
 ```
 
 ##### Explicit learning record

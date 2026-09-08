@@ -9,6 +9,12 @@
   ],
   "references": [
     {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../interaction/user-approval"
+    },
+    {
       "path": "../../attachment/attachment"
     },
     {

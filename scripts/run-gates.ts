@@ -18,7 +18,7 @@ import {
   parseCoveragePartitionCount,
 } from './coverage-partitions.ts'
 import { pnpmInvocation } from './pnpm-invocation.ts'
-import { acquireWorktreeGateLock } from './worktree-gate-lock.ts'
+import { acquireWorktreeGateLock, type WorktreeGateLock } from './worktree-gate-lock.ts'
 
 /** A named aggregate exposed by the gate runner. */
 export type Mode =
@@ -88,12 +88,29 @@ type GateExecutor = (gate: Gate) => Promise<GateResult>
 type ResultObserver = (result: GateResult) => void
 
 const root = resolve(import.meta.dirname, '..')
+
+/**
+ * Propagate aggregate ownership to the child-process environment.
+ * @param lock - Aggregate lock whose token children may borrow.
+ * @param environment - Environment passed to child gates.
+ * @returns Nothing; the supplied environment is updated in place.
+ */
+export function propagateGateLockToken(
+  lock: Pick<WorktreeGateLock, 'token'> | undefined,
+  environment: NodeJS.ProcessEnv = process.env,
+): void {
+  if (lock !== undefined) environment.PHOENIX_GATE_LOCK_TOKEN = lock.token
+}
+
 if (import.meta.main) {
   const args = process.argv.slice(2)
   const mode = parseMode(args[0])
   const lock = process.env.DSH_GATE_LOCK_DISABLED === '1'
     ? undefined
-    : await acquireWorktreeGateLock(root, mode)
+    : await acquireWorktreeGateLock(root, mode, {
+      inheritedToken: process.env.PHOENIX_GATE_LOCK_TOKEN,
+    })
+  propagateGateLockToken(lock)
   try {
     process.exitCode = await main(args)
   } finally {

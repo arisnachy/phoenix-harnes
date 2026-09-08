@@ -19,7 +19,7 @@
 
 `ctx.goals` 只接受以对应 id 注册的完全相同的活跃 `Agent` 实例。`get()` 返回与内部状态脱离的 `GoalView`；变更以 `GoalRef { id, revision }` 作为比较并设置防护，并拒绝陈旧引用。服务通过 [goal.md](../../../docs/subsystems/goal.zh.md#cordis-surface) 的生成区块公开 create、edit、pause、resume、complete、block 和 clear 动词。创建默认值在内部解析。`disarm()` 是仅供生命周期使用的例外：它移除进程本地续行权限，不写入新 revision，也不发出变更事件。
 
-独立完成审查是由此域拥有的持久化 `goal/judge` 事件。域会拒绝所有没有当前目标持久化通过 judge 的直接完成；续行消费者可以重放最新的非通过审查，并在进程重启后将其有界发现和所需修改带入修复轮次。
+独立完成审查是由此域拥有的持久化 `goal/judge` 事件。域会拒绝所有当前目标 revision 的最新 judge 未通过的直接完成；续行消费者可以重放最新的非通过审查，并在进程重启后将其有界发现和所需修改带入修复轮次。
 
 该服务还公开由事件支持的 `ctx.goals.specialists` 和 `SpecialistLedger`。`specialist_lab` 工具记录一个有界的主题实验室：来源、假设、可重现实验、评估和 judge 反馈。只有通过评估才会进入 `ready`；失败评估进入 `improving`，达到迭代上限后进入 `blocked`。
 

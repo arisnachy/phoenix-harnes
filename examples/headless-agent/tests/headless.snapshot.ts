@@ -787,6 +787,15 @@ describe('headless stream-json snapshots', () => {
         const probeContent = probeMessage?.content as JsonObject[] | undefined
         expect(probeContent?.[0]?.isError).toBe(true)
         expect((probeData?.error as JsonObject | undefined)?.code).toBe('GOAL_NOT_FOUND')
+        const recoveryMessages = records.filter((record) => {
+          if (record.type !== 'user/message') return false
+          const message = record.data as JsonObject | undefined
+          const content = message?.content as JsonObject[] | undefined
+          return content?.some(block => block.type === 'text'
+            && typeof block.text === 'string'
+            && block.text.startsWith('Tool "update_goal" failed in the previous attempt.'))
+        })
+        expect(recoveryMessages).toHaveLength(1)
         const goalChanges = records.filter(record => record.type === 'goal/change')
         expect(goalChanges).toHaveLength(1)
         const data = goalChanges[0]?.data as JsonObject | undefined

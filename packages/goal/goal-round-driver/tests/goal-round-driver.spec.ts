@@ -285,6 +285,37 @@ describe('same-session goal driving', () => {
     await test.agent.whenIdle()
   })
 
+  it('does not replay needs_changes after a later pass for the same goal revision', async () => {
+    const test = await harness([textResponse('continue after the passing review')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
+    const created = test.ctx.goals.create(test.agent, { objective: 'continue after review', maxGoalRounds: 1 })
+    test.agent.session.append('goal/judge', {
+      callId: 'judge-needs-changes' as never,
+      goalId: created.id,
+      revision: created.revision,
+      round: 0,
+      verdict: 'needs_changes',
+      summary: 'The earlier review required another check.',
+      findings: ['The earlier evidence was incomplete.'],
+      requiredChanges: ['Do not replay this after a passing review.'],
+    })
+    test.agent.session.append('goal/judge', {
+      callId: 'judge-pass' as never,
+      goalId: created.id,
+      revision: created.revision,
+      round: 0,
+      verdict: 'pass',
+      summary: 'The later review passed.',
+      findings: [],
+      requiredChanges: [],
+    })
+
+    await waitForRequests(test.adapter, 1)
+    expect(requestText(test.adapter.requests[0]!)).not.toContain('Do not replay this after a passing review.')
+    await continued
+    await test.agent.whenIdle()
+  })
+
   it('never adopts activation from an already-live driver and waits for explicit resume', async () => {
     const ctx = new Context()
     contexts.push(ctx)

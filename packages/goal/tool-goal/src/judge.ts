@@ -92,7 +92,7 @@ function reviewProvider(runtime: GoalJudgeRuntime, requested: string, parent: Ag
   const names = [...new Set([requested, ...(runtime.list?.() ?? [])])]
     .filter(name => !(nonCodex && name.toLowerCase() === 'luna'))
     .filter(name => canReview(runtime, name))
-  const fresh = names.find((name) => runtime.getProvider(name)?.inheritsParentContext !== true)
+  const fresh = names.find(name => runtime.getProvider(name)?.inheritsParentContext !== true)
   return fresh ?? names[0]
 }
 

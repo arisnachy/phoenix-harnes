@@ -8,6 +8,8 @@ Run the one-line PowerShell installer from the repository README. It installs a 
 
 The bootstrap is operational but not Authenticode-signed. A trusted signed release requires an external publisher certificate and remains a release credential gate.
 
+Updater preflight and prepared activation require the exact configured GitHub owner/repository over HTTPS or SSH. Repository-name suffixes, lookalike hosts, query strings, and other transports are rejected before fetching or activating an update.
+
 ## VS Code and Cursor
 
 Run `pnpm run package:vscode`, then install `dist/phoenix-hardness-vscode.vsix` through **Extensions → Install from VSIX**. The Explorer panel can install or update PHOENIX, start the local runtime, and open its Web interface. It never reads provider credentials.

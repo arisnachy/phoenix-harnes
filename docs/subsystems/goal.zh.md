@@ -240,9 +240,8 @@ create(agent: Agent, request: CreateGoalRequest): GoalView
 
 /**
  * Mark a current non-complete goal complete and disarm it. Completion is
- * fail-closed on the latest executable/adversarial certification while a
- * settled semantic PASS is monotonic for the exact revision: a later
- * provider outage cannot erase evidence that already passed.
+ * fail-closed on the latest executable/adversarial certification and the
+ * latest independent judge review for the exact revision.
  * @param agent - owning live agent.
  * @param ref - expected current revision.
  * @returns the completed view.

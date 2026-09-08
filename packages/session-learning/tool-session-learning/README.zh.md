@@ -11,7 +11,7 @@
   name: '@phoenix-ai/dsh-tool-session-learning'
 ```
 
-该工具需要 `tools`、`systemPrompt` 和 `learningMemory`。搜索是只读的；记忆操作不能修改提示词、权限、工具或凭据。搜索支持项目、层、时间窗口和已替代历史过滤。自动上下文最多包含八条当前项目的认知记录，并排除原始对话记录。
+该工具需要 `tools`、`systemPrompt` 和 `learningMemory`。搜索是只读的；记忆操作不能修改提示词、权限、工具或凭据。搜索支持项目、层、时间窗口和已替代历史过滤。自动上下文为当前请求代理的工作区最多选择八条旧版日志记录，然后排除原始对话记录。没有代理的组装请求不接收自动记忆。
 
 ## 模型体验
 
@@ -24,7 +24,7 @@
 ##### 自动连续性上下文
 
 ```markdown
-Each model assembly receives up to eight active project-scoped cognitive records as untrusted read-only evidence. Raw conversation records remain excluded from automatic injection; use memory_search with a project or time filter when the task requires them.
+Each agent assembly receives bounded untrusted read-only evidence from its own session and known sessions with the same normalized absolute workspace path. Raw conversation records remain excluded from automatic injection; use memory_search with a project or time filter when the task requires them.
 ```
 
 ##### 显式学习记录

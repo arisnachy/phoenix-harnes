@@ -87,17 +87,22 @@ describe('session navigation commands', () => {
     const { command } = commandHarness()
     const agent = { session: { events: threeTurns() } }
 
-    expect(command('fork').handler({ agent, rawInput: '-1' })).toMatchObject({ kind: 'error', text: expect.stringMatching(/non-negative integer/i) })
-    expect(command('rewind').handler({ agent, rawInput: '0' })).toMatchObject({ kind: 'error', text: expect.stringMatching(/positive integer/i) })
-    expect(command('rewind').handler({ agent, rawInput: '99' })).toMatchObject({ kind: 'error', text: expect.stringMatching(/completed turn boundary/i) })
+    const invalidFork = command('fork').handler({ agent, rawInput: '-1' })
+    expect(invalidFork.kind).toBe('error')
+    expect(invalidFork.text).toMatch(/non-negative integer/i)
+    const invalidRewind = command('rewind').handler({ agent, rawInput: '0' })
+    expect(invalidRewind.kind).toBe('error')
+    expect(invalidRewind.text).toMatch(/positive integer/i)
+    const unavailableRewind = command('rewind').handler({ agent, rawInput: '99' })
+    expect(unavailableRewind.kind).toBe('error')
+    expect(unavailableRewind.text).toMatch(/completed turn boundary/i)
   })
 
   it('reports that a plain fork needs at least one completed turn', () => {
     const { command } = commandHarness()
     const agent = { session: { events: [] } }
-    expect(command('fork').handler({ agent, rawInput: '' })).toMatchObject({
-      kind: 'error',
-      text: expect.stringMatching(/no completed turn/i),
-    })
+    const result = command('fork').handler({ agent, rawInput: '' })
+    expect(result.kind).toBe('error')
+    expect(result.text).toMatch(/no completed turn/i)
   })
 })

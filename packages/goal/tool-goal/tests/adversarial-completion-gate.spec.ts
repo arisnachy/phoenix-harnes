@@ -129,9 +129,8 @@ describe('adversarial completion tester', () => {
     expect(JSON.stringify(execute?.prompt)).toContain('corrupt-config')
     expect(JSON.stringify(execute?.prompt)).toContain('evidence_ledger')
     expect(JSON.stringify(execute?.prompt)).toMatch(/temporary|clean.room|extract/i)
-    expect(execute?.toolFilter).toEqual(expect.objectContaining({
-      allow: expect.arrayContaining(['bash', 'read', 'glob', 'grep']),
-    }))
+    const allowedTools: unknown = expect.arrayContaining(['bash', 'read', 'glob', 'grep'])
+    expect(execute?.toolFilter).toMatchObject({ allow: allowedTools })
   })
 
   it('requires at least one verified mandatory criterion before the gate can pass', () => {

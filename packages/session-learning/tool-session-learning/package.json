@@ -17,7 +17,7 @@
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
-  "files": ["lib/index.js", "lib/invariant.js", "lib/presentation.js", "lib/types/**/*.d.ts"],
+  "files": ["lib/index.js", "lib/invariant.js", "lib/types/**/*.d.ts"],
   "license": "MIT",
   "peerDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",
@@ -28,11 +28,13 @@
   },
   "dependencies": { "@phoenix-ai/schemastery": "workspace:^" },
   "devDependencies": {
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-agent-loop": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-session-learning": "workspace:^",
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^",
-    "@phoenix-ai/schemastery": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^"
   }
 }

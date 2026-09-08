@@ -21,7 +21,7 @@ import {
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
-import { classifyStableUpdate } from './phoenix-update-policy.mjs'
+import { classifyStableUpdate, matchesUpdateRepository } from './phoenix-update-policy.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
@@ -123,10 +123,7 @@ function refreshRequestPath(root) {
 function remoteMatchesExpected(root) {
   const result = git(root, ['remote', 'get-url', REMOTE], { allowFailure: true })
   if (!result.ok) return false
-  const normalized = result.stdout.replace(/\\/g, '/').replace(/\.git$/i, '')
-  const expected = EXPECTED_REPOSITORY.toLowerCase()
-  return normalized.toLowerCase().includes(`github.com/${expected}`)
-    || normalized.toLowerCase().includes(`github.com:${expected}`)
+  return matchesUpdateRepository(result.stdout, EXPECTED_REPOSITORY)
 }
 
 function currentBranch(root) {

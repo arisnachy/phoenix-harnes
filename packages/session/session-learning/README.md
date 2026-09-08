@@ -6,6 +6,8 @@ Persistent, provenance-aware cognitive memory for PHOENIX. The service observes 
 
 ## Composition
 
+The package publishes independent root, `./invariant`, and `./ledger` runtime entries. The `./ledger` export supports explicit legacy-ledger consumers without requiring source files in an installation.
+
 ```yaml
 - id: session-learning
   name: '@phoenix-ai/dsh-session-learning'
@@ -25,7 +27,7 @@ The ledger does not silently change permissions, credentials, or trusted plugins
 
 #### What the model sees
 
-The service itself adds no prompt or tool schema. A separately composed memory consumer can call `searchCognitive()`, `timeline()`, and `workingMemory()` and must render returned records with their layers, project, entities, relations, source URI, and confidence. The shipped learning-tool consumer calls `recallCognitive()` during assembly for bounded project-scoped evidence; summaries are protected against prompt-variable delimiters and remain untrusted evidence rather than instructions.
+The service itself adds no prompt or tool schema. A separately composed memory consumer can call `searchCognitive()`, `timeline()`, and `workingMemory()`. The shipped learning-tool consumer calls `recallForSession()` with the requesting agent's session. It selects bounded legacy-ledger evidence from that session and known sessions with an identical normalized absolute workspace path; directory basenames and the newest global session do not determine automatic recall. Summaries remain untrusted evidence, and prompt-variable interpolation is disabled for this context.
 
 #### Token effect
 
@@ -37,5 +39,6 @@ The ledger does not change model requests. An explicit memory read is appended t
 
 ## Known Limitations and Deferred Work
 
+- Automatic recall omits memories from historical sessions whose headers are not loaded. Without an absolute workspace path, it recalls only the requesting session; diagnostics without an agent receive no automatic memories. Path aliases and differently cased paths are not merged.
 - Candidate-lesson judging, skill synthesis, experiments, and a browser memory panel remain separate consumers for later phases.
 - The hybrid ranker is deterministic and does not claim embedding-level semantic equivalence; a future vector provider can enrich the index without replacing the canonical ledger or tool name.

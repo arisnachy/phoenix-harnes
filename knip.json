@@ -41,6 +41,7 @@
     "examples": {
       "entry": [
         "headless-agent/tests/fixtures/cli-mock-llm.ts",
+        "headless-agent/tests/fixtures/session-learning/mock-llm.ts",
         "headless-agent/tests/fixtures/semantic-checkpoint-agent.ts",
         "headless-agent/tests/fixtures/subagent-diagnostic-agent.ts",
         "headless-agent/tests/fixtures/subagent-inheritance-agent.ts",
@@ -78,7 +79,6 @@
         "**/*.ts"
       ],
       "ignoreDependencies": [
-        "@phoenix-ai/.+",
         "@phoenix-ai/.+"
       ]
     },
@@ -396,6 +396,7 @@
       ]
     },
     "packages/llm/llm-pi-ai": {
+      "ignoreBinaries": ["codex"],
       "entry": [
         "tests/**/*.spec.ts",
         "tests/**/*.e2e.ts"
@@ -661,12 +662,12 @@
     },
     "packages/bundle/base": {
       "ignoreDependencies": [
-        "@phoenix-ai/.+",
         "@phoenix-ai/.+"
       ]
     },
     "packages/bundle/headless": {
       "ignoreDependencies": [
+        "@phoenix-ai/dsh-code-runtime-python",
         "@phoenix-ai/dsh-code-runtime-worker-thread"
       ]
     },

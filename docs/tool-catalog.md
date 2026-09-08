@@ -19,7 +19,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tools` | `run_code` | `ctx.tools`, `ctx.codeRuntime (execution time)`, `ctx.systemPrompt` | `tool/call`, `one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`, `tool/result` | - | Owned by the tool registry as a reserved transport outside filterable capability layers under `mode: code` / `mode: both` (see the Code Mode Agent Note). Under `code` it is the registry's only wire contribution; the other visible capabilities are declared in a generated SDK section in the loaded runtime's language, and a program calls them through bindings scheduled under the native concurrency contract (submission-ordered starts and policy; concurrency-safe bodies overlap up to `maxParallelSubCalls`) that re-enter the complete guarded tool pipeline and link each nested execution to this outer result. |
 | `@phoenix-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
 | `@phoenix-ai/dsh-tool-bash` | `bash` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The bash tool is the model-facing consumer of the bash executor seam. A `run_in_background` run registers with the generic `ctx.jobs` runtime and is collected/stopped through the `job_*` tools from `@phoenix-ai/dsh-tool-jobs`; the `enableRunInBackground` config (default true) removes the parameter entirely when disabled. |
-| `@phoenix-ai/dsh-tool-pwsh` | `pwsh` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The pwsh tool is the PowerShell-dialect consumer of the bash executor seam for Windows compositions (a PowerShell executor such as `@phoenix-ai/dsh-pwsh-local` backs `ctx.shell`); it mirrors the bash tool call-for-call minus sandbox controls — `run_in_background` runs register with the generic `ctx.jobs` runtime and are collected/stopped through the `job_*` tools, and the managed `DSH_*` environment comes from `@phoenix-ai/dsh-shell-env`. Each call runs in a fresh process (no persistent PTY session), with native `C:\...` paths and `$env:NAME` variables. |
+| `@phoenix-ai/dsh-tool-pwsh` | `computer`, `pwsh` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The pwsh tool is the PowerShell-dialect consumer of the bash executor seam for Windows compositions (a PowerShell executor such as `@phoenix-ai/dsh-pwsh-local` backs `ctx.shell`); it mirrors the bash tool call-for-call minus sandbox controls — `run_in_background` runs register with the generic `ctx.jobs` runtime and are collected/stopped through the `job_*` tools, and the managed `DSH_*` environment comes from `@phoenix-ai/dsh-shell-env`. Each call runs in a fresh process (no persistent PTY session), with native `C:\...` paths and `$env:NAME` variables. |
 | `@phoenix-ai/dsh-tool-cordis` | `cordis_define`, `cordis_inspect_list`, `cordis_inspect_query`, `cordis_inspect_self`, `cordis_run`, `cordis_stop`, `cordis_undefine` | `ctx.tools`, `ctx.dynamicCordisRunner` | `tool/call`, `tool/result`, `process-local dynamic package lifecycle` | - | Not in any shipped tree (a deliberate opt-in — dynamic package code reaches the real runtime, see .agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.md). The toolset injects `ctx.dynamicCordisRunner` from `@phoenix-ai/dsh-cordis-host-runner`, which owns the definition registry and the vm sandbox; a composition missing it never activates the tools. A running package may register ADDITIONAL model-visible tools until it is stopped, undefined, or PHOENIX restarts; a full changed request header logs those tool-set changes. |
 | `@phoenix-ai/dsh-tool-bash-persistent` | `bash` | `ctx.tools`, `ctx.terminals`, `an owning Agent at execution time` | `tool/call`, `PTY shell state`, `tool/result` | - | One owner-isolated persistent bash tool; deployment composition supplies the PTY backend and may override the model-facing environment description. |
 | `@phoenix-ai/dsh-tool-pwsh-persistent` | `pwsh` | `ctx.tools`, `ctx.terminals`, `an owning Agent at execution time` | `tool/call`, `PTY shell state`, `tool/result` | - | One owner-isolated persistent pwsh tool, the Windows counterpart of the persistent bash tool; deployment composition supplies a pwsh-dialect PTY backend and may override the model-facing environment description. |
@@ -228,6 +228,74 @@ The bash tool is the model-facing consumer of the bash executor seam. A `run_in_
 <a id="phoenix-aidsh-tool-pwsh"></a>
 
 ## `@phoenix-ai/dsh-tool-pwsh`
+
+### `computer`
+
+Control the Windows desktop with a closed action set. Use screenshot to observe the current virtual desktop; the screenshot is injected as a durable image attachment for the next model step. Input actions are move, click, double_click, drag, type, key, and scroll. read-only permission is observe-only; workspace-write allows input through user approval; danger-full-access allows input without prompts. Never guess coordinates when a fresh screenshot can ground them.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Desktop operation to perform.",
+      "enum": [
+        "screenshot",
+        "move",
+        "click",
+        "double_click",
+        "drag",
+        "type",
+        "key",
+        "scroll"
+      ]
+    },
+    "x": {
+      "type": "integer",
+      "description": "Screen X coordinate. Required for move/click/double_click/drag; optional with scroll."
+    },
+    "y": {
+      "type": "integer",
+      "description": "Screen Y coordinate. Required for move/click/double_click/drag; optional with scroll."
+    },
+    "x2": {
+      "type": "integer",
+      "description": "Drag destination X coordinate."
+    },
+    "y2": {
+      "type": "integer",
+      "description": "Drag destination Y coordinate."
+    },
+    "button": {
+      "type": "string",
+      "description": "Mouse button; defaults to left.",
+      "enum": [
+        "left",
+        "right",
+        "middle"
+      ]
+    },
+    "text": {
+      "type": "string",
+      "description": "Unicode text for the type action."
+    },
+    "keys": {
+      "type": "string",
+      "description": "Key or combo such as ENTER, CTRL+L, ALT+TAB, F5, or SHIFT+F10."
+    },
+    "delta": {
+      "type": "integer",
+      "description": "Mouse-wheel delta for scroll; positive scrolls up and negative scrolls down."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/shell/tool-pwsh/src/index.ts`](../packages/shell/tool-pwsh/src/index.ts)
 
 ### `pwsh`
 

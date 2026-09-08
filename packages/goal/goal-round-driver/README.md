@@ -56,7 +56,7 @@ The model receives the complete objective and positive round number in the retai
 ##### Judge feedback
 
 ```markdown
-When the previous completion judge returned needs_changes or blocked, the driver reconstructs that result from the durable goal/judge event and places its bounded findings and required changes in the next round prompt. This survives process restart and is consumed by the automatically resumed active mission.
+When the latest completion judge returned needs_changes or blocked, the driver reconstructs that result from the durable goal/judge event and places its bounded findings and required changes in the next round prompt. A later passing review suppresses older findings for the same goal revision. This survives process restart and is consumed by the automatically resumed active mission.
 ```
 
 ##### Supervisor checkpoint

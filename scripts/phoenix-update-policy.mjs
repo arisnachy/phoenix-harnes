@@ -1,4 +1,34 @@
 /**
+ * Match the configured GitHub repository without accepting lookalike remotes.
+ * @param {string} remote - Git remote URL in HTTPS, SSH URL, or GitHub SCP form.
+ * @param {string} repository - Expected owner/repository identity.
+ * @returns {boolean} Whether the remote identifies the exact configured source.
+ */
+export function matchesUpdateRepository(remote, repository) {
+  if (!/^[a-z0-9-]+\/[a-z0-9_.-]+$/i.test(repository)) return false
+  if (/[\s\\]/u.test(remote)) return false
+  const scp = /^git@github\.com:(?<path>[^?#]+)$/i.exec(remote)
+  const expected = repository.toLowerCase()
+  if (scp !== null) return scp.groups.path.replace(/\.git$/i, '').toLowerCase() === expected
+  let url
+  try {
+    url = new URL(remote)
+  } catch {
+    return false
+  }
+  if (url.hostname.toLowerCase() !== 'github.com' || url.search !== '' || url.hash !== '') return false
+  if (url.password !== '') return false
+  if (url.protocol === 'https:') {
+    if (url.username !== '' || url.port !== '') return false
+  } else if (url.protocol === 'ssh:') {
+    if (url.username !== 'git' || (url.port !== '' && url.port !== '22')) return false
+  } else {
+    return false
+  }
+  return url.pathname.replace(/\.git$/i, '').toLowerCase() === `/${expected}`
+}
+
+/**
  * Return whether a checkout branch is managed by the PHOENIX release updater.
  * Keep this shared between preflight policy and prepared activation so a
  * promoted `stable` checkout cannot be prepared successfully and then rejected

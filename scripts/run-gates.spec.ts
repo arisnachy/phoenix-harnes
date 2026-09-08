@@ -3,6 +3,7 @@ import {
   defaultConcurrency,
   formatGateResultReason,
   gatesForMode,
+  propagateGateLockToken,
   runGate,
   runGates,
   type Gate,
@@ -53,6 +54,24 @@ function withEnv<T>(name: string, value: string | undefined, action: () => T): T
     else process.env[name] = previous
   }
 }
+
+describe('gate lock child environment', () => {
+  it('propagates the owning aggregate token to child gates', () => {
+    const environment: NodeJS.ProcessEnv = {}
+
+    propagateGateLockToken({ token: 'aggregate-token' }, environment)
+
+    expect(environment.PHOENIX_GATE_LOCK_TOKEN).toBe('aggregate-token')
+  })
+
+  it('leaves the child environment unchanged when no lock is held', () => {
+    const environment: NodeJS.ProcessEnv = { EXISTING: 'value' }
+
+    propagateGateLockToken(undefined, environment)
+
+    expect(environment).toEqual({ EXISTING: 'value' })
+  })
+})
 
 describe('gate graph validation', () => {
   it.each([

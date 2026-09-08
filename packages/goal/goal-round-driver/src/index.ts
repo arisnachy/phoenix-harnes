@@ -109,11 +109,11 @@ export function apply(ctx: Context): void {
 
   /** Read the latest non-passing judge result for this goal from durable history. */
   function latestJudge(state: DriverState, goal: GoalView): GoalJudgeAuditEntry | undefined {
-    return state.agent.session.events.findLast((event): event is SessionEvent<'goal/judge'> =>
+    const latest = state.agent.session.events.findLast((event): event is SessionEvent<'goal/judge'> =>
       event.type === 'goal/judge'
       && event.data.goalId === goal.id
-      && event.data.verdict !== 'pass',
-    )?.data
+      && event.data.revision === goal.revision)
+    return latest?.data.verdict === 'pass' ? undefined : latest?.data
   }
 
   /** Read the last strategy so a repair round can select a different one. */

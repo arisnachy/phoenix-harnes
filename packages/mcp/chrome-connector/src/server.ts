@@ -41,7 +41,12 @@ function isLoopback(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
 }
 
-/** Build Chrome/Edge flags for PHOENIX's isolated CDP browser. */
+/**
+ * Build Chrome/Edge flags for PHOENIX's isolated CDP browser.
+ * @param profileDir - Dedicated browser profile directory.
+ * @param headless - Whether to launch without a visible browser window.
+ * @returns Browser arguments with loopback-only debugging and an isolated profile.
+ */
 export function buildDedicatedBrowserArgs(profileDir: string, headless = false): string[] {
   return [
     '--remote-debugging-port=0',
@@ -156,7 +161,7 @@ async function launchDedicatedBrowser(): Promise<string> {
     managedBrowser = child
     managedProfileDir = profileDir
     let spawnError: Error | undefined
-    child.once('error', error => { spawnError = error })
+    child.once('error', (error) => { spawnError = error })
     if (!cleanupRegistered) {
       cleanupRegistered = true
       process.once('exit', cleanupManagedBrowser)
