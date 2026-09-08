@@ -26,6 +26,16 @@ export function inspectFrontendBootstrap(html: string): Pick<Check, 'ok' | 'deta
     : { ok: false, detail: 'Phoenix client module bootstrap is missing or still references the legacy module' }
 }
 
+/**
+ * Interpret the updater state-file discovery consistently with the updater:
+ * no state file means there is no pending prepared update, which is healthy idle.
+ */
+export function inspectUpdateState(hasStateFile: boolean): Pick<Check, 'ok' | 'detail'> {
+  return hasStateFile
+    ? { ok: true, detail: 'state file discoverable' }
+    : { ok: true, detail: 'no pending update state; updater idle' }
+}
+
 function commandVersion(command: string, args: readonly string[]): string | undefined {
   const result = spawnSync(command, [...args], { encoding: 'utf8', windowsHide: true })
   if (result.status !== 0) return undefined
@@ -72,11 +82,14 @@ async function chatGptWebCheck(): Promise<Check | undefined> {
 export async function runDoctor(): Promise<number> {
   const web = await webChecks()
   const chatgptWeb = await chatGptWebCheck()
+  const updateState = inspectUpdateState(
+    existsSync(dshHomePath('..', 'phoenix-update-state.json')) || existsSync('.git/phoenix-update-state.json'),
+  )
   const checks: Check[] = [
     { name: 'Node.js', ok: Number(process.versions.node.split('.')[0]) >= 22, detail: process.version },
     { name: 'Git', ok: commandVersion('git', ['--version']) !== undefined, detail: commandVersion('git', ['--version']) ?? 'not found' },
     { name: 'Python', ok: commandVersion(process.platform === 'win32' ? 'python' : 'python3', ['--version']) !== undefined, detail: commandVersion(process.platform === 'win32' ? 'python' : 'python3', ['--version']) ?? 'not found' },
-    { name: 'update state', ok: existsSync(dshHomePath('..', 'phoenix-update-state.json')) || existsSync('.git/phoenix-update-state.json'), detail: 'state file discoverable' },
+    { name: 'update state', ...updateState },
     ...web,
     ...(chatgptWeb === undefined ? [] : [chatgptWeb]),
   ]
