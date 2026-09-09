@@ -7,8 +7,12 @@ import GoogleApiBroker, {
 } from '@phoenix-ai/dsh-authorization/google'
 import { MemoryCredentials } from './memory.ts'
 
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return { ...actual, homedir: () => '/__phoenix_test_home_without_google_oauth__' }
+})
+
 const originalFetch = internals.fetch
-const originalResolveClientId = internals.resolveClientId
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 
@@ -20,12 +24,10 @@ function googleApi(ctx: Context): GoogleApiBroker {
 
 afterEach(() => {
   internals.fetch = originalFetch
-  internals.resolveClientId = originalResolveClientId
   vi.restoreAllMocks()
 })
 
 async function harnessWithoutClientId(): Promise<Context> {
-  internals.resolveClientId = () => undefined
   const ctx = new Context()
   await ctx.plugin(MemoryCredentials)
   await ctx.plugin(AuthorizationService)
@@ -78,7 +80,6 @@ describe('Google Workspace runtime guards', () => {
   })
 
   it('purges a secret-bearing durable grant left by the superseded Google broker', async () => {
-    internals.resolveClientId = configured => configured
     const ctx = new Context()
     await ctx.plugin(MemoryCredentials)
     await ctx.plugin(AuthorizationService)
