@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assertComputerActionAllowed,
   computerModeForSandbox,
+  runWindowsComputerAction,
   shouldCaptureAfterAction,
   validateComputerArgs,
   windowsComputerInvocation,
@@ -78,5 +79,14 @@ describe('Computer Use argument contract', () => {
 
   it('rejects key strings outside the closed combo grammar', () => {
     expect(() => validateComputerArgs({ action: 'key', keys: 'CTRL+L;calc.exe' })).toThrow(/unsupported/i)
+  })
+})
+
+const windowsIt = process.platform === 'win32' ? it : it.skip
+
+describe('Computer Use native Windows driver', () => {
+  windowsIt('compiles the embedded driver and enumerates the interactive desktop', async () => {
+    const output = await runWindowsComputerAction({ action: 'windows' })
+    expect(typeof output).toBe('string')
   })
 })
