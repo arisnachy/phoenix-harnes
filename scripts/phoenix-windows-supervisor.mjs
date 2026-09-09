@@ -37,14 +37,42 @@ function gitValue(cwd, args) {
   return value.length === 0 ? undefined : value
 }
 
-function gitClean(cwd) {
+function gitStatus(cwd) {
   const result = spawnSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
     cwd,
     encoding: 'utf8',
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'ignore'],
   })
-  return result.status === 0 && typeof result.stdout === 'string' && result.stdout.trim().length === 0
+  if (result.status !== 0 || typeof result.stdout !== 'string') {
+    return { ok: false, entries: [] }
+  }
+  const output = result.stdout.trim()
+  return {
+    ok: true,
+    entries: output.length === 0 ? [] : output.split(/\r?\n/u).filter(Boolean),
+  }
+}
+
+function gitClean(cwd) {
+  const status = gitStatus(cwd)
+  return status.ok && status.entries.length === 0
+}
+
+function reportDirtyActivationBlock(status) {
+  if (!status.ok) {
+    console.error('[PHOENIX UPDATE] activation paused: unable to verify that the live checkout is clean.')
+    console.error('[PHOENIX UPDATE] PHOENIX was not modified; fix the Git checkout and retry the restart.')
+    return
+  }
+  console.error('[PHOENIX UPDATE] activation paused: the live checkout has local changes that appeared after preparation.')
+  for (const entry of status.entries.slice(0, 25)) {
+    console.error(`[PHOENIX UPDATE]   ${entry}`)
+  }
+  if (status.entries.length > 25) {
+    console.error(`[PHOENIX UPDATE]   ...and ${String(status.entries.length - 25)} more change(s).`)
+  }
+  console.error('[PHOENIX UPDATE] Commit, stash, or intentionally discard those changes, then request the restart again. The prepared update remains cached.')
 }
 
 function absoluteGitPath(cwd, value) {
@@ -275,6 +303,13 @@ while (true) {
   if (!requested) {
     finalCode = hostExit.code ?? (hostExit.signal === null ? 1 : 0)
     break
+  }
+
+  const liveStatus = gitStatus(root)
+  if (!liveStatus.ok || liveStatus.entries.length > 0) {
+    clearRestartRequest()
+    reportDirtyActivationBlock(liveStatus)
+    continue
   }
 
   console.error('[PHOENIX UPDATE] restart request received; activating prepared update under supervisor control...')
