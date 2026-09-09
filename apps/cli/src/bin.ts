@@ -29,6 +29,37 @@ function readVersion(): string {
 
 const rawArgs = process.argv.slice(2)
 
+// `pnpm phoenix` historically launched the Web Host directly. On Windows that
+// bypassed phoenix-windows-supervisor.mjs, so an update restart could terminate
+// the Host and return control to PowerShell before the prepared candidate was
+// activated and relaunched. Route every direct Windows Web launch through the
+// supervisor. The Host process started by that supervisor carries the guard
+// below, preventing recursion while keeping the normal CLI invocation intact.
+if (
+  process.platform === 'win32'
+  && rawArgs[0] === 'web'
+  && process.env.PHOENIX_UPDATE_SUPERVISED !== '1'
+) {
+  const supervisor = resolve(
+    fileURLToPath(new URL('../../../scripts/phoenix-windows-supervisor.mjs', import.meta.url)),
+  )
+  if (existsSync(supervisor)) {
+    const forwardedArgs = rawArgs.slice(1)
+    if (forwardedArgs[0] === '--') forwardedArgs.shift()
+    const result = spawnSync(process.execPath, [supervisor, ...forwardedArgs], {
+      cwd: resolve(supervisor, '..', '..'),
+      env: process.env,
+      stdio: 'inherit',
+      windowsHide: false,
+    })
+    if (result.error !== undefined) {
+      console.error(`[PHOENIX] Windows supervisor launch failed: ${result.error.message}`)
+      process.exit(1)
+    }
+    process.exit(result.status ?? 1)
+  }
+}
+
 // Codex marketplace management is a PHOENIX launcher capability rather than a
 // profile capability. Keep it outside the legacy `dsh plugin` pnpm forwarder:
 // the two commands manage different plugin formats and must not reinterpret
