@@ -8,6 +8,7 @@ import GoogleApiBroker, {
 import { MemoryCredentials } from './memory.ts'
 
 const originalFetch = internals.fetch
+const originalResolveClientId = internals.resolveClientId
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 
@@ -19,10 +20,12 @@ function googleApi(ctx: Context): GoogleApiBroker {
 
 afterEach(() => {
   internals.fetch = originalFetch
+  internals.resolveClientId = originalResolveClientId
   vi.restoreAllMocks()
 })
 
 async function harnessWithoutClientId(): Promise<Context> {
+  internals.resolveClientId = () => undefined
   const ctx = new Context()
   await ctx.plugin(MemoryCredentials)
   await ctx.plugin(AuthorizationService)
@@ -68,12 +71,14 @@ describe('Google Workspace runtime guards', () => {
     internals.fetch = fetchSpy as typeof fetch
 
     await expect(googleApi(ctx).request({ service: 'drive', path: 'files' }))
-      .rejects.toMatchObject({ code: 'GOOGLE_REAUTH_REQUIRED' })
+      .rejects.toMatchObject({ code: 'GOOGLE_CLIENT_UNCONFIGURED' })
 
     expect(fetchSpy).not.toHaveBeenCalled()
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toBeUndefined()
   })
 
   it('purges a secret-bearing durable grant left by the superseded Google broker', async () => {
+    internals.resolveClientId = configured => configured
     const ctx = new Context()
     await ctx.plugin(MemoryCredentials)
     await ctx.plugin(AuthorizationService)
