@@ -73,7 +73,9 @@ describe('Google OAuth on first capability use', () => {
     internals.openBrowser = async (url: string) => { opened.push(url) }
     internals.openLoopback = async () => ({
       redirectUri: 'http://127.0.0.1:49152/oauth2/callback',
-      code: Promise.reject(new Error('user cancelled Google authorization')),
+      code: new Promise<string>((_resolve, reject) => {
+        setTimeout(() => reject(new Error('user cancelled Google authorization')), 0)
+      }),
       close: () => Promise.resolve(),
     })
 
