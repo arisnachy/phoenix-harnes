@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/phoenix-logo.svg" alt="PHOENIX — Universal AI Harness" width="520">
+  <img src="docs/phoenix-logo.png" alt="PHOENIX — Universal AI Harness" width="220">
 </p>
 
 # PHOENIX
