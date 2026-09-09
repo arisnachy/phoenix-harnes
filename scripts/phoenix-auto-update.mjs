@@ -137,8 +137,13 @@ function currentCommit(root) {
   return git(root, ['rev-parse', 'HEAD']).stdout
 }
 
+function worktreeChanges(root) {
+  const output = git(root, ['status', '--porcelain=v1', '--untracked-files=all']).stdout
+  return output.length === 0 ? [] : output.split(/\r?\n/u).filter(Boolean)
+}
+
 function cleanWorktree(root) {
-  return git(root, ['status', '--porcelain=v1', '--untracked-files=all']).stdout.length === 0
+  return worktreeChanges(root).length === 0
 }
 
 function isManagedInstall(root) {
@@ -375,6 +380,7 @@ function readPrepared(root) {
     const value = JSON.parse(readFileSync(path, 'utf8'))
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
     if (typeof value.target !== 'string' || !/^[0-9a-f]{40}$/i.test(value.target)) return undefined
+    if (typeof value.base !== 'string' || !/^[0-9a-f]{40}$/i.test(value.base)) return undefined
     if (!['full', 'client', 'none'].includes(value.mode)) return undefined
     return value
   } catch {
@@ -406,10 +412,16 @@ function clearPrepared(root) {
 function preparedCandidateValid(root, target) {
   const prepared = readPrepared(root)
   if (prepared?.target !== target) return false
+  if (prepared.base !== currentCommit(root)) return false
+  if (!cleanWorktree(root)) return false
   const stage = stageDirectory()
   if (!sameRepositoryWorktree(root, stage)) return false
   const stageHead = git(stage, ['rev-parse', 'HEAD'], { allowFailure: true })
-  return stageHead.ok && stageHead.stdout === target
+  const stageStatus = git(stage, ['status', '--porcelain=v1', '--untracked-files=all'], { allowFailure: true })
+  return stageHead.ok
+    && stageHead.stdout === target
+    && stageStatus.ok
+    && stageStatus.stdout.length === 0
 }
 
 function ensureDependencies(root, label, plan, onPhase) {
@@ -794,7 +806,31 @@ async function watch(root, parentPid) {
           writeState(root, { status: 'available', phase: 'notify', ...updateFacts(inspection) })
           break
         case 'apply':
-        case 'replace':
+        case 'replace': {
+          const localChanges = worktreeChanges(root)
+          if (localChanges.length > 0) {
+            pending = undefined
+            preparedTarget = undefined
+            if (announcedTarget !== inspection.target) {
+              announcedTarget = inspection.target
+              console.error(`[PHOENIX UPDATE] new stable version ${inspection.target.slice(0, 12)} detected.`)
+            }
+            console.error(`[PHOENIX UPDATE] stable ${inspection.target.slice(0, 12)} is available, but local changes block preparation/activation.`)
+            for (const entry of localChanges.slice(0, 25)) {
+              console.error(`[PHOENIX UPDATE]   ${entry}`)
+            }
+            if (localChanges.length > 25) {
+              console.error(`[PHOENIX UPDATE]   ...and ${String(localChanges.length - 25)} more change(s).`)
+            }
+            writeState(root, {
+              status: 'paused',
+              phase: 'worktree',
+              ...updateFacts(inspection),
+              detail: `Local changes block automatic update preparation/activation (${String(localChanges.length)} change(s)).`,
+            })
+            break
+          }
+
           pending = inspection
           if (preparedTarget !== inspection.target) {
             if (announcedTarget !== inspection.target) {
@@ -807,6 +843,7 @@ async function watch(root, parentPid) {
             writeState(root, { status: 'ready', phase: 'ready', ...updateFacts(inspection) })
           }
           break
+        }
         case 'unchanged':
           switch (inspection.status) {
             case 'current':
