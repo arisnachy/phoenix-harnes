@@ -1,18 +1,18 @@
 /**
- * Windows Computer Use for PHOENIX. The model sees a closed action vocabulary;
- * implementation details stay behind a fixed PowerShell/C# driver so model
- * text can never become executable shell source.
+ * Window-aware Windows Computer Use for PHOENIX.
  *
- * Permission mapping intentionally reuses the durable sandbox policy:
- * read-only -> observe, workspace-write/danger-full-access -> interact.
- * Interactive actions under workspace-write require the ordinary user approval
- * channel; danger-full-access is the explicit no-prompt desktop authority.
+ * The model sees a closed action vocabulary and never supplies executable shell
+ * source. All model strings are transported through environment variables into
+ * a fixed PowerShell/C# driver. Desktop input is guarded by the session's
+ * sandbox authority and, when requested, by an explicit top-level window
+ * selector. State-changing actions automatically produce a fresh screenshot so
+ * the next model step observes what actually happened instead of trusting that
+ * input injection alone meant success.
  *
  * @module @phoenix-ai/dsh-tool-pwsh/computer
  */
 
 import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import type { Context } from '@phoenix-ai/cordis'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -20,7 +20,9 @@ import type { SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@phoenix-ai/dsh-sandbox-policy'
 import { defineTool, type ToolDefinition, type ToolRunContext } from '@phoenix-ai/dsh-tools'
 
-const execFileAsync = promisify(execFile)
+const POST_ACTION_SETTLE_MS = 250
+const INT32_MIN = -2_147_483_648
+const INT32_MAX = 2_147_483_647
 
 /** Desktop authority derived from the session's existing permission policy. */
 export type ComputerMode = 'off' | 'observe' | 'interact'
@@ -28,6 +30,8 @@ export type ComputerMode = 'off' | 'observe' | 'interact'
 /** Closed model-facing action vocabulary. */
 export type ComputerAction =
   | 'screenshot'
+  | 'windows'
+  | 'focus'
   | 'move'
   | 'click'
   | 'double_click'
@@ -42,6 +46,11 @@ export type ComputerButton = 'left' | 'right' | 'middle'
 /** Model-facing arguments for one desktop operation. */
 export interface ComputerToolArgs {
   action: ComputerAction
+  /**
+   * Optional top-level window selector. Supported forms are a title or title
+   * substring, pid:1234, and hwnd:0x123ABC. focus requires this field.
+   */
+  target?: string
   x?: number
   y?: number
   x2?: number
@@ -56,6 +65,7 @@ interface ComputerInvocation {
   file: string
   argv: readonly string[]
   env: Readonly<Record<string, string>>
+  stdin: string
 }
 
 interface DesktopImageAttachment {
@@ -92,14 +102,15 @@ export function assertComputerActionAllowed(mode: ComputerMode, action: Computer
   if (mode === 'off') {
     throw new Error('Computer Use is disabled by the current permission mode.')
   }
-  if (mode === 'observe' && action !== 'screenshot') {
+  const observationOnly = action === 'screenshot' || action === 'windows'
+  if (mode === 'observe' && !observationOnly) {
     throw new Error(`Computer action "${action}" requires interact permission; current mode is observe.`)
   }
 }
 
 function assertCoordinate(value: number | undefined, name: string): asserts value is number {
-  if (value === undefined || !Number.isSafeInteger(value)) {
-    throw new TypeError(`computer ${name} must be a safe integer coordinate`)
+  if (value === undefined || !Number.isSafeInteger(value) || value < INT32_MIN || value > INT32_MAX) {
+    throw new TypeError(`computer ${name} must be a signed 32-bit integer coordinate`)
   }
 }
 
@@ -110,6 +121,16 @@ function assertOptionalPointPair(args: ComputerToolArgs): void {
   assertCoordinate(args.y, 'y')
 }
 
+function validateTarget(target: string | undefined, required: boolean): void {
+  if (target === undefined) {
+    if (required) throw new TypeError('computer focus requires a non-empty target window selector')
+    return
+  }
+  if (target.trim().length === 0) throw new TypeError('computer target must be non-empty')
+  if (target.length > 512) throw new RangeError('computer target exceeds 512 UTF-16 code units')
+  if (target.includes('\0')) throw new TypeError('computer target contains an unsupported NUL character')
+}
+
 const KEY_COMBO = /^[A-Za-z0-9_+\-]+$/u
 
 /**
@@ -117,8 +138,11 @@ const KEY_COMBO = /^[A-Za-z0-9_+\-]+$/u
  * @param args - Model-facing desktop action and its action-specific fields.
  */
 export function validateComputerArgs(args: ComputerToolArgs): void {
+  validateTarget(args.target, args.action === 'focus')
   switch (args.action) {
     case 'screenshot':
+    case 'windows':
+    case 'focus':
       return
     case 'move':
     case 'click':
@@ -149,8 +173,9 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
       }
       return
     case 'scroll':
-      if (args.delta === undefined || !Number.isSafeInteger(args.delta) || args.delta === 0) {
-        throw new TypeError('computer scroll requires a non-zero safe integer delta')
+      if (args.delta === undefined || !Number.isSafeInteger(args.delta)
+        || args.delta < INT32_MIN || args.delta > INT32_MAX || args.delta === 0) {
+        throw new TypeError('computer scroll requires a non-zero signed 32-bit integer delta')
       }
       assertOptionalPointPair(args)
       return
@@ -161,12 +186,29 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
   }
 }
 
+/**
+ * Determine whether an action must be followed by a fresh visual observation.
+ * @param action - Closed-set Computer Use action.
+ * @returns True when the action can change desktop/application state in a way the model must re-observe.
+ */
+export function shouldCaptureAfterAction(action: ComputerAction): boolean {
+  return action === 'focus'
+    || action === 'click'
+    || action === 'double_click'
+    || action === 'drag'
+    || action === 'type'
+    || action === 'key'
+    || action === 'scroll'
+}
+
 const WINDOWS_DRIVER = String.raw`
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $source = @"
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 
 public static class PhoenixDesktop {
@@ -180,6 +222,9 @@ public static class PhoenixDesktop {
   private const uint KEYEVENTF_KEYUP = 0x0002;
   private const uint KEYEVENTF_UNICODE = 0x0004;
   private const uint INPUT_KEYBOARD = 1;
+  private const int SW_RESTORE = 9;
+
+  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
   [DllImport("user32.dll", SetLastError = true)]
   private static extern bool SetCursorPos(int x, int y);
@@ -195,6 +240,56 @@ public static class PhoenixDesktop {
 
   [DllImport("user32.dll")]
   private static extern bool SetProcessDPIAware();
+
+  [DllImport("user32.dll")]
+  private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+  [DllImport("user32.dll")]
+  private static extern bool IsWindowVisible(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  private static extern bool IsWindow(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  private static extern bool IsIconic(IntPtr hWnd);
+
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  private static extern int GetWindowTextLength(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+  [DllImport("user32.dll")]
+  private static extern IntPtr GetForegroundWindow();
+
+  [DllImport("user32.dll")]
+  private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  private static extern bool BringWindowToTop(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+
+  [DllImport("user32.dll")]
+  private static extern uint GetCurrentThreadId();
+
+  [DllImport("user32.dll")]
+  private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+
+  [DllImport("user32.dll")]
+  private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct RECT {
+    public int Left;
+    public int Top;
+    public int Right;
+    public int Bottom;
+  }
 
   [StructLayout(LayoutKind.Sequential)]
   private struct INPUT {
@@ -237,6 +332,154 @@ public static class PhoenixDesktop {
 
   public static void EnableDpiAwareness() {
     try { SetProcessDPIAware(); } catch { }
+  }
+
+  private static string Title(IntPtr hWnd) {
+    int length = GetWindowTextLength(hWnd);
+    if (length <= 0) return String.Empty;
+    var text = new StringBuilder(length + 1);
+    GetWindowText(hWnd, text, text.Capacity);
+    return text.ToString().Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ').Trim();
+  }
+
+  private static List<IntPtr> VisibleWindows() {
+    var result = new List<IntPtr>();
+    EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
+      if (IsWindowVisible(hWnd) && Title(hWnd).Length > 0) result.Add(hWnd);
+      return true;
+    }, IntPtr.Zero);
+    return result;
+  }
+
+  private static string Hex(IntPtr hWnd) {
+    return "0x" + hWnd.ToInt64().ToString("X");
+  }
+
+  public static string DescribeWindow(IntPtr hWnd) {
+    if (hWnd == IntPtr.Zero || !IsWindow(hWnd)) return "hwnd=0x0 active=false title=<none>";
+    uint pid;
+    GetWindowThreadProcessId(hWnd, out pid);
+    RECT rect;
+    bool hasRect = GetWindowRect(hWnd, out rect);
+    bool active = GetForegroundWindow() == hWnd;
+    string bounds = hasRect
+      ? (" bounds=" + rect.Left + "," + rect.Top + "," + rect.Right + "," + rect.Bottom)
+      : String.Empty;
+    return "hwnd=" + Hex(hWnd) + " pid=" + pid + " active=" + active.ToString().ToLowerInvariant()
+      + bounds + " title=" + Title(hWnd);
+  }
+
+  public static string ListWindows() {
+    var lines = new List<string>();
+    foreach (IntPtr hWnd in VisibleWindows()) lines.Add(DescribeWindow(hWnd));
+    if (lines.Count == 0) return "<no visible top-level windows>";
+    return String.Join(Environment.NewLine, lines.ToArray());
+  }
+
+  private static IntPtr ParseHandle(string raw) {
+    string value = (raw ?? String.Empty).Trim();
+    long parsed;
+    if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) {
+      try { parsed = Convert.ToInt64(value.Substring(2), 16); }
+      catch { throw new ArgumentException("invalid hwnd selector: " + raw); }
+    } else if (!Int64.TryParse(value, out parsed)) {
+      throw new ArgumentException("invalid hwnd selector: " + raw);
+    }
+    IntPtr hWnd = new IntPtr(parsed);
+    if (!IsWindow(hWnd)) throw new ArgumentException("window handle does not exist: " + raw);
+    return hWnd;
+  }
+
+  public static IntPtr ResolveWindow(string selector) {
+    string wanted = (selector ?? String.Empty).Trim();
+    if (wanted.Length == 0) throw new ArgumentException("empty window selector");
+
+    if (wanted.StartsWith("hwnd:", StringComparison.OrdinalIgnoreCase)) {
+      return ParseHandle(wanted.Substring(5));
+    }
+
+    if (wanted.StartsWith("pid:", StringComparison.OrdinalIgnoreCase)) {
+      uint wantedPid;
+      if (!UInt32.TryParse(wanted.Substring(4).Trim(), out wantedPid)) {
+        throw new ArgumentException("invalid pid selector: " + selector);
+      }
+      var matches = new List<IntPtr>();
+      IntPtr foreground = GetForegroundWindow();
+      foreach (IntPtr hWnd in VisibleWindows()) {
+        uint pid;
+        GetWindowThreadProcessId(hWnd, out pid);
+        if (pid == wantedPid) {
+          if (hWnd == foreground) return hWnd;
+          matches.Add(hWnd);
+        }
+      }
+      if (matches.Count == 0) throw new ArgumentException("no visible window for " + selector);
+      return matches[0];
+    }
+
+    var exact = new List<IntPtr>();
+    var partial = new List<IntPtr>();
+    foreach (IntPtr hWnd in VisibleWindows()) {
+      string title = Title(hWnd);
+      if (String.Equals(title, wanted, StringComparison.OrdinalIgnoreCase)) exact.Add(hWnd);
+      else if (title.IndexOf(wanted, StringComparison.OrdinalIgnoreCase) >= 0) partial.Add(hWnd);
+    }
+    var candidates = exact.Count > 0 ? exact : partial;
+    if (candidates.Count == 0) throw new ArgumentException("no visible window matches target: " + selector);
+    if (candidates.Count == 1) return candidates[0];
+    IntPtr active = GetForegroundWindow();
+    foreach (IntPtr candidate in candidates) if (candidate == active) return candidate;
+    throw new ArgumentException("window target is ambiguous; use pid: or hwnd: " + selector);
+  }
+
+  /**
+   * Focus and verify a top-level target. Input guards refuse to restore a
+   * minimized target because restoring changes geometry and invalidates prior
+   * screenshot coordinates. Explicit focus may restore it; the caller then
+   * receives a fresh screenshot before taking coordinate actions.
+   */
+  public static string FocusWindow(string selector, bool allowRestore) {
+    IntPtr hWnd = ResolveWindow(selector);
+    bool restored = false;
+    if (IsIconic(hWnd)) {
+      if (!allowRestore) {
+        throw new InvalidOperationException("target window is minimized; call focus, inspect the fresh screenshot, then retry the input action");
+      }
+      ShowWindowAsync(hWnd, SW_RESTORE);
+      restored = true;
+      Thread.Sleep(120);
+    }
+
+    IntPtr foreground = GetForegroundWindow();
+    uint ignored;
+    uint targetThread = GetWindowThreadProcessId(hWnd, out ignored);
+    uint currentThread = GetCurrentThreadId();
+    uint foregroundThread = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, out ignored);
+    bool attachedTarget = false;
+    bool attachedForeground = false;
+    try {
+      if (targetThread != 0 && targetThread != currentThread) {
+        attachedTarget = AttachThreadInput(currentThread, targetThread, true);
+      }
+      if (foregroundThread != 0 && foregroundThread != currentThread && foregroundThread != targetThread) {
+        attachedForeground = AttachThreadInput(currentThread, foregroundThread, true);
+      }
+      BringWindowToTop(hWnd);
+      SetForegroundWindow(hWnd);
+    } finally {
+      if (attachedForeground) AttachThreadInput(currentThread, foregroundThread, false);
+      if (attachedTarget) AttachThreadInput(currentThread, targetThread, false);
+    }
+
+    Thread.Sleep(100);
+    if (GetForegroundWindow() != hWnd) {
+      throw new InvalidOperationException("failed to focus target window; foreground is " + DescribeWindow(GetForegroundWindow()));
+    }
+    return DescribeWindow(hWnd) + " restored=" + restored.ToString().ToLowerInvariant();
+  }
+
+  private static void GuardTarget(string selector) {
+    if (!String.IsNullOrWhiteSpace(selector)) FocusWindow(selector, false);
   }
 
   public static void Move(int x, int y) {
@@ -341,6 +584,14 @@ public static class PhoenixDesktop {
     Thread.Sleep(25);
     for (int i = codes.Count - 1; i >= 0; i--) keybd_event(codes[i], 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
   }
+
+  public static void Guard(string selector) {
+    GuardTarget(selector);
+  }
+
+  public static string ForegroundSummary() {
+    return DescribeWindow(GetForegroundWindow());
+  }
 }
 "@
 
@@ -348,6 +599,7 @@ Add-Type -TypeDefinition $source -Language CSharp
 [PhoenixDesktop]::EnableDpiAwareness()
 $action = $env:PHX_ACTION
 $button = if ($env:PHX_BUTTON) { $env:PHX_BUTTON } else { 'left' }
+$target = $env:PHX_TARGET
 
 switch ($action) {
   'screenshot' {
@@ -371,21 +623,47 @@ switch ($action) {
       $bitmap.Dispose()
     }
   }
-  'move' { [PhoenixDesktop]::Move([int]$env:PHX_X, [int]$env:PHX_Y) }
-  'click' { [PhoenixDesktop]::Click([int]$env:PHX_X, [int]$env:PHX_Y, $button, 1) }
-  'double_click' { [PhoenixDesktop]::Click([int]$env:PHX_X, [int]$env:PHX_Y, $button, 2) }
-  'drag' { [PhoenixDesktop]::Drag([int]$env:PHX_X, [int]$env:PHX_Y, [int]$env:PHX_X2, [int]$env:PHX_Y2, $button) }
-  'type' { [PhoenixDesktop]::TypeText($env:PHX_TEXT) }
-  'key' { [PhoenixDesktop]::KeyCombo($env:PHX_KEYS) }
+  'windows' { [PhoenixDesktop]::ListWindows() }
+  'focus' { [PhoenixDesktop]::FocusWindow($target, $true) }
+  'move' {
+    [PhoenixDesktop]::Guard($target)
+    [PhoenixDesktop]::Move([int]$env:PHX_X, [int]$env:PHX_Y)
+    [PhoenixDesktop]::ForegroundSummary()
+  }
+  'click' {
+    [PhoenixDesktop]::Guard($target)
+    [PhoenixDesktop]::Click([int]$env:PHX_X, [int]$env:PHX_Y, $button, 1)
+    [PhoenixDesktop]::ForegroundSummary()
+  }
+  'double_click' {
+    [PhoenixDesktop]::Guard($target)
+    [PhoenixDesktop]::Click([int]$env:PHX_X, [int]$env:PHX_Y, $button, 2)
+    [PhoenixDesktop]::ForegroundSummary()
+  }
+  'drag' {
+    [PhoenixDesktop]::Guard($target)
+    [PhoenixDesktop]::Drag([int]$env:PHX_X, [int]$env:PHX_Y, [int]$env:PHX_X2, [int]$env:PHX_Y2, $button)
+    [PhoenixDesktop]::ForegroundSummary()
+  }
+  'type' {
+    [PhoenixDesktop]::Guard($target)
+    [PhoenixDesktop]::TypeText($env:PHX_TEXT)
+    [PhoenixDesktop]::ForegroundSummary()
+  }
+  'key' {
+    [PhoenixDesktop]::Guard($target)
+    [PhoenixDesktop]::KeyCombo($env:PHX_KEYS)
+    [PhoenixDesktop]::ForegroundSummary()
+  }
   'scroll' {
+    [PhoenixDesktop]::Guard($target)
     if ($env:PHX_X -and $env:PHX_Y) { [PhoenixDesktop]::Move([int]$env:PHX_X, [int]$env:PHX_Y) }
     [PhoenixDesktop]::Scroll([int]$env:PHX_DELTA)
+    [PhoenixDesktop]::ForegroundSummary()
   }
   default { throw "unsupported PHX_ACTION: $action" }
 }
 `
-
-const ENCODED_WINDOWS_DRIVER = Buffer.from(WINDOWS_DRIVER, 'utf16le').toString('base64')
 
 function putNumber(env: Record<string, string>, key: string, value: number | undefined): void {
   if (value !== undefined) env[key] = String(value)
@@ -393,8 +671,9 @@ function putNumber(env: Record<string, string>, key: string, value: number | und
 
 /**
  * Build the injection-safe native invocation; model strings travel only as environment values.
+ * The fixed driver is streamed over stdin so its size never consumes the Windows command-line budget.
  * @param args - Validated model-facing Computer Use arguments.
- * @returns Fixed PowerShell executable/argv plus isolated environment values.
+ * @returns Fixed PowerShell executable/argv, isolated environment values, and fixed stdin driver source.
  */
 export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvocation {
   validateComputerArgs(args)
@@ -404,14 +683,49 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   putNumber(env, 'PHX_X2', args.x2)
   putNumber(env, 'PHX_Y2', args.y2)
   putNumber(env, 'PHX_DELTA', args.delta)
+  if (args.target !== undefined) env.PHX_TARGET = args.target
   if (args.button !== undefined) env.PHX_BUTTON = args.button
   if (args.text !== undefined) env.PHX_TEXT = args.text
   if (args.keys !== undefined) env.PHX_KEYS = args.keys
   return {
     file: 'powershell.exe',
-    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', ENCODED_WINDOWS_DRIVER],
+    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', '-'],
     env,
+    // Windows PowerShell executes a multi-line stdin command only after the blank
+    // line that terminates its final compound statement.
+    stdin: `${WINDOWS_DRIVER}\n`,
   }
+}
+
+function executeComputerInvocation(invocation: ComputerInvocation, signal?: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = execFile(invocation.file, [...invocation.argv], {
+      encoding: 'utf8',
+      windowsHide: true,
+      maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, ...invocation.env },
+      ...signal === undefined ? {} : { signal },
+    }, (error, stdout) => {
+      if (error !== null) {
+        reject(error instanceof Error ? error : new Error('Computer Use process failed', { cause: error }))
+        return
+      }
+      resolve(stdout.trim())
+    })
+
+    if (child.stdin === null) {
+      child.kill()
+      reject(new Error('Computer Use PowerShell process did not expose stdin'))
+      return
+    }
+
+    child.stdin.on('error', (error) => {
+      if ((error as NodeJS.ErrnoException).code === 'EPIPE') return
+      child.kill()
+      reject(error)
+    })
+    child.stdin.end(invocation.stdin, 'utf8')
+  })
 }
 
 /**
@@ -426,18 +740,11 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
   }
   signal?.throwIfAborted()
   const invocation = windowsComputerInvocation(args)
-  const { stdout } = await execFileAsync(invocation.file, [...invocation.argv], {
-    encoding: 'utf8',
-    windowsHide: true,
-    maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, ...invocation.env },
-    ...signal === undefined ? {} : { signal },
-  })
-  return stdout.trim()
+  return await executeComputerInvocation(invocation, signal)
 }
 
 function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; reversible: boolean } {
-  if (action === 'move' || action === 'scroll') return { risk: 'low', reversible: true }
+  if (action === 'move' || action === 'scroll' || action === 'focus') return { risk: 'low', reversible: true }
   if (action === 'click' || action === 'double_click' || action === 'drag') return { risk: 'medium', reversible: false }
   return { risk: 'high', reversible: false }
 }
@@ -450,7 +757,7 @@ async function authorizeComputerAction(
 ): Promise<void> {
   const mode = computerModeForSandbox(sandboxMode)
   assertComputerActionAllowed(mode, action)
-  if (action === 'screenshot' || sandboxMode === 'danger-full-access') return
+  if (action === 'screenshot' || action === 'windows' || sandboxMode === 'danger-full-access') return
   const agent = exec.agent
   if (agent === undefined) throw new Error('Computer input requires an owning agent session')
   const approval = ctx.get('approval')
@@ -471,6 +778,61 @@ async function authorizeComputerAction(
 }
 
 /**
+ * Wait for desktop state to settle and release cancellation listeners on every completion path.
+ * @param ms - Milliseconds to wait before the next observation.
+ * @param signal - Optional action cancellation signal.
+ * @returns A promise that resolves after the delay or rejects when cancelled.
+ */
+export function waitForComputerSettle(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal === undefined) return new Promise(resolve => setTimeout(resolve, ms))
+  const abortError = (): Error => signal.reason instanceof Error
+    ? signal.reason
+    : new Error('Computer action aborted', { cause: signal.reason })
+  if (signal.aborted) return Promise.reject(abortError())
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      reject(abortError())
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+async function attachDesktopScreenshot(
+  ctx: Context,
+  exec: ToolRunContext,
+  base64Png: string,
+  label: string,
+): Promise<void> {
+  if (exec.agent === undefined) throw new Error('Computer screenshot requires an owning agent session')
+  if (base64Png.length === 0) throw new Error('Computer screenshot driver returned no image bytes')
+  const bytes = Buffer.from(base64Png, 'base64')
+  if (bytes.length === 0) throw new Error('Computer screenshot decoded to an empty image')
+  const attachments = attachmentWriter(ctx)
+  if (attachments === undefined) throw new Error('Computer screenshot requires the attachment service')
+  const attachment = await attachments.saveImage({
+    data: bytes,
+    mediaType: 'image/png',
+    name: 'phoenix-desktop.png',
+  })
+  const imageBlock = { type: 'image', attachment } as unknown as ContentBlock
+  exec.deferContext(createUserMessage({
+    content: [
+      {
+        type: 'text',
+        text: `${label} (${attachment.width}x${attachment.height}). Treat this fresh observation as the source of truth; do not infer success from input injection alone.`,
+      },
+      imageBlock,
+    ],
+    source: { kind: 'plugin', plugin: 'computer-use' },
+  }))
+}
+
+/**
  * Build the Windows Computer Use definition without executing desktop operations.
  * @param ctx - PHOENIX composition carrying tools, shell policy, and optional attachments/approval capabilities.
  * @returns Tool definition for runtime registration or platform-independent schema collection.
@@ -481,14 +843,15 @@ export function createComputerTool(ctx: Context): ToolDefinition {
 
   return defineTool({
     name: 'computer',
-    description: 'Control the Windows desktop with a closed action set. Use screenshot to observe the current virtual desktop; the screenshot is injected as a durable image attachment for the next model step. Input actions are move, click, double_click, drag, type, key, and scroll. read-only permission is observe-only; workspace-write allows input through user approval; danger-full-access allows input without prompts. Never guess coordinates when a fresh screenshot can ground them.',
+    description: 'Control the Windows desktop with window-aware actions. Before controlling an external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
     parameters: {
       action: {
         type: 'string',
         required: true,
-        enum: ['screenshot', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
-        description: 'Desktop operation to perform.',
+        enum: ['screenshot', 'windows', 'focus', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
+        description: 'Desktop operation. windows lists visible top-level windows; focus activates a target and verifies foreground identity.',
       },
+      target: { type: 'string', description: 'Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus and strongly recommended for external-app input.' },
       x: { type: 'integer', description: 'Screen X coordinate. Required for move/click/double_click/drag; optional with scroll.' },
       y: { type: 'integer', description: 'Screen Y coordinate. Required for move/click/double_click/drag; optional with scroll.' },
       x2: { type: 'integer', description: 'Drag destination X coordinate.' },
@@ -505,13 +868,19 @@ export function createComputerTool(ctx: Context): ToolDefinition {
         properties: {
           action: { type: 'string', required: true },
           status: { type: 'string', required: true, const: 'ok' },
+          details: { type: 'string' },
+          postScreenshot: { type: 'boolean', required: true },
         },
       },
       render: (_args, value) => [{
         type: 'text',
-        text: value.action === 'screenshot'
-          ? 'Desktop screenshot captured and attached for the next model step.'
-          : `Desktop ${value.action} completed.`,
+        text: value.action === 'windows'
+          ? `Visible top-level windows:\n${value.details ?? '<none>'}`
+          : value.action === 'screenshot'
+            ? 'Desktop screenshot captured and attached for the next model step.'
+            : value.postScreenshot
+              ? `Desktop ${value.action} input sent and a fresh post-action screenshot was attached. Verify the visible result before proceeding.`
+              : `Desktop ${value.action} input sent.`,
       }],
     },
     async execute(args: ComputerToolArgs, exec) {
@@ -520,29 +889,26 @@ export function createComputerTool(ctx: Context): ToolDefinition {
       const policy = sandboxPolicy?.resolve(session === undefined ? {} : { session })
       const sandboxMode = policy?.mode ?? deploymentDefault
       await authorizeComputerAction(ctx, exec, args.action, sandboxMode)
+
       const output = await runWindowsComputerAction(args, exec.signal)
+      let postScreenshot = false
+
       if (args.action === 'screenshot') {
-        if (exec.agent === undefined) throw new Error('Computer screenshot requires an owning agent session')
-        if (output.length === 0) throw new Error('Computer screenshot driver returned no image bytes')
-        const bytes = Buffer.from(output, 'base64')
-        if (bytes.length === 0) throw new Error('Computer screenshot decoded to an empty image')
-        const attachments = attachmentWriter(ctx)
-        if (attachments === undefined) throw new Error('Computer screenshot requires the attachment service')
-        const attachment = await attachments.saveImage({
-          data: bytes,
-          mediaType: 'image/png',
-          name: 'phoenix-desktop.png',
-        })
-        const imageBlock = { type: 'image', attachment } as unknown as ContentBlock
-        exec.deferContext(createUserMessage({
-          content: [
-            { type: 'text', text: `PHOENIX desktop screenshot (${attachment.width}x${attachment.height}).` },
-            imageBlock,
-          ],
-          source: { kind: 'plugin', plugin: 'computer-use' },
-        }))
+        await attachDesktopScreenshot(ctx, exec, output, 'PHOENIX desktop screenshot')
+        postScreenshot = true
+      } else if (shouldCaptureAfterAction(args.action)) {
+        await waitForComputerSettle(POST_ACTION_SETTLE_MS, exec.signal)
+        const fresh = await runWindowsComputerAction({ action: 'screenshot' }, exec.signal)
+        await attachDesktopScreenshot(ctx, exec, fresh, `PHOENIX post-${args.action} desktop screenshot`)
+        postScreenshot = true
       }
-      return { action: args.action, status: 'ok' as const }
+
+      return {
+        action: args.action,
+        status: 'ok' as const,
+        ...output.length > 0 && args.action !== 'screenshot' ? { details: output } : {},
+        postScreenshot,
+      }
     },
   })
 }

@@ -231,7 +231,7 @@ The bash tool is the model-facing consumer of the bash executor seam. A `run_in_
 
 ### `computer`
 
-Control the Windows desktop with a closed action set. Use screenshot to observe the current virtual desktop; the screenshot is injected as a durable image attachment for the next model step. Input actions are move, click, double_click, drag, type, key, and scroll. read-only permission is observe-only; workspace-write allows input through user approval; danger-full-access allows input without prompts. Never guess coordinates when a fresh screenshot can ground them.
+Control the Windows desktop with window-aware actions. Before controlling an external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.
 
 ```json
 {
@@ -239,9 +239,11 @@ Control the Windows desktop with a closed action set. Use screenshot to observe 
   "properties": {
     "action": {
       "type": "string",
-      "description": "Desktop operation to perform.",
+      "description": "Desktop operation. windows lists visible top-level windows; focus activates a target and verifies foreground identity.",
       "enum": [
         "screenshot",
+        "windows",
+        "focus",
         "move",
         "click",
         "double_click",
@@ -250,6 +252,10 @@ Control the Windows desktop with a closed action set. Use screenshot to observe 
         "key",
         "scroll"
       ]
+    },
+    "target": {
+      "type": "string",
+      "description": "Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus and strongly recommended for external-app input."
     },
     "x": {
       "type": "integer",

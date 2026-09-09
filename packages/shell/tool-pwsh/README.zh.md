@@ -14,6 +14,12 @@
 
 Windows 组合还会注册 `computer`。任何主机都可以为文档收集其定义；原生桌面执行仍仅限 Windows，并保留会话权限与审批检查。
 
+### `computer`
+
+`computer` 公开一组封闭的 Windows 桌面动作：`screenshot`、`windows`、`focus`、`move`、`click`、`double_click`、`drag`、`type`、`key` 和 `scroll`。`windows` 枚举可见顶层窗口。`focus` 要求标题、标题子串、`pid:1234` 或 `hwnd:0x123ABC` selector；同一个可选 `target` 也会在输入注入前确认所选窗口位于前台，从而保护输入动作。标题有歧义时会失败并要求 pid 或 handle。最小化的目标必须先 focus，使模型在复用坐标前获得新截图。
+
+固定 PowerShell/C# driver 通过 stdin 传输，以避开 Windows 命令行长度限制。模型控制的文本和 selector 只通过 `PHX_*` 环境变量传递，绝不成为可执行源码。`read-only` 允许 `screenshot` 与 `windows`；`workspace-write` 通过普通 approval service 路由输入；`danger-full-access` 是明确的无提示桌面权限。除鼠标移动外，每个改变状态的动作都会短暂等待、捕获新截图并将图像延迟注入模型上下文。成功结果表示 Windows 接受了该操作；模型必须用新观察验证应用层结果。
+
 ### `pwsh`
 
 | Arg | Type | Notes |
@@ -68,11 +74,11 @@ Non-zero exits are reported as `[exit code: N]` markers; investigate failures be
 
 #### 模型看到的内容
 
-模型看到生成的 [`pwsh` schema](../../../docs/tool-catalog.zh.md#phoenix-aidsh-tool-pwsh)。按 agent 作用域的工具限制可以移除该 agent 的定义。
+模型在相应工具可用时看到生成的 [`computer`](../../../docs/tool-catalog.zh.md#computer) 与 [`pwsh`](../../../docs/tool-catalog.zh.md#pwsh) schema。按 agent 作用域的工具限制可以移除任一定义。Computer 结果返回所选动作、操作系统层状态、可选窗口明细，以及是否附加了新截图；可见窗口枚举为每个窗口返回一条确定性文本。
 
 #### Token 影响
 
-工具可见的每个请求上的固定 schema 成本。
+每个工具可见时产生固定 schema 成本。Computer 截图只在请求观察或执行改变状态的动作后增加有界图像上下文。
 
 #### KV Cache 影响
 

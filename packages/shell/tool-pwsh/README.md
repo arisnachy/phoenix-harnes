@@ -14,6 +14,12 @@ The plugin also contributes the `tool:pwsh` prompt section (order 105): non-zero
 
 Windows compositions additionally register `computer`. Its definition can be collected for documentation on any host; native desktop execution remains Windows-only and retains the session's permission and approval checks.
 
+### `computer`
+
+`computer` exposes a closed Windows desktop action set: `screenshot`, `windows`, `focus`, `move`, `click`, `double_click`, `drag`, `type`, `key`, and `scroll`. `windows` enumerates visible top-level windows. `focus` requires a title, title substring, `pid:1234`, or `hwnd:0x123ABC` selector; the same optional `target` guards input actions by verifying that the selected window is foreground before input is injected. An ambiguous title fails and asks for a pid or handle. A minimized target must be focused first so the model receives a fresh screenshot before reusing coordinates.
+
+The fixed PowerShell/C# driver is streamed over stdin to avoid the Windows command-line limit. Model-controlled text and selectors travel only in `PHX_*` environment variables and never become executable source. `read-only` permits `screenshot` and `windows`; `workspace-write` routes input through the normal approval service; `danger-full-access` is the explicit no-prompt desktop authority. Every state-changing action except pointer movement waits briefly, captures a new screenshot, and defers that image into model context. A successful result means Windows accepted the operation; the model must use the fresh observation to verify the application-level outcome.
+
 ### `pwsh`
 
 | Arg | Type | Notes |
@@ -68,11 +74,11 @@ Prefix-stable while the registration scope and prompt text are unchanged. Plugin
 
 #### What the model sees
 
-The model sees the generated [`pwsh` schema](../../../docs/tool-catalog.md#phoenix-aidsh-tool-pwsh). Agent-scoped tool restrictions can remove the definition for that agent.
+The model sees the generated [`computer`](../../../docs/tool-catalog.md#computer) and [`pwsh`](../../../docs/tool-catalog.md#pwsh) schemas when each tool is available. Agent-scoped tool restrictions can remove either definition for that agent. Computer results return the selected action, OS-level status, optional window details, and whether a fresh screenshot was attached; visible-window enumeration returns one deterministic line per window.
 
 #### Token effect
 
-Fixed schema cost on every request where the tool is visible.
+Fixed schema cost on every request where each tool is visible. Computer screenshots add bounded image context only after a requested observation or state-changing action.
 
 #### KV Cache effect
 
