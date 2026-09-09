@@ -1,0 +1,32 @@
+PHOENIX ORIGINAL CONTRIBUTIONS LICENSE
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+Copyright (c) 2026 Arisnachy Gómez Díaz.
+
+To the extent that copyright in PHOENIX-specific original contributions is
+held or controlled by the PHOENIX project owner, those contributions are free
+software: you may redistribute them and/or modify them under the terms of the
+GNU Affero General Public License as published by the Free Software Foundation,
+either version 3 of that License, or (at your option) any later version.
+
+The authoritative GNU Affero General Public License version 3 text is published
+by the Free Software Foundation at:
+https://www.gnu.org/licenses/agpl-3.0.html
+
+Distributors of covered PHOENIX code must provide recipients with a complete
+copy of the applicable GNU Affero General Public License and satisfy all of its
+requirements, including the source-availability obligations that apply when a
+modified covered work is used to provide interaction to users over a computer
+network.
+
+This license does not alter or replace the MIT license applicable to upstream
+DeepSeek Harness material or packages that explicitly declare MIT, and it does
+not alter any third-party license. See LICENSE and LICENSING.md for scope.
+
+No trademark rights in PHOENIX, its logo, or its distinctive branding are
+granted by this software license. See TRADEMARKS.md.
+
+Organizations that need to use PHOENIX-specific code without the obligations
+of AGPL-3.0-or-later may request a separate written commercial license for
+rights that the PHOENIX project owner is legally able to license. See
+COMMERCIAL-LICENSE.md.

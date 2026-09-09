@@ -11,3 +11,7 @@
 - 验证：
 
 </details>
+
+## Contributor licensing
+
+- [ ] I have read and agree to `CLA.md`, I have the right to submit this contribution, and I have identified any third-party material or license obligations included in it.

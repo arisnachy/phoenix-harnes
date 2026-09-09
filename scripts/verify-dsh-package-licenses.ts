@@ -1,5 +1,8 @@
 /**
- * Enforce the MIT license declaration for repository-owned DSH npm packages.
+ * Enforce the MIT license declaration for published repository-owned DSH npm packages.
+ * The private PHOENIX workspace root is intentionally excluded so the product layer
+ * can carry its own copyleft/commercial licensing policy without relicensing upstream
+ * compatibility packages.
  * @module scripts/verify-dsh-package-licenses
  */
 
@@ -9,7 +12,7 @@ import { resolve, sep } from 'node:path'
 const ROOT = resolve(import.meta.dirname, '..')
 const DSH_PACKAGE_NAME = /^@phoenix-ai\/dsh(?:-|$)/
 
-/** Result of checking every DSH package reachable through the root workspace list. */
+/** Result of checking every published DSH package reachable through the root workspace list. */
 export interface DshPackageLicenseReport {
   /** Number of DSH package manifests checked. */
   packageCount: number
@@ -50,7 +53,7 @@ function printable(value: unknown): string {
 }
 
 /**
- * Check every DSH npm package declared by the repository workspace.
+ * Check every published DSH npm package declared by the repository workspace.
  * @param root - absolute repository root containing the workspace package.json.
  * @returns the checked package count and every non-MIT declaration.
  */
@@ -60,6 +63,8 @@ export function inspectDshPackageLicenses(root: string): DshPackageLicenseReport
 
   for (const file of workspaceManifestPaths(root)) {
     const manifest = readManifest(root, file)
+    if (file === 'package.json' && manifest.private === true) continue
+
     const name = manifest.name
     if (typeof name !== 'string' || !DSH_PACKAGE_NAME.test(name)) continue
 
@@ -83,7 +88,7 @@ if (process.argv[1] && import.meta.filename === resolve(process.argv[1])) {
     process.exitCode = 1
   } else {
     process.stdout.write(
-      `verify-dsh-package-licenses: ${String(report.packageCount)} DSH package(s) checked; all declare MIT.\n`,
+      `verify-dsh-package-licenses: ${String(report.packageCount)} published DSH package(s) checked; all declare MIT.\n`,
     )
   }
 }

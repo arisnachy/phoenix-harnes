@@ -1,3 +1,39 @@
+PHOENIX REPOSITORY LICENSING NOTICE
+
+Copyright (c) 2026 Arisnachy Gómez Díaz — PHOENIX original contributions.
+Copyright (c) 2026 DeepSeek — upstream DeepSeek Harness portions.
+
+This repository contains material under more than one license. This file is not
+a blanket MIT grant for every PHOENIX-specific contribution.
+
+1. PHOENIX-specific original contributions controlled by the PHOENIX project
+   owner are licensed under GNU Affero General Public License version 3 or any
+   later version (AGPL-3.0-or-later), unless a file or package carries a more
+   specific license notice. See LICENSE-PHOENIX and LICENSING.md.
+
+2. Code derived from the upstream DeepSeek Harness project, and repository
+   packages that explicitly declare "license": "MIT", retain their MIT terms.
+   The upstream MIT notice is reproduced below and must be preserved.
+
+3. Vendored and third-party material remains under its own license. See
+   THIRD_PARTY_NOTICES.md and license files shipped with those components.
+
+4. The PHOENIX name, logo, visual identity, and other source-identifying brand
+   assets are not licensed by the software licenses. See TRADEMARKS.md.
+
+5. Nothing in this notice revokes rights already granted for historical copies
+   of code under MIT or another license. The protected PHOENIX licensing policy
+   applies prospectively to PHOENIX-specific contributions and distributions
+   governed by this notice, subject to the rights of upstream and third-party
+   copyright holders.
+
+6. A separate commercial license may be available for PHOENIX-specific code
+   where the project owner has the right to grant one. See COMMERCIAL-LICENSE.md.
+
+--------------------------------------------------------------------------
+UPSTREAM MIT LICENSE
+--------------------------------------------------------------------------
+
 MIT License
 
 Copyright (c) 2026 DeepSeek

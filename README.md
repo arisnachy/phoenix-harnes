@@ -76,7 +76,7 @@ Use this repository's [Issues](https://github.com/arisnachy/phoenix-harnes/issue
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Contributions are also subject to the [PHOENIX Contributor License Agreement](CLA.md).
 
 ## Development
 
@@ -88,12 +88,14 @@ For agents, follow [AGENTS.md](AGENTS.md).
 
 ## Upstream foundation and attribution
 
-PHOENIX is a downstream evolution built on [DeepSeek Harness](https://github.com/arisnachy/phoenix-harnes), the MIT-licensed open-source agent harness developed by [DeepSeek AI](https://deepseek.com). Its plugin architecture is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
+PHOENIX is a downstream evolution built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), the MIT-licensed open-source agent harness developed by [DeepSeek AI](https://deepseek.com). Its plugin architecture is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
 
 PHOENIX does not claim authorship of upstream code. Upstream attribution and license notices are preserved while PHOENIX-specific work remains clearly separated as downstream evolution.
 
 ## License
 
-[MIT](LICENSE)
+PHOENIX-specific original contributions controlled by the project owner are licensed under **AGPL-3.0-or-later** unless a more specific notice applies. Upstream DeepSeek Harness material and packages that explicitly declare MIT retain their **MIT** terms; third-party components retain their own licenses.
+
+See [LICENSE](LICENSE) for the repository-wide scope notice, [LICENSE-PHOENIX](LICENSE-PHOENIX) and [LICENSING.md](LICENSING.md) for the PHOENIX license, [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) for proprietary/commercial licensing, and [TRADEMARKS.md](TRADEMARKS.md) for brand rules.
 
 Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

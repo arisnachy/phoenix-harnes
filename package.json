@@ -1,7 +1,7 @@
 {
   "name": "@phoenix-ai/dsh-root",
   "version": "0.1.1-rc.2",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.7.0",
