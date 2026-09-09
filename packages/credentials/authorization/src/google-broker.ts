@@ -240,9 +240,6 @@ export function resolveGoogleOAuthClientId(
 
 /**
  * Resolve broker configuration without inventing scopes or a deployment identity.
- * A non-environment explicit client id remains authoritative for tests/embedded
- * deployments; normal PHOENIX environment configuration is treated as a fallback
- * behind the existing local Desktop OAuth client.
  * @param config - deployment-owned Google OAuth client id and requested scopes.
  * @returns validated, normalized broker configuration.
  */
@@ -257,14 +254,18 @@ export function resolveGoogleSpec(config: Config): ResolvedSpec {
   if (new Set(scopes).size !== scopes.length) {
     throw new TypeError('authorization-google: scopes must not contain duplicates')
   }
-  const explicit = nonEmpty(config.clientId) ? config.clientId.trim() : undefined
-  const ambient = nonEmpty(process.env.PHOENIX_GOOGLE_OAUTH_CLIENT_ID)
-    ? process.env.PHOENIX_GOOGLE_OAUTH_CLIENT_ID.trim()
-    : undefined
+  const clientId = nonEmpty(config.clientId) ? config.clientId.trim() : undefined
+  return clientId === undefined ? { scopes } : { clientId, scopes }
+}
+
+function resolveRuntimeGoogleSpec(config: Config): ResolvedSpec {
+  const spec = resolveGoogleSpec(config)
+  const ambient = configuredClientId(undefined)
+  const explicit = spec.clientId
   const clientId = explicit !== undefined && explicit !== ambient
     ? explicit
     : resolveGoogleOAuthClientId(explicit)
-  return clientId === undefined ? { scopes } : { clientId, scopes }
+  return clientId === undefined ? { scopes: spec.scopes } : { clientId, scopes: spec.scopes }
 }
 
 function base64url(value: Buffer): string {
@@ -536,7 +537,7 @@ export default class GoogleApiBroker extends Service {
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
-    this.spec = resolveGoogleSpec(config)
+    this.spec = resolveRuntimeGoogleSpec(config)
     this.startupCleanup = this.purgeStaleRecord()
     // Cleanup starts at construction so a secret grant or marker left by an
     // earlier process cannot be mistaken for this process's live session.
