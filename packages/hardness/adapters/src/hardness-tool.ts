@@ -38,6 +38,7 @@ type HardnessToolResult =
   }
 
 const SENSITIVE_RENDER_KEY = /(?:api[-_]?key|authorization|credential|password|private(?:[-_]?key)?|secret|token)/i
+const TECHNICAL_MISSION_DEBT = /(?:no acquisition\/build provider handles|no executable surface|no executor owns|executor unavailable|capability (?:is )?unavailable|no (?:registered |matching )?capability)/i
 
 function containsSensitiveRenderKey(value: JsonValue): boolean {
   const pending: JsonValue[] = [value]
@@ -67,15 +68,29 @@ function safeRendered(value: unknown): JsonValue | undefined {
   return snapshot === undefined || containsSensitiveRenderKey(snapshot) ? undefined : snapshot
 }
 
+/** Technical capability gaps are work for PHOENIX, not external dependencies. */
+function recoverableTechnicalDebt(result: Extract<HardnessMissionResult, { kind: 'blocked' }>): boolean {
+  return TECHNICAL_MISSION_DEBT.test(result.reason)
+}
+
 function projectMissionResult(result: HardnessMissionResult): HardnessToolResult {
   switch (result.kind) {
-    case 'blocked':
+    case 'blocked': {
+      if (recoverableTechnicalDebt(result)) {
+        return {
+          kind: 'blocked',
+          reason: result.reason,
+          mission_status: 'RECOVERING',
+          next_action: 'repair_and_replan',
+        }
+      }
       return {
         kind: 'blocked',
         reason: result.reason,
         mission_status: result.status ?? (result.retryable === true ? 'RECOVERING' : 'WAITING_EXTERNAL'),
         next_action: result.nextAction ?? (result.retryable === true ? 'retry_with_alternative' : 'wait_for_dependency'),
       }
+    }
     case 'completed':
     {
       const rendered = safeRendered(result.rendered)
@@ -108,7 +123,12 @@ function deferMissionRecovery(exec: ToolRunContext, value: Extract<HardnessToolR
         + `Reason: ${JSON.stringify(value.reason)}\n`
         + 'Do not treat this blocked result as mission completion. Keep the original objective active. '
         + 'Apply WALL_PROTOCOL: inspect the root cause, use the stated next action, and continue until '
-        + 'the final deliverable is independently verified by the judge or the user explicitly cancels.\n'
+        + 'the final deliverable is independently verified by the judge or the user explicitly cancels. '
+        + 'An absent tool, capability, surface, or executor is internal mission debt: inspect ATLAS and connector inventories, '
+        + 'try a materially different existing route, then acquire or build the smallest governed helper the runtime permits, '
+        + 'test it before use, and record the failure-to-solution learning so the same failure is not repeated. '
+        + 'Use WAITING_EXTERNAL only for a dependency PHOENIX cannot create or satisfy itself, such as direct human authorization, '
+        + 'a credential only the human controls, a required physical action, or unavailable external infrastructure.\n'
         + '</hardness_mission_recovery>',
     }],
     source: {
@@ -136,7 +156,7 @@ function executionContext(exec: { readonly callId: CapabilityExecutionContext['c
 export function createHardnessTool(runner: HardnessMissionRunner): ToolDefinition {
   return defineTool({
     name: 'hardness_run',
-    description: 'Run one governed HARDNESS capability mission. A blocked result is non-terminal: read mission_status and next_action, apply WALL_PROTOCOL, and continue until the final deliverable is independently verified by the judge or the user explicitly cancels.',
+    description: 'Run one governed HARDNESS capability mission. A blocked result is non-terminal: read mission_status and next_action, apply WALL_PROTOCOL, resolve technical mission debt by finding/acquiring/building and testing the needed capability, and continue until the final deliverable is independently verified by the judge or the user explicitly cancels.',
     parameters: {
       need: {
         type: 'object',
