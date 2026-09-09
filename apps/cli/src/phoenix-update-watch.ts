@@ -39,17 +39,26 @@ export function startPhoenixUpdateWatcher(): void {
 
 function startWatcher(root: string, worker: string, label: string): void {
   try {
+    // A direct `pnpm phoenix` launch is not owned by the Windows supervisor.
+    // In that legacy path the updater itself must survive the Host process so it
+    // can observe the restart request, activate the prepared checkout, and
+    // relaunch through phoenix-windows.cmd. A detached child with inherited
+    // stdio is still tied to the parent console on Windows, so disconnect its
+    // handles as well. Supervised launches return above and keep normal logs.
+    const detachedForWindowsRestart = process.platform === 'win32'
     const child = spawn(process.execPath, [worker, '--watch', '--parent-pid', String(process.pid)], {
       cwd: root,
       env: process.env,
-      stdio: ['ignore', 'inherit', 'inherit'],
+      detached: detachedForWindowsRestart,
+      stdio: detachedForWindowsRestart ? 'ignore' : ['ignore', 'inherit', 'inherit'],
       windowsHide: true,
     })
     child.once('error', (error) => {
       console.error(`[${label}] watcher could not start: ${error.message}`)
     })
-    // The watcher observes this pid and owns no authority over shutdown. If the
-    // host decides to exit, an updater child must never keep it alive.
+    // The watcher observes this pid and must not keep the Host alive. On
+    // Windows it intentionally remains alive after Host exit long enough to
+    // finish a requested activation and relaunch PHOENIX.
     child.unref()
   } catch (error) {
     console.error(`[${label}] watcher could not start: ${error instanceof Error ? error.message : String(error)}`)
