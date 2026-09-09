@@ -26,4 +26,14 @@ describe('prepared client self-update contract', () => {
 
     expect(promoter).toContain("if (source === root && !values['verify-only'])")
   })
+
+  it('binds cached prepared updates to the live base and a clean live checkout', () => {
+    const updater = source('scripts/phoenix-auto-update.mjs')
+
+    expect(updater).toContain('if (prepared.base !== currentCommit(root)) return false')
+    expect(updater).toContain('if (!cleanWorktree(root)) return false')
+    expect(updater).toContain("const stageStatus = git(stage, ['status', '--porcelain=v1', '--untracked-files=all'], { allowFailure: true })")
+    expect(updater).toContain("phase: 'worktree'")
+    expect(updater).toContain('local changes block preparation/activation')
+  })
 })
