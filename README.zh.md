@@ -76,7 +76,7 @@ PHOENIX 的反馈、缺陷、设计讨论和支持请使用本仓库的 [Issues]
 
 ## 参与贡献
 
-参见 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)。
+参见 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)。贡献还受 [PHOENIX Contributor License Agreement](CLA.md) 约束。
 
 ## 开发
 
@@ -88,12 +88,14 @@ Windows 安装、IDE 打包、原生 sandbox 边界与 continuity 状态参见 [
 
 ## 上游基础与署名
 
-PHOENIX 是基于 [DeepSeek Harness](https://github.com/arisnachy/phoenix-harnes) 构建的下游演进项目；该项目是由 [DeepSeek AI](https://deepseek.com) 开发并采用 MIT 许可证的开源 agent harness。其插件架构由 [Cordis](https://github.com/cordiverse/cordis) 驱动，设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
+PHOENIX 是基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 构建的下游演进项目；该项目是由 [DeepSeek AI](https://deepseek.com) 开发并采用 MIT 许可证的开源 agent harness。其插件架构由 [Cordis](https://github.com/cordiverse/cordis) 驱动，设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
 
 PHOENIX 不声称拥有上游代码的作者身份。上游署名与许可证声明会被保留，同时 PHOENIX 专属工作会明确作为下游演进进行区分。
 
 ## 许可证
 
-[MIT](LICENSE)
+由项目所有者持有或控制版权的 PHOENIX 专属原创贡献，除非存在更具体的许可声明，否则采用 **AGPL-3.0-or-later**。上游 DeepSeek Harness 材料以及明确声明 MIT 的包继续保留其 **MIT** 条款；第三方组件继续适用各自许可证。
+
+仓库整体许可范围见 [LICENSE](LICENSE)，PHOENIX 许可见 [LICENSE-PHOENIX](LICENSE-PHOENIX) 与 [LICENSING.md](LICENSING.md)，专有/商业许可见 [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)，品牌规则见 [TRADEMARKS.md](TRADEMARKS.md)。
 
 第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
