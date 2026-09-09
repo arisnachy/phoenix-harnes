@@ -21,14 +21,15 @@ function createWorkspace(): string {
   roots.push(root)
   writeManifest(root, 'package.json', {
     name: '@phoenix-ai/dsh-root',
-    license: 'MIT',
+    license: 'AGPL-3.0-or-later',
+    private: true,
     workspaces: ['apps/*', 'packages/*/*', 'vendor/*'],
   })
   return root
 }
 
 describe('DSH package license gate', () => {
-  it('checks root, unhyphenated CLI, and dsh-prefixed package names while ignoring other families', () => {
+  it('allows the private PHOENIX root to use AGPL while enforcing MIT on published DSH packages', () => {
     const root = createWorkspace()
     writeManifest(root, 'apps/cli/package.json', { name: '@phoenix-ai/dsh', license: 'MIT' })
     writeManifest(root, 'packages/core/agent/package.json', {
@@ -41,14 +42,14 @@ describe('DSH package license gate', () => {
     })
 
     expect(inspectDshPackageLicenses(root)).toEqual({
-      packageCount: 3,
+      packageCount: 2,
       failures: [
         'packages/core/agent/package.json: @phoenix-ai/dsh-agent must declare "license": "MIT"; found "BSD-3-Clause".',
       ],
     })
   })
 
-  it('rejects a missing license declaration', () => {
+  it('rejects a missing license declaration on a published DSH package', () => {
     const root = createWorkspace()
     writeManifest(root, 'packages/core/agent/package.json', { name: '@phoenix-ai/dsh-agent' })
 
