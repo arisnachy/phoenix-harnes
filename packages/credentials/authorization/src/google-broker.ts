@@ -551,6 +551,8 @@ export default class GoogleApiBroker extends Service {
   private readonly startupCleanup: Promise<void>
   private grant: GoogleGrant | undefined
   private refreshInFlight: Promise<GoogleGrant> | undefined
+  private authorizationInFlight: Promise<GoogleGrant> | undefined
+  private autoAuthorizationBlocked = false
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
@@ -619,6 +621,8 @@ export default class GoogleApiBroker extends Service {
     const grant = this.grant
     this.grant = undefined
     this.refreshInFlight = undefined
+    this.authorizationInFlight = undefined
+    this.autoAuthorizationBlocked = true
     let revoked = grant === undefined
     if (grant !== undefined) {
       const token = grant.refreshToken ?? grant.accessToken
@@ -685,6 +689,7 @@ export default class GoogleApiBroker extends Service {
       }
       await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
       this.grant = next
+      this.autoAuthorizationBlocked = false
     } finally {
       await receiver.close()
     }
@@ -693,14 +698,52 @@ export default class GoogleApiBroker extends Service {
   private async usableGrant(requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
     await this.startupCleanup
     const current = this.grant
-    if (current === undefined) {
-      throw new AuthorizationError('Google is not signed in for this PHOENIX process', 'GOOGLE_REAUTH_REQUIRED')
-    }
+    if (current === undefined) return this.authorizeOnDemand(requiredScope)
     if (!current.scopes.includes(requiredScope)) {
       throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
     }
     if (current.expiresAt > internals.now() + EXPIRY_SKEW_MS) return current
     return this.refresh(current, requiredScope, signal)
+  }
+
+  private authorizeOnDemand(requiredScope: string): Promise<GoogleGrant> {
+    const checkScope = (next: GoogleGrant): GoogleGrant => {
+      if (!next.scopes.includes(requiredScope)) {
+        throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
+      }
+      return next
+    }
+    if (this.autoAuthorizationBlocked) {
+      return Promise.reject(new AuthorizationError(
+        'Google needs explicit reconnection after a cancelled or disconnected authorization',
+        'GOOGLE_REAUTH_REQUIRED',
+      ))
+    }
+    if (this.authorizationInFlight !== undefined) return this.authorizationInFlight.then(checkScope)
+
+    const running = this.ctx.authorization.begin({
+      key: GOOGLE_ACCOUNT_KEY,
+      interaction: {
+        notify: () => {},
+        prompt: () => Promise.reject(new AuthorizationError(
+          'Google loopback authorization never accepts model-supplied credentials',
+          'GOOGLE_INTERACTION_DENIED',
+        )),
+      },
+    }).then((outcome) => {
+      const next = this.grant
+      if (outcome.status !== 'authorized' || next === undefined) {
+        throw new AuthorizationError('Google authorization did not complete', 'GOOGLE_REAUTH_REQUIRED')
+      }
+      return next
+    }).catch((error: unknown) => {
+      this.autoAuthorizationBlocked = true
+      throw error
+    }).finally(() => {
+      if (this.authorizationInFlight === running) this.authorizationInFlight = undefined
+    })
+    this.authorizationInFlight = running
+    return running.then(checkScope)
   }
 
   private refresh(current: GoogleGrant, requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
