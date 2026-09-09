@@ -13,7 +13,6 @@
  */
 
 import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import type { Context } from '@phoenix-ai/cordis'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -21,7 +20,6 @@ import type { SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@phoenix-ai/dsh-sandbox-policy'
 import { defineTool, type ToolRunContext } from '@phoenix-ai/dsh-tools'
 
-const execFileAsync = promisify(execFile)
 const POST_ACTION_SETTLE_MS = 250
 
 /** Desktop authority derived from the session's existing permission policy. */
@@ -65,6 +63,7 @@ interface ComputerInvocation {
   file: string
   argv: readonly string[]
   env: Readonly<Record<string, string>>
+  stdin: string
 }
 
 interface DesktopImageAttachment {
@@ -662,16 +661,15 @@ switch ($action) {
 }
 `
 
-const ENCODED_WINDOWS_DRIVER = Buffer.from(WINDOWS_DRIVER, 'utf16le').toString('base64')
-
 function putNumber(env: Record<string, string>, key: string, value: number | undefined): void {
   if (value !== undefined) env[key] = String(value)
 }
 
 /**
  * Build the injection-safe native invocation; model strings travel only as environment values.
+ * The fixed driver is streamed over stdin so its size never consumes the Windows command-line budget.
  * @param args - Validated model-facing Computer Use arguments.
- * @returns Fixed PowerShell executable/argv plus isolated environment values.
+ * @returns Fixed PowerShell executable/argv, isolated environment values, and fixed stdin driver source.
  */
 export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvocation {
   validateComputerArgs(args)
@@ -687,9 +685,41 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   if (args.keys !== undefined) env.PHX_KEYS = args.keys
   return {
     file: 'powershell.exe',
-    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', ENCODED_WINDOWS_DRIVER],
+    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', '-'],
     env,
+    stdin: WINDOWS_DRIVER,
   }
+}
+
+function executeComputerInvocation(invocation: ComputerInvocation, signal?: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = execFile(invocation.file, [...invocation.argv], {
+      encoding: 'utf8',
+      windowsHide: true,
+      maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, ...invocation.env },
+      ...signal === undefined ? {} : { signal },
+    }, (error, stdout) => {
+      if (error !== null) {
+        reject(error)
+        return
+      }
+      resolve(stdout.trim())
+    })
+
+    if (child.stdin === null) {
+      child.kill()
+      reject(new Error('Computer Use PowerShell process did not expose stdin'))
+      return
+    }
+
+    child.stdin.on('error', (error) => {
+      if ((error as NodeJS.ErrnoException).code === 'EPIPE') return
+      child.kill()
+      reject(error)
+    })
+    child.stdin.end(invocation.stdin, 'utf8')
+  })
 }
 
 /**
@@ -704,14 +734,7 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
   }
   signal?.throwIfAborted()
   const invocation = windowsComputerInvocation(args)
-  const { stdout } = await execFileAsync(invocation.file, [...invocation.argv], {
-    encoding: 'utf8',
-    windowsHide: true,
-    maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, ...invocation.env },
-    ...signal === undefined ? {} : { signal },
-  })
-  return stdout.trim()
+  return await executeComputerInvocation(invocation, signal)
 }
 
 function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; reversible: boolean } {
