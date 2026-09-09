@@ -18,7 +18,7 @@ Windows compositions additionally register `computer`. Its definition can be col
 
 `computer` exposes a closed Windows desktop action set: `screenshot`, `windows`, `focus`, `move`, `click`, `double_click`, `drag`, `type`, `key`, and `scroll`. `windows` enumerates visible top-level windows. `focus` requires a title, title substring, `pid:1234`, or `hwnd:0x123ABC` selector; the same optional `target` guards input actions by verifying that the selected window is foreground before input is injected. An ambiguous title fails and asks for a pid or handle. A minimized target must be focused first so the model receives a fresh screenshot before reusing coordinates.
 
-The fixed PowerShell/C# driver is streamed over stdin to avoid the Windows command-line limit. Model-controlled text and selectors travel only in `PHX_*` environment variables and never become executable source. `read-only` permits `screenshot` and `windows`; `workspace-write` routes input through the normal approval service; `danger-full-access` is the explicit no-prompt desktop authority. Every state-changing action except pointer movement waits briefly, captures a new screenshot, and defers that image into model context. A successful result means Windows accepted the operation; the model must use the fresh observation to verify the application-level outcome.
+The fixed PowerShell/C# driver is streamed over stdin to avoid the Windows command-line limit. The stream ends with the blank statement terminator required for Windows PowerShell to execute its final compound statement, and the driver selects UTF-8 for window titles. Model-controlled text and selectors travel only in `PHX_*` environment variables and never become executable source. Coordinates and scroll deltas must fit the signed 32-bit integers consumed by the native driver. `read-only` permits `screenshot` and `windows`; `workspace-write` routes input through the normal approval service; `danger-full-access` is the explicit no-prompt desktop authority. Every state-changing action except pointer movement waits briefly, captures a new screenshot, and defers that image into model context. A successful result means Windows accepted the operation; the model must use the fresh observation to verify the application-level outcome.
 
 ### `pwsh`
 
@@ -74,7 +74,7 @@ Prefix-stable while the registration scope and prompt text are unchanged. Plugin
 
 #### What the model sees
 
-The model sees the generated [`computer`](../../../docs/tool-catalog.md#computer) and [`pwsh`](../../../docs/tool-catalog.md#pwsh) schemas when each tool is available. Agent-scoped tool restrictions can remove either definition for that agent. Computer results return the selected action, OS-level status, optional window details, and whether a fresh screenshot was attached; visible-window enumeration returns one deterministic line per window.
+The model sees the generated [`computer` and `pwsh` schemas](../../../docs/tool-catalog.md#phoenix-aidsh-tool-pwsh) when each tool is available. Agent-scoped tool restrictions can remove either definition for that agent. Computer results return the selected action, OS-level status, optional window details, and whether a fresh screenshot was attached; visible-window enumeration returns one deterministic line per window.
 
 #### Token effect
 

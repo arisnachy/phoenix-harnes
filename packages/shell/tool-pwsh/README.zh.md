@@ -18,7 +18,7 @@ Windows 组合还会注册 `computer`。任何主机都可以为文档收集其�
 
 `computer` 公开一组封闭的 Windows 桌面动作：`screenshot`、`windows`、`focus`、`move`、`click`、`double_click`、`drag`、`type`、`key` 和 `scroll`。`windows` 枚举可见顶层窗口。`focus` 要求标题、标题子串、`pid:1234` 或 `hwnd:0x123ABC` selector；同一个可选 `target` 也会在输入注入前确认所选窗口位于前台，从而保护输入动作。标题有歧义时会失败并要求 pid 或 handle。最小化的目标必须先 focus，使模型在复用坐标前获得新截图。
 
-固定 PowerShell/C# driver 通过 stdin 传输，以避开 Windows 命令行长度限制。模型控制的文本和 selector 只通过 `PHX_*` 环境变量传递，绝不成为可执行源码。`read-only` 允许 `screenshot` 与 `windows`；`workspace-write` 通过普通 approval service 路由输入；`danger-full-access` 是明确的无提示桌面权限。除鼠标移动外，每个改变状态的动作都会短暂等待、捕获新截图并将图像延迟注入模型上下文。成功结果表示 Windows 接受了该操作；模型必须用新观察验证应用层结果。
+固定 PowerShell/C# driver 通过 stdin 传输，以避开 Windows 命令行长度限制。该 stream 以 Windows PowerShell 执行最终 compound statement 所需的空白终止行结尾，driver 并为窗口标题选择 UTF-8。模型控制的文本和 selector 只通过 `PHX_*` 环境变量传递，绝不成为可执行源码。坐标和滚动 delta 必须落入 native driver 所消费的有符号 32 位整数范围。`read-only` 允许 `screenshot` 与 `windows`；`workspace-write` 通过普通 approval service 路由输入；`danger-full-access` 是明确的无提示桌面权限。除鼠标移动外，每个改变状态的动作都会短暂等待、捕获新截图并将图像延迟注入模型上下文。成功结果表示 Windows 接受了该操作；模型必须用新观察验证应用层结果。
 
 ### `pwsh`
 
@@ -74,7 +74,7 @@ Non-zero exits are reported as `[exit code: N]` markers; investigate failures be
 
 #### 模型看到的内容
 
-模型在相应工具可用时看到生成的 [`computer`](../../../docs/tool-catalog.zh.md#computer) 与 [`pwsh`](../../../docs/tool-catalog.zh.md#pwsh) schema。按 agent 作用域的工具限制可以移除任一定义。Computer 结果返回所选动作、操作系统层状态、可选窗口明细，以及是否附加了新截图；可见窗口枚举为每个窗口返回一条确定性文本。
+模型在相应工具可用时看到生成的 [`computer` 与 `pwsh` schema](../../../docs/tool-catalog.zh.md#phoenix-aidsh-tool-pwsh)。按 agent 作用域的工具限制可以移除任一定义。Computer 结果返回所选动作、操作系统层状态、可选窗口明细，以及是否附加了新截图；可见窗口枚举为每个窗口返回一条确定性文本。
 
 #### Token 影响
 

@@ -235,7 +235,7 @@ bash 工具是 bash 执行器 seam 面向模型的消费方。使用 `run_in_bac
 
 ### `computer`
 
-通过封闭的操作集合控制 Windows 桌面。使用 screenshot 观察当前虚拟桌面；截图作为持久图像附件注入下一模型步骤。输入操作包括 move、click、double_click、drag、type、key 和 scroll。read-only 权限仅允许观察；workspace-write 通过用户审批允许输入；danger-full-access 允许输入且不弹出提示。有最新截图可供定位时，绝不猜测坐标。
+通过窗口感知动作控制 Windows 桌面。控制外部应用前，优先执行 windows -> focus(target) -> screenshot，然后再操作。target 可以是可见标题、标题子串、pid:1234 或 hwnd:0x123ABC；提供 target 时，PHOENIX 会在注入输入前验证目标位于前台。绝不使用旧坐标点击最小化目标：先调用 focus，检查自动生成的新截图，再执行动作。改变状态的动作会自动附加动作后截图。将该截图作为事实来源，并在下一动作前验证可见结果；status ok 只表示操作系统接受了工具动作，不表示应用层目标已经成功。read-only 只能观察；workspace-write 使用普通审批；danger-full-access 拥有无提示桌面权限。
 
 ```json
 {
@@ -243,9 +243,11 @@ bash 工具是 bash 执行器 seam 面向模型的消费方。使用 `run_in_bac
   "properties": {
     "action": {
       "type": "string",
-      "description": "Desktop operation to perform.",
+      "description": "Desktop operation. windows lists visible top-level windows; focus activates a target and verifies foreground identity.",
       "enum": [
         "screenshot",
+        "windows",
+        "focus",
         "move",
         "click",
         "double_click",
@@ -254,6 +256,10 @@ bash 工具是 bash 执行器 seam 面向模型的消费方。使用 `run_in_bac
         "key",
         "scroll"
       ]
+    },
+    "target": {
+      "type": "string",
+      "description": "Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus and strongly recommended for external-app input."
     },
     "x": {
       "type": "integer",
