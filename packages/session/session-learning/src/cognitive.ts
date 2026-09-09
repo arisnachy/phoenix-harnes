@@ -9,8 +9,9 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { readJsonl } from './read-jsonl.ts'
 import type { MemoryId, MemoryKind } from './ledger.ts'
 
 /** Memory layers projected from one canonical session event. */
@@ -178,23 +179,9 @@ export class CognitiveMemoryLedger {
     await this.writeChain
     this.records.clear()
     this.sourceIndex.clear()
-    let text: string
-    try {
-      text = await readFile(this.path, 'utf8')
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
-      throw error
-    }
-    for (const [index, line] of text.split('\n').entries()) {
-      if (line.trim() === '') continue
-      let raw: unknown
-      try {
-        raw = JSON.parse(line)
-      } catch (error) {
-        throw new Error(`cognitive memory row ${index + 1} is not valid JSON`, { cause: error })
-      }
-      this.applyRow(validateRow(raw, index + 1))
-    }
+    await readJsonl(this.path, 'cognitive memory row', (row, lineNumber) => {
+      this.applyRow(validateRow(row, lineNumber))
+    })
   }
 
   /**

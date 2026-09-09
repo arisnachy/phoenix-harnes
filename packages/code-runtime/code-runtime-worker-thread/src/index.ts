@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
-import { CodeRuntime, DUNDER_MEMBER, PORTABLE_RESERVED_WORDS, RESERVED_BINDING_GLOBALS, RESERVED_ERROR_MEMBERS } from '@phoenix-ai/dsh-code-runtime'
+import { CodeRuntime, DUNDER_MEMBER, PORTABLE_RESERVED_WORDS, RESERVED_BINDING_GLOBALS, RESERVED_ERROR_MEMBERS, settleCodeRuns } from '@phoenix-ai/dsh-code-runtime'
 import type { CodeBindingNamespace, CodeJsonValue, CodeRunFailure, CodeRunRequest, CodeRunResult } from '@phoenix-ai/dsh-code-runtime'
 import { snapshotJsonValue } from '@phoenix-ai/dsh-session'
 import type { ReplyMessage, WorkerBootData, WorkerToHost } from './protocol.ts'
@@ -277,9 +277,7 @@ export class WorkerThreadCodeRuntime extends CodeRuntime {
    */
   private async teardown(): Promise<void> {
     this.disposed = true
-    const runs = [...this.live]
-    for (const run of runs) run.settle({ kind: 'abort', message: 'runtime disposed' })
-    await Promise.all(runs.map(run => run.finished))
+    await settleCodeRuns(this.live, { kind: 'abort', message: 'runtime disposed' })
   }
 
   /**

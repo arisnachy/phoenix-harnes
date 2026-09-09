@@ -258,6 +258,8 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(BashEnvPlugin)
       await ctx.plugin(PwshLocalExecutor)
       await ctx.plugin(ToolPwsh)
+      // The catalog includes Windows-only definitions on every build host.
+      if (process.platform !== 'win32') ctx.tools.register(ToolPwsh.createComputerTool(ctx))
     },
     note:
       'The pwsh tool is the PowerShell-dialect consumer of the bash executor seam for Windows compositions (a PowerShell executor such as `@phoenix-ai/dsh-pwsh-local` backs `ctx.shell`); it mirrors the bash tool call-for-call minus sandbox controls — `run_in_background` runs register with the generic `ctx.jobs` runtime and are collected/stopped through the `job_*` tools, and the managed `DSH_*` environment comes from `@phoenix-ai/dsh-shell-env`. Each call runs in a fresh process (no persistent PTY session), with native `C:\\...` paths and `$env:NAME` variables.',

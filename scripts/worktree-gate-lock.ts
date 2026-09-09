@@ -225,7 +225,7 @@ async function liveBorrowerCount(path: string, token: string, processAlive: (pid
   for (const entry of entries) {
     if (!entry.startsWith(prefix) || entry.endsWith('.tmp')) continue
     const leasePath = join(dirname(path), entry)
-    const borrower = await readBorrowerLease(leasePath)
+    const borrower = await readLockIdentity(leasePath)
     if (borrower !== undefined && borrower.token === token && processAlive(borrower.pid)) {
       count += 1
       continue
@@ -235,7 +235,7 @@ async function liveBorrowerCount(path: string, token: string, processAlive: (pid
   return count
 }
 
-async function readBorrowerLease(path: string): Promise<BorrowerRecord | undefined> {
+async function readLockIdentity(path: string): Promise<BorrowerRecord | undefined> {
   try {
     const value: unknown = JSON.parse(await readFile(path, 'utf8'))
     if (typeof value !== 'object' || value === null) return undefined
@@ -263,18 +263,11 @@ async function delay(milliseconds: number): Promise<void> {
 }
 
 async function readLock(path: string): Promise<LockRecord | undefined> {
-  try {
-    const value: unknown = JSON.parse(await readFile(path, 'utf8'))
-    if (typeof value !== 'object' || value === null) return undefined
-    if (!('pid' in value) || typeof value.pid !== 'number') return undefined
-    if (!('token' in value) || typeof value.token !== 'string') return undefined
-    if (!('mode' in value) || typeof value.mode !== 'string') return undefined
-    if (!('createdAt' in value) || typeof value.createdAt !== 'string') return undefined
-    return value as LockRecord
-  } catch (error: unknown) {
-    if (isCode(error, 'ENOENT') || error instanceof SyntaxError) return undefined
-    throw error
-  }
+  const value = await readLockIdentity(path)
+  if (value === undefined) return undefined
+  if (!('mode' in value) || typeof value.mode !== 'string') return undefined
+  if (!('createdAt' in value) || typeof value.createdAt !== 'string') return undefined
+  return value as LockRecord
 }
 
 async function lockAge(path: string, now: number): Promise<number> {

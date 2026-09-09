@@ -14,6 +14,8 @@ Status: implemented
 
 ## Verification
 
+领域、命令和工具状态转换测试夹具显式提供两种完成认证。缺失评审和修订版本变更用例为当前修订版本提供通过的完成门禁，以单独验证评审拒绝。这三个文件及对抗性完成门禁文件中的 79 个测试全部通过，生产要求未变。
+
 Goal 服务回归覆盖 `pass` 后接 `needs_changes` 时拒绝完成，以及 `needs_changes` 后接 `pass` 时接受完成。驱动器集成测试和不变量回归覆盖后续通过后抑制早先 `needs_changes` 发现。Goal 与驱动器聚焦 Vitest 文件共同通过。
 
 ## Alternatives considered

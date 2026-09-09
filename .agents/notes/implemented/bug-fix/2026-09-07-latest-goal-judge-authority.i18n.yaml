@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-07-latest-goal-judge-authority.md
-2026-09-07-latest-goal-judge-authority.md: be4e6da91902e73b065c89f8bda8467d5f506a93
-2026-09-07-latest-goal-judge-authority.zh.md: 0f4637e8e3e019799f9fa36421d728b3877ed59c
+2026-09-07-latest-goal-judge-authority.md: c8017880c3cb53b4f243c871a42b12ca3014f203
+2026-09-07-latest-goal-judge-authority.zh.md: 2f24ed58e2cba0084f3a04ba7d26bd22f8d45788

@@ -7,7 +7,7 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@phoenix-ai/cordis'
 import type { PatchOptions } from '@phoenix-ai/cordis-plugin-include'
 import { boot, loadOverlayPatches } from '@phoenix-ai/dsh-app-boot'
@@ -30,8 +30,12 @@ const officialSource = 'git+https://projects.blender.org/lab/blender_mcp.git@v1.
 const liveContexts = new Set<Context>()
 
 afterEach(async () => {
-  await Promise.all([...liveContexts].map(async ctx => ctx.fiber.dispose()))
-  liveContexts.clear()
+  try {
+    await Promise.all([...liveContexts].map(async ctx => ctx.fiber.dispose()))
+  } finally {
+    liveContexts.clear()
+    vi.unstubAllEnvs()
+  }
 })
 
 function insertedRow(patches: PatchOptions[]): InsertedRow {
@@ -60,7 +64,7 @@ describe('official Blender Lab MCP overlay', () => {
     expect(row.config?.transport).toBe('stdio')
     expect(source).toContain(officialSource)
     expect(source).toContain("'blender-mcp'")
-    expect(source).not.toMatch(/args:\s*\[\s*['\"]blender-mcp['\"]\s*\]/u)
+    expect(source).not.toMatch(/args:\s*\[\s*['"]blender-mcp['"]\s*\]/u)
     expect(source).not.toContain('ahujasid/blender-mcp')
     expect(source).not.toMatch(/\bsk-[A-Za-z0-9_-]{8,}\b/u)
   })
@@ -87,15 +91,16 @@ describe('official Blender Lab MCP overlay', () => {
   })
 
   it('loads through the real MCP bridge and discovers a namespaced tool', async () => {
+    vi.stubEnv('PHOENIX_BLENDER_MCP_COMMAND', process.execPath)
+    vi.stubEnv('PHOENIX_BLENDER_MCP_ARGS', JSON.stringify([fixtureServer]))
     const patches = loadOverlayPatches('blender-mcp-config-test', overlay)
     insertedRow(patches).name = 'cordis:blender-test-mcp-client'
     const fixturePatch: PatchOptions = {
       id: 'mcp-blender-lab',
       config: {
+        ...insertedRow(patches).config,
         serverName: 'blender',
         transport: 'stdio',
-        command: process.execPath,
-        args: [fixtureServer],
         env: {},
         cwd: root,
         toolCallTimeoutMs: 5_000,
@@ -115,5 +120,24 @@ describe('official Blender Lab MCP overlay', () => {
       },
     )
     await waitForTool(ctx, 'mcp__blender__greet')
+    expect(ctx.tools.schemas().find(schema => schema.name === 'mcp__blender__greet')).toMatchInlineSnapshot(`
+      {
+        "description": "Greets a person by name.",
+        "name": "mcp__blender__greet",
+        "parameters": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "name": {
+              "description": "Name to greet",
+              "type": "string",
+            },
+          },
+          "required": [
+            "name",
+          ],
+          "type": "object",
+        },
+      }
+    `)
   }, 15_000)
 })

@@ -79,7 +79,17 @@ function appendRound(session: Session, ref: GoalRef, round: number): void {
 }
 
 /** Append the durable proof required before a goal can enter complete. */
+function appendPassingGate(session: Session, ref: GoalRef): void {
+  session.append('goal/completion-gate', {
+    goalId: ref.id, revision: ref.revision, round: 0, attemptId: 'test-gate',
+    checks: { requirements: 'pass', builderTests: 'pass', adversarialTests: 'pass', startup: 'pass', artifactIntegrity: 'pass', cleanRoom: 'pass' },
+    evidenceLedger: [{ criterionId: 'test', criterion: 'Fixture objective', mandatory: true, status: 'verified', evidence: ['Fixture verification'] }],
+    artifactFingerprint: 'sha256:fixture', cleanRoomEvidence: 'Fixture clean-room verification', findings: [], proceduralLessons: [],
+  })
+}
+
 function appendPassingJudge(session: Session, ref: GoalRef): void {
+  appendPassingGate(session, ref)
   session.append('goal/judge', {
     callId: 'test-judge' as never,
     goalId: ref.id,
@@ -307,6 +317,7 @@ describe('GoalService mutations', () => {
   it('rejects completion when no durable independent judge has passed', async () => {
     const { ctx, agent } = await harness()
     const goal = ctx.goals.create(agent, { objective: 'do not close early' })
+    appendPassingGate(agent.session, goal)
 
     expect(() => ctx.goals.complete(agent, goal)).toThrow(expect.objectContaining({
       code: 'GOAL_COMPLETION_NOT_VERIFIED',
@@ -319,6 +330,7 @@ describe('GoalService mutations', () => {
     const created = ctx.goals.create(agent, { objective: 'review the exact version' })
     appendPassingJudge(agent.session, created)
     const edited = ctx.goals.edit(agent, created, { objective: 'review the changed version' })
+    appendPassingGate(agent.session, edited)
 
     expect(() => ctx.goals.complete(agent, edited)).toThrow(expect.objectContaining({
       code: 'GOAL_COMPLETION_NOT_VERIFIED',

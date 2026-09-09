@@ -465,6 +465,12 @@ importers:
       '@phoenix-ai/dsh-bash-sandbox':
         specifier: workspace:*
         version: link:../packages/shell/bash-sandbox
+      '@phoenix-ai/dsh-code-runtime':
+        specifier: workspace:*
+        version: link:../packages/code-runtime/code-runtime
+      '@phoenix-ai/dsh-code-runtime-python':
+        specifier: workspace:*
+        version: link:../packages/code-runtime/code-runtime-python
       '@phoenix-ai/dsh-code-runtime-worker-thread':
         specifier: workspace:*
         version: link:../packages/code-runtime/code-runtime-worker-thread

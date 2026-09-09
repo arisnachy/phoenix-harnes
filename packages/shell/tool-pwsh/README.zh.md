@@ -6,11 +6,13 @@
 
 需要已加载的执行器实现与 `shell-env` 插件；两者都存在前工具保持 pending（`inject: ['tools', 'bash', 'systemPrompt', 'bashEnv']`）。
 
-包根只导出 Cordis 插件约定（`name`、`inject`、`Config`、`apply`）；结果渲染（`src/render.ts`）与后台任务适配（`src/background.ts`）镜像 bash 工具的结构，并可通过包的 `./src/*` 导出访问。
+包根导出 Cordis 插件约定（`name`、`inject`、`Config`、`apply`）及用于收集模式的 `createComputerTool()`；结果渲染（`src/render.ts`）与后台任务适配（`src/background.ts`）镜像 bash 工具的结构，并可通过包的 `./src/*` 导出访问。
 
 插件还贡献 `tool:pwsh` 提示词段落（order 105）：非零退出以 `[exit code: N]` marker 报告，Windows 上的中断以无 signal 的 exit 1 结算。
 
 ## 工具
+
+Windows 组合还会注册 `computer`。任何主机都可以为文档收集其定义；原生桌面执行仍仅限 Windows，并保留会话权限与审批检查。
 
 ### `pwsh`
 

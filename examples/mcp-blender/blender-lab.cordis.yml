@@ -13,7 +13,8 @@
         transport: stdio
         serverName: blender
         command: !!js process.env.PHOENIX_BLENDER_MCP_COMMAND ?? 'uvx'
-        args: !!js process.env.PHOENIX_BLENDER_MCP_ARGS ? JSON.parse(process.env.PHOENIX_BLENDER_MCP_ARGS) : ['--from', 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp', 'blender-mcp']
+        args: !!js >-
+          process.env.PHOENIX_BLENDER_MCP_ARGS ? JSON.parse(process.env.PHOENIX_BLENDER_MCP_ARGS) : ['--from', 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp', 'blender-mcp']
         env:
           BLENDER_MCP_HOST: !!js process.env.PHOENIX_BLENDER_MCP_HOST ?? 'localhost'
           BLENDER_MCP_PORT: !!js process.env.PHOENIX_BLENDER_MCP_PORT ?? '9876'

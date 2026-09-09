@@ -34,6 +34,25 @@ function safeRelations(record: CognitiveMemoryRecord): readonly object[] {
   }))
 }
 
+/** Render the shared model-safe fields used by automatic context and search results. */
+function presentCognitiveMemory(record: CognitiveMemoryRecord) {
+  return {
+    id: safePromptText(String(record.id)),
+    session_id: safePromptText(record.sessionId),
+    event_seq: record.eventSeq,
+    kind: record.kind,
+    layers: record.layers,
+    summary: safePromptText(record.summary),
+    source_event_type: safePromptText(record.provenance.sourceEventType),
+    source_uri: safePromptText(record.provenance.sourceUri),
+    project_id: record.projectId === undefined ? undefined : safePromptText(record.projectId),
+    confidence: record.confidence,
+    importance: record.importance,
+    frequency: record.frequency,
+    occurred_at: record.provenance.occurredAt,
+  }
+}
+
 /**
  * Format bounded, non-interaction memory for automatic model context.
  * @param records - Memory records to project.
@@ -42,21 +61,7 @@ function safeRelations(record: CognitiveMemoryRecord): readonly object[] {
 export function formatRecentMemoryContext(records: readonly PresentableMemory[]): string {
   const shareable = records.map(unwrapMemory)
     .filter(record => record.kind !== 'interaction' && record.kind !== 'conversation')
-    .map(record => isCognitiveMemory(record) ? {
-      id: safePromptText(String(record.id)),
-      session_id: safePromptText(record.sessionId),
-      event_seq: record.eventSeq,
-      kind: record.kind,
-      layers: record.layers,
-      summary: safePromptText(record.summary),
-      source_event_type: safePromptText(record.provenance.sourceEventType),
-      source_uri: safePromptText(record.provenance.sourceUri),
-      project_id: record.projectId === undefined ? undefined : safePromptText(record.projectId),
-      confidence: record.confidence,
-      importance: record.importance,
-      frequency: record.frequency,
-      occurred_at: record.provenance.occurredAt,
-    } : {
+    .map(record => isCognitiveMemory(record) ? presentCognitiveMemory(record) : {
       session_id: safePromptText(record.sessionId),
       event_seq: record.eventSeq,
       kind: record.kind,
@@ -85,15 +90,7 @@ export function formatMemorySearchResult(records: readonly MemoryRecord[] | read
       if ('record' in item) {
         const record = item.record
         return {
-          id: safePromptText(String(record.id)),
-          session_id: safePromptText(record.sessionId),
-          event_seq: record.eventSeq,
-          kind: record.kind,
-          layers: record.layers,
-          summary: safePromptText(record.summary),
-          source_event_type: safePromptText(record.provenance.sourceEventType),
-          source_uri: safePromptText(record.provenance.sourceUri),
-          project_id: record.projectId === undefined ? undefined : safePromptText(record.projectId),
+          ...presentCognitiveMemory(record),
           entities: safeEntities(record),
           relations: safeRelations(record),
           confidence: record.confidence,

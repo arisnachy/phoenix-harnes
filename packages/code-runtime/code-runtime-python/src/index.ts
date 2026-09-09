@@ -8,15 +8,15 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
-import { Writable } from 'node:stream'
+import { Readable, Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { snapshotJsonValue } from '@phoenix-ai/dsh-session'
-import { CodeRuntime, DUNDER_MEMBER, PORTABLE_RESERVED_WORDS, RESERVED_BINDING_GLOBALS, RESERVED_ERROR_MEMBERS } from '@phoenix-ai/dsh-code-runtime'
+import { CodeRuntime, DUNDER_MEMBER, PORTABLE_RESERVED_WORDS, RESERVED_BINDING_GLOBALS, RESERVED_ERROR_MEMBERS, settleCodeRuns } from '@phoenix-ai/dsh-code-runtime'
 import type { CodeBindingNamespace, CodeJsonValue, CodeRunFailure, CodeRunRequest, CodeRunResult } from '@phoenix-ai/dsh-code-runtime'
 import type { BootMessage, ChildToHost, ReplyMessage } from './protocol.ts'
-import { checkDoneValue, encodeJsonPlain, hasNonLosslessNumber, hasUnsafeIntegerToken, logTruncationMarker, validateChildFrame } from './protocol.ts'
+import { checkDoneValue, encodeJsonPlain, hasNonLosslessNumber, hasUnsafeIntegerToken, logTruncationMarker, PROTOCOL_READ_FD, PROTOCOL_WRITE_FD, validateChildFrame } from './protocol.ts'
 
 export type { BootMessage, ChildToHost, ReplyMessage }
 export { checkDoneValue, encodeJsonPlain, hasNonLosslessNumber, hasUnsafeIntegerToken, logTruncationMarker, validateChildFrame }
@@ -158,9 +158,7 @@ export class PythonCodeRuntime extends CodeRuntime {
 
   private async teardown(): Promise<void> {
     this.disposed = true
-    const runs = [...this.live]
-    for (const run of runs) run.settle({ kind: 'abort', message: 'runtime disposed' })
-    await Promise.all(runs.map(run => run.finished))
+    await settleCodeRuns(this.live, { kind: 'abort', message: 'runtime disposed' })
   }
 
   /**
@@ -181,10 +179,11 @@ export class PythonCodeRuntime extends CodeRuntime {
     // receives an empty environment; keeping the script directory available
     // is required for the checked-in bootstrap import.
     const child = spawn(this.config.pythonCommand, ['-B', PYTHON_PATH], {
-      stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: {}, windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'], env: {}, windowsHide: true,
     })
-    const channel = child.stdio[3]
-    if (!(channel instanceof Writable)) {
+    const channel = child.stdio[PROTOCOL_READ_FD]
+    const responses = child.stdio[PROTOCOL_WRITE_FD]
+    if (!(channel instanceof Writable) || !(responses instanceof Readable)) {
       child.kill()
       return Promise.resolve({ logs: [], error: { kind: 'worker-exit', message: 'python protocol channel unavailable' } })
     }
@@ -274,7 +273,7 @@ export class PythonCodeRuntime extends CodeRuntime {
       }
       const capture = (chunk: Buffer): void => { if (!settled && !output.admit(chunk.toString('utf8'), logs)) fail({ kind: 'output-limit', message: `outer output exceeded ${this.config.maxOutputBytes} bytes` }) }
       onAbort = (): void => { fail({ kind: 'abort', message: String(request.signal?.reason) }) }
-      channel.on('data', read)
+      responses.on('data', read)
       child.stdout.on('data', capture)
       child.stderr.on('data', capture)
       child.once('error', (error) => { fail({ kind: 'worker-exit', message: `python process error: ${error.message}` }) })

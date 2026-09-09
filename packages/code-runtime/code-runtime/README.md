@@ -8,6 +8,8 @@ This package owns the Service Definition role of the capability (the bash trio i
 
 ## Service API (`ctx.codeRuntime`)
 
+Providers can use `settleCodeRuns()` during teardown after rejecting new work. It snapshots the live executions, delivers the supplied failure to each, and waits for their resource-completion promises; settlement may remove entries from the provider's live set without skipping an execution.
+
 | Member | Semantics |
 |---|---|
 | `run(request)` | Execute one program against the request's bindings. **Resolves with an error FIELD for every program outcome** — parse/transform failure, thrown exception, invalid completion, output overflow, budget expiry, abort, or substrate death (`CodeRunFailure`'s orthogonal `kind` taxonomy); it rejects only for caller misuse of the Service Definition contract (e.g. a run submitted after disposal). The program runs as the body of an async function: top-level `await`/`return` work, and a lossless JSON completion becomes `result.value`. |

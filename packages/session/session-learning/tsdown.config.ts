@@ -1,8 +1,8 @@
 import { defineConfig } from 'tsdown'
 
 /** Emit each declared runtime export without introducing unpublished shared chunks. */
-export default defineConfig(['index', 'invariant', 'ledger'].map(name => ({
-  entry: [`lib/types/${name}.js`],
+export default defineConfig(['lib/types/index.js', 'lib/types/invariant.js', 'lib/types/ledger.js'].map(entry => ({
+  entry: [entry],
   outDir: 'lib',
   format: ['esm'],
   platform: 'node',

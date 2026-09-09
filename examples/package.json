@@ -19,6 +19,8 @@
     "@phoenix-ai/dsh-authorization": "workspace:*",
     "@phoenix-ai/dsh-bash-local": "workspace:*",
     "@phoenix-ai/dsh-bash-sandbox": "workspace:*",
+    "@phoenix-ai/dsh-code-runtime-python": "workspace:*",
+    "@phoenix-ai/dsh-code-runtime": "workspace:*",
     "@phoenix-ai/dsh-code-runtime-worker-thread": "workspace:*",
     "@phoenix-ai/dsh-command-feedback": "workspace:*",
     "@phoenix-ai/dsh-command-goal": "workspace:*",

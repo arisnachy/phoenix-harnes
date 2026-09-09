@@ -1,6 +1,6 @@
 """Wire protocol vocabulary for the Python side of dsh-code-runtime-python.
 
-Mirrors ``src/protocol.ts``. Frames travel on fd 3 as JSON-lines (one JSON
+Mirrors ``src/protocol.ts``. Frames travel on fd 3 (requests) and fd 4 (responses) as JSON-lines (one JSON
 object per line). The host validates every inbound frame; this side trusts
 host replies.
 
@@ -16,10 +16,9 @@ from __future__ import annotations
 
 from typing import Any, Literal, TypedDict, Union
 
-# The protocol fd from the child's perspective. Node passes
-# ``stdio: [pipe, pipe, pipe, pipe]`` so the fourth entry (fd 3) is the
-# framed-JSON channel; stdout/stderr stay clear for the program's own output.
-PROTOCOL_FD = 3
+# Separate child descriptors avoid concurrent synchronous reads and writes on one Windows pipe.
+PROTOCOL_READ_FD = 3
+PROTOCOL_WRITE_FD = 4
 
 
 class ErrorClass(TypedDict):

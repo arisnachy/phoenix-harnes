@@ -18,7 +18,7 @@ import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@phoenix-ai/dsh-sandbox-policy'
-import { defineTool, type ToolRunContext } from '@phoenix-ai/dsh-tools'
+import { defineTool, type ToolDefinition, type ToolRunContext } from '@phoenix-ai/dsh-tools'
 
 const execFileAsync = promisify(execFile)
 
@@ -471,15 +471,15 @@ async function authorizeComputerAction(
 }
 
 /**
- * Register the model-facing Computer Use tool on Windows compositions.
+ * Build the Windows Computer Use definition without executing desktop operations.
  * @param ctx - PHOENIX composition carrying tools, shell policy, and optional attachments/approval capabilities.
+ * @returns Tool definition for runtime registration or platform-independent schema collection.
  */
-export function registerComputerTool(ctx: Context): void {
-  if (process.platform !== 'win32') return
+export function createComputerTool(ctx: Context): ToolDefinition {
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
   const deploymentDefault = ctx.shell.sandboxMode
 
-  ctx.tools.register(defineTool({
+  return defineTool({
     name: 'computer',
     description: 'Control the Windows desktop with a closed action set. Use screenshot to observe the current virtual desktop; the screenshot is injected as a durable image attachment for the next model step. Input actions are move, click, double_click, drag, type, key, and scroll. read-only permission is observe-only; workspace-write allows input through user approval; danger-full-access allows input without prompts. Never guess coordinates when a fresh screenshot can ground them.',
     parameters: {
@@ -544,5 +544,14 @@ export function registerComputerTool(ctx: Context): void {
       }
       return { action: args.action, status: 'ok' as const }
     },
-  }))
+  })
+}
+
+/**
+ * Register the model-facing Computer Use tool on Windows compositions.
+ * @param ctx - PHOENIX composition carrying the tool runtime.
+ */
+export function registerComputerTool(ctx: Context): void {
+  if (process.platform !== 'win32') return
+  ctx.tools.register(createComputerTool(ctx))
 }

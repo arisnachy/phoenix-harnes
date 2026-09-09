@@ -14,6 +14,8 @@ For the exact `{ goalId, revision }`, completion reads the most recent `goal/jud
 
 ## Verification
 
+Domain, command, and tool transition fixtures supply both completion certifications explicitly. The missing-judge and changed-revision cases supply a passing completion gate for the current revision so they isolate judge rejection. All 79 tests across these three files and the adversarial completion-gate file pass without changing production requirements.
+
 Goal service regressions cover `pass` followed by `needs_changes` rejection and `needs_changes` followed by `pass` acceptance. Driver integration and invariant regressions cover suppression of earlier `needs_changes` findings after a later pass. The focused goal and driver Vitest files pass together.
 
 ## Alternatives considered

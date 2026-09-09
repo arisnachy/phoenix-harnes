@@ -154,8 +154,8 @@ describe('LearningMemoryService', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
-    const alpha = ctx.sessions.create(SessionId('cognitive-alpha'), { meta: { cwd: 'C:\\workspace\\alpha' } })
-    const beta = ctx.sessions.create(SessionId('cognitive-beta'), { meta: { cwd: 'C:\\workspace\\beta' } })
+    const alpha = ctx.sessions.create(SessionId('cognitive-alpha'), { meta: { cwd: join(root, 'alpha') } })
+    const beta = ctx.sessions.create(SessionId('cognitive-beta'), { meta: { cwd: join(root, 'beta') } })
     alpha.append('turn/start', { turn: 1 })
     alpha.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'Remember the alpha sandbox decision.' }],
