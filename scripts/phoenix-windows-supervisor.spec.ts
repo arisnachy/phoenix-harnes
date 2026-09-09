@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
+const cliSource = readFileSync(resolve('apps/cli/src/bin.ts'), 'utf8')
 
 describe('PHOENIX Windows updater supervisor resilience', () => {
   it('restarts the updater watcher when it exits while the host is still alive', () => {
@@ -26,5 +27,13 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('gitClean(stage)')
     expect(source).toContain("gitValue(stage, ['rev-parse', 'HEAD']) === target")
     expect(source).toContain('using the verified staged activator for prepared self-update compatibility')
+  })
+
+  it('routes direct Windows web launches through the supervisor so restart survives the host exit', () => {
+    expect(cliSource).toContain("process.platform === 'win32'")
+    expect(cliSource).toContain("rawArgs[0] === 'web'")
+    expect(cliSource).toContain("process.env.PHOENIX_UPDATE_SUPERVISED !== '1'")
+    expect(cliSource).toContain('phoenix-windows-supervisor.mjs')
+    expect(cliSource).toContain('process.exit(result.status ?? 1)')
   })
 })
