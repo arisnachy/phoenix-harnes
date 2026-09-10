@@ -26,6 +26,20 @@ export const VARIANT_TITLES: Record<ToolRowVariant, string> = {
   write: 'Write', edit: 'Edit', code: 'Code', others: 'Tool call',
 }
 
+/** Human activity copy for generic tool families whose verb changes with state. */
+function activityTitle(variant: ToolRowVariant, state: ToolRowState): string {
+  if (variant === 'read') return state === 'running' ? 'Reading' : 'Read'
+  if (variant === 'edit') {
+    if (state === 'running') return 'Editing'
+    return state === 'ok' ? 'Edited' : 'Edit'
+  }
+  if (variant === 'bash') {
+    if (state === 'running') return 'Running'
+    return state === 'ok' ? 'Ran' : 'Run'
+  }
+  return VARIANT_TITLES[variant]
+}
+
 /**
  * Known tool name -> variant.
  *
@@ -225,11 +239,9 @@ export function toolRowModel(toolName: string, block: ToolCallBlock, cwd?: strin
     ? block.callId
     : abbreviateHomePath(relativizeToCwd(deriveSummary(variant, argsRaw), cwd), home)
   const toolTitle = TOOL_TITLES[toolName]
-  // Others keeps the static "Tool call" title (figma literal); the real tool
-  // name rides the mutable summary slot unless the tool owns a specific title.
-  const summary = variant === 'others' && toolName !== '' && toolTitle === undefined
-    ? `${toolName} · ${base}`
-    : base
+  const title = toolTitle
+    ?? (variant === 'others' && toolName !== '' ? toolName : activityTitle(variant, state))
+  const summary = base
   // The empty string is "no text" for both derived result fields: a settled
   // call with blank content has nothing to expand, and a blank first line
   // would erase the collapsed error row's summary slot.
@@ -237,7 +249,7 @@ export function toolRowModel(toolName: string, block: ToolCallBlock, cwd?: strin
   const errorSummary = state === 'error' && output !== null ? firstLine(output) : null
   return {
     variant,
-    title: toolTitle ?? VARIANT_TITLES[variant],
+    title,
     summary,
     filePath: deriveFilePath(variant, argsRaw),
     body: deriveBody(variant, argsRaw),
