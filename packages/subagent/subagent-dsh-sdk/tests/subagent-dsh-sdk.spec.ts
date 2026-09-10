@@ -120,6 +120,7 @@ describe('dsh-subagent-dsh-sdk provider', () => {
         provider: 'fake-provider',
         model: 'fake-model',
         maxTokens: 4096,
+        protocolVersion: 2,
       }])
       await ctx.fiber.dispose()
     } finally {
