@@ -8,7 +8,7 @@ import { FiberState } from '@phoenix-ai/cordis'
 import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
 import type { GoalJudgeAuditEntry, GoalMessageSource, GoalRef, GoalView } from '@phoenix-ai/dsh-goal'
-import { createUserMessage } from '@phoenix-ai/dsh-llm'
+import { createUserMessage, isHarnessError, QUOTA_EXCEEDED_CODE } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, UserMessage } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
@@ -77,6 +77,11 @@ function goalRef(goal: GoalView): GoalRef {
 /** Human-readable unexpected values for logs. */
 function renderThrown(value: unknown): string {
   return value instanceof Error ? value.message : String(value)
+}
+
+/** Provider quota cannot be repaired by another automatic goal round. */
+export function isTerminalGoalQuota(error: unknown): boolean {
+  return isHarnessError(error) && error.code === QUOTA_EXCEEDED_CODE
 }
 
 /** Install automatic same-session continuation and its race fences. */
@@ -320,6 +325,21 @@ export function apply(ctx: Context): void {
       const goal = currentGoal(state)
       if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') {
         disarm(state)
+        return
+      }
+      // An exhausted account/subscription quota is an external terminal
+      // dependency for this model route. Another automatic goal round would
+      // submit the same impossible request and can create an unbounded
+      // goal-injection loop, so stop automatic authority immediately and keep
+      // the durable goal blocked for an explicit resume/model change.
+      if (isTerminalGoalQuota(error)) {
+        state.attempt = undefined
+        state.requested = false
+        state.needsCheckpoint = false
+        ctx.goals.block(agent, goalRef(goal), {
+          code: 'provider-quota-exhausted',
+          message: `Automatic continuation stopped because the model provider quota is exhausted: ${renderThrown(error)}`,
+        })
         return
       }
       // A failed model turn is a disposable attempt, never a mission result.
