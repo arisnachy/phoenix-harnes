@@ -68,6 +68,9 @@ describe('CI workflow', () => {
       candidate_needed: '${{ steps.materialize.outputs.candidate_needed }}',
       candidate_tree: '${{ steps.materialize.outputs.candidate_tree }}',
     })
+    expect(validate.env).toMatchObject({
+      UPSTREAM_REPOSITORY: 'arisnachy/phoenix-harnes',
+    })
     const validateSteps = (validate.steps as unknown[]).filter(isRecord)
     const validateJson = JSON.stringify(validate)
     expect(validateSteps.some(step => typeof step.uses === 'string' && step.uses.startsWith('actions/checkout@'))).toBe(false)
@@ -116,6 +119,7 @@ describe('CI workflow', () => {
       permissions: { 'pull-requests': 'write' },
       if: "needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.published == 'true'",
       'timeout-minutes': 10,
+      env: { BASE_REF: 'stable' },
     })
     const reviewJson = JSON.stringify(review)
     expect(reviewJson).toContain('gh pr create')
