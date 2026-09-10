@@ -2000,6 +2000,9 @@ importers:
       '@phoenix-ai/dsh-plan-mode':
         specifier: workspace:^
         version: link:../../plan/plan-mode
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
       '@phoenix-ai/dsh-session-projection':
         specifier: workspace:^
         version: link:../../session/session-projection
@@ -2018,6 +2021,9 @@ importers:
       '@phoenix-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../core/tools
+      '@phoenix-ai/dsh-user-approval':
+        specifier: workspace:^
+        version: link:../../interaction/user-approval
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
