@@ -37,3 +37,5 @@ jobs:
           fi
           git commit -m "chore(ui4): sync lockfile and module graph [lock-generated]"
           git push origin HEAD:feat/phoenix-ui4-context-panel-20260910
+
+# Branch-local reconciliation helper; removed before merge once generated files are clean.
