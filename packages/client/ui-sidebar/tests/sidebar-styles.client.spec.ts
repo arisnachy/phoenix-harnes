@@ -78,4 +78,20 @@ describe('SidebarRoot.module.css', () => {
     expect(declarations('.fallbackBrandName')?.get('font-size')).toBe('20px')
     expect(declarations('.fallbackBrandName')?.get('white-space')).toBe('nowrap')
   })
+
+  it('renders New Session as a compact left-aligned sidebar row', () => {
+    const row = declarations('.newSession')
+    expect(row?.get('justify-content')).toBe('flex-start')
+    expect(row?.get('width')).toBe('100%')
+    expect(row?.get('height')).toBe('36px')
+    expect(row?.get('padding')).toBe('0 10px')
+    expect(row?.get('margin')).toBe('0 0 6px')
+    expect(row?.get('border')).toBe('1px solid transparent')
+    expect(row?.get('border-radius')).toBe('8px')
+    expect(row?.get('background')).toBe('transparent')
+    expect(row?.get('font-weight')).toBe('400')
+    expect(declarations('.newSession:hover')?.get('background')).toBe(
+      'var(--dsw-alias-interactive-bg-hover)',
+    )
+  })
 })
