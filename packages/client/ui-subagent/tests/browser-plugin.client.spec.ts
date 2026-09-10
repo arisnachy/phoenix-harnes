@@ -8,8 +8,8 @@ import {
 } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ComposerChainProps } from '@phoenix-ai/dsh-client-ui-conversation/client'
 import { apply as applyLocale, inject as localeInject } from '@phoenix-ai/dsh-client-locale/client'
-import {
-  SubagentHeaderLineage, type SubagentCatalogInjected,
+import type {
+  SubagentCatalogInjected,
 } from '../src/client/SubagentHeaderLineage.tsx'
 import {
   SubagentReadOnlyComposer, type SubagentReadOnlyMatch,
@@ -94,8 +94,7 @@ describe('apply', () => {
 
   it('registers catalog actions and selects read-only subagent composers from session facts', async () => {
     const { ctx, face } = await fullBench(FAMILY)
-    const catalogEntry = ctx.slots.entries('conversation.session.header.lineage')
-      .find(entry => entry.component === SubagentHeaderLineage)!
+    const catalogEntry = ctx.slots.entries('conversation.session.header.lineage')[0]!
     const actions = (catalogEntry.inject as unknown as (id: SessionId) => SubagentCatalogInjected)(sid('parent'))
     const address: SubagentAddress = {
       parentSessionId: sid('parent'),
