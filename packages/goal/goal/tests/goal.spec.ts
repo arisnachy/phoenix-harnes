@@ -78,8 +78,38 @@ function appendRound(session: Session, ref: GoalRef, round: number): void {
   session.append('turn/end', { turn, reason: { kind: 'completed' } })
 }
 
-/** Append the durable proof required before a goal can enter complete. */
+/** Append the executable certification required before a goal can enter complete. */
+function appendPassingGate(session: Session, ref: GoalRef): void {
+  session.append('goal/completion-gate', {
+    goalId: ref.id,
+    revision: ref.revision,
+    round: 0,
+    attemptId: 'goal-test-gate',
+    checks: {
+      requirements: 'pass',
+      builderTests: 'pass',
+      adversarialTests: 'pass',
+      startup: 'pass',
+      artifactIntegrity: 'pass',
+      cleanRoom: 'pass',
+    },
+    evidenceLedger: [{
+      criterionId: 'REQ-001',
+      criterion: 'Ship a verified artifact.',
+      mandatory: true,
+      status: 'verified',
+      evidence: ['clean-room verification'],
+    }],
+    artifactFingerprint: 'sha256:goal-test-artifact',
+    cleanRoomEvidence: 'verified extracted artifact in a clean temporary directory',
+    findings: [],
+    proceduralLessons: [],
+  })
+}
+
+/** Append the revision-bound proof required before a goal can enter complete. */
 function appendPassingJudge(session: Session, ref: GoalRef): void {
+  appendPassingGate(session, ref)
   session.append('goal/judge', {
     callId: 'test-judge' as never,
     goalId: ref.id,
@@ -309,7 +339,7 @@ describe('GoalService mutations', () => {
     const goal = ctx.goals.create(agent, { objective: 'do not close early' })
 
     expect(() => ctx.goals.complete(agent, goal)).toThrow(expect.objectContaining({
-      code: 'GOAL_COMPLETION_NOT_VERIFIED',
+      code: 'GOAL_COMPLETION_GATE_NOT_VERIFIED',
     }))
     expect(ctx.goals.get(agent)).toMatchObject({ phase: 'active', revision: 1 })
   })
@@ -321,7 +351,7 @@ describe('GoalService mutations', () => {
     const edited = ctx.goals.edit(agent, created, { objective: 'review the changed version' })
 
     expect(() => ctx.goals.complete(agent, edited)).toThrow(expect.objectContaining({
-      code: 'GOAL_COMPLETION_NOT_VERIFIED',
+      code: 'GOAL_COMPLETION_GATE_NOT_VERIFIED',
     }))
     expect(ctx.goals.get(agent)).toMatchObject({ phase: 'active', revision: 2 })
   })
