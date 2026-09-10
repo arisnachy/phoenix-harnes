@@ -31,6 +31,7 @@ const ToolCall = memo(function ToolCall({
     home,
     inspect: () => { inspectCall(callId) },
   }), [callId, toolName, block, openFile, cwd, home, inspectCall])
+  const detailsLabel = t('details.title')
   return (
     <div
       className={css.callRow}
@@ -48,8 +49,8 @@ const ToolCall = memo(function ToolCall({
         <button
           type="button"
           className={css.openDetails}
-          aria-label="Open in side panel"
-          title="Open in side panel"
+          aria-label={detailsLabel}
+          title={detailsLabel}
           onClick={() => { openDetails({ turnSeq, callId, toolName }) }}
         >
           ↗
