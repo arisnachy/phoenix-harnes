@@ -28,7 +28,7 @@ function declarations(selector: string): Map<string, string> | undefined {
 describe('SidebarRoot.module.css', () => {
   it('shares and cancels the wide shell trailing padding structurally', () => {
     const root = declarations('.root')
-    expect(root?.get('--dsh-sidebar-inline-padding')).toBe('12px')
+    expect(root?.get('--dsh-sidebar-inline-padding')).toBe('10px')
     expect(root?.get('padding')).toBe('6px var(--dsh-sidebar-inline-padding)')
     expect(declarations('.regionArea')?.get('margin-left')).toBe('-4px')
     expect(declarations('.regionArea')?.get('padding-left')).toBe('4px')
@@ -64,18 +64,19 @@ describe('SidebarRoot.module.css', () => {
     expect(declarations('.collapsed .newSession')?.get('width')).toBe('36px')
   })
 
-  it('keeps the refined PHOENIX identity inside the existing header geometry', () => {
-    expect(declarations('.logoRow')?.get('height')).toBe('60px')
-    expect(declarations('.brandIdentity')?.get('height')).toBe('42px')
-    expect(declarations('.brandMark img')?.get('width')).toBe('42px')
-    expect(declarations('.brandMark img')?.get('height')).toBe('42px')
-    expect(declarations('.brandName')?.get('height')).toBe('34px')
+  it('keeps a calmer PHOENIX identity inside the existing header geometry', () => {
+    expect(declarations('.logoRow')?.get('height')).toBe('52px')
+    expect(declarations('.logoRow')?.get('margin-bottom')).toBe('4px')
+    expect(declarations('.brandIdentity')?.get('height')).toBe('36px')
+    expect(declarations('.brandMark img')?.get('width')).toBe('36px')
+    expect(declarations('.brandMark img')?.get('height')).toBe('36px')
+    expect(declarations('.brandName')?.get('height')).toBe('30px')
     expect(declarations('.brandName')?.get('line-height')).toBe('1')
-    expect(declarations('.brandName')?.get('font-size')).toBe('20px')
+    expect(declarations('.brandName')?.get('font-size')).toBe('18px')
     expect(declarations('.brandName')?.get('font-weight')).toBe('600')
-    expect(declarations('.brandName')?.get('letter-spacing')).toBe('0.18em')
+    expect(declarations('.brandName')?.get('letter-spacing')).toBe('0.16em')
     expect(declarations('.brandName')?.get('border-left')).toBe('1px solid var(--dsw-alias-border-l2)')
-    expect(declarations('.fallbackBrandName')?.get('font-size')).toBe('20px')
+    expect(declarations('.fallbackBrandName')?.get('font-size')).toBe('0')
     expect(declarations('.fallbackBrandName')?.get('white-space')).toBe('nowrap')
   })
 
@@ -92,6 +93,12 @@ describe('SidebarRoot.module.css', () => {
     expect(row?.get('font-weight')).toBe('400')
     expect(declarations('.newSession:hover')?.get('background')).toBe(
       'var(--dsw-alias-interactive-bg-hover)',
+    )
+    expect(declarations('.newSession:focus-visible')?.get('background')).toBe(
+      'var(--dsw-alias-interactive-bg-hover)',
+    )
+    expect(declarations('.newSession:focus-visible')?.get('outline')).toBe(
+      '2px solid var(--dsw-alias-state-business-primary)',
     )
   })
 })
