@@ -30,16 +30,31 @@ interface JsonRpcResponseShape {
   error?: JsonRpcErrorShape | null
 }
 
+interface CodexReasoningEffortShape {
+  reasoningEffort?: unknown
+  description?: unknown
+}
+
 interface CodexModelShape {
   id?: unknown
   model?: unknown
   displayName?: unknown
   hidden?: unknown
+  supportedReasoningEfforts?: unknown
+  defaultReasoningEffort?: unknown
 }
 
 interface CodexModelListShape {
   data?: unknown
   nextCursor?: unknown
+}
+
+/** Extra discovery metadata Codex exposes beyond the provider-neutral minimum. */
+interface CodexDiscoveredModel extends LlmDiscoveredModel {
+  reasoning?: {
+    efforts: Array<{ id: string; name: string; description?: string }>
+    defaultEffort?: string
+  }
 }
 
 /** Injectable transport seam used by regression tests. */
@@ -49,6 +64,46 @@ export interface CodexModelListTransport {
 
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+/** Human-readable labels for Codex's current and forward-compatible effort ids. */
+function effortName(id: string): string {
+  const known: Readonly<Record<string, string>> = {
+    off: 'Off',
+    minimal: 'Minimal',
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+    xhigh: 'Extra High',
+    max: 'Max',
+    ultra: 'Ultra',
+  }
+  return known[id] ?? id
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase())
+}
+
+/** Preserve the account-scoped reasoning capabilities Codex advertises for one model. */
+function reasoningOf(entry: CodexModelShape): CodexDiscoveredModel['reasoning'] | undefined {
+  if (!Array.isArray(entry.supportedReasoningEfforts)) return undefined
+  const efforts = entry.supportedReasoningEfforts.flatMap((raw) => {
+    const option = raw as CodexReasoningEffortShape | null
+    const id = text(option?.reasoningEffort)
+    if (id === undefined) return []
+    const description = text(option?.description)
+    return [{
+      id,
+      name: effortName(id),
+      ...description === undefined ? {} : { description },
+    }]
+  })
+  if (efforts.length === 0) return undefined
+  const advertised = new Set(efforts.map(effort => effort.id))
+  const defaultEffort = text(entry.defaultReasoningEffort)
+  return {
+    efforts,
+    ...defaultEffort !== undefined && advertised.has(defaultEffort) ? { defaultEffort } : {},
+  }
 }
 
 /**
@@ -76,21 +131,26 @@ export function encodeCodexWireFrame(frame: Readonly<Record<string, unknown>>): 
  * @returns Visible PHOENIX discovery rows and the optional pagination cursor.
  */
 export function readCodexModelPage(result: unknown): {
-  models: LlmDiscoveredModel[]
+  models: CodexDiscoveredModel[]
   nextCursor?: string
 } {
   const page = result as CodexModelListShape | null
   if (!Array.isArray(page?.data)) {
     throw new LlmError('Codex model/list returned no data array', 'DISCOVERY_FAILED')
   }
-  const models: LlmDiscoveredModel[] = []
+  const models: CodexDiscoveredModel[] = []
   for (const raw of page.data) {
     const entry = raw as CodexModelShape | null
     if (entry?.hidden === true) continue
     const id = text(entry?.model) ?? text(entry?.id)
     if (id === undefined) continue
     const name = text(entry?.displayName)
-    models.push({ id, ...name === undefined ? {} : { name } })
+    const reasoning = entry === null ? undefined : reasoningOf(entry)
+    models.push({
+      id,
+      ...name === undefined ? {} : { name },
+      ...reasoning === undefined ? {} : { reasoning },
+    })
   }
   const nextCursor = text(page.nextCursor)
   return { models, ...nextCursor === undefined ? {} : { nextCursor } }
@@ -231,7 +291,7 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
   }
   const lines = createInterface({ input: child.stdout, crlfDelay: Number.POSITIVE_INFINITY })
   const iterator = lines[Symbol.asyncIterator]()
-  const models = new Map<string, LlmDiscoveredModel>()
+  const models = new Map<string, CodexDiscoveredModel>()
   let requestId = 1
   try {
     await writeFrame(child, {

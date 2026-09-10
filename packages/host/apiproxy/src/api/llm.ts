@@ -9,7 +9,7 @@
  */
 
 import type { RpcRequest, RpcResponse } from './rpc.ts'
-import type { ModelCatalogFailure, ModelProviderGroup } from './sessions.ts'
+import type { ModelCatalogFailure, ModelProviderGroup, ModelReasoning } from './sessions.ts'
 
 /** Wire view of one configurable provider. */
 export interface ConfigurableProviderView {
@@ -86,4 +86,6 @@ export interface DiscoveredModelView {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+  /** Selectable reasoning metadata when the endpoint advertises it. */
+  reasoning?: ModelReasoning
 }
