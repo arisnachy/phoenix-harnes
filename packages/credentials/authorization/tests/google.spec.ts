@@ -11,6 +11,7 @@ import { MemoryCredentials } from './memory.ts'
 const originalFetch = internals.fetch
 const originalNow = internals.now
 const originalOpenLoopback = internals.openLoopback
+const originalOpenBrowser = internals.openBrowser
 
 const SCOPES = [
   'openid',
@@ -45,6 +46,7 @@ function surface() {
 }
 
 async function harness(): Promise<Context> {
+  internals.openBrowser = async () => {}
   const ctx = new Context()
   await ctx.plugin(MemoryCredentials)
   await ctx.plugin(AuthorizationService)
@@ -80,6 +82,7 @@ afterEach(() => {
   internals.fetch = originalFetch
   internals.now = originalNow
   internals.openLoopback = originalOpenLoopback
+  internals.openBrowser = originalOpenBrowser
   vi.restoreAllMocks()
 })
 
@@ -200,12 +203,10 @@ describe('Google Workspace API broker', () => {
     expect(JSON.stringify(result)).not.toMatch(/access-token-private|refresh-token-private/)
   })
 
-  it('does not restore a Google session from the durable marker after a process restart', async () => {
+  it('does not restore a Google session from a durable marker after a process restart', async () => {
     const ctx = await harness()
     await ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
 
-    await expect(googleApi(ctx).request({ service: 'calendar', path: 'calendars/primary/events' }))
-      .rejects.toMatchObject({ code: 'GOOGLE_REAUTH_REQUIRED' })
     expect(await ctx.authorization.inspect(GOOGLE_ACCOUNT_KEY)).toBeUndefined()
   })
 

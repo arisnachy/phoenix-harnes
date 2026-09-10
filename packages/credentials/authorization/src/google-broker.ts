@@ -14,8 +14,12 @@
  * @module @phoenix-ai/dsh-authorization/google
  */
 
+import { spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialKey, type CredentialKey } from '@phoenix-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
@@ -29,6 +33,7 @@ const GOOGLE_REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
 const LOOPBACK_HOST = '127.0.0.1'
 const CALLBACK_PATH = '/oauth2/callback'
 const EXPIRY_SKEW_MS = 60_000
+const GOOGLE_OAUTH_CLIENT_FILENAME = 'google-oauth-client.json'
 
 /** Deployment configuration. */
 export interface Config {
@@ -181,6 +186,87 @@ interface LoopbackReceiver {
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
+}
+
+/** Inputs exposed only to make local-client discovery deterministic under tests. */
+export interface GoogleOAuthClientResolutionOptions {
+  homeDir?: string
+  env?: Readonly<Record<string, string | undefined>>
+  readFile?: (path: string) => string
+}
+
+function googleOAuthClientPath(homeDir: string): string {
+  return join(homeDir, '.dsh', 'secrets', GOOGLE_OAUTH_CLIENT_FILENAME)
+}
+
+function validGoogleClientId(value: unknown): value is string {
+  return nonEmpty(value) && /^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com$/u.test(value.trim())
+}
+
+function readLocalGoogleOAuthClientId(
+  path: string,
+  readFile: (path: string) => string,
+): string | undefined {
+  let content: string
+  try {
+    content = readFile(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return undefined
+    throw new AuthorizationError(
+      `Google OAuth client config ${path} could not be read`,
+      'GOOGLE_CLIENT_CONFIG',
+    )
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(content)
+  } catch {
+    throw new AuthorizationError(
+      `Google OAuth client config ${path} is not valid JSON`,
+      'GOOGLE_CLIENT_CONFIG',
+    )
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new AuthorizationError(
+      `Google OAuth client config ${path} must contain a Google Desktop OAuth client`,
+      'GOOGLE_CLIENT_CONFIG',
+    )
+  }
+
+  const root = parsed as { installed?: unknown; client_id?: unknown }
+  const installed = root.installed !== null
+    && typeof root.installed === 'object'
+    && !Array.isArray(root.installed)
+    ? root.installed as { client_id?: unknown }
+    : undefined
+  const candidate = installed?.client_id ?? root.client_id
+  if (!validGoogleClientId(candidate)) {
+    throw new AuthorizationError(
+      `Google OAuth client config ${path} does not contain a valid Desktop client_id`,
+      'GOOGLE_CLIENT_CONFIG',
+    )
+  }
+  return candidate.trim()
+}
+
+/**
+ * Resolve the Google Desktop OAuth application identity on the Host.
+ * The existing KIRA/OpenClaw file wins; explicit composition and environment
+ * remain migration fallbacks. Only client_id is returned — client_secret is
+ * deliberately ignored and never enters PHOENIX config, telemetry, or prompts.
+ */
+export function resolveGoogleOAuthClientId(
+  configuredClientId?: string,
+  options: GoogleOAuthClientResolutionOptions = {},
+): string | undefined {
+  const homeDir = options.homeDir ?? homedir()
+  const readFile = options.readFile ?? ((path: string) => readFileSync(path, 'utf8'))
+  const local = readLocalGoogleOAuthClientId(googleOAuthClientPath(homeDir), readFile)
+  if (local !== undefined) return local
+  if (nonEmpty(configuredClientId)) return configuredClientId.trim()
+  const envClientId = (options.env ?? process.env).PHOENIX_GOOGLE_OAUTH_CLIENT_ID
+  return nonEmpty(envClientId) ? envClientId.trim() : undefined
 }
 
 /**
@@ -410,7 +496,7 @@ function createAuthorizationUrl(spec: ResolvedSpec, redirectUri: string, state: 
   const clientId = spec.clientId
   if (clientId === undefined) {
     throw new AuthorizationError(
-      'Google OAuth is not configured. Set PHOENIX_GOOGLE_OAUTH_CLIENT_ID to a Google Desktop OAuth client id and restart PHOENIX.',
+      'Google OAuth is not configured. Add ~/.dsh/secrets/google-oauth-client.json or set PHOENIX_GOOGLE_OAUTH_CLIENT_ID and restart PHOENIX.',
       'GOOGLE_CLIENT_UNCONFIGURED',
     )
   }
@@ -429,6 +515,34 @@ function createAuthorizationUrl(spec: ResolvedSpec, redirectUri: string, state: 
   return url.toString()
 }
 
+async function openSystemBrowser(url: string): Promise<void> {
+  const target = new URL(url)
+  if (target.origin !== 'https://accounts.google.com') {
+    throw new AuthorizationError('Google OAuth browser target is not allowed', 'GOOGLE_BROWSER_TARGET_DENIED')
+  }
+  const command = process.platform === 'win32'
+    ? 'rundll32.exe'
+    : process.platform === 'darwin'
+      ? 'open'
+      : 'xdg-open'
+  const args = process.platform === 'win32'
+    ? ['url.dll,FileProtocolHandler', url]
+    : [url]
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    child.once('error', reject)
+    child.once('spawn', () => {
+      child.unref()
+      resolve()
+    })
+  })
+}
+
 /** Google Host broker. OAuth material never leaves this service instance. */
 export default class GoogleApiBroker extends Service {
   static inject = ['authorization', 'credentials']
@@ -437,10 +551,13 @@ export default class GoogleApiBroker extends Service {
   private readonly startupCleanup: Promise<void>
   private grant: GoogleGrant | undefined
   private refreshInFlight: Promise<GoogleGrant> | undefined
+  private authorizationInFlight: Promise<GoogleGrant> | undefined
+  private autoAuthorizationBlocked = false
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
-    this.spec = resolveGoogleSpec(config)
+    const clientId = resolveGoogleOAuthClientId(config.clientId)
+    this.spec = resolveGoogleSpec(clientId === undefined ? config : { ...config, clientId })
     this.startupCleanup = this.purgeStaleRecord()
     // Cleanup starts at construction so a secret grant or marker left by an
     // earlier process cannot be mistaken for this process's live session.
@@ -504,6 +621,8 @@ export default class GoogleApiBroker extends Service {
     const grant = this.grant
     this.grant = undefined
     this.refreshInFlight = undefined
+    this.authorizationInFlight = undefined
+    this.autoAuthorizationBlocked = true
     let revoked = grant === undefined
     if (grant !== undefined) {
       const token = grant.refreshToken ?? grant.accessToken
@@ -527,7 +646,7 @@ export default class GoogleApiBroker extends Service {
     const clientId = this.spec.clientId
     if (clientId === undefined) {
       throw new AuthorizationError(
-        'Google OAuth is not configured. Set PHOENIX_GOOGLE_OAUTH_CLIENT_ID to a Google Desktop OAuth client id and restart PHOENIX.',
+        'Google OAuth is not configured. Add ~/.dsh/secrets/google-oauth-client.json or set PHOENIX_GOOGLE_OAUTH_CLIENT_ID and restart PHOENIX.',
         'GOOGLE_CLIENT_UNCONFIGURED',
       )
     }
@@ -535,10 +654,12 @@ export default class GoogleApiBroker extends Service {
     const pkce = createPkce()
     const receiver = await internals.openLoopback(state, session.signal)
     try {
+      const authorizationUrl = createAuthorizationUrl(this.spec, receiver.redirectUri, state, pkce.challenge)
       session.notify({
         message: 'Continue with Google in your browser. PHOENIX keeps OAuth tokens inside the Host process.',
-        url: createAuthorizationUrl(this.spec, receiver.redirectUri, state, pkce.challenge),
+        url: authorizationUrl,
       })
+      await internals.openBrowser(authorizationUrl).catch(() => {})
       const code = await receiver.code
       const response = await internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
         method: 'POST',
@@ -568,6 +689,7 @@ export default class GoogleApiBroker extends Service {
       }
       await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
       this.grant = next
+      this.autoAuthorizationBlocked = false
     } finally {
       await receiver.close()
     }
@@ -576,14 +698,52 @@ export default class GoogleApiBroker extends Service {
   private async usableGrant(requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
     await this.startupCleanup
     const current = this.grant
-    if (current === undefined) {
-      throw new AuthorizationError('Google is not signed in for this PHOENIX process', 'GOOGLE_REAUTH_REQUIRED')
-    }
+    if (current === undefined) return this.authorizeOnDemand(requiredScope)
     if (!current.scopes.includes(requiredScope)) {
       throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
     }
     if (current.expiresAt > internals.now() + EXPIRY_SKEW_MS) return current
     return this.refresh(current, requiredScope, signal)
+  }
+
+  private authorizeOnDemand(requiredScope: string): Promise<GoogleGrant> {
+    const checkScope = (next: GoogleGrant): GoogleGrant => {
+      if (!next.scopes.includes(requiredScope)) {
+        throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
+      }
+      return next
+    }
+    if (this.autoAuthorizationBlocked) {
+      return Promise.reject(new AuthorizationError(
+        'Google needs explicit reconnection after a cancelled or disconnected authorization',
+        'GOOGLE_REAUTH_REQUIRED',
+      ))
+    }
+    if (this.authorizationInFlight !== undefined) return this.authorizationInFlight.then(checkScope)
+
+    const running = this.ctx.authorization.begin({
+      key: GOOGLE_ACCOUNT_KEY,
+      interaction: {
+        notify: () => {},
+        prompt: () => Promise.reject(new AuthorizationError(
+          'Google loopback authorization never accepts model-supplied credentials',
+          'GOOGLE_INTERACTION_DENIED',
+        )),
+      },
+    }).then((outcome) => {
+      const next = this.grant
+      if (outcome.status !== 'authorized' || next === undefined) {
+        throw new AuthorizationError('Google authorization did not complete', 'GOOGLE_REAUTH_REQUIRED')
+      }
+      return next
+    }).catch((error: unknown) => {
+      this.autoAuthorizationBlocked = true
+      throw error
+    }).finally(() => {
+      if (this.authorizationInFlight === running) this.authorizationInFlight = undefined
+    })
+    this.authorizationInFlight = running
+    return running.then(checkScope)
   }
 
   private refresh(current: GoogleGrant, requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
@@ -649,13 +809,15 @@ export default class GoogleApiBroker extends Service {
   }
 }
 
-/** Test seams for network, clock, and loopback I/O; production never mutates them. */
+/** Test seams for network, clock, loopback, and browser I/O; production never mutates them. */
 export const internals: {
   fetch: typeof fetch
   now: () => number
   openLoopback: typeof openLoopback
+  openBrowser: typeof openSystemBrowser
 } = {
   fetch,
   now: Date.now,
   openLoopback,
+  openBrowser: openSystemBrowser,
 }
