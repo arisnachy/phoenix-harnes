@@ -124,9 +124,9 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
                 alt=""
                 aria-hidden="true"
                 draggable="false"
-                height="24"
+                height="38"
                 src="/phoenix-emblem.png"
-                width="24"
+                width="38"
               />
             </div>
           </span>
@@ -250,9 +250,9 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
                 alt=""
                 aria-hidden="true"
                 draggable="false"
-                height="24"
+                height="38"
                 src="/phoenix-emblem.png"
-                width="24"
+                width="38"
               />
             </div>
           </span>

@@ -24,6 +24,7 @@ describe('Google authorization REAL composition', () => {
         label: 'Google Workspace',
         methods: [{ id: 'oauth', label: 'Sign in with Google' }],
         inFlight: false,
+        disconnectable: true,
       }])
       expect(ctx.get('googleApi')).toBeDefined()
 

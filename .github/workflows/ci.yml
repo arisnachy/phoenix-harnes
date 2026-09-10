@@ -156,6 +156,14 @@ jobs:
       - name: Run complete keyless Python suite
         run: uv run --python 3.10 --group test --project python/sdk pytest
 
+  python-runtime:
+    if: github.event_name == 'pull_request'
+    name: python runtime / release-shaped Linux x64
+    uses: ./.github/workflows/build-exe-for-python-sdk.yml
+    with:
+      targets: node24-linux-x64
+      ci: true
+
   windows:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -187,10 +195,11 @@ jobs:
   windows-native:
     if: github.event_name == 'pull_request'
     runs-on: windows-latest
-    name: windows node 24 / native required
+    name: windows node 24 / native complete
     timeout-minutes: 120
     env:
       DSH_GATE_CONCURRENCY: '1'
+      DSH_COVERAGE_TEST_TIMEOUT_MS: '30000'
       DSH_PUBLINT_CONCURRENCY: '2'
     steps:
       - uses: actions/checkout@v6
@@ -216,12 +225,12 @@ jobs:
         run: pnpm exec vitest run packages/shell/tool-pwsh/tests/computer.spec.ts
       - name: Run required native Windows gates
         shell: pwsh
-        run: pnpm run check:ci:windows-blocking
+        run: pnpm run check:ci:windows-complete
 
   all-checks-passed:
     name: all checks passed
     runs-on: ubuntu-latest
-    needs: [node-24, node-24-coverage, node-24-consumers, node-compat, python-sdk, windows, windows-native]
+    needs: [node-24, node-24-coverage, node-24-consumers, node-compat, python-sdk, python-runtime, windows, windows-native]
     if: always() && github.event_name == 'pull_request'
     steps:
       - name: Fail if any needed job did not succeed

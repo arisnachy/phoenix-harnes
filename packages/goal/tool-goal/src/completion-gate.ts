@@ -5,6 +5,7 @@ import type { ContentBlock, LlmRuntime } from '@phoenix-ai/dsh-llm'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
 import { resolveGoalJudgeAgentOptions } from './judge-route.ts'
+import { availableReviewTools } from './review-tools.ts'
 
 /** Machine verdict for one independently checked completion dimension. */
 export type CompletionCheckStatus = 'pass' | 'fail' | 'blocked'
@@ -342,7 +343,7 @@ export async function runAdversarialCompletionGate(input: {
     signal: input.signal,
     agentOptions,
     outputSchema: EXECUTION_SCHEMA,
-    toolFilter: { allow: [...EXECUTION_TOOLS] },
+    toolFilter: { allow: availableReviewTools(input.parent, EXECUTION_TOOLS) },
   })
   return readExecution(executed) ?? unavailable('Independent adversarial execution did not return valid clean-room evidence.')
 }

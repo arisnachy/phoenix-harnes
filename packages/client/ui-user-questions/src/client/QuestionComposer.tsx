@@ -42,7 +42,8 @@ export function parseRecommendedLabel(label: string): { label: string; recommend
 
 /** Return whether a text-field key event belongs to an active IME composition. */
 function isComposing(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
-  return event.nativeEvent.isComposing || event.key === 'Process'
+  const legacyKeyCode = (event.nativeEvent as unknown as { readonly keyCode?: number }).keyCode
+  return event.nativeEvent.isComposing || legacyKeyCode === 229 || event.key === 'Process'
 }
 
 /** The free-text answer field shared by both question shapes. */

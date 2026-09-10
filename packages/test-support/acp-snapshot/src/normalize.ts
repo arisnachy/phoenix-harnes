@@ -1,6 +1,6 @@
 /**
  * Pure ACP transcript and session-log normalizers. They scrub session ids, run cwd, RPC ids,
- * timestamps and hook duration while preserving event payloads.
+ * timestamps, approval deadline anchors, and hook duration while preserving event payloads.
  * Request-header scrubbers stay composable so one scenario per header class can pin prompt and
  * tool-schema sidecars.
  * @module @phoenix-ai/dsh-acp-snapshot/normalize
@@ -347,6 +347,17 @@ export function normalizeSessionLog(
     if (record.type === 'hook/result' && record.data !== null && typeof record.data === 'object') {
       const data = record.data as Record<string, unknown>
       if ('durationMs' in data) data.durationMs = 0
+    }
+    if (record.type === 'approval/asked' && record.data !== null && typeof record.data === 'object') {
+      const data = record.data as Record<string, unknown>
+      const deadline = data.deadline
+      if (deadline !== null && typeof deadline === 'object') {
+        const fields = deadline as Record<string, unknown>
+        if (typeof fields.requestedAt === 'number' && typeof fields.expiresAt === 'number') {
+          fields.expiresAt = Math.max(0, fields.expiresAt - fields.requestedAt)
+          fields.requestedAt = 0
+        }
+      }
     }
     return scrubValue(record, ctx, cwdPathMode) as Record<string, unknown>
   })

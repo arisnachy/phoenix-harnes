@@ -27,6 +27,103 @@ describe('CI workflow', () => {
     expect(commands).toContain('pnpm run check:ci:windows-blocking')
   })
 
+  it('separates public ref resolution, credential-free candidate validation, and publication', () => {
+    const workflow = loadWorkflow('.github/workflows/phoenix-upstream-quarantine.yml')
+    if (!isRecord(workflow.jobs)) throw new TypeError('PHOENIX quarantine workflow must define jobs')
+
+    expect(workflow.permissions).toEqual({})
+    expect(Object.keys(workflow.jobs).sort()).toEqual([
+      'open-review',
+      'publish-candidate',
+      'resolve-upstream',
+      'validate-candidate',
+    ])
+
+    const resolve = workflowJob(workflow, 'resolve-upstream')
+    expect(resolve.permissions).toEqual({ contents: 'read' })
+    expect(resolve.outputs).toMatchObject({
+      upstream_sha: '${{ steps.resolve.outputs.upstream_sha }}',
+      base_sha: '${{ steps.resolve.outputs.base_sha }}',
+      candidate_branch: '${{ steps.resolve.outputs.candidate_branch }}',
+      candidate_exists: '${{ steps.resolve.outputs.candidate_exists }}',
+    })
+    const resolveSteps = (resolve.steps as unknown[]).filter(isRecord)
+    expect(resolveSteps.some(step => typeof step.uses === 'string')).toBe(false)
+    const resolveCommands = resolveSteps
+      .filter((step): step is Record<string, unknown> & { run: string } => typeof step.run === 'string')
+      .map(step => step.run)
+      .join('\n')
+    expect(resolveCommands).toContain('git ls-remote')
+    expect(resolveCommands).toContain('candidate_branch="quarantine/phoenix-${base_short}-${upstream_short}"')
+    expect(resolveCommands).not.toContain('git push')
+
+    const validate = workflowJob(workflow, 'validate-candidate')
+    expect(validate).toMatchObject({
+      needs: 'resolve-upstream',
+      permissions: {},
+      'timeout-minutes': 45,
+    })
+    expect(validate.if).toBeUndefined()
+    expect(validate.outputs).toMatchObject({
+      candidate_needed: '${{ steps.materialize.outputs.candidate_needed }}',
+      candidate_tree: '${{ steps.materialize.outputs.candidate_tree }}',
+    })
+    const validateSteps = (validate.steps as unknown[]).filter(isRecord)
+    const validateJson = JSON.stringify(validate)
+    expect(validateSteps.some(step => typeof step.uses === 'string' && step.uses.startsWith('actions/checkout@'))).toBe(false)
+    expect(validateJson).toContain('pnpm install --frozen-lockfile --ignore-scripts')
+    expect(validateJson).toContain('phoenix-quarantine-verify.mjs')
+    expect(validateJson).toContain('WORKFLOW_SHA:scripts/phoenix-quarantine-verify.mjs')
+    expect(validateJson).toContain('GITHUB_WORKSPACE')
+    expect(validateJson).toContain('candidate_tree=$candidate_tree')
+    expect(validateJson).toContain('pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa')
+    expect(validateJson).toContain('actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38')
+    expect(validateJson).toContain("steps.materialize.outputs.candidate_needed == 'true'")
+    expect(validateJson).not.toContain('${{ github.token }}')
+    expect(validateJson).not.toContain('secrets.')
+    expect(validateJson).not.toContain('git push')
+
+    const publish = workflowJob(workflow, 'publish-candidate')
+    expect(publish).toMatchObject({
+      needs: ['resolve-upstream', 'validate-candidate'],
+      permissions: { contents: 'write' },
+      if: "needs.validate-candidate.result == 'success' && needs.validate-candidate.outputs.candidate_needed == 'true'",
+      'timeout-minutes': 10,
+    })
+    expect(publish.outputs).toMatchObject({
+      published: '${{ steps.publish.outputs.published }}',
+    })
+    const checkout = (publish.steps as unknown[])
+      .filter(isRecord)
+      .find(step => step.uses === 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803')
+    expect(checkout).toMatchObject({
+      with: {
+        'persist-credentials': true,
+        token: '${{ github.token }}',
+      },
+    })
+    const publishJson = JSON.stringify(publish)
+    expect(publishJson).toContain('${{ github.token }}')
+    expect(publishJson).toContain('${{ needs.validate-candidate.outputs.candidate_tree }}')
+    expect(publishJson).toContain('VALIDATED_CANDIDATE_TREE')
+    expect(publishJson).toContain('Existing candidate branch does not contain the validated tree.')
+    expect(publishJson).toContain('git push --no-follow-tags')
+    expect(publishJson).not.toContain('pull-requests: write')
+
+    const review = workflowJob(workflow, 'open-review')
+    expect(review).toMatchObject({
+      needs: 'publish-candidate',
+      permissions: { 'pull-requests': 'write' },
+      if: "needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.published == 'true'",
+      'timeout-minutes': 10,
+    })
+    const reviewJson = JSON.stringify(review)
+    expect(reviewJson).toContain('gh pr create')
+    expect(reviewJson).toContain('--draft')
+    expect(reviewJson).toContain('GH_TOKEN')
+    expect(reviewJson).not.toContain('contents: write')
+  })
+
   it('isolates every pnpm action setup destination per runner', () => {
     const files = ['.github/workflows/ci.yml', '.github/workflows/ci-master.yml', '.github/workflows/phoenix-main-guard.yml']
     const setups: Array<{ jobName: string; step: unknown }> = []

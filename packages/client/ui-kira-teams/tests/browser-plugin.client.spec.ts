@@ -111,8 +111,8 @@ describe('lineageMembers', () => {
       sessionsWith(FAMILY, sid('g1')).list.getSnapshot(),
     )
     expect(root?.id).toBe(sid('root'))
-    expect(rows.map(row => row.summary.id)).toEqual([sid('c1')])
-    expect(rows.map(row => row.depth)).toEqual([1])
+    expect(rows.map(row => row.summary.id)).toEqual([sid('c1'), sid('c2'), sid('g1')])
+    expect(rows.map(row => row.depth)).toEqual([1, 1, 2])
   })
 
   it('returns nothing without a current session', () => {

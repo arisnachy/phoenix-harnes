@@ -17,7 +17,7 @@ Check the [exit code: N] marker on every bash result; investigate failures befor
 
 Track every background job id you start. You are notified in-session when a job finishes — do not busy-poll or sleep on one; keep working on independent steps and do not duplicate a running job's work. Before giving a final answer, collect every still-relevant job with job_output (set wait: true only when you are genuinely blocked on it), and job_kill jobs that stopped mattering.
 
-Use goal tools for one long-running completion objective in the current session. create_goal may infer goal intent from a direct human request in any language; do not create a goal for routine single-turn work. Call get_goal before update_goal and copy its exact goal_id and revision. After session resume or fork, an active goal is disarmed: when a human asks to continue or resume in any wording or language, use update_goal action resume to rearm it. Mark complete only when the objective is actually achieved. Mark blocked only after the same blocking condition persists for at least 3 consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, or useful remaining work is not blocked.
+Use goal tools for one long-running completion objective in the current session. create_goal may infer goal intent from a direct human request in any language; do not create a goal for routine single-turn work. Call get_goal before update_goal and copy its exact goal_id and revision. After session resume or fork, the driver restores an active durable goal and continues it automatically; blocked goals wait for their external condition or an explicit resume. Mark complete only when the objective is actually achieved. Mark blocked only after the same blocking condition persists for at least 3 consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, or useful remaining work is not blocked. The goal domain independently rejects completion unless a durable judge has passed the exact current goal revision. Completion is gated by an independent read-only judge: a self-reported complete result remains active until the judge returns pass; use its required_changes as the next work list. When the exact deliverable is ready, call update_goal with action complete in the same round so the judge activates; never end a supposedly finished round with prose alone. A blocked or rejected judge is a recovery event, not mission completion: continue with a materially improved strategy.
 
 Usa workflow SOLO cuando la persona pida explícitamente un workflow o una orquestación grande: escribe un script JavaScript con fases y resultados estructurados. Respeta el límite de 2 subagentes concurrentes y 2 totales. Para una o dos delegaciones, usa llamadas directas seriales. Antes de delegar muestra ORQUESTACION; después resume RESULTADO y EVIDENCIA en español.
 
@@ -109,6 +109,115 @@ interface ToolArgsMap {
     /** children (default) lists direct children only; descendants walks the complete tree below you. */
     scope?: "children" | "descendants";
   } & Record<string, JsonValue>;
+  /** Build one organization, business, or system as a durable Organization Forge. Research comparable solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, and R&D roles active, prefer deterministic automation, and require functional, tested, secure, observable, maintainable, documented evidence plus an independent judge before delivery. Forge is a modular capability over the mission system, not a replacement for it. Start with research; a failed work item or judge result remains active and nextAction points to the next recovery step. The final handoff question is not a completion substitute. */
+  organization_forge: {
+    /** start, get, research, source, audit, blueprint, deliverable, work, strategy, revalidate, atlas, block, advance, criterion, judge, or management */
+    action: "start" | "get" | "research" | "source" | "audit" | "blueprint" | "deliverable" | "work" | "strategy" | "revalidate" | "atlas" | "block" | "advance" | "criterion" | "judge" | "management";
+    /** Existing Forge build id for non-start actions. */
+    forge_id?: string;
+    /** Business, organization, or system objective for start. */
+    objective?: string;
+    /** Required delivery criteria for start. */
+    criteria?: string[];
+    /** Comparable solution kind. */
+    research_kind?: "product" | "repository" | "tool" | "component" | "pattern";
+    /** Comparable solution title. */
+    research_title?: string;
+    /** Secret-free comparable solution summary. */
+    research_summary?: string;
+    /** Why the comparable solution matters. */
+    research_relevance?: string;
+    /** Research evidence references. */
+    research_evidence?: string[];
+    /** Public source title. */
+    title?: string;
+    /** Public https, atlas, or local source reference without credentials. */
+    locator?: string;
+    /** Detected license identifier or policy result. */
+    license?: string;
+    /** Audit stage. */
+    stage?: "pre-reuse" | "post-modification";
+    /** Source id being audited. */
+    source_id?: string;
+    /** Dependency audit result. */
+    dependencies?: "pending" | "passed" | "needs_changes" | "blocked";
+    /** Secret scan result. */
+    secrets?: "pending" | "passed" | "needs_changes" | "blocked";
+    /** Vulnerability audit result. */
+    vulnerabilities?: "pending" | "passed" | "needs_changes" | "blocked";
+    /** Bounded audit or judge findings. */
+    findings?: string[];
+    /** Blueprint components. */
+    components?: string[];
+    /** Blueprint infrastructure. */
+    infrastructure?: string[];
+    /** Blueprint automations. */
+    automations?: string[];
+    /** Blueprint workflows. */
+    workflows?: string[];
+    /** Blueprint metrics. */
+    metrics?: string[];
+    /** Blueprint cost controls. */
+    cost_controls?: string[];
+    /** Blueprint quality targets. */
+    quality_targets?: string[];
+    /** Existing deliverable id when updating evidence status. */
+    deliverable_id?: string;
+    /** Concrete output name. */
+    deliverable_name?: string;
+    /** Concrete output kind. */
+    deliverable_kind?: "software" | "web" | "infrastructure" | "automation" | "workflow" | "agent" | "documentation" | "other";
+    /** Durable artifact reference. */
+    artifact_ref?: string;
+    /** Deliverable evidence state. */
+    deliverable_status?: "pending" | "implemented" | "tested" | "verified";
+    /** Phoenix team role for work. */
+    role?: "it" | "security" | "rd";
+    /** Durable work item title. */
+    work_title?: string;
+    /** Recoverable work status. */
+    work_status?: "active" | "completed" | "failed";
+    /** Strategy referenced by a work item. */
+    strategy_id?: string;
+    /** Stable failure fingerprint used to prevent repeated approaches. */
+    failure_fingerprint?: string;
+    /** Alternative strategy name. */
+    strategy_name?: string;
+    /** Alternative strategy status. */
+    strategy_status?: "proposed" | "active" | "completed" | "failed";
+    /** Alternative strategy summary. */
+    strategy_summary?: string;
+    /** Current source revalidation evidence. */
+    revalidation_evidence?: string[];
+    /** Reusable Atlas entry name. */
+    atlas_name?: string;
+    /** Secret-free reusable Atlas summary. */
+    atlas_summary?: string;
+    /** Secret-free reusable pattern. */
+    reusable_pattern?: string;
+    /** External dependency that blocks progress. */
+    dependency?: string;
+    /** Why the dependency blocks progress. */
+    blocker_reason?: string;
+    /** Condition that allows the next attempt. */
+    resume_condition?: string;
+    /** Next Forge lifecycle phase. */
+    phase?: "researching" | "auditing" | "designing" | "building" | "verifying";
+    /** Criterion id returned by start or get. */
+    criterion_id?: string;
+    /** Evidence state. */
+    criterion_status?: "pending" | "implemented" | "tested" | "verified";
+    /** Evidence references; required for verified. */
+    evidence?: string[];
+    /** Optional manual verdict when judging is disabled. */
+    verdict?: "pass" | "needs_changes" | "blocked";
+    /** Judge summary. */
+    summary?: string;
+    /** Required changes before approval. */
+    required_changes?: string[];
+    /** Post-build management choice. */
+    management_mode?: "handoff" | "assisted" | "autonomous";
+  } & Record<string, JsonValue>;
   /** Run a foreground fresh-agent Ralph loop toward one immutable objective. Use only when the direct human explicitly asks for Ralph or fresh-agent iteration. Each round opens a new child with no parent conversation or prior child session; the shared workspace is long-term memory, and only a bounded structured report crosses rounds. The call returns when a worker reports completion or a concrete blocker, or at the round limit. Ordinary long-running same-session work belongs to goal tools. */
   ralph: {
     /** The immutable completion objective for every fresh Ralph round. */
@@ -136,6 +245,39 @@ interface ToolArgsMap {
   skill: {
     /** The exact skill name from the available skills list. */
     name: string;
+  } & Record<string, JsonValue>;
+  /** Maintain one persistent, evidence-based specialist laboratory. Start it only for an explicit expertise request, then register traceable sources, falsifiable hypotheses, reproducible experiments, and judge results. A specialist is ready only after a passing evaluation; failed evaluations create an improving checkpoint and are bounded by max_iterations. When the base profile requires judging, evaluate invokes a fresh read-only independent judge automatically. */
+  specialist_lab: {
+    /** start, source, hypothesis, experiment, or evaluate */
+    action: "start" | "source" | "hypothesis" | "experiment" | "evaluate";
+    /** Existing specialist laboratory id for non-start actions. */
+    specialist_id?: string;
+    /** Research topic for start. */
+    topic?: string;
+    /** Concrete expertise objective for start. */
+    objective?: string;
+    /** Evidence-based readiness criteria for start. */
+    success_criteria?: string[];
+    /** Positive bounded improvement-loop cap. */
+    max_iterations?: number;
+    /** Source title. */
+    title?: string;
+    /** Source URL or stable locator. */
+    locator?: string;
+    /** Falsifiable hypothesis. */
+    hypothesis?: string;
+    /** Reproducible experiment name. */
+    experiment_name?: string;
+    /** Dataset used by the experiment. */
+    dataset?: string;
+    /** Judge score from 0 to 1. */
+    score?: number;
+    /** Whether all success criteria passed when no independent judge is configured. */
+    passed?: boolean;
+    /** Judge summary. */
+    summary?: string;
+    /** Changes required before the next evaluation. */
+    required_changes?: string[];
   } & Record<string, JsonValue>;
   /** Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result. */
   subagent: {
@@ -262,6 +404,12 @@ interface ToolOutputMap {
       };
     };
     activation: "armed" | "disarmed";
+    judge?: {
+      verdict: "pass" | "needs_changes" | "blocked";
+      summary: string;
+      findings: string[];
+      requiredChanges: string[];
+    };
   };
   edit: {
     path: string;
@@ -284,6 +432,12 @@ interface ToolOutputMap {
       };
     };
     activation: "armed" | "disarmed";
+    judge?: {
+      verdict: "pass" | "needs_changes" | "blocked";
+      summary: string;
+      findings: string[];
+      requiredChanges: string[];
+    };
   };
   interrupt_agent: {
     accepted: boolean;
@@ -335,6 +489,7 @@ interface ToolOutputMap {
     parent?: string;
     depth?: number;
   })[];
+  organization_forge: Record<string, JsonValue>;
   ralph: {
     runId: string;
     agentsStarted: number;
@@ -366,6 +521,9 @@ interface ToolOutputMap {
       description: string;
     };
     content: string;
+  };
+  specialist_lab: {
+    specialist: Record<string, JsonValue>;
   };
   subagent: {
     kind: "background";
@@ -416,6 +574,12 @@ interface ToolOutputMap {
       };
     };
     activation: "armed" | "disarmed";
+    judge?: {
+      verdict: "pass" | "needs_changes" | "blocked";
+      summary: string;
+      findings: string[];
+      requiredChanges: string[];
+    };
   };
   workflow: {
     runId: string;

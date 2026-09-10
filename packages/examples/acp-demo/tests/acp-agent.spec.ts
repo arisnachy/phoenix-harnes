@@ -255,7 +255,9 @@ describe('dsh-acp-demo composition', () => {
       'job_kill',
       'job_list',
       'job_output',
+      'organization_forge',
       'skill',
+      'specialist_lab',
       'update_goal',
     ])
     await ctx.fiber.dispose()

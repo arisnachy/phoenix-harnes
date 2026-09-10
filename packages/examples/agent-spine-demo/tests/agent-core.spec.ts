@@ -573,6 +573,15 @@ describe('dsh-agent-spine-demo bundle', () => {
         </skill_resources>
 
         <skill_instructions>
+        <phoenix_operational_preflight>
+        Skill: hot-skill
+        Modo: instruction-only
+        Entradas obligatorias: ninguna declarada
+        Herramientas:
+        No se detectó una herramienta específica; usa la skill como guía y no afirmes ejecución.
+        No inventes herramientas, no adivines entradas y no presentes una acción condicionada como ejecutada.
+        </phoenix_operational_preflight>
+
         Use the freshly loaded body.
         </skill_instructions>
         </skill_content>",

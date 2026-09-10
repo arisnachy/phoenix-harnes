@@ -46,9 +46,16 @@ if (
   if (existsSync(supervisor)) {
     const forwardedArgs = rawArgs.slice(1)
     if (forwardedArgs[0] === '--') forwardedArgs.shift()
+    const hostArtifact = fileURLToPath(import.meta.url).replaceAll('\\', '/').endsWith('/lib/bin.js')
+      ? 'lib'
+      : 'src'
     const result = spawnSync(process.execPath, [supervisor, ...forwardedArgs], {
       cwd: resolve(supervisor, '..', '..'),
-      env: process.env,
+      env: {
+        ...process.env,
+        PHOENIX_SUPERVISED_HOST_ARTIFACT: hostArtifact,
+        PHOENIX_SUPERVISED_LAUNCH_CWD: process.cwd(),
+      },
       stdio: 'inherit',
       windowsHide: false,
     })

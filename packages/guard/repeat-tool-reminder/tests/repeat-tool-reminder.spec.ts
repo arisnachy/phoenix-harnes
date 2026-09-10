@@ -38,7 +38,9 @@ function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
 /** Every injected-context user message in the agent's log, flattened to joined text + source for terse assertions. */
 function reminders(agent: Agent): { text: string; source: unknown }[] {
   return [...agent.session.events]
-    .filter((e): e is SessionEvent<'user/message'> => e.type === 'user/message' && e.data.source.kind !== 'user')
+    .filter((e): e is SessionEvent<'user/message'> => e.type === 'user/message'
+      && e.data.source.kind === 'plugin'
+      && (e.data.source.plugin === 'repeat-tool-reminder' || e.data.source.plugin === 'test'))
     .map(e => ({
       text: e.data.content.map(block => block.type === 'text' ? block.text : '').join('|'),
       source: e.data.source,

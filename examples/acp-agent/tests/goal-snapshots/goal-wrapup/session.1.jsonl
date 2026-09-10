@@ -1,0 +1,6 @@
+{"type":"session","version":0,"id":"51111111-1111-4111-8111-111111111111","createdAt":1788989001000,"cwd":"{{cwd}}","parentSession":"50000000-0000-4000-8000-000000000000","origin":"subagent","delegationDepth":1}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-start","index":0,"blockType":"tool-call"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"tool-call-delta","index":0,"id":"goal-design-output","name":"structured_output","argumentsDelta":"{\"cases\":[{\"name\":\"missing-closing-message\",\"purpose\":\"Detect a goal marked complete without a user-visible closing message.\"}]}"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-end","index":0,"block":{"type":"tool-call","id":"goal-design-output","name":"structured_output","arguments":"{\"cases\":[{\"name\":\"missing-closing-message\",\"purpose\":\"Detect a goal marked complete without a user-visible closing message.\"}]}"}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"usage","usage":{"inputTokens":20,"outputTokens":10}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"finish","reason":{"kind":"tool-calls"}}}}

@@ -1,0 +1,6 @@
+{"type":"session","version":0,"id":"53333333-3333-4333-8333-333333333333","createdAt":1788989003000,"cwd":"{{cwd}}","parentSession":"50000000-0000-4000-8000-000000000000","origin":"subagent","delegationDepth":1}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-start","index":0,"blockType":"tool-call"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"tool-call-delta","index":0,"id":"goal-judge-output","name":"structured_output","argumentsDelta":"{\"verdict\":\"pass\",\"summary\":\"The assembled wrap-up lifecycle is independently verified.\",\"findings\":[],\"required_changes\":[]}"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-end","index":0,"block":{"type":"tool-call","id":"goal-judge-output","name":"structured_output","arguments":"{\"verdict\":\"pass\",\"summary\":\"The assembled wrap-up lifecycle is independently verified.\",\"findings\":[],\"required_changes\":[]}"}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"usage","usage":{"inputTokens":30,"outputTokens":12}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"finish","reason":{"kind":"tool-calls"}}}}
