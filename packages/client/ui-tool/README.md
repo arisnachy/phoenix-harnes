@@ -16,6 +16,8 @@ The package also fills `conversation.details.tool` with `ToolDetails`. The row a
 
 Generic rows classify known Tool names into search, read, shell, write, edit, code, or generic variants. Running, successful, failed, and interrupted lifecycle states come only from the frozen call/result slice. File paths resolve against the session `cwd` only when the user invokes the Host open-file callback; presentation code does not read Session services.
 
+Settled generic Tool results may also carry durable `image` content blocks. Those blocks are not flattened into JSON text: `ToolCallTree` threads the conversation image renderer into the generic fallback, which forwards each durable attachment reference through `renderMessageImages`. The attachment plugin therefore remains responsible for authorization, loading, gallery presentation, and URL lifecycle, while ordinary text and unknown non-image result blocks keep the generic row fallback.
+
 ## Atomic Tool views
 
 An owning business package registers its wire Tool name into `tool.call.toolview`:
