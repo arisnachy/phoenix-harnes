@@ -40,3 +40,27 @@ describe('ConversationRoot premium header', () => {
     expect(declarations('.tabActive::after')?.get('background')).toBe('var(--dsw-alias-label-primary)')
   })
 })
+
+describe('ConversationRoot UI-2 composer', () => {
+  it('uses a Codex-scale responsive composer column', () => {
+    expect(declarations('.root')?.get('--dsh-chat-content-width')).toBe('768px')
+    expect(declarations('.root')?.get('--dsh-composer-card-max-width')).toBe('calc(var(--dsh-chat-content-width) + 32px)')
+    expect(declarations('.root')?.get('--dsh-composer-side-clearance')).toBe('clamp(10px, 2vw, 18px)')
+  })
+
+  it('gives the composer a floating card and visible neutral focus treatment', () => {
+    const card = declarations('.root :global([data-composer-card])')
+    expect(card?.get('border-radius')).toBe('26px')
+    expect(card?.get('box-shadow')).toBe('var(--dsw-shadow-lv2)')
+    expect(card?.get('transition')).toContain('border-color')
+
+    const focused = declarations('.root :global([data-composer-card]):focus-within')
+    expect(focused?.get('border-color')).toBe('var(--dsw-alias-border-l2)')
+    expect(focused?.get('box-shadow')).toContain('0 0 0 1px var(--dsw-alias-border-l2)')
+  })
+
+  it('keeps the active dock safe-area aware', () => {
+    expect(declarations(".root[data-phase='active'] .composerSeat")?.get('padding-bottom'))
+      .toBe('env(safe-area-inset-bottom)')
+  })
+})
