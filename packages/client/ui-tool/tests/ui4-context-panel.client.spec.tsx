@@ -56,7 +56,7 @@ describe('PHOENIX UI-4 contextual panel', () => {
     const block = root('w1', { name: 'read', argsRaw: '{"path":"a.ts"}' })
     const view = render(<ToolCallTree {...props(block, openDetails)} />)
 
-    fireEvent.click(view.getByRole('button', { name: 'Open in side panel' }))
+    fireEvent.click(view.getByRole('button', { name: t('details.title') }))
 
     expect(openDetails).toHaveBeenCalledTimes(1)
     expect(openDetails).toHaveBeenCalledWith({ turnSeq: 3, callId: 'w1', toolName: 'read' })
