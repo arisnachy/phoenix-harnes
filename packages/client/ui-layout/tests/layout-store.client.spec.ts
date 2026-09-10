@@ -1,10 +1,4 @@
 // @vitest-environment jsdom
-/**
- * createLayoutStore unit account: init shape, the action write set (clamp
- * inside actions), and the absence of browser persistence. Uses the
- * test-sanctioned path: factory self-call + .create() gives the
- * real engine instance (same create path as production).
- */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createLayoutStore } from '@phoenix-ai/dsh-client-ui-layout/src/client/stores.ts'
 import {
@@ -13,16 +7,23 @@ import {
 } from '@phoenix-ai/dsh-client-ui-layout/src/client/columns.ts'
 
 const PERSIST_KEY = 'dsh.layout.panels'
-
 beforeEach(() => { localStorage.clear() })
 
+const initial = () => ({
+  sidebar: SIDEBAR_DEFAULT,
+  details: 0,
+  rightPane: null,
+  narrow: false,
+  narrowExpanded: false,
+})
+
 describe('createLayoutStore', () => {
-  it('initializes the sidebar at its default width, details closed, wide viewport assumed', () => {
+  it('initializes with both right-rail surfaces closed', () => {
     const { store } = createLayoutStore().create()
-    expect(store.getSnapshot()).toEqual({ sidebar: SIDEBAR_DEFAULT, details: 0, narrow: false, narrowExpanded: false })
+    expect(store.getSnapshot()).toEqual(initial())
   })
 
-  it('each create() is an independent instance (factory is not a singleton)', () => {
+  it('each create() is an independent instance', () => {
     const a = createLayoutStore().create()
     const b = createLayoutStore().create()
     a.actions.setSidebar(400)
@@ -41,7 +42,7 @@ describe('createLayoutStore', () => {
     expect(store.getSnapshot().details).toBe(DETAILS_MAX)
   })
 
-  it('toggleSidebar flips closed <-> contract default (drag width forgotten)', () => {
+  it('toggleSidebar flips closed <-> contract default', () => {
     const { store, actions } = createLayoutStore().create()
     actions.setSidebar(400)
     actions.toggleSidebar()
@@ -50,18 +51,18 @@ describe('createLayoutStore', () => {
     expect(store.getSnapshot().sidebar).toBe(SIDEBAR_DEFAULT)
   })
 
-  it('narrow toggleSidebar flips only the re-expand override; the width preference survives', () => {
+  it('narrow toggleSidebar flips only the re-expand override', () => {
     const { store, actions } = createLayoutStore().create()
     actions.setSidebar(400)
     actions.setNarrow(true)
     actions.toggleSidebar()
-    expect(store.getSnapshot()).toEqual({ sidebar: 400, details: 0, narrow: true, narrowExpanded: true })
+    expect(store.getSnapshot()).toEqual({ sidebar: 400, details: 0, rightPane: null, narrow: true, narrowExpanded: true })
     actions.toggleSidebar()
     expect(store.getSnapshot().narrowExpanded).toBe(false)
     expect(store.getSnapshot().sidebar).toBe(400)
   })
 
-  it('crossing the breakpoint drops the override; a same-value setNarrow keeps it', () => {
+  it('crossing the breakpoint drops the override', () => {
     const { store, actions } = createLayoutStore().create()
     actions.setNarrow(true)
     actions.toggleSidebar()
@@ -74,30 +75,37 @@ describe('createLayoutStore', () => {
     expect(store.getSnapshot().narrowExpanded).toBe(false)
   })
 
-  it('openDetails uses the contract default, preserves an open width, and closeDetails zeroes', () => {
+  it('tool details opens the right rail and closeDetails only closes its own mode', () => {
     const { store, actions } = createLayoutStore().create()
     actions.openDetails()
-    expect(store.getSnapshot().details).toBe(DETAILS_DEFAULT)
+    expect(store.getSnapshot()).toMatchObject({ details: DETAILS_DEFAULT, rightPane: 'details' })
     actions.setDetails(500)
     actions.openDetails()
     expect(store.getSnapshot().details).toBe(500)
+    actions.openWorkspaceSurface()
     actions.closeDetails()
-    expect(store.getSnapshot().details).toBe(0)
+    expect(store.getSnapshot()).toMatchObject({ details: 500, rightPane: 'workspace' })
   })
 
-  it('does not persist panel geometry', () => {
+  it('Workspace Surface reuses the resizable right rail and collapses independently', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.openWorkspaceSurface()
+    expect(store.getSnapshot()).toMatchObject({ details: DETAILS_DEFAULT, rightPane: 'workspace' })
+    actions.setDetails(520)
+    actions.openDetails()
+    expect(store.getSnapshot()).toMatchObject({ details: 520, rightPane: 'details' })
+    actions.openWorkspaceSurface()
+    expect(store.getSnapshot()).toMatchObject({ details: 520, rightPane: 'workspace' })
+    actions.closeWorkspaceSurface()
+    expect(store.getSnapshot()).toMatchObject({ details: 0, rightPane: null })
+  })
+
+  it('does not persist panel geometry or right-pane selection', () => {
     const first = createLayoutStore().create()
     first.actions.setSidebar(400)
-    first.actions.openDetails()
+    first.actions.openWorkspaceSurface()
     first.actions.setDetails(500)
     expect(localStorage.getItem(PERSIST_KEY)).toBeNull()
-
-    const second = createLayoutStore().create()
-    expect(second.store.getSnapshot()).toEqual({
-      sidebar: SIDEBAR_DEFAULT,
-      details: 0,
-      narrow: false,
-      narrowExpanded: false,
-    })
+    expect(createLayoutStore().create().store.getSnapshot()).toEqual(initial())
   })
 })
