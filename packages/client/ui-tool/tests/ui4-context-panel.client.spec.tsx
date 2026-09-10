@@ -8,6 +8,7 @@ import { makeTranslate } from '@phoenix-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
 import type { ToolTreeProps } from '../src/client/contract/slots.ts'
 import { ToolCallTree } from '../src/client/tool/ToolCallTree.tsx'
+import { ToolDetails } from '../src/client/tool/ToolDetails.tsx'
 import { zh } from '@phoenix-ai/dsh-client-ui-conversation/src/client/locales.ts'
 
 afterEach(cleanup)
@@ -59,5 +60,29 @@ describe('PHOENIX UI-4 contextual panel', () => {
 
     expect(openDetails).toHaveBeenCalledTimes(1)
     expect(openDetails).toHaveBeenCalledWith({ turnSeq: 3, callId: 'w1', toolName: 'read' })
+  })
+
+  it('renders an image artifact as the selected tool visual surface', () => {
+    const block: ToolResultNode = {
+      ...root('screen-1', { name: 'computer_use', argsRaw: '{}' }),
+      meta: {
+        artifact: {
+          id: 'screen-artifact',
+          title: 'Computer visual state',
+          mime: 'image/png',
+          data: 'data:image/png;base64,iVBORw0KGgo=',
+        },
+      },
+    }
+    const description: HostDescription | undefined = undefined
+    const view = render(
+      <ToolDetails
+        block={block}
+        useHostDescription={selector => selector(description)}
+        t={t}
+      />,
+    )
+
+    expect(view.getByRole('img', { name: 'Computer visual state' })).toBeTruthy()
   })
 })
