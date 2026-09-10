@@ -1,10 +1,8 @@
 {
   "name": "@phoenix-ai/dsh-client-ui-workspace",
-  "description": "Workspace picker plugin: one WorkspacePicker registered into the sidebar and empty-state workspace slots",
+  "description": "Workspace browsing plus the non-blocking PHOENIX Workspace Surface",
   "version": "0.1.1-rc.2",
-  "publishConfig": {
-    "access": "public"
-  },
+  "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
@@ -14,18 +12,9 @@
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./lib/types/index.d.ts",
-      "default": "./lib/index.js"
-    },
-    "./invariant": {
-      "types": "./lib/types/invariant.d.ts",
-      "default": "./lib/invariant.js"
-    },
-    "./client": {
-      "types": "./lib/types/client/index.d.ts",
-      "default": "./lib/client.js"
-    },
+    ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./invariant": { "types": "./lib/types/invariant.d.ts", "default": "./lib/invariant.js" },
+    "./client": { "types": "./lib/types/client/index.d.ts", "default": "./lib/client.js" },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -36,19 +25,15 @@
         "@phoenix-ai/dsh-client-locale",
         "@phoenix-ai/dsh-client-runtime",
         "@phoenix-ai/dsh-client-ui-conversation",
-        "@phoenix-ai/dsh-client-ui-sidebar"
+        "@phoenix-ai/dsh-client-ui-sidebar",
+        "@phoenix-ai/dsh-client-ui-layout"
       ],
       "platform": "web"
     }
   },
-  "scripts": {
-    "bundle": "tsdown",
-    "watch": "tsdown --watch"
-  },
+  "scripts": { "bundle": "tsdown", "watch": "tsdown --watch" },
   "license": "MIT",
-  "dependencies": {
-    "clsx": "^2.0.0"
-  },
+  "dependencies": { "clsx": "^2.0.0" },
   "peerDependencies": {
     "@phoenix-ai/dsh-hardness": "workspace:^",
     "@phoenix-ai/dsh-host-apiproxy": "workspace:^",
@@ -78,10 +63,5 @@
     "@phoenix-ai/cordis": "workspace:^",
     "react": "^18.2.0"
   },
-  "files": [
-    "lib/index.js",
-    "lib/invariant.js",
-    "lib/client.js",
-    "lib/types/**/*.d.ts"
-  ]
+  "files": ["lib/index.js", "lib/invariant.js", "lib/client.js", "lib/types/**/*.d.ts"]
 }
