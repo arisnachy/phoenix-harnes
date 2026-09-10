@@ -132,6 +132,9 @@ const CAPACITY_HINT: Readonly<Record<CapacityField, string>> = {
   maxTokens: '32K',
 }
 
+/** Reasoning ids the current pi-ai configuration schema can materialize. */
+const PI_AI_REASONING_EFFORTS = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+
 /**
  * Spell a stored count for a field that may be unset. The spelling itself is
  * {@link formatCapacity}, shared with the DeepSeek catalog editor so both
@@ -143,13 +146,26 @@ function capacitySpelling(value: number | undefined): string {
   return value === undefined ? '' : formatCapacity(value)
 }
 
-/** Adopt a candidate, keeping whatever capacities the provider disclosed. */
-function adopt(candidate: DiscoveredModelView): ModelDraft {
+/**
+ * Adopt one discovered model without throwing away its selectable reasoning
+ * capability. Discovery may expose forward-looking effort ids (for example
+ * `ultra`) before the installed pi-ai runtime can dispatch them; only ids the
+ * current configuration schema can execute are materialized into
+ * `reasoningEfforts`, while the raw discovery metadata remains available in
+ * the picker response for future runtimes.
+ */
+export function adoptDiscoveredModel(candidate: DiscoveredModelView): ModelDraft {
+  const reasoningEfforts = candidate.reasoning?.efforts.reduce<Record<string, string | null>>((result, effort) => {
+    if (!PI_AI_REASONING_EFFORTS.has(effort.id)) return result
+    result[effort.id] = effort.id === 'off' ? null : effort.id
+    return result
+  }, {})
   return {
     id: candidate.id,
     ...candidate.name === undefined ? {} : { name: candidate.name },
     ...candidate.contextWindow === undefined ? {} : { contextWindow: candidate.contextWindow },
     ...candidate.maxTokens === undefined ? {} : { maxTokens: candidate.maxTokens },
+    ...reasoningEfforts !== undefined && Object.keys(reasoningEfforts).length > 0 ? { reasoningEfforts } : {},
   }
 }
 
@@ -276,7 +292,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
       if (found === undefined) return
       const byId = new Map(models.map(model => [textOf(model, 'id'), model]))
       for (const candidate of found) {
-        byId.set(candidate.id, byId.get(candidate.id) ?? adopt(candidate))
+        byId.set(candidate.id, byId.get(candidate.id) ?? adoptDiscoveredModel(candidate))
       }
       onChange([...byId.values()])
     } catch (error) {
@@ -301,7 +317,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
       // Keyed by id, so a half-typed row whose id is still empty is not a
       // match and the candidate joins as its own row — correct, since a row
       // without an id is not yet a model and the create/apply gates refuse it.
-      byId.set(candidate.id, byId.get(candidate.id) ?? adopt(candidate))
+      byId.set(candidate.id, byId.get(candidate.id) ?? adoptDiscoveredModel(candidate))
     }
     onChange([...byId.values()])
     closePicker()
