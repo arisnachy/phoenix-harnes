@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { SessionId, WorkspaceId, WorkspaceView } from '@phoenix-ai/dsh-api-remotes/client'
 import { SessionRuntime } from '../src/client/sessions/service.ts'
 import { WorkspaceRuntime } from '../src/client/workspaces/service.ts'
-import { FakeApiClient, fakeRemote, ok } from './fake-api.client.ts'
+import { FakeApiClient, deferred, fakeRemote, ok } from './fake-api.client.ts'
 
 const sid = (id: string): SessionId => id as SessionId
 const wid = (id: string): WorkspaceId => id as WorkspaceId
@@ -47,6 +47,43 @@ describe('WorkspaceRuntime New Session', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
 
     expect(api.callsOf('session.create')).toEqual([{ workspaceId: 'alpha' }])
+    expect(sessions.list.getSnapshot().current).toBe('s-fresh')
+  })
+
+  it('keeps the current session live while a new session is still being prepared', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+
+    api.onWorkspaceList = () => Promise.resolve(ok({
+      items: [workspace('alpha', [sid('s-current')])] as never[],
+    }))
+    api.onList = () => Promise.resolve(ok({
+      items: [{
+        sessionId: sid('s-current'),
+        updatedAt: 1,
+        running: false,
+        blank: false,
+        cwd: '/w/alpha',
+      }] as never[],
+    }))
+    await Promise.all([workspaces.refresh(), sessions.refresh()])
+    await Promise.resolve()
+    sessions.open(sid('s-current'))
+
+    const create = deferred<Awaited<ReturnType<FakeApiClient['onCreate']>>>()
+    api.onCreate = () => create.promise
+
+    workspaces.startSession()
+
+    // The resident composer is session-scoped. Keep the current selection
+    // staged while Host creation is pending so the textarea never falls into
+    // the no-session/inert state and remains writable until the hand-off.
+    expect(sessions.list.getSnapshot().current).toBe('s-current')
+
+    create.resolve(ok({ sessionId: sid('s-fresh') }))
+    await new Promise(resolve => setTimeout(resolve, 0))
     expect(sessions.list.getSnapshot().current).toBe('s-fresh')
   })
 })

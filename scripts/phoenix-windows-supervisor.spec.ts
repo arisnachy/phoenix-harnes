@@ -29,6 +29,13 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('using the verified staged activator for prepared self-update compatibility')
   })
 
+  it('pauses activation before invoking the prepared activator when the live checkout is dirty', () => {
+    expect(source).toContain('const liveStatus = gitStatus(root)')
+    expect(source).toContain('if (!liveStatus.ok || liveStatus.entries.length > 0)')
+    expect(source).toContain('reportDirtyActivationBlock(liveStatus)')
+    expect(source).toContain('Commit, stash, or intentionally discard those changes')
+  })
+
   it('routes direct Windows web launches through the supervisor so restart survives the host exit', () => {
     expect(cliSource).toContain("process.platform === 'win32'")
     expect(cliSource).toContain("rawArgs[0] === 'web'")
