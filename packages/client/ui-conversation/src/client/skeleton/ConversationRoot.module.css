@@ -6,9 +6,9 @@
   height: 100%;
   min-width: 0;
   background: var(--dsw-alias-bg-base);
-  --dsh-chat-content-width: 748px;
+  --dsh-chat-content-width: 768px;
   --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
-  --dsh-composer-side-clearance: 16px;
+  --dsh-composer-side-clearance: clamp(10px, 2vw, 18px);
   --dsh-composer-dock-inset: 8px;
 }
 
@@ -229,11 +229,30 @@
   position: sticky;
   bottom: 0;
   z-index: 7;
+  padding-bottom: env(safe-area-inset-bottom);
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--dsw-alias-bg-base) 0%, transparent) 0px,
     var(--dsw-alias-bg-base) 36px
   );
+}
+
+/* UI-2: ChatGPT/Codex-like floating composer chrome. InputBar keeps ownership
+   of behavior, attachments, model controls and send/stop semantics; the shell
+   only supplies the responsive geometry and premium focus surface. */
+.root :global([data-composer-card]) {
+  border-radius: 26px;
+  box-shadow: var(--dsw-shadow-lv2);
+  transition: border-color 140ms var(--ds-ease-in-out), box-shadow 140ms var(--ds-ease-in-out);
+}
+
+.root :global([data-composer-card])::after {
+  border-radius: inherit;
+}
+
+.root :global([data-composer-card]):focus-within {
+  border-color: var(--dsw-alias-border-l2);
+  box-shadow: var(--dsw-shadow-lv2), 0 0 0 1px var(--dsw-alias-border-l2);
 }
 
 .scrollBody:has([data-conversation-composer-overlay]) {
@@ -294,9 +313,25 @@
   visibility: hidden;
 }
 
+@media (max-width: 720px) {
+  .root {
+    --dsh-chat-content-width: 100%;
+    --dsh-composer-side-clearance: 10px;
+  }
+
+  .composerSeat {
+    --dsh-composer-text-max-height: min(38vh, 280px);
+  }
+
+  .root :global([data-composer-card]) {
+    border-radius: 24px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .crumb,
-  .tab {
+  .tab,
+  .root :global([data-composer-card]) {
     transition: none;
   }
 }
