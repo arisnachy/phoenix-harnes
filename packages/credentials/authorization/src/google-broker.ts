@@ -14,8 +14,12 @@
  * @module @phoenix-ai/dsh-authorization/google
  */
 
+import { spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialKey, type CredentialKey } from '@phoenix-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
@@ -29,6 +33,7 @@ const GOOGLE_REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
 const LOOPBACK_HOST = '127.0.0.1'
 const CALLBACK_PATH = '/oauth2/callback'
 const EXPIRY_SKEW_MS = 60_000
+const DEFAULT_GOOGLE_OAUTH_CLIENT_FILE = join(homedir(), '.dsh', 'secrets', 'google-oauth-client.json')
 
 /** Deployment configuration. */
 export interface Config {
@@ -183,6 +188,56 @@ function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
 }
 
+function configuredClientId(value: string | undefined): string | undefined {
+  if (nonEmpty(value)) return value.trim()
+  const ambient = process.env.PHOENIX_GOOGLE_OAUTH_CLIENT_ID
+  return nonEmpty(ambient) ? ambient.trim() : undefined
+}
+
+/**
+ * Resolve the Google Desktop client id from the existing local KIRA/OpenClaw
+ * configuration, falling back to PHOENIX deployment configuration. Secrets in
+ * the JSON file are parsed only inside the Host process and are never returned.
+ * @param fallback - deployment/client-id fallback, normally PHOENIX_GOOGLE_OAUTH_CLIENT_ID.
+ * @param file - local OAuth client JSON path; overridable only for deterministic tests.
+ * @returns the selected public Google OAuth client id, or undefined when neither source exists.
+ */
+export function resolveGoogleOAuthClientId(
+  fallback?: string,
+  file: string = DEFAULT_GOOGLE_OAUTH_CLIENT_FILE,
+): string | undefined {
+  let content: string
+  try {
+    content = readFileSync(file, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return configuredClientId(fallback)
+    throw new TypeError(`authorization-google: failed to read local Google OAuth client at ${file}`)
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(content)
+  } catch {
+    throw new TypeError(`authorization-google: invalid local Google OAuth client at ${file}`)
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new TypeError(`authorization-google: invalid local Google OAuth client at ${file}`)
+  }
+  const root = parsed as Record<string, unknown>
+  const installed = root.installed
+  const web = root.web
+  const nested = installed !== null && typeof installed === 'object' && !Array.isArray(installed)
+    ? installed as Record<string, unknown>
+    : web !== null && typeof web === 'object' && !Array.isArray(web)
+      ? web as Record<string, unknown>
+      : undefined
+  const clientId = nested?.client_id ?? root.client_id
+  if (!nonEmpty(clientId)) {
+    throw new TypeError(`authorization-google: local Google OAuth client at ${file} has no valid client_id`)
+  }
+  return clientId.trim()
+}
+
 /**
  * Resolve broker configuration without inventing scopes or a deployment identity.
  * @param config - deployment-owned Google OAuth client id and requested scopes.
@@ -201,6 +256,16 @@ export function resolveGoogleSpec(config: Config): ResolvedSpec {
   }
   const clientId = nonEmpty(config.clientId) ? config.clientId.trim() : undefined
   return clientId === undefined ? { scopes } : { clientId, scopes }
+}
+
+function resolveRuntimeGoogleSpec(config: Config): ResolvedSpec {
+  const spec = resolveGoogleSpec(config)
+  const ambient = configuredClientId(undefined)
+  const explicit = spec.clientId
+  const clientId = explicit !== undefined && explicit !== ambient
+    ? explicit
+    : resolveGoogleOAuthClientId(explicit)
+  return clientId === undefined ? { scopes: spec.scopes } : { clientId, scopes: spec.scopes }
 }
 
 function base64url(value: Buffer): string {
@@ -410,7 +475,7 @@ function createAuthorizationUrl(spec: ResolvedSpec, redirectUri: string, state: 
   const clientId = spec.clientId
   if (clientId === undefined) {
     throw new AuthorizationError(
-      'Google OAuth is not configured. Set PHOENIX_GOOGLE_OAUTH_CLIENT_ID to a Google Desktop OAuth client id and restart PHOENIX.',
+      'Google OAuth is not configured. Add ~/.dsh/secrets/google-oauth-client.json or set PHOENIX_GOOGLE_OAUTH_CLIENT_ID, then retry.',
       'GOOGLE_CLIENT_UNCONFIGURED',
     )
   }
@@ -429,6 +494,38 @@ function createAuthorizationUrl(spec: ResolvedSpec, redirectUri: string, state: 
   return url.toString()
 }
 
+async function openAuthorizationUrl(url: string): Promise<void> {
+  const destination = new URL(url)
+  if (destination.origin !== 'https://accounts.google.com'
+    || destination.pathname !== '/o/oauth2/v2/auth') {
+    throw new AuthorizationError('Refusing to open a non-Google OAuth destination', 'GOOGLE_BROWSER_DESTINATION')
+  }
+  // Vitest exercises the same Host path but must never launch a real desktop browser.
+  if (process.env.VITEST === 'true') return
+
+  const command = process.platform === 'win32'
+    ? 'rundll32.exe'
+    : process.platform === 'darwin'
+      ? 'open'
+      : 'xdg-open'
+  const args = process.platform === 'win32'
+    ? ['url.dll,FileProtocolHandler', destination.toString()]
+    : [destination.toString()]
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    child.once('error', reject)
+    child.once('spawn', () => {
+      child.unref()
+      resolve()
+    })
+  })
+}
+
 /** Google Host broker. OAuth material never leaves this service instance. */
 export default class GoogleApiBroker extends Service {
   static inject = ['authorization', 'credentials']
@@ -440,7 +537,7 @@ export default class GoogleApiBroker extends Service {
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
-    this.spec = resolveGoogleSpec(config)
+    this.spec = resolveRuntimeGoogleSpec(config)
     this.startupCleanup = this.purgeStaleRecord()
     // Cleanup starts at construction so a secret grant or marker left by an
     // earlier process cannot be mistaken for this process's live session.
@@ -527,7 +624,7 @@ export default class GoogleApiBroker extends Service {
     const clientId = this.spec.clientId
     if (clientId === undefined) {
       throw new AuthorizationError(
-        'Google OAuth is not configured. Set PHOENIX_GOOGLE_OAUTH_CLIENT_ID to a Google Desktop OAuth client id and restart PHOENIX.',
+        'Google OAuth is not configured. Add ~/.dsh/secrets/google-oauth-client.json or set PHOENIX_GOOGLE_OAUTH_CLIENT_ID, then retry.',
         'GOOGLE_CLIENT_UNCONFIGURED',
       )
     }
@@ -535,10 +632,19 @@ export default class GoogleApiBroker extends Service {
     const pkce = createPkce()
     const receiver = await internals.openLoopback(state, session.signal)
     try {
+      const authorizationUrl = createAuthorizationUrl(this.spec, receiver.redirectUri, state, pkce.challenge)
       session.notify({
         message: 'Continue with Google in your browser. PHOENIX keeps OAuth tokens inside the Host process.',
-        url: createAuthorizationUrl(this.spec, receiver.redirectUri, state, pkce.challenge),
+        url: authorizationUrl,
       })
+      try {
+        await internals.openAuthorizationUrl(authorizationUrl)
+      } catch {
+        session.notify({
+          message: 'PHOENIX could not open the browser automatically. Open this Google authorization URL manually.',
+          url: authorizationUrl,
+        })
+      }
       const code = await receiver.code
       const response = await internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
         method: 'POST',
@@ -649,13 +755,15 @@ export default class GoogleApiBroker extends Service {
   }
 }
 
-/** Test seams for network, clock, and loopback I/O; production never mutates them. */
+/** Test seams for network, clock, loopback I/O, and host browser opening; production never mutates them. */
 export const internals: {
   fetch: typeof fetch
   now: () => number
   openLoopback: typeof openLoopback
+  openAuthorizationUrl: typeof openAuthorizationUrl
 } = {
   fetch,
   now: Date.now,
   openLoopback,
+  openAuthorizationUrl,
 }
