@@ -1,5 +1,6 @@
 /** Card-aware output body for the selected Tool call in details. */
 import { DiffBlock, ReadBlock, SearchBlock, TerminalBlock, WebBlock } from '@phoenix-ai/dsh-client-ui-primitives'
+import type { ToolCallBlock } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ToolDetailsProps } from '../contract/slots.ts'
 import { diffCardModel } from './models/diff-card-model.ts'
 import { readCardModel } from './models/read-card-model.ts'
@@ -8,6 +9,29 @@ import { terminalBlockLabels, terminalCardModel } from './models/terminal-card-m
 import { resultText } from './models/tool-call-model.ts'
 import { webCardModel } from './models/web-card-model.ts'
 import css from './ToolDetails.module.css'
+
+interface ImageArtifact {
+  readonly title: string
+  readonly data: string
+}
+
+/** Narrow an optional settled-call artifact to a browser-safe inline image. */
+function imageArtifact(block: ToolCallBlock): ImageArtifact | null {
+  if (!('kind' in block)) return null
+  const meta = block.meta as { readonly artifact?: unknown } | undefined
+  const candidate = meta?.artifact
+  if (candidate === null || typeof candidate !== 'object') return null
+  const artifact = candidate as { readonly title?: unknown; readonly mime?: unknown; readonly data?: unknown }
+  if (
+    typeof artifact.title !== 'string'
+    || artifact.title === ''
+    || typeof artifact.mime !== 'string'
+    || !artifact.mime.startsWith('image/')
+    || typeof artifact.data !== 'string'
+    || !artifact.data.startsWith('data:image/')
+  ) return null
+  return { title: artifact.title, data: artifact.data }
+}
 
 /**
  * Render the selected Tool call's structured output when its presentation
@@ -19,6 +43,15 @@ export function ToolDetails({
   block, cwd, useHostDescription, t,
 }: Pick<ToolDetailsProps, 'block' | 'cwd' | 'useHostDescription' | 't'>) {
   const home = useHostDescription(description => description?.home)
+  const artifact = imageArtifact(block)
+  if (artifact !== null) {
+    return (
+      <figure className={css.artifact}>
+        <img className={css.artifactImage} src={artifact.data} alt={artifact.title} />
+        <figcaption className={css.artifactCaption}>{artifact.title}</figcaption>
+      </figure>
+    )
+  }
   const terminal = terminalCardModel(block, cwd)
   if (terminal !== null) {
     return (

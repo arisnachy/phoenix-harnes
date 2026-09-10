@@ -69,6 +69,7 @@
     "@phoenix-ai/dsh-llm-deepseek": "workspace:^",
     "@phoenix-ai/dsh-llm-pi-ai": "workspace:^",
     "@phoenix-ai/dsh-llm-retry": "workspace:^",
+    "@phoenix-ai/dsh-mcp-connector-registry": "workspace:^",
     "@phoenix-ai/dsh-permission-presets": "workspace:^",
     "@phoenix-ai/dsh-plan-mode": "workspace:^",
     "@phoenix-ai/dsh-user-profile": "workspace:^",

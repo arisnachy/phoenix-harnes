@@ -2,6 +2,48 @@
   border-radius: 6px;
 }
 
+.callMain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px;
+}
+
+.callBody {
+  min-width: 0;
+}
+
+.openDetails {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.callMain:hover .openDetails,
+.callMain:focus-within .openDetails,
+.openDetails:focus-visible {
+  opacity: 1;
+}
+
+.openDetails:hover,
+.openDetails:focus-visible {
+  background: var(--dsw-alias-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  outline: none;
+}
+
 .subCalls {
   display: flex;
   flex-direction: column;
