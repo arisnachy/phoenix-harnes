@@ -64,7 +64,7 @@ describe('ModelSelect reasoning effort', () => {
     />)
 
     const trigger = screen.getByRole('button', {
-      name: '选择模型，当前 DeepSeek-V4-Flash，推理等级 High',
+      name: '选择模型，当前 DeepSeek V4 Flash，推理等级 High',
     })
     fireEvent.click(trigger)
     fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
@@ -78,7 +78,7 @@ describe('ModelSelect reasoning effort', () => {
         model: 'deepseek-v4-flash',
         reasoningEffort: 'max',
       })
-      expect(trigger.getAttribute('aria-label')).toBe('选择模型，当前 DeepSeek-V4-Flash，推理等级 Max')
+      expect(trigger.getAttribute('aria-label')).toBe('选择模型，当前 DeepSeek V4 Flash，推理等级 Max')
     })
   })
 
@@ -132,7 +132,7 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.queryByRole('menuitem', { name: /推理等级/ })).toBeNull()
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
     expect(screen.queryByText('removed-model')).toBeNull()
-    expect(screen.getByRole('menuitemradio', { name: 'DeepSeek-V4-Flash' })).toBeTruthy()
+    expect(screen.getByRole('menuitemradio', { name: 'DeepSeek V4 Flash' })).toBeTruthy()
   })
 
   it('announces a rejected selection as a transient toast and keeps the in-menu strip for loads', async () => {
@@ -160,11 +160,61 @@ describe('ModelSelect reasoning effort', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /选择模型|当前/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /DeepSeek-V4-Pro/ }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /DeepSeek V4 Pro/ }))
     const toast = await screen.findByRole('alert')
     expect(toast.textContent).toContain('模型操作失败：model-unavailable: session already contains images')
     // The selection failure does not render the in-menu load strip (no Retry).
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
+  })
+
+  it('presents readable names and silently falls back when a provider logo fails', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'google', model: 'research' },
+      groups: [
+        {
+          id: 'google',
+          name: 'google',
+          models: [
+            { id: 'research', name: 'Deep Research Max Preview (Apr-21-2026)' },
+            { id: 'gemini', name: 'gemini-2.5-computer-use-preview-10-2025' },
+          ],
+        },
+        {
+          id: 'unknown-gateway',
+          name: 'Acme Gateway',
+          models: [{ id: 'acme', name: 'Acme-Model' }],
+        },
+      ],
+    }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    const trigger = screen.getByRole('button', { name: /Deep Research Max/ })
+    expect(trigger.getAttribute('title')).toBeNull()
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+
+    const research = screen.getByRole('menuitemradio', { name: 'Deep Research Max' })
+    expect(research.getAttribute('title')).toBeNull()
+    expect(screen.getByText('Research')).toBeTruthy()
+    expect(screen.getAllByText('Preview').length).toBeGreaterThan(0)
+    expect(screen.getByRole('menuitemradio', { name: 'Gemini 2.5 Computer Use' })).toBeTruthy()
+
+    const googleLogo = screen.getAllByRole('img', { name: 'google logo' })[0]
+    const image = googleLogo?.querySelector('img')
+    expect(image?.getAttribute('src')).toContain('cdn.simpleicons.org/google')
+    fireEvent.error(image as HTMLImageElement)
+    expect(image?.hidden).toBe(true)
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    const unknownLogo = screen.getByRole('img', { name: 'Acme Gateway logo' })
+    expect(unknownLogo.querySelector('img')).toBeNull()
   })
 
   it('renders no Agent-bound control for an addressed subagent session', () => {

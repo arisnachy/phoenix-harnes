@@ -5,6 +5,12 @@
  * each drilling into its own list — the provider-grouped model list over
  * the shared directory, and the effort levels. The trigger (313:14108's
  * ToggleButton) shows both: model name + effort in the caption tone.
+ *
+ * Host provider/model ids remain the only routing facts. The model pane adds
+ * a presentation-only layer for friendly catalog names, secondary capability
+ * copy, Preview badges, and provider identity. Known provider logos load lazily
+ * and silently over a fixed local monogram fallback; an unknown provider or a
+ * failed image request never changes selection state or opens an error surface.
  * Data and submission ride the SAME per-session ModelDirectory as the
  * /model popup; exact-model reasoning metadata and the selected effort come
  * from the Host rather than a client-owned vocabulary. A rejected selection
@@ -23,6 +29,7 @@ import {
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
+import { presentModel, providerInitial, providerLogoUrl } from './presentation.ts'
 import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
@@ -34,6 +41,28 @@ interface EffortChoice {
   effort: string | undefined
   label: string
   description?: string
+}
+
+/** Fixed provider mark with a local monogram that survives offline/CDN failure. */
+function ProviderLogo({ providerId, providerName }: { providerId: string; providerName: string }) {
+  const src = providerLogoUrl(providerId, providerName)
+  return (
+    <span className={css.providerLogo} role="img" aria-label={`${providerName} logo`}>
+      <span className={css.providerLogoFallback} aria-hidden="true">{providerInitial(providerName)}</span>
+      {src !== undefined && (
+        <img
+          className={css.providerLogoImage}
+          src={src}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={(event) => { event.currentTarget.hidden = true }}
+        />
+      )}
+    </span>
+  )
 }
 
 /**
@@ -202,8 +231,9 @@ export function ModelSelect(
     void select(selection).then(settleSelection)
   }
 
-  const modelLabel = currentChoice?.model.name ?? t('trigger.fallback')
-  const triggerLabel = effortLabel === undefined ? modelLabel : `${modelLabel} · ${effortLabel}`
+  const modelLabel = currentChoice === undefined
+    ? t('trigger.fallback')
+    : presentModel(currentChoice.model.name).displayName
   const triggerAria = currentChoice === undefined
     ? t('trigger.selectAria')
     : effortLabel === undefined
@@ -226,7 +256,6 @@ export function ModelSelect(
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? `${id}-menu` : undefined}
-        title={triggerLabel}
         disabled={locked}
         onClick={() => {
           if (open) {
@@ -244,7 +273,7 @@ export function ModelSelect(
       {open && (
         <div
           id={`${id}-menu`}
-          className={css.menu}
+          className={clsx(css.menu, pane === 'model' && css.modelMenu)}
           role="menu"
           aria-label={t('menu.aria')}
           aria-busy={state.status === 'loading' || busy}
@@ -291,26 +320,33 @@ export function ModelSelect(
                       <div className={css.groupTitle} id={headingId}>{group.name}</div>
                       {group.models.map((model) => {
                         const selected = state.current?.provider === group.id && state.current.model === model.id
+                        const presentation = presentModel(model.name, model.description)
                         return (
                           <button
                             ref={itemRef()}
                             type="button"
                             role="menuitemradio"
+                            aria-label={presentation.displayName}
                             aria-checked={selected}
-                            className={clsx(css.option, selected && css.selected)}
+                            className={clsx(css.option, css.modelOption, selected && css.selected)}
                             key={model.id}
-                            title={model.name}
                             disabled={busy}
                             onClick={() => { choose({ provider: group.id, model: model.id }) }}
                           >
+                            <ProviderLogo providerId={group.id} providerName={group.name} />
                             <span className={css.optionCopy}>
-                              <span className={css.modelName}>{model.name}</span>
-                              {model.description !== undefined && (
-                                <span className={css.description}>{model.description}</span>
+                              <span className={css.modelName}>{presentation.displayName}</span>
+                              {presentation.description !== undefined && (
+                                <span className={css.description}>{presentation.description}</span>
                               )}
                             </span>
-                            <span className={css.check}>
-                              {selected ? <IconCheckOutline16 /> : null}
+                            <span className={css.optionTrail}>
+                              {presentation.badge !== undefined && (
+                                <span className={css.badge} aria-hidden="true">{presentation.badge}</span>
+                              )}
+                              <span className={css.check}>
+                                {selected ? <IconCheckOutline16 /> : null}
+                              </span>
                             </span>
                           </button>
                         )
