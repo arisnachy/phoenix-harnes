@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
 import { JsonBlock } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts'
+import type {} from '../contract/ui4-details-owner.ts'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 import css from './ChatView.module.css'
 
@@ -17,7 +18,7 @@ type RoutedChatNodeOwner = {
 
 /** Subscribe and dispatch one stable Context key without observing sibling Nodes. */
 export const ChatNodeSeat = memo(function ChatNodeSeat({
-  nodeKey, selectedCallId, cwd, openFile, inspectCall, forkAt,
+  nodeKey, selectedCallId, cwd, openFile, inspectCall, openDetails, forkAt,
   renderMessageImages, loadImage, fileMentions, workspaceFileMentions, runArtifact, useSession, renderSlot, t,
 }: ChatNodeSeatProps) {
   const node = useSession(snapshot => snapshot.chat.nodes.get(nodeKey))
@@ -29,6 +30,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       cwd,
       openFile,
       inspectCall,
+      openDetails,
       forkAt,
       ...runArtifact === undefined ? {} : { runArtifact },
       renderMessageImages,
@@ -36,8 +38,8 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       fileMentions,
       workspaceFileMentions,
     }, [
-    node, selectedCallId, cwd, openFile, inspectCall, forkAt, renderMessageImages, loadImage, fileMentions, runArtifact,
-    workspaceFileMentions,
+    node, selectedCallId, cwd, openFile, inspectCall, openDetails, forkAt, renderMessageImages, loadImage, fileMentions,
+    runArtifact, workspaceFileMentions,
   ])
   if (routedNode === undefined || owner === null) return null
   // Runtime dispatch owns the correlation: every Node's discriminant is the
