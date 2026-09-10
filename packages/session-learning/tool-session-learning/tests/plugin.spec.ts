@@ -64,6 +64,8 @@ describe('tool-session-learning plugin', () => {
 
     const assembly = await ctx.systemPrompt.assemble()
     expect(() => renderContextSnapshot(assembly)).not.toThrow()
-    expect(renderContextSnapshot(assembly)).toContain('{{A=3;while(A!=3){A++;}}}')
+    const context = renderContextSnapshot(assembly)
+    expect(context).toContain('{ {A=3;while(A!=3){A++;} }')
+    expect(context).not.toContain('summary":"{{A=3')
   })
 })
