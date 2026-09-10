@@ -54,7 +54,8 @@ export function apply(ctx: Context, config: Config): void {
     // search indexes every durable event and can be very large; scanning that
     // full index synchronously here makes every user message pay the cost.
     // Explicit memory_search still exposes cognitive recall when requested.
-    text: () => formatRecentMemoryContext(ctx.learningMemory.recall(8)),
+    text: ({ agent }) => agent === undefined ? ''
+      : formatRecentMemoryContext(ctx.learningMemory.recallForSession(agent.session, 8)),
     interpolateVariables: false,
   })
   ctx.tools.register(defineTool({

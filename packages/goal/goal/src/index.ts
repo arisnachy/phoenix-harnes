@@ -397,9 +397,8 @@ export class GoalService extends TypertRemoteService {
 
   /**
    * Mark a current non-complete goal complete and disarm it. Completion is
-   * fail-closed on the latest executable/adversarial certification while a
-   * settled semantic PASS is monotonic for the exact revision: a later
-   * provider outage cannot erase evidence that already passed.
+   * fail-closed on the latest executable/adversarial certification and the
+   * latest independent judge review for the exact revision.
    * @param agent - owning live agent.
    * @param ref - expected current revision.
    * @returns the completed view.
@@ -422,12 +421,11 @@ export class GoalService extends TypertRemoteService {
         'GOAL_COMPLETION_GATE_NOT_VERIFIED',
       )
     }
-    const judgePassed = agent.session.events.some(event =>
+    const latestJudge = agent.session.events.findLast((event): event is SessionEvent<'goal/judge'> =>
       event.type === 'goal/judge'
       && event.data.goalId === current.id
-      && event.data.revision === current.revision
-      && event.data.verdict === 'pass')
-    if (!judgePassed) {
+      && event.data.revision === current.revision)
+    if (latestJudge?.data.verdict !== 'pass') {
       throw new GoalError(
         `goal "${current.id}" requires an independent passing judge before completion`,
         'GOAL_COMPLETION_NOT_VERIFIED',

@@ -24,6 +24,16 @@ const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
 const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const WATCHER_RESTART_DELAY_MS = 1000
+const sourceHostEntry = join(root, 'apps', 'cli', 'src', 'bin.ts')
+const builtHostEntry = join(root, 'apps', 'cli', 'lib', 'bin.js')
+const launchCwd = (() => {
+  const configured = process.env.PHOENIX_SUPERVISED_LAUNCH_CWD
+  if (configured === undefined || configured === '') return root
+  if (!isAbsolute(configured)) throw new Error('Supervised Host launch directory must be absolute.')
+  const resolved = resolve(configured)
+  if (!existsSync(resolved)) throw new Error(`Supervised Host launch directory is missing: ${resolved}`)
+  return resolved
+})()
 
 function gitValue(cwd, args) {
   const result = spawnSync('git', args, {
@@ -161,13 +171,24 @@ async function stopWatcher(watcher) {
 }
 
 function startHost() {
+  const artifact = process.env.PHOENIX_SUPERVISED_HOST_ARTIFACT
+  const hostArgsPrefix = artifact === 'lib'
+    ? [builtHostEntry]
+    : artifact === undefined || artifact === '' || artifact === 'src'
+      ? ['--import', 'tsx/esm', sourceHostEntry]
+      : undefined
+  if (hostArgsPrefix === undefined) {
+    throw new Error(`Unsupported supervised Host artifact: ${artifact}`)
+  }
+  if (!existsSync(hostArgsPrefix.at(-1))) {
+    throw new Error(`Supervised Host entry is missing: ${hostArgsPrefix.at(-1)}`)
+  }
   return spawn(process.execPath, [
-    '--import', 'tsx/esm',
-    'apps/cli/src/bin.ts',
+    ...hostArgsPrefix,
     'web', '--',
     ...hostArgs,
   ], {
-    cwd: root,
+    cwd: launchCwd,
     stdio: 'inherit',
     windowsHide: false,
     env: {

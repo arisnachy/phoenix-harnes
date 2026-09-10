@@ -37,6 +37,7 @@ import type { ShellRunResult } from '@phoenix-ai/dsh-shell'
 import { parseExitStatus } from '@phoenix-ai/dsh-shell'
 import { processOutcome } from './background.ts'
 import { registerComputerTool } from './computer.ts'
+export { createComputerTool } from './computer.ts'
 import { renderPwshProcessRead, renderPwshResult } from './render.ts'
 import type { RenderablePwshResult } from './render.ts'
 

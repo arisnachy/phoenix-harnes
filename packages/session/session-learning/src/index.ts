@@ -8,7 +8,7 @@
  */
 
 import { Context, Service } from '@phoenix-ai/cordis'
-import { basename } from 'node:path'
+import { basename, isAbsolute, normalize } from 'node:path'
 import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-agent'
 import { SessionId } from '@phoenix-ai/dsh-session'
@@ -80,7 +80,7 @@ export class LearningMemoryService extends Service {
   }
 
   /** Load memory without holding Phoenix boot on large historical ledgers. */
-  protected async [Service.init](): Promise<void> {
+  protected [Service.init](): void {
     for (const session of this.ctx.sessions.list()) this.setCurrentSession(session)
 
     const loading = Promise.all([this.ledger.load(), this.cognitive.load()])
@@ -136,6 +136,24 @@ export class LearningMemoryService extends Service {
    */
   recall(limit: number = 20): MemoryRecord[] {
     return this.ledger.recall(limit)
+  }
+
+  /**
+   * Read automatic continuity for the requesting session's exact project directory.
+   * Unknown historical sessions and sessions without an absolute cwd cannot share context.
+   * @param session - Session whose model request is being assembled.
+   * @param limit - Maximum number of eligible memories, applied after isolation.
+   * @returns Durable memories from this session and known sessions with the same cwd.
+   */
+  recallForSession(session: Session, limit: number = 20): MemoryRecord[] {
+    const eligible = new Set<string>([session.id])
+    const project = automaticRecallProject(session)
+    if (project !== undefined) {
+      for (const candidate of this.ctx.sessions.list()) {
+        if (automaticRecallProject(candidate) === project) eligible.add(candidate.id)
+      }
+    }
+    return this.ledger.recall(limit, eligible)
   }
 
   /**
@@ -351,7 +369,7 @@ function cognitiveObservationFor(session: Session, event: SessionEvent): Cogniti
   const error = isErrorEvent(event, content)
   const success = isSuccessEvent(event)
   const prospective = /\b(?:goal|mission|pending|blocked|blocker|unfinished|follow[- ]?up|pendiente|misión|bloqueo)\b/iu.test(content)
-  const procedural = String(event.type) === 'goal/false-pass'
+  const procedural = ['goal/false-pass'].includes(event.type)
     || event.type.startsWith('tool/')
     || error
     || /\b(?:strategy|workflow|skill|estrategia|flujo|habilidad)\b/iu.test(content)
@@ -453,6 +471,12 @@ function durableFact(text: string): { subject: string; value: string } | undefin
   }
   if (isDurableUserSignal(text)) return { subject: 'user.preference.general', value: text.slice(0, 240) }
   return undefined
+}
+
+function automaticRecallProject(session: Session): string | undefined {
+  const cwd = session.header.cwd
+  if (cwd === undefined || !isAbsolute(cwd)) return undefined
+  return normalize(cwd)
 }
 
 function projectIdFor(session: Session): string | undefined {

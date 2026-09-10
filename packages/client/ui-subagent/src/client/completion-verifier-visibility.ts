@@ -37,7 +37,6 @@ export function filterCompletionVerifierSessionState(state: SessionListState): S
   const subagentsByParent = { ...state.subagentsByParent }
 
   for (const [rawParentId, catalog] of Object.entries(state.subagentsByParent)) {
-    if (catalog === undefined) continue
     const entries = filterVisibleSubagentEntries(catalog.entries)
     if (entries.length === catalog.entries.length) continue
     changed = true
@@ -50,6 +49,6 @@ export function filterCompletionVerifierSessionState(state: SessionListState): S
 
   if (!changed) return state
   const byId = { ...state.byId }
-  for (const id of hidden) delete byId[id]
+  for (const id of hidden) Reflect.deleteProperty(byId, id)
   return { ...state, byId, subagentsByParent }
 }

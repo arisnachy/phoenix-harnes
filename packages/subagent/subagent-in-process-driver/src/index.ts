@@ -77,6 +77,10 @@ function prePublicationAbort(): Error {
   return new Error('subagent request was aborted before child publication')
 }
 
+function isSignalAborted(signal: AbortSignal): boolean {
+  return signal.aborted
+}
+
 /** Append one one-shot descriptor inside the child's initial turn before its first request. */
 function attachDescriptorAppend(childCtx: Context, descriptor: SubagentDescriptorData): void {
   let appended = false
@@ -102,7 +106,7 @@ export async function startInProcessRun(
   options: InProcessRunOptions,
 ): Promise<SubagentRun> {
   assertSubagentMaxDepth(request.maxDepth)
-  if (request.signal.aborted) throw prePublicationAbort()
+  if (isSignalAborted(request.signal)) throw prePublicationAbort()
   const parent = request.parent
   const childDepth = resolveChildDepth(parent, request.maxDepth)
 
@@ -115,7 +119,7 @@ export async function startInProcessRun(
   const worktree = options.worktreeIsolation === true
     ? await createSubagentWorktree(parent.session.header.cwd, childId)
     : undefined
-  if (request.signal.aborted) {
+  if (isSignalAborted(request.signal)) {
     await worktree?.release()
     throw prePublicationAbort()
   }
@@ -209,7 +213,7 @@ function drivePublishedRun(
       const disposal = settlements[0]
       if (disposal.status === 'rejected') throw disposal.reason
       const worktreeDisposal = worktreeSettlement[0]
-      if (worktreeDisposal?.status === 'rejected') throw worktreeDisposal.reason
+      if (worktreeDisposal.status === 'rejected') throw worktreeDisposal.reason
     },
   }
 }

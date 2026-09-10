@@ -5,9 +5,10 @@ on:
   schedule:
     - cron: '17 9 * * 1'
 
-permissions:
-  contents: write
-  pull-requests: write
+# Jobs opt into only the permission they need. The validation job below uses
+# an empty permission set because it executes source fetched from an external
+# ref.
+permissions: {}
 
 concurrency:
   group: phoenix-upstream-quarantine
@@ -15,59 +16,166 @@ concurrency:
 
 env:
   PRIMARY_NODE_VERSION: '24'
+  PHOENIX_BASE_REF: stable
+  PHOENIX_UPSTREAM_REPOSITORY: arisnachy/phoenix-harnes
+  PHOENIX_UPSTREAM_REF: main
   DSH_TELEMETRY_DISABLED: '1'
 
 jobs:
-  deepseek-candidate:
+  # This job resolves immutable public refs only. It does not check out or
+  # execute either tree, and it never creates a branch.
+  resolve-upstream:
+    name: Resolve immutable upstream refs
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
+      base_sha: ${{ steps.resolve.outputs.base_sha }}
+      candidate_branch: ${{ steps.resolve.outputs.candidate_branch }}
+      candidate_exists: ${{ steps.resolve.outputs.candidate_exists }}
     steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Fetch the public upstream
-        run: |
-          git remote add deepseek-upstream https://github.com/arisnachy/phoenix-harnes.git
-          git fetch --no-tags deepseek-upstream main
-
-      - name: Stop when this upstream SHA already has a candidate
-        id: candidate
+      - name: Resolve PHOENIX base and public upstream
+        id: resolve
         shell: bash
+        env:
+          BASE_REF: ${{ env.PHOENIX_BASE_REF }}
+          UPSTREAM_REPOSITORY: ${{ env.PHOENIX_UPSTREAM_REPOSITORY }}
+          UPSTREAM_REF: ${{ env.PHOENIX_UPSTREAM_REF }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          upstream_sha="$(git rev-parse deepseek-upstream/main)"
-          short_sha="${upstream_sha:0:12}"
-          branch="quarantine/deepseek-${short_sha}"
-          echo "upstream_sha=$upstream_sha" >> "$GITHUB_OUTPUT"
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          base_url="https://github.com/${REPOSITORY}.git"
+          upstream_url="https://github.com/${UPSTREAM_REPOSITORY}.git"
+
+          upstream_line="$(git ls-remote "$upstream_url" "refs/heads/$UPSTREAM_REF")"
+          upstream_sha="${upstream_line%%$'\t'*}"
+          [[ "$upstream_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Public upstream did not resolve to a full commit SHA." >&2
+            exit 1
+          }
+
+          base_line="$(git ls-remote "$base_url" "refs/heads/$BASE_REF")"
+          base_sha="${base_line%%$'\t'*}"
+          [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "PHOENIX base did not resolve to a full commit SHA." >&2
+            exit 1
+          }
+
+          base_short="${base_sha:0:12}"
+          upstream_short="${upstream_sha:0:12}"
+          candidate_branch="quarantine/phoenix-${base_short}-${upstream_short}"
+          set +e
+          candidate_line="$(git ls-remote "$base_url" "refs/heads/$candidate_branch")"
+          candidate_status=$?
+          set -e
+          [[ "$candidate_status" -eq 0 ]] || {
+            echo "Could not resolve the existing PHOENIX candidate ref." >&2
+            exit 1
+          }
+          candidate_sha="${candidate_line%%$'\t'*}"
+          if [[ -z "$candidate_line" ]]; then
+            candidate_exists=false
           else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+            [[ "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "Existing candidate ref is malformed." >&2
+              exit 1
+            }
+            candidate_exists=true
           fi
 
-      - uses: pnpm/action-setup@v4
-        if: steps.candidate.outputs.exists == 'false'
-        with:
-          dest: ${{ runner.temp }}/setup-pnpm
+          {
+            echo "upstream_sha=$upstream_sha"
+            echo "base_sha=$base_sha"
+            echo "candidate_branch=$candidate_branch"
+            echo "candidate_exists=$candidate_exists"
+          } >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v6
-        if: steps.candidate.outputs.exists == 'false'
-        with:
-          node-version: ${{ env.PRIMARY_NODE_VERSION }}
-          cache: pnpm
-
-      - name: Merge only into a quarantine candidate
-        if: steps.candidate.outputs.exists == 'false'
-        run: |
-          git config user.name phoenix-upstream-bot
-          git config user.email phoenix-upstream-bot@users.noreply.github.com
-          git switch -c "${{ steps.candidate.outputs.branch }}"
-          git merge --no-edit --no-ff deepseek-upstream/main
-
-      - name: Protect PHOENIX product identity
-        if: steps.candidate.outputs.exists == 'false'
+  # This job deliberately has no GitHub permissions and no credential-bearing
+  # checkout. It reconstructs the candidate from the exact SHAs, then runs
+  # the PHOENIX acceptance gate with package lifecycle scripts disabled.
+  validate-candidate:
+    name: Validate untrusted candidate without credentials
+    needs: resolve-upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions: {}
+    outputs:
+      candidate_needed: ${{ steps.materialize.outputs.candidate_needed }}
+      candidate_tree: ${{ steps.materialize.outputs.candidate_tree }}
+    env:
+      BASE_SHA: ${{ needs.resolve-upstream.outputs.base_sha }}
+      UPSTREAM_SHA: ${{ needs.resolve-upstream.outputs.upstream_sha }}
+      UPSTREAM_REPOSITORY: arisnachy/phoenix-harnes
+      GH_TOKEN: ''
+      GITHUB_TOKEN: ''
+      NODE_AUTH_TOKEN: ''
+      ACTIONS_RUNTIME_TOKEN: ''
+    steps:
+      - name: Assert that validation has no credential environment
         shell: bash
         run: |
+          set -euo pipefail
+          for variable in GH_TOKEN GITHUB_TOKEN NODE_AUTH_TOKEN ACTIONS_RUNTIME_TOKEN; do
+            if [[ -n "${!variable:-}" ]]; then
+              echo "Validation received an unexpected credential: $variable" >&2
+              exit 1
+            fi
+          done
+
+      - name: Materialize exact public candidate
+        id: materialize
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          base_url="https://github.com/${REPOSITORY}.git"
+          upstream_url="https://github.com/${UPSTREAM_REPOSITORY}.git"
+          git init --initial-branch=phoenix-validation
+          git remote add phoenix-origin "$base_url"
+          git remote add phoenix-upstream "$upstream_url"
+          git fetch --no-tags phoenix-origin "$BASE_SHA"
+          git fetch --no-tags phoenix-upstream "$UPSTREAM_SHA"
+          git cat-file -e "$BASE_SHA^{commit}"
+          git cat-file -e "$UPSTREAM_SHA^{commit}"
+          git switch --detach "$BASE_SHA"
+          git config user.name phoenix-validation
+          git config user.email phoenix-validation@users.noreply.github.com
+          git merge --no-edit --no-ff "$UPSTREAM_SHA"
+          [[ "$(git rev-parse "$BASE_SHA^{commit}")" == "$BASE_SHA" ]]
+          [[ "$(git rev-parse "$UPSTREAM_SHA^{commit}")" == "$UPSTREAM_SHA" ]]
+          git diff --check
+          base_tree="$(git rev-parse "$BASE_SHA^{tree}")"
+          candidate_tree="$(git rev-parse HEAD^{tree})"
+          echo "candidate_tree=$candidate_tree" >> "$GITHUB_OUTPUT"
+          if [[ "$candidate_tree" == "$base_tree" ]]; then
+            echo 'PHOENIX base already contains the upstream tree; no candidate is needed.'
+            echo 'candidate_needed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'candidate_needed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        if: steps.materialize.outputs.candidate_needed == 'true'
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-phoenix-quarantine
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        if: steps.materialize.outputs.candidate_needed == 'true'
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          check-latest: false
+
+      - name: Install dependencies without lifecycle scripts
+        if: steps.materialize.outputs.candidate_needed == 'true'
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Protect PHOENIX product identity
+        if: steps.materialize.outputs.candidate_needed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
           forbidden='DSH Local Build|Into the Unknown|Deep diving'
           if rg -n "$forbidden" packages/client packages/bundle apps; then
             echo 'Upstream candidate reintroduced a retired product identity.' >&2
@@ -75,29 +183,128 @@ jobs:
           fi
           rg -n 'PHOENIX' packages/client/web packages/client/ui-brand-official >/dev/null
 
-      - name: Install and run the static acceptance gate
-        if: steps.candidate.outputs.exists == 'false'
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run check:ci:static
-
-      - name: Publish candidate branch
-        if: steps.candidate.outputs.exists == 'false'
-        run: git push --set-upstream origin "${{ steps.candidate.outputs.branch }}"
-
-      - name: Open the KIRA review pull request
-        if: steps.candidate.outputs.exists == 'false'
+      - name: Load the immutable PHOENIX verifier
+        if: steps.materialize.outputs.candidate_needed == 'true'
+        shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
+          set -euo pipefail
+          [[ "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git fetch --no-tags phoenix-origin "$WORKFLOW_SHA"
+          git show "$WORKFLOW_SHA:scripts/phoenix-quarantine-verify.mjs" > "$RUNNER_TEMP/phoenix-quarantine-verify.mjs"
+          node --check "$RUNNER_TEMP/phoenix-quarantine-verify.mjs"
+
+      - name: Run the trusted static PHOENIX acceptance gate
+        if: steps.materialize.outputs.candidate_needed == 'true'
+        run: node "$RUNNER_TEMP/phoenix-quarantine-verify.mjs" "$GITHUB_WORKSPACE" "$BASE_SHA"
+
+  # Only this job can create the quarantine branch. It repeats the merge from
+  # immutable refs so validation output cannot be substituted by an artifact.
+  publish-candidate:
+    name: Publish verified quarantine candidate
+    needs: [resolve-upstream, validate-candidate]
+    if: needs.validate-candidate.result == 'success' && needs.validate-candidate.outputs.candidate_needed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      candidate_branch: ${{ steps.publish.outputs.candidate_branch }}
+      upstream_sha: ${{ steps.publish.outputs.upstream_sha }}
+      published: ${{ steps.publish.outputs.published }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.resolve-upstream.outputs.base_sha }}
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ github.token }}
+
+      - name: Recreate and publish exact validated candidate
+        id: publish
+        shell: bash
+        env:
+          BASE_SHA: ${{ needs.resolve-upstream.outputs.base_sha }}
+          UPSTREAM_SHA: ${{ needs.resolve-upstream.outputs.upstream_sha }}
+          CANDIDATE_BRANCH: ${{ needs.resolve-upstream.outputs.candidate_branch }}
+          VALIDATED_CANDIDATE_TREE: ${{ needs.validate-candidate.outputs.candidate_tree }}
+          UPSTREAM_REPOSITORY: ${{ env.PHOENIX_UPSTREAM_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          upstream_url="https://github.com/${UPSTREAM_REPOSITORY}.git"
+          git remote add phoenix-upstream "$upstream_url"
+          git fetch --no-tags phoenix-upstream "$UPSTREAM_SHA"
+          git cat-file -e "$BASE_SHA^{commit}"
+          git cat-file -e "$UPSTREAM_SHA^{commit}"
+          git switch --create "$CANDIDATE_BRANCH" "$BASE_SHA"
+          git config user.name phoenix-upstream-bot
+          git config user.email phoenix-upstream-bot@users.noreply.github.com
+          git merge --no-edit --no-ff "$UPSTREAM_SHA"
+          git diff --check
+          base_tree="$(git rev-parse "$BASE_SHA^{tree}")"
+          candidate_tree="$(git rev-parse HEAD^{tree})"
+          [[ "$candidate_tree" == "$VALIDATED_CANDIDATE_TREE" ]] || {
+            echo 'Recreated candidate tree does not match the credential-free validation result.' >&2
+            exit 1
+          }
+          if [[ "$candidate_tree" == "$base_tree" ]]; then
+            echo 'PHOENIX base already contains the upstream tree; no candidate was published.'
+            echo 'published=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          existing_line="$(git ls-remote origin "refs/heads/$CANDIDATE_BRANCH")"
+          existing_sha="${existing_line%%$'\t'*}"
+          if [[ -n "$existing_line" ]]; then
+            [[ "$existing_sha" =~ ^[0-9a-f]{40}$ ]]
+            git fetch --no-tags origin "$existing_sha"
+            existing_tree="$(git rev-parse "$existing_sha^{tree}")"
+            [[ "$existing_tree" == "$candidate_tree" ]] || {
+              echo 'Existing candidate branch does not contain the validated tree.' >&2
+              exit 1
+            }
+          else
+            git push --no-follow-tags origin "HEAD:$CANDIDATE_BRANCH"
+          fi
+          echo "candidate_branch=$CANDIDATE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+          echo 'published=true' >> "$GITHUB_OUTPUT"
+
+  # Pull-request creation is a separate API operation, so it does not share
+  # the contents-write permission used for the branch push.
+  open-review:
+    name: Open PHOENIX review pull request
+    needs: publish-candidate
+    if: needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BASE_REF: stable
+      CANDIDATE_BRANCH: ${{ needs.publish-candidate.outputs.candidate_branch }}
+      UPSTREAM_SHA: ${{ needs.publish-candidate.outputs.upstream_sha }}
+    steps:
+      - name: Create one human-reviewable PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$CANDIDATE_BRANCH" --base "$BASE_REF" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            echo "Review PR #$existing already exists."
+            exit 0
+          fi
           gh pr create \
-            --base main \
-            --head "${{ steps.candidate.outputs.branch }}" \
-            --title "quarantine: review DeepSeek upstream ${{ steps.candidate.outputs.upstream_sha }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "$BASE_REF" \
+            --head "$CANDIDATE_BRANCH" \
+            --draft \
+            --title "quarantine: review PHOENIX upstream $UPSTREAM_SHA" \
             --body-file - <<'EOF'
           Automated PHOENIX quarantine candidate.
 
-          This pull request must not auto-merge. KIRA review must confirm:
+          This pull request must not auto-merge. Human review must confirm:
 
           - PHOENIX identity remains intact.
           - Security and secret boundaries remain intact.
@@ -105,7 +312,7 @@ jobs:
           - Snapshots and coverage are green.
           - A rollback SHA is recorded.
 
-          Codex and Claude Code are integrations, not source-code upstreams;
-          their supported SDK/CLI updates must arrive through separately reviewed
-          dependency pull requests.
+          Codex, Claude Code, and OpenClaw are integrations. Their supported
+          SDK or CLI updates enter PHOENIX through separately reviewed bridge
+          updates; this source candidate cannot replace those boundaries.
           EOF

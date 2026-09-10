@@ -5,7 +5,7 @@
  */
 
 import { Context, Service } from '@phoenix-ai/cordis'
-import type { CodeRunRequest, CodeRunResult } from './types.ts'
+import type { CodeRunFailure, CodeRunRequest, CodeRunResult } from './types.ts'
 
 export type {
   CodeBindingErrorClass,
@@ -16,6 +16,21 @@ export type {
   CodeRunRequest,
   CodeRunResult,
 } from './types.ts'
+
+/**
+ * Settle a snapshot of in-flight executions and wait for their resources to exit.
+ * @param runs - Provider-owned executions; the provider must reject new work before calling.
+ * @param failure - Failure delivered to every execution in the snapshot.
+ * @returns Resolves after all recorded execution resources have finished.
+ */
+export async function settleCodeRuns(
+  runs: Iterable<{ settle(failure: CodeRunFailure): void; finished: Promise<void> }>,
+  failure: CodeRunFailure,
+): Promise<void> {
+  const pending = [...runs]
+  for (const run of pending) run.settle(failure)
+  await Promise.all(pending.map(run => run.finished))
+}
 
 /**
  * Binding globals EVERY backend refuses because SOME backend owns the slot in

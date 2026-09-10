@@ -3,6 +3,7 @@ CLAUDE.local.md
 node_modules/
 .phoenix-managed-install
 .phoenix-gates.lock
+.phoenix-gates.lock.*
 lib/
 *.tsbuildinfo
 pnpm-debug.log
@@ -50,6 +51,8 @@ worktrees/
 .kira/evidence.md
 .kira/failures.md
 .kira/memory/
+# Local learned records can contain user task data.
+.learning/
 .kira/labs/phoenix-self/
 .kira/audit-*.md
 .kira/promotion-review-*.md

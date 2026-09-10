@@ -14,6 +14,33 @@ afterEach(async () => {
 })
 
 describe('LearningMemoryService', () => {
+  it('recalls only the requesting session and known sessions in its exact project directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-isolation-'))
+    roots.push(root)
+    const ctx = new Context()
+    try {
+      await ctx.plugin(SessionStore)
+      await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
+      const first = ctx.sessions.create(SessionId('first-project'), { meta: { cwd: join(root, 'first', 'app') } })
+      const sibling = ctx.sessions.create(SessionId('same-project'), { meta: { cwd: join(root, 'first', 'app') } })
+      const other = ctx.sessions.create(SessionId('other-project'), { meta: { cwd: join(root, 'other', 'app') } })
+      const projectless = ctx.sessions.create(SessionId('projectless'), { meta: {} })
+      for (const session of [first, sibling, other, projectless]) {
+        await ctx.learningMemory.remember({
+          sessionId: session.id, eventSeq: 0, kind: 'lesson', summary: `Lesson for ${session.id}`,
+          sourceEventType: 'memory/explicit', confidence: 0.9, occurredAt: 1,
+        })
+      }
+      expect(ctx.learningMemory.recallForSession(first).map(record => record.sessionId).sort())
+        .toEqual([first.id, sibling.id].sort())
+      expect(ctx.learningMemory.recallForSession(other).map(record => record.sessionId)).toEqual([other.id])
+      expect(ctx.learningMemory.recallForSession(projectless).map(record => record.sessionId)).toEqual([projectless.id])
+      expect(ctx.learningMemory.recallForSession(first, 1)).toHaveLength(1)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('learns from user interactions, successes, and failures in the durable session stream', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-service-'))
     roots.push(root)
@@ -127,8 +154,8 @@ describe('LearningMemoryService', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
-    const alpha = ctx.sessions.create(SessionId('cognitive-alpha'), { meta: { cwd: 'C:\\workspace\\alpha' } })
-    const beta = ctx.sessions.create(SessionId('cognitive-beta'), { meta: { cwd: 'C:\\workspace\\beta' } })
+    const alpha = ctx.sessions.create(SessionId('cognitive-alpha'), { meta: { cwd: join(root, 'alpha') } })
+    const beta = ctx.sessions.create(SessionId('cognitive-beta'), { meta: { cwd: join(root, 'beta') } })
     alpha.append('turn/start', { turn: 1 })
     alpha.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'Remember the alpha sandbox decision.' }],

@@ -1,0 +1,4 @@
+- id: python-runtime
+  name: '@phoenix-ai/dsh-code-runtime-python'
+  config:
+    maxWallMs: 3000

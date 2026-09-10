@@ -12,6 +12,7 @@ import {
   type GoalCompletionGateResult,
 } from './completion-gate.ts'
 import { resolveGoalJudgeAgentOptions } from './judge-route.ts'
+import { availableReviewTools } from './review-tools.ts'
 
 export { resolveGoalJudgeAgentOptions } from './judge-route.ts'
 
@@ -92,7 +93,7 @@ function reviewProvider(runtime: GoalJudgeRuntime, requested: string, parent: Ag
   const names = [...new Set([requested, ...(runtime.list?.() ?? [])])]
     .filter(name => !(nonCodex && name.toLowerCase() === 'luna'))
     .filter(name => canReview(runtime, name))
-  const fresh = names.find((name) => runtime.getProvider(name)?.inheritsParentContext !== true)
+  const fresh = names.find(name => runtime.getProvider(name)?.inheritsParentContext !== true)
   return fresh ?? names[0]
 }
 
@@ -311,7 +312,7 @@ export async function judgeGoalCompletion(input: {
         signal: input.signal,
       }),
       outputSchema: GOAL_JUDGE_OUTPUT_SCHEMA,
-      toolFilter: { allow: [...READ_ONLY_TOOLS] },
+      toolFilter: { allow: availableReviewTools(input.parent, READ_ONLY_TOOLS) },
     })
     const result = await run.result
     if (result.stopReason === 'completed') judged = readStructured(result.structured) ?? unavailable()

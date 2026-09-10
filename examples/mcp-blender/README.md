@@ -1,5 +1,7 @@
 # Blender Lab MCP for PHOENIX
 
+English | [中文](README.zh.md)
+
 This is PHOENIX's checked-in integration for the **official Blender Lab MCP server** from Blender Foundation. It does not use the unrelated third-party PyPI package that is also named `blender-mcp`.
 
 ## Requirements
@@ -10,6 +12,8 @@ This is PHOENIX's checked-in integration for the **official Blender Lab MCP serv
 - `uv`/`uvx` available to the PHOENIX process.
 
 The Blender add-on normally listens on `localhost:9876`. The PHOENIX overlay starts the MCP process over stdio and points it at that local Blender bridge.
+
+The overlay keeps the argument expression in a YAML `!!js` block scalar so its ternary remains executable configuration. The keyless integration test exercises the command and argument environment overrides through the real Loader and a local MCP fixture; it does not establish a live Blender connection.
 
 ## Start PHOENIX with Blender MCP
 

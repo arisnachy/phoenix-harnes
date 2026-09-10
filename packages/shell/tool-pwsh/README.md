@@ -6,11 +6,19 @@ The model-facing `pwsh` tool registered over the `ctx.shell` executor seam. Inte
 
 Requires a loaded executor implementation and the `shell-env` plugin; the tool stays pending until both exist (`inject: ['tools', 'bash', 'systemPrompt', 'bashEnv']`).
 
-The package root exposes only the Cordis plugin contract (`name`, `inject`, `Config`, `apply`); result rendering (`src/render.ts`) and background-job adaptation (`src/background.ts`) mirror the bash tool's structure and stay reachable through the package's `./src/*` export.
+The package root exposes the Cordis plugin contract (`name`, `inject`, `Config`, `apply`) and `createComputerTool()` for schema collection; result rendering (`src/render.ts`) and background-job adaptation (`src/background.ts`) mirror the bash tool's structure and stay reachable through the package's `./src/*` export.
 
 The plugin also contributes the `tool:pwsh` prompt section (order 105): non-zero exits are reported as `[exit code: N]` markers, and Windows interruption settles as exit 1 without a signal marker.
 
 ## Tools
+
+Windows compositions additionally register `computer`. Its definition can be collected for documentation on any host; native desktop execution remains Windows-only and retains the session's permission and approval checks.
+
+### `computer`
+
+`computer` exposes a closed Windows desktop action set: `screenshot`, `windows`, `focus`, `move`, `click`, `double_click`, `drag`, `type`, `key`, and `scroll`. `windows` enumerates visible top-level windows. `focus` requires a title, title substring, `pid:1234`, or `hwnd:0x123ABC` selector; the same optional `target` guards input actions by verifying that the selected window is foreground before input is injected. An ambiguous title fails and asks for a pid or handle. A minimized target must be focused first so the model receives a fresh screenshot before reusing coordinates.
+
+The fixed PowerShell/C# driver is streamed over stdin to avoid the Windows command-line limit. The stream ends with the blank statement terminator required for Windows PowerShell to execute its final compound statement, and the driver selects UTF-8 for window titles. Model-controlled text and selectors travel only in `PHX_*` environment variables and never become executable source. Coordinates and scroll deltas must fit the signed 32-bit integers consumed by the native driver. `read-only` permits `screenshot` and `windows`; `workspace-write` routes input through the normal approval service; `danger-full-access` is the explicit no-prompt desktop authority. Every state-changing action except pointer movement waits briefly, captures a new screenshot, and defers that image into model context. A successful result means Windows accepted the operation; the model must use the fresh observation to verify the application-level outcome.
 
 ### `pwsh`
 
@@ -66,11 +74,11 @@ Prefix-stable while the registration scope and prompt text are unchanged. Plugin
 
 #### What the model sees
 
-The model sees the generated [`pwsh` schema](../../../docs/tool-catalog.md#phoenix-aidsh-tool-pwsh). Agent-scoped tool restrictions can remove the definition for that agent.
+The model sees the generated [`computer` and `pwsh` schemas](../../../docs/tool-catalog.md#phoenix-aidsh-tool-pwsh) when each tool is available. Agent-scoped tool restrictions can remove either definition for that agent. Computer results return the selected action, OS-level status, optional window details, and whether a fresh screenshot was attached; visible-window enumeration returns one deterministic line per window.
 
 #### Token effect
 
-Fixed schema cost on every request where the tool is visible.
+Fixed schema cost on every request where each tool is visible. Computer screenshots add bounded image context only after a requested observation or state-changing action.
 
 #### KV Cache effect
 

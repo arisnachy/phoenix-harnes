@@ -18,7 +18,7 @@ describe('prepared client self-update contract', () => {
     const activator = source('scripts/phoenix-activate-prepared.mjs')
 
     expect(activator).toContain(
-      "node(stage, ['--import', 'tsx/esm', 'scripts/promote-client-artifacts.ts', '--from', stage, '--verify-only'])",
+      "node(stage, ['--import', 'tsx/esm', 'scripts/promote-client-artifacts.ts', '--from', stage, '--verify-only'], { inherit: true })",
     )
   })
 

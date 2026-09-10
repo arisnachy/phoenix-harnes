@@ -23,7 +23,7 @@
 | `@phoenix-ai/dsh-tools` | `run_code` | `ctx.tools`、`ctx.codeRuntime (execution time)`、`ctx.systemPrompt` | `tool/call`、`one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`、`tool/result` | - | 在 `mode: code`／`mode: both` 下，它由工具注册表所有，作为可过滤能力层之外的保留传输机制（参见 Code Mode Agent Note）。在 `code` 下，它是注册表对协议格式（wire format）的唯一贡献；其他可见能力在使用已加载运行时语言生成的 SDK 章节中声明。程序通过 binding 调用这些能力，调用按照原生并发约定调度：启动顺序和策略遵循提交顺序，并发安全的函数体最多重叠执行 `maxParallelSubCalls` 个。调用会重新进入完整且受守卫保护的工具流水线，并将每个嵌套执行关联到此外层结果。 |
 | `@phoenix-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`、`ctx.systemPrompt`、`ctx.userQuestions (execution time, opportunistic)` | `tool/call`、`plan/mode inactive on an approved review`、`tool/result` | - | 规划未激活时，exit_plan_mode 仍保留在面向模型的 schema 中，这样状态转换不会在规划策略变更之外额外造成工具目录变动。其执行路径会拒绝规划模式之外的调用；在规划模式下，它通过用户交互 seam 提交计划（批准／根据反馈继续规划），批准后会在步骤边界记录规划模式已停用。 |
 | `@phoenix-ai/dsh-tool-bash` | `bash` | `ctx.tools`、`ctx.shell`、`ctx.systemPrompt`、`ctx.shellEnv`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | bash 工具是 bash 执行器 seam 面向模型的消费方。使用 `run_in_background` 的运行会注册到通用 `ctx.jobs` 运行时，并通过 `job_*` 工具（来自 `@phoenix-ai/dsh-tool-jobs`）收集／停止；禁用 `enableRunInBackground` 配置（默认为 true）后，该参数会被完全移除。 |
-| `@phoenix-ai/dsh-tool-pwsh` | `pwsh` | `ctx.tools`、`ctx.shell`、`ctx.systemPrompt`、`ctx.shellEnv`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | pwsh 工具是 Windows 组合中 bash 执行器 seam 的 PowerShell 方言消费方（由 `@phoenix-ai/dsh-pwsh-local` 等 PowerShell 执行器为 `ctx.shell` 提供后端）；除沙箱接口外，它逐项对应 bash 工具调用。使用 `run_in_background` 的运行会注册到通用 `ctx.jobs` 运行时，并通过 `job_*` 工具收集／停止；托管的 `DSH_*` 环境来自 `@phoenix-ai/dsh-shell-env`。每次调用都在新进程中运行，不使用持久 PTY 会话。路径采用原生 `C:\...` 形式，变量采用 `$env:NAME`。 |
+| `@phoenix-ai/dsh-tool-pwsh` | `computer`, `pwsh` | `ctx.tools`、`ctx.shell`、`ctx.systemPrompt`、`ctx.shellEnv`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | pwsh 工具是 Windows 组合中 bash 执行器 seam 的 PowerShell 方言消费方（由 `@phoenix-ai/dsh-pwsh-local` 等 PowerShell 执行器为 `ctx.shell` 提供后端）；除沙箱接口外，它逐项对应 bash 工具调用。使用 `run_in_background` 的运行会注册到通用 `ctx.jobs` 运行时，并通过 `job_*` 工具收集／停止；托管的 `DSH_*` 环境来自 `@phoenix-ai/dsh-shell-env`。每次调用都在新进程中运行，不使用持久 PTY 会话。路径采用原生 `C:\...` 形式，变量采用 `$env:NAME`。 |
 | `@phoenix-ai/dsh-tool-cordis` | `cordis_define`、`cordis_inspect_list`、`cordis_inspect_query`、`cordis_inspect_self`、`cordis_run`、`cordis_stop`、`cordis_undefine` | `ctx.tools`、`ctx.dynamicCordisRunner` | `tool/call`、`tool/result`、`process-local dynamic package lifecycle` | - | 不在任何随产品发布的树中，需要显式选择启用；动态 Package 代码可以访问真实运行时，见 .agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.md。该工具集注入 `@phoenix-ai/dsh-cordis-host-runner` 提供的 `ctx.dynamicCordisRunner`，后者拥有定义注册表和 vm 沙箱；组合缺少它时这些工具不会激活。运行中的 Package 在停止、undefine 或 PHOENIX 重启前可以注册**额外的**模型可见工具；发生这类工具集变化时，系统会记录完整且有变动的请求头。 |
 | `@phoenix-ai/dsh-tool-bash-persistent` | `bash` | `ctx.tools`、`ctx.terminals`、`an owning Agent at execution time` | `tool/call`、`PTY shell state`、`tool/result` | - | 一个按所有者隔离的持久 bash 工具；部署组合提供 PTY 后端，并可覆盖面向模型的环境描述。 |
 | `@phoenix-ai/dsh-tool-pwsh-persistent` | `pwsh` | `ctx.tools`、`ctx.terminals`、`an owning Agent at execution time` | `tool/call`、`PTY shell state`、`tool/result` | - | 一个按所有者隔离的持久 pwsh 工具，持久 bash 工具的 Windows 对应物；部署组合提供 pwsh 方言的 PTY 后端，并可覆盖面向模型的环境描述。 |
@@ -232,6 +232,80 @@ bash 工具是 bash 执行器 seam 面向模型的消费方。使用 `run_in_bac
 <a id="phoenix-aidsh-tool-pwsh"></a>
 
 ## `@phoenix-ai/dsh-tool-pwsh`
+
+### `computer`
+
+通过窗口感知动作控制 Windows 桌面。控制外部应用前，优先执行 windows -> focus(target) -> screenshot，然后再操作。target 可以是可见标题、标题子串、pid:1234 或 hwnd:0x123ABC；提供 target 时，PHOENIX 会在注入输入前验证目标位于前台。绝不使用旧坐标点击最小化目标：先调用 focus，检查自动生成的新截图，再执行动作。改变状态的动作会自动附加动作后截图。将该截图作为事实来源，并在下一动作前验证可见结果；status ok 只表示操作系统接受了工具动作，不表示应用层目标已经成功。read-only 只能观察；workspace-write 使用普通审批；danger-full-access 拥有无提示桌面权限。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Desktop operation. windows lists visible top-level windows; focus activates a target and verifies foreground identity.",
+      "enum": [
+        "screenshot",
+        "windows",
+        "focus",
+        "move",
+        "click",
+        "double_click",
+        "drag",
+        "type",
+        "key",
+        "scroll"
+      ]
+    },
+    "target": {
+      "type": "string",
+      "description": "Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus and strongly recommended for external-app input."
+    },
+    "x": {
+      "type": "integer",
+      "description": "Screen X coordinate. Required for move/click/double_click/drag; optional with scroll."
+    },
+    "y": {
+      "type": "integer",
+      "description": "Screen Y coordinate. Required for move/click/double_click/drag; optional with scroll."
+    },
+    "x2": {
+      "type": "integer",
+      "description": "Drag destination X coordinate."
+    },
+    "y2": {
+      "type": "integer",
+      "description": "Drag destination Y coordinate."
+    },
+    "button": {
+      "type": "string",
+      "description": "Mouse button; defaults to left.",
+      "enum": [
+        "left",
+        "right",
+        "middle"
+      ]
+    },
+    "text": {
+      "type": "string",
+      "description": "Unicode text for the type action."
+    },
+    "keys": {
+      "type": "string",
+      "description": "Key or combo such as ENTER, CTRL+L, ALT+TAB, F5, or SHIFT+F10."
+    },
+    "delta": {
+      "type": "integer",
+      "description": "Mouse-wheel delta for scroll; positive scrolls up and negative scrolls down."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+来源：[`packages/shell/tool-pwsh/src/index.ts`](../packages/shell/tool-pwsh/src/index.ts)
 
 ### `pwsh`
 

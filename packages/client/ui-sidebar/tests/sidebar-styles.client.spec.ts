@@ -11,7 +11,13 @@ const css = readFileSync(fileURLToPath(new URL('../src/client/SidebarRoot.module
  * @returns the normalized declarations, or undefined when absent.
  */
 function declarations(selector: string): Map<string, string> | undefined {
+  return declarationBlocks(selector)[0]
+}
+
+/** Every declaration block containing one exact selector, in source order. */
+function declarationBlocks(selector: string): Array<Map<string, string>> {
   const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, ' ')
+  const blocks: Array<Map<string, string>> = []
   for (const [, selectorList = '', body = ''] of withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     if (!selectorList.split(',').map(value => value.trim()).includes(selector)) continue
     const found = new Map<string, string>()
@@ -20,9 +26,9 @@ function declarations(selector: string): Map<string, string> | undefined {
       if (colon === -1) continue
       found.set(part.slice(0, colon).trim(), part.slice(colon + 1).trim().replace(/\s+/g, ' '))
     }
-    return found
+    blocks.push(found)
   }
-  return undefined
+  return blocks
 }
 
 describe('SidebarRoot.module.css', () => {
@@ -77,6 +83,9 @@ describe('SidebarRoot.module.css', () => {
     expect(declarations('.brandName')?.get('letter-spacing')).toBe('0.16em')
     expect(declarations('.brandName')?.get('border-left')).toBe('1px solid var(--dsw-alias-border-l2)')
     expect(declarations('.fallbackBrandName')?.get('font-size')).toBe('0')
+    expect(declarations('.fallbackBrandName')?.get('width')).toBe('146px')
+    expect(css).toContain("mask-image: url('/phoenix-wordmark-mask.svg')")
+    expect(css).toContain("mask-image: url('/phoenix-wordmark-accent.svg')")
     expect(declarations('.fallbackBrandName')?.get('white-space')).toBe('nowrap')
   })
 
@@ -97,8 +106,8 @@ describe('SidebarRoot.module.css', () => {
     expect(declarations('.newSession:focus-visible')?.get('background')).toBe(
       'var(--dsw-alias-interactive-bg-hover)',
     )
-    expect(declarations('.newSession:focus-visible')?.get('outline')).toBe(
-      '2px solid var(--dsw-alias-state-business-primary)',
-    )
+    expect(declarationBlocks('.newSession:focus-visible').some(block => (
+      block.get('outline') === '2px solid var(--dsw-alias-state-business-primary)'
+    ))).toBe(true)
   })
 })

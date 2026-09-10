@@ -6,9 +6,10 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import type { Branded } from '@phoenix-ai/dsh-brand'
+import { readJsonl } from './read-jsonl.ts'
 
 /** Nominal identifier owned by the learning ledger. */
 export type MemoryId = Branded<'MemoryId'>
@@ -75,23 +76,9 @@ export class MemoryLedger {
     await this.writeChain
     this.records.clear()
     this.sourceIndex.clear()
-    let text: string
-    try {
-      text = await readFile(this.path, 'utf8')
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
-      throw error
-    }
-    for (const [index, line] of text.split('\n').entries()) {
-      if (line.trim() === '') continue
-      let row: unknown
-      try {
-        row = JSON.parse(line)
-      } catch (error) {
-        throw new Error(`memory ledger row ${index + 1} is not valid JSON`, { cause: error })
-      }
-      this.applyRow(validateRow(row, index + 1))
-    }
+    await readJsonl(this.path, 'memory ledger row', (row, lineNumber) => {
+      this.applyRow(validateRow(row, lineNumber))
+    })
   }
 
   /**
@@ -157,11 +144,13 @@ export class MemoryLedger {
   /**
    * Read bounded continuity context with durable lessons ahead of noisy recent activity.
    * @param limit - Maximum number of records to return.
+   * @param sessionIds - Eligible source sessions; omitted only for an explicit unscoped read.
    * @returns High-confidence durable records followed by newest active observations.
    */
-  recall(limit = 20): MemoryRecord[] {
+  recall(limit = 20, sessionIds?: ReadonlySet<string>): MemoryRecord[] {
     if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError('memory recall limit must be a positive safe integer')
-    const active = [...this.records.values()].filter(record => record.status === 'active')
+    const active = [...this.records.values()].filter(record => record.status === 'active'
+      && (sessionIds === undefined || sessionIds.has(record.sessionId)))
     const durable = active
       .filter(record => (record.kind === 'preference' || record.kind === 'lesson' || record.kind === 'skill') && record.confidence >= 0.8)
       .sort((left, right) => right.confidence - left.confidence || right.recordedAt - left.recordedAt || right.occurredAt - left.occurredAt)

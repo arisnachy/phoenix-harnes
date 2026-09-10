@@ -1,6 +1,6 @@
 """Fresh-process Python executor for dsh-code-runtime-python.
 
-The parent owns the fd-3 protocol. Model code runs in an async function so
+The parent owns the two protocol pipes. Model code runs in an async function so
 ``return`` and ``await tools.name(args)`` behave like the TypeScript runtime.
 This process is containment, not a security boundary; the product sandbox and
 approval policy remain authoritative.
@@ -20,7 +20,7 @@ try:
 except ImportError:
     resource = None  # type: ignore[assignment]
 
-from protocol import PROTOCOL_FD, log_truncation_marker
+from protocol import PROTOCOL_READ_FD, PROTOCOL_WRITE_FD, log_truncation_marker
 
 
 def send(writer: io.TextIOWrapper, frame: dict[str, Any]) -> None:
@@ -189,9 +189,8 @@ async def execute(program: str, boot: dict[str, Any], bridge: Bridge, writer: io
 
 
 def main() -> None:
-    read_fd = os.dup(PROTOCOL_FD)
-    reader = os.fdopen(read_fd, "r", encoding="utf-8", buffering=1)
-    writer = os.fdopen(PROTOCOL_FD, "w", encoding="utf-8", buffering=1)
+    reader = os.fdopen(PROTOCOL_READ_FD, "r", encoding="utf-8", buffering=1)
+    writer = os.fdopen(PROTOCOL_WRITE_FD, "w", encoding="utf-8", buffering=1)
     boot = json.loads(reader.readline())
     apply_limits(boot)
     send(writer, {"type": "boot-ack"})

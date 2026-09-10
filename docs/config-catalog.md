@@ -2876,7 +2876,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/shell/tool-pwsh/src/index.ts:53`](../packages/shell/tool-pwsh/src/index.ts)
+Source: [`packages/shell/tool-pwsh/src/index.ts:54`](../packages/shell/tool-pwsh/src/index.ts)
 
 <a id="phoenix-aidsh-tool-pwsh-persistent"></a>
 

@@ -925,7 +925,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'complete\') complete(agent: Agent, ref: GoalRef): GoalView',
-        description: 'Mark a current non-complete goal complete and disarm it. Completion is fail-closed on the latest executable/adversarial certification while a settled semantic PASS is monotonic for the exact revision: a later provider outage cannot erase evidence that already passed.',
+        description: 'Mark a current non-complete goal complete and disarm it. Completion is fail-closed on the latest executable/adversarial certification and the latest independent judge review for the exact revision.',
         parameters: [{ name: 'agent', description: 'owning live agent.' }, { name: 'ref', description: 'expected current revision.' }],
         returns: 'the completed view.',
       },
@@ -1069,6 +1069,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read bounded automatic continuity context, prioritizing durable memories.',
         parameters: [{ name: 'limit', description: 'Maximum number of records to return.' }],
         returns: 'Durable high-confidence memories followed by recent evidence.',
+      },
+      {
+        signature: 'recallForSession(session: Session, limit: number = 20): MemoryRecord[]',
+        description: 'Read automatic continuity for the requesting session\'s exact project directory. Unknown historical sessions and sessions without an absolute cwd cannot share context.',
+        parameters: [{ name: 'session', description: 'Session whose model request is being assembled.' }, { name: 'limit', description: 'Maximum number of eligible memories, applied after isolation.' }],
+        returns: 'Durable memories from this session and known sessions with the same cwd.',
       },
       {
         signature: 'searchCognitive(query: string = \'\', limit: number = 50, filters: Omit<CognitiveMemoryQuery, \'query\' | \'limit\'> = {}): CognitiveMemoryHit[]',

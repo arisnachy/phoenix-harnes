@@ -18,9 +18,11 @@ import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@phoenix-ai/dsh-sandbox-policy'
-import { defineTool, type ToolRunContext } from '@phoenix-ai/dsh-tools'
+import { defineTool, type ToolDefinition, type ToolRunContext } from '@phoenix-ai/dsh-tools'
 
 const POST_ACTION_SETTLE_MS = 250
+const INT32_MIN = -2_147_483_648
+const INT32_MAX = 2_147_483_647
 
 /** Desktop authority derived from the session's existing permission policy. */
 export type ComputerMode = 'off' | 'observe' | 'interact'
@@ -107,8 +109,8 @@ export function assertComputerActionAllowed(mode: ComputerMode, action: Computer
 }
 
 function assertCoordinate(value: number | undefined, name: string): asserts value is number {
-  if (value === undefined || !Number.isSafeInteger(value)) {
-    throw new TypeError(`computer ${name} must be a safe integer coordinate`)
+  if (value === undefined || !Number.isSafeInteger(value) || value < INT32_MIN || value > INT32_MAX) {
+    throw new TypeError(`computer ${name} must be a signed 32-bit integer coordinate`)
   }
 }
 
@@ -171,8 +173,9 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
       }
       return
     case 'scroll':
-      if (args.delta === undefined || !Number.isSafeInteger(args.delta) || args.delta === 0) {
-        throw new TypeError('computer scroll requires a non-zero safe integer delta')
+      if (args.delta === undefined || !Number.isSafeInteger(args.delta)
+        || args.delta < INT32_MIN || args.delta > INT32_MAX || args.delta === 0) {
+        throw new TypeError('computer scroll requires a non-zero signed 32-bit integer delta')
       }
       assertOptionalPointPair(args)
       return
@@ -200,6 +203,7 @@ export function shouldCaptureAfterAction(action: ComputerAction): boolean {
 
 const WINDOWS_DRIVER = String.raw`
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $source = @"
 using System;
 using System.Collections.Generic;
@@ -687,7 +691,9 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
     file: 'powershell.exe',
     argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', '-'],
     env,
-    stdin: WINDOWS_DRIVER,
+    // Windows PowerShell executes a multi-line stdin command only after the blank
+    // line that terminates its final compound statement.
+    stdin: `${WINDOWS_DRIVER}\n`,
   }
 }
 
@@ -701,7 +707,7 @@ function executeComputerInvocation(invocation: ComputerInvocation, signal?: Abor
       ...signal === undefined ? {} : { signal },
     }, (error, stdout) => {
       if (error !== null) {
-        reject(error)
+        reject(error instanceof Error ? error : new Error('Computer Use process failed', { cause: error }))
         return
       }
       resolve(stdout.trim())
@@ -771,15 +777,28 @@ async function authorizeComputerAction(
   }
 }
 
-function delay(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.reject(signal.reason)
+/**
+ * Wait for desktop state to settle and release cancellation listeners on every completion path.
+ * @param ms - Milliseconds to wait before the next observation.
+ * @param signal - Optional action cancellation signal.
+ * @returns A promise that resolves after the delay or rejects when cancelled.
+ */
+export function waitForComputerSettle(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal === undefined) return new Promise(resolve => setTimeout(resolve, ms))
+  const abortError = (): Error => signal.reason instanceof Error
+    ? signal.reason
+    : new Error('Computer action aborted', { cause: signal.reason })
+  if (signal.aborted) return Promise.reject(abortError())
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms)
-    if (signal === undefined) return
-    signal.addEventListener('abort', () => {
+    const onAbort = (): void => {
       clearTimeout(timer)
-      reject(signal.reason)
-    }, { once: true })
+      reject(abortError())
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal.addEventListener('abort', onAbort, { once: true })
   })
 }
 
@@ -814,15 +833,15 @@ async function attachDesktopScreenshot(
 }
 
 /**
- * Register the model-facing Computer Use tool on Windows compositions.
+ * Build the Windows Computer Use definition without executing desktop operations.
  * @param ctx - PHOENIX composition carrying tools, shell policy, and optional attachments/approval capabilities.
+ * @returns Tool definition for runtime registration or platform-independent schema collection.
  */
-export function registerComputerTool(ctx: Context): void {
-  if (process.platform !== 'win32') return
+export function createComputerTool(ctx: Context): ToolDefinition {
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
   const deploymentDefault = ctx.shell.sandboxMode
 
-  ctx.tools.register(defineTool({
+  return defineTool({
     name: 'computer',
     description: 'Control the Windows desktop with window-aware actions. Before controlling an external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
     parameters: {
@@ -878,7 +897,7 @@ export function registerComputerTool(ctx: Context): void {
         await attachDesktopScreenshot(ctx, exec, output, 'PHOENIX desktop screenshot')
         postScreenshot = true
       } else if (shouldCaptureAfterAction(args.action)) {
-        await delay(POST_ACTION_SETTLE_MS, exec.signal)
+        await waitForComputerSettle(POST_ACTION_SETTLE_MS, exec.signal)
         const fresh = await runWindowsComputerAction({ action: 'screenshot' }, exec.signal)
         await attachDesktopScreenshot(ctx, exec, fresh, `PHOENIX post-${args.action} desktop screenshot`)
         postScreenshot = true
@@ -891,5 +910,14 @@ export function registerComputerTool(ctx: Context): void {
         postScreenshot,
       }
     },
-  }))
+  })
+}
+
+/**
+ * Register the model-facing Computer Use tool on Windows compositions.
+ * @param ctx - PHOENIX composition carrying the tool runtime.
+ */
+export function registerComputerTool(ctx: Context): void {
+  if (process.platform !== 'win32') return
+  ctx.tools.register(createComputerTool(ctx))
 }

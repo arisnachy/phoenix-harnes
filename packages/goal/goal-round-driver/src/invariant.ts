@@ -43,13 +43,17 @@ function goalView(folded: FoldedGoal, source: GoalMessageSource, fail: Invariant
   }
 }
 
-/** Rebuild the latest persisted judge feedback that precedes one round. */
-function latestJudge(prior: readonly SessionEvent[], goalId: GoalMessageSource['goalId']): GoalJudgeAuditEntry | undefined {
-  return prior.findLast((event): event is SessionEvent<'goal/judge'> =>
+/** Rebuild the latest persisted judge feedback for the exact goal revision. */
+function latestJudge(
+  prior: readonly SessionEvent[],
+  goalId: GoalMessageSource['goalId'],
+  revision: GoalMessageSource['revision'],
+): GoalJudgeAuditEntry | undefined {
+  const latest = prior.findLast((event): event is SessionEvent<'goal/judge'> =>
     event.type === 'goal/judge'
     && event.data.goalId === goalId
-    && event.data.verdict !== 'pass',
-  )?.data
+    && event.data.revision === revision)
+  return latest?.data.verdict === 'pass' ? undefined : latest?.data
 }
 
 /** Rebuild the strategy selected immediately before a continuation prompt. */
@@ -70,7 +74,7 @@ function validateEvent(
   const expected = renderGoalRoundPrompt(
     goal,
     source.round,
-    latestJudge(prior, source.goalId),
+    latestJudge(prior, source.goalId, source.revision),
     latestStrategy(prior, source.goalId)?.strategy,
   )
   if (!isDeepStrictEqual(event.data.content, expected)) {

@@ -97,6 +97,9 @@ describe('adversarial completion tester', () => {
       parent: {
         id: SessionId('anthropic-builder'),
         options: { provider: 'anthropic', model: 'claude-opus', reasoningEffort: 'high' },
+        ctx: {
+          tools: { schemas: () => [{ name: 'bash' }, { name: 'read' }] },
+        },
       } as never,
       objective: 'Ship a reliable CLI artifact that handles malformed and alternate input formats.',
       round: 4,
@@ -129,9 +132,7 @@ describe('adversarial completion tester', () => {
     expect(JSON.stringify(execute?.prompt)).toContain('corrupt-config')
     expect(JSON.stringify(execute?.prompt)).toContain('evidence_ledger')
     expect(JSON.stringify(execute?.prompt)).toMatch(/temporary|clean.room|extract/i)
-    expect(execute?.toolFilter).toEqual(expect.objectContaining({
-      allow: expect.arrayContaining(['bash', 'read', 'glob', 'grep']),
-    }))
+    expect(execute?.toolFilter).toEqual({ allow: ['bash', 'read'] })
   })
 
   it('requires at least one verified mandatory criterion before the gate can pass', () => {

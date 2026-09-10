@@ -51,6 +51,19 @@ function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
+function formatWireValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return `${value}`
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (value === null) return 'null'
+  if (value === undefined) return 'undefined'
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return '<unserializable>'
+  }
+}
+
 /**
  * Encode one newline-delimited Codex app-server frame.
  * Codex uses JSON-RPC semantics but deliberately omits the `jsonrpc` member on
@@ -196,12 +209,12 @@ async function readResponse(
     if (message.id === undefined) continue
     if (message.id !== expectedId) {
       throw new LlmError(
-        `Codex app-server response id mismatch: expected ${expectedId}, received ${String(message.id)}`,
+        `Codex app-server response id mismatch: expected ${expectedId}, received ${formatWireValue(message.id)}`,
         'DISCOVERY_FAILED',
       )
     }
     if (message.error !== undefined && message.error !== null) {
-      const detail = text(message.error.message) ?? `RPC error ${String(message.error.code ?? 'unknown')}`
+      const detail = text(message.error.message) ?? `RPC error ${formatWireValue(message.error.code ?? 'unknown')}`
       throw new LlmError(`Codex model/list failed: ${detail}`, 'DISCOVERY_FAILED')
     }
     return message.result

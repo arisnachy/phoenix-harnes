@@ -121,6 +121,7 @@ describe('same-session goal snapshot through the ACP automation driver', () => {
       mode: 'replay',
       fixtureFile: join(wrapupDir, 'session.jsonl'),
       overrideFile: join(wrapupDir, 'replay.override.json'),
+      childFiles: [1, 2, 3].map(index => join(wrapupDir, `session.${index}.jsonl`)),
       configPath: agent.configPath,
       env: {
         NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
@@ -128,9 +129,11 @@ describe('same-session goal snapshot through the ACP automation driver', () => {
     })
 
     expect(result.stderr).toBe('')
-    expect(result.sessionLogs).toHaveLength(1)
-    const log = result.sessionLogs[0]
+    expect(result.sessionLogs).toHaveLength(4)
+    const log = result.sessionLogs.find(candidate => candidate.id === result.sessionId)
     if (log === undefined) throw new Error('goal wrap-up snapshot did not persist its session')
+    expect(result.sessionLogs.filter(candidate => candidate !== log)
+      .every(candidate => candidate.parentSession === log.id)).toBe(true)
     const records = parseJsonl(log.content)
     const events = records.slice(1) as unknown as SessionEvent[]
     const calls = events.filter(event => event.type === 'tool/call').map(event => event.data.name)

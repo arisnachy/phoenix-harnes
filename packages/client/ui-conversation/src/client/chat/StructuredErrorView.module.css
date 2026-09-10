@@ -81,6 +81,8 @@
 }
 
 .rawJson {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
   max-width: 100%;
   max-height: 360px;
   margin: 8px 0 0;

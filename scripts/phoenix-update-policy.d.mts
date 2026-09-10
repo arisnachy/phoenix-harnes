@@ -1,4 +1,12 @@
 /**
+ * Match a GitHub HTTPS or SSH remote against the exact configured repository.
+ * @param remote - Observed Git remote URL.
+ * @param repository - Expected owner/repository identity.
+ * @returns Whether the remote identifies the configured source.
+ */
+export function matchesUpdateRepository(remote: string, repository: string): boolean
+
+/**
  * Return whether a checkout branch is managed by the PHOENIX release updater.
  * @param branch - current checkout branch.
  * @param stableBranch - configured promoted stable branch.

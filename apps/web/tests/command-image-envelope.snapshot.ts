@@ -18,8 +18,13 @@ async function freshComposer(): Promise<HTMLTextAreaElement> {
   const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
   const start = tree.querySelector<HTMLButtonElement>('button[aria-label="New session in fixture"]')
   if (start === null) throw new Error('fixture Workspace new-session action missing')
+  const previous = screen.queryByPlaceholderText('Describe what you want to build')
   fireEvent.click(start)
-  return await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 }) as HTMLTextAreaElement
+  return await waitFor(() => {
+    const textarea = screen.getByPlaceholderText('Describe what you want to build') as HTMLTextAreaElement
+    if (textarea === previous) throw new Error('fresh session composer has not mounted')
+    return textarea
+  }, { timeout: 10_000 })
 }
 
 /** Paste one tiny PNG into the composer and wait for its rail thumbnail. */

@@ -8,6 +8,8 @@
 
 ## 服务 API（`ctx.codeRuntime`）
 
+提供方在拒绝新工作后，可在资源释放时调用 `settleCodeRuns()`。它对活跃执行建立快照，向每项执行传递指定失败，并等待其资源完成承诺；结算过程中即使从提供方活跃集合删除条目，也不会跳过执行。
+
 | 成员 | 语义 |
 |---|---|
 | `run(request)` | 针对请求的绑定执行一段程序。**所有程序失败结果都通过 resolve 结果中的 error 字段报告**：包括解析／转换失败、抛出异常、无效完成值、输出溢出、预算到期、中止或执行基底终止（由 `CodeRunFailure` 的正交 `kind` 分类表示）；只有调用方误用 Service Definition 约定时才 reject（例如 dispose（资源释放）后仍提交运行）。程序作为异步函数的函数体运行，因此顶层 `await`／`return` 可用，无损 JSON 完成值会成为 `result.value`。 |

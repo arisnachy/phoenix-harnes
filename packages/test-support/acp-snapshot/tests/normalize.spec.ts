@@ -381,6 +381,25 @@ describe('normalizeSessionLog', () => {
     expect(out).toContain('"decision":"block"') // the decision is the behavior — kept
   })
 
+  it('rebases an approval deadline while preserving its duration and policy', () => {
+    const ev = JSON.stringify({
+      type: 'approval/asked', seq: 2, time: 5,
+      data: {
+        id: 'approval-1',
+        deadline: { requestedAt: 1_000, expiresAt: 61_000 },
+        policyRevision: 7,
+      },
+    })
+    const out = normalizeSessionLog(`${header({})}\n${ev}\n`, ctx)
+    expect(JSON.parse(out.trimEnd().split('\n')[1] ?? '{}')).toMatchObject({
+      type: 'approval/asked',
+      data: {
+        deadline: { requestedAt: 0, expiresAt: 60_000 },
+        policyRevision: 7,
+      },
+    })
+  })
+
   it('preserves a packed chunk row\'s sequence, zeroes time, and zeroes volatile dt gaps', () => {
     const row = JSON.stringify({
       type: 'text-chunks', seq0: 7, time0: 999,

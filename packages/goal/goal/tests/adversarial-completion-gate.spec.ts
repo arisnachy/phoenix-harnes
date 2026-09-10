@@ -81,7 +81,9 @@ function appendJudge(
     revision: ref.revision,
     round: 1,
     verdict,
-    summary: verdict === 'pass' ? 'verified' : 'provider unavailable after settled review',
+    summary: verdict === 'pass' ? 'verified'
+      : verdict === 'needs_changes' ? 'required changes remain'
+        : 'provider unavailable after review',
     findings: [],
     requiredChanges: [],
   })
@@ -99,13 +101,26 @@ describe('adversarial completion gate', () => {
     }))
   })
 
-  it('keeps a settled pass authoritative when a later provider outage records blocked', async () => {
+  it('rejects completion when needs_changes follows an earlier pass for the same revision', async () => {
     const { ctx, agent, session } = await harness()
     const goal = ctx.goals.create(agent, { objective: 'Ship a verified artifact' })
     const ref = refOf(goal)
     appendGate(session, ref)
     appendJudge(session, ref, 'pass', 'judge-pass')
-    appendJudge(session, ref, 'blocked', 'late-provider-outage')
+    appendJudge(session, ref, 'needs_changes', 'judge-needs-changes')
+
+    expect(() => ctx.goals.complete(agent, ref)).toThrow(expect.objectContaining({
+      code: 'GOAL_COMPLETION_NOT_VERIFIED',
+    }))
+  })
+
+  it('accepts completion when pass follows an earlier needs_changes review for the same revision', async () => {
+    const { ctx, agent, session } = await harness()
+    const goal = ctx.goals.create(agent, { objective: 'Ship a verified artifact' })
+    const ref = refOf(goal)
+    appendGate(session, ref)
+    appendJudge(session, ref, 'needs_changes', 'judge-needs-changes')
+    appendJudge(session, ref, 'pass', 'judge-pass')
 
     expect(ctx.goals.complete(agent, ref)).toMatchObject({ phase: 'complete' })
   })

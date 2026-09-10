@@ -6,6 +6,7 @@ const configPath = fileURLToPath(new URL('./fixtures/dsh-badge/cordis.yml', impo
 const defaultConfigPath = fileURLToPath(new URL('./fixtures/dsh-badge/default.cordis.yml', import.meta.url))
 const tsconfigPath = fileURLToPath(new URL('../../../tsconfig.json', import.meta.url))
 const badgeAssetsPath = fileURLToPath(new URL('../../../packages/skill/skill-badge/assets/', import.meta.url))
+const escapedBadgeAssetsPath = JSON.stringify(badgeAssetsPath).slice(1, -1)
 
 describe('PHOENIX badge assembled snapshot', () => {
   it('advertises and loads the opt-in bundled skill through the shipped app', async () => {
@@ -31,7 +32,7 @@ describe('PHOENIX badge assembled snapshot', () => {
     })
     const disabledSnapshot = JSON.parse(disabled.stdout) as unknown
     const enabledSnapshot = JSON.parse(
-      enabled.stdout.replaceAll(badgeAssetsPath, '{{badgeAssetsPath}}'),
+      enabled.stdout.replaceAll(escapedBadgeAssetsPath, '{{badgeAssetsPath}}'),
     ) as unknown
 
     expect(disabled.stderr).toBe('')
@@ -76,7 +77,7 @@ describe('PHOENIX badge assembled snapshot', () => {
             {
               "text": "<skill_content name="dsh-badge">
       <skill_resources>
-      Base directory for this skill: C:\\Users\\arisn\\OneDrive\\Documentos\\ChatGPT\\Fenix\\packages\\skill\\skill-badge\\assets\\
+      Base directory for this skill: {{badgeAssetsPath}}
       Resolve relative paths mentioned by this skill against the base directory before using them. Load referenced resources only as needed.
       </skill_resources>
 
@@ -174,7 +175,7 @@ describe('PHOENIX badge assembled snapshot', () => {
             "provider": "dsh-badge",
             "resourceBase": {
               "kind": "directory",
-              "path": "C:\\Users\\arisn\\OneDrive\\Documentos\\ChatGPT\\Fenix\\packages\\skill\\skill-badge\\assets\\",
+              "path": "{{badgeAssetsPath}}",
             },
           },
         },
@@ -188,7 +189,7 @@ describe('PHOENIX badge assembled snapshot', () => {
           "provider": "dsh-badge",
           "resourceBase": {
             "kind": "directory",
-            "path": "C:\\Users\\arisn\\OneDrive\\Documentos\\ChatGPT\\Fenix\\packages\\skill\\skill-badge\\assets\\",
+            "path": "{{badgeAssetsPath}}",
           },
           "source": "bundled",
         },

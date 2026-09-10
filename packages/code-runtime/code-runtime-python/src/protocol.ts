@@ -1,21 +1,17 @@
 /**
  * Versionless, JSON-lines wire protocol between the Node host and the CPython subprocess. Frames
- * travel on the child's fd 3 (one JSON object per line), leaving stdout/stderr free for the
+ * travel on the child's fd 3 (host requests) and fd 4 (child responses), one JSON object per line,
+ * leaving stdout/stderr free for the
  * program's own output. Host treats every inbound frame as hostile because model code can post
- * anything through the same fd; the Python bootstrap trusts host replies.
+ * anything through the response descriptor; the Python bootstrap trusts host replies.
  * @module @phoenix-ai/dsh-code-runtime-python/src/protocol
  */
 
-/**
- * The framed-JSON channel's file descriptor from the child's perspective. The
- * host pins it positionally when it spawns the child (`stdio` index 3, i.e.
- * `['pipe','pipe','pipe','pipe']`), and the Python bootstrap reads the same
- * number from its own `protocol.py`. Exported as the single TS-side source of
- * truth: the host wiring uses it, and the cross-language mirror test asserts the
- * Python constant equals it, so a drift on either side breaks the boot channel
- * loudly rather than silently.
- */
-export const PROTOCOL_FD = 3
+/** Child descriptor for reading host requests; a separate pipe prevents synchronous Windows reads from blocking child writes. */
+export const PROTOCOL_READ_FD = 3
+
+/** Child descriptor for writing responses and binding calls; mirrored by `py/protocol.py`. */
+export const PROTOCOL_WRITE_FD = 4
 
 /**
  * One binding namespace declaration inside a {@link BootMessage}. `global` is
@@ -258,7 +254,7 @@ export const WIRE_FRAME_FIELDS =
  * The in-band marker text announcing that log capture stopped at the byte
  * budget. Shared wire vocabulary: the Python-side LogBuffer emits it when ITS
  * ledger exhausts, and the host emits identical text when its own ledger drops
- * a frame first (forged fd-3 traffic, stray stdout bytes) — a truncated run
+ * a frame first (forged fd-4 traffic, stray stdout bytes) — a truncated run
  * reads the same however the cap was hit.
  * @param maxBytes - the configured `maxLogBytes` the marker names.
  * @returns the marker line.
@@ -391,7 +387,7 @@ function jsonStringBytesUpTo(text: string, maxBytes: number): number | undefined
  * metered by {@link jsonStringBytesUpTo} without allocating an escaped copy —
  * not the parse that produced `value`.
  * That upstream width is bounded separately, by the host-side cap on inbound
- * fd-3 frame size before `JSON.parse` runs (owned by the runtime that reads the
+ * fd-4 frame size before `JSON.parse` runs (owned by the runtime that reads the
  * channel), so `value` cannot be arbitrarily large when it reaches here. The
  * budget is the `maxValueBytes` the boot frame carries — a required wire field
  * with no default at this layer. The traversal rejects over-budget BEFORE
@@ -566,7 +562,7 @@ function* ownValues(record: object): Generator {
  * copy each object's full breadth — allocating hundreds of megabytes beyond
  * what `JSON.parse` already holds. Iterative either way, so a deep frame
  * cannot overflow the host stack.
- * @param value - a JSON-parse-produced value from an fd-3 frame.
+ * @param value - a JSON-parse-produced value from an fd-4 frame.
  * @returns true when any contained number is non-finite or negative zero.
  */
 export function hasNonLosslessNumber(value: unknown): boolean {
@@ -592,13 +588,13 @@ export function hasNonLosslessNumber(value: unknown): boolean {
 }
 
 /**
- * Runtime shape gate for inbound fd-3 traffic. Model code has full access to
- * fd 3 and can post anything — `null`, primitives, poisoned fields — so the
+ * Runtime shape gate for inbound fd-4 traffic. Model code has full access to
+ * fd 4 and can post anything — `null`, primitives, poisoned fields — so the
  * compile-time union means nothing here: every field is validated and REBUILT
  * before the host reads it (forged extras never ride along; a non-number id
  * can never be echoed into a reply). Junk returns `undefined` and is dropped
  * so a throw in the host's `message` handler cannot crash the host process.
- * @param raw - one JSON-parsed frame from fd 3.
+ * @param raw - one JSON-parsed frame from fd 4.
  * @returns the rebuilt frame, or `undefined` to drop it silently.
  */
 export function validateChildFrame(raw: unknown): ChildToHost | undefined {

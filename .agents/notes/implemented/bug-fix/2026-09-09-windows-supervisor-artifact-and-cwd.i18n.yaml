@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-09-windows-supervisor-artifact-and-cwd.md
+2026-09-09-windows-supervisor-artifact-and-cwd.md: 2d4383c19e24abfdd2872ddcd082479a73ba09c1
+2026-09-09-windows-supervisor-artifact-and-cwd.zh.md: b53c20d3148ccdf7674e9d6740ff6a855f708e1d

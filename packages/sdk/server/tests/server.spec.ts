@@ -61,7 +61,7 @@ async function mockCompletionServer(): Promise<{ url: string; requests: unknown[
 
 async function makeHarness(storageDir: string) {
   const ctx = new Context()
-  await ctx.plugin(agentCore, { workspaceContext: false })
+  await ctx.plugin(agentCore, { workspaceContext: false, skills: { enabled: false }, goals: false })
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(JsonlSessionPersistence, { root: storageDir })
   await new Promise(resolve => setTimeout(resolve, 50))
@@ -115,6 +115,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
     vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
     const ctx = await makeHarness(storageDir)
+    await ctx.plugin(LlmDeepSeek, { models: [{ id: 'dsagent-model' }] })
     try {
       const transport = new FakeTransport()
       const server = new HarnessSdkJsonRpcServer(ctx, transport)
@@ -301,6 +302,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
     vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
     const ctx = await makeHarness(storageDir)
+    await ctx.plugin(LlmDeepSeek, { models: [{ id: 'plain-model' }] })
     try {
       const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
 

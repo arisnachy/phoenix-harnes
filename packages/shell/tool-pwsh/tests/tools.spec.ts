@@ -333,7 +333,7 @@ describe('registration', () => {
     await ctx.plugin(BashEnvPlugin)
     await ctx.plugin(FakeBash)
     const fiber = await ctx.plugin(ToolPwsh)
-    expect(ctx.tools.schemas()).toHaveLength(1)
+    expect(ctx.tools.schemas()).toHaveLength(2)
     await fiber.dispose()
     expect(ctx.tools.schemas()).toHaveLength(0)
   })

@@ -39,7 +39,7 @@ interface SandboxFixture {
   run: Mock<RunCommand>
   kill: ReturnType<typeof vi.fn>
   setTimeout: ReturnType<typeof vi.fn>
-  betaPause: ReturnType<typeof vi.fn>
+  pause: ReturnType<typeof vi.fn>
 }
 
 type RunCommand = (
@@ -53,16 +53,16 @@ function fakeSandbox(id = 'sandbox-1'): SandboxFixture {
   const run = vi.fn<RunCommand>().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
   const kill = vi.fn().mockResolvedValue(undefined)
   const setTimeout = vi.fn().mockResolvedValue(undefined)
-  const betaPause = vi.fn().mockResolvedValue(undefined)
+  const pause = vi.fn().mockResolvedValue(undefined)
   const sandbox = {
     sandboxId: id,
     files: { makeDir, getInfo },
     commands: { run },
     kill,
     setTimeout,
-    betaPause,
+    pause,
   } as unknown as SandboxType
-  return { sandbox, makeDir, getInfo, run, kill, setTimeout, betaPause }
+  return { sandbox, makeDir, getInfo, run, kill, setTimeout, pause }
 }
 
 beforeEach(() => {
@@ -185,7 +185,7 @@ describe('E2BRuntime', () => {
     expect(ctx.e2b.retention).toBe('pause')
 
     await fiber.dispose()
-    expect(fixture.betaPause).toHaveBeenCalledOnce()
+    expect(fixture.pause).toHaveBeenCalledOnce()
     expect(fixture.kill).not.toHaveBeenCalled()
   })
 
@@ -198,13 +198,13 @@ describe('E2BRuntime', () => {
     expect(ctx.e2b.retention).toBe('retain')
 
     await fiber.dispose()
-    expect(fixture.betaPause).not.toHaveBeenCalled()
+    expect(fixture.pause).not.toHaveBeenCalled()
     expect(fixture.kill).not.toHaveBeenCalled()
   })
 
   it('accepts an already-missing sandbox while pausing on disposal', async () => {
     const fixture = fakeSandbox('missing-pause')
-    fixture.betaPause.mockRejectedValue(new SandboxNotFoundError('already gone'))
+    fixture.pause.mockRejectedValue(new SandboxNotFoundError('already gone'))
     sdk.create.mockResolvedValue(fixture.sandbox)
     const ctx = new Context()
     const errors: unknown[] = []
@@ -213,7 +213,7 @@ describe('E2BRuntime', () => {
     await ctx.e2b.getSandbox()
 
     await fiber.dispose()
-    expect(fixture.betaPause).toHaveBeenCalledOnce()
+    expect(fixture.pause).toHaveBeenCalledOnce()
     expect(errors).toEqual([])
   })
 

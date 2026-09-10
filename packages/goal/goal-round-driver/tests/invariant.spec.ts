@@ -119,6 +119,33 @@ describe('goal-round-driver prompt invariants', () => {
     }).not.toThrow()
   })
 
+  it('does not rebuild needs_changes feedback after a later pass', async () => {
+    const { session } = await mount()
+    appendChange(session)
+    session.append('goal/judge', {
+      callId: 'judge-needs-changes' as never,
+      goalId: change.goal.id,
+      revision: change.goal.revision,
+      round: 0,
+      verdict: 'needs_changes',
+      summary: 'The earlier review required another check.',
+      findings: ['The earlier evidence was incomplete.'],
+      requiredChanges: ['Do not replay this after a passing review.'],
+    })
+    session.append('goal/judge', {
+      callId: 'judge-pass' as never,
+      goalId: change.goal.id,
+      revision: change.goal.revision,
+      round: 0,
+      verdict: 'pass',
+      summary: 'The later review passed.',
+      findings: [],
+      requiredChanges: [],
+    })
+
+    expect(() => { appendRound(session, 2) }).not.toThrow()
+  })
+
   it('rejects a goal round without a reconstructable active goal', async () => {
     const { session } = await mount()
     const source = { kind: 'goal', goalId: change.goal.id, revision: 1, round: 1 } as const

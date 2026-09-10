@@ -56,13 +56,15 @@ async function boot(
 }
 
 describe('login flows in a real composition', () => {
-  it('offers a sign-in for a provider no route names, once the seam is mounted', async () => {
+  it('offers sign-in for a pi-ai-owned provider before any route names it', async () => {
     const ctx = await boot(await home(), {}, { authorization: true })
 
     // Zero routes configured: signing in is what makes a route worth adding,
     // so the offer cannot wait for a profile to name the provider.
-    const codex = ctx.authorization.describe(LlmPiAi.recordKeyFor('openai-codex'))
-    expect(codex?.methods.map(method => method.id)).toEqual(['oauth'])
+    await vi.waitFor(() => {
+      const anthropic = ctx.authorization.describe(LlmPiAi.recordKeyFor('anthropic'))
+      expect(anthropic?.methods.map(method => method.id)).toEqual(['oauth', 'api-key'])
+    })
   })
 
   it('mounts without the seam, and simply offers no sign-in', async () => {

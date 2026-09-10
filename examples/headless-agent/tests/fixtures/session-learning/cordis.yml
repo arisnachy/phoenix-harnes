@@ -1,0 +1,28 @@
+- id: learning-mock-llm
+  name: './mock-llm.ts'
+
+- id: agent-spine
+  name: '@phoenix-ai/dsh-agent-spine-demo'
+  config:
+    agents: []
+    workspaceContext: false
+    dshHome: !!js process.cwd()
+    skills:
+      enabled: false
+    toolBash: false
+    toolJobs: false
+    goals: false
+
+- id: persistence
+  name: '@phoenix-ai/dsh-session-persistence-jsonl'
+  config:
+    root: './.sessions'
+    compression: 'none'
+
+- id: session-learning
+  name: '@phoenix-ai/dsh-session-learning'
+  config:
+    path: './.learning/learning.jsonl'
+
+- id: tool-session-learning
+  name: '@phoenix-ai/dsh-tool-session-learning'

@@ -79,8 +79,8 @@ export function resolveE2BLifecycleConfig(config: Pick<Config, 'sandboxId' | 're
     throw new Error('dsh-e2b: sandboxId must be a non-empty string when configured')
   }
   const retention = config.retention ?? 'kill'
-  if (retention !== 'kill' && retention !== 'pause' && retention !== 'retain') {
-    throw new Error(`dsh-e2b: unsupported retention policy ${String(retention)}`)
+  if (!['kill', 'pause', 'retain'].includes(retention)) {
+    throw new Error(`dsh-e2b: unsupported retention policy ${retention}`)
   }
   return {
     sandboxId,
@@ -211,11 +211,11 @@ export class E2BRuntime extends Service {
     const sandbox = reconnecting
       ? await Sandbox.connect(this.config.sandboxId as string, { apiKey: this.config.apiKey })
       : await Sandbox.create({
-          apiKey: this.config.apiKey,
-          timeoutMs: this.config.timeoutMs,
-          secure: true,
-          lifecycle: { onTimeout: this.config.autoPause ? 'pause' : 'kill' },
-        })
+        apiKey: this.config.apiKey,
+        timeoutMs: this.config.timeoutMs,
+        secure: true,
+        lifecycle: { onTimeout: this.config.autoPause ? 'pause' : 'kill' },
+      })
     try {
       // A reconnect adopts this runtime's requested lease from now, rather
       // than silently inheriting an arbitrary remaining timeout.
@@ -251,7 +251,7 @@ export class E2BRuntime extends Service {
     if (this.config.retention === 'retain') return
     try {
       if (this.config.retention === 'pause') {
-        await sandbox.betaPause()
+        await sandbox.pause()
         return
       }
       await sandbox.kill()

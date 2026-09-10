@@ -3,17 +3,17 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
-import { logTruncationMarker, PROTOCOL_FD, WIRE_FRAME_FIELDS } from '../src/protocol.ts'
+import { logTruncationMarker, PROTOCOL_READ_FD, PROTOCOL_WRITE_FD, WIRE_FRAME_FIELDS } from '../src/protocol.ts'
 
 /**
  * Cross-language mirror check between `src/protocol.ts` and `py/protocol.py`,
- * spawning a real `python3` to read the Python side. Two things are asserted:
- * the runtime surfaces both sides EXECUTE against — `PROTOCOL_FD` and the log
+ * spawning a real CPython interpreter to read the Python side. Two things are asserted:
+ * the runtime surfaces both sides EXECUTE against — the protocol descriptors and the log
  * truncation marker text, where a drift silently corrupts a live run — and the
  * per-frame wire field sets (required/optional keys of each `TypedDict`), which
  * turns the otherwise review-only shape mirror into an executable check that
  * catches the round-12 kind of drift (a renamed/dropped field, or one side
- * making a field optional the other requires). Self-skips when no `python3` is
+ * making a field optional the other requires). Self-skips when no interpreter is
  * on PATH — CI provides one; the pure-TS `protocol.spec.ts` covers the host
  * codec unconditionally.
  */
@@ -22,37 +22,39 @@ const execFileAsync = promisify(execFile)
 const pyDir = fileURLToPath(new URL('../py', import.meta.url))
 // `-B` blocks bytecode writes into the source tree (`py/__pycache__/*.pyc`);
 // `-I` isolates the interpreter but does not imply it.
-const python3Flags = ['-I', '-B']
+const pythonFlags = ['-I', '-B']
+const pythonCommand = process.platform === 'win32' ? 'python' : 'python3'
 
-async function hasPython3(): Promise<boolean> {
+async function hasPython(): Promise<boolean> {
   try {
-    await execFileAsync('python3', ['--version'])
+    await execFileAsync(pythonCommand, ['--version'])
     return true
   } catch {
     return false
   }
 }
 
-const python3Available = await hasPython3()
+const pythonAvailable = await hasPython()
 
-describe.skipIf(!python3Available)('protocol.py mirrors protocol.ts at runtime', () => {
-  it('agrees on PROTOCOL_FD and the log truncation marker across byte budgets', async () => {
+describe.skipIf(!pythonAvailable)('protocol.py mirrors protocol.ts at runtime', () => {
+  it('agrees on both protocol descriptors and the log truncation marker across byte budgets', async () => {
     const budgets = [1, 65536, 1048576]
     const probe = [
       'import json, sys',
       `sys.path.insert(0, ${JSON.stringify(pyDir)})`,
-      'from protocol import PROTOCOL_FD, log_truncation_marker',
+      'from protocol import PROTOCOL_READ_FD, PROTOCOL_WRITE_FD, log_truncation_marker',
       `budgets = ${JSON.stringify(budgets)}`,
       'print(json.dumps({',
-      '  "fd": PROTOCOL_FD,',
+      '  "readFd": PROTOCOL_READ_FD,',
+      '  "writeFd": PROTOCOL_WRITE_FD,',
       '  "markers": [log_truncation_marker(b) for b in budgets],',
       '}))',
     ].join('\n')
-    const { stdout } = await execFileAsync('python3', [...python3Flags, '-c', probe])
-    const seen = JSON.parse(stdout) as { fd: number; markers: string[] }
-    // Assert against the TS-side PROTOCOL_FD export (the value the host wires),
-    // not a bare literal, so a drift on either side of the wire is caught here.
-    expect(seen.fd).toBe(PROTOCOL_FD)
+    const { stdout } = await execFileAsync(pythonCommand, [...pythonFlags, '-c', probe])
+    const seen = JSON.parse(stdout) as { readFd: number; writeFd: number; markers: string[] }
+    expect(seen.readFd).toBe(PROTOCOL_READ_FD)
+    expect(seen.writeFd).toBe(PROTOCOL_WRITE_FD)
+    expect(seen.readFd).not.toBe(seen.writeFd)
     expect(seen.markers).toEqual(budgets.map(budget => logTruncationMarker(budget)))
   })
 
@@ -78,7 +80,7 @@ describe.skipIf(!python3Available)('protocol.py mirrors protocol.ts at runtime',
       + ' if not n.startswith("_") and hasattr(v, "__required_keys__")}',
       'print(json.dumps(frames))',
     ].join('\n')
-    const { stdout } = await execFileAsync('python3', [...python3Flags, '-c', probe])
+    const { stdout } = await execFileAsync(pythonCommand, [...pythonFlags, '-c', probe])
     const seen = JSON.parse(stdout) as Record<string, { required: string[]; optional: string[] }>
     // Normalize the TS source of truth to the same sorted shape Python reports.
     const expected = Object.fromEntries(

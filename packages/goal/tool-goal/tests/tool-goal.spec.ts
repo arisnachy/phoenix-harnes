@@ -83,6 +83,12 @@ async function harness(config: toolGoal.Config = {}) {
 
 /** Add a revision-bound judge proof for tests that exercise the domain transition directly. */
 function appendPassingJudge(root: StubAgent, goal: NonNullable<ReturnType<GoalService['get']>>): void {
+  root.session.append('goal/completion-gate', {
+    goalId: goal.id, revision: goal.revision, round: goal.roundsStarted, attemptId: 'tool-test-gate',
+    checks: { requirements: 'pass', builderTests: 'pass', adversarialTests: 'pass', startup: 'pass', artifactIntegrity: 'pass', cleanRoom: 'pass' },
+    evidenceLedger: [{ criterionId: 'test', criterion: 'Fixture objective', mandatory: true, status: 'verified', evidence: ['Fixture verification'] }],
+    artifactFingerprint: 'sha256:fixture', cleanRoomEvidence: 'Fixture clean-room verification', findings: [], proceduralLessons: [],
+  })
   root.session.append('goal/judge', {
     callId: 'tool-goal-test-judge' as never,
     goalId: goal.id,

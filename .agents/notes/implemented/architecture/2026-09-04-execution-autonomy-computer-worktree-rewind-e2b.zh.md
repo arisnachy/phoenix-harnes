@@ -12,7 +12,7 @@ PHOENIX 已经具备强健的权限、会话、子代理和远程运行时基础
 
 ## Decision
 
-`@phoenix-ai/dsh-tool-pwsh` 注册仅限 Windows 的 `computer` 工具，其封闭动作集合为 `screenshot`、`move`、`click`、`double_click`、`drag`、`type`、`key` 和 `scroll`。模型提供的值只通过环境变量进入固定的 PowerShell/C# 驱动程序，绝不会插值到可执行源代码中。桌面权限直接派生自现有 sandbox policy，而不是新增另一项持久权限开关：`read-only` 只能观察，`workspace-write` 和 `danger-full-access` 允许交互。`workspace-write` 下的交互动作使用现有 approval service；`danger-full-access` 是明确的无提示权限。缺少权限事实时默认拒绝。截图通过可选 attachment capability 保存，并延迟注入模型上下文作为图像内容。
+`@phoenix-ai/dsh-tool-pwsh` 注册仅限 Windows 的 `computer` 工具，其封闭动作集合为 `screenshot`、`windows`、`focus`、`move`、`click`、`double_click`、`drag`、`type`、`key` 和 `scroll`。`windows` 枚举可见顶层窗口；`focus` 解析明确的标题、pid 或 handle，并验证前台身份。输入动作可携带同一个 selector 作为 guard，改变状态的动作则捕获新截图，使模型验证可见的应用状态。模型提供的值只通过环境变量进入固定 PowerShell/C# driver，而 driver 本身通过 stdin 传输以避开 Windows 命令行长度限制；两个路径都不会把模型文本插值进可执行源码。stdin payload 包含执行最终 compound statement 所需的空白终止行，选择 UTF-8 输出，并按 driver 使用的有符号 32 位类型校验每个数字。动作后 delay 在正常结束时移除 abort listener。桌面权限直接派生自现有 sandbox policy，而不是新增另一项持久权限开关：`read-only` 只能观察，`workspace-write` 和 `danger-full-access` 允许交互。`workspace-write` 下的交互动作使用现有 approval service；`danger-full-access` 是明确的无提示权限。缺少权限事实时默认拒绝。截图通过可选 attachment capability 保存，并延迟注入模型上下文作为图像内容。
 
 `@phoenix-ai/dsh-subagent-in-process-driver` 在启用隔离时，为 one-shot 子代理创建确定性的分支和关联 Git worktree。内置 spawn 与 fork provider 默认启用该能力。非 Git 工作区保持原行为；一旦检测到 Git，worktree 创建失败会作为致命错误处理，而不会静默降级为共享写入。清理只移除干净的 worktree，保留有未提交修改的 worktree，并保留分支，因此已提交的子代理工作不会被生命周期清理销毁。可继续的 fork 会话仍使用共享工作区，因为该路径由 continuation manager 而不是 one-shot driver 管理。
 
@@ -32,7 +32,7 @@ PHOENIX 已经具备强健的权限、会话、子代理和远程运行时基础
 
 ## Consequences
 
-- observe-only 权限下无法执行桌面输入；模型只获得封闭且经过验证的动作界面，而不是任意主机命令。
+- observe-only 权限下无法执行桌面输入；模型只获得封闭且经过验证的动作界面，而不是任意主机命令。窗口身份检查和动作后的新截图可减少旧坐标与假成功故障。
 - one-shot Git 子代理默认获得隔离 checkout，同时未提交或已提交的工作在清理后仍可保留。
 - `/fork` 和 `/rewind` 保留原始对话及其未来历史，而不是重写历史。
 - 当调用者明确选择 `pause` 或 `retain` 时，E2B 会话可以跨 PHOENIX 进程生命周期存活，同时历史上的默认 `kill` 行为保持不变。
