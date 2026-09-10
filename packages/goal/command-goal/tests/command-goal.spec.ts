@@ -85,8 +85,33 @@ function ref(goal: NonNullable<ReturnType<GoalService['get']>>): GoalRef {
   return { id: goal.id, revision: goal.revision }
 }
 
-/** Append the durable proof required before the goal domain accepts completion. */
+/** Append the executable certification required before the goal domain accepts completion. */
 function appendPassingJudge(session: Session, goal: NonNullable<ReturnType<GoalService['get']>>): void {
+  session.append('goal/completion-gate', {
+    goalId: goal.id,
+    revision: goal.revision,
+    round: 0,
+    attemptId: 'command-goal-test-gate',
+    checks: {
+      requirements: 'pass',
+      builderTests: 'pass',
+      adversarialTests: 'pass',
+      startup: 'pass',
+      artifactIntegrity: 'pass',
+      cleanRoom: 'pass',
+    },
+    evidenceLedger: [{
+      criterionId: 'REQ-001',
+      criterion: 'Ship a verified artifact.',
+      mandatory: true,
+      status: 'verified',
+      evidence: ['clean-room verification'],
+    }],
+    artifactFingerprint: 'sha256:command-goal-test-artifact',
+    cleanRoomEvidence: 'verified extracted artifact in a clean temporary directory',
+    findings: [],
+    proceduralLessons: [],
+  })
   session.append('goal/judge', {
     callId: 'command-test-judge' as never,
     goalId: goal.id,
