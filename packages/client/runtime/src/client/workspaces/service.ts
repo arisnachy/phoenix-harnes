@@ -191,6 +191,10 @@ export class WorkspaceRuntime implements IWorkspaces {
     const currentIsTargetBlank = current !== undefined
       && currentWorkspaceId === target
       && sessions.byId[current]?.blank === true
+    // Make the explicit New Session gesture visible immediately. Host session
+    // creation/reuse may take time; leaving the old conversation selected
+    // makes a healthy but pending request look like a dead button.
+    this.sessions.clear()
     const nextSession = currentIsTargetBlank
       ? this.sessions.create({ workspaceId: target })
       : this.connectWorkspace(target)
