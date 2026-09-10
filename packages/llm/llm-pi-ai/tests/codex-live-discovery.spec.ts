@@ -86,6 +86,38 @@ describe('Codex app-server model/list mapping', () => {
     })
   })
 
+  it('preserves Codex reasoning capabilities for newly advertised models', () => {
+    expect(readCodexModelPage({
+      data: [{
+        id: 'gpt-6-astra',
+        model: 'gpt-6-astra',
+        displayName: 'GPT-6-Astra',
+        hidden: false,
+        supportedReasoningEfforts: [
+          { reasoningEffort: 'low', description: 'Fast responses with lighter reasoning' },
+          { reasoningEffort: 'high', description: 'Greater reasoning depth for complex problems' },
+          { reasoningEffort: 'max', description: 'Maximum reasoning depth for the hardest problems' },
+          { reasoningEffort: 'ultra', description: 'Maximum reasoning with automatic task delegation' },
+        ],
+        defaultReasoningEffort: 'low',
+      }],
+    })).toEqual({
+      models: [{
+        id: 'gpt-6-astra',
+        name: 'GPT-6-Astra',
+        reasoning: {
+          efforts: [
+            { id: 'low', name: 'Low', description: 'Fast responses with lighter reasoning' },
+            { id: 'high', name: 'High', description: 'Greater reasoning depth for complex problems' },
+            { id: 'max', name: 'Max', description: 'Maximum reasoning depth for the hardest problems' },
+            { id: 'ultra', name: 'Ultra', description: 'Maximum reasoning with automatic task delegation' },
+          ],
+          defaultEffort: 'low',
+        },
+      }],
+    })
+  })
+
   it('refuses a malformed app-server response rather than inventing models', () => {
     expect(() => readCodexModelPage({ models: [] })).toThrow(/no data array/)
   })
