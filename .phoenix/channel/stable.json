@@ -4,7 +4,7 @@
   "channel": "stable",
   "sourceBranch": "main",
   "sourceCommit": "1265f2ca61d7acee83cd735dc1798c3390a80160",
-  "publishedAt": "2026-09-10T14:40:23Z",
+  "publishedAt": "2026-09-10T14:44:32Z",
   "minimumNode": "22.19.0",
   "policy": {
     "installMode": "auto",
