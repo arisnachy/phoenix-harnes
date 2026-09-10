@@ -1,0 +1,39 @@
+name: UI4 generated-artifact sync
+
+on:
+  push:
+    branches:
+      - feat/phoenix-ui4-context-panel-20260910
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: contains(github.event.head_commit.message, '[sync-lock]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/phoenix-ui4-context-panel-20260910
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install and reconcile lockfile
+        run: pnpm install --no-frozen-lockfile
+      - name: Regenerate module graph
+        run: pnpm run gen-module-graph
+      - name: Commit derived artifacts
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml docs/module-graph.md
+          if git diff --cached --quiet; then
+            echo "No derived artifact changes"
+            exit 0
+          fi
+          git commit -m "chore(ui4): sync lockfile and module graph [lock-generated]"
+          git push origin HEAD:feat/phoenix-ui4-context-panel-20260910
