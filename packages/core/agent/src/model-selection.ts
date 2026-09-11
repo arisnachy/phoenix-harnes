@@ -44,7 +44,7 @@ export function defaultExecutionHandoff(selection: ModelSelection | undefined): 
     selection: {
       provider: 'openai-codex',
       model: 'gpt-5.6-luna',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     },
   }
 }
