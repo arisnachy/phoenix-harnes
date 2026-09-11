@@ -336,7 +336,7 @@ export function apply(ctx: Context, config: Config): void {
 
   if (resolved.requireJudge) {
     ctx.on('agent/turn-stopping', async ({ agent, turn, reason, signal }) => {
-      if (reason.kind !== 'completed') return
+      if (reason?.kind !== 'completed') return
       const goal = ctx.goals.get(agent)
       if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') return
       const round = autonomousGoalRound(agent, turn, goal)
