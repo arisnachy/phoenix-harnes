@@ -12,17 +12,17 @@ function provider() {
 }
 
 describe('goal completion judge', () => {
-  it('routes an OpenAI Codex parent to the Luna xhigh judge model', async () => {
+  it('returns an OpenAI Codex parent to the exact selected reviewer model', async () => {
     await expect(resolveGoalJudgeAgentOptions({
       parent: {
         id: SessionId('codex-parent'),
-        options: { provider: 'openai-codex', model: 'gpt-5.6-sol' },
+        options: { provider: 'openai-codex', model: 'gpt-6-astra', reasoningEffort: 'low' },
       } as never,
       signal: new AbortController().signal,
     })).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: 'xhigh',
+      model: 'gpt-6-astra',
+      reasoningEffort: 'low',
     })
   })
 
@@ -68,7 +68,7 @@ describe('goal completion judge', () => {
     expect(resolveModelInfo).toHaveBeenCalledWith('anthropic', 'claude-opus', expect.any(AbortSignal))
   })
 
-  it('passes the resolved Codex judge route to the fresh child run', async () => {
+  it('passes the selected Codex reviewer route to the fresh child run', async () => {
     const start = vi.fn(async (_name: string, request: Record<string, unknown>) => ({
       result: Promise.resolve({
         output: [],
@@ -83,14 +83,14 @@ describe('goal completion judge', () => {
       provider: 'spawn',
       parent: {
         id: SessionId('codex-parent'),
-        options: { provider: 'openai-codex', model: 'gpt-5.6-sol' },
+        options: { provider: 'openai-codex', model: 'gpt-6-astra', reasoningEffort: 'low' },
       } as never,
       objective: 'Finish the feature',
       round: 3,
       signal: new AbortController().signal,
     })
     expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
-      agentOptions: { provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'xhigh' },
+      agentOptions: { provider: 'openai-codex', model: 'gpt-6-astra', reasoningEffort: 'low' },
     }))
   })
 

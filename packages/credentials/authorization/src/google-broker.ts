@@ -27,7 +27,6 @@ const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 const GOOGLE_REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
 const LOOPBACK_HOST = '127.0.0.1'
-const CALLBACK_PATH = '/oauth2/callback'
 const EXPIRY_SKEW_MS = 60_000
 
 /** Deployment configuration. */
@@ -256,6 +255,19 @@ async function readTokenResponse(response: Response): Promise<TokenResponse> {
   return parseTokenResponse(value)
 }
 
+async function safeOAuthErrorCode(response: Response): Promise<string | undefined> {
+  try {
+    const value: unknown = await response.json()
+    if (value === null || typeof value !== 'object') return undefined
+    const error = (value as { error?: unknown }).error
+    if (typeof error !== 'string') return undefined
+    const normalized = error.trim()
+    return /^[a-z0-9_.-]{1,64}$/iu.test(normalized) ? normalized : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function form(fields: Readonly<Record<string, string>>): URLSearchParams {
   const body = new URLSearchParams()
   for (const [key, value] of Object.entries(fields)) body.set(key, value)
@@ -327,10 +339,10 @@ async function listen(server: Server): Promise<number> {
   })
   const address = server.address()
   if (address === null || typeof address === 'string') {
-    await new Promise<void>(resolve => server.close(() =>{  resolve() }))
+    await new Promise<void>(resolve => server.close(() => { resolve() }))
     throw new AuthorizationError('Google loopback receiver did not bind an IP port', 'GOOGLE_CALLBACK_BIND')
   }
-  return (address).port
+  return address.port
 }
 
 async function closeServer(server: Server): Promise<void> {
@@ -359,7 +371,7 @@ async function openLoopback(expectedState: string, signal: AbortSignal): Promise
       return
     }
     const callback = new URL(request.url, `http://${LOOPBACK_HOST}`)
-    if (callback.pathname !== CALLBACK_PATH) {
+    if (callback.pathname !== '/') {
       finish(404, 'Not found')
       return
     }
@@ -387,7 +399,7 @@ async function openLoopback(expectedState: string, signal: AbortSignal): Promise
       return
     }
     finished = true
-    finish(200, 'Google authorization completed. You can close this tab and return to PHOENIX.')
+    finish(200, 'PHOENIX received Google authorization and is completing sign-in. You can close this tab.')
     settled.resolve(code)
   })
   const port = await listen(server)
@@ -400,7 +412,7 @@ async function openLoopback(expectedState: string, signal: AbortSignal): Promise
   }
   signal.addEventListener('abort', onAbort, { once: true })
   return {
-    redirectUri: `http://${LOOPBACK_HOST}:${String(port)}${CALLBACK_PATH}`,
+    redirectUri: `http://${LOOPBACK_HOST}:${String(port)}`,
     code: settled.promise.finally(() => { signal.removeEventListener('abort', onAbort) }),
     close: () => closeServer(server),
   }
@@ -554,7 +566,12 @@ export default class GoogleApiBroker extends Service {
         redirect: 'error',
       })
       if (!response.ok) {
-        throw new AuthorizationError(`Google token exchange failed with HTTP ${String(response.status)}`, 'GOOGLE_TOKEN_EXCHANGE')
+        const reason = await safeOAuthErrorCode(response)
+        const suffix = reason === undefined ? '' : ` (${reason})`
+        throw new AuthorizationError(
+          `Google token exchange failed with HTTP ${String(response.status)}${suffix}. Verify the Google Desktop OAuth client and retry sign-in.`,
+          'GOOGLE_TOKEN_EXCHANGE',
+        )
       }
       const token = await readTokenResponse(response)
       if (token.token_type.toLowerCase() !== 'bearer') {
