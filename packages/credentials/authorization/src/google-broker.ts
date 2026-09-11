@@ -27,7 +27,6 @@ const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 const GOOGLE_REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
 const LOOPBACK_HOST = '127.0.0.1'
-const CALLBACK_PATH = '/oauth2/callback'
 const EXPIRY_SKEW_MS = 60_000
 
 /** Deployment configuration. */
@@ -327,10 +326,10 @@ async function listen(server: Server): Promise<number> {
   })
   const address = server.address()
   if (address === null || typeof address === 'string') {
-    await new Promise<void>(resolve => server.close(() =>{  resolve() }))
+    await new Promise<void>(resolve => server.close(() => { resolve() }))
     throw new AuthorizationError('Google loopback receiver did not bind an IP port', 'GOOGLE_CALLBACK_BIND')
   }
-  return (address).port
+  return address.port
 }
 
 async function closeServer(server: Server): Promise<void> {
@@ -359,7 +358,7 @@ async function openLoopback(expectedState: string, signal: AbortSignal): Promise
       return
     }
     const callback = new URL(request.url, `http://${LOOPBACK_HOST}`)
-    if (callback.pathname !== CALLBACK_PATH) {
+    if (callback.pathname !== '/') {
       finish(404, 'Not found')
       return
     }
@@ -387,7 +386,7 @@ async function openLoopback(expectedState: string, signal: AbortSignal): Promise
       return
     }
     finished = true
-    finish(200, 'Google authorization completed. You can close this tab and return to PHOENIX.')
+    finish(200, 'PHOENIX received Google authorization and is completing sign-in. You can close this tab.')
     settled.resolve(code)
   })
   const port = await listen(server)
@@ -400,7 +399,7 @@ async function openLoopback(expectedState: string, signal: AbortSignal): Promise
   }
   signal.addEventListener('abort', onAbort, { once: true })
   return {
-    redirectUri: `http://${LOOPBACK_HOST}:${String(port)}${CALLBACK_PATH}`,
+    redirectUri: `http://${LOOPBACK_HOST}:${String(port)}`,
     code: settled.promise.finally(() => { signal.removeEventListener('abort', onAbort) }),
     close: () => closeServer(server),
   }
@@ -442,10 +441,6 @@ export default class GoogleApiBroker extends Service {
     super(ctx, 'googleApi')
     this.spec = resolveGoogleSpec(config)
     this.startupCleanup = this.purgeStaleRecord()
-    // Cleanup starts at construction so a secret grant or marker left by an
-    // earlier process cannot be mistaken for this process's live session.
-    // Attach a rejection handler immediately to avoid an unhandled rejection;
-    // every public operation still awaits the original promise and fails loud.
     void this.startupCleanup.catch(() => {})
     ctx.effect(() => ctx.authorization.registerFlow({
       key: GOOGLE_ACCOUNT_KEY,
@@ -457,10 +452,6 @@ export default class GoogleApiBroker extends Service {
     }))
   }
 
-  /**
-   * Secret-free telemetry exists only while this process owns a live grant.
-   * @returns sanitized Google account and service capability telemetry, when connected.
-   */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
     await this.startupCleanup
     const grant = this.grant
@@ -474,11 +465,6 @@ export default class GoogleApiBroker extends Service {
       }
   }
 
-  /**
-   * Execute one request inside a fixed Google service boundary.
-   * @param request - bounded Google service request.
-   * @returns the bounded response without credential-bearing headers.
-   */
   async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {
     const destination = serviceUrl(request)
     const headers = callerHeaders(request.headers)
@@ -495,10 +481,6 @@ export default class GoogleApiBroker extends Service {
     }
   }
 
-  /**
-   * Clear the process grant and secret-free marker even when provider revocation fails.
-   * @returns whether Google acknowledged token revocation.
-   */
   async disconnect(): Promise<{ revoked: boolean }> {
     await this.startupCleanup
     const grant = this.grant
@@ -642,7 +624,6 @@ export default class GoogleApiBroker extends Service {
     return next
   }
 
-  /** Remove any Google credential record that predates this process-local broker instance. */
   private async purgeStaleRecord(): Promise<void> {
     const info = await this.ctx.credentials.describeRecord(GOOGLE_ACCOUNT_KEY)
     if (info.configured) await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
