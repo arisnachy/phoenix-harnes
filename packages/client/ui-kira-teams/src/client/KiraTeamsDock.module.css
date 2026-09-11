@@ -1,19 +1,23 @@
-/* Frame-overlay teams dock: fixed top-right card over the app frame. */
+/* The teams dock is a normal center-column sibling, not a floating overlay. */
 
 .root {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+  order: 2;
+  flex: 0 0 320px;
+  width: 320px;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
   display: flex;
-  justify-content: flex-end;
-  align-items: flex-start;
-  padding: 60px 16px 16px;
+  align-items: stretch;
+  padding: 16px;
+  border-left: 1px solid var(--dsh-color-border, var(--border, rgba(0, 0, 0, 0.1)));
+  background: color-mix(in srgb, var(--dsh-color-surface, var(--surface, #fff)) 92%, transparent);
+  pointer-events: auto;
 }
 
 .dock {
-  pointer-events: auto;
-  width: 288px;
-  max-height: min(420px, 60vh);
+  width: 100%;
+  max-height: none;
   display: flex;
   flex-direction: column;
   background: var(--dsh-color-surface, var(--surface, #fff));
@@ -182,4 +186,19 @@
   font-size: 11px;
   opacity: 0.75;
   white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .root {
+    flex: 0 0 auto;
+    width: 100%;
+    height: min(42vh, 360px);
+    padding: 8px 12px 12px;
+    border-top: 1px solid var(--dsh-color-border, var(--border, rgba(0, 0, 0, 0.1)));
+    border-left: 0;
+  }
+
+  .dock {
+    min-height: 0;
+  }
 }

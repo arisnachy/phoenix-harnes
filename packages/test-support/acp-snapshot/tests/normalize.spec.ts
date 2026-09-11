@@ -220,6 +220,20 @@ describe('normalizeSessionLog', () => {
     expect(out).not.toContain('123')
   })
 
+  it('zeroes volatile approval deadline timestamps', () => {
+    const raw = JSON.stringify({
+      type: 'approval/asked',
+      data: {
+        id: 'approval-1',
+        deadline: { requestedAt: 1789079845375, expiresAt: 1789079905375, risk: 'medium' },
+      },
+    })
+    const frame = JSON.parse(normalizeSessionLog(`${raw}\n`, ctx)) as {
+      data: { deadline: { requestedAt: number; expiresAt: number; risk: string } }
+    }
+    expect(frame.data.deadline).toEqual({ requestedAt: 0, expiresAt: 0, risk: 'medium' })
+  })
+
   it('preserves event sequence and zeroes event time', () => {
     const out = normalizeSessionLog(`${header({})}\n${event({ seq: 7, time: 999 })}\n`, ctx)
     expect(out).toContain('"time":0')

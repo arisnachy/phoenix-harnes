@@ -702,6 +702,23 @@ describe('SubagentHeaderLineage', () => {
     expect(screen.getByRole('button', { name: `切换子代理：${CHILD}` })).toBeTruthy()
   })
 
+  it('does not emit duplicate React keys for the current switcher and count', () => {
+    const input = {
+      ...props(catalog(), {}, {
+        [CHILD]: {
+          ...summary(CHILD, 1), parentId: PARENT, origin: 'subagent' as const,
+        },
+      }),
+      lineageSessionId: CHILD,
+      displayTitle: 'worker',
+    }
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    render(<SubagentHeaderLineage {...input} />)
+
+    expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key')
+  })
+
   it('keeps an ancestor switcher muted and omits its descendant count', () => {
     const input = {
       ...props(catalog(), {

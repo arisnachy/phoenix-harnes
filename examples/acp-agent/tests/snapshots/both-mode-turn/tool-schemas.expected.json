@@ -201,6 +201,371 @@
       }
     },
     {
+      "name": "organization_forge",
+      "description": "Build one organization, business, or system as a durable Organization Forge. Research comparable solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, and R&D roles active, prefer deterministic automation, and require functional, tested, secure, observable, maintainable, documented evidence plus an independent judge before delivery. Forge is a modular capability over the mission system, not a replacement for it. Start with research; a failed work item or judge result remains active and nextAction points to the next recovery step. The final handoff question is not a completion substitute.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "start, get, research, source, audit, blueprint, deliverable, work, strategy, revalidate, atlas, block, advance, criterion, judge, or management",
+            "enum": [
+              "start",
+              "get",
+              "research",
+              "source",
+              "audit",
+              "blueprint",
+              "deliverable",
+              "work",
+              "strategy",
+              "revalidate",
+              "atlas",
+              "block",
+              "advance",
+              "criterion",
+              "judge",
+              "management"
+            ]
+          },
+          "forge_id": {
+            "type": "string",
+            "description": "Existing Forge build id for non-start actions."
+          },
+          "objective": {
+            "type": "string",
+            "description": "Business, organization, or system objective for start."
+          },
+          "criteria": {
+            "type": "array",
+            "description": "Required delivery criteria for start.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "research_kind": {
+            "type": "string",
+            "description": "Comparable solution kind.",
+            "enum": [
+              "product",
+              "repository",
+              "tool",
+              "component",
+              "pattern"
+            ]
+          },
+          "research_title": {
+            "type": "string",
+            "description": "Comparable solution title."
+          },
+          "research_summary": {
+            "type": "string",
+            "description": "Secret-free comparable solution summary."
+          },
+          "research_relevance": {
+            "type": "string",
+            "description": "Why the comparable solution matters."
+          },
+          "research_evidence": {
+            "type": "array",
+            "description": "Research evidence references.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string",
+            "description": "Public source title."
+          },
+          "locator": {
+            "type": "string",
+            "description": "Public https, atlas, or local source reference without credentials."
+          },
+          "license": {
+            "type": "string",
+            "description": "Detected license identifier or policy result."
+          },
+          "stage": {
+            "type": "string",
+            "description": "Audit stage.",
+            "enum": [
+              "pre-reuse",
+              "post-modification"
+            ]
+          },
+          "source_id": {
+            "type": "string",
+            "description": "Source id being audited."
+          },
+          "dependencies": {
+            "type": "string",
+            "description": "Dependency audit result.",
+            "enum": [
+              "pending",
+              "passed",
+              "needs_changes",
+              "blocked"
+            ]
+          },
+          "secrets": {
+            "type": "string",
+            "description": "Secret scan result.",
+            "enum": [
+              "pending",
+              "passed",
+              "needs_changes",
+              "blocked"
+            ]
+          },
+          "vulnerabilities": {
+            "type": "string",
+            "description": "Vulnerability audit result.",
+            "enum": [
+              "pending",
+              "passed",
+              "needs_changes",
+              "blocked"
+            ]
+          },
+          "findings": {
+            "type": "array",
+            "description": "Bounded audit or judge findings.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "components": {
+            "type": "array",
+            "description": "Blueprint components.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "infrastructure": {
+            "type": "array",
+            "description": "Blueprint infrastructure.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "automations": {
+            "type": "array",
+            "description": "Blueprint automations.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "workflows": {
+            "type": "array",
+            "description": "Blueprint workflows.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "description": "Blueprint metrics.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cost_controls": {
+            "type": "array",
+            "description": "Blueprint cost controls.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "quality_targets": {
+            "type": "array",
+            "description": "Blueprint quality targets.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deliverable_id": {
+            "type": "string",
+            "description": "Existing deliverable id when updating evidence status."
+          },
+          "deliverable_name": {
+            "type": "string",
+            "description": "Concrete output name."
+          },
+          "deliverable_kind": {
+            "type": "string",
+            "description": "Concrete output kind.",
+            "enum": [
+              "software",
+              "web",
+              "infrastructure",
+              "automation",
+              "workflow",
+              "agent",
+              "documentation",
+              "other"
+            ]
+          },
+          "artifact_ref": {
+            "type": "string",
+            "description": "Durable artifact reference."
+          },
+          "deliverable_status": {
+            "type": "string",
+            "description": "Deliverable evidence state.",
+            "enum": [
+              "pending",
+              "implemented",
+              "tested",
+              "verified"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "description": "Phoenix team role for work.",
+            "enum": [
+              "it",
+              "security",
+              "rd"
+            ]
+          },
+          "work_title": {
+            "type": "string",
+            "description": "Durable work item title."
+          },
+          "work_status": {
+            "type": "string",
+            "description": "Recoverable work status.",
+            "enum": [
+              "active",
+              "completed",
+              "failed"
+            ]
+          },
+          "strategy_id": {
+            "type": "string",
+            "description": "Strategy referenced by a work item."
+          },
+          "failure_fingerprint": {
+            "type": "string",
+            "description": "Stable failure fingerprint used to prevent repeated approaches."
+          },
+          "strategy_name": {
+            "type": "string",
+            "description": "Alternative strategy name."
+          },
+          "strategy_status": {
+            "type": "string",
+            "description": "Alternative strategy status.",
+            "enum": [
+              "proposed",
+              "active",
+              "completed",
+              "failed"
+            ]
+          },
+          "strategy_summary": {
+            "type": "string",
+            "description": "Alternative strategy summary."
+          },
+          "revalidation_evidence": {
+            "type": "array",
+            "description": "Current source revalidation evidence.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "atlas_name": {
+            "type": "string",
+            "description": "Reusable Atlas entry name."
+          },
+          "atlas_summary": {
+            "type": "string",
+            "description": "Secret-free reusable Atlas summary."
+          },
+          "reusable_pattern": {
+            "type": "string",
+            "description": "Secret-free reusable pattern."
+          },
+          "dependency": {
+            "type": "string",
+            "description": "External dependency that blocks progress."
+          },
+          "blocker_reason": {
+            "type": "string",
+            "description": "Why the dependency blocks progress."
+          },
+          "resume_condition": {
+            "type": "string",
+            "description": "Condition that allows the next attempt."
+          },
+          "phase": {
+            "type": "string",
+            "description": "Next Forge lifecycle phase.",
+            "enum": [
+              "researching",
+              "auditing",
+              "designing",
+              "building",
+              "verifying"
+            ]
+          },
+          "criterion_id": {
+            "type": "string",
+            "description": "Criterion id returned by start or get."
+          },
+          "criterion_status": {
+            "type": "string",
+            "description": "Evidence state.",
+            "enum": [
+              "pending",
+              "implemented",
+              "tested",
+              "verified"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "description": "Evidence references; required for verified.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verdict": {
+            "type": "string",
+            "description": "Optional manual verdict when judging is disabled.",
+            "enum": [
+              "pass",
+              "needs_changes",
+              "blocked"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "description": "Judge summary."
+          },
+          "required_changes": {
+            "type": "array",
+            "description": "Required changes before approval.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "management_mode": {
+            "type": "string",
+            "description": "Post-build management choice.",
+            "enum": [
+              "handoff",
+              "assisted",
+              "autonomous"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
       "name": "ralph",
       "description": "Run a foreground fresh-agent Ralph loop toward one immutable objective. Use only when the direct human explicitly asks for Ralph or fresh-agent iteration. Each round opens a new child with no parent conversation or prior child session; the shared workspace is long-term memory, and only a bounded structured report crosses rounds. The call returns when a worker reports completion or a concrete blocker, or at the round limit. Ordinary long-running same-session work belongs to goal tools.",
       "parameters": {
@@ -299,6 +664,91 @@
         },
         "required": [
           "name"
+        ]
+      }
+    },
+    {
+      "name": "specialist_lab",
+      "description": "Maintain one persistent, evidence-based specialist laboratory. Start it only for an explicit expertise request, then register traceable sources, falsifiable hypotheses, reproducible experiments, and judge results. A specialist is ready only after a passing evaluation; failed evaluations create an improving checkpoint and are bounded by max_iterations. When the base profile requires judging, evaluate invokes a fresh read-only independent judge automatically.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "start, source, hypothesis, experiment, or evaluate",
+            "enum": [
+              "start",
+              "source",
+              "hypothesis",
+              "experiment",
+              "evaluate"
+            ]
+          },
+          "specialist_id": {
+            "type": "string",
+            "description": "Existing specialist laboratory id for non-start actions."
+          },
+          "topic": {
+            "type": "string",
+            "description": "Research topic for start."
+          },
+          "objective": {
+            "type": "string",
+            "description": "Concrete expertise objective for start."
+          },
+          "success_criteria": {
+            "type": "array",
+            "description": "Evidence-based readiness criteria for start.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_iterations": {
+            "type": "number",
+            "description": "Positive bounded improvement-loop cap."
+          },
+          "title": {
+            "type": "string",
+            "description": "Source title."
+          },
+          "locator": {
+            "type": "string",
+            "description": "Source URL or stable locator."
+          },
+          "hypothesis": {
+            "type": "string",
+            "description": "Falsifiable hypothesis."
+          },
+          "experiment_name": {
+            "type": "string",
+            "description": "Reproducible experiment name."
+          },
+          "dataset": {
+            "type": "string",
+            "description": "Dataset used by the experiment."
+          },
+          "score": {
+            "type": "number",
+            "description": "Judge score from 0 to 1."
+          },
+          "passed": {
+            "type": "boolean",
+            "description": "Whether all success criteria passed when no independent judge is configured."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Judge summary."
+          },
+          "required_changes": {
+            "type": "array",
+            "description": "Changes required before the next evaluation.",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "action"
         ]
       }
     },

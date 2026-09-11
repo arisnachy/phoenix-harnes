@@ -97,7 +97,9 @@ export function lineageMembers(state: SessionListState): {
         if (summary.origin !== 'subagent' || summary.parentId !== parentId) continue
         if (depth.has(summary.id)) continue
         depth.set(summary.id, childDepth)
-        rows.push({ summary, depth: childDepth })
+        if (summary.running) rows.push({ summary, depth: childDepth })
+        // Walk through settled parents as well: a still-running grandchild is
+        // an active member even if its parent has already settled.
         next.push(summary.id)
       }
     }
@@ -112,12 +114,12 @@ export function lineageMembers(state: SessionListState): {
 }
 
 /**
- * Frame-wide overlay dock: the always-visible board of the subagents the
- * current lineage has deployed — the Codex-style side view of a KIRA team.
+ * In-flow teams panel: the active board of subagents the current lineage has
+ * deployed — the Codex-style side view of a KIRA team.
  * Settled children are removed from the visible roster; only active members
  * remain. Renders nothing until the lineage actually has members; pops itself open
  * whenever a new member starts running so deployments are never silent.
- * @param props - Overlay standard props, injected sessions face, and copy.
+ * @param props - Shell standard props, injected sessions face, and copy.
  * @returns The dock element, or null while the lineage has no subagents.
  */
 export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProps) {
@@ -153,7 +155,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
 
   if (collapsed) {
     return (
-      <div className={css.root}>
+      <div className={css.root} data-kira-teams>
         <button
           type="button"
           className={`${css.pill} ${runningCount > 0 ? css.pillLive : ''}`}
@@ -172,7 +174,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
   }
 
   return (
-    <div className={css.root}>
+    <div className={css.root} data-kira-teams>
       <section className={css.dock} aria-label={t('team.aria')}>
         <header className={css.header}>
           <button
@@ -226,6 +228,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
                 activity={activityOf(summary)}
                 running={summary.running}
                 pending={summary.pendingInteraction !== undefined}
+                identity={summary.agentPreset ?? summary.displayTitle}
               />
               <span className={css.name}>{summary.displayTitle}</span>
               <span className={css.agentName}>{agentNameOf(summary)}</span>

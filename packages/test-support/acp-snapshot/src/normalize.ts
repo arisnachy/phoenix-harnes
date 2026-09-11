@@ -348,6 +348,15 @@ export function normalizeSessionLog(
       const data = record.data as Record<string, unknown>
       if ('durationMs' in data) data.durationMs = 0
     }
+    if (record.type === 'approval/asked' && record.data !== null && typeof record.data === 'object') {
+      const data = record.data as Record<string, unknown>
+      const deadline = data.deadline
+      if (deadline !== null && typeof deadline === 'object') {
+        const values = deadline as Record<string, unknown>
+        if ('requestedAt' in values) values.requestedAt = 0
+        if ('expiresAt' in values) values.expiresAt = 0
+      }
+    }
     return scrubValue(record, ctx, cwdPathMode) as Record<string, unknown>
   })
   return records.map(r => JSON.stringify(r)).join('\n') + '\n'

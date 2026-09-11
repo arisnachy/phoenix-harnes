@@ -3,12 +3,48 @@ import { Session, SessionId } from '@phoenix-ai/dsh-session'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import { judgeGoalCompletion, recordGoalJudge, resolveGoalJudgeAgentOptions } from '../src/judge.ts'
 
-const parent = { id: SessionId('judge-parent'), options: {} } as never
+const parent = {
+  id: SessionId('judge-parent'),
+  session: Session.create(SessionId('judge-parent-session')),
+  options: {},
+} as never
 
 function provider() {
   return {
     capabilities: { outputSchema: true, toolFilter: true },
   }
+}
+
+const passingGateDesign = {
+  cases: [{ name: 'malformed-input', purpose: 'Reject malformed input without silent success.' }],
+}
+
+const passingGateExecution = {
+  checks: {
+    requirements: 'pass',
+    builder_tests: 'pass',
+    adversarial_tests: 'pass',
+    startup: 'pass',
+    artifact_integrity: 'pass',
+    clean_room: 'pass',
+  },
+  evidence_ledger: [{
+    criterion_id: 'REQ-001',
+    criterion: 'Ship a verified artifact.',
+    mandatory: true,
+    status: 'verified',
+    evidence: ['clean-room verification'],
+  }],
+  artifact_fingerprint: 'sha256:judge-test-artifact',
+  clean_room_evidence: 'verified extracted artifact in a clean temporary directory',
+  findings: [],
+  procedural_lessons: [],
+}
+
+function structuredGateResponse(label: unknown): unknown {
+  if (label === 'goal-adversarial-test-design') return passingGateDesign
+  if (label === 'goal-adversarial-tester') return passingGateExecution
+  return undefined
 }
 
 describe('goal completion judge', () => {
@@ -83,6 +119,7 @@ describe('goal completion judge', () => {
       provider: 'spawn',
       parent: {
         id: SessionId('codex-parent'),
+        session: Session.create(SessionId('codex-parent-session')),
         options: { provider: 'openai-codex', model: 'gpt-5.6-sol' },
       } as never,
       objective: 'Finish the feature',
@@ -99,7 +136,7 @@ describe('goal completion judge', () => {
       result: Promise.resolve({
         output: [],
         stopReason: 'completed' as const,
-        structured: {
+        structured: structuredGateResponse(request.label) ?? {
           verdict: 'pass',
           summary: 'All acceptance evidence is present.',
           findings: [],
@@ -136,11 +173,11 @@ describe('goal completion judge', () => {
     const result = await judgeGoalCompletion({
       subagents: {
         getProvider: () => provider() as never,
-        start: vi.fn(async () => ({
+        start: vi.fn(async (_name: string, request: Record<string, unknown>) => ({
           result: Promise.resolve({
             output: [],
             stopReason: 'completed' as const,
-            structured: {
+            structured: structuredGateResponse(request.label) ?? {
               verdict: 'needs_changes',
               summary: 'The acceptance test is missing.',
               findings: ['No assembled test proves the user-visible path.'],
@@ -161,11 +198,11 @@ describe('goal completion judge', () => {
   })
 
   it('falls back to an available structured provider when the configured alias is absent', async () => {
-    const start = vi.fn(async (name: string) => ({
+    const start = vi.fn(async (name: string, request: Record<string, unknown>) => ({
       result: Promise.resolve({
         output: [],
         stopReason: 'completed' as const,
-        structured: {
+        structured: structuredGateResponse(request.label) ?? {
           verdict: 'pass',
           summary: 'The objective is verified.',
           findings: [],
@@ -182,7 +219,11 @@ describe('goal completion judge', () => {
         start: start as never,
       },
       provider: 'spawn',
-      parent,
+      parent: {
+        id: SessionId('codex-fallback-parent'),
+        session: Session.create(SessionId('codex-fallback-parent-session')),
+        options: { provider: 'openai-codex', model: 'gpt-5.6-sol' },
+      } as never,
       objective: 'Finish the feature',
       round: 2,
       signal: new AbortController().signal,

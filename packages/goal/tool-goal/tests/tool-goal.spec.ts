@@ -81,8 +81,38 @@ async function harness(config: toolGoal.Config = {}) {
   return { ctx, fiber, root }
 }
 
+/** Add the adversarial gate required before a terminal goal transition. */
+function appendPassingGate(root: StubAgent, goal: NonNullable<ReturnType<GoalService['get']>>): void {
+  root.session.append('goal/completion-gate', {
+    goalId: goal.id,
+    revision: goal.revision,
+    round: goal.roundsStarted,
+    attemptId: 'tool-goal-test-gate',
+    checks: {
+      requirements: 'pass',
+      builderTests: 'pass',
+      adversarialTests: 'pass',
+      startup: 'pass',
+      artifactIntegrity: 'pass',
+      cleanRoom: 'pass',
+    },
+    evidenceLedger: [{
+      criterionId: 'REQ-001',
+      criterion: 'Ship a verified artifact.',
+      mandatory: true,
+      status: 'verified',
+      evidence: ['clean-room verification'],
+    }],
+    artifactFingerprint: 'sha256:tool-goal-test-artifact',
+    cleanRoomEvidence: 'verified extracted artifact in a clean temporary directory',
+    findings: [],
+    proceduralLessons: [],
+  })
+}
+
 /** Add a revision-bound judge proof for tests that exercise the domain transition directly. */
 function appendPassingJudge(root: StubAgent, goal: NonNullable<ReturnType<GoalService['get']>>): void {
+  appendPassingGate(root, goal)
   root.session.append('goal/judge', {
     callId: 'tool-goal-test-judge' as never,
     goalId: goal.id,

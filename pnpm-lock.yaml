@@ -1114,6 +1114,9 @@ importers:
       '@phoenix-ai/dsh-llm-retry':
         specifier: workspace:^
         version: link:../../llm/llm-retry
+      '@phoenix-ai/dsh-mcp-connector-registry':
+        specifier: workspace:^
+        version: link:../../mcp/mcp-registry
       '@phoenix-ai/dsh-permission-presets':
         specifier: workspace:^
         version: link:../../interaction/permission-presets

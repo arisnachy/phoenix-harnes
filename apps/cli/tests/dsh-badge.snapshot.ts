@@ -31,7 +31,7 @@ describe('PHOENIX badge assembled snapshot', () => {
     })
     const disabledSnapshot = JSON.parse(disabled.stdout) as unknown
     const enabledSnapshot = JSON.parse(
-      enabled.stdout.replaceAll(badgeAssetsPath, '{{badgeAssetsPath}}'),
+      enabled.stdout.replaceAll(badgeAssetsPath.replaceAll('\\', '\\\\'), '{{badgeAssetsPath}}'),
     ) as unknown
 
     expect(disabled.stderr).toBe('')
@@ -76,7 +76,7 @@ describe('PHOENIX badge assembled snapshot', () => {
             {
               "text": "<skill_content name="dsh-badge">
       <skill_resources>
-      Base directory for this skill: C:\\Users\\arisn\\OneDrive\\Documentos\\ChatGPT\\Fenix\\packages\\skill\\skill-badge\\assets\\
+      Base directory for this skill: {{badgeAssetsPath}}
       Resolve relative paths mentioned by this skill against the base directory before using them. Load referenced resources only as needed.
       </skill_resources>
 
@@ -174,7 +174,7 @@ describe('PHOENIX badge assembled snapshot', () => {
             "provider": "dsh-badge",
             "resourceBase": {
               "kind": "directory",
-              "path": "C:\\Users\\arisn\\OneDrive\\Documentos\\ChatGPT\\Fenix\\packages\\skill\\skill-badge\\assets\\",
+              "path": "{{badgeAssetsPath}}",
             },
           },
         },
@@ -188,7 +188,7 @@ describe('PHOENIX badge assembled snapshot', () => {
           "provider": "dsh-badge",
           "resourceBase": {
             "kind": "directory",
-            "path": "C:\\Users\\arisn\\OneDrive\\Documentos\\ChatGPT\\Fenix\\packages\\skill\\skill-badge\\assets\\",
+            "path": "{{badgeAssetsPath}}",
           },
           "source": "bundled",
         },

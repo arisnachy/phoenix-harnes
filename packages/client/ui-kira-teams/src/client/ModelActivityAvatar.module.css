@@ -132,6 +132,18 @@
   background: radial-gradient(circle at 35% 32%, #e0f2fe 0%, #3b82f6 52%, #1e3a8a 100%);
 }
 
+.avatar[data-avatar='generic'][data-variant='1'] .core {
+  background: radial-gradient(circle at 35% 32%, #fce7f3 0%, #ec4899 52%, #831843 100%);
+}
+
+.avatar[data-avatar='generic'][data-variant='2'] .core {
+  background: radial-gradient(circle at 35% 32%, #ede9fe 0%, #8b5cf6 52%, #4c1d95 100%);
+}
+
+.avatar[data-avatar='generic'][data-variant='3'] .core {
+  background: radial-gradient(circle at 35% 32%, #dcfce7 0%, #22c55e 52%, #14532d 100%);
+}
+
 .avatar[data-phase='preparing'] .core {
   animation: avatar-breathe 1.8s ease-in-out infinite alternate;
 }

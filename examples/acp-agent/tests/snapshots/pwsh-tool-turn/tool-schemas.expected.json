@@ -1,6 +1,75 @@
 {
   "initial": [
     {
+      "name": "computer",
+      "description": "Control the Windows desktop with window-aware actions. Before controlling an external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Desktop operation. windows lists visible top-level windows; focus activates a target and verifies foreground identity.",
+            "enum": [
+              "screenshot",
+              "windows",
+              "focus",
+              "move",
+              "click",
+              "double_click",
+              "drag",
+              "type",
+              "key",
+              "scroll"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "description": "Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus and strongly recommended for external-app input."
+          },
+          "x": {
+            "type": "integer",
+            "description": "Screen X coordinate. Required for move/click/double_click/drag; optional with scroll."
+          },
+          "y": {
+            "type": "integer",
+            "description": "Screen Y coordinate. Required for move/click/double_click/drag; optional with scroll."
+          },
+          "x2": {
+            "type": "integer",
+            "description": "Drag destination X coordinate."
+          },
+          "y2": {
+            "type": "integer",
+            "description": "Drag destination Y coordinate."
+          },
+          "button": {
+            "type": "string",
+            "description": "Mouse button; defaults to left.",
+            "enum": [
+              "left",
+              "right",
+              "middle"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "description": "Unicode text for the type action."
+          },
+          "keys": {
+            "type": "string",
+            "description": "Key or combo such as ENTER, CTRL+L, ALT+TAB, F5, or SHIFT+F10."
+          },
+          "delta": {
+            "type": "integer",
+            "description": "Mouse-wheel delta for scroll; positive scrolls up and negative scrolls down."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
       "name": "job_kill",
       "description": "Request cancellation of a running background job by job id. Returns immediately; the job settles as killed once its work actually stops.",
       "parameters": {
