@@ -59,6 +59,44 @@ function openGoalRound(root: StubAgent, goal: NonNullable<ReturnType<GoalService
   return turn
 }
 
+function certifyCurrentRevision(root: StubAgent, goal: NonNullable<ReturnType<GoalService['get']>>): void {
+  root.session.append('goal/completion-gate', {
+    goalId: goal.id,
+    revision: goal.revision,
+    round: 1,
+    attemptId: `automatic-supervisor-gate-${goal.id}`,
+    checks: {
+      requirements: 'pass',
+      builderTests: 'pass',
+      adversarialTests: 'pass',
+      startup: 'pass',
+      artifactIntegrity: 'pass',
+      cleanRoom: 'pass',
+    },
+    evidenceLedger: [{
+      criterionId: 'criterion-1',
+      criterion: 'The requested product is complete, verified, and usable.',
+      mandatory: true,
+      status: 'verified',
+      evidence: ['clean-room verified artifact'],
+    }],
+    artifactFingerprint: 'automatic-supervisor-artifact-v1',
+    cleanRoomEvidence: 'Independent clean-room verification passed.',
+    findings: [],
+    proceduralLessons: [],
+  })
+  root.session.append('goal/judge', {
+    callId: 'automatic-supervisor-seed-judge' as never,
+    goalId: goal.id,
+    revision: goal.revision,
+    round: 1,
+    verdict: 'pass',
+    summary: 'The exact deliverable is independently verified.',
+    findings: [],
+    requiredChanges: [],
+  })
+}
+
 describe('automatic mission supervisor', () => {
   it('reviews a completed autonomous goal round even when the executor never calls complete', async () => {
     const { ctx, root } = await harness()
@@ -84,6 +122,28 @@ describe('automatic mission supervisor', () => {
       phase: 'active',
       roundsStarted: 1,
       activation: 'armed',
+    })
+  })
+
+  it('completes automatically only after exact executable evidence and supervisor PASS exist', async () => {
+    const { ctx, root } = await harness()
+    const created = ctx.goals.create(root.agent, { objective: 'Ship the fully verified product' })
+    certifyCurrentRevision(root, created)
+    const turn = openGoalRound(root, created)
+
+    await agentEvents(ctx, root.agent).serial('agent/turn-stopping', {
+      turn,
+      reason: { kind: 'completed' },
+      signal: new AbortController().signal,
+    })
+
+    expect(root.session.events.filter(event => event.type === 'goal/judge').at(-1)?.data.verdict).toBe('pass')
+    expect(ctx.goals.get(root.agent)).toMatchObject({
+      id: created.id,
+      revision: created.revision,
+      phase: 'complete',
+      roundsStarted: 1,
+      activation: 'disarmed',
     })
   })
 
