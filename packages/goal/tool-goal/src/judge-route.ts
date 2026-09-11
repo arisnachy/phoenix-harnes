@@ -1,16 +1,17 @@
 /** Model-route policy shared by completion testers and judges. */
 
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
-import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import type { LlmRuntime } from '@phoenix-ai/dsh-llm'
 
 const REASONING_RANK = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const
 
 /**
  * Resolve the exact independent verifier model route.
- * Codex parents use Luna xhigh. Every non-Codex parent keeps the exact active
- * provider and model, with the same effort or the highest advertised effort
- * when the parent omitted one.
+ * The reviewer always returns to the exact active parent provider/model. If the
+ * parent selected a reasoning effort, preserve it. Otherwise use the highest
+ * advertised effort when the catalog can resolve one. This keeps the Codex
+ * cognitive default asymmetric: selected model plans/reviews while Luna Max is
+ * used only for execution steps. Non-Codex providers are never rerouted.
  * @param input - parent route, optional model catalog, and cancellation signal.
  * @returns independent child options preserving the intended model policy.
  */
@@ -21,13 +22,6 @@ export async function resolveGoalJudgeAgentOptions(input: {
 }): Promise<AgentOptions> {
   const { provider, model, reasoningEffort } = input.parent.options
   if (provider === undefined || model === undefined) return {}
-  if (provider === 'openai-codex') {
-    return {
-      provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: ReasoningEffortId('xhigh'),
-    }
-  }
   if (reasoningEffort !== undefined) return { provider, model, reasoningEffort }
   if (input.llm !== undefined) {
     try {
