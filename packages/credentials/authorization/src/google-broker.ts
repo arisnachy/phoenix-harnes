@@ -255,6 +255,19 @@ async function readTokenResponse(response: Response): Promise<TokenResponse> {
   return parseTokenResponse(value)
 }
 
+async function safeOAuthErrorCode(response: Response): Promise<string | undefined> {
+  try {
+    const value: unknown = await response.json()
+    if (value === null || typeof value !== 'object') return undefined
+    const error = (value as { error?: unknown }).error
+    if (typeof error !== 'string') return undefined
+    const normalized = error.trim()
+    return /^[a-z0-9_.-]{1,64}$/iu.test(normalized) ? normalized : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function form(fields: Readonly<Record<string, string>>): URLSearchParams {
   const body = new URLSearchParams()
   for (const [key, value] of Object.entries(fields)) body.set(key, value)
@@ -441,6 +454,10 @@ export default class GoogleApiBroker extends Service {
     super(ctx, 'googleApi')
     this.spec = resolveGoogleSpec(config)
     this.startupCleanup = this.purgeStaleRecord()
+    // Cleanup starts at construction so a secret grant or marker left by an
+    // earlier process cannot be mistaken for this process's live session.
+    // Attach a rejection handler immediately to avoid an unhandled rejection;
+    // every public operation still awaits the original promise and fails loud.
     void this.startupCleanup.catch(() => {})
     ctx.effect(() => ctx.authorization.registerFlow({
       key: GOOGLE_ACCOUNT_KEY,
@@ -452,6 +469,10 @@ export default class GoogleApiBroker extends Service {
     }))
   }
 
+  /**
+   * Secret-free telemetry exists only while this process owns a live grant.
+   * @returns sanitized Google account and service capability telemetry, when connected.
+   */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
     await this.startupCleanup
     const grant = this.grant
@@ -465,6 +486,11 @@ export default class GoogleApiBroker extends Service {
       }
   }
 
+  /**
+   * Execute one request inside a fixed Google service boundary.
+   * @param request - bounded Google service request.
+   * @returns the bounded response without credential-bearing headers.
+   */
   async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {
     const destination = serviceUrl(request)
     const headers = callerHeaders(request.headers)
@@ -481,6 +507,10 @@ export default class GoogleApiBroker extends Service {
     }
   }
 
+  /**
+   * Clear the process grant and secret-free marker even when provider revocation fails.
+   * @returns whether Google acknowledged token revocation.
+   */
   async disconnect(): Promise<{ revoked: boolean }> {
     await this.startupCleanup
     const grant = this.grant
@@ -536,7 +566,12 @@ export default class GoogleApiBroker extends Service {
         redirect: 'error',
       })
       if (!response.ok) {
-        throw new AuthorizationError(`Google token exchange failed with HTTP ${String(response.status)}`, 'GOOGLE_TOKEN_EXCHANGE')
+        const reason = await safeOAuthErrorCode(response)
+        const suffix = reason === undefined ? '' : ` (${reason})`
+        throw new AuthorizationError(
+          `Google token exchange failed with HTTP ${String(response.status)}${suffix}. Verify the Google Desktop OAuth client and retry sign-in.`,
+          'GOOGLE_TOKEN_EXCHANGE',
+        )
       }
       const token = await readTokenResponse(response)
       if (token.token_type.toLowerCase() !== 'bearer') {
@@ -624,6 +659,7 @@ export default class GoogleApiBroker extends Service {
     return next
   }
 
+  /** Remove any Google credential record that predates this process-local broker instance. */
   private async purgeStaleRecord(): Promise<void> {
     const info = await this.ctx.credentials.describeRecord(GOOGLE_ACCOUNT_KEY)
     if (info.configured) await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
