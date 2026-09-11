@@ -14,13 +14,15 @@ The model-facing control tools for [`ctx.goals`](../goal/README.md): `get_goal`,
 
 When `requireJudge` is enabled, `evaluate` invokes a fresh structured subagent with the same read-only review allow-list as goal completion. The judge receives the persisted laboratory evidence, and its verdict is stored in the specialist snapshot. A non-pass result is also deferred as model context so the next bounded cycle has the required changes without another user confirmation.
 
-When `requireJudge` is enabled, `complete` first starts a fresh structured subagent with a read-only tool allow-list. The goal enters `complete` only after the judge returns `pass`; `needs_changes` keeps it active, appends the required changes to the session, and allows the next bounded goal round to repair the work. Judge results are persisted as secret-free `goal/judge` events.
+When `requireJudge` is enabled, the supervisor owns mission finality. Every autonomous goal round that reaches a normal `completed` turn boundary is independently reviewed even if the executor never calls `update_goal(... complete)`. The supervisor first requires the adversarial executable completion gate and then a fresh read-only semantic judge. `needs_changes` or `blocked` keeps the goal active and becomes durable recovery feedback; only an exact-revision PASS backed by the executable gate may call the goal domain's `complete` transition. A `max-tokens` boundary is attempt-level only and never triggers a completion decision. Legacy/custom emitters that omit a stop reason also fail closed and cannot trigger DONE.
+
+The explicit `update_goal(... complete)` path remains supported for models that proactively request review. It uses the same independent gate and judge. If that exact autonomous round has already produced a durable `goal/judge` result, the turn-end supervisor does not duplicate the review.
 
 All calls are exclusive, so a model-ordered batch observes earlier mutations and their new revisions. UI clients receive pure generic cards: read for `get_goal`, other for mutations. Mutation cards select the first meaningful action value and otherwise show the goal id, so accepted fillers never produce blank input.
 
 All three canonical values match the compact JSON already rendered to Native callers: `{ goal: null }` or `{ goal: { id, revision, objective, phase, roundsStarted, maxGoalRounds, blockedReason? }, activation }`. Programmatic consumers therefore receive the same domain structure without parsing the rendered JSON.
 
-An autonomous goal round that successfully reports `complete` or `blocked` marks that tool execution with `concludeTurn()` so the physical turn stops after the step. Direct-human mutations never contribute this stop: the assistant may acknowledge the change and concurrent human steering remains available to the loop.
+An autonomous goal round that successfully reports `complete` or `blocked` marks that tool execution with `concludeTurn()` so the physical turn stops after the step. Direct-human mutations never contribute this stop: the assistant may acknowledge the change and concurrent human steering remains available to the loop. A physical turn stop is never itself mission completion; the supervisor/domain gate decides finality.
 
 ## Authority
 
@@ -49,12 +51,12 @@ Complete and blocked also accept the exact current goal round: a goal-sourced `u
 
 #### What the model sees
 
-A fixed goal policy says when semantic human intent warrants creation, requires exact read-before-update refs, explains rearming after resume/fork, and limits completion/blocking claims. When enabled, it also tells the model that self-reported completion remains active until an independent judge returns `pass`. The configured threshold is interpolated into that guidance.
+A fixed goal policy says when semantic human intent warrants creation, requires exact read-before-update refs, explains rearming after resume/fork, and limits completion/blocking claims. When enabled, it also tells the model that every normally completed autonomous round is reviewed automatically, self-reported completion remains active until independent verification returns `pass`, and token/round boundaries are not completion evidence. The configured blocked threshold is interpolated into that guidance.
 
 ##### Goal policy
 
 ```markdown
-Use goal tools for one long-running completion objective in the current session. create_goal may infer goal intent from a direct human request in any language; do not create a goal for routine single-turn work. Call get_goal before update_goal and copy its exact goal_id and revision. After session resume or fork, an active goal is disarmed: when a human asks to continue or resume in any wording or language, use update_goal action resume to rearm it. Mark complete only when the objective is actually achieved. The independent read-only judge must return pass before completion is accepted; use its required_changes as the next work list. Mark blocked only after the same blocking condition persists for at least 3 consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, or useful remaining work is not blocked.
+Use goal tools for one long-running completion objective in the current session. create_goal may infer goal intent from a direct human request in any language; do not create a goal for routine single-turn work. Call get_goal before update_goal and copy its exact goal_id and revision. After session resume or fork, the driver restores an active durable goal and continues it automatically. Mark complete only when the objective is actually achieved. Every autonomous goal round that reaches a normal completed boundary is reviewed automatically; executor prose alone cannot finish the mission. The independent read-only judge plus executable completion gate must return pass before completion is accepted. Use required_changes as the next work list. Token, turn, and continuation-window boundaries are attempt-level only, not mission completion. Mark blocked only for a concrete condition under the configured policy; difficulty, uncertainty, or useful remaining work is not blocked.
 ```
 
 #### Token effect
@@ -84,5 +86,5 @@ Schemas are prefix-stable while their definitions and visibility are unchanged. 
 - **Semantic intent remains model judgment** — execution can prove that the current turn contains a direct human message, not whether the request is substantial enough to merit a goal.
 - **Same-condition blocking remains model judgment** — the runtime enforces distinct admitted-round count, not semantic equivalence of obstacles. The completion judge certifies the requested result, not semantic equivalence of blockers.
 - **No scheduling or direct human rendering** — these tools mutate state only; the same-session driver and [`dsh-command-goal`](../command-goal/README.md) are independent consumers of the same domain.
-- **Goal-round authority requires a driver** — the autonomous `complete`/`blocked` path is dormant unless a continuation driver admits goal-sourced user turns; mounting this tool package alone does not create them.
+- **Goal-round authority requires a driver** — automatic turn-end review applies to a goal-sourced autonomous round; mounting this tool package alone does not create continuation rounds.
 - **Prompt registration is independent of filtering** — a scope may hide the tools while retaining their guidance unless the deployment scopes both registrations together.
