@@ -59,6 +59,9 @@ export type PreStepDecision =
 /** Action returned by a listener that owns model-request recovery. */
 export type RequestErrorAction = { kind: 'retry' } | undefined
 
+/** Why a turn is at a normal model-stop boundary before durable turn/end commits. */
+export type TurnStoppingReason = { kind: 'completed' | 'max-tokens' }
+
 /** Why a session lifecycle began; seeded creates are `startup`, while persisted loads are `resume`. */
 export type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact'
 
@@ -273,11 +276,12 @@ declare module '@phoenix-ai/cordis' {
      * closes only when that inbox drains.
      * @param payload.agent - the agent whose turn is at its stop boundary.
      * @param payload.turn - the turn about to close.
+     * @param payload.reason - model stop reason; max-tokens is an attempt boundary, never proof of mission completion.
      * @param payload.signal - the current turn's explicit abort signal.
      * Scope-filtered dispatch (`@phoenix-ai/dsh-scope`): agent-scoped listeners receive only that agent.
      * @mode serial
      */
-    'agent/turn-stopping'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; signal: AbortSignal }): Promise<void> | void
+    'agent/turn-stopping'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; reason: TurnStoppingReason; signal: AbortSignal }): Promise<void> | void
     // ---- error notifications (emit) ----
     /**
      * A step or turn errored. The machine reports a failure here even when
