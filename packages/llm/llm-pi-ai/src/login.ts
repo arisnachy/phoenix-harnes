@@ -16,18 +16,6 @@ import { catalogProvider, catalogProviderIds } from './catalog.ts'
 import { recordKeyFor } from './auth.ts'
 import type { PiAiAuthInjection } from './adapter.ts'
 
-/** Providers whose credentials are owned by a native product session rather than pi-ai login. */
-export const NATIVE_SESSION_AUTH_PROVIDERS = new Set<string>(['openai-codex'])
-
-/**
- * Decide whether a provider should expose the generic pi-ai login flow.
- * @param providerId - catalog provider identifier.
- * @returns true when pi-ai, rather than a native session bridge, owns login.
- */
-export function usesPiAiLogin(providerId: string): boolean {
-  return !NATIVE_SESSION_AUTH_PROVIDERS.has(providerId)
-}
-
 function loginMethods(provider: Provider | undefined): AuthorizationMethod[] {
   const methods: AuthorizationMethod[] = []
   const oauth = provider?.auth.oauth
@@ -91,13 +79,6 @@ function restate(prompt: AuthPrompt): AuthorizationPrompt {
  */
 export function registerPiAiFlows(ctx: Context, auth: PiAiAuthInjection): void {
   for (const providerId of catalogProviderIds()) {
-    if (!usesPiAiLogin(providerId)) {
-      ctx.logger.info(
-        'llm-pi-ai: provider "%s" uses native session authentication; generic pi-ai login is disabled',
-        providerId,
-      )
-      continue
-    }
     const provider = catalogProvider(providerId)
     const [first, ...rest] = loginMethods(provider)
     if (provider === undefined || first === undefined) continue

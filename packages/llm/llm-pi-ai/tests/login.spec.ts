@@ -17,7 +17,7 @@ vi.mock('@earendil-works/pi-ai', async importOriginal => ({
 }))
 
 const { credentialStoreFrom, authContextFrom, recordKeyFor } = await import('../src/auth.ts')
-const { registerPiAiFlows, usesPiAiLogin } = await import('../src/login.ts')
+const { registerPiAiFlows } = await import('../src/login.ts')
 
 const CODEX = recordKeyFor('openai-codex')
 const ANTHROPIC = recordKeyFor('anthropic')
@@ -70,12 +70,11 @@ afterEach(async () => {
 })
 
 describe('pi-ai login flows', () => {
-  it('keeps Codex subscription auth on the native Codex bridge', async () => {
+  it('offers Codex OAuth for the credential used by Codex model requests', async () => {
     const ctx = await harness()
     const offered = ctx.authorization.list()
-    expect(usesPiAiLogin('openai-codex')).toBe(false)
-    expect(usesPiAiLogin('anthropic')).toBe(true)
-    expect(offered.find(entry => entry.key === CODEX)).toBeUndefined()
+    expect(offered.find(entry => entry.key === CODEX)?.methods.map(one => one.id))
+      .toEqual(['oauth'])
   })
 
   it('offers pi-ai flows for providers whose credentials pi-ai owns', async () => {

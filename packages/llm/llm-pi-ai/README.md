@@ -14,6 +14,8 @@ The `image_generation` tool persists each successful Codex raster in the durable
 
 Configure credentials, the model catalog, and deployment-specific transport settings per provider, keyed by the provider route itself. Each profile may set a `retryPolicy`; omission uses normal mode with two retries. `apiKeyEnv` is a credential *reference* resolved per request, so no secret enters this file. Omitting it leaves the route unauthenticated, which for an installed catalog route means pi-ai's provider-native ambient discovery; a configured reference that resolves to nothing fails the request with `MISSING_CREDENTIAL` instead, because falling through would authenticate with whatever unrelated key the environment happens to hold. One credential serves every model on its route.
 
+OpenAI Codex has two deliberately separate authorization entries. `OpenAI Codex` runs pi-ai's ChatGPT OAuth flow and stores `llm-pi-ai/openai-codex`, the grant used and refreshed by model requests. `ChatGPT / Codex` represents the native Codex account used by Codex subagents and account telemetry. Signing in to either entry does not authorize the other: PHOENIX does not copy ChatGPT tokens between the native Codex store and its model-provider credential store.
+
 ```yaml
 - id: llm
   name: '@phoenix-ai/dsh-llm-pi-ai'

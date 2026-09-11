@@ -14,6 +14,8 @@
 
 按提供方配置凭据、模型 catalog 与部署特定传输设置，并以提供方路由本身为键。每个 profile 都可以设置 `retryPolicy`；省略时使用 normal 模式并重试两次。`apiKeyEnv` 是按请求解析的凭据*引用*，因此机密不进入该文件。省略它会让该路由处于未认证状态；对已安装 catalog 路由而言，这意味着交给 pi-ai 的提供方原生环境发现。已配置却解析不出任何值的引用则相反，会让请求以 `MISSING_CREDENTIAL` 失败，因为放行下去就会用环境里恰好持有的某个无关密钥完成认证。一条凭据服务该路由下的全部模型。
 
+OpenAI Codex 有两个刻意分离的授权条目。`OpenAI Codex` 运行 pi-ai 的 ChatGPT OAuth 流程并存储 `llm-pi-ai/openai-codex`，模型请求使用并刷新该授权。`ChatGPT / Codex` 表示 Codex 子代理和账户遥测使用的原生 Codex 账户。登录任一条目都不会授权另一个条目：PHOENIX 不会在原生 Codex 存储与模型提供商凭据存储之间复制 ChatGPT 令牌。
+
 ```yaml
 - id: llm
   name: '@phoenix-ai/dsh-llm-pi-ai'
