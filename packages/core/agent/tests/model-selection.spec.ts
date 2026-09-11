@@ -11,13 +11,13 @@ import {
 import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 describe('installModelSelection()', () => {
-  it('only provides the default Luna handoff for OpenAI Codex', () => {
+  it('only provides the default Luna max handoff for OpenAI Codex', () => {
     expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-5.6-sol' })).toEqual({
       afterStep: 0,
       selection: {
         provider: 'openai-codex',
         model: 'gpt-5.6-luna',
-        reasoningEffort: ReasoningEffortId('high'),
+        reasoningEffort: ReasoningEffortId('max'),
       },
     })
     expect(defaultExecutionHandoff({ provider: 'other', model: 'custom' })).toBeUndefined()
