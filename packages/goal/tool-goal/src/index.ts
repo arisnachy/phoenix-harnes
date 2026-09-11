@@ -6,6 +6,7 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
+import type { Agent } from '@phoenix-ai/dsh-agent'
 import { GoalId } from '@phoenix-ai/dsh-goal'
 import type {
   ForgeCriterionStatus, ForgeDeliverableKind, ForgeDeliverableStatus, ForgeManagementMode, ForgePhase,
@@ -13,7 +14,7 @@ import type {
   GoalRef, GoalView, OrganizationForgeSnapshot,
 } from '@phoenix-ai/dsh-goal'
 import { nextOrganizationForgeAction } from '@phoenix-ai/dsh-goal'
-import { boundContextSummary, createUserMessage, HarnessError } from '@phoenix-ai/dsh-llm'
+import { boundContextSummary, CallId, createUserMessage, HarnessError } from '@phoenix-ai/dsh-llm'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { GenericCallView, JsonValue } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
@@ -179,11 +180,12 @@ function guidance(blockedAfter: number, requireJudge: boolean): string {
     + 'or useful remaining work is not blocked. The goal domain independently rejects completion unless '
     + 'a durable judge has passed the exact current goal revision.'
     + (requireJudge
-      ? ' Completion is gated by an independent read-only judge: a self-reported complete result '
-        + 'remains active until the judge returns pass; use its required_changes as the next work list. '
-        + 'When the exact deliverable is ready, call update_goal with action complete in the same round so '
-        + 'the judge activates; never end a supposedly finished round with prose alone. A blocked or rejected '
-        + 'judge is a recovery event, not mission completion: continue with a materially improved strategy.'
+      ? ' Completion is gated by an independent read-only judge. Every autonomous goal round that '
+        + 'reaches a normal completed boundary is reviewed automatically; executor prose alone can never '
+        + 'finish the mission. A self-reported complete result remains active until the judge returns pass, '
+        + 'and max-token boundaries are attempt limits only, never completion evidence. Use required_changes '
+        + 'as the next work list. A blocked or rejected judge is a recovery event, not mission completion: '
+        + 'continue with a materially improved strategy until independent review passes.'
       : '')
 }
 
@@ -250,6 +252,29 @@ function goalValue(goal: GoalView | undefined, judge?: GoalJudgeResult): GoalToo
   }
 }
 
+/** Find the exact autonomous goal round that owns one open turn. */
+function autonomousGoalRound(agent: Agent, turn: number, goal: GoalView): { round: number; startIndex: number } | undefined {
+  const startIndex = agent.session.events.findLastIndex(event => event.type === 'turn/start' && event.data.turn === turn)
+  if (startIndex < 0) return undefined
+  const roundEvent = agent.session.events.slice(startIndex + 1).findLast(event =>
+    event.type === 'user/message' && event.data.source.kind === 'goal')
+  if (roundEvent?.type !== 'user/message' || roundEvent.data.source.kind !== 'goal') return undefined
+  const source = roundEvent.data.source
+  if (source.goalId !== goal.id || source.revision !== goal.revision || source.round !== goal.roundsStarted) {
+    return undefined
+  }
+  return { round: source.round, startIndex }
+}
+
+/** Whether this exact autonomous round already obtained an independent review. */
+function roundAlreadyReviewed(agent: Agent, goal: GoalView, round: number, startIndex: number): boolean {
+  return agent.session.events.slice(startIndex + 1).some(event =>
+    event.type === 'goal/judge'
+    && event.data.goalId === goal.id
+    && event.data.revision === goal.revision
+    && event.data.round === round)
+}
+
 /** Compact model-facing projection of a specialist laboratory. */
 function specialistValue(value: unknown): { specialist: Record<string, JsonValue> } {
   return { specialist: JSON.parse(JSON.stringify(value)) as Record<string, JsonValue> }
@@ -308,6 +333,48 @@ export function apply(ctx: Context, config: Config): void {
     order: 114,
     text: guidance(resolved.blockedAfterConsecutiveRounds, resolved.requireJudge),
   })
+
+  if (resolved.requireJudge) {
+    ctx.on('agent/turn-stopping', async ({ agent, turn, reason, signal }) => {
+      if (reason?.kind !== 'completed') return
+      const goal = ctx.goals.get(agent)
+      if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') return
+      const round = autonomousGoalRound(agent, turn, goal)
+      if (round === undefined || roundAlreadyReviewed(agent, goal, round.round, round.startIndex)) return
+      try {
+        const subagents = ctx.get('subagents')
+        const llm = ctx.get('llm', false)
+        const judge = await judgeGoalCompletion({
+          subagents,
+          ...llm === undefined ? {} : { llm },
+          provider: resolved.judgeProvider,
+          parent: agent,
+          objective: goal.objective,
+          round: round.round,
+          signal,
+        })
+        signal.throwIfAborted()
+        recordGoalJudge(agent.session, {
+          callId: CallId(`goal-supervisor-${goal.id}-${goal.revision}-${round.round}-${turn}`),
+          goalId: goal.id,
+          revision: goal.revision,
+          round: round.round,
+          verdict: judge.verdict,
+          summary: judge.summary,
+          findings: judge.findings,
+          requiredChanges: judge.requiredChanges,
+        })
+        if (judge.verdict !== 'pass') return
+        const current = ctx.goals.get(agent)
+        if (current === undefined || current.id !== goal.id || current.revision !== goal.revision
+          || current.phase !== 'active') return
+        ctx.goals.complete(agent, { id: current.id, revision: current.revision })
+      } catch (error: unknown) {
+        if (signal.aborted) throw error
+        ctx.logger.warn(`goal supervisor review failed for agent "${agent.id}": ${String(error)}`)
+      }
+    })
+  }
 
   ctx.tools.register(defineTool({
     name: 'get_goal',
