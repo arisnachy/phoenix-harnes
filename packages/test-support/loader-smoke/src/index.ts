@@ -22,9 +22,10 @@ export {
   type FixtureTurnResult,
 } from './agent-turn.ts'
 
-const DEFAULT_PROCESS_TIMEOUT_MS = 30_000
+// Windows cold boots the src/tsx product path more slowly than the lib path.
+const DEFAULT_PROCESS_TIMEOUT_MS = process.platform === 'win32' ? 90_000 : 30_000
 
-/** Vitest deadline that leaves room for the subprocess-owned 30-second diagnostic timeout. */
+/** Vitest deadline that leaves room for the subprocess-owned process timeout. */
 export const LOADER_SMOKE_TEST_TIMEOUT_MS = DEFAULT_PROCESS_TIMEOUT_MS + 15_000
 
 /** Which artifact an example bin is booted from: unbuilt `src` via tsx, or built `lib` via plain Node. */

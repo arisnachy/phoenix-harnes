@@ -12,6 +12,10 @@ const fixture = (name: string): string => fileURLToPath(new URL(`./fixtures/${na
 const canonicalTempPath = (path: string): string => path.replace(/^\/private(?=\/(?:var|tmp)\/)/, '')
 
 describe('runLoaderSmoke', () => {
+  it('leaves a Windows cold-boot margin for the loader subprocess', () => {
+    expect(LOADER_SMOKE_TEST_TIMEOUT_MS).toBe(process.platform === 'win32' ? 105_000 : 45_000)
+  })
+
   it('isolates the process, closes stdin, captures output, and removes the cwd', async () => {
     const result = await runLoaderSmoke({
       label: 'success fixture',
