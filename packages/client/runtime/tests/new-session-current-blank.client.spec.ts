@@ -50,7 +50,7 @@ describe('WorkspaceRuntime New Session', () => {
     expect(sessions.list.getSnapshot().current).toBe('s-fresh')
   })
 
-  it('keeps the current session live while a new session is still being prepared', async () => {
+  it('clears the visible conversation immediately while a new session is still being prepared', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()
     const sessions = new SessionRuntime(ctx, api, fakeRemote())
@@ -77,10 +77,9 @@ describe('WorkspaceRuntime New Session', () => {
 
     workspaces.startSession()
 
-    // The resident composer is session-scoped. Keep the current selection
-    // staged while Host creation is pending so the textarea never falls into
-    // the no-session/inert state and remains writable until the hand-off.
-    expect(sessions.list.getSnapshot().current).toBe('s-current')
+    // New Session must change the UI synchronously instead of leaving the old
+    // conversation on screen while the Host create is pending or stalled.
+    expect(sessions.list.getSnapshot().current).toBeUndefined()
 
     create.resolve(ok({ sessionId: sid('s-fresh') }))
     await new Promise(resolve => setTimeout(resolve, 0))
