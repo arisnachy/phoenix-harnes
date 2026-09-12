@@ -157,40 +157,42 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     if (modelTools) {
       disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
     }
-    let activeConnection: HostConnectionHandle | undefined
-    let missionDispose: (() => Promise<void>) | undefined
-    const syncMissionRuntime = (): void => {
-      const connection = ctx.get('connection')
-      if (connection === activeConnection) return
-      const previousDispose = missionDispose
-      activeConnection = undefined
-      missionDispose = undefined
-      if (previousDispose !== undefined) void previousDispose()
-      if (connection === undefined) return
-      activeConnection = connection
-      missionDispose = installHardnessMissionRuntime({
-        connection,
-        agents,
-        approval,
-        hardness,
-        tools,
-        acquisition,
-        ...(codeRuntime === undefined ? {} : { codeRuntime }),
-        ...(pythonCodeRuntime === undefined ? {} : { pythonCodeRuntime }),
-        ...(subagents === undefined ? {} : { subagents }),
-        ...(config.judgeProvider === undefined ? {} : { judgeProvider: config.judgeProvider }),
+    if (!modelTools) {
+      let activeConnection: HostConnectionHandle | undefined
+      let missionDispose: (() => Promise<void>) | undefined
+      const syncMissionRuntime = (): void => {
+        const connection = ctx.get('connection')
+        if (connection === activeConnection) return
+        const previousDispose = missionDispose
+        activeConnection = undefined
+        missionDispose = undefined
+        if (previousDispose !== undefined) void previousDispose()
+        if (connection === undefined) return
+        activeConnection = connection
+        missionDispose = installHardnessMissionRuntime({
+          connection,
+          agents,
+          approval,
+          hardness,
+          tools,
+          acquisition,
+          ...(codeRuntime === undefined ? {} : { codeRuntime }),
+          ...(pythonCodeRuntime === undefined ? {} : { pythonCodeRuntime }),
+          ...(subagents === undefined ? {} : { subagents }),
+          ...(config.judgeProvider === undefined ? {} : { judgeProvider: config.judgeProvider }),
+        })
+      }
+      syncMissionRuntime()
+      disposers.push(ctx.on('internal/service', (name) => {
+        if (name === 'connection') syncMissionRuntime()
+      }))
+      disposers.push(() => {
+        const disposeMission = missionDispose
+        activeConnection = undefined
+        missionDispose = undefined
+        if (disposeMission !== undefined) void disposeMission()
       })
     }
-    syncMissionRuntime()
-    disposers.push(ctx.on('internal/service', (name) => {
-      if (name === 'connection') syncMissionRuntime()
-    }))
-    disposers.push(() => {
-      const disposeMission = missionDispose
-      activeConnection = undefined
-      missionDispose = undefined
-      if (disposeMission !== undefined) void disposeMission()
-    })
   } catch (error) {
     disposeAll(disposers)
     throw error
