@@ -159,7 +159,11 @@ describe('scoreAttention', () => {
 
     expect(result).toEqual(first)
     expect(result).toHaveLength(2)
-    expect(result.find(candidate => candidate.record.eventSeq === 1)?.record.entities).toHaveLength(1)
+    const resultEntities = result.find(candidate => candidate.record.eventSeq === 1)?.record.entities as Array<CognitiveMemoryRecord['entities'][number]>
+    expect(resultEntities).toHaveLength(1)
+    resultEntities.push({ type: 'concept', value: 'result', normalized: 'result' })
+    expect(sourceEntities).toHaveLength(2)
+    expect(sourceEntities[0]!.value).toBe('clock')
   })
 
   it('returns an empty result for empty input and rejects invalid weights', () => {
@@ -167,5 +171,30 @@ describe('scoreAttention', () => {
     expect(() => scoreAttention([], { ...weights, importance: -1 })).toThrow(/non-negative/)
     expect(() => scoreAttention([], { ...weights, confidence: Number.NaN })).toThrow(/finite/)
     expect(scoreAttention([record({ importance: Number.NaN })], weights)[0]?.signals.importance).toBe(0)
+  })
+
+  it('normalizes finite extreme weights without overflow', () => {
+    const result = scoreAttention([
+      record({ kind: 'pending', importance: 1, confidence: 1, layers: ['prospective'] }),
+    ], {
+      importance: Number.MAX_VALUE,
+      confidence: Number.MAX_VALUE,
+      recency: Number.MAX_VALUE,
+      urgency: Number.MAX_VALUE,
+      goalRelevance: Number.MAX_VALUE,
+      novelty: Number.MAX_VALUE,
+    })
+
+    expect(result[0]?.score).toBe(1)
+    expect(Number.isFinite(result[0]?.score)).toBe(true)
+  })
+
+  it('orders tie-break text by Unicode code point', () => {
+    const result = scoreAttention([
+      record({ id: 'astral' as MemoryId, eventSeq: 1, provenance: { ...record().provenance, eventSeq: 1, sourceUri: '\u{1F600}', occurredAt: 100 } }),
+      record({ id: 'bmp' as MemoryId, eventSeq: 1, provenance: { ...record().provenance, eventSeq: 1, sourceUri: '\uE000', occurredAt: 100 } }),
+    ], { importance: 0, confidence: 0, recency: 0, urgency: 0, goalRelevance: 0, novelty: 0 })
+
+    expect(result.map(candidate => candidate.record.id)).toEqual(['bmp', 'astral'])
   })
 })

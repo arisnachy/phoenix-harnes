@@ -21,10 +21,25 @@ export function scoreAttention(
   if (active.length === 0) return []
 
   const bounds = observedBounds(active)
-  const totalWeight = WEIGHT_KEYS.reduce((sum, key) => sum + weights[key], 0)
+  const largestWeight = Math.max(...WEIGHT_KEYS.map(key => weights[key]))
+  const normalizedWeights = largestWeight === 0
+    ? undefined
+    : {
+      importance: weights.importance / largestWeight,
+      confidence: weights.confidence / largestWeight,
+      recency: weights.recency / largestWeight,
+      urgency: weights.urgency / largestWeight,
+      goalRelevance: weights.goalRelevance / largestWeight,
+      novelty: weights.novelty / largestWeight,
+    }
+  const totalWeight = normalizedWeights === undefined
+    ? 0
+    : WEIGHT_KEYS.reduce((sum, key) => sum + normalizedWeights[key], 0)
   const candidates = active.map((record) => {
     const signals = signalsFor(record, bounds)
-    const weighted = WEIGHT_KEYS.reduce((sum, key) => sum + signals[key] * weights[key], 0)
+    const weighted = normalizedWeights === undefined
+      ? 0
+      : WEIGHT_KEYS.reduce((sum, key) => sum + signals[key] * normalizedWeights[key], 0)
     const score = totalWeight === 0 ? 0 : clamp(weighted / totalWeight)
     return {
       record: cloneCognitiveRecord(record),
@@ -78,7 +93,15 @@ function compareCandidates(left: AttentionCandidate, right: AttentionCandidate):
 }
 
 function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0
+  const leftCodePoints = Array.from(left, character => character.codePointAt(0) as number)
+  const rightCodePoints = Array.from(right, character => character.codePointAt(0) as number)
+  const length = Math.min(leftCodePoints.length, rightCodePoints.length)
+  for (let index = 0; index < length; index++) {
+    const leftCodePoint = leftCodePoints[index] as number
+    const rightCodePoint = rightCodePoints[index] as number
+    if (leftCodePoint !== rightCodePoint) return leftCodePoint < rightCodePoint ? -1 : 1
+  }
+  return leftCodePoints.length - rightCodePoints.length
 }
 
 function validateWeights(weights: AttentionWeights): void {
