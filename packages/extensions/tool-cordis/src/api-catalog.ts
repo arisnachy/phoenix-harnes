@@ -603,6 +603,35 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'cognitiveRuntime',
+    summary: 'Event-backed, process-local cognitive runtime service.',
+    description: 'Event-backed, process-local cognitive runtime service.',
+    methods: [
+      {
+        signature: 'readonly config: Readonly<CognitiveRuntimeConfig>',
+        description: 'Resolved immutable configuration used by every snapshot.',
+        parameters: [],
+      },
+      {
+        signature: 'async ready(): Promise<void>',
+        description: 'Wait until initial reconstruction and all queued refreshes are settled.',
+        parameters: [],
+      },
+      {
+        signature: 'get(sessionId: SessionId): CognitiveState | undefined',
+        description: 'Read a detached state for one exact live session.',
+        parameters: [{ name: 'sessionId', description: 'Session identity to read.' }],
+        returns: 'A detached state, or `undefined` when the session is not live.',
+      },
+      {
+        signature: 'async refresh(sessionId: SessionId): Promise<CognitiveState | undefined>',
+        description: 'Rebuild one session\'s state through the serialized refresh queue.',
+        parameters: [{ name: 'sessionId', description: 'Session identity to refresh.' }],
+        returns: 'The newly rebuilt state, the retained prior state after failure, or `undefined` for a missing session.',
+      },
+    ],
+  },
+  {
     key: 'commands',
     summary: 'Human-command registry.',
     description: 'Human-command registry. Plain-context definitions are global; definitions registered through a command-injected child of an agent context shadow globals for that agent.',
@@ -1087,6 +1116,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read a chronological cognitive timeline, retaining superseded history when requested.',
         parameters: [{ name: 'query', description: 'Project, session, time, and history filters.' }],
         returns: 'Cognitive records ordered by source occurrence.',
+      },
+      {
+        signature: 'cognitiveForSession(sessionId: SessionId, limit: number = 20): CognitiveMemoryRecord[]',
+        description: 'Read the newest active cognitive records for one exact session.',
+        parameters: [{ name: 'sessionId', description: 'Branded session identity to read.' }, { name: 'limit', description: 'Maximum number of records to return, from 1 through 128.' }],
+        returns: 'Active records in chronological order.',
+        throws: ['{TypeError} When limit is outside the supported range.'],
       },
       {
         signature: 'workingMemory(limit: number = 20): CognitiveMemoryRecord[]',
@@ -2809,6 +2845,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'key', description: 'the credential record the finished attempt was authorizing.' }, { name: 'settlement', description: 'how it ended, including the `failed` case its caller sees as a thrown error.' }],
   },
   {
+    name: 'cognitive-runtime/state',
+    mode: 'emit',
+    signature: '\'cognitive-runtime/state\'(state: CognitiveState, config: Readonly<CognitiveRuntimeConfig>): void',
+    summary: 'Internal validation signal for one successful process-local snapshot.',
+    description: 'Internal validation signal for one successful process-local snapshot.',
+    parameters: [{ name: 'state', description: 'Detached cognitive state published after validation.' }, { name: 'config', description: 'Resolved bounds used to derive the state.' }],
+  },
+  {
     name: 'commands/change',
     mode: 'emit',
     signature: '\'commands/change\'(): void',
@@ -3301,6 +3345,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AttachmentId = Branded<\'AttachmentId\'>;',
   },
   {
+    name: 'AttentionCandidate',
+    declaration: 'export interface AttentionCandidate {\n    readonly record: CognitiveMemoryRecord;\n    readonly signals: AttentionSignals;\n    readonly score: number;\n    readonly reasons: readonly string[];\n}',
+  },
+  {
+    name: 'AttentionSignals',
+    declaration: 'export interface AttentionSignals {\n    readonly importance: number;\n    readonly confidence: number;\n    readonly recency: number;\n    readonly urgency: number;\n    readonly goalRelevance: number;\n    readonly novelty: number;\n}',
+  },
+  {
+    name: 'AttentionWeights',
+    declaration: 'export interface AttentionWeights {\n    readonly importance: number;\n    readonly confidence: number;\n    readonly recency: number;\n    readonly urgency: number;\n    readonly goalRelevance: number;\n    readonly novelty: number;\n}',
+  },
+  {
     name: 'AuthorizationAccountTelemetry',
     declaration: 'export interface AuthorizationAccountTelemetry {\n    kind: \'account\';\n    provider: string;\n    accountType?: string;\n    email?: string;\n    plan?: string;\n    primaryLimit?: AuthorizationRateLimitWindow;\n    secondaryLimit?: AuthorizationRateLimitWindow;\n    credits?: AuthorizationCreditsTelemetry;\n    usage?: AuthorizationUsageTelemetry;\n    connectors?: readonly AuthorizationConnectorTelemetry[];\n}',
   },
@@ -3471,6 +3527,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CognitiveMemoryStatus',
     declaration: 'export type CognitiveMemoryStatus = \'active\' | \'superseded\' | \'obsolete\' | \'forgotten\';',
+  },
+  {
+    name: 'CognitiveRuntimeConfig',
+    declaration: 'export interface CognitiveRuntimeConfig {\n    readonly maxCandidates: number;\n    readonly activeLimit: number;\n    readonly backgroundLimit: number;\n    readonly weights: AttentionWeights;\n}',
+  },
+  {
+    name: 'CognitiveState',
+    declaration: 'export interface CognitiveState extends WorkingMemoryPartition {\n    readonly sessionId: SessionId;\n    readonly projectId?: string;\n    readonly observedSeq: number;\n    readonly candidateCount: number;\n}',
   },
   {
     name: 'CollectedOutput',
@@ -5767,6 +5831,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkflowStopReason',
     declaration: 'export type WorkflowStopReason = \'completed\' | \'cancelled\' | \'error\';',
+  },
+  {
+    name: 'WorkingMemoryPartition',
+    declaration: 'export interface WorkingMemoryPartition {\n    readonly focus?: AttentionCandidate;\n    readonly active: readonly AttentionCandidate[];\n    readonly background: readonly AttentionCandidate[];\n    readonly suppressed: readonly AttentionCandidate[];\n}',
   },
 ]
 

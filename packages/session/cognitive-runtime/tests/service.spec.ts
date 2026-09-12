@@ -166,6 +166,7 @@ describe('CognitiveRuntimeService', () => {
     { activeLimit: -1 },
     { backgroundLimit: -1 },
     { weights: { ...config.weights, urgency: Number.NaN } },
+    { weights: { importance: 0, confidence: 0, recency: 0, urgency: 0, goalRelevance: 0, novelty: 0 } },
   ])('rejects invalid resolved configuration %j', (override) => {
     expect(() => new CognitiveRuntime(new Context(), { ...config, ...override } as Config)).toThrow(/cognitive-runtime/)
   })

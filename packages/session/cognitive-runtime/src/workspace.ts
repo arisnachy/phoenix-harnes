@@ -1,7 +1,7 @@
 /** Construction of a detached global-workspace snapshot. */
 
 import type { SessionId } from '@phoenix-ai/dsh-session'
-import { cloneAttentionCandidate } from './types.ts'
+import { cloneAttentionCandidate } from './clone.ts'
 import type { AttentionCandidate, CognitiveState, WorkingMemoryPartition } from './types.ts'
 
 /**

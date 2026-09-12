@@ -8,7 +8,7 @@ import { scoreAttention } from './attention.ts'
 import { validateCognitiveState } from './invariant.ts'
 import { partitionWorkingMemory } from './working-memory.ts'
 import { createGlobalWorkspace } from './workspace.ts'
-import { cloneAttentionCandidate } from './types.ts'
+import { cloneAttentionCandidate } from './clone.ts'
 import type { AttentionWeights, CognitiveState } from './types.ts'
 
 export { scoreAttention } from './attention.ts'
@@ -23,13 +23,18 @@ declare module '@phoenix-ai/cordis' {
   }
 
   interface Events {
-    /** Internal validation signal for one successful process-local snapshot. */
-    'cognitive-runtime/state'(state: CognitiveState, config: Readonly<Config>): void
+    /**
+     * Internal validation signal for one successful process-local snapshot.
+     * @mode emit
+     * @param state - Detached cognitive state published after validation.
+     * @param config - Resolved bounds used to derive the state.
+     */
+    'cognitive-runtime/state'(state: CognitiveState, config: Readonly<CognitiveRuntimeConfig>): void
   }
 }
 
 /** Deployment-owned bounded attention and working-memory configuration. */
-export interface Config {
+export interface CognitiveRuntimeConfig {
   /** Maximum active ledger records read for one session refresh. */
   readonly maxCandidates: number
   /** Maximum records retained after the focus candidate. */
@@ -40,9 +45,12 @@ export interface Config {
   readonly weights: AttentionWeights
 }
 
+/** Compatibility name for the resolved cognitive-runtime configuration. */
+export type Config = CognitiveRuntimeConfig
+
 const MAX_CANDIDATES = 128
 const MAX_REGION = 128
-const DEFAULT_CONFIG: Config = {
+const DEFAULT_CONFIG: CognitiveRuntimeConfig = {
   maxCandidates: 64,
   activeLimit: 8,
   backgroundLimit: 16,
@@ -66,7 +74,7 @@ const WeightConfig: z<AttentionWeights> = z.object({
 })
 
 /** Runtime schema with explicit finite bounds for every deployment tunable. */
-export const Config: z<Config> = z.object({
+export const Config: z<CognitiveRuntimeConfig> = z.object({
   maxCandidates: z.number().step(1).min(1).max(MAX_CANDIDATES).default(DEFAULT_CONFIG.maxCandidates),
   activeLimit: z.number().step(1).min(0).max(MAX_REGION).default(DEFAULT_CONFIG.activeLimit),
   backgroundLimit: z.number().step(1).min(0).max(MAX_REGION).default(DEFAULT_CONFIG.backgroundLimit),
@@ -76,15 +84,15 @@ export const Config: z<Config> = z.object({
 /** Event-backed, process-local cognitive runtime service. */
 export class CognitiveRuntimeService extends Service {
   static inject = ['sessions', 'learningMemory']
-  static Config: z<Config> = Config
+  static Config: z<CognitiveRuntimeConfig> = Config
 
   /** Resolved immutable configuration used by every snapshot. */
-  readonly config: Readonly<Config>
+  readonly config: Readonly<CognitiveRuntimeConfig>
   private readonly states = new Map<string, CognitiveState>()
   private operationTail: Promise<void> = Promise.resolve()
 
   /** @param ctx - Host context containing sessions and learning memory. */
-  constructor(ctx: Context, config: Config = DEFAULT_CONFIG) {
+  constructor(ctx: Context, config: CognitiveRuntimeConfig = DEFAULT_CONFIG) {
     super(ctx, 'cognitiveRuntime')
     const resolved = resolveConfig(config)
     this.config = Object.freeze({ ...resolved, weights: Object.freeze({ ...resolved.weights }) })
@@ -166,7 +174,7 @@ export class CognitiveRuntimeService extends Service {
   }
 }
 
-function resolveConfig(config: Config): Config {
+function resolveConfig(config: CognitiveRuntimeConfig): CognitiveRuntimeConfig {
   if (!Number.isSafeInteger(config.maxCandidates) || config.maxCandidates < 1 || config.maxCandidates > MAX_CANDIDATES) {
     throw new TypeError(`cognitive-runtime maxCandidates must be a safe integer between 1 and ${String(MAX_CANDIDATES)}`)
   }
@@ -180,6 +188,8 @@ function resolveConfig(config: Config): Config {
   for (const [key, value] of Object.entries(weights)) {
     if (!Number.isFinite(value) || value < 0) throw new TypeError(`cognitive-runtime weight ${key} must be finite and non-negative`)
   }
+  const totalWeight = Object.values(weights).reduce((sum, value) => sum + value, 0)
+  if (totalWeight <= 0) throw new TypeError('cognitive-runtime weights must have a positive total')
   return { ...config, weights }
 }
 

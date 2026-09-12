@@ -54,6 +54,8 @@ flowchart LR
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_session_learning["session-learning<br/>@phoenix-ai/dsh-session-learning"]
   cfg --> plugin_dsh_base_session_learning
+  plugin_dsh_base_cognitive_runtime["cognitive-runtime<br/>@phoenix-ai/dsh-cognitive-runtime"]
+  cfg --> plugin_dsh_base_cognitive_runtime
   plugin_dsh_base_voice["voice<br/>@phoenix-ai/dsh-voice"]
   cfg --> plugin_dsh_base_voice
   plugin_dsh_base_voice_local["voice-local<br/>@phoenix-ai/dsh-voice-local"]
@@ -217,6 +219,7 @@ flowchart LR
 | `llm-pi-ai` | `@phoenix-ai/dsh-llm-pi-ai` |
 | `session-persistence-jsonl` | `@phoenix-ai/dsh-session-persistence-jsonl` |
 | `session-learning` | `@phoenix-ai/dsh-session-learning` |
+| `cognitive-runtime` | `@phoenix-ai/dsh-cognitive-runtime` |
 | `voice` | `@phoenix-ai/dsh-voice` |
 | `voice-local` | `@phoenix-ai/dsh-voice-local` |
 | `attachment-local` | `@phoenix-ai/dsh-attachment-local` |

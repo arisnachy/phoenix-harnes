@@ -1,6 +1,6 @@
 /** Deterministic focus, active, background, and budget-suppressed partitioning. */
 
-import { cloneAttentionCandidate } from './types.ts'
+import { cloneAttentionCandidate } from './clone.ts'
 import type { AttentionCandidate, WorkingMemoryPartition } from './types.ts'
 
 /**
