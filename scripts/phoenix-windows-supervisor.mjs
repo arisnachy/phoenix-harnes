@@ -179,8 +179,10 @@ function startHost() {
 }
 
 function startWatcher() {
+  const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()
   if (
     process.env.PHOENIX_AUTO_UPDATE === '0'
+    || updateMode === 'off'
     || !existsSync(updater)
     || !existsSync(shim)
   ) return undefined
