@@ -16,6 +16,7 @@ import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 
 const root = resolve(process.cwd())
 const hostArgs = process.argv.slice(2)
@@ -171,7 +172,7 @@ function startHost() {
     stdio: 'inherit',
     windowsHide: false,
     env: {
-      ...process.env,
+      ...hydratePhoenixEnvironment(process.env),
       PHOENIX_UPDATE_SUPERVISED: '1',
     },
   })
