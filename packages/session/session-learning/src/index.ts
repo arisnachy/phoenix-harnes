@@ -55,6 +55,7 @@ export const Config: z<Config> = z.object({
 })
 
 const DEFAULT_MAX_RECORDS = 10_000
+const MAX_SESSION_COGNITIVE_RECORDS = 128
 const MAX_SUMMARY_CHARS = 4_096
 
 /**
@@ -177,6 +178,21 @@ export class LearningMemoryService extends Service {
   timeline(query: Pick<CognitiveMemoryQuery, 'projectId' | 'sessionId' | 'from' | 'to' | 'includeHistory'> = {}): CognitiveMemoryRecord[] {
     const project = query.projectId ?? this.currentProject
     return this.cognitive.timeline({ ...query, ...project === undefined ? {} : { projectId: project } })
+  }
+
+  /**
+   * Read the newest active cognitive records for one exact session.
+   * @param sessionId - Branded session identity to read.
+   * @param limit - Maximum number of records to return, from 1 through 128.
+   * @returns Active records in chronological order.
+   * @throws {TypeError} When limit is outside the supported range.
+   */
+  cognitiveForSession(sessionId: SessionId, limit = 20): CognitiveMemoryRecord[] {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_SESSION_COGNITIVE_RECORDS) {
+      throw new TypeError('cognitive memory session limit must be an integer between 1 and 128')
+    }
+    const records = this.cognitive.timeline({ sessionId: String(sessionId), includeHistory: false })
+    return records.slice(Math.max(0, records.length - limit))
   }
 
   /**
