@@ -112,26 +112,26 @@
   max-width: min(390px, calc(100vw - 32px));
   max-height: none;
   padding: 0;
-  border-radius: 22px;
+  border-radius: 18px;
 }
 
 .effortSelector {
   --effort-blue: var(--dsw-static-blue-600, #2563eb);
   --effort-blue-soft: var(--dsw-static-blue-100, #dbeafe);
-  padding: 24px 28px 26px;
+  padding: 16px 18px 18px;
   background: var(--dsw-specific-menu);
 }
 
 .effortHeader {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
   align-items: center;
-  min-height: 32px;
+  min-height: 28px;
 }
 
 .effortIcon {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   color: var(--effort-blue);
   fill: none;
   stroke: currentColor;
@@ -145,10 +145,10 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  gap: 5px;
+  gap: 4px;
   color: var(--effort-blue);
-  font-size: 20px;
-  line-height: 28px;
+  font-size: 16px;
+  line-height: 22px;
   font-weight: 650;
 }
 
@@ -161,15 +161,15 @@
 
 .effortValueChevron {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .effortReset {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -195,11 +195,11 @@
 }
 
 .effortModel {
-  margin-top: 4px;
+  margin-top: 2px;
   overflow: hidden;
   color: var(--dsw-alias-label-secondary);
-  font-size: 18px;
-  line-height: 26px;
+  font-size: 14px;
+  line-height: 20px;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -207,8 +207,8 @@
 
 .effortSlider {
   position: relative;
-  height: 68px;
-  margin-top: 20px;
+  height: 46px;
+  margin-top: 12px;
 }
 
 .effortTrack,
@@ -220,8 +220,8 @@
 }
 
 .effortTrack {
-  top: 30px;
-  height: 8px;
+  top: 9px;
+  height: 28px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--effort-blue-soft);
@@ -236,30 +236,30 @@
 }
 
 .effortStops {
-  top: 29px;
-  height: 10px;
+  top: 20px;
+  height: 6px;
   pointer-events: none;
 }
 
 .effortStop {
   position: absolute;
   display: block;
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: var(--effort-blue);
-  opacity: 0.42;
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  opacity: 0.38;
 }
 
 .effortStopActive {
-  opacity: 0.9;
+  opacity: 0.72;
 }
 
 .effortRange {
-  top: 4px;
+  top: 0;
   width: 100%;
-  height: 54px;
+  height: 46px;
   margin: 0;
   appearance: none;
   outline: none;
@@ -272,33 +272,33 @@
 }
 
 .effortRange::-webkit-slider-runnable-track {
-  height: 8px;
+  height: 28px;
   background: transparent;
 }
 
 .effortRange::-moz-range-track {
-  height: 8px;
+  height: 28px;
   background: transparent;
 }
 
 .effortRange::-webkit-slider-thumb {
-  width: 54px;
-  height: 54px;
-  margin-top: -23px;
+  width: 42px;
+  height: 42px;
+  margin-top: -7px;
   appearance: none;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
   background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: 0 2px 8px rgb(15 23 42 / 18%);
+  box-shadow: 0 2px 7px rgb(15 23 42 / 16%);
 }
 
 .effortRange::-moz-range-thumb {
-  width: 54px;
-  height: 54px;
+  width: 42px;
+  height: 42px;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
   background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: 0 2px 8px rgb(15 23 42 / 18%);
+  box-shadow: 0 2px 7px rgb(15 23 42 / 16%);
 }
 
 .effortRange:focus-visible::-webkit-slider-thumb,
