@@ -19,6 +19,11 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('clearTimeout(restartTimer)')
   })
 
+  it('does not start or respawn the updater watcher when update mode is off', () => {
+    expect(source).toContain("const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()")
+    expect(source).toContain("|| updateMode === 'off'")
+  })
+
   it('uses only an exact clean verified staged activator for prepared self-updates', () => {
     expect(source).toContain('function preparedActivator()')
     expect(source).toContain("const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')")
