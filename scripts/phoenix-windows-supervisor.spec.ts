@@ -24,6 +24,12 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain("|| updateMode === 'off'")
   })
 
+  it('does not start the updater watcher on a dirty live checkout', () => {
+    expect(source).toContain('const startupStatus = gitStatus(root)')
+    expect(source).toContain('if (!startupStatus.ok || startupStatus.entries.length > 0)')
+    expect(source).toContain('automatic update watcher paused for this session')
+  })
+
   it('uses only an exact clean verified staged activator for prepared self-updates', () => {
     expect(source).toContain('function preparedActivator()')
     expect(source).toContain("const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')")
