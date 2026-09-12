@@ -1054,6 +1054,9 @@ importers:
       '@phoenix-ai/dsh-bash-sandbox':
         specifier: workspace:^
         version: link:../../shell/bash-sandbox
+      '@phoenix-ai/dsh-cognitive-runtime':
+        specifier: workspace:^
+        version: link:../../session/cognitive-runtime
       '@phoenix-ai/dsh-command-compact':
         specifier: workspace:^
         version: link:../../compaction/command-compact

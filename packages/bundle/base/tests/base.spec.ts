@@ -31,6 +31,28 @@ describe('dsh-base bundle', () => {
       patch => patch.insert ?? [],
     )
     expect(rows.length).toBeGreaterThan(50)
+    expect(rows.filter(row => row.id === 'cognitive-runtime')).toHaveLength(1)
+    const learningIndex = rows.findIndex(row => row.id === 'session-learning')
+    const cognitiveIndex = rows.findIndex(row => row.id === 'cognitive-runtime')
+    expect(learningIndex).toBeGreaterThanOrEqual(0)
+    expect(cognitiveIndex).toBe(learningIndex + 1)
+    const cognitive = rows[cognitiveIndex]
+    expect(cognitive.disabled).toBeUndefined()
+    expect(cognitive.config).toEqual({
+      maxCandidates: 64,
+      activeLimit: 8,
+      backgroundLimit: 16,
+      weights: {
+        importance: 1,
+        confidence: 1,
+        recency: 1,
+        urgency: 1,
+        goalRelevance: 1,
+        novelty: 1,
+      },
+    })
+    expect(cognitive).not.toHaveProperty('tools')
+    expect(cognitive).not.toHaveProperty('permissions')
     expect(rows.some(row => row.id === 'agent-loop')).toBe(true)
     expect(rows.some(row => row.id === 'hardness')).toBe(true)
     expect(rows.some(row => row.id === 'hardness-adapters')).toBe(true)

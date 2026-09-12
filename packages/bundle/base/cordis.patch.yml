@@ -150,6 +150,23 @@
       config:
         path: !!js dshHomePath('memory', 'learning.jsonl')
 
+    # Deterministic, process-local cognitive projection over the learning ledger.
+    # It observes session events but contributes no prompt, tool, permission, or
+    # durable-event surface; later layers may tune only these bounded budgets.
+    - id: cognitive-runtime
+      name: '@phoenix-ai/dsh-cognitive-runtime'
+      config:
+        maxCandidates: 64
+        activeLimit: 8
+        backgroundLimit: 16
+        weights:
+          importance: 1
+          confidence: 1
+          recency: 1
+          urgency: 1
+          goalRelevance: 1
+          novelty: 1
+
     # Voice is a silent-by-default side channel. Only authorization, verified
     # mission completion, explicit discoveries/help, and real blocks are
     # announced; ordinary tools and progress never reach it.

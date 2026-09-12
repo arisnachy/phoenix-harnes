@@ -80,6 +80,7 @@
     "@phoenix-ai/dsh-session-checkpoint-policy": "workspace:^",
     "@phoenix-ai/dsh-session-persistence-jsonl": "workspace:^",
     "@phoenix-ai/dsh-session-learning": "workspace:^",
+    "@phoenix-ai/dsh-cognitive-runtime": "workspace:^",
     "@phoenix-ai/dsh-session-projection": "workspace:^",
     "@phoenix-ai/dsh-session-query-sqlite": "workspace:^",
     "@phoenix-ai/dsh-session-telemetry-otel": "workspace:^",
