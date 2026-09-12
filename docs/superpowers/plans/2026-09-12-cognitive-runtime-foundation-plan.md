@@ -1,5 +1,7 @@
 # PHOENIX Cognitive Runtime Foundation Implementation Plan
 
+English | [中文](2026-09-12-cognitive-runtime-foundation-plan.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a deterministic, read-only cognitive projection that derives attention, bounded working memory, and a global workspace from PHOENIX's existing session-learning records.
@@ -8,7 +10,7 @@
 
 **Tech Stack:** TypeScript ESM workspace packages, Cordis `Service`, Schemastery configuration, Vitest, YAML bundle composition, generated documentation catalogs.
 
-**Spec:** `docs/superpowers/specs/2026-09-12-cognitive-runtime-foundation-design.md`
+**Spec:** [`2026-09-12-cognitive-runtime-foundation-design.md`](../specs/2026-09-12-cognitive-runtime-foundation-design.md)
 
 ## Global Constraints
 

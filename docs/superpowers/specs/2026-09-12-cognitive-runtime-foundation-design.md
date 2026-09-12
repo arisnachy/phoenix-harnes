@@ -1,5 +1,7 @@
 # PHOENIX Cognitive Runtime Foundation
 
+English | [中文](2026-09-12-cognitive-runtime-foundation-design.zh.md)
+
 ## Status
 
 Approved foundation slice for the human-inspired cognitive runtime. This document describes a deterministic projection, not consciousness and not an autonomous authority.

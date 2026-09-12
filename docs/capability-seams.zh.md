@@ -217,6 +217,8 @@ flowchart LR
   pkg_session_learning["session-learning"]
   svc_learningMemory["ctx.learningMemory<br/>Persistent learning memory"]
   pkg_tool_session_learning["tool-session-learning"]
+  pkg_cognitive_runtime["cognitive-runtime"]
+  svc_cognitiveRuntime["ctx.cognitiveRuntime<br/>Bounded cognitive state projection"]
   pkg_mcp_registry["mcp-registry"]
   svc_mcpConnectors["ctx.mcpConnectors<br/>MCP connector lifecycle registry"]
   pkg_mcp_client["mcp-client"]
@@ -238,6 +240,7 @@ flowchart LR
   pkg_code_runtime --> svc_pythonCodeRuntime
   pkg_code_runtime_python --> svc_pythonCodeRuntime
   pkg_code_runtime_worker --> svc_codeRuntime
+  pkg_cognitive_runtime --> svc_cognitiveRuntime
   pkg_commands --> svc_commands
   pkg_compaction --> svc_compaction
   pkg_compaction_basic --> svc_compaction
@@ -524,6 +527,7 @@ flowchart LR
 | `ctx.dynamicCordisRunner` | `core` | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | 拥有内存定义注册表、Host 半的 vm 沙箱和 request-run 往返流程；浏览器页面通过其 Remote 命名空间在线访问同一服务。 |
 | `ctx.cordisInspect` | `core` | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | 注册 Host inspect 提供方、镜像 Client 提供方 manifest，并通过动态 Cordis 传输路由 Client 查询。 |
 | `ctx.learningMemory` | `core` | [`session-learning`](../packages/session/session-learning) | - | [`tool-session-learning`](../packages/session-learning/tool-session-learning), [`system-prompt`](../packages/core/system-prompt) | - | 从持久会话事件中记录有界且带来源的经验；消费方决定何时召回证据，记忆不会成为权限或指令的依据。 |
+| `ctx.cognitiveRuntime` | `core` | [`cognitive-runtime`](../packages/session/cognitive-runtime) | - | - | - | 从 session-learning 记录派生确定性的注意力和工作记忆分区，不改变提示、工具、权限、目标或持久会话事件。 |
 | `ctx.mcpConnectors` | `core` | `mcp-registry` | - | [`mcp-client`](../packages/mcp/mcp-client), [`hardness-adapters`](../packages/hardness/adapters) | - | 投影不含密钥的 MCP 服务器身份、传输、生命周期和公开工具名，使诊断和面向模型的连接器目录可以观察实时状态，而不会接收凭据或提供方错误。 |
 
 维护模式：混合模式。服务从 Cordis 声明中发现；接口、实现和消费方角色在 `scripts/gen-doc-graphs.ts` 中分类，并设有完整性守卫。

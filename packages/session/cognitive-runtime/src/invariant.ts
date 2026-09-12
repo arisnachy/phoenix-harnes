@@ -12,7 +12,11 @@ export const name = 'cognitive-runtime-invariant'
 /** Service required before the companion can reserve package ownership. */
 export const inject = ['invariants']
 
-/** Validate one state against the runtime's bounded projection relation. */
+/**
+ * Validate one state against the runtime's bounded projection relation.
+ * @param state - The cognitive snapshot to validate.
+ * @param config - The limits that define the allowed projection.
+ */
 export function validateCognitiveState(state: CognitiveState, config: Readonly<CognitiveRuntimeConfig>): void {
   if (typeof state.sessionId !== 'string' || state.sessionId.trim() === '') throw new TypeError('cognitive state session identity is empty')
   if (!Number.isSafeInteger(state.observedSeq) || state.observedSeq < -1) throw new TypeError('cognitive state observed sequence is invalid')

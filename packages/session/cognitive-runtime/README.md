@@ -40,7 +40,19 @@ All ranking inputs come from persisted records. The service does not use wall-cl
 
 ## Model Experience
 
-None directly. The package contributes no prompt text, model request field, tool schema, permission, approval, or goal mutation. A future consumer may read `ctx.cognitiveRuntime.get(sessionId)` as untrusted process-local evidence, but this package does not decide whether that evidence is shown to a model or used to authorize an action.
+### Process-local cognitive state
+
+#### What the model sees
+
+No model sees this package directly. It contributes no prompt text, model request field, tool schema, permission, approval, or goal mutation. A future consumer may read `ctx.cognitiveRuntime.get(sessionId)` as untrusted process-local evidence, but this package does not decide whether that evidence is shown to a model or used to authorize an action.
+
+#### Token effect
+
+None; the runtime does not append state to a model request.
+
+#### KV Cache effect
+
+None; the runtime does not assemble or send provider requests.
 
 ## Known Limitations and Deferred Work
 
