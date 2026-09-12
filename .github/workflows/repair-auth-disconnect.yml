@@ -1,0 +1,73 @@
+name: Repair auth disconnect
+
+on:
+  push:
+    branches: [release/codex-graft-full]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ !contains(github.event.head_commit.message, '[host-auth-fix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: release/codex-graft-full
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply deterministic release repairs
+        shell: bash
+        run: |
+          node scripts/repair-codex-graft.mjs
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('packages/host/apiproxy/src/api-proxy.ts')
+          text = p.read_text(encoding='utf-8')
+          pairs = [
+            (
+              "      async list(request) {\n        const authorization = ctx.get('authorization')",
+              "      list(request) {\n        const authorization = ctx.get('authorization')",
+            ),
+            (
+              "        const entries = await Promise.all(authorization.list().map(async (entry) => {",
+              "        return Promise.all(authorization.list().map(async (entry) => {",
+            ),
+            (
+              "        }))\n        return ok(request, { entries })\n      },\n\n      begin(request, signal) {",
+              "        })).then(entries => ok(request, { entries }))\n      },\n\n      begin(request, signal) {",
+            ),
+          ]
+          for index, (before, after) in enumerate(pairs, 1):
+              count = text.count(before)
+              if count != 1:
+                  raise SystemExit(f'authorization.list rewrite {index}: expected 1 match, got {count}')
+              text = text.replace(before, after, 1)
+          p.write_text(text, encoding='utf-8')
+          PY
+          git diff --check
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit -p tsconfig.json
+      - name: Static gates
+        run: pnpm run check:static
+      - name: Commit verified repairs
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No repair needed'
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'fix(release): complete verified Codex graft repairs [skip repair] [host-auth-fix]'
+          git push origin HEAD:release/codex-graft-full
