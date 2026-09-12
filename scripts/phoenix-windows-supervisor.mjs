@@ -179,11 +179,22 @@ function startHost() {
 }
 
 function startWatcher() {
+  const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()
   if (
     process.env.PHOENIX_AUTO_UPDATE === '0'
+    || updateMode === 'off'
     || !existsSync(updater)
     || !existsSync(shim)
   ) return undefined
+
+  const startupStatus = gitStatus(root)
+  if (!startupStatus.ok || startupStatus.entries.length > 0) {
+    const detail = startupStatus.ok
+      ? `${String(startupStatus.entries.length)} local change(s) detected`
+      : 'Git worktree status could not be verified'
+    console.error(`[PHOENIX UPDATE] ${detail}; automatic update watcher paused for this session. PHOENIX will start normally.`)
+    return undefined
+  }
 
   const updateTemp = process.env.PHOENIX_UPDATE_TEMP?.trim()
   const watcherEnv = {
