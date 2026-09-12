@@ -6641,6 +6641,25 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
 
+  packages/session/cognitive-runtime:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@phoenix-ai/dsh-session-learning':
+        specifier: workspace:^
+        version: link:../session-learning
+
   packages/session/session-checkpoint-policy:
     devDependencies:
       '@phoenix-ai/cordis':
