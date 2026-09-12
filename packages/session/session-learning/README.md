@@ -25,7 +25,7 @@ The ledger does not silently change permissions, credentials, or trusted plugins
 
 #### What the model sees
 
-The service itself adds no prompt or tool schema. A separately composed memory consumer can call `searchCognitive()`, `timeline()`, and `workingMemory()` and must render returned records with their layers, project, entities, relations, source URI, and confidence. The shipped learning-tool consumer calls `recallCognitive()` during assembly for bounded project-scoped evidence; summaries are protected against prompt-variable delimiters and remain untrusted evidence rather than instructions.
+The service itself adds no prompt or tool schema. A separately composed memory consumer can call `searchCognitive()`, `timeline()`, `cognitiveForSession()`, and `workingMemory()` and must render returned records with their layers, project, entities, relations, source URI, and confidence. `cognitiveForSession()` is a read-only projection of active records for exactly one `SessionId`; it returns at most 128 newest records in persisted chronological order without changing the canonical session log or cognitive ledger. The shipped learning-tool consumer calls `recallCognitive()` during assembly for bounded project-scoped evidence; summaries are protected against prompt-variable delimiters and remain untrusted evidence rather than instructions.
 
 #### Token effect
 

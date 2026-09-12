@@ -146,4 +146,38 @@ describe('LearningMemoryService', () => {
     expect(ctx.learningMemory.searchCognitive('beta', 10, { projectId: 'alpha' })).toEqual([])
     expect(ctx.learningMemory.timeline({ projectId: 'beta' }).every(record => record.provenance.projectId === 'beta')).toBe(true)
   })
+
+  it('reads only active cognitive records for one session in bounded chronological order', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-cognitive-session-read-'))
+    roots.push(root)
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
+    const alpha = ctx.sessions.create(SessionId('cognitive-read-alpha'), { meta: {} })
+    const beta = ctx.sessions.create(SessionId('cognitive-read-beta'), { meta: {} })
+
+    for (const text of ['alpha first', 'alpha second', 'alpha third']) {
+      alpha.append('user/message', createUserMessage({
+        content: [{ type: 'text', text }],
+        source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+    }
+    beta.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'beta only' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+
+    await ctx.learningMemory.ready()
+    const records = ctx.learningMemory.cognitiveForSession(alpha.id, 2)
+
+    expect(records.map(record => record.sessionId)).toEqual([String(alpha.id), String(alpha.id)])
+    expect(records.map(record => record.content)).toEqual(['alpha second', 'alpha third'])
+    expect(records.every(record => record.status === 'active')).toBe(true)
+    expect(ctx.learningMemory.cognitiveForSession(beta.id).map(record => record.content)).toEqual(['beta only'])
+    expect(ctx.learningMemory.cognitiveForSession(alpha.id, 128)).toHaveLength(3)
+    expect(() => ctx.learningMemory.cognitiveForSession(alpha.id, 129)).toThrow(TypeError)
+    expect(() => ctx.learningMemory.cognitiveForSession(alpha.id, 0)).toThrow(TypeError)
+    expect(() => ctx.learningMemory.cognitiveForSession(alpha.id, 1.5)).toThrow(TypeError)
+    expect(() => ctx.learningMemory.cognitiveForSession(alpha.id, Number.MAX_SAFE_INTEGER + 1)).toThrow(TypeError)
+  })
 })
