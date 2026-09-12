@@ -187,6 +187,15 @@ function startWatcher() {
     || !existsSync(shim)
   ) return undefined
 
+  const startupStatus = gitStatus(root)
+  if (!startupStatus.ok || startupStatus.entries.length > 0) {
+    const detail = startupStatus.ok
+      ? `${String(startupStatus.entries.length)} local change(s) detected`
+      : 'Git worktree status could not be verified'
+    console.error(`[PHOENIX UPDATE] ${detail}; automatic update watcher paused for this session. PHOENIX will start normally.`)
+    return undefined
+  }
+
   const updateTemp = process.env.PHOENIX_UPDATE_TEMP?.trim()
   const watcherEnv = {
     ...process.env,
