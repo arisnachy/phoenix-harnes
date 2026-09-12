@@ -73,8 +73,12 @@ function signalsFor(record: CognitiveMemoryRecord, bounds: ObservedBounds): Atte
 function compareCandidates(left: AttentionCandidate, right: AttentionCandidate): number {
   return right.score - left.score
     || right.record.eventSeq - left.record.eventSeq
-    || left.record.provenance.sourceUri.localeCompare(right.record.provenance.sourceUri)
-    || String(left.record.id).localeCompare(String(right.record.id))
+    || compareText(left.record.provenance.sourceUri, right.record.provenance.sourceUri)
+    || compareText(String(left.record.id), String(right.record.id))
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
 }
 
 function validateWeights(weights: AttentionWeights): void {
