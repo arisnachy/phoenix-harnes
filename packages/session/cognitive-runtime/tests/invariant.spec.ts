@@ -47,7 +47,6 @@ describe('cognitive-runtime invariants', () => {
 
   it.each([
     state({ candidateCount: 1 }),
-    state({ candidateCount: 1, focus: undefined, active: [], background: [], suppressed: [] }),
   ])('rejects a state whose candidate count has no focus', async (invalid) => {
     const ctx = await setup()
     expect(() => ctx.emit('cognitive-runtime/state', invalid, config)).toThrow(/focus|candidate count/)

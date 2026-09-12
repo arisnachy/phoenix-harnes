@@ -37,6 +37,7 @@ describe('dsh-base bundle', () => {
     expect(learningIndex).toBeGreaterThanOrEqual(0)
     expect(cognitiveIndex).toBe(learningIndex + 1)
     const cognitive = rows[cognitiveIndex]
+    if (cognitive === undefined) throw new Error('base patch must mount cognitive-runtime')
     expect(cognitive.disabled).toBeUndefined()
     expect(cognitive.config).toEqual({
       maxCandidates: 64,
