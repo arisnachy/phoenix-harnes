@@ -7,6 +7,7 @@ import { Tooltip } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarFooterActionOwnerProps } from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import type { InjectFace, PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
+import { isHiddenUpdaterPause } from './update-presentation.ts'
 import css from './UpdateFooterAction.module.css'
 
 /** Poll cadence for the repository-local updater state while Web is open. */
@@ -67,7 +68,7 @@ function clearRestartReconnectGrace(): void {
  * @returns locale key, or undefined when the updater should stay invisible.
  */
 export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventoryLocaleKey | undefined {
-  const developmentBranchPause = snapshot.phase === 'development-branch'
+  const protectedPause = isHiddenUpdaterPause(snapshot.phase)
     || snapshot.detail?.startsWith('Automatic updates are disabled on branch ') === true
   switch (snapshot.status) {
     case 'idle':
@@ -75,7 +76,7 @@ export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventory
     case 'updated':
     case 'off':
       return undefined
-    case 'paused': return developmentBranchPause ? undefined : 'updatePaused'
+    case 'paused': return protectedPause ? undefined : 'updatePaused'
     case 'checking': return undefined
     case 'available': return 'updateAvailable'
     case 'preparing':
