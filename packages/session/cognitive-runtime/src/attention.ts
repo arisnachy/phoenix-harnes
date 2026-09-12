@@ -1,7 +1,7 @@
 /** Deterministic attention scoring over detached session-learning records. */
 
 import type { CognitiveMemoryRecord } from '@phoenix-ai/dsh-session-learning'
-import { cloneCognitiveRecord } from './types.ts'
+import { cloneCognitiveRecord } from './clone.ts'
 import type { AttentionCandidate, AttentionSignals, AttentionWeights } from './types.ts'
 
 const WEIGHT_KEYS = ['importance', 'confidence', 'recency', 'urgency', 'goalRelevance', 'novelty'] as const
@@ -46,7 +46,7 @@ function observedBounds(records: readonly CognitiveMemoryRecord[]): ObservedBoun
   let oldest = Number.POSITIVE_INFINITY
   let newest = Number.NEGATIVE_INFINITY
   for (const record of records) {
-    const observedAt = record.lastObservedAt
+    const observedAt = record.provenance.occurredAt
     if (observedAt < oldest) oldest = observedAt
     if (observedAt > newest) newest = observedAt
   }
@@ -56,7 +56,7 @@ function observedBounds(records: readonly CognitiveMemoryRecord[]): ObservedBoun
 function signalsFor(record: CognitiveMemoryRecord, bounds: ObservedBounds): AttentionSignals {
   const recency = bounds.oldest === bounds.newest
     ? 1
-    : clamp((record.lastObservedAt - bounds.oldest) / (bounds.newest - bounds.oldest))
+    : clamp((record.provenance.occurredAt - bounds.oldest) / (bounds.newest - bounds.oldest))
   const urgency = record.kind === 'error' || record.kind === 'pending' ? 1 : 0
   const goalRelevance = record.kind === 'mission' || record.kind === 'pending' || record.layers.includes('prospective') ? 1 : 0
   const frequency = Number.isFinite(record.frequency) && record.frequency > 0 ? record.frequency : 1

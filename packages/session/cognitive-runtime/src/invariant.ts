@@ -2,7 +2,7 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invariants'
-import type { Config } from './index.ts'
+import type { CognitiveRuntimeConfig } from './index.ts'
 import type { CognitiveState } from './types.ts'
 
 const PACKAGE_NAME = '@phoenix-ai/dsh-cognitive-runtime'
@@ -13,7 +13,7 @@ export const name = 'cognitive-runtime-invariant'
 export const inject = ['invariants']
 
 /** Validate one state against the runtime's bounded projection relation. */
-export function validateCognitiveState(state: CognitiveState, config: Readonly<Config>): void {
+export function validateCognitiveState(state: CognitiveState, config: Readonly<CognitiveRuntimeConfig>): void {
   if (typeof state.sessionId !== 'string' || state.sessionId.trim() === '') throw new TypeError('cognitive state session identity is empty')
   if (!Number.isSafeInteger(state.observedSeq) || state.observedSeq < -1) throw new TypeError('cognitive state observed sequence is invalid')
   if (!Number.isSafeInteger(state.candidateCount) || state.candidateCount < 0 || state.candidateCount > config.maxCandidates) {

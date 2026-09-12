@@ -631,6 +631,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Records bounded, provenance-aware lessons from durable session events; consumers decide when evidence is recalled and never treat memory as authority for permissions or instructions.',
   },
   {
+    key: 'cognitiveRuntime',
+    pkg: 'cognitive-runtime',
+    title: 'Bounded cognitive state projection',
+    mode: 'core',
+    note: 'Derives deterministic attention and working-memory partitions from session-learning records without changing prompts, tools, permissions, goals, or durable session events.',
+  },
+  {
     key: 'mcpConnectors',
     pkg: 'mcp-registry',
     title: 'MCP connector lifecycle registry',

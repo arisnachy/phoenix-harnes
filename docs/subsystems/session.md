@@ -616,6 +616,35 @@ The backends that consume this contract are on [persistence.md](persistence.md).
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxcognitiveruntime--cognitiveruntimeservice"></a>
+
+### `ctx.cognitiveRuntime` — `CognitiveRuntimeService`
+
+Event-backed, process-local cognitive runtime service.
+
+```ts cordis-catalog
+/** Wait until initial reconstruction and all queued refreshes are settled. */
+async ready(): Promise<void>
+
+/**
+ * Read a detached state for one exact live session.
+ * @param sessionId - Session identity to read.
+ * @returns A detached state, or `undefined` when the session is not live.
+ */
+get(sessionId: SessionId): CognitiveState | undefined
+
+/**
+ * Rebuild one session's state through the serialized refresh queue.
+ * @param sessionId - Session identity to refresh.
+ * @returns The newly rebuilt state, the retained prior state after failure, or `undefined` for a missing session.
+ */
+async refresh(sessionId: SessionId): Promise<CognitiveState | undefined>
+```
+
+Types: [SessionId](core.md)
+
+Source: [`packages/session/cognitive-runtime/src/index.ts`](../../packages/session/cognitive-runtime/src/index.ts)
+
 <a id="ctxlearningmemory--learningmemoryservice"></a>
 
 ### `ctx.learningMemory` — `LearningMemoryService`
@@ -672,6 +701,15 @@ recallCognitive(query: Omit<CognitiveMemoryQuery, 'limit'> & { limit?: number } 
 timeline(query: Pick<CognitiveMemoryQuery, 'projectId' | 'sessionId' | 'from' | 'to' | 'includeHistory'> = {}): CognitiveMemoryRecord[]
 
 /**
+ * Read the newest active cognitive records for one exact session.
+ * @param sessionId - Branded session identity to read.
+ * @param limit - Maximum number of records to return, from 1 through 128.
+ * @returns Active records in chronological order.
+ * @throws {TypeError} When limit is outside the supported range.
+ */
+cognitiveForSession(sessionId: SessionId, limit: number = 20): CognitiveMemoryRecord[]
+
+/**
  * Read the latest working-memory records for the current project.
  * @param limit - Maximum number of records.
  * @returns Active working-memory records.
@@ -716,6 +754,8 @@ forget(id: MemoryId): Promise<void>
  */
 forgetCognitive(id: MemoryId): Promise<void>
 ```
+
+Types: [SessionId](core.md)
 
 Source: [`packages/session/session-learning/src/index.ts`](../../packages/session/session-learning/src/index.ts)
 
@@ -854,6 +894,28 @@ fork(source: SessionForkSource, boundary?: number, childSessionId?: SessionId): 
 Types: [CreateSessionOptions](persistence.md) · [PrepareSessionOptions](persistence.md) · [SessionId](core.md)
 
 Source: [`packages/core/session/src/index.ts`](../../packages/core/session/src/index.ts)
+
+<a id="cognitive-runtime-events"></a>
+
+### `cognitive-runtime/*` events
+
+<a id="cognitive-runtimestate--emit"></a>
+
+#### `cognitive-runtime/state` — emit
+
+Internal validation signal for one successful process-local snapshot.
+
+```ts cordis-catalog
+/**
+ * Internal validation signal for one successful process-local snapshot.
+ * @mode emit
+ * @param state - Detached cognitive state published after validation.
+ * @param config - Resolved bounds used to derive the state.
+ */
+'cognitive-runtime/state'(state: CognitiveState, config: Readonly<CognitiveRuntimeConfig>): void
+```
+
+Source: [`packages/session/cognitive-runtime/src/index.ts`](../../packages/session/cognitive-runtime/src/index.ts)
 
 <a id="session-events"></a>
 

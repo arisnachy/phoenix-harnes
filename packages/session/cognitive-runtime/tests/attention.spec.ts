@@ -94,6 +94,24 @@ describe('scoreAttention', () => {
     expect(scoreAttention([record({ frequency: 0 })], weights)[0]?.signals.novelty).toBe(1)
   })
 
+  it('uses canonical occurrence time instead of reinforcement time for recency', () => {
+    const result = scoreAttention([
+      record({
+        eventSeq: 1,
+        provenance: { ...record().provenance, eventSeq: 1, occurredAt: 100 },
+        lastObservedAt: 10_000,
+      }),
+      record({
+        eventSeq: 2,
+        provenance: { ...record().provenance, eventSeq: 2, occurredAt: 200 },
+        lastObservedAt: 200,
+      }),
+    ], { ...weights, importance: 0, confidence: 0, urgency: 0, goalRelevance: 0, novelty: 0 })
+
+    expect(result.map(candidate => candidate.record.eventSeq)).toEqual([2, 1])
+    expect(result.map(candidate => candidate.signals.recency)).toEqual([1, 0])
+  })
+
   it('filters inactive lifecycle records before scoring', () => {
     const result = scoreAttention([
       record({ eventSeq: 1, status: 'forgotten' }),

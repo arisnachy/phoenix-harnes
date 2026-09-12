@@ -187,7 +187,7 @@ export class LearningMemoryService extends Service {
    * @returns Active records in chronological order.
    * @throws {TypeError} When limit is outside the supported range.
    */
-  cognitiveForSession(sessionId: SessionId, limit = 20): CognitiveMemoryRecord[] {
+  cognitiveForSession(sessionId: SessionId, limit: number = 20): CognitiveMemoryRecord[] {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_SESSION_COGNITIVE_RECORDS) {
       throw new TypeError('cognitive memory session limit must be an integer between 1 and 128')
     }
