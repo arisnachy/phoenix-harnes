@@ -8,9 +8,9 @@
  *
  * Host provider/model ids remain the only routing facts. The model pane adds
  * a presentation-only layer for friendly catalog names, secondary capability
- * copy, Preview badges, and provider identity. Known provider logos load lazily
- * and silently over a fixed local monogram fallback; an unknown provider or a
- * failed image request never changes selection state or opens an error surface.
+ * copy, Preview badges, and provider identity. Known provider marks are bundled
+ * official paths and unknown providers use a local monogram; no provider mark
+ * request can change selection state or open an error surface.
  * Data and submission ride the SAME per-session ModelDirectory as the
  * /model popup; exact-model reasoning metadata and the selected effort come
  * from the Host rather than a client-owned vocabulary. A rejected selection
@@ -29,7 +29,7 @@ import {
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
-import { presentModel, providerInitial, providerLogoUrl } from './presentation.ts'
+import { presentModel, providerBrandMark, providerInitial } from './presentation.ts'
 import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
@@ -43,24 +43,24 @@ interface EffortChoice {
   description?: string
 }
 
-/** Fixed provider mark with a local monogram that survives offline/CDN failure. */
+/** Render a packaged provider mark or the local fallback for unknown ids. */
 function ProviderLogo({ providerId, providerName }: { providerId: string; providerName: string }) {
-  const src = providerLogoUrl(providerId, providerName)
+  const mark = providerBrandMark(providerId, providerName)
   return (
     <span className={css.providerLogo} role="img" aria-label={`${providerName} logo`}>
-      <span className={css.providerLogoFallback} aria-hidden="true">{providerInitial(providerName)}</span>
-      {src !== undefined && (
-        <img
-          className={css.providerLogoImage}
-          src={src}
-          alt=""
-          aria-hidden="true"
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-          onError={(event) => { event.currentTarget.hidden = true }}
-        />
-      )}
+      {mark === undefined
+        ? <span className={css.providerLogoFallback} aria-hidden="true">{providerInitial(providerName)}</span>
+        : (
+          <svg
+            className={css.providerLogoMark}
+            data-provider-mark={mark.slug}
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            style={{ color: `#${mark.hex}` }}
+          >
+            <path d={mark.path} fill="currentColor" />
+          </svg>
+        )}
     </span>
   )
 }
