@@ -57,6 +57,21 @@ describe('partitionWorkingMemory', () => {
     expect(result.suppressed.map(item => item.record.eventSeq)).toEqual([2])
   })
 
+  it('suppresses only candidates outside partially filled budgets', () => {
+    const result = partitionWorkingMemory([
+      candidate(1),
+      candidate(2),
+      candidate(3),
+      candidate(4),
+      candidate(5),
+    ], 1, 1)
+
+    expect(result.focus?.record.eventSeq).toBe(1)
+    expect(result.active.map(item => item.record.eventSeq)).toEqual([2])
+    expect(result.background.map(item => item.record.eventSeq)).toEqual([3])
+    expect(result.suppressed.map(item => item.record.eventSeq)).toEqual([4, 5])
+  })
+
   it('handles empty input and rejects negative or fractional budgets', () => {
     expect(partitionWorkingMemory([], 0, 0)).toEqual({ active: [], background: [], suppressed: [] })
     expect(() => partitionWorkingMemory([], -1, 0)).toThrow(/non-negative/)
