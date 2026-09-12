@@ -25,7 +25,7 @@ import clsx from 'clsx'
 import type { ModelReasoningEffort, ModelSelection } from '@phoenix-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
-  IconWarningOutline16, Toast,
+  IconRefreshOutline16, IconWarningOutline16, Toast,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
@@ -81,6 +81,7 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
+  const [effortDraftKey, setEffortDraftKey] = useState<string | null>(null)
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -90,7 +91,7 @@ export function ModelSelect(
   const toastSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const itemRefs = useRef<(HTMLElement | null)[]>([])
   const id = useId()
 
   const choices = useMemo(() => state.groups.flatMap(group =>
@@ -119,9 +120,7 @@ export function ModelSelect(
   const effortChoices = useMemo<readonly EffortChoice[]>(() => reasoning === undefined
     ? []
     : [
-      ...reasoning.defaultEffort === undefined
-        ? [{ key: 'provider-default', effort: undefined, label: t('effort.providerDefault') }]
-        : [],
+      { key: 'provider-default', effort: undefined, label: t('effort.providerDefault') },
       ...reasoning.efforts.map((effort: ModelReasoningEffort) => ({
         key: `effort:${effort.id}`,
         effort: effort.id,
@@ -153,6 +152,11 @@ export function ModelSelect(
     return () => { document.removeEventListener('mousedown', closeOutside) }
   }, [open])
 
+  useEffect(() => {
+    if (open && pane === 'effort') return
+    setEffortDraftKey(null)
+  }, [open, pane])
+
   if (!available) return null
 
   const show = (): void => {
@@ -164,6 +168,7 @@ export function ModelSelect(
   const close = (restoreFocus = false): void => {
     setOpen(false)
     setPane('root')
+    setEffortDraftKey(null)
     if (restoreFocus) queueMicrotask(() => { triggerRef.current?.focus() })
   }
 
@@ -184,6 +189,7 @@ export function ModelSelect(
       return
     }
     if (!open) return
+    if (event.target instanceof HTMLInputElement && event.target.type === 'range') return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       moveFocus(event.key === 'ArrowDown' ? 1 : -1)
@@ -205,6 +211,7 @@ export function ModelSelect(
       toastSeq.current += 1
       setToast({ seq: toastSeq.current, text: t('error.action', { message }) })
     }
+    setEffortDraftKey(null)
   }
 
   const choose = (selection: ModelSelection): void => {
@@ -219,7 +226,6 @@ export function ModelSelect(
   const chooseEffort = (effort: string | undefined): void => {
     if (state.current === null) return
     if (effectiveEffort === effort) {
-      close(true)
       return
     }
     const selection: ModelSelection = {
@@ -229,6 +235,27 @@ export function ModelSelect(
     }
     lastActionRef.current = 'select'
     void select(selection).then(settleSelection)
+  }
+
+  const selectedEffortChoice = effortChoices.find(level => level.effort === effectiveEffort)
+  const draftEffortChoice = effortDraftKey === null
+    ? undefined
+    : effortChoices.find(level => level.key === effortDraftKey)
+  const displayedEffortChoice = draftEffortChoice ?? selectedEffortChoice ?? effortChoices[0]
+  const displayedEffortIndex = displayedEffortChoice === undefined
+    ? 0
+    : effortChoices.indexOf(displayedEffortChoice)
+
+  const commitEffortIndex = (index: number): void => {
+    const choice = effortChoices[index]
+    if (choice === undefined) return
+    setEffortDraftKey(choice.key)
+    chooseEffort(choice.effort)
+  }
+
+  const updateEffortDraft = (index: number): void => {
+    const choice = effortChoices[index]
+    if (choice !== undefined) setEffortDraftKey(choice.key)
   }
 
   const modelLabel = currentChoice === undefined
@@ -243,7 +270,7 @@ export function ModelSelect(
   let itemIndex = 0
   const itemRef = () => {
     const at = itemIndex++
-    return (node: HTMLButtonElement | null) => { itemRefs.current[at] = node }
+    return (node: HTMLElement | null) => { itemRefs.current[at] = node }
   }
 
   return (
@@ -273,7 +300,11 @@ export function ModelSelect(
       {open && (
         <div
           id={`${id}-menu`}
-          className={clsx(css.menu, pane === 'model' && css.modelMenu)}
+          className={clsx(
+            css.menu,
+            pane === 'model' && css.modelMenu,
+            pane === 'effort' && css.effortMenu,
+          )}
           role="menu"
           aria-label={t('menu.aria')}
           aria-busy={state.status === 'loading' || busy}
@@ -371,28 +402,77 @@ export function ModelSelect(
               )}
               {effortChoices.length === 0
                 ? <div className={css.empty}>{t('empty.efforts')}</div>
-                : effortChoices.map(level => (
-                  <button
-                    ref={itemRef()}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={effectiveEffort === level.effort}
-                    className={clsx(css.option, effectiveEffort === level.effort && css.selected)}
-                    key={level.key}
-                    disabled={busy}
-                    onClick={() => { chooseEffort(level.effort) }}
+                : (
+                  <div
+                    className={css.effortSelector}
+                    data-testid="effort-selector"
+                    role="group"
+                    aria-label={t('effort.selectorAria')}
                   >
-                    <span className={css.optionCopy}>
-                      <span className={css.modelName}>{level.label}</span>
-                      {level.description !== undefined && (
-                        <span className={css.description}>{level.description}</span>
-                      )}
-                    </span>
-                    <span className={css.check}>
-                      {effectiveEffort === level.effort ? <IconCheckOutline16 /> : null}
-                    </span>
-                  </button>
-                ))}
+                    <div className={css.effortHeader}>
+                      <svg className={css.effortIcon} viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M13.9 1.6 3.2 10.5h6.1l-2.5 11.9 13.9-12.8h-6.5l2.8-8Z" />
+                      </svg>
+                      <div className={css.effortTitle}>
+                        <span className={css.effortValue}>{displayedEffortChoice?.label ?? effortLabel}</span>
+                        <IconChevronRightOutline14 className={css.effortValueChevron} />
+                      </div>
+                      <button
+                        ref={itemRef()}
+                        type="button"
+                        className={css.effortReset}
+                        aria-label={t('effort.reset')}
+                        disabled={busy}
+                        onClick={() => { commitEffortIndex(0) }}
+                      >
+                        <IconRefreshOutline16 />
+                      </button>
+                    </div>
+                    <div className={css.effortModel}>{modelLabel}</div>
+                    <div className={css.effortSlider}>
+                      <div className={css.effortTrack} aria-hidden="true">
+                        <span
+                          className={css.effortTrackFill}
+                          style={{ width: `${effortChoices.length <= 1 ? 100 : (displayedEffortIndex / (effortChoices.length - 1)) * 100}%` }}
+                        />
+                      </div>
+                      <div className={css.effortStops} aria-hidden="true">
+                        {effortChoices.map((level, index) => (
+                          <span
+                            className={clsx(css.effortStop, index === displayedEffortIndex && css.effortStopActive)}
+                            key={level.key}
+                            style={{ left: `${effortChoices.length <= 1 ? 50 : (index / (effortChoices.length - 1)) * 100}%` }}
+                          />
+                        ))}
+                      </div>
+                      <input
+                        ref={itemRef()}
+                        className={css.effortRange}
+                        type="range"
+                        min={0}
+                        max={Math.max(effortChoices.length - 1, 0)}
+                        step={1}
+                        value={displayedEffortIndex}
+                        aria-label={t('effort.sliderAria')}
+                        aria-valuetext={displayedEffortChoice?.label ?? effortLabel}
+                        disabled={busy}
+                        onChange={(event) => { updateEffortDraft(Number(event.currentTarget.value)) }}
+                        onPointerDown={(event) => {
+                          if (typeof event.currentTarget.setPointerCapture === 'function') {
+                            event.currentTarget.setPointerCapture(event.pointerId)
+                          }
+                        }}
+                        onPointerUp={(event) => { commitEffortIndex(Number(event.currentTarget.value)) }}
+                        onPointerCancel={() => { setEffortDraftKey(null) }}
+                        onKeyUp={(event) => {
+                          if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'Enter', ' '].includes(event.key)) {
+                            commitEffortIndex(Number(event.currentTarget.value))
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
             </>
           )}
         </div>
