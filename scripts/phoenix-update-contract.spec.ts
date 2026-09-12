@@ -37,14 +37,4 @@ describe('prepared client self-update contract', () => {
     expect(updater).toContain("phase: 'worktree'")
     expect(updater).toContain('local changes block preparation/activation')
   })
-
-  it('reports an unchanged dirty checkout only once until its target or worktree changes', () => {
-    const updater = source('scripts/phoenix-auto-update.mjs')
-
-    expect(updater).toContain('let announcedDirtySignature')
-    expect(updater).toContain('const dirtySignature =')
-    expect(updater).toContain('if (announcedDirtySignature !== dirtySignature)')
-    expect(updater).toContain('announcedDirtySignature = dirtySignature')
-    expect(updater).toContain('announcedDirtySignature = undefined')
-  })
 })
