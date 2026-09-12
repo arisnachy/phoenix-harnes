@@ -1,0 +1,68 @@
+{
+  "name": "@phoenix-ai/dsh-cognitive-runtime",
+  "description": "Deterministic, read-only cognitive state projection for PHOENIX sessions",
+  "version": "0.1.1-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
+    "directory": "packages/session/cognitive-runtime"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./attention": {
+      "types": "./lib/types/attention.d.ts",
+      "default": "./lib/attention.js"
+    },
+    "./working-memory": {
+      "types": "./lib/types/working-memory.d.ts",
+      "default": "./lib/working-memory.js"
+    },
+    "./workspace": {
+      "types": "./lib/types/workspace.d.ts",
+      "default": "./lib/workspace.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/attention.js",
+    "lib/working-memory.js",
+    "lib/workspace.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-session-learning": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^"
+  },
+  "devDependencies": {
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
+    "@phoenix-ai/dsh-session-learning": "workspace:^",
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^"
+  }
+}
