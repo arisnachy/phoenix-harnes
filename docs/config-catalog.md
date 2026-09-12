@@ -3689,6 +3689,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@phoenix-ai/dsh-client-ui-slots` ([`packages/client/ui-slots/src/index.ts`](../packages/client/ui-slots/src/index.ts))
 - `@phoenix-ai/dsh-client-web` ([`packages/client/web/src/index.ts`](../packages/client/web/src/index.ts))
 - `@phoenix-ai/dsh-cmdline` ([`packages/boot/cmdline/src/index.ts`](../packages/boot/cmdline/src/index.ts))
+- `@phoenix-ai/dsh-cognitive-runtime` ([`packages/session/cognitive-runtime/src/index.ts`](../packages/session/cognitive-runtime/src/index.ts))
 - `@phoenix-ai/dsh-hardness-atlas-json` ([`packages/hardness/atlas-json/src/index.ts`](../packages/hardness/atlas-json/src/index.ts))
 - `@phoenix-ai/dsh-home-paths` ([`packages/util/home-paths/src/index.ts`](../packages/util/home-paths/src/index.ts))
 - `@phoenix-ai/dsh-hook-protocol` ([`packages/hooks/hook-protocol/src/index.ts`](../packages/hooks/hook-protocol/src/index.ts))

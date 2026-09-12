@@ -24,15 +24,15 @@
     },
     "./attention": {
       "types": "./lib/types/attention.d.ts",
-      "default": "./lib/attention.js"
+      "default": "./lib/types/attention.js"
     },
     "./working-memory": {
       "types": "./lib/types/working-memory.d.ts",
-      "default": "./lib/working-memory.js"
+      "default": "./lib/types/working-memory.js"
     },
     "./workspace": {
       "types": "./lib/types/workspace.d.ts",
-      "default": "./lib/workspace.js"
+      "default": "./lib/types/workspace.js"
     },
     "./types": {
       "types": "./lib/types/types.d.ts",
@@ -44,9 +44,6 @@
   "files": [
     "lib/index.js",
     "lib/invariant.js",
-    "lib/attention.js",
-    "lib/working-memory.js",
-    "lib/workspace.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts"
   ],

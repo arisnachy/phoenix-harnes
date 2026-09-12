@@ -3,7 +3,11 @@
 import type { CognitiveMemoryRecord } from '@phoenix-ai/dsh-session-learning'
 import type { AttentionCandidate } from './types.ts'
 
-/** Clone one record and its nested arrays so projections do not alias the ledger. */
+/**
+ * Clone one record and its nested arrays so projections do not alias the ledger.
+ * @param record - The ledger record to detach.
+ * @returns A detached copy of the cognitive-memory record.
+ */
 export function cloneCognitiveRecord(record: CognitiveMemoryRecord): CognitiveMemoryRecord {
   return {
     ...record,
@@ -14,7 +18,11 @@ export function cloneCognitiveRecord(record: CognitiveMemoryRecord): CognitiveMe
   }
 }
 
-/** Clone one candidate and its nested record for an independent projection snapshot. */
+/**
+ * Clone one candidate and its nested record for an independent projection snapshot.
+ * @param candidate - The candidate to detach.
+ * @returns A detached copy of the attention candidate.
+ */
 export function cloneAttentionCandidate(candidate: AttentionCandidate): AttentionCandidate {
   return {
     record: cloneCognitiveRecord(candidate.record),
