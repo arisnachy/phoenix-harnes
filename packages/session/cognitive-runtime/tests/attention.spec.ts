@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { CognitiveMemoryRecord, MemoryId } from '@phoenix-ai/dsh-session-learning'
 import { scoreAttention } from '../src/attention.ts'
 import type { AttentionWeights } from '../src/types.ts'
@@ -105,6 +105,14 @@ describe('scoreAttention', () => {
     expect(result.map(candidate => candidate.record.eventSeq)).toEqual([4])
   })
 
+  it('returns no candidates when every record is outside the active lifecycle', () => {
+    expect(scoreAttention([
+      record({ status: 'forgotten' }),
+      record({ eventSeq: 2, status: 'superseded' }),
+      record({ eventSeq: 3, status: 'obsolete' }),
+    ], weights)).toEqual([])
+  })
+
   it('breaks equal scores by event sequence, source URI, and id', () => {
     const result = scoreAttention([
       record({ id: 'z' as MemoryId, eventSeq: 2, provenance: { ...record().provenance, eventSeq: 2, sourceUri: 'z', occurredAt: 100 } }),
@@ -117,17 +125,23 @@ describe('scoreAttention', () => {
   })
 
   it('returns detached candidates and uses no ambient clock', () => {
-    const source = [record({ eventSeq: 1, entities: [{ type: 'concept', value: 'clock', normalized: 'clock' }] })]
+    const source = [
+      record({ eventSeq: 1, lastObservedAt: 100, entities: [{ type: 'concept', value: 'clock', normalized: 'clock' }] }),
+      record({ eventSeq: 2, lastObservedAt: 200 }),
+    ]
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    const first = scoreAttention(source, weights)
+    vi.setSystemTime(1_000_000)
     const result = scoreAttention(source, weights)
+    vi.useRealTimers()
     const sourceEntities = source[0]!.entities as Array<CognitiveMemoryRecord['entities'][number]>
     sourceEntities.push({ type: 'concept', value: 'mutated', normalized: 'mutated' })
-    source.push(record({ eventSeq: 2, lastObservedAt: 1000 }))
+    source.push(record({ eventSeq: 3, lastObservedAt: 1000 }))
 
-    expect(result).toHaveLength(1)
-    expect(result[0]?.record.entities).toHaveLength(1)
-    expect(scoreAttention([record({ eventSeq: 1, lastObservedAt: 100 })], weights)).toEqual(
-      scoreAttention([record({ eventSeq: 1, lastObservedAt: 100 })], weights),
-    )
+    expect(result).toEqual(first)
+    expect(result).toHaveLength(2)
+    expect(result.find(candidate => candidate.record.eventSeq === 1)?.record.entities).toHaveLength(1)
   })
 
   it('returns an empty result for empty input and rejects invalid weights', () => {
