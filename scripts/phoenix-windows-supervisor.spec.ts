@@ -36,6 +36,11 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('Commit, stash, or intentionally discard those changes')
   })
 
+  it('hydrates the current user Google token before launching each Host', () => {
+    expect(source).toContain("import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'")
+    expect(source).toContain('...hydratePhoenixEnvironment(process.env)')
+  })
+
   it('routes direct Windows web launches through the supervisor so restart survives the host exit', () => {
     expect(cliSource).toContain("process.platform === 'win32'")
     expect(cliSource).toContain("rawArgs[0] === 'web'")
