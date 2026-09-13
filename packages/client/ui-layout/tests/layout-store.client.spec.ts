@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * createLayoutStore unit account: panel geometry, narrow behavior, and the
- * shared visual-workspace lease used by subagent and Cordis surfaces.
+ * shared visual-workspace occupancy used to coordinate KIRA and Cordis.
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createLayoutStore } from '@phoenix-ai/dsh-client-ui-layout/src/client/stores.ts'
@@ -94,7 +94,7 @@ describe('createLayoutStore', () => {
     expect(store.getSnapshot().details).toBe(0)
   })
 
-  it('borrows shell geometry for the first visual owner and restores it after the last owner closes', () => {
+  it('tracks an expanded subagent surface without borrowing shell geometry', () => {
     const { store, actions } = createLayoutStore().create()
     actions.setSidebar(400)
     actions.openDetails()
@@ -102,21 +102,32 @@ describe('createLayoutStore', () => {
 
     actions.setWorkspaceOccupant('subagent', true)
     actions.setWorkspaceOccupant('subagent', true)
+
     expect(store.getSnapshot()).toMatchObject({
-      sidebar: 0,
-      details: DETAILS_DEFAULT,
+      sidebar: 400,
+      details: 500,
       workspaceSubagent: true,
       workspaceCordis: false,
-      workspaceRestoreSidebar: 400,
-      workspaceRestoreDetails: 500,
+      workspaceRestoreSidebar: null,
+      workspaceRestoreDetails: null,
     })
 
-    actions.setWorkspaceOccupant('cordis', true)
     actions.setWorkspaceOccupant('subagent', false)
+    expect(store.getSnapshot()).toMatchObject({ sidebar: 400, details: 500, workspaceSubagent: false })
+  })
+
+  it('Cordis snapshots the shell, minimizes navigation, closes ordinary details, and restores exactly on close', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.setSidebar(400)
+    actions.openDetails()
+    actions.setDetails(500)
+    actions.setWorkspaceOccupant('subagent', true)
+
+    actions.setWorkspaceOccupant('cordis', true)
     expect(store.getSnapshot()).toMatchObject({
       sidebar: 0,
-      details: DETAILS_DEFAULT,
-      workspaceSubagent: false,
+      details: 0,
+      workspaceSubagent: true,
       workspaceCordis: true,
       workspaceRestoreSidebar: 400,
       workspaceRestoreDetails: 500,
@@ -126,23 +137,24 @@ describe('createLayoutStore', () => {
     expect(store.getSnapshot()).toMatchObject({
       sidebar: 400,
       details: 500,
-      workspaceSubagent: false,
+      workspaceSubagent: true,
       workspaceCordis: false,
       workspaceRestoreSidebar: null,
       workspaceRestoreDetails: null,
     })
   })
 
-  it('keeps navigation minimized and the right dock open while any visual owner is active', () => {
+  it('keeps navigation minimized and ordinary details closed while Cordis owns the rail', () => {
     const { store, actions } = createLayoutStore().create()
     actions.setWorkspaceOccupant('cordis', true)
 
     actions.toggleSidebar()
+    actions.openDetails()
     actions.closeDetails()
 
     expect(store.getSnapshot()).toMatchObject({
       sidebar: 0,
-      details: DETAILS_DEFAULT,
+      details: 0,
       workspaceCordis: true,
     })
   })
