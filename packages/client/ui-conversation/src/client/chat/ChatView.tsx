@@ -1,17 +1,13 @@
 // ChatView: the default conversation view — one stable keyed parent list over
 // final business Nodes, plus paging, pending steering and bottom-follow.
-// Each row dispatches through 'conversation.chat.node'; ui-tool owns the
-// tool-call renderer and its recursive root/subcall composition. A Host
-// open-path refusal from the injected opener is an in-page dialog here.
+// Technical/context/tool rows are compacted by ToolActivityFlow before each
+// business node dispatches through 'conversation.chat.node'. A Host open-path
+// refusal from the injected opener is an in-page dialog here.
 //
 // Scroll: when nested under `[data-conversation-scroll]` (active conversation
 // column), that host is the scrollport and this view is flow content; when
 // mounted alone (unit tests), `.scroll` owns overflow. Bottom-follow and
 // prepend anchoring always target the resolved scrollport.
-//
-// Render economics: order changes only when rows enter, leave or move. Each
-// ChatNodeSeat subscribes to one Node key, so Assistant deltas and Tool
-// lifecycle updates replace only their own row without remounting it.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
@@ -21,7 +17,7 @@ import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-a
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { turnProgress, type TurnProgress } from './turn-progress.ts'
-import { ChatNodeSeat } from './ChatNodeSeat.tsx'
+import { ToolActivityFlow } from './ToolActivityFlow.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
 
@@ -466,25 +462,22 @@ export function ChatView({
               </button>
             </div>
           )}
-          {order.map(nodeKey => (
-            <ChatNodeSeat
-              key={nodeKey}
-              nodeKey={nodeKey}
-              useSession={useSession}
-              selectedCallId={selectedCallId}
-              cwd={cwd}
-              openFile={requestOpenFile}
-              inspectCall={inspectCall}
-              forkAt={forkAt}
-              renderMessageImages={renderMessageImages}
-              loadImage={loadImage}
-              fileMentions={fileMentions}
-              workspaceFileMentions={workspaceFileMentions}
-              {...runArtifact === undefined ? {} : { runArtifact }}
-              renderSlot={renderSlot}
-              t={t}
-            />
-          ))}
+          <ToolActivityFlow
+            nodes={chatNodes}
+            useSession={useSession}
+            selectedCallId={selectedCallId}
+            cwd={cwd}
+            openFile={requestOpenFile}
+            inspectCall={inspectCall}
+            forkAt={forkAt}
+            renderMessageImages={renderMessageImages}
+            loadImage={loadImage}
+            fileMentions={fileMentions}
+            workspaceFileMentions={workspaceFileMentions}
+            {...runArtifact === undefined ? {} : { runArtifact }}
+            renderSlot={renderSlot}
+            t={t}
+          />
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}
