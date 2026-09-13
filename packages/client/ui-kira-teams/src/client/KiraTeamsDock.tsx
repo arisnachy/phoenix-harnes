@@ -8,7 +8,7 @@ import type {
   SessionId, SessionListState, SessionSummary, SubagentAddress,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import type { PropsLocale, PropsRuntime, TranslateNS } from '@phoenix-ai/dsh-client-ui-slots'
-import { NS } from './locales.ts'
+import { NS, type KiraTeamsKey } from './locales.ts'
 import { ModelActivityAvatar, stableAgentIndex } from './ModelActivityAvatar.tsx'
 import css from './KiraTeamsDock.module.css'
 
@@ -67,6 +67,17 @@ const AGENT_NAMES = [
 /** Resolve a stable KIRA codename shown instead of provider internals. */
 export function agentNameOf(summary: SessionSummary): string {
   return AGENT_NAMES[stableAgentIndex(String(summary.id), AGENT_NAMES.length)] ?? 'Vigía'
+}
+
+/** Pick the localized status that matches the live activity projection. */
+export function statusKeyOf(summary: SessionSummary): KiraTeamsKey {
+  if (summary.pendingInteraction !== undefined) return 'status.waiting'
+  if (!summary.running) return 'status.done'
+  switch (activityOf(summary)?.phase) {
+    case 'running-tools': return 'status.tools'
+    case 'verifying': return 'status.verifying'
+    default: return 'status.preparing'
+  }
 }
 
 export function lineageMembers(state: SessionListState): {
@@ -213,7 +224,8 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
               role="treeitem"
               aria-level={depth}
               aria-selected={state.current === summary.id}
-              className={`${css.row} ${summary.running ? css.rowRunning : ''}`}
+              aria-label={`${agentNameOf(summary)} · ${t(statusKeyOf(summary))}`}
+              className={`${css.row} ${summary.running ? css.rowRunning : ''} ${summary.pendingInteraction !== undefined ? css.rowPending : ''}`}
               style={{ paddingInlineStart: 12 + depth * 14 }}
               title={summary.displayTitle}
               onClick={() => {
@@ -231,11 +243,8 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
                 pending={summary.pendingInteraction !== undefined}
                 agentId={String(summary.id)}
               />
-              <span className={css.name}>{summary.displayTitle}</span>
               <span className={css.agentName}>{agentNameOf(summary)}</span>
-              <span className={css.status}>
-                {t('status.running')}
-              </span>
+              <span className={css.status}>{t(statusKeyOf(summary))}</span>
             </button>
           ))}
         </div>

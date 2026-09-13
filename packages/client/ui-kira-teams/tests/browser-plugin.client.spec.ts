@@ -7,7 +7,7 @@ import {
   type SessionSummary, type SubagentAddress,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { apply as applyLocale, inject as localeInject } from '@phoenix-ai/dsh-client-locale/client'
-import { activityOf, agentNameOf, KiraTeamsDock, lineageMembers } from '../src/client/KiraTeamsDock.tsx'
+import { activityOf, agentNameOf, KiraTeamsDock, lineageMembers, statusKeyOf } from '../src/client/KiraTeamsDock.tsx'
 import { agentAvatarKind } from '../src/client/ModelActivityAvatar.tsx'
 import { apply, inject } from '../src/client/index.ts'
 
@@ -105,6 +105,24 @@ describe('lineageMembers', () => {
     })
     expect(agentNameOf(child)).toBe('Orión')
     expect(agentNameOf(FAMILY.find(item => item.id === sid('c2'))!)).toBe('Nexo')
+  })
+
+  it('maps activity phases to visible status labels without exposing prompts', () => {
+    const verifying = summary({
+      id: sid('verifying'), parentId: sid('root'), origin: 'subagent', running: true,
+      projectionValues: { subagentActivity: { model: 'gpt-5.6-luna', phase: 'verifying' } },
+    })
+    const preparing = summary({ id: sid('preparing'), parentId: sid('root'), origin: 'subagent', running: true })
+    const waiting = summary({
+      id: sid('waiting'), parentId: sid('root'), origin: 'subagent',
+      running: false, pendingInteraction: 'question',
+    })
+    const done = summary({ id: sid('done'), parentId: sid('root'), origin: 'subagent', running: false })
+    expect(statusKeyOf(FAMILY.find(item => item.id === sid('c1'))!)).toBe('status.tools')
+    expect(statusKeyOf(verifying)).toBe('status.verifying')
+    expect(statusKeyOf(preparing)).toBe('status.preparing')
+    expect(statusKeyOf(waiting)).toBe('status.waiting')
+    expect(statusKeyOf(done)).toBe('status.done')
   })
 
   it('assigns the recovered illustrated avatar roster by agent id', () => {
