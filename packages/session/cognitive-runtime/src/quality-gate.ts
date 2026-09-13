@@ -20,6 +20,10 @@ export const COMPLETION_AUDIT_PROMPT = [
  * Decide whether the turn deserves one extra completion-audit model step.
  * Tool-free conversational turns close normally; tool-using turns are audited
  * exactly once by the service integration.
+ * @param events - Durable session events available at the turn-stopping boundary.
+ * @param turn - Current turn number being considered for closure.
+ * @param alreadyAudited - Whether this turn already received its bounded completion audit.
+ * @returns `true` only when current-turn tool work requires one completion-audit step.
  */
 export function turnNeedsQualityAudit(
   events: readonly SessionEvent[],
