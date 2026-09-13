@@ -212,7 +212,7 @@
 
 .effortSlider {
   position: relative;
-  height: 40px;
+  height: 56px;
   margin-top: 16px;
 }
 
@@ -225,8 +225,8 @@
 }
 
 .effortTrack {
-  top: 16px;
-  height: 8px;
+  top: 6px;
+  height: 44px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--effort-blue-soft);
@@ -241,7 +241,7 @@
 }
 
 .effortStops {
-  top: 17px;
+  top: 25px;
   height: 6px;
   pointer-events: none;
 }
@@ -264,7 +264,7 @@
 .effortRange {
   top: 0;
   width: 100%;
-  height: 40px;
+  height: 56px;
   margin: 0;
   appearance: none;
   outline: none;
@@ -277,19 +277,19 @@
 }
 
 .effortRange::-webkit-slider-runnable-track {
-  height: 8px;
+  height: 44px;
   background: transparent;
 }
 
 .effortRange::-moz-range-track {
-  height: 8px;
+  height: 44px;
   background: transparent;
 }
 
 .effortRange::-webkit-slider-thumb {
-  width: 36px;
-  height: 36px;
-  margin-top: -14px;
+  width: 56px;
+  height: 56px;
+  margin-top: -6px;
   appearance: none;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
@@ -298,8 +298,8 @@
 }
 
 .effortRange::-moz-range-thumb {
-  width: 36px;
-  height: 36px;
+  width: 56px;
+  height: 56px;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
   background: var(--dsw-alias-bg-layer-1, #fff);
