@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** AppFrame behavior while the shared visual workspace owns the right dock. */
+/** AppFrame shell geometry while Cordis borrows the in-flow visual rail. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
@@ -27,7 +27,11 @@ function mountWith(owner: 'subagent' | 'cordis') {
   const useSessions = ((selector: (state: SessionListState) => unknown) => selector({
     ids: [], byId: {}, current: undefined, phase: 'ready',
   } as SessionListState)) as never
-  const renderSlot = ((_key: string, _owner: object) => <div />) as AppFrameProps['renderSlot']
+  const renderSlot = ((key: string, _owner: object) => (
+    key === 'shell.overlay'
+      ? <div data-cordis-workspace={owner === 'cordis' || undefined} data-kira-teams={owner === 'subagent' || undefined} />
+      : <div />
+  )) as AppFrameProps['renderSlot']
   const props = {
     useStore: hookOf(instance),
     actions: instance.actions,
@@ -49,21 +53,19 @@ afterEach(() => {
 })
 
 describe('AppFrame visual workspace', () => {
-  it('reserves the Cordis dock with no current session and restores the original shell on release', () => {
+  it('minimizes navigation for Cordis while keeping the ordinary details column closed, then restores the shell exactly', () => {
     const { instance, frame } = mountWith('cordis')
 
-    expect(frame.style.gridTemplateColumns).toBe('56px minmax(0, 1fr) 360px')
-    expect(frame.getAttribute('data-visual-workspace')).toBe('true')
-    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(0)
+    expect(frame.style.gridTemplateColumns).toBe('56px minmax(0, 1fr) 0px')
+    expect(frame.querySelector('[data-cordis-workspace]')).toBeTruthy()
 
     act(() => { instance.actions.setWorkspaceOccupant('cordis', false) })
     expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
-    expect(frame.hasAttribute('data-visual-workspace')).toBe(false)
   })
 
-  it('uses the same borrowed geometry for the subagent occupant', () => {
+  it('does not double-shrink the shell for the subagent card, which already reserves in-flow width', () => {
     const { frame } = mountWith('subagent')
-    expect(frame.style.gridTemplateColumns).toBe('56px minmax(0, 1fr) 360px')
-    expect(frame.getAttribute('data-visual-workspace')).toBe('true')
+    expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
+    expect(frame.querySelector('[data-kira-teams]')).toBeTruthy()
   })
 })
