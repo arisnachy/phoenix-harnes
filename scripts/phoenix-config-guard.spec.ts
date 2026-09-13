@@ -7,10 +7,17 @@ const restart = readFileSync(resolve('scripts/phoenix-safe-restart.mjs'), 'utf8'
 
 describe('PHOENIX boot configuration guard contract', () => {
   it('preflights the exact Web profile without booting or stopping the live Host', () => {
-    expect(guard).toContain("'web',\n    '--dump-config'")
+    expect(guard).toContain("'apps/cli/src/bin.ts',\n    'web'")
+    expect(guard).toContain("args.push('--dump-config')")
     expect(guard).toContain("PHOENIX_UPDATE_SUPERVISED: '1'")
     expect(guard).toContain("PHOENIX_AUTO_UPDATE: '0'")
     expect(guard).toContain("PHOENIX_UPDATE_MODE: 'off'")
+  })
+
+  it('preflights the generated Codex overlay whenever the real boot would enable it', () => {
+    expect(guard).toContain("join(resolvePhoenixHome(env), 'codex', 'enabled.patch.yml')")
+    expect(guard).toContain("(env.PHOENIX_CODEX_PLUGINS ?? 'on').trim().toLowerCase() !== 'off'")
+    expect(guard).toContain("args.push('--patch', codexPatch)")
   })
 
   it('snapshots every boot-critical user patch but never the credential store', () => {
