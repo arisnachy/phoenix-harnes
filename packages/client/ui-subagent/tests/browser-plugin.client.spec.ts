@@ -92,7 +92,7 @@ describe('apply', () => {
     expect(inject).toEqual(['sessions', 'slots', 'locale'])
   })
 
-  it('registers catalog actions and selects read-only subagent composers from session facts', async () => {
+  it('registers catalog actions without treating the lightweight header popup as a visual-workspace occupant', async () => {
     const { ctx, face } = await fullBench(FAMILY)
     const catalogEntry = ctx.slots.entries('conversation.session.header.lineage')[0]!
     const actions = (catalogEntry.inject as unknown as (id: SessionId) => SubagentCatalogInjected)(sid('parent'))
