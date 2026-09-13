@@ -43,7 +43,7 @@ phoenix/evolution-inbox
 3. 获取稳定通道 manifest；
 4. 验证获取到的 stable commit 已存在于本地；
 5. 拒绝降级；只有受管的 `main` 或 `stable` checkout 才允许替换不相关的发布历史；
-6. 当 worktree 包含本地修改时拒绝自动变更；
+6. 即使 worktree 包含本地修改，也只在分离 staging 中准备和验证候选；激活实时 worktree 前仍必须保持干净；
 7. 在候选 commit 上创建分离的临时 Git worktree；
 8. 在其中执行 frozen dependency install、完整 build 和 CLI smoke test；
 9. 将当前 commit 记录到 `refs/phoenix/recovery/last-good`；
@@ -55,7 +55,7 @@ phoenix/evolution-inbox
 
 ## PHOENIX 运行期间
 
-CLI 会启动低频更新 watcher。默认轮询间隔为十分钟。当新的稳定 SHA 出现时，正在运行的 harness 会显示更新通知，但不会在 session 活跃期间替换自身文件。在 `auto` 模式下，安装会延迟到该 PHOENIX process 退出之后；届时候选版本会在安装前重新获取并重新验证。
+CLI 会启动低频更新 watcher。默认轮询间隔为十分钟。当新的稳定 SHA 出现时，正在运行的 harness 会显示更新通知，但不会在 session 活跃期间替换自身文件。即使 checkout 有本地修改，watcher 仍会在隔离 staging 中执行预检；它会记录 `available` 与 `phase: worktree`，保持 Host 运行，并等待实时 checkout 干净后再激活。在 `auto` 模式下，安装会延迟到该 PHOENIX process 退出之后；届时候选版本会在安装前重新获取并重新验证。
 
 下一次 Windows 启动也会在 boot 前执行更新检查。普通的网络/通道故障会保留最后一个已知良好的 PHOENIX。只有极端情况下实时更新和 rollback 都失败时，才使用致命 updater exit code `12`。
 

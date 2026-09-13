@@ -19,6 +19,17 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('clearTimeout(restartTimer)')
   })
 
+  it('does not start or respawn the updater watcher when update mode is off', () => {
+    expect(source).toContain("const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()")
+    expect(source).toContain("|| updateMode === 'off'")
+  })
+
+  it('does not start the updater watcher on a dirty live checkout', () => {
+    expect(source).toContain('const startupStatus = gitStatus(root)')
+    expect(source).toContain('if (!startupStatus.ok || startupStatus.entries.length > 0)')
+    expect(source).toContain('automatic update watcher paused for this session')
+  })
+
   it('uses only an exact clean verified staged activator for prepared self-updates', () => {
     expect(source).toContain('function preparedActivator()')
     expect(source).toContain("const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')")
@@ -34,6 +45,11 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('if (!liveStatus.ok || liveStatus.entries.length > 0)')
     expect(source).toContain('reportDirtyActivationBlock(liveStatus)')
     expect(source).toContain('Commit, stash, or intentionally discard those changes')
+  })
+
+  it('hydrates the current user Google token before launching each Host', () => {
+    expect(source).toContain("import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'")
+    expect(source).toContain('...hydratePhoenixEnvironment(process.env)')
   })
 
   it('routes direct Windows web launches through the supervisor so restart survives the host exit', () => {

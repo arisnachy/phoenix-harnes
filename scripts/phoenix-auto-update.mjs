@@ -4,9 +4,10 @@
  *
  * Invariants:
  * - only the official stable channel can nominate a commit;
- * - only a clean `main` or promoted `stable` worktree can be updated automatically;
+ * - only a clean `main` or promoted `stable` worktree can be activated automatically;
  * - the nominated commit must be reachable from the configured main remote;
  * - candidates are validated in a persistent short-path staging worktree;
+ * - local changes never prevent an isolated candidate from being prepared;
  * - client-only changes use an incremental client build; critical changes stay full;
  * - the live checkout is not mutated while PHOENIX is serving a session;
  * - the current commit is recorded as a recovery ref before activation;
@@ -409,11 +410,10 @@ function clearPrepared(root) {
   }
 }
 
-function preparedCandidateValid(root, target) {
+function stagedCandidateValid(root, target) {
   const prepared = readPrepared(root)
   if (prepared?.target !== target) return false
   if (prepared.base !== currentCommit(root)) return false
-  if (!cleanWorktree(root)) return false
   const stage = stageDirectory()
   if (!sameRepositoryWorktree(root, stage)) return false
   const stageHead = git(stage, ['rev-parse', 'HEAD'], { allowFailure: true })
@@ -422,6 +422,23 @@ function preparedCandidateValid(root, target) {
     && stageHead.stdout === target
     && stageStatus.ok
     && stageStatus.stdout.length === 0
+}
+
+function preparedCandidateValid(root, target) {
+  return stagedCandidateValid(root, target) && cleanWorktree(root)
+}
+
+function writePreparedState(root, inspection, plan) {
+  if (cleanWorktree(root)) {
+    writeState(root, { status: 'ready', phase: 'ready', ...updateFacts(inspection) })
+    return
+  }
+  writeState(root, {
+    status: 'available',
+    phase: 'worktree',
+    ...updateFacts(inspection),
+    detail: `Stable update ${inspection.target.slice(0, 12)} is prepared in isolated staging (${plan.mode}); local changes remain protected; activation waits for a clean checkout.`,
+  })
 }
 
 function ensureDependencies(root, label, plan, onPhase) {
@@ -472,9 +489,9 @@ function stageCandidate(root, inspection) {
   const target = inspection.target
   const facts = updateFacts(inspection)
   const plan = updatePlan(root, inspection)
-  if (preparedCandidateValid(root, target)) {
+  if (stagedCandidateValid(root, target)) {
     console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} was already prepared; reusing cached staging result.`)
-    writeState(root, { status: 'ready', phase: 'ready', ...facts })
+    writePreparedState(root, inspection, plan)
     return plan
   }
 
@@ -487,8 +504,12 @@ function stageCandidate(root, inspection) {
       writeState(root, { status: 'preparing', phase, ...facts })
     })
     writePrepared(root, inspection, plan)
-    writeState(root, { status: 'ready', phase: 'ready', ...facts })
-    console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} is prepared (${plan.mode}). Restart PHOENIX to activate it.`)
+    writePreparedState(root, inspection, plan)
+    if (cleanWorktree(root)) {
+      console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} is prepared (${plan.mode}). Restart PHOENIX to activate it.`)
+    } else {
+      console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} is prepared in isolated staging; local changes remain protected. Clean the checkout before activation.`)
+    }
     return plan
   } catch (error) {
     clearPrepared(root)
@@ -807,30 +828,6 @@ async function watch(root, parentPid) {
           break
         case 'apply':
         case 'replace': {
-          const localChanges = worktreeChanges(root)
-          if (localChanges.length > 0) {
-            pending = undefined
-            preparedTarget = undefined
-            if (announcedTarget !== inspection.target) {
-              announcedTarget = inspection.target
-              console.error(`[PHOENIX UPDATE] new stable version ${inspection.target.slice(0, 12)} detected.`)
-            }
-            console.error(`[PHOENIX UPDATE] stable ${inspection.target.slice(0, 12)} is available, but local changes block preparation/activation.`)
-            for (const entry of localChanges.slice(0, 25)) {
-              console.error(`[PHOENIX UPDATE]   ${entry}`)
-            }
-            if (localChanges.length > 25) {
-              console.error(`[PHOENIX UPDATE]   ...and ${String(localChanges.length - 25)} more change(s).`)
-            }
-            writeState(root, {
-              status: 'paused',
-              phase: 'worktree',
-              ...updateFacts(inspection),
-              detail: `Local changes block automatic update preparation/activation (${String(localChanges.length)} change(s)).`,
-            })
-            break
-          }
-
           pending = inspection
           if (preparedTarget !== inspection.target) {
             if (announcedTarget !== inspection.target) {
@@ -840,7 +837,7 @@ async function watch(root, parentPid) {
             stageCandidate(root, inspection)
             preparedTarget = inspection.target
           } else {
-            writeState(root, { status: 'ready', phase: 'ready', ...updateFacts(inspection) })
+            writePreparedState(root, inspection, updatePlan(root, inspection))
           }
           break
         }

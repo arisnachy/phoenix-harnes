@@ -29,6 +29,17 @@ const reasoning = {
   defaultEffort: 'high',
 }
 
+const codexReasoning = {
+  efforts: [
+    { id: 'low', name: 'Low' },
+    { id: 'medium', name: 'Medium' },
+    { id: 'high', name: 'High' },
+    { id: 'xhigh', name: 'Extra High' },
+    { id: 'max', name: 'Max' },
+  ],
+  defaultEffort: 'high',
+}
+
 function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryState {
   return {
     current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
@@ -68,10 +79,11 @@ describe('ModelSelect reasoning effort', () => {
     })
     fireEvent.click(trigger)
     fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
-    expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
-      .toEqual(['Off', 'High', 'MaxLargest budget'])
+    const slider = screen.getByRole('slider', { name: '选择推理等级' })
+    expect(slider.getAttribute('aria-valuetext')).toBe('High')
 
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /Max/ }))
+    fireEvent.change(slider, { target: { value: '3' } })
+    fireEvent.pointerUp(slider)
     await waitFor(() => {
       expect(select).toHaveBeenCalledWith({
         provider: 'deepseek-official',
@@ -82,7 +94,75 @@ describe('ModelSelect reasoning effort', () => {
     })
   })
 
-  it('offers provider default only when the adapter does not configure a model default', () => {
+  it('keeps the effort card open while the slider waits for host acceptance', async () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'high' },
+    }))
+    let acceptSelection!: (accepted: boolean) => void
+    const selection = new Promise<boolean>((resolve) => { acceptSelection = resolve })
+    const select = vi.fn(() => selection)
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={select}
+      t={t}
+    />)
+
+    const trigger = screen.getByRole('button', { name: /DeepSeek V4 Flash/ })
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+
+    const card = screen.getByTestId('effort-selector')
+    const slider = screen.getByRole('slider', { name: '选择推理等级' })
+    fireEvent.change(slider, { target: { value: '3' } })
+    expect(screen.getByTestId('effort-selector')).toBe(card)
+    expect(select).not.toHaveBeenCalled()
+
+    fireEvent.pointerUp(slider)
+    expect(select).toHaveBeenCalledWith({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      reasoningEffort: 'max',
+    })
+    expect(screen.getByTestId('effort-selector')).toBe(card)
+
+    acceptSelection(true)
+    await waitFor(() => { expect(screen.queryByTestId('effort-selector')).toBeNull() })
+  })
+
+  it('submits the provider default from the reset control and waits before closing', async () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'max' },
+    }))
+    let acceptSelection!: (accepted: boolean) => void
+    const selection = new Promise<boolean>((resolve) => { acceptSelection = resolve })
+    const select = vi.fn(() => selection)
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={select}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /DeepSeek V4 Flash/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    fireEvent.click(screen.getByRole('button', { name: '恢复默认推理等级' }))
+
+    expect(select).toHaveBeenCalledWith({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+    })
+    expect(screen.getByTestId('effort-selector')).toBeTruthy()
+
+    acceptSelection(true)
+    await waitFor(() => { expect(screen.queryByTestId('effort-selector')).toBeNull() })
+  })
+
+  it('offers provider default as the first effort position', () => {
     const directory = createSnapshotStore(state({
       groups: [{
         id: 'provider',
@@ -108,8 +188,34 @@ describe('ModelSelect reasoning effort', () => {
       name: '选择模型，当前 Model，推理等级 Default',
     }))
     fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
-    expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
-      .toEqual(['Default', 'Standard'])
+    const slider = screen.getByRole('slider', { name: '选择推理等级' })
+    expect(slider.getAttribute('aria-valuetext')).toBe('Default')
+    expect(slider.getAttribute('max')).toBe('1')
+  })
+
+  it('keeps the full Codex effort vocabulary supplied by the adapter', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'openai', model: 'gpt-5.6', reasoningEffort: 'high' },
+      groups: [{
+        id: 'openai',
+        name: 'OpenAI',
+        models: [{ id: 'gpt-5.6', name: 'GPT-5.6', reasoning: codexReasoning }],
+      }],
+    }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /GPT-5.6/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    const slider = screen.getByRole('slider', { name: '选择推理等级' })
+    expect(slider.getAttribute('max')).toBe('5')
+    expect(slider.getAttribute('aria-valuetext')).toBe('High')
   })
 
   it('prompts for a selection when the current model is no longer advertised', () => {
@@ -167,17 +273,32 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
   })
 
-  it('presents readable names and silently falls back when a provider logo fails', () => {
+  it('presents readable names with packaged official provider marks', () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state({
       current: { provider: 'google', model: 'research' },
       groups: [
         {
           id: 'google',
-          name: 'google',
+          name: 'Gemini',
           models: [
             { id: 'research', name: 'Deep Research Max Preview (Apr-21-2026)' },
             { id: 'gemini', name: 'gemini-2.5-computer-use-preview-10-2025' },
           ],
+        },
+        {
+          id: 'openai',
+          name: 'OpenAI',
+          models: [{ id: 'gpt', name: 'gpt-5.6' }],
+        },
+        {
+          id: 'openrouter',
+          name: 'OpenRouter',
+          models: [{ id: 'route', name: 'openrouter-auto' }],
+        },
+        {
+          id: 'deepseek',
+          name: 'DeepSeek',
+          models: [{ id: 'chat', name: 'deepseek-chat' }],
         },
         {
           id: 'unknown-gateway',
@@ -206,15 +327,22 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.getAllByText('Preview').length).toBeGreaterThan(0)
     expect(screen.getByRole('menuitemradio', { name: 'Gemini 2.5 Computer Use' })).toBeTruthy()
 
-    const googleLogo = screen.getAllByRole('img', { name: 'google logo' })[0]
-    const image = googleLogo?.querySelector('img')
-    expect(image?.getAttribute('src')).toContain('cdn.simpleicons.org/google')
-    fireEvent.error(image as HTMLImageElement)
-    expect(image?.hidden).toBe(true)
+    const expectedMarks = [
+      ['Gemini', 'googlegemini'],
+      ['OpenAI', 'openai'],
+      ['OpenRouter', 'openrouter'],
+      ['DeepSeek', 'deepseek'],
+    ] as const
+    for (const [name, slug] of expectedMarks) {
+      const logos = screen.getAllByRole('img', { name: `${name} logo` })
+      const mark = logos.flatMap(logo => [...logo.querySelectorAll(`svg[data-provider-mark="${slug}"]`)]).at(0)
+      expect(mark?.querySelector('path')?.getAttribute('d')).toBeTruthy()
+    }
     expect(screen.queryByRole('alert')).toBeNull()
 
     const unknownLogo = screen.getByRole('img', { name: 'Acme Gateway logo' })
-    expect(unknownLogo.querySelector('img')).toBeNull()
+    expect(unknownLogo.querySelector('svg')).toBeNull()
+    expect(unknownLogo.textContent).toBe('A')
   })
 
   it('renders no Agent-bound control for an addressed subagent session', () => {

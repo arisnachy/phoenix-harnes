@@ -215,6 +215,8 @@ flowchart LR
   pkg_session_learning["session-learning"]
   svc_learningMemory["ctx.learningMemory<br/>Persistent learning memory"]
   pkg_tool_session_learning["tool-session-learning"]
+  pkg_cognitive_runtime["cognitive-runtime"]
+  svc_cognitiveRuntime["ctx.cognitiveRuntime<br/>Bounded cognitive state projection"]
   pkg_mcp_registry["mcp-registry"]
   svc_mcpConnectors["ctx.mcpConnectors<br/>MCP connector lifecycle registry"]
   pkg_mcp_client["mcp-client"]
@@ -236,6 +238,7 @@ flowchart LR
   pkg_code_runtime --> svc_pythonCodeRuntime
   pkg_code_runtime_python --> svc_pythonCodeRuntime
   pkg_code_runtime_worker --> svc_codeRuntime
+  pkg_cognitive_runtime --> svc_cognitiveRuntime
   pkg_commands --> svc_commands
   pkg_compaction --> svc_compaction
   pkg_compaction_basic --> svc_compaction
@@ -522,6 +525,7 @@ flowchart LR
 | `ctx.dynamicCordisRunner` | `core` | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | Owns the in-memory definition registry, the vm sandbox for host halves, and the request-run round trip; browser pages reach the same service over the wire through its remote namespace. |
 | `ctx.cordisInspect` | `core` | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | - | [`tool-cordis`](../packages/extensions/tool-cordis) | - | Registers host inspect providers, mirrors the client provider manifest, and routes client queries through the dynamic Cordis transport. |
 | `ctx.learningMemory` | `core` | [`session-learning`](../packages/session/session-learning) | - | [`tool-session-learning`](../packages/session-learning/tool-session-learning), [`system-prompt`](../packages/core/system-prompt) | - | Records bounded, provenance-aware lessons from durable session events; consumers decide when evidence is recalled and never treat memory as authority for permissions or instructions. |
+| `ctx.cognitiveRuntime` | `core` | [`cognitive-runtime`](../packages/session/cognitive-runtime) | - | - | - | Derives deterministic attention and working-memory partitions from session-learning records without changing prompts, tools, permissions, goals, or durable session events. |
 | `ctx.mcpConnectors` | `core` | `mcp-registry` | - | [`mcp-client`](../packages/mcp/mcp-client), [`hardness-adapters`](../packages/hardness/adapters) | - | Projects secret-free MCP server identity, transport, lifecycle, and public tool names so diagnostics and model-facing connector inventory can observe live state without receiving credentials or provider errors. |
 
 Maintenance mode: hybrid: services are discovered from Cordis declarations; interface/implementation/consumer roles are classified in `scripts/gen-doc-graphs.ts` with a completeness guard.

@@ -16,6 +16,7 @@ import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 
 const root = resolve(process.cwd())
 const hostArgs = process.argv.slice(2)
@@ -171,18 +172,29 @@ function startHost() {
     stdio: 'inherit',
     windowsHide: false,
     env: {
-      ...process.env,
+      ...hydratePhoenixEnvironment(process.env),
       PHOENIX_UPDATE_SUPERVISED: '1',
     },
   })
 }
 
 function startWatcher() {
+  const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()
   if (
     process.env.PHOENIX_AUTO_UPDATE === '0'
+    || updateMode === 'off'
     || !existsSync(updater)
     || !existsSync(shim)
   ) return undefined
+
+  const startupStatus = gitStatus(root)
+  if (!startupStatus.ok || startupStatus.entries.length > 0) {
+    const detail = startupStatus.ok
+      ? `${String(startupStatus.entries.length)} local change(s) detected`
+      : 'Git worktree status could not be verified'
+    console.error(`[PHOENIX UPDATE] ${detail}; automatic update watcher paused for this session. PHOENIX will start normally.`)
+    return undefined
+  }
 
   const updateTemp = process.env.PHOENIX_UPDATE_TEMP?.trim()
   const watcherEnv = {

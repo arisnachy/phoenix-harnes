@@ -25,7 +25,7 @@ PHOENIX 的持久化认知记忆会观察每个持久会话事件。原始会话
 
 #### 模型看到的内容
 
-认知服务提供 `searchCognitive()`、`timeline()` 和 `workingMemory()` 查询。学习工具在自动上下文中调用项目范围的 `recallCognitive()`，并返回层、实体、关系、来源 URI、时间和置信度。
+认知服务提供 `searchCognitive()`、`timeline()`、`cognitiveForSession()` 和 `workingMemory()` 查询。`cognitiveForSession()` 是只读的会话范围投影，只读取指定的 `SessionId`，最多返回 128 条最新活动记录，同时保持持久化发生顺序；它不会修改规范会话日志或认知日志。学习工具在自动上下文中调用项目范围的 `recallCognitive()`，并返回层、实体、关系、来源 URI、时间和置信度。
 
 #### Token 影响
 

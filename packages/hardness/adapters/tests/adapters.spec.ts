@@ -10,25 +10,46 @@ import type { ToolRuntime } from '@phoenix-ai/dsh-tools'
 import type { SkillRegistry, SkillSummary } from '@phoenix-ai/dsh-skill'
 
 describe('HARDNESS source adapters', () => {
-  it('mounts the model-facing tool and protocol in the composed runtime', async () => {
+  it('mounts the host RPC and protocol only for the host adapter', async () => {
     const context = new Context()
     await context.plugin(SystemPrompt)
     await context.plugin(ToolRuntimePlugin)
     await context.plugin(SkillRegistryPlugin)
     await context.plugin(HardnessRegistry)
     const hardness = context.get('hardness') as HardnessService
-    context.provide('connection', { rpc: { handle: vi.fn(() => async () => {}) } } as never)
+    const handle = vi.fn(() => async () => {})
+    context.provide('connection', { rpc: { handle } } as never)
     context.provide('agents', { get: () => undefined } as never)
     context.provide('approval', { request: vi.fn() } as never)
 
-    const dispose = await apply(context, { judgeProvider: 'spawn' })
-    expect(context.tools.get('hardness_run')).toBeDefined()
+    const dispose = await apply(context, { judgeProvider: 'spawn', modelTools: false })
+    expect(handle).toHaveBeenCalledWith('/hardness', expect.any(Function), { authority: 'loopback' })
+    expect(context.tools.get('hardness_run')).toBeUndefined()
     expect(hardness.get('tool:hardness_run' as never)).toBeUndefined()
     const assembly = await context.systemPrompt.assemble()
     expect(renderPrompt(assembly)).toContain('<phoenix_hardness_protocol>')
 
     dispose()
     expect(context.tools.get('hardness_run')).toBeUndefined()
+    await context.fiber.dispose()
+  })
+
+  it('does not mount the host RPC for the model-facing preset adapter', async () => {
+    const context = new Context()
+    await context.plugin(SystemPrompt)
+    await context.plugin(ToolRuntimePlugin)
+    await context.plugin(SkillRegistryPlugin)
+    await context.plugin(HardnessRegistry)
+    const handle = vi.fn(() => async () => {})
+    context.provide('connection', { rpc: { handle } } as never)
+    context.provide('agents', { get: () => undefined } as never)
+    context.provide('approval', { request: vi.fn() } as never)
+
+    const dispose = await apply(context, { judgeProvider: 'spawn', modelTools: true })
+    expect(context.tools.get('hardness_run')).toBeDefined()
+    expect(handle).not.toHaveBeenCalled()
+
+    dispose()
     await context.fiber.dispose()
   })
 
@@ -42,8 +63,8 @@ describe('HARDNESS source adapters', () => {
     context.provide('approval', { request: vi.fn() } as never)
 
     const handle = vi.fn(() => async () => {})
-    const dispose = await apply(context, { judgeProvider: 'spawn' })
-    expect(context.tools.get('hardness_run')).toBeDefined()
+    const dispose = await apply(context, { judgeProvider: 'spawn', modelTools: false })
+    expect(context.tools.get('hardness_run')).toBeUndefined()
     expect(handle).not.toHaveBeenCalled()
 
     context.provide('connection', { rpc: { handle } } as never)
