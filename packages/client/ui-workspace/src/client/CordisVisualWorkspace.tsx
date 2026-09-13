@@ -13,7 +13,7 @@ export type CordisVisualContent =
 export interface ICordisVisualWorkspace {
   /** Show or replace the current visual surface. */
   show(content: CordisVisualContent): void
-  /** Close the Cordis surface and release its shared dock lease. */
+  /** Close the Cordis surface and restore the shell geometry borrowed by Cordis. */
   close(): void
   /** Read the current surface. */
   getSnapshot(): CordisVisualContent | null
@@ -36,7 +36,7 @@ export class CordisVisualWorkspaceController implements ICordisVisualWorkspace {
     this.#emit()
   }
 
-  /** Close the surface and restore layout once no other dock owner remains. */
+  /** Close the surface and restore the exact pre-Cordis shell geometry. */
   close(): void {
     if (this.#content === null) return
     this.#content = null
@@ -113,7 +113,7 @@ function Surface({ content }: { content: CordisVisualContent }) {
   }
 }
 
-/** Floating visual surface aligned with Phoenix's shared right-side workspace. */
+/** Visual surface mounted in Phoenix's shared KIRA/Cordis right rail. */
 export function CordisVisualWorkspace({
   controller,
   layout,
@@ -133,6 +133,7 @@ export function CordisVisualWorkspace({
   return (
     <aside
       className={css.root}
+      data-cordis-workspace
       data-under-subagent={occupancy.subagent || undefined}
       aria-label="Cordis visual workspace"
     >
