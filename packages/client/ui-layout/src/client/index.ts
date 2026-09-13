@@ -17,11 +17,12 @@ import { ThemePresenter } from './theme-presenter.ts'
 
 // Contract exports only (export-convergence rule: cross-package consumers
 // keep a symbol exported; test-only/package-internal symbols live off /src).
-// ILayout: the ctx.layout face consumers and test fakes type against.
-// OwnerShare contracts below are the render-side halves registrants compose
-// against; the frame components and the store factory are package-internal.
+// ILayout and the visual-workspace occupancy types are the ctx.layout face
+// consumers and test fakes type against. OwnerShare contracts below are the
+// render-side halves registrants compose against; frame/store internals stay
+// package-private.
 export { LayoutController } from './service.ts'
-export type { ILayout } from './service.ts'
+export type { ILayout, WorkspaceOccupancy, WorkspaceOccupant } from './service.ts'
 
 declare module '@phoenix-ai/cordis' {
   interface Context {

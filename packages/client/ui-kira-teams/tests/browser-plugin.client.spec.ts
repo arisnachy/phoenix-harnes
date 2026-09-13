@@ -68,10 +68,19 @@ async function fullBench(sessions: SessionSummary[], current?: SessionId) {
   ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
   ctx.provide('remote', { $on: () => () => {} } as never)
   ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+  const layout = {
+    toggleSidebar() {},
+    openDetails() {},
+    closeDetails() {},
+    setWorkspaceOccupant() {},
+    getWorkspaceOccupancy: () => ({ subagent: false, cordis: false }),
+    subscribeWorkspaceOccupancy: () => () => {},
+  }
+  ctx.provide('layout', layout as never)
   await provideSlotFaces(ctx)
   await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
   await ctx.plugin({ inject: [...inject], apply }).await()
-  return { face, ctx }
+  return { face, ctx, layout }
 }
 
 const FAMILY: SessionSummary[] = [
@@ -215,20 +224,22 @@ describe('lineageMembers', () => {
 
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'slots', 'locale'])
+    expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout'])
   })
 
   it('registers one shell.overlay entry whose inject exposes the sessions face and actions', async () => {
-    const { ctx, face } = await fullBench(FAMILY, sid('root'))
+    const { ctx, face, layout } = await fullBench(FAMILY, sid('root'))
     const entry = ctx.slots.entries('shell.overlay')
       .find(slotEntry => slotEntry.component === KiraTeamsDock)!
     expect(entry).toBeDefined()
     const injected = (entry.inject as unknown as () => {
       list: { getSnapshot(): SessionListState }
+      layout: unknown
       openChild: (address: SubagentAddress) => void
       refresh: (parentSessionId: SessionId) => void
     })()
     expect(injected.list.getSnapshot().current).toBe(sid('root'))
+    expect(injected.layout).toBe(layout)
     const address: SubagentAddress = {
       parentSessionId: sid('root'),
       childSessionId: sid('c1'),
