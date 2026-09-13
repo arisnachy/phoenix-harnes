@@ -1,4 +1,11 @@
 .group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.liveTool {
   min-width: 0;
 }
 
@@ -7,6 +14,7 @@
   min-height: 28px;
   align-items: center;
   gap: 8px;
+  width: fit-content;
   padding: 0;
   border: 0;
   color: var(--dsw-alias-label-secondary);
@@ -26,18 +34,26 @@
 }
 
 .chevron {
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  align-items: center;
+  justify-content: center;
   margin-left: 1px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 18px;
-  line-height: 1;
-  transform: translateY(-1px);
+}
+
+.chevronIcon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  transform: rotate(0deg);
   transition: transform 120ms ease;
 }
 
-.chevron[data-open] {
-  transform: translateY(1px) rotate(180deg);
+.chevron[data-open] .chevronIcon {
+  transform: rotate(180deg);
 }
 
 .body {
@@ -45,12 +61,11 @@
   min-width: 0;
   flex-direction: column;
   gap: 8px;
-  margin-top: 8px;
   padding-left: 26px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chevron {
+  .chevronIcon {
     transition: none;
   }
 }
