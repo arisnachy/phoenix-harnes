@@ -132,6 +132,10 @@ Keep a small protocol/fixture test that asserts the delegated prompt requires th
 7. The Web profile includes the capability; unrelated headless/base profiles do not gain the Codex native payload by default.
 8. Tests cover success, unavailability, malformed output, path safety, cancellation, and real Loader composition.
 
+## Implemented runtime composition
+
+The Web profile mounts the official Codex subagent provider, and the standard interactive agent preset mounts the Codex-backed `image_generation` tool. The new package is part of the workspace lockfile and host TypeScript project graph; base/headless profiles remain unchanged. This wiring is intentionally explicit so a missing Codex provider fails closed instead of silently falling back to an external image API.
+
 ## Deferred work
 
 A future design may add image editing/reference inputs, provider-neutral non-Codex image generators, multi-image batches, and richer generation controls. Those features must reuse the durable attachment seam and must not weaken the commit-point or path-safety rules above.
