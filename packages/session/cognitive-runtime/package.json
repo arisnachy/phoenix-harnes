@@ -1,6 +1,6 @@
 {
   "name": "@phoenix-ai/dsh-cognitive-runtime",
-  "description": "Deterministic, read-only cognitive state projection for PHOENIX sessions",
+  "description": "Deterministic cognitive state, model continuity, and completion-quality projection for PHOENIX sessions",
   "version": "0.1.1-rc.2",
   "publishConfig": {
     "access": "public"
@@ -34,6 +34,14 @@
       "types": "./lib/types/workspace.d.ts",
       "default": "./lib/types/workspace.js"
     },
+    "./model-context": {
+      "types": "./lib/types/model-context.d.ts",
+      "default": "./lib/model-context.js"
+    },
+    "./quality-gate": {
+      "types": "./lib/types/quality-gate.d.ts",
+      "default": "./lib/quality-gate.js"
+    },
     "./types": {
       "types": "./lib/types/types.d.ts",
       "default": "./lib/types/types.js"
@@ -44,21 +52,29 @@
   "files": [
     "lib/index.js",
     "lib/invariant.js",
+    "lib/model-context.js",
+    "lib/quality-gate.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
   "peerDependencies": {
+    "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-session-learning": "workspace:^",
+    "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
+    "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-session-learning": "workspace:^",
+    "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/schemastery": "workspace:^"
   }
