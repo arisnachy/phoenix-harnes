@@ -59,22 +59,16 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-session-learning": "workspace:^",
-    "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
-    "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-session-learning": "workspace:^",
-    "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/schemastery": "workspace:^"
   }
