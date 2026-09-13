@@ -103,16 +103,9 @@ const invocation = parseDshArgs(rawArgs, readVersion())
 
 switch (invocation.mode) {
   case 'profile': {
-    const [
-      { runProfile },
-      { startPhoenixUpdateWatcher },
-      { startPhoenixProactivity },
-      { installPhoenixProactivityTools },
-    ] = await Promise.all([
+    const [{ runProfile }, { startPhoenixUpdateWatcher }] = await Promise.all([
       import('./profile-boot.ts'),
       import('./phoenix-update-watch.ts'),
-      import('./phoenix-proactivity.ts'),
-      import('./phoenix-proactivity-tools.ts'),
     ])
     startPhoenixUpdateWatcher()
 
@@ -127,19 +120,12 @@ switch (invocation.mode) {
       patches.push(codexPatch)
     }
 
-    const { ctx } = await runProfile({
+    await runProfile({
       environment: loadLayeredEnv('dsh'),
       profile: invocation.profile,
       patchFiles: patches,
       args: invocation.args,
     })
-    // Global Phoenix proactivity starts only after the profile tree is live. It
-    // immediately catches up overdue durable tasks (for example a 15:00 task
-    // missed while the PC was powered off) and keeps a lightweight unref'd
-    // poller. The same engine is exposed as model tools so Phoenix can create,
-    // list, pause, resume, cancel, and plan its own future work.
-    const proactivity = await startPhoenixProactivity(ctx)
-    installPhoenixProactivityTools(ctx, proactivity)
     break
   }
   case 'plugin': {
