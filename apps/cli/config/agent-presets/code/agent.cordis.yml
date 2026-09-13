@@ -253,6 +253,15 @@
         subagentProvider: spawn
         maxRounds: 64
 
+# ── native image generation ──────────────────────────────────────────────────
+
+# Keep the standard agent's native Codex image tool available in Code Mode so
+# tool-presentation can project `image_generation` into the generated SDK.
+- id: tool-image-generation
+  name: '@phoenix-ai/dsh-llm-pi-ai'
+  config:
+    imageOnly: true
+
 # ── remaining model-facing rows ─────────────────────────────────────────────
 
 - id: tool-ask-user
