@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { ComponentProps } from 'react'
-import type { AssistantChatData } from '../contract/chat-nodes.ts'
+import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
+import { isRunningTool } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { ReasoningRow } from './ReasoningRow.tsx'
@@ -19,7 +20,7 @@ interface ToolActivityFlowProps extends SeatProps {
 }
 
 type ActivityItem =
-  | { readonly kind: 'node'; readonly key: string }
+  | { readonly kind: 'node'; readonly key: string; readonly liveTool: boolean }
   | {
     readonly kind: 'reasoning'
     readonly key: string
@@ -39,6 +40,12 @@ type FlowItem =
 
 function isWholeActivity(kind: string): boolean {
   return kind === 'context' || kind === 'tool-call' || kind === 'model-retry'
+}
+
+function activityNode(node: OrderedChatNode): ActivityItem {
+  const liveTool = node.kind === 'tool-call'
+    && isRunningTool((node.data as ToolChatData).root)
+  return { kind: 'node', key: node.key, liveTool }
 }
 
 function assistantData(node: OrderedChatNode): AssistantChatData | null {
@@ -88,7 +95,7 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
 
   for (const node of nodes) {
     if (isWholeActivity(node.kind)) {
-      pending.push({ kind: 'node', key: node.key })
+      pending.push(activityNode(node))
       pendingAnchorKey ??= node.key
       continue
     }
@@ -129,6 +136,23 @@ function ToolActivityIcon() {
   )
 }
 
+function ToolActivityChevron({ open }: { readonly open: boolean }) {
+  return (
+    <span className={css.chevron} data-open={open || undefined} aria-hidden="true">
+      <svg className={css.chevronIcon} viewBox="0 0 12 12" data-tool-activity-chevron>
+        <path
+          d="M3 4.5 6 7.5 9 4.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  )
+}
+
 function ToolActivityGroup({
   items, anchorKey, t, ...seatProps
 }: {
@@ -137,25 +161,41 @@ function ToolActivityGroup({
   readonly t: ChatViewSlotProps['t']
 } & SeatProps) {
   const [open, setOpen] = useState(false)
+  const liveTools = items.filter((item): item is Extract<ActivityItem, { kind: 'node' }> =>
+    item.kind === 'node' && item.liveTool)
+  const history = items.filter(item => item.kind !== 'node' || !item.liveTool)
+  const hasHistory = history.length > 0
+
   return (
     <div
       className={css.group}
       data-chat-flow-kind="tool-activity"
       {...anchorKey === undefined ? {} : { 'data-chat-anchor-key': anchorKey }}
     >
-      <button
-        type="button"
-        className={css.toggle}
-        aria-expanded={open}
-        onClick={() => { setOpen(value => !value) }}
-      >
-        <ToolActivityIcon />
-        <span>{t('context.tools')}</span>
-        <span className={css.chevron} data-open={open || undefined} aria-hidden="true">⌄</span>
-      </button>
-      {open && (
+      {liveTools.map(item => (
+        <div key={`live:${item.key}`} className={css.liveTool} data-testid="live-tool-activity">
+          <ChatNodeSeat
+            nodeKey={item.key}
+            t={t}
+            {...seatProps}
+          />
+        </div>
+      ))}
+      {hasHistory && (
+        <button
+          type="button"
+          className={css.toggle}
+          aria-expanded={open}
+          onClick={() => { setOpen(value => !value) }}
+        >
+          <ToolActivityIcon />
+          <span>{t('context.tools')}</span>
+          <ToolActivityChevron open={open} />
+        </button>
+      )}
+      {open && hasHistory && (
         <div className={css.body}>
-          {items.map(item => item.kind === 'node'
+          {history.map(item => item.kind === 'node'
             ? (
               <ChatNodeSeat
                 key={item.key}
@@ -180,6 +220,7 @@ function ToolActivityGroup({
 
 /**
  * Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure.
+ * Running Tool rows stay live above the disclosure and join history once settled.
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
