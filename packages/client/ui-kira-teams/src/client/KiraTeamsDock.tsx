@@ -97,7 +97,9 @@ export function lineageMembers(state: SessionListState): {
         if (summary.origin !== 'subagent' || summary.parentId !== parentId) continue
         if (depth.has(summary.id)) continue
         depth.set(summary.id, childDepth)
-        if (summary.running) rows.push({ summary, depth: childDepth })
+        if (summary.running || summary.pendingInteraction !== undefined) {
+          rows.push({ summary, depth: childDepth })
+        }
         // Continue through settled parents so active grandchildren remain visible.
         next.push(summary.id)
       }
