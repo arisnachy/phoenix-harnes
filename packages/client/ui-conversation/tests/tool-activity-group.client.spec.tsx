@@ -52,7 +52,17 @@ function context(seq: number, label: string): ConversationNode {
   } as ConversationNode
 }
 
-function assistantWithReasoning(seq: number): ConversationNode {
+function user(seq: number, text: string): ConversationNode {
+  return {
+    kind: 'user',
+    seq,
+    time: seq * 1_000,
+    content: [{ type: 'text', text }],
+    source: { kind: 'user' },
+  } as ConversationNode
+}
+
+function assistantWithReasoning(seq: number, visible = true): ConversationNode {
   return {
     kind: 'assistant',
     seq,
@@ -61,7 +71,7 @@ function assistantWithReasoning(seq: number): ConversationNode {
     step: 1,
     blocks: [
       { kind: 'reasoning', text: 'inspect the runtime first' },
-      { kind: 'text', text: 'Visible answer' },
+      ...(visible ? [{ kind: 'text' as const, text: 'Visible answer' }] : []),
     ],
   } as AssistantMessageNode
 }
@@ -82,7 +92,7 @@ function emptyWorkspaces() {
 function renderChat(nodes: readonly ConversationNode[]) {
   const source = createSnapshotStore(snapshot(nodes))
   const chat = createChatStore().create()
-  const t = ((key: string) => key === 'activity.tools' ? 'Tools' : key) as ChatViewSlotProps['t']
+  const t = ((key: string) => key === 'context.tools' ? 'Tools' : key) as ChatViewSlotProps['t']
   const renderSlot = ((key: string, owner: object, opts?: { fallback?: React.ReactNode }) => {
     if (key !== 'conversation.chat.node') return opts?.fallback ?? null
     const node = (owner as ChatNodeOwnerProps & { node: { kind: string } }).node
@@ -127,13 +137,36 @@ describe('chat tool activity grouping', () => {
     fireEvent.click(disclosure)
     expect(disclosure.getAttribute('aria-expanded')).toBe('true')
     expect(screen.getAllByTestId('node-context')).toHaveLength(2)
+
+    fireEvent.click(disclosure)
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByTestId('node-context')).toBeNull()
   })
 
   it('moves assistant reasoning into Tools while leaving visible assistant prose outside', () => {
     renderChat([assistantWithReasoning(1)])
 
-    expect(screen.getByRole('button', { name: 'Tools' })).toBeTruthy()
+    const disclosure = screen.getByRole('button', { name: 'Tools' })
     expect(screen.getByTestId('node-assistant-step')).toBeTruthy()
     expect(screen.queryByText('reasoning.title')).toBeNull()
+
+    fireEvent.click(disclosure)
+    expect(screen.getByText('reasoning.title')).toBeTruthy()
+  })
+
+  it('keeps a reasoning-only assistant inside the Tools disclosure', () => {
+    renderChat([assistantWithReasoning(1, false)])
+
+    const disclosure = screen.getByRole('button', { name: 'Tools' })
+    expect(screen.queryByTestId('node-assistant-step')).toBeNull()
+    fireEvent.click(disclosure)
+    expect(screen.getByText('reasoning.title')).toBeTruthy()
+  })
+
+  it('starts a new Tools disclosure after an ordinary user message', () => {
+    renderChat([context(1, 'before'), user(2, 'hello'), context(3, 'after')])
+
+    expect(screen.getAllByRole('button', { name: 'Tools' })).toHaveLength(2)
+    expect(screen.getByTestId('node-user')).toBeTruthy()
   })
 })
