@@ -245,7 +245,6 @@
 .avatar[data-avatar='dragon'] .core {
   background: #fff;
 }
-
 .avatar[data-phase='preparing'] .core {
   animation: avatar-breathe 1.8s ease-in-out infinite alternate;
 }

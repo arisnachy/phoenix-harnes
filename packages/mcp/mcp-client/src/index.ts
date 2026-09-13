@@ -212,12 +212,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       key: controller.key,
       label: `MCP ${config.serverName}`,
       methods: [{ id: 'oauth', label: `Authorize ${config.serverName}` }],
-      inspect: async () => {
-        const info = await credentials.describeRecord(controller.key)
-        return info.configured
-          ? { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'oauth' }
-          : undefined
-      },
+      inspect: async () => (await controller.isAuthorized())
+        ? { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'oauth' }
+        : undefined,
       disconnect: async () => {
         await controller.disconnect()
         connection.reconnect()

@@ -126,7 +126,6 @@ function generatedImageTool(): ToolResultNode {
     content: [{ type: 'image', attachment: generatedAttachment }],
   }
 }
-
 function emptySessions() {
   return bindSnapshotSelector(createSnapshotStore<SessionListState>({
     ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,

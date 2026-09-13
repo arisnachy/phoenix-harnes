@@ -36,9 +36,8 @@
   overflow: hidden;
 }
 
-/* The teams dock is a real sibling of the conversation, never a floating
-   layer. Its presence changes only the center-column flow; the global shell
-   and sidebar keep their geometry untouched. */
+/* Keep the teams dock as a real sibling in the center flow so chat receives
+   its own space; the global shell and sidebar keep their geometry untouched. */
 .centerCol:has([data-kira-teams]) {
   flex-direction: row;
 }

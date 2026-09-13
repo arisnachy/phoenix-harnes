@@ -96,6 +96,6 @@ describe('createMcpOAuthProvider', () => {
     expect(hasUsableMcpOAuthTokens(undefined)).toBe(false)
     expect(hasUsableMcpOAuthTokens({ clientInformation: { client_id: 'id' } })).toBe(false)
     expect(hasUsableMcpOAuthTokens({ tokens: { access_token: 'access', token_type: 'Bearer' } })).toBe(true)
-    expect(hasUsableMcpOAuthTokens({ tokens: { refresh_token: 'refresh', token_type: 'Bearer' } })).toBe(true)
+    expect(hasUsableMcpOAuthTokens({ tokens: { access_token: '', refresh_token: 'refresh', token_type: 'Bearer' } })).toBe(true)
   })
 })
