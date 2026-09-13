@@ -58,6 +58,7 @@ export function useAuthorizationAttempt(
       void api.status({ attemptId: attempt.id, after: attempt.nextSeq }).then((response) => {
         if (stale) return
         if (!response.result.ok) {
+          setAttempt(undefined)
           setFailure(response.result.error.message)
           return
         }
@@ -81,7 +82,11 @@ export function useAuthorizationAttempt(
           ...view.error === undefined ? {} : { error: view.error },
         })
         if (view.status === 'authorized') onAuthorized()
-      }, (error: unknown) => { if (!stale) setFailure(String(error)) })
+      }, (error: unknown) => {
+        if (stale) return
+        setAttempt(undefined)
+        setFailure(String(error))
+      })
     }, 650)
     return () => { stale = true; window.clearTimeout(timer) }
   }, [api, attempt, onAuthorized])
