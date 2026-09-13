@@ -6,6 +6,9 @@ import type { AttentionCandidate, CognitiveState } from './types.ts'
 /** Stable marker used to identify PHOENIX-owned cognitive snapshots. */
 export const COGNITIVE_CONTEXT_MARKER = '<phoenix_cognitive_workspace>'
 
+/** Explicit invalidation snapshot when the active workspace becomes empty. */
+export const COGNITIVE_CONTEXT_CLEARED = `${COGNITIVE_CONTEXT_MARKER}\nstate=cleared\nEarlier cognitive-runtime snapshots no longer apply.\n</phoenix_cognitive_workspace>`
+
 const MAX_CONTEXT_CHARS = 6_000
 const MAX_ITEM_CHARS = 640
 const MAX_ACTIVE_ITEMS = 6
@@ -18,9 +21,9 @@ const CLOSING_TAG = '</phoenix_cognitive_workspace>'
  * into the cognitive workspace that produced them.
  */
 export function isCognitiveRuntimeProjection(
-  record: Pick<CognitiveMemoryRecord, 'sourceEventType' | 'content'>,
+  record: Pick<CognitiveMemoryRecord, 'content' | 'provenance'>,
 ): boolean {
-  return record.sourceEventType === 'user/message'
+  return record.provenance.sourceEventType === 'user/message'
     && record.content.includes(COGNITIVE_CONTEXT_MARKER)
 }
 
