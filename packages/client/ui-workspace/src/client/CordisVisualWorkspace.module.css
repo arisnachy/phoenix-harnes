@@ -1,0 +1,153 @@
+.root {
+  position: fixed;
+  z-index: 80;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 56px));
+  min-height: 0;
+  overflow: hidden;
+  pointer-events: auto;
+  background: var(--dsw-alias-bg-base);
+  border-left: 1px solid var(--dsw-alias-border-l2);
+  box-shadow: var(--dsw-shadow-lv2);
+  transition:
+    top var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    height var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+/* When the subagent workspace already owns the dock, Cordis takes the lower
+   half instead of covering it. The shared layout lease keeps the chat/sidebar
+   geometry stable until both owners release the dock. */
+.root[data-under-subagent='true'] {
+  top: 50%;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.close:hover,
+.close:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-base);
+}
+
+.image,
+.video,
+.page {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.image,
+.video {
+  object-fit: contain;
+  background: var(--dsw-alias-bg-base);
+}
+
+.pageWrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.page {
+  flex: 1;
+  min-height: 0;
+  background: white;
+}
+
+.externalLink {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 6px 9px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-button-floating-fill);
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  text-decoration: none;
+  box-shadow: var(--dsw-shadow-lv1);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  color: var(--dsw-alias-label-primary);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  margin: auto;
+  padding: 20px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .root {
+    width: calc(100vw - 56px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root {
+    transition: none;
+  }
+}
