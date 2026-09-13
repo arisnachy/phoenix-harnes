@@ -229,6 +229,22 @@
 .avatar[data-avatar='dolphin'] .core::after { content: '🐬'; }
 .avatar[data-avatar='forge'] .core::after { content: '⚒'; }
 .avatar[data-avatar='dragon'] .core::after { content: '🐉'; }
+
+/* White character cards keep every illustrated glyph legible in dark shells. */
+.avatar[data-avatar='eagle'] .core,
+.avatar[data-avatar='wolf'] .core,
+.avatar[data-avatar='fox'] .core,
+.avatar[data-avatar='owl'] .core,
+.avatar[data-avatar='lynx'] .core,
+.avatar[data-avatar='dolphin'] .core,
+.avatar[data-avatar='forge'] .core,
+.avatar[data-avatar='nova'] .core,
+.avatar[data-avatar='comet'] .core,
+.avatar[data-avatar='prism'] .core,
+.avatar[data-avatar='aurora'] .core,
+.avatar[data-avatar='dragon'] .core {
+  background: #fff;
+}
 .avatar[data-phase='preparing'] .core {
   animation: avatar-breathe 1.8s ease-in-out infinite alternate;
 }
