@@ -1,12 +1,10 @@
-/** Read-only Cordis service projecting deterministic cognitive state per session. */
+/** Cordis service projecting deterministic cognition into live agent execution. */
 
+import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
-import type {} from '@phoenix-ai/dsh-agent'
-import { createUserMessage } from '@phoenix-ai/dsh-llm'
-import { SessionId } from '@phoenix-ai/dsh-session'
+import { SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'
 import type { LearningMemoryService } from '@phoenix-ai/dsh-session-learning'
-import type { AssembleContext } from '@phoenix-ai/dsh-system-prompt'
 import { scoreAttention } from './attention.ts'
 import { validateCognitiveState } from './invariant.ts'
 import { partitionWorkingMemory } from './working-memory.ts'
@@ -56,6 +54,51 @@ export interface CognitiveRuntimeConfig {
 
 /** Compatibility name for the resolved cognitive-runtime configuration. */
 export type Config = CognitiveRuntimeConfig
+
+interface ModelAssemblyLike {
+  readonly agent?: { readonly id?: unknown }
+}
+
+interface PromptRegistryLike {
+  context(input: {
+    readonly name: string
+    readonly order: number
+    readonly interpolateVariables: boolean
+    readonly text: (context: ModelAssemblyLike) => string
+  }): void
+}
+
+interface PromptContextLike {
+  readonly systemPrompt: PromptRegistryLike
+}
+
+interface CognitiveSteeringMessage {
+  readonly id: string
+  readonly role: 'user'
+  readonly content: readonly [{ readonly type: 'text'; readonly text: string }]
+  readonly source: { readonly kind: 'plugin'; readonly plugin: string }
+}
+
+interface AgentBridgeLike {
+  readonly id: SessionId
+  readonly session: { readonly events: readonly SessionEvent[] }
+  steer(message: CognitiveSteeringMessage): void
+}
+
+interface AgentTurnStoppingPayloadLike {
+  readonly agent: AgentBridgeLike
+  readonly turn: number
+}
+
+type OptionalPromptInjector = (
+  names: readonly string[],
+  callback: (context: PromptContextLike) => void,
+) => void
+
+type AgentTurnStoppingRegistrar = (
+  name: 'agent/turn-stopping',
+  listener: (payload: AgentTurnStoppingPayloadLike) => void,
+) => unknown
 
 const MAX_CANDIDATES = 128
 const MAX_REGION = 128
@@ -107,21 +150,7 @@ export class CognitiveRuntimeService extends Service {
     super(ctx, 'cognitiveRuntime')
     const resolved = resolveConfig(config)
     this.config = Object.freeze({ ...resolved, weights: Object.freeze({ ...resolved.weights }) })
-
-    // Prompt assembly is optional for diagnostics/tests that run the cognitive
-    // service without an agent stack. When present, this provider is evaluated
-    // before every model step through the existing runtime-context projection.
-    ctx.inject(['systemPrompt'], (promptCtx) => {
-      promptCtx.systemPrompt.context({
-        name: 'cognitive-runtime:workspace',
-        order: COGNITIVE_CONTEXT_ORDER,
-        interpolateVariables: false,
-        text: (context) => {
-          const sessionId = sessionIdFromAssembly(context)
-          return sessionId === undefined ? '' : this.modelContext(sessionId)
-        },
-      })
-    })
+    this.registerOptionalPromptBridge(ctx)
   }
 
   /** Seed existing sessions and subscribe to the canonical live event stream. */
@@ -137,17 +166,15 @@ export class CognitiveRuntimeService extends Service {
       this.auditedTurns.delete(String(session.id))
     })
 
-    // A tool-using turn receives one bounded completion audit before it may
-    // close. The audit marker is set before steering so re-entrant stop checks
-    // cannot schedule a second review for the same turn.
-    this.ctx.on('agent/turn-stopping', ({ agent, turn }) => {
+    // Agent integration is intentionally capability-coupled rather than a
+    // package dependency: the base composition mounts both services, while
+    // isolated cognitive-runtime tests and diagnostics remain agent-free.
+    const onAgentStopping = this.ctx.on.bind(this.ctx) as unknown as AgentTurnStoppingRegistrar
+    onAgentStopping('agent/turn-stopping', ({ agent, turn }) => {
       const alreadyAudited = this.wasAudited(agent.id, turn)
       if (!turnNeedsQualityAudit(agent.session.events, turn, alreadyAudited)) return
       this.markAudited(agent.id, turn)
-      agent.steer(createUserMessage({
-        content: [{ type: 'text', text: COMPLETION_AUDIT_PROMPT }],
-        source: { kind: 'plugin', plugin: 'cognitive-runtime' },
-      }))
+      agent.steer(createCompletionAuditMessage())
     })
 
     await this.enqueue(async () => {
@@ -187,6 +214,22 @@ export class CognitiveRuntimeService extends Service {
    */
   async refresh(sessionId: SessionId): Promise<CognitiveState | undefined> {
     return this.enqueue(() => this.refreshSafe(sessionId))
+  }
+
+  /** Register model-facing state only when the optional prompt capability exists. */
+  private registerOptionalPromptBridge(ctx: Context): void {
+    const injectPrompt = ctx.inject.bind(ctx) as unknown as OptionalPromptInjector
+    injectPrompt(['systemPrompt'], (promptCtx) => {
+      promptCtx.systemPrompt.context({
+        name: 'cognitive-runtime:workspace',
+        order: COGNITIVE_CONTEXT_ORDER,
+        interpolateVariables: false,
+        text: (context) => {
+          const sessionId = sessionIdFromAssembly(context)
+          return sessionId === undefined ? '' : this.modelContext(sessionId)
+        },
+      })
+    })
   }
 
   /** Rebuild one state and retain the last successful value after a failure. */
@@ -246,8 +289,17 @@ export class CognitiveRuntimeService extends Service {
   }
 }
 
-function sessionIdFromAssembly(context: AssembleContext): SessionId | undefined {
-  const candidate = (context as AssembleContext & { agent?: { id?: unknown } }).agent?.id
+function createCompletionAuditMessage(): CognitiveSteeringMessage {
+  return Object.freeze({
+    id: randomUUID(),
+    role: 'user' as const,
+    content: Object.freeze([Object.freeze({ type: 'text' as const, text: COMPLETION_AUDIT_PROMPT })]) as CognitiveSteeringMessage['content'],
+    source: Object.freeze({ kind: 'plugin' as const, plugin: 'cognitive-runtime' }),
+  })
+}
+
+function sessionIdFromAssembly(context: ModelAssemblyLike): SessionId | undefined {
+  const candidate = context.agent?.id
   return typeof candidate === 'string' && candidate.length > 0 ? SessionId(candidate) : undefined
 }
 
