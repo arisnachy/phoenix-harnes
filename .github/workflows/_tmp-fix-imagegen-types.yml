@@ -1,0 +1,50 @@
+name: Temporary fix imagegen types
+
+on:
+  push:
+    branches:
+      - feat/kira-floating-codex-imagegen-20260913
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/kira-floating-codex-imagegen-20260913
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Apply focused TypeScript fixes and self-remove workflow
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+
+          const sourcePath = 'packages/subagent/tool-image-generation-codex/src/index.ts'
+          let source = fs.readFileSync(sourcePath, 'utf8')
+          const sourceNeedle = "\n}\n\n/** Register the tool when its configured Codex provider is actually available. */"
+          const sourceReplacement = "\n} as const\n\n/** Register the tool when its configured Codex provider is actually available. */"
+          if (!source.includes(sourceNeedle)) throw new Error('attachment output schema terminator not found')
+          source = source.replace(sourceNeedle, sourceReplacement)
+          fs.writeFileSync(sourcePath, source)
+
+          const testPath = 'packages/subagent/tool-image-generation-codex/tests/image-generation.spec.ts'
+          let test = fs.readFileSync(testPath, 'utf8')
+          const testNeedle = "    mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],"
+          const testReplacement = "    mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const,"
+          if (!test.includes(testNeedle)) throw new Error('mediaTypes fixture not found')
+          test = test.replace(testNeedle, testReplacement)
+          fs.writeFileSync(testPath, test)
+          NODE
+          rm .github/workflows/_tmp-fix-imagegen-types.yml
+      - name: Commit focused fix
+        shell: bash
+        run: |
+          git config user.name "phoenix-ci"
+          git config user.email "phoenix-ci@users.noreply.github.com"
+          git add packages/subagent/tool-image-generation-codex/src/index.ts packages/subagent/tool-image-generation-codex/tests/image-generation.spec.ts .github/workflows/_tmp-fix-imagegen-types.yml
+          git commit -m "fix(imagegen): preserve literal output schema types"
+          git push origin HEAD:feat/kira-floating-codex-imagegen-20260913
