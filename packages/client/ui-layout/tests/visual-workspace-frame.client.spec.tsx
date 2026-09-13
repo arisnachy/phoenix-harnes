@@ -25,7 +25,13 @@ function mountWith(owner: 'subagent' | 'cordis') {
   const instance = createLayoutStore().create()
   instance.actions.setWorkspaceOccupant(owner, true)
   const useSessions = ((selector: (state: SessionListState) => unknown) => selector({
-    ids: [], byId: {}, current: undefined, phase: 'ready',
+    ids: [],
+    byId: {},
+    current: undefined,
+    phase: 'ready',
+    subagentsByParent: {},
+    jobsBySession: {},
+    currentAddress: undefined,
   } as SessionListState)) as never
   const renderSlot = ((key: string, _owner: object) => (
     key === 'shell.overlay'
