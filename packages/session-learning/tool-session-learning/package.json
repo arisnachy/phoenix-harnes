@@ -17,7 +17,7 @@
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
-  "files": ["lib/index.js", "lib/invariant.js", "lib/presentation.js", "lib/types/**/*.d.ts"],
+  "files": ["lib/index.js", "lib/invariant.js", "lib/presentation.js", "lib/adaptive.js", "lib/types/**/*.d.ts"],
   "license": "MIT",
   "peerDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",
