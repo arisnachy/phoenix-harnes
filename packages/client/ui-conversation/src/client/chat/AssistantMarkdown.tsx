@@ -1,13 +1,9 @@
-// AssistantMarkdown: renders assistant blocks in order — markdown text body,
-// reasoning as the figma Think summary row (expand = indented gray text),
-// other-block JSON fallback. Tool-call heads are NOT rendered here: the chat
-// view groups them into tool rows through its keyed toolview slot (figma
-// step-summary flow). Shared by finalized nodes and the streaming partial;
-// the turn-level loading dots live in the chat view's tail, not here.
-// Finalized content (text) nodes append IconActions once their turn ends
-// (`time` is omitted for mid-turn narration and while the turn still runs);
-// their branch action is enabled only when the node is also the completed
-// turn's transcript tail. Think / tool-head-only nodes stay chrome-free.
+// AssistantMarkdown: renders user-facing assistant blocks in order — markdown
+// text, images, and unknown-block fallbacks. Reasoning and tool-call heads are
+// intentionally NOT rendered here: ChatView's technical-activity grouping owns
+// their compact Tools disclosure, so model-internal activity does not spill
+// into the main transcript. Shared by finalized nodes and streaming partials;
+// the turn-level loading signal lives in ChatView's tail.
 
 import { Fragment, memo, useMemo } from 'react'
 import type { ReactNode } from 'react'
@@ -15,7 +11,6 @@ import type { AssistantBlock } from '@phoenix-ai/dsh-client-runtime/client'
 import { JsonBlock, MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { MarkdownFileMentions } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts'
-import { ReasoningRow } from './ReasoningRow.tsx'
 import css from './AssistantMarkdown.module.css'
 
 export interface AssistantMarkdownProps {
@@ -31,20 +26,18 @@ export interface AssistantMarkdownProps {
   t: ChatViewSlotProps['t']
 }
 
-/** Reasoning block as the Think variant summary row (figma 39:28304). */
+/** User-facing assistant prose/media; technical reasoning is owned by ToolActivityFlow. */
 export const AssistantMarkdown = memo(function AssistantMarkdown({
   blocks, streaming, interrupted, renderMessageImages, mentions, t,
 }: AssistantMarkdownProps) {
   // Stable per locale revision (t identity changes on switch): a fresh object
   // per render would rebuild MarkdownText's component table every chunk.
   const codeLabels = useMemo(() => ({ copyLabel: t('copy'), copiedLabel: t('copied') }), [t])
-  const last = blocks.length - 1
-  // Tool-call heads render as tool rows in the chat view's grouping pass, so
-  // a node that is only those heads (or empty) would paint an empty root
-  // between tool groups — skip the shell unless something visible remains.
-  const hasVisible = streaming
-    || interrupted === true
-    || blocks.some(block => block.kind !== 'tool-call')
+  const hasVisible = interrupted === true || blocks.some((block) => {
+    if (block.kind === 'tool-call' || block.kind === 'reasoning') return false
+    if (block.kind === 'text') return block.text.trim() !== ''
+    return true
+  })
   if (!hasVisible) return null
   const rendered: ReactNode[] = []
   for (let i = 0; i < blocks.length; i++) {
@@ -62,8 +55,8 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           />,
         )
         break
+      // Reasoning is represented once inside the compact Tools disclosure.
       case 'reasoning':
-        rendered.push(<ReasoningRow key={i} text={block.text} running={streaming && i === last} t={t} />)
         break
       case 'image': {
         // Consecutive image blocks share one gallery so several images tile
