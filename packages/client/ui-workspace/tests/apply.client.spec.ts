@@ -2,8 +2,11 @@ import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'
+import type { ILayout, WorkspaceOccupancy } from '@phoenix-ai/dsh-client-ui-layout/client'
 import { apply, inject } from '@phoenix-ai/dsh-client-ui-workspace/client'
-import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from '@phoenix-ai/dsh-client-ui-workspace/client'
+import type {
+  ICordisVisualWorkspace, WorkspaceBrowserInjected, WorkspacePickerInjected,
+} from '@phoenix-ai/dsh-client-ui-workspace/client'
 import { WorkspaceBrowser } from '../src/client/WorkspaceBrowser.tsx'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 
@@ -27,6 +30,16 @@ async function bench() {
   const renameSession = vi.fn(async (title: string) => ({ ok: true, value: { title, seq: 1 } }))
   const binding = vi.fn(() => ({ session: { rename: renameSession } }))
   const fork = vi.fn(async () => 'forked' as never)
+  const setWorkspaceOccupant = vi.fn()
+  const occupancy: WorkspaceOccupancy = Object.freeze({ subagent: false, cordis: false })
+  const layout: ILayout = {
+    toggleSidebar: vi.fn(),
+    openDetails: vi.fn(),
+    closeDetails: vi.fn(),
+    setWorkspaceOccupant,
+    getWorkspaceOccupancy: () => occupancy,
+    subscribeWorkspaceOccupancy: () => () => {},
+  }
   ctx.provide('workspaces', {
     create, startSession, rename, insertSessionBefore,
   } as never)
@@ -34,29 +47,37 @@ async function bench() {
   ctx.provide('connection', {
     hostDescription: { getSnapshot: () => undefined, subscribe: () => () => {} },
   } as never)
+  ctx.provide('layout', layout)
   const locale = new LocaleRuntime(ctx)
-  // These specs assert the shipped Chinese copy. There is no jsdom `window`
-  // in this lane, so browser-language detection never runs and the locale
-  // comes from FALLBACK_LOCALE (en): state the asserted locale explicitly.
   locale.setLocale('zh')
   ctx.provide('locale', locale)
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, startSession, rename,
     insertSessionBefore, open, clear, search, renameSession, binding, fork,
+    setWorkspaceOccupant,
   }
 }
 
-type HoleName = 'sidebar.workspaces' | 'conversation.hero.workspace' | 'conversation.empty.workspace'
+type HoleName =
+  | 'sidebar.workspaces'
+  | 'conversation.hero.workspace'
+  | 'conversation.empty.workspace'
+  | 'shell.overlay'
 
 /** Declare any subset of the holes with a single root registration ('root' is a single slot). */
 function declare(slots: SlotRegistry, ...names: HoleName[]): () => void {
-  const children = Object.fromEntries(names.map(name => [name, { kind: 'single', scope: 'root' }]))
+  const children = Object.fromEntries(names.map(name => [
+    name,
+    name === 'shell.overlay'
+      ? { kind: 'list', scope: 'root' }
+      : { kind: 'single', scope: 'root' },
+  ]))
   return slots.register({ name: 'root', children } as never, () => null)
 }
 
 describe('ui-workspace apply', () => {
   it('declares the services it drives', () => {
-    expect(inject).toEqual(['slots', 'sessions', 'workspaces', 'locale', 'connection'])
+    expect(inject).toEqual(['slots', 'sessions', 'workspaces', 'locale', 'connection', 'layout'])
   })
 
   it('registers browser and pickers for declarations arriving before or after apply', async () => {
@@ -64,8 +85,6 @@ describe('ui-workspace apply', () => {
     declare(before.slots, 'sidebar.workspaces')
     await before.ctx.plugin({ inject: [...inject], apply }).await()
     expect(before.slots.entries('sidebar.workspaces')[0]!.component).toBe(WorkspaceBrowser)
-    // Copy rides the standard locale seat: the entry declares the namespace
-    // and apply registered both dictionaries.
     expect(before.slots.entries('sidebar.workspaces')[0]!.locale).toBe('workspace')
     expect(before.locale.bind('workspace')('session.new')).toBe('新会话')
 
@@ -74,7 +93,25 @@ describe('ui-workspace apply', () => {
     declare(after.slots, 'conversation.hero.workspace', 'conversation.empty.workspace')
     await Promise.resolve()
     expect(after.slots.entries('conversation.hero.workspace')[0]!.component).toBe(WorkspacePicker)
-    // expect(after.slots.entries('conversation.empty.workspace')[0]!.component).toBe(WorkspacePicker)
+  })
+
+  it('provides the Cordis visual service and registers its overlay when the shell seat exists', async () => {
+    const b = await bench()
+    declare(b.slots, 'shell.overlay')
+    const fiber = b.ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+
+    const visual = b.ctx.get('visualWorkspace') as ICordisVisualWorkspace
+    expect(visual).toBeDefined()
+    expect(b.slots.entries('shell.overlay')).toHaveLength(1)
+
+    visual.show({ kind: 'image', src: 'https://example.test/preview.png', title: 'Preview' })
+    expect(b.setWorkspaceOccupant).toHaveBeenCalledWith('cordis', true)
+    visual.close()
+    expect(b.setWorkspaceOccupant).toHaveBeenLastCalledWith('cordis', false)
+
+    await fiber.dispose()
+    expect(b.slots.entries('shell.overlay')).toHaveLength(0)
   })
 
   it('routes browser actions and picker creation to the services', async () => {
@@ -83,7 +120,6 @@ describe('ui-workspace apply', () => {
     await b.ctx.plugin({ inject: [...inject], apply }).await()
 
     const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
-    // Both arms delegate to the runtime's shared New Session action.
     browser.startSession('ws' as never)
     expect(b.startSession).toHaveBeenCalledWith('ws')
     browser.startSession()
@@ -121,7 +157,6 @@ describe('ui-workspace apply', () => {
     const b = await bench()
     declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace')
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    // Registration declared the child holes (declaration = render authorization).
     expect(b.slots.spec('sidebar.workspaces.directoryFlow')).toMatchObject({ kind: 'single' })
     expect(b.slots.spec('conversation.hero.workspace.directoryFlow')).toMatchObject({ kind: 'single' })
 
@@ -130,7 +165,6 @@ describe('ui-workspace apply', () => {
     expect(browser.hooks.directoryFlow.getSnapshot()).toBe(false)
     expect(browser.hooks.hostDescription.getSnapshot()).toBeUndefined()
     expect(picker.hooks.directoryFlow.getSnapshot()).toBe(false)
-    // A flow occupant flips exactly its own surface, and the source notifies.
     const notified = vi.fn()
     const unsubscribe = browser.hooks.directoryFlow.subscribe(notified)
     const dispose = b.slots.register({ name: 'sidebar.workspaces.directoryFlow' } as never, () => null)
@@ -158,12 +192,12 @@ describe('ui-workspace apply', () => {
 
   it('unregisters every entry on teardown', async () => {
     const b = await bench()
-    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace')
+    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace', 'shell.overlay')
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     await fiber.dispose()
     expect(b.slots.entries('sidebar.workspaces')).toHaveLength(0)
     expect(b.slots.entries('conversation.hero.workspace')).toHaveLength(0)
-    // expect(b.slots.entries('conversation.empty.workspace')).toHaveLength(0)
+    expect(b.slots.entries('shell.overlay')).toHaveLength(0)
   })
 })
