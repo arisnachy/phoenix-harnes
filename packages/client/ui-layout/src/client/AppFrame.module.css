@@ -36,6 +36,21 @@
   overflow: hidden;
 }
 
+/* Keep the teams dock in the center flow so chat receives its own space. */
+.centerCol:has([data-kira-teams]) {
+  flex-direction: row;
+}
+
+.centerCol:has([data-kira-teams]) > [data-shell-overlay] {
+  display: contents;
+}
+
+@media (max-width: 760px) {
+  .centerCol:has([data-kira-teams]) {
+    flex-direction: column;
+  }
+}
+
 .detailsCol {
   min-width: 0;
   overflow: hidden;
