@@ -9,7 +9,6 @@ import { createLayoutStore } from '@phoenix-ai/dsh-client-ui-layout/src/client/s
 import type { SessionListState } from '@phoenix-ai/dsh-client-runtime/client'
 
 class ResizeObserverStub {
-  constructor(_cb: ResizeObserverCallback) {}
   observe(): void {}
   unobserve(): void {}
   disconnect(): void {}
@@ -25,7 +24,7 @@ function mountWith(owner: 'subagent' | 'cordis') {
   const instance = createLayoutStore().create()
   instance.actions.setWorkspaceOccupant(owner, true)
   const useSessions = ((selector: (state: SessionListState) => unknown) => selector({
-    ids: [], byId: {}, current: undefined, phase: 'ready',
+    ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
   } as SessionListState)) as never
   const renderSlot = ((key: string, _owner: object) => (
     key === 'shell.overlay'

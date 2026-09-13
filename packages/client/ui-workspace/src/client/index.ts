@@ -16,7 +16,6 @@ import { WorkspacePicker } from './WorkspacePicker.tsx'
 import {
   CordisVisualWorkspace,
   CordisVisualWorkspaceController,
-  type CordisVisualContent,
   type ICordisVisualWorkspace,
 } from './CordisVisualWorkspace.tsx'
 export { CapabilitySurfacePreview, registerCapabilitySurfacePreview } from './CapabilitySurfacePreview.tsx'
