@@ -26,6 +26,7 @@
       "inject": [
         "@phoenix-ai/dsh-client-locale",
         "@phoenix-ai/dsh-client-runtime",
+        "@phoenix-ai/dsh-client-ui-layout",
         "@phoenix-ai/dsh-client-ui-primitives"
       ],
       "platform": "web"
