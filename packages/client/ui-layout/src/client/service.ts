@@ -44,7 +44,10 @@ export class LayoutController implements ILayout {
   #occupancy: WorkspaceOccupancy = Object.freeze({ subagent: false, cordis: false })
   #occupancyListeners = new Set<() => void>()
 
-  /** Adopt the root entry's bound store actions. */
+  /**
+   * Adopt the root entry's bound store actions.
+   * @param actions - Bound actions for the root layout store instance.
+   */
   attachPanels(actions: PanelActions): void {
     this.#panels = actions
   }
