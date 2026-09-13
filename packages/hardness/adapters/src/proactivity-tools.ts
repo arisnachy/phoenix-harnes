@@ -1,4 +1,10 @@
-import { defineTool, ToolArgsError, type ToolDefinition, type ToolRunContext } from '@phoenix-ai/dsh-tools'
+import {
+  defineTool,
+  ToolArgsError,
+  type JsonValue,
+  type ToolDefinition,
+  type ToolRunContext,
+} from '@phoenix-ai/dsh-tools'
 import type { ProactivityEngine, ProactivityRecurrence, ProactivityTask } from './proactivity-engine.ts'
 
 function minutesToMs(value: number | undefined, field: string): number | undefined {
@@ -15,19 +21,38 @@ function positiveInteger(value: number | undefined, field: string): number | und
   return value
 }
 
-function taskView(task: ProactivityTask) {
+function recurrenceView(recurrence: ProactivityRecurrence): JsonValue {
+  if (recurrence.kind === 'once') return { kind: 'once' }
+  if (recurrence.kind === 'interval') return { kind: 'interval', every_ms: recurrence.everyMs }
+  return {
+    kind: 'yearly',
+    every_years: recurrence.everyYears,
+    ...(recurrence.timezone === undefined ? {} : { timezone: recurrence.timezone }),
+  }
+}
+
+function taskView(task: ProactivityTask): Record<string, JsonValue> {
   return {
     id: task.id,
     title: task.title,
     status: task.status,
     next_run_at: task.nextRunAt,
-    recurrence: task.recurrence,
+    recurrence: recurrenceView(task.recurrence),
     catch_up: task.catchUp,
     visibility: task.visibility,
     delivery: task.delivery,
     sender_identity: task.senderIdentity,
     created_by: task.createdBy,
-    history: task.history.slice(-5),
+    history: task.history.slice(-5).map(row => ({
+      phase: row.phase,
+      scheduled_for: row.scheduledFor,
+      idempotency_key: row.idempotencyKey,
+      started_at: row.startedAt,
+      finished_at: row.finishedAt,
+      status: row.status,
+      ...(row.summary === undefined ? {} : { summary: row.summary }),
+      ...(row.error === undefined ? {} : { error: row.error }),
+    })),
   }
 }
 
@@ -108,8 +133,8 @@ export function createProactivityCreateTool(engine: ProactivityEngine): ToolDefi
       return taskView(task)
     },
     presentCall(args) {
-      if (args.visibility === 'surprise') return { card: 'generic', title: 'Phoenix private preparation', kind: 'create' }
-      return { card: 'generic', title: `Schedule: ${args.title}`, kind: 'create', rawInput: args.runAt }
+      if (args.visibility === 'surprise') return { card: 'generic', title: 'Phoenix private preparation', kind: 'execute' }
+      return { card: 'generic', title: `Schedule: ${args.title}`, kind: 'execute', rawInput: args.runAt }
     },
   })
 }
