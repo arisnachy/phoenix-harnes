@@ -81,7 +81,11 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
           d.workspaceRestoreDetails = d.details
           d.sidebar = 0
           d.narrowExpanded = false
-          if (d.details === 0) d.details = DETAILS_DEFAULT
+          // The floating workspace itself is contract-width (DETAILS_DEFAULT),
+          // so reserve that same width even when the user previously resized
+          // or closed the ordinary details panel. The exact prior width is
+          // restored when the final workspace owner releases the dock.
+          d.details = DETAILS_DEFAULT
         }
 
         if (occupant === 'subagent') d.workspaceSubagent = active
