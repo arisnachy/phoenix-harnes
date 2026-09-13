@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-09-13-cordis-visual-workspace.zh.md)
+
 ## Problem
 
 Phoenix already has an in-flow KIRA/subagent card beside the conversation, but Cordis-driven visual material had no coordinated presentation surface. Showing an image, video, page, or supporting text either replaced conversation context, opened an unrelated browser surface, or risked covering the chat. The missing coordination was especially visible when the KIRA/subagent card and Cordis content were active at the same time: both needed a predictable right-side area, Cordis needed to open below KIRA, and closing Cordis had to restore the user's prior shell state exactly.
