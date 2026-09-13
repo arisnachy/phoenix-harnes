@@ -15,12 +15,6 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../../core/agent"
-    },
-    {
-      "path": "../../llm/llm"
-    },
-    {
       "path": "../../core/session"
     },
     {
