@@ -7,6 +7,7 @@ import {
   createCredentialStateStore,
   createMcpOAuthProvider,
   hasUsableMcpOAuthTokens,
+  isExpectedMcpOAuthClose,
   type McpOAuthStateStore,
 } from '@phoenix-ai/dsh-mcp-client/src/oauth.ts'
 import { credentialKey, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
@@ -125,5 +126,11 @@ describe('createMcpOAuthProvider', () => {
     expect(hasUsableMcpOAuthTokens({ clientInformation: { client_id: 'id' } })).toBe(false)
     expect(hasUsableMcpOAuthTokens({ tokens: { access_token: 'access', token_type: 'Bearer' } })).toBe(true)
     expect(hasUsableMcpOAuthTokens({ tokens: { access_token: '', refresh_token: 'refresh', token_type: 'Bearer' } })).toBe(true)
+  })
+
+  it('classifies callback closure during Host shutdown as an expected cancellation', () => {
+    expect(isExpectedMcpOAuthClose(new Error('MCP OAuth callback closed'))).toBe(true)
+    expect(isExpectedMcpOAuthClose(new Error('MCP OAuth callback server closed'))).toBe(true)
+    expect(isExpectedMcpOAuthClose(new Error('MCP OAuth state did not match'))).toBe(false)
   })
 })
