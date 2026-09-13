@@ -2,19 +2,19 @@
 /**
  * Windows process supervisor for the PHOENIX Web Host and stable updater.
  *
- * Preparation and activation have separate owners:
- * - the watcher prepares and validates candidates while the Host stays alive;
- * - an explicit restart request makes this supervisor stop the watcher,
- *   activate the prepared candidate synchronously, then launch a fresh Host.
- *
- * The supervisor therefore remains alive across an update restart. PowerShell
- * must not regain control until activation either completed or failed visibly.
+ * The supervisor is deliberately outside the Host process. A model, plugin,
+ * update, or crash may terminate the Host, but it cannot terminate the owner
+ * responsible for validating configuration, relaunching PHOENIX, and rolling
+ * back a configuration that prevents a healthy boot.
  */
 
+import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, unlinkSync } from 'node:fs'
+import {
+  existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 
@@ -24,7 +24,19 @@ const updater = join(root, 'scripts', 'phoenix-auto-update.mjs')
 const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
 const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
+const HOST_RESTART_REQUEST_FILE = 'phoenix-host-restart-request.json'
 const WATCHER_RESTART_DELAY_MS = 1000
+const HOST_RESTART_DELAY_MS = 1000
+const CONTROL_POLL_MS = 500
+const HOST_STABLE_MS = Math.max(5_000, Number.parseInt(process.env.PHOENIX_HOST_STABLE_MS ?? '15000', 10) || 15_000)
+const CONFIG_SNAPSHOT_SCHEMA = 1
+const CONFIG_SNAPSHOT_FILE = 'phoenix-config-last-known-good.json'
+const CONFIG_RECOVERY_REPORT_FILE = 'phoenix-config-recovery-report.json'
+const CRITICAL_CONFIG_PATHS = [
+  'profiles/web/package.json',
+  'profiles/web/cordis.patch.yml',
+  'codex/enabled.patch.yml',
+]
 
 function gitValue(cwd, args) {
   const result = spawnSync('git', args, {
@@ -128,9 +140,13 @@ function recoverStaleStagingIndexLock() {
   }
 }
 
-function restartRequestPath() {
+function gitControlPath(filename) {
   const gitDir = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-dir']))
-  return gitDir === undefined ? undefined : join(gitDir, RESTART_REQUEST_FILE)
+  return gitDir === undefined ? undefined : join(gitDir, filename)
+}
+
+function restartRequestPath() {
+  return gitControlPath(RESTART_REQUEST_FILE)
 }
 
 function restartRequestTarget() {
@@ -159,6 +175,180 @@ function clearRestartRequest() {
       console.error(`[PHOENIX UPDATE] warning: could not clear restart request: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
+}
+
+function hostRestartRequestPath() {
+  return gitControlPath(HOST_RESTART_REQUEST_FILE)
+}
+
+function hostRestartRequested() {
+  const path = hostRestartRequestPath()
+  if (path === undefined || !existsSync(path)) return false
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    return value?.schema === 1 && value.kind === 'host-restart'
+  } catch {
+    return false
+  }
+}
+
+function clearHostRestartRequest() {
+  const path = hostRestartRequestPath()
+  if (path === undefined) return
+  try {
+    unlinkSync(path)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.error(`[PHOENIX RECOVERY] warning: could not clear host restart request: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+}
+
+function dshHome() {
+  const configured = process.env.DSH_HOME?.trim()
+  return configured !== undefined && configured.length > 0
+    ? resolve(configured)
+    : join(homedir(), '.dsh')
+}
+
+function recoveryDirectory() {
+  return join(dshHome(), 'recovery')
+}
+
+function configSnapshotPath() {
+  return join(recoveryDirectory(), CONFIG_SNAPSHOT_FILE)
+}
+
+function recoveryReportPath() {
+  return join(recoveryDirectory(), CONFIG_RECOVERY_REPORT_FILE)
+}
+
+function captureBootCriticalConfiguration() {
+  const home = dshHome()
+  return {
+    schema: CONFIG_SNAPSHOT_SCHEMA,
+    files: CRITICAL_CONFIG_PATHS.map((relativePath) => {
+      const path = join(home, relativePath)
+      return existsSync(path)
+        ? { path: relativePath, exists: true, content: readFileSync(path, 'utf8') }
+        : { path: relativePath, exists: false, content: '' }
+    }),
+  }
+}
+
+function configurationFingerprint(snapshot) {
+  return createHash('sha256').update(JSON.stringify(snapshot.files)).digest('hex')
+}
+
+function readLastKnownGoodConfiguration() {
+  const path = configSnapshotPath()
+  if (!existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== CONFIG_SNAPSHOT_SCHEMA || !Array.isArray(value.files) || typeof value.fingerprint !== 'string') return undefined
+    const expected = new Set(CRITICAL_CONFIG_PATHS)
+    if (value.files.some(entry => typeof entry?.path !== 'string' || !expected.has(entry.path)
+      || typeof entry.exists !== 'boolean' || typeof entry.content !== 'string')) return undefined
+    return value
+  } catch {
+    return undefined
+  }
+}
+
+function persistLastKnownGoodConfiguration(snapshot = captureBootCriticalConfiguration()) {
+  const payload = {
+    ...snapshot,
+    fingerprint: configurationFingerprint(snapshot),
+    healthyAt: new Date().toISOString(),
+  }
+  mkdirSync(recoveryDirectory(), { recursive: true })
+  writeFileSync(configSnapshotPath(), JSON.stringify(payload, undefined, 2) + '\n', 'utf8')
+  return payload.fingerprint
+}
+
+function restoreLastKnownGoodConfiguration() {
+  const snapshot = readLastKnownGoodConfiguration()
+  if (snapshot === undefined) return false
+  const home = dshHome()
+  const entries = new Map(snapshot.files.map(entry => [entry.path, entry]))
+  for (const relativePath of CRITICAL_CONFIG_PATHS) {
+    const entry = entries.get(relativePath)
+    if (entry === undefined) continue
+    const path = join(home, relativePath)
+    if (entry.exists) {
+      mkdirSync(dirname(path), { recursive: true })
+      writeFileSync(path, entry.content, 'utf8')
+    } else {
+      rmSync(path, { force: true })
+    }
+  }
+  return true
+}
+
+function configurationChangedSinceLastKnownGood() {
+  const lastGood = readLastKnownGoodConfiguration()
+  if (lastGood === undefined) return false
+  return configurationFingerprint(captureBootCriticalConfiguration()) !== lastGood.fingerprint
+}
+
+function writeConfigurationRecoveryReport(reason, detail = '') {
+  try {
+    mkdirSync(recoveryDirectory(), { recursive: true })
+    const current = captureBootCriticalConfiguration()
+    const lastGood = readLastKnownGoodConfiguration()
+    writeFileSync(recoveryReportPath(), JSON.stringify({
+      schema: 1,
+      at: new Date().toISOString(),
+      reason,
+      detail: String(detail).slice(0, 4_000),
+      currentFingerprint: configurationFingerprint(current),
+      lastKnownGoodFingerprint: lastGood?.fingerprint ?? null,
+      files: CRITICAL_CONFIG_PATHS,
+    }, undefined, 2) + '\n', 'utf8')
+  } catch (error) {
+    console.error(`[PHOENIX RECOVERY] warning: could not persist recovery report: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+function preflightBootConfiguration() {
+  const result = spawnSync(process.execPath, [
+    '--import', 'tsx/esm',
+    'apps/cli/src/bin.ts',
+    'web', '--dump-config',
+  ], {
+    cwd: root,
+    env: {
+      ...hydratePhoenixEnvironment(process.env),
+      PHOENIX_UPDATE_SUPERVISED: '1',
+      PHOENIX_CONFIG_PREFLIGHT: '1',
+      PHOENIX_AUTO_UPDATE: '0',
+    },
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 60_000,
+  })
+  if (result.error !== undefined) return { ok: false, detail: result.error.message }
+  const detail = [result.stderr, result.stdout]
+    .filter(value => typeof value === 'string' && value.trim().length > 0)
+    .join('\n')
+    .trim()
+  return { ok: result.status === 0, detail }
+}
+
+function recoverConfigurationBeforeFirstBoot() {
+  const preflight = preflightBootConfiguration()
+  if (preflight.ok) {
+    if (readLastKnownGoodConfiguration() === undefined) persistLastKnownGoodConfiguration()
+    return
+  }
+  if (!restoreLastKnownGoodConfiguration()) {
+    writeConfigurationRecoveryReport('initial-preflight-failed-no-last-known-good', preflight.detail)
+    console.error('[PHOENIX RECOVERY] configuration preflight failed and no last-known-good snapshot exists yet; attempting normal boot so diagnostics remain visible.')
+    return
+  }
+  writeConfigurationRecoveryReport('initial-preflight-failed-restored-last-known-good', preflight.detail)
+  console.error('[PHOENIX RECOVERY] startup configuration was invalid; restored last-known-good configuration before launching PHOENIX.')
 }
 
 const sleep = ms => new Promise(resolvePromise => setTimeout(resolvePromise, ms))
@@ -316,49 +506,151 @@ function activatePrepared() {
   return result.status ?? 1
 }
 
+async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) {
+  while (true) {
+    const event = await Promise.race([
+      hostExitPromise.then(exit => ({ kind: 'exit', exit })),
+      sleep(CONTROL_POLL_MS).then(() => ({ kind: 'poll' })),
+    ])
+    if (event.kind === 'exit') return { ...event, lastObservedFingerprint }
+    if (shutdownRequested) continue
+
+    const currentFingerprint = configurationFingerprint(captureBootCriticalConfiguration())
+    if (currentFingerprint !== lastObservedFingerprint) {
+      const preflight = preflightBootConfiguration()
+      if (!preflight.ok) {
+        writeConfigurationRecoveryReport('live-configuration-preflight-failed', preflight.detail)
+        console.error('[PHOENIX RECOVERY] configuration preflight failed; keeping the current PHOENIX host alive while the model repairs the configuration.')
+        if (preflight.detail.length > 0) console.error(`[PHOENIX RECOVERY] ${preflight.detail}`)
+      } else {
+        console.error('[PHOENIX RECOVERY] configuration change detected and preflight passed; current Host remains available until a supervised restart is requested.')
+      }
+      lastObservedFingerprint = currentFingerprint
+    }
+
+    if (hostRestartRequested()) {
+      const preflight = preflightBootConfiguration()
+      if (!preflight.ok) {
+        clearHostRestartRequest()
+        writeConfigurationRecoveryReport('restart-preflight-failed', preflight.detail)
+        console.error('[PHOENIX RECOVERY] configuration preflight failed; keeping the current PHOENIX host alive and refusing the restart.')
+        if (preflight.detail.length > 0) console.error(`[PHOENIX RECOVERY] ${preflight.detail}`)
+        continue
+      }
+      clearHostRestartRequest()
+      return { kind: 'safe-restart', lastObservedFingerprint }
+    }
+  }
+}
+
+let shutdownRequested = false
+let activeHost
+function requestShutdown() {
+  shutdownRequested = true
+  if (activeHost !== undefined && activeHost.exitCode === null) activeHost.kill()
+}
+process.once('SIGINT', requestShutdown)
+process.once('SIGTERM', requestShutdown)
+
 recoverStaleStagingIndexLock()
+recoverConfigurationBeforeFirstBoot()
 
 let finalCode = 0
 while (true) {
+  const launchConfiguration = captureBootCriticalConfiguration()
+  let lastObservedFingerprint = configurationFingerprint(launchConfiguration)
+  const startedAt = Date.now()
   const host = startHost()
+  activeHost = host
   host.once('error', (error) => {
     console.error(`[PHOENIX] host launch failed: ${error.message}`)
   })
-  const watcherSupervisor = superviseWatcher(host)
-
-  const hostExit = await new Promise(resolveExit => {
+  const hostExitPromise = new Promise(resolveExit => {
     host.once('exit', (code, signal) => resolveExit({ code, signal }))
   })
-  const requested = restartRequested()
+  const watcherSupervisor = superviseWatcher(host)
+  let watcherStopped = false
+  let healthyCheckpointWritten = false
+  const stableTimer = setTimeout(() => {
+    if (host.exitCode !== null || shutdownRequested) return
+    try {
+      persistLastKnownGoodConfiguration(launchConfiguration)
+      healthyCheckpointWritten = true
+      console.error('[PHOENIX RECOVERY] healthy Host checkpoint recorded as last-known-good configuration.')
+    } catch (error) {
+      console.error(`[PHOENIX RECOVERY] warning: could not record healthy configuration checkpoint: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }, HOST_STABLE_MS)
+  stableTimer.unref?.()
 
-  await watcherSupervisor.stop()
+  const hostEvent = await waitForHostEvent(host, hostExitPromise, lastObservedFingerprint)
+  lastObservedFingerprint = hostEvent.lastObservedFingerprint
+  let plannedHostRestart = false
+  let hostExit
 
-  if (!requested) {
-    finalCode = hostExit.code ?? (hostExit.signal === null ? 1 : 0)
+  if (hostEvent.kind === 'safe-restart') {
+    plannedHostRestart = true
+    await watcherSupervisor.stop()
+    watcherStopped = true
+    console.error('[PHOENIX RECOVERY] configuration preflight passed; restarting under the external supervisor.')
+    if (host.exitCode === null) host.kill()
+    hostExit = await hostExitPromise
+  } else {
+    hostExit = hostEvent.exit
+  }
+
+  clearTimeout(stableTimer)
+  if (!watcherStopped) await watcherSupervisor.stop()
+  activeHost = undefined
+
+  if (shutdownRequested) {
+    finalCode = hostExit.code ?? (hostExit.signal === null ? 0 : 0)
     break
   }
 
-  const liveStatus = gitStatus(root)
-  if (!liveStatus.ok || liveStatus.entries.length > 0) {
-    clearRestartRequest()
-    reportDirtyActivationBlock(liveStatus)
-    continue
-  }
-
-  console.error('[PHOENIX UPDATE] restart request received; activating prepared update under supervisor control...')
-  const activationCode = activatePrepared()
-  if (activationCode !== 0) {
-    clearRestartRequest()
-    if (activationCode === 12) {
-      console.error('[PHOENIX UPDATE] rollback failed critically; refusing automatic relaunch from an unknown checkout state.')
-      finalCode = activationCode
-      break
+  const requested = restartRequested()
+  if (requested) {
+    const liveStatus = gitStatus(root)
+    if (!liveStatus.ok || liveStatus.entries.length > 0) {
+      clearRestartRequest()
+      reportDirtyActivationBlock(liveStatus)
+      continue
     }
-    console.error(`[PHOENIX UPDATE] activation failed safely with exit code ${String(activationCode)}; relaunching the last-known-good PHOENIX. The prepared update remains available to retry.`)
+
+    console.error('[PHOENIX UPDATE] restart request received; activating prepared update under supervisor control...')
+    const activationCode = activatePrepared()
+    if (activationCode !== 0) {
+      clearRestartRequest()
+      if (activationCode === 12) {
+        console.error('[PHOENIX UPDATE] rollback failed critically; refusing automatic relaunch from an unknown checkout state.')
+        finalCode = activationCode
+        break
+      }
+      console.error(`[PHOENIX UPDATE] activation failed safely with exit code ${String(activationCode)}; relaunching the last-known-good PHOENIX. The prepared update remains available to retry.`)
+      continue
+    }
+
+    console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
     continue
   }
 
-  console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
+  if (plannedHostRestart) continue
+
+  const earlyCrash = !healthyCheckpointWritten && (Date.now() - startedAt) < HOST_STABLE_MS
+  if (earlyCrash && configurationChangedSinceLastKnownGood()) {
+    console.error('[PHOENIX RECOVERY] configuration changed since the last healthy boot and the new Host exited before its health checkpoint.')
+    if (restoreLastKnownGoodConfiguration()) {
+      writeConfigurationRecoveryReport('early-boot-crash-restored-last-known-good', `exit=${String(hostExit.code)} signal=${String(hostExit.signal)}`)
+      console.error('[PHOENIX RECOVERY] restored last-known-good configuration; relaunching PHOENIX under the same supervisor.')
+    } else {
+      writeConfigurationRecoveryReport('early-boot-crash-no-last-known-good', `exit=${String(hostExit.code)} signal=${String(hostExit.signal)}`)
+    }
+  }
+
+  const reason = hostExit.code === null ? `signal ${hostExit.signal ?? 'unknown'}` : `exit code ${String(hostExit.code)}`
+  console.error(`[PHOENIX] host exited unexpectedly (${reason}); supervisor remains alive and will relaunch it in ${String(HOST_RESTART_DELAY_MS)}ms.`)
+  await sleep(HOST_RESTART_DELAY_MS)
+  continue
 }
 
 process.exitCode = finalCode
