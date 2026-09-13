@@ -116,7 +116,8 @@
     "@phoenix-ai/dsh-workspace": "workspace:^",
     "@phoenix-ai/schemastery": "workspace:^",
     "commander": "^15.0.0",
-    "open": "^11.0.0"
+    "open": "^11.0.0",
+    "@phoenix-ai/dsh-subagent-codex": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/cordis-plugin-loader": "workspace:^",

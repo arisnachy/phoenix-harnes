@@ -312,3 +312,10 @@
   config:
     judgeProvider: spawn
     modelTools: true
+
+# Codex-backed image generation is a model-facing capability of the full Web agent.
+- id: tool-image-generation-codex
+  name: '@phoenix-ai/dsh-tool-image-generation-codex'
+  config:
+    provider: codex
+    toolName: image_generation

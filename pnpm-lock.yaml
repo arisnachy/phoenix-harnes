@@ -267,6 +267,9 @@ importers:
       '@phoenix-ai/dsh-tool-goal':
         specifier: workspace:^
         version: link:../../packages/goal/tool-goal
+      '@phoenix-ai/dsh-tool-image-generation-codex':
+        specifier: workspace:^
+        version: link:../../packages/subagent/tool-image-generation-codex
       '@phoenix-ai/dsh-tool-jobs':
         specifier: workspace:^
         version: link:../../packages/jobs/tool-jobs
@@ -1542,6 +1545,9 @@ importers:
       '@phoenix-ai/dsh-storage-json':
         specifier: workspace:^
         version: link:../../storage/storage-json
+      '@phoenix-ai/dsh-subagent-codex':
+        specifier: workspace:^
+        version: link:../../subagent/subagent-codex
       '@phoenix-ai/dsh-subprocess':
         specifier: workspace:^
         version: link:../../subprocess/subprocess
@@ -8119,6 +8125,43 @@ importers:
       '@phoenix-ai/dsh-tool-subagent':
         specifier: workspace:^
         version: link:../tool-subagent
+
+  packages/subagent/tool-image-generation-codex:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/cordis-plugin-loader':
+        specifier: workspace:^
+        version: link:../../../vendor/loader
+      '@phoenix-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@phoenix-ai/dsh-attachment':
+        specifier: workspace:^
+        version: link:../../attachment/attachment
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@phoenix-ai/dsh-loader-smoke':
+        specifier: workspace:^
+        version: link:../../test-support/loader-smoke
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@phoenix-ai/dsh-subagent':
+        specifier: workspace:^
+        version: link:../subagent
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/subagent/tool-subagent:
     dependencies:

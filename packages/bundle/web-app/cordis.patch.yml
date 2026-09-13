@@ -456,3 +456,9 @@
       name: '@phoenix-ai/dsh-agent-presets'
       config:
         default: standard
+
+# Web-only official Codex provider. The standard agent consumes it through
+# image_generation; headless/base profiles do not pay the Codex payload cost.
+- insert:
+    - id: subagent-codex
+      name: '@phoenix-ai/dsh-subagent-codex'
