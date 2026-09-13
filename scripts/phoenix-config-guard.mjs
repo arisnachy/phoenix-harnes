@@ -25,7 +25,6 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const SNAPSHOT_SCHEMA = 1
-const RESTART_SCHEMA = 1
 const CONFIG_FILENAMES = new Set(['package.json', 'cordis.patch.yml', 'pnpm-workspace.yaml'])
 
 export function resolvePhoenixHome(env = process.env) {
