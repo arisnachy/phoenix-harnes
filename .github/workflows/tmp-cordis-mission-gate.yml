@@ -1,5 +1,6 @@
 name: Temporary Cordis mission gate
 
+# rerun after shell.overlay id and TS-spec fixes
 on:
   push:
     branches:
