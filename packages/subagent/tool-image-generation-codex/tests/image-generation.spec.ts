@@ -48,7 +48,7 @@ class TestAttachments extends AttachmentStore {
     maxMessageImageBytes: 16 * 1024 * 1024,
     maxImagePixels: 16_000_000,
     maxImageDimension: 8_192,
-    mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+    mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const,
   })
 
   async validateImage(_input: SaveImageAttachment): Promise<void> {}

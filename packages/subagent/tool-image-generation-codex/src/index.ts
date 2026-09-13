@@ -253,7 +253,7 @@ const attachmentOutputSchema = {
       },
     },
   },
-}
+} as const
 
 /** Register the tool when its configured Codex provider is actually available. */
 export function apply(ctx: Context, config: Config): void {
