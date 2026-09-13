@@ -60,6 +60,15 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(cliSource).toContain('process.exit(result.status ?? 1)')
   })
 
+  it('exposes a safe-restart launcher before profile parsing so a broken profile cannot hide recovery', () => {
+    const safeRestart = cliSource.indexOf("if (rawArgs[0] === 'safe-restart')")
+    const parseArgs = cliSource.indexOf('const invocation = parseDshArgs(rawArgs, readVersion())')
+    expect(safeRestart).toBeGreaterThanOrEqual(0)
+    expect(parseArgs).toBeGreaterThan(safeRestart)
+    expect(cliSource).toContain('phoenix-safe-restart.mjs')
+    expect(cliSource).toContain('[PHOENIX] safe restart launcher failed')
+  })
+
   it('keeps the supervisor alive and relaunches the Host after an unplanned Host exit', () => {
     expect(source).toContain('HOST_RESTART_DELAY_MS')
     expect(source).toContain('unexpectedly; relaunching under supervisor control')
