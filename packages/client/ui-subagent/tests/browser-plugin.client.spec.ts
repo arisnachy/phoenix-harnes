@@ -1,7 +1,7 @@
 /** ui-subagent browser half: catalog actions and read-only composer routing. */
 import { Context } from '@phoenix-ai/cordis'
 import { stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   SlotRegistry, type ConversationSnapshot, type SessionId, type SessionListState,
   type SessionSummary, type SubagentAddress,
@@ -63,18 +63,20 @@ async function provideSlotFaces(ctx: Context): Promise<void> {
   } as never, () => null)
 }
 
-/** Boot the plugin over fake sessions and slot faces. */
+/** Boot the plugin over fake sessions, layout, and slot faces. */
 async function fullBench(sessions: SessionSummary[]) {
   const ctx = new Context()
   const face = sessionsWith(sessions)
+  const layout = { setWorkspaceOccupant: vi.fn() }
   ctx.provide('sessions', face)
+  ctx.provide('layout', layout as never)
   ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
   ctx.provide('remote', { $on: () => () => {} } as never)
   ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   await provideSlotFaces(ctx)
   await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
   await ctx.plugin({ inject: [...inject], apply }).await()
-  return { face, ctx }
+  return { face, ctx, layout }
 }
 
 const FAMILY: SessionSummary[] = [
@@ -89,11 +91,11 @@ const FAMILY: SessionSummary[] = [
 
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'slots', 'locale'])
+    expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout'])
   })
 
-  it('registers catalog actions and selects read-only subagent composers from session facts', async () => {
-    const { ctx, face } = await fullBench(FAMILY)
+  it('registers catalog actions, leases the shared workspace, and selects read-only subagent composers from session facts', async () => {
+    const { ctx, face, layout } = await fullBench(FAMILY)
     const catalogEntry = ctx.slots.entries('conversation.session.header.lineage')[0]!
     const actions = (catalogEntry.inject as unknown as (id: SessionId) => SubagentCatalogInjected)(sid('parent'))
     const address: SubagentAddress = {
@@ -104,10 +106,16 @@ describe('apply', () => {
     actions.openChild(address)
     actions.refresh(sid('parent'))
     actions.setCatalogOpen(sid('parent'), true)
+    actions.setCatalogOpen(sid('parent'), false)
     expect(face.actionCalls).toEqual([
       { method: 'openSubagent', args: [address] },
       { method: 'refreshSubagents', args: [sid('parent')] },
       { method: 'setSubagentCatalogOpen', args: [sid('parent'), true] },
+      { method: 'setSubagentCatalogOpen', args: [sid('parent'), false] },
+    ])
+    expect(layout.setWorkspaceOccupant.mock.calls).toEqual([
+      ['subagent', true],
+      ['subagent', false],
     ])
 
     const composerEntry = ctx.slots.entries('conversation.composer')
