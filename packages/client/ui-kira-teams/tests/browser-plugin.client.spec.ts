@@ -7,7 +7,10 @@ import {
   type SessionSummary, type SubagentAddress,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { apply as applyLocale, inject as localeInject } from '@phoenix-ai/dsh-client-locale/client'
-import { activityOf, agentNameOf, KiraTeamsDock, lineageMembers, statusKeyOf } from '../src/client/KiraTeamsDock.tsx'
+import {
+  activityKeyOf, activityOf, agentNameOf, agentRoleKeyOf,
+  KiraTeamsDock, lineageMembers, statusKeyOf,
+} from '../src/client/KiraTeamsDock.tsx'
 import { agentAvatarKind } from '../src/client/ModelActivityAvatar.tsx'
 import { apply, inject } from '../src/client/index.ts'
 
@@ -123,6 +126,43 @@ describe('lineageMembers', () => {
     expect(statusKeyOf(preparing)).toBe('status.preparing')
     expect(statusKeyOf(waiting)).toBe('status.waiting')
     expect(statusKeyOf(done)).toBe('status.done')
+  })
+
+  it('derives a visible team role from the durable subagent label', () => {
+    const judge = summary({
+      id: sid('judge'), parentId: sid('root'), origin: 'subagent', running: true,
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'Juez de calidad', seq: 1 },
+        subagentActivity: { phase: 'verifying' },
+      },
+    })
+    const researcher = summary({
+      id: sid('research'), parentId: sid('root'), origin: 'subagent', running: true,
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'Investigador de referencias', seq: 2 },
+        subagentActivity: { phase: 'running-tools' },
+      },
+    })
+    const generic = summary({ id: sid('generic'), parentId: sid('root'), origin: 'subagent', running: true })
+    expect(agentRoleKeyOf(judge)).toBe('role.judge')
+    expect(agentRoleKeyOf(researcher)).toBe('role.researcher')
+    expect(agentRoleKeyOf(generic)).toBe('role.agent')
+  })
+
+  it('exposes the current action independently from the role', () => {
+    const verifying = summary({
+      id: sid('verifying-action'), parentId: sid('root'), origin: 'subagent', running: true,
+      projectionValues: { subagentActivity: { phase: 'verifying' } },
+    })
+    const waiting = summary({
+      id: sid('waiting-action'), parentId: sid('root'), origin: 'subagent', running: false,
+      pendingInteraction: 'question',
+    })
+    const done = summary({ id: sid('done-action'), parentId: sid('root'), origin: 'subagent', running: false })
+    expect(activityKeyOf(FAMILY.find(item => item.id === sid('c1'))!)).toBe('activity.tools')
+    expect(activityKeyOf(verifying)).toBe('activity.verifying')
+    expect(activityKeyOf(waiting)).toBe('activity.waiting')
+    expect(activityKeyOf(done)).toBe('activity.done')
   })
 
   it('assigns the recovered illustrated avatar roster by agent id', () => {

@@ -47,12 +47,7 @@ function initialCollapsed(): boolean {
   }
 }
 
-/**
- * Resolve the current lineage's ordinary root and collect every subagent
- * descendant beneath it with BFS depths. Ordinary forks terminate propagation
- * through the `origin === 'subagent'` chain check, matching the header
- * catalog's lineage semantics.
- */
+/** Read the durable provider-neutral activity projection for one member. */
 export function activityOf(summary: SessionSummary): SubagentActivityProjection | undefined {
   return summary.projectionValues?.subagentActivity
 }
@@ -69,7 +64,7 @@ export function agentNameOf(summary: SessionSummary): string {
   return AGENT_NAMES[stableAgentIndex(String(summary.id), AGENT_NAMES.length)] ?? 'Vigía'
 }
 
-/** Pick the localized status that matches the live activity projection. */
+/** Pick the localized legacy status that matches the live activity projection. */
 export function statusKeyOf(summary: SessionSummary): KiraTeamsKey {
   if (summary.pendingInteraction !== undefined) return 'status.waiting'
   if (!summary.running) return 'status.done'
@@ -80,6 +75,39 @@ export function statusKeyOf(summary: SessionSummary): KiraTeamsKey {
   }
 }
 
+/**
+ * Derive a compact human role from the durable subagent label. The display
+ * deliberately stays provider-neutral: labels describe the job, never the
+ * underlying model or transport.
+ */
+export function agentRoleKeyOf(summary: SessionSummary): KiraTeamsKey {
+  const label = summary.projectionValues?.subagent?.label?.trim().toLocaleLowerCase() ?? ''
+  if (
+    /\b(juez|judge|reviewer|review|revisor|revisión|revision|quality|calidad|auditor)\b/u.test(label)
+  ) return 'role.judge'
+  if (
+    /\b(investigador|investigadora|research|researcher|referencia|referencias|reference|references)\b/u.test(label)
+  ) return 'role.researcher'
+  return 'role.agent'
+}
+
+/** Resolve the member's current visible action independently from its role. */
+export function activityKeyOf(summary: SessionSummary): KiraTeamsKey {
+  if (summary.pendingInteraction !== undefined) return 'activity.waiting'
+  if (!summary.running) return 'activity.done'
+  switch (activityOf(summary)?.phase) {
+    case 'running-tools': return 'activity.tools'
+    case 'verifying': return 'activity.verifying'
+    default: return 'activity.preparing'
+  }
+}
+
+/**
+ * Resolve the current lineage's ordinary root and collect every subagent
+ * descendant beneath it with BFS depths. Ordinary forks terminate propagation
+ * through the `origin === 'subagent'` chain check, matching the header
+ * catalog's lineage semantics.
+ */
 export function lineageMembers(state: SessionListState): {
   root: SessionSummary | undefined
   rows: MemberRow[]
@@ -126,13 +154,12 @@ export function lineageMembers(state: SessionListState): {
 }
 
 /**
- * In-flow teams panel: the active board of subagents the current lineage has
- * deployed — the Codex-style side view of a KIRA team.
- * Settled children are removed from the visible roster; only active members
- * remain. Renders nothing until the lineage actually has members; pops itself open
- * whenever a new member starts running so deployments are never silent.
+ * In-flow teams card: the active board of subagents the current lineage has
+ * deployed. It reserves shell space instead of covering the conversation and
+ * exposes stable KIRA identities, roles, and current actions without leaking
+ * provider or model internals.
  * @param props - Shell standard props, injected sessions face, and copy.
- * @returns The dock element, or null while the lineage has no subagents.
+ * @returns The card element, or null while the lineage has no active members.
  */
 export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProps) {
   const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
@@ -217,36 +244,45 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
           </button>
         </header>
         <div className={css.list} role="tree" aria-label={t('team.aria')}>
-          {rows.map(({ summary, depth }) => (
-            <button
-              key={summary.id}
-              type="button"
-              role="treeitem"
-              aria-level={depth}
-              aria-selected={state.current === summary.id}
-              aria-label={`${agentNameOf(summary)} · ${t(statusKeyOf(summary))}`}
-              className={`${css.row} ${summary.running ? css.rowRunning : ''} ${summary.pendingInteraction !== undefined ? css.rowPending : ''}`}
-              style={{ paddingInlineStart: 12 + depth * 14 }}
-              title={summary.displayTitle}
-              onClick={() => {
-                if (summary.parentId === undefined) return
-                openChild({
-                  parentSessionId: summary.parentId,
-                  childSessionId: summary.id,
-                  mode: 'continuable',
-                })
-              }}
-            >
-              <ModelActivityAvatar
-                activity={activityOf(summary)}
-                running={summary.running}
-                pending={summary.pendingInteraction !== undefined}
-                agentId={String(summary.id)}
-              />
-              <span className={css.agentName}>{agentNameOf(summary)}</span>
-              <span className={css.status}>{t(statusKeyOf(summary))}</span>
-            </button>
-          ))}
+          {rows.map(({ summary, depth }) => {
+            const roleKey = agentRoleKeyOf(summary)
+            const actionKey = activityKeyOf(summary)
+            return (
+              <button
+                key={summary.id}
+                type="button"
+                role="treeitem"
+                aria-level={depth}
+                aria-selected={state.current === summary.id}
+                aria-label={`${agentNameOf(summary)} · ${t(roleKey)} · ${t(actionKey)}`}
+                className={`${css.row} ${summary.running ? css.rowRunning : ''} ${summary.pendingInteraction !== undefined ? css.rowPending : ''}`}
+                style={{ paddingInlineStart: 12 + depth * 14 }}
+                title={summary.displayTitle}
+                onClick={() => {
+                  if (summary.parentId === undefined) return
+                  openChild({
+                    parentSessionId: summary.parentId,
+                    childSessionId: summary.id,
+                    mode: 'continuable',
+                  })
+                }}
+              >
+                <ModelActivityAvatar
+                  activity={activityOf(summary)}
+                  running={summary.running}
+                  pending={summary.pendingInteraction !== undefined}
+                  agentId={String(summary.id)}
+                />
+                <span className={css.agentCopy}>
+                  <span className={css.agentHeading}>
+                    <span className={css.agentName}>{agentNameOf(summary)}</span>
+                    <span className={css.role}>{t(roleKey)}</span>
+                  </span>
+                  <span className={css.activity}>{t(actionKey)}</span>
+                </span>
+              </button>
+            )
+          })}
         </div>
       </section>
     </div>
