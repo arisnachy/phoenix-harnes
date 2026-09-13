@@ -130,6 +130,29 @@ describe('lineageMembers', () => {
     expect(root).toBeUndefined()
     expect(rows).toEqual([])
   })
+
+  it('removes settled children from the active team roster', () => {
+    const { rows } = lineageMembers(
+      sessionsWith([
+        summary({ id: sid('root') }),
+        summary({ id: sid('done'), parentId: sid('root'), origin: 'subagent', running: false }),
+      ], sid('root')).list.getSnapshot(),
+    )
+    expect(rows).toEqual([])
+  })
+
+  it('keeps agents awaiting interaction visible even when execution is paused', () => {
+    const { rows } = lineageMembers(
+      sessionsWith([
+        summary({ id: sid('root') }),
+        summary({
+          id: sid('waiting'), parentId: sid('root'), origin: 'subagent',
+          running: false, pendingInteraction: 'question',
+        }),
+      ], sid('root')).list.getSnapshot(),
+    )
+    expect(rows.map(row => row.summary.id)).toEqual([sid('waiting')])
+  })
 })
 
 describe('apply', () => {
