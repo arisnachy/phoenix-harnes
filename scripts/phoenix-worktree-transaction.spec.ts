@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,6 +15,13 @@ const repos: string[] = []
 
 function git(root: string, ...args: string[]): string {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
+}
+
+function gitMaybe(root: string, ...args: string[]): string | undefined {
+  const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' })
+  if (result.status !== 0 || typeof result.stdout !== 'string') return undefined
+  const value = result.stdout.trim()
+  return value.length === 0 ? undefined : value
 }
 
 function createRepo(): string {
@@ -72,7 +79,7 @@ describe('PHOENIX dirty-worktree update transaction', () => {
 
     finalizeWorktreeSnapshot(root, snapshot)
     expect(stashHashes(root)).toEqual([existingStash])
-    expect(git(root, 'rev-parse', '--verify', '-q', 'refs/phoenix/recovery/worktree-snapshot')).toBe('')
+    expect(gitMaybe(root, 'rev-parse', '--verify', '-q', 'refs/phoenix/recovery/worktree-snapshot')).toBeUndefined()
   })
 
   it('rolls a conflicting reapply back to the original head and exact worktree', () => {
