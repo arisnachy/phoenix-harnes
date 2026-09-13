@@ -103,7 +103,13 @@ describe('lineageMembers', () => {
       model: 'gpt-5.6-luna',
       phase: 'running-tools',
     })
-    expect(agentNameOf(child)).toBe('Luna')
+    expect(agentNameOf(child)).toBe('Orión')
+    expect(agentNameOf(FAMILY.find(item => item.id === sid('c2'))!)).toBe('Nexo')
+  })
+
+  it('keeps fallback avatar identities deterministic and distinct', () => {
+    expect(avatarVariant('c1')).toBe(avatarVariant('c1'))
+    expect(avatarVariant('c1')).not.toBe(avatarVariant('c2'))
   })
 
   it('keeps fallback avatar identities deterministic', () => {

@@ -9,7 +9,7 @@ import type {
 } from '@phoenix-ai/dsh-client-runtime/client'
 import type { PropsLocale, PropsRuntime, TranslateNS } from '@phoenix-ai/dsh-client-ui-slots'
 import { NS } from './locales.ts'
-import { ModelActivityAvatar } from './ModelActivityAvatar.tsx'
+import { ModelActivityAvatar, stableAgentIndex } from './ModelActivityAvatar.tsx'
 import css from './KiraTeamsDock.module.css'
 
 /** Sessions face plus business actions supplied by the slot registration. */
@@ -57,16 +57,16 @@ export function activityOf(summary: SessionSummary): SubagentActivityProjection 
   return summary.projectionValues?.subagentActivity
 }
 
-/** Resolve the compact model name shown beside an active team member. */
+const AGENT_NAMES = [
+  'Vega', 'Nova', 'Prisma', 'Atlas', 'Orión', 'Nexo',
+  'Astra', 'Lumen', 'Pulsar', 'Cometa', 'Aurora', 'Cobalto',
+  'Helix', 'Vector', 'Quasar', 'Senda', 'Zenit', 'Eclipse',
+  'Fénix', 'Argo', 'Órbita', 'Vórtice', 'Solaria', 'Orbe',
+] as const
+
+/** Resolve a stable KIRA codename shown instead of provider internals. */
 export function agentNameOf(summary: SessionSummary): string {
-  const model = activityOf(summary)?.model
-  if (model !== undefined && model.trim().length > 0) {
-    const modelId = model.split('/').at(-1) ?? model
-    const persona = modelId.match(/(?:^|-)(luna|sol|terra)(?:$|-)/i)?.[1]
-    if (persona !== undefined) return persona.charAt(0).toUpperCase() + persona.slice(1).toLowerCase()
-    return modelId
-  }
-  return summary.agentPreset ?? 'Phoenix'
+  return AGENT_NAMES[stableAgentIndex(String(summary.id), AGENT_NAMES.length)] ?? 'Vigía'
 }
 
 export function lineageMembers(state: SessionListState): {
@@ -98,8 +98,7 @@ export function lineageMembers(state: SessionListState): {
         if (depth.has(summary.id)) continue
         depth.set(summary.id, childDepth)
         if (summary.running) rows.push({ summary, depth: childDepth })
-        // Walk through settled parents as well: a still-running grandchild is
-        // an active member even if its parent has already settled.
+        // Continue through settled parents so active grandchildren remain visible.
         next.push(summary.id)
       }
     }
@@ -228,7 +227,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
                 activity={activityOf(summary)}
                 running={summary.running}
                 pending={summary.pendingInteraction !== undefined}
-                identity={summary.agentPreset ?? summary.displayTitle}
+                identity={String(summary.id)}
               />
               <span className={css.name}>{summary.displayTitle}</span>
               <span className={css.agentName}>{agentNameOf(summary)}</span>
