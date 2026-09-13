@@ -146,6 +146,13 @@
   background: radial-gradient(circle at 35% 32%, #dcfce7 0%, #22c55e 52%, #14532d 100%);
 }
 
+.avatar[data-avatar='eagle'] .core { background: radial-gradient(circle at 35% 28%, #fff7c2, #f59e0b 48%, #92400e); }
+.avatar[data-avatar='wolf'] .core { background: radial-gradient(circle at 35% 28%, #e2e8f0, #64748b 48%, #1e293b); }
+.avatar[data-avatar='fox'] .core { background: radial-gradient(circle at 35% 28%, #fed7aa, #f97316 48%, #9a3412); }
+.avatar[data-avatar='owl'] .core { background: radial-gradient(circle at 35% 28%, #ede9fe, #8b5cf6 48%, #4c1d95); }
+.avatar[data-avatar='lynx'] .core { background: radial-gradient(circle at 35% 28%, #fce7f3, #ec4899 48%, #831843); }
+.avatar[data-avatar='dolphin'] .core { background: radial-gradient(circle at 35% 28%, #cffafe, #06b6d4 48%, #155e75); }
+.avatar[data-avatar='forge'] .core { background: radial-gradient(circle at 35% 28%, #ffedd5, #ea580c 48%, #7c2d12); }
 .avatar[data-avatar='nova'] .core {
   background: radial-gradient(circle at 35% 28%, #fce7f3 0%, #d946ef 52%, #701a75 100%);
 }
@@ -162,6 +169,8 @@
   background: radial-gradient(circle at 35% 28%, #d9f99d 0%, #14b8a6 52%, #115e59 100%);
 }
 
+.avatar[data-avatar='dragon'] .core { background: radial-gradient(circle at 35% 28%, #fecaca, #ef4444 48%, #7f1d1d); }
+
 .avatar[data-avatar='sol'] { --avatar-accent: #d97706; }
 .avatar[data-avatar='luna'] { --avatar-accent: #6366f1; }
 .avatar[data-avatar='terra'] { --avatar-accent: #0f766e; }
@@ -170,6 +179,14 @@
 .avatar[data-avatar='prism'] { --avatar-accent: #0d9488; }
 .avatar[data-avatar='comet'] { --avatar-accent: #2563eb; }
 .avatar[data-avatar='aurora'] { --avatar-accent: #0f766e; }
+.avatar[data-avatar='eagle'] { --avatar-accent: #d97706; }
+.avatar[data-avatar='wolf'] { --avatar-accent: #475569; }
+.avatar[data-avatar='fox'] { --avatar-accent: #ea580c; }
+.avatar[data-avatar='owl'] { --avatar-accent: #7c3aed; }
+.avatar[data-avatar='lynx'] { --avatar-accent: #db2777; }
+.avatar[data-avatar='dolphin'] { --avatar-accent: #0891b2; }
+.avatar[data-avatar='forge'] { --avatar-accent: #c2410c; }
+.avatar[data-avatar='dragon'] { --avatar-accent: #dc2626; }
 
 .avatar[data-avatar] .core::after {
   width: auto;
@@ -191,6 +208,28 @@
 .avatar[data-avatar='sol'] .core::after { content: '☼'; }
 .avatar[data-avatar='luna'] .core::after { content: '☾'; }
 .avatar[data-avatar='terra'] .core::after { content: '◍'; }
+
+.avatar[data-avatar='eagle'] .core::after,
+.avatar[data-avatar='wolf'] .core::after,
+.avatar[data-avatar='fox'] .core::after,
+.avatar[data-avatar='owl'] .core::after,
+.avatar[data-avatar='lynx'] .core::after,
+.avatar[data-avatar='dolphin'] .core::after,
+.avatar[data-avatar='forge'] .core::after,
+.avatar[data-avatar='dragon'] .core::after {
+  font-family: 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif;
+  font-size: 20px;
+}
+
+.avatar[data-avatar='eagle'] .core::after { content: '🦅'; }
+.avatar[data-avatar='wolf'] .core::after { content: '🐺'; }
+.avatar[data-avatar='fox'] .core::after { content: '🦊'; }
+.avatar[data-avatar='owl'] .core::after { content: '🦉'; }
+.avatar[data-avatar='lynx'] .core::after { content: '🐆'; }
+.avatar[data-avatar='dolphin'] .core::after { content: '🐬'; }
+.avatar[data-avatar='forge'] .core::after { content: '⚒'; }
+.avatar[data-avatar='dragon'] .core::after { content: '🐉'; }
+
 .avatar[data-phase='preparing'] .core {
   animation: avatar-breathe 1.8s ease-in-out infinite alternate;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ModelActivityAvatar, avatarVariant, modelAvatarKind } from '../src/client/ModelActivityAvatar.tsx'
+import { ModelActivityAvatar, modelAvatarKind } from '../src/client/ModelActivityAvatar.tsx'
 
 describe('modelAvatarKind', () => {
   it.each([
@@ -14,22 +14,22 @@ describe('modelAvatarKind', () => {
 })
 
 describe('ModelActivityAvatar', () => {
-  it('keeps each agent avatar variant stable and visible in the DOM contract', () => {
+  it('renders the recovered illustrated avatar for each agent id', () => {
     const first = ModelActivityAvatar({
+      agentId: 'c1',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
       running: true,
       pending: false,
-      identity: 'c1',
     })
     const second = ModelActivityAvatar({
+      agentId: 'c2',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
       running: true,
       pending: false,
-      identity: 'c2',
     })
-    expect(first.props['data-variant']).toBe(avatarVariant('c1'))
-    expect(second.props['data-variant']).toBe(avatarVariant('c2'))
-    expect(first.props['data-variant']).not.toBe(second.props['data-variant'])
+    expect(first.props['data-avatar']).toBe('lynx')
+    expect(second.props['data-avatar']).toBe('dolphin')
+    expect(first.props['data-avatar']).not.toBe(second.props['data-avatar'])
   })
 
   it('exposes model family, phase and state as decorative data', () => {
