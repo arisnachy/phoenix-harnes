@@ -187,13 +187,23 @@ function compactDiagnostic(result) {
   return lines.slice(Math.max(0, lines.length - 24)).join('\n').slice(-6000)
 }
 
-export function preflightPhoenixConfiguration(root, env = process.env) {
-  const result = spawnSync(process.execPath, [
+function preflightArgs(env) {
+  const args = [
     '--import', 'tsx/esm',
     'apps/cli/src/bin.ts',
     'web',
-    '--dump-config',
-  ], {
+  ]
+  const codexPatch = join(resolvePhoenixHome(env), 'codex', 'enabled.patch.yml')
+  const codexPluginsEnabled = (env.PHOENIX_CODEX_PLUGINS ?? 'on').trim().toLowerCase() !== 'off'
+  if (codexPluginsEnabled && existsSync(codexPatch)) {
+    args.push('--patch', codexPatch)
+  }
+  args.push('--dump-config')
+  return args
+}
+
+export function preflightPhoenixConfiguration(root, env = process.env) {
+  const result = spawnSync(process.execPath, preflightArgs(env), {
     cwd: root,
     env: {
       ...env,
@@ -216,7 +226,7 @@ export function preflightPhoenixConfiguration(root, env = process.env) {
   return {
     ok: true,
     status: 0,
-    summary: 'Web profile parsed and composed successfully without stopping the live Host.',
+    summary: 'Web profile and enabled Codex overlay parsed and composed successfully without stopping the live Host.',
   }
 }
 
