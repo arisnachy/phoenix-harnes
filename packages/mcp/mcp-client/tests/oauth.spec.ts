@@ -4,10 +4,12 @@ import type { OAuthTokens, OAuthClientInformationMixed } from '@modelcontextprot
 import type { OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js'
 import {
   McpOAuthCallbackServer,
+  createCredentialStateStore,
   createMcpOAuthProvider,
   hasUsableMcpOAuthTokens,
   type McpOAuthStateStore,
 } from '@phoenix-ai/dsh-mcp-client/src/oauth.ts'
+import { credentialKey, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
 
 function store(initial?: Record<string, unknown>): McpOAuthStateStore & { state: Record<string, unknown> | undefined } {
   let state = initial
@@ -90,6 +92,32 @@ describe('createMcpOAuthProvider', () => {
     await expect((await second).code).resolves.toBe('good-code')
     expect((await accepted).status).toBe(200)
     await callback.close()
+  })
+
+  it('keeps pre-token state volatile and persists only a usable grant', async () => {
+    const records = new Map<string, unknown>()
+    const credentials = {
+      readRecord: async (key: unknown) => records.get(String(key)),
+      modifyRecord: async (key: unknown, mutate: (current: unknown) => Promise<unknown>) => {
+        const next = await mutate(records.get(String(key)))
+        if (next !== undefined) records.set(String(key), next)
+        return next
+      },
+      deleteRecord: async (key: unknown) => { records.delete(String(key)) },
+    } as unknown as CredentialProvider
+    const state = createCredentialStateStore(credentials, credentialKey('mcp-client', 'notion-notion'))
+    const clientInformation = { client_id: 'client-id' }
+    await state.write({ clientInformation })
+    expect(records.size).toBe(0)
+    expect(await state.read()).toEqual({ clientInformation })
+
+    const tokens = { access_token: 'access-token', token_type: 'Bearer' }
+    await state.write({ clientInformation, tokens })
+    expect(records.size).toBe(1)
+    expect(await state.read()).toEqual({ clientInformation, tokens })
+
+    await state.write({ clientInformation })
+    expect(records.size).toBe(0)
   })
 
   it('reports connected only when access or refresh tokens exist', () => {
