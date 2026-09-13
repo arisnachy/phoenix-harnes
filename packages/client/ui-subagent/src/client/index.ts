@@ -4,6 +4,7 @@ import type {
   ClientContext, SessionId, SubagentAddress,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ComposerChainProps } from '@phoenix-ai/dsh-client-ui-conversation/client'
+import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
 import {
   SubagentHeaderLineage, type SubagentCatalogInjected, type SubagentHeaderLineageProps,
 } from './SubagentHeaderLineage.tsx'
@@ -32,26 +33,17 @@ export {
   filterVisibleSubagentEntries,
 } from './completion-verifier-visibility.ts'
 
-/** Required services for conversation slots and session navigation. */
-export const inject = ['sessions', 'slots', 'locale']
+/** Required services for conversation slots, session navigation, and shared workspace layout. */
+export const inject = ['sessions', 'slots', 'locale', 'layout']
 
-/** Claim the composer for one-shot history or an unavailable continuation owner. */
 function selectReadOnlySubagent(owner: ComposerChainProps): SubagentReadOnlyMatch | null {
   const subagent = owner.session?.subagent
   if (subagent === undefined || subagent === null) return null
   if (subagent.address.mode === 'one-shot') return { reason: 'one-shot' }
   if (subagent.parentAvailable) return null
-  // A RUNNING parent-offline continuable child keeps the default composer:
-  // its input is disabled there, but the same primary Stop stays available so
-  // the child can be interrupted. Once it stops, this takeover returns.
   return owner.session?.running === true ? null : { reason: 'parent-unavailable' }
 }
 
-/**
- * Give only this lineage surface the transient-worker-filtered session view.
- * The underlying durable session catalog remains untouched and navigable by
- * other history/debugging surfaces.
- */
 function CompletionAwareSubagentHeaderLineage(props: SubagentHeaderLineageProps) {
   const useSessions: typeof props.useSessions = selector => props.useSessions(
     state => selector(filterCompletionVerifierSessionState(state)),
@@ -59,10 +51,7 @@ function CompletionAwareSubagentHeaderLineage(props: SubagentHeaderLineageProps)
   return createElement(SubagentHeaderLineage, { ...props, useSessions })
 }
 
-/**
- * Client plugin body: register the subagent catalog and read-only composer seats.
- * @param ctx - client root context.
- */
+/** Register subagent catalog and composer surfaces. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-subagent: dictionaries')
   const sessions = ctx.sessions
@@ -74,6 +63,10 @@ export function apply(ctx: ClientContext): void {
       void sessions.refreshSubagents(parentSessionId)
     },
     setCatalogOpen(parentSessionId: SessionId, open: boolean) {
+      // The subagent window and Cordis share one right-side workspace lease.
+      // Opening the catalog claims the top half; closing it releases only the
+      // subagent claim, leaving Cordis untouched when it is still active.
+      ctx.layout.setWorkspaceOccupant('subagent', open)
       sessions.setSubagentCatalogOpen(parentSessionId, open)
     },
   })
