@@ -1,8 +1,6 @@
 /**
- * LayoutController behavior: the cross-plugin panel-action face. Geometry
- * lives in the entry store (layout-store.spec.ts) — here we assert the
- * delegation contract: attachPanels wiring, the three actions forwarding, the
- * unwired fail-loud, and re-attach overwriting a stale action set.
+ * LayoutController behavior: panel delegation and the shared visual-workspace
+ * occupancy projection exposed to UI plugins.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { LayoutController } from '@phoenix-ai/dsh-client-ui-layout/src/client/service.ts'
@@ -16,11 +14,12 @@ function fakePanels(): PanelActions {
     setNarrow: vi.fn(),
     openDetails: vi.fn(),
     closeDetails: vi.fn(),
+    setWorkspaceOccupant: vi.fn(),
   }
 }
 
 describe('LayoutController', () => {
-  it('forwards the three panel actions to the attached set', () => {
+  it('forwards panel actions to the attached set', () => {
     const service = new LayoutController()
     const panels = fakePanels()
     service.attachPanels(panels)
@@ -41,6 +40,42 @@ describe('LayoutController', () => {
     expect(() => { service.toggleSidebar() }).toThrow(/panel actions not wired/)
     expect(() => { service.openDetails() }).toThrow(/panel actions not wired/)
     expect(() => { service.closeDetails() }).toThrow(/panel actions not wired/)
+    expect(() => { service.setWorkspaceOccupant('cordis', true) }).toThrow(/panel actions not wired/)
+  })
+
+  it('projects independent subagent and Cordis occupancy and notifies subscribers', () => {
+    const service = new LayoutController()
+    const panels = fakePanels()
+    const listener = vi.fn()
+    service.attachPanels(panels)
+    const unsubscribe = service.subscribeWorkspaceOccupancy(listener)
+
+    service.setWorkspaceOccupant('subagent', true)
+    expect(service.getWorkspaceOccupancy()).toEqual({ subagent: true, cordis: false })
+    service.setWorkspaceOccupant('cordis', true)
+    expect(service.getWorkspaceOccupancy()).toEqual({ subagent: true, cordis: true })
+    service.setWorkspaceOccupant('subagent', false)
+    expect(service.getWorkspaceOccupancy()).toEqual({ subagent: false, cordis: true })
+
+    expect(panels.setWorkspaceOccupant).toHaveBeenNthCalledWith(1, 'subagent', true)
+    expect(panels.setWorkspaceOccupant).toHaveBeenNthCalledWith(2, 'cordis', true)
+    expect(panels.setWorkspaceOccupant).toHaveBeenNthCalledWith(3, 'subagent', false)
+    expect(listener).toHaveBeenCalledTimes(3)
+
+    unsubscribe()
+    service.setWorkspaceOccupant('cordis', false)
+    expect(listener).toHaveBeenCalledTimes(3)
+  })
+
+  it('ignores duplicate occupancy writes', () => {
+    const service = new LayoutController()
+    const panels = fakePanels()
+    service.attachPanels(panels)
+
+    service.setWorkspaceOccupant('cordis', true)
+    service.setWorkspaceOccupant('cordis', true)
+
+    expect(panels.setWorkspaceOccupant).toHaveBeenCalledTimes(1)
   })
 
   it('re-attach overwrites the stale action set (entry re-register)', () => {
