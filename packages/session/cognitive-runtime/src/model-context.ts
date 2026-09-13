@@ -20,6 +20,9 @@ const MAX_ACTIVE = 32
  * Render the part of cognitive state a model needs for continuity and control.
  * Background and suppressed memories deliberately stay outside the prompt: they
  * remain available to the runtime without consuming the model context window.
+ * @param state - Current deterministic cognitive state for the live session.
+ * @param options - Bounded rendering limits for model-facing context.
+ * @returns The model-facing cognitive workspace, or an empty string when no focus exists.
  */
 export function renderCognitiveModelContext(
   state: CognitiveState | undefined,
