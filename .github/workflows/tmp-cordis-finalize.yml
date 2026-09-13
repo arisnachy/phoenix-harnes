@@ -1,0 +1,68 @@
+name: Temporary Cordis finalization
+
+on:
+  push:
+    branches:
+      - codex/cordis-visual-workspace-20260913
+    paths:
+      - .github/workflows/tmp-cordis-finalize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/cordis-visual-workspace-20260913
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Register client visual workspace and language switcher
+        shell: python
+        run: |
+          from pathlib import Path
+
+          catalog = Path('scripts/gen-cordis-catalog.ts')
+          text = catalog.read_text(encoding='utf-8')
+          needle = "  layout: 'client-side interface-typed browser service — packages/client/ui-layout/README.md owns the API',\n"
+          addition = needle + "  visualWorkspace: 'client-side interface-typed browser service — packages/client/ui-workspace/README.md owns the API',\n"
+          if 'visualWorkspace:' not in text:
+              if needle not in text:
+                  raise SystemExit('layout exemption anchor not found')
+              catalog.write_text(text.replace(needle, addition, 1), encoding='utf-8')
+
+          note = Path('.agents/notes/implemented/feature/2026-09-13-cordis-visual-workspace.md')
+          text = note.read_text(encoding='utf-8')
+          switcher = 'English | [中文](2026-09-13-cordis-visual-workspace.zh.md)\n'
+          if switcher not in text:
+              marker = 'Status: implemented\n'
+              if marker not in text:
+                  raise SystemExit('note status anchor not found')
+              note.write_text(text.replace(marker, marker + '\n' + switcher, 1), encoding='utf-8')
+      - name: Regenerate client catalog
+        run: pnpm run gen-client-catalog
+      - name: Re-record Cordis translation pair
+        run: pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-13-cordis-visual-workspace.md
+      - name: Commit generated results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/gen-cordis-catalog.ts \
+            .agents/notes/implemented/feature/2026-09-13-cordis-visual-workspace.md \
+            .agents/notes/implemented/feature/2026-09-13-cordis-visual-workspace.i18n.yaml \
+            packages/extensions/cordis-client-runner/src/client/slot-catalog.ts
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+          else
+            git commit -m "chore(cordis): finalize generated catalogs"
+            git push origin HEAD:codex/cordis-visual-workspace-20260913
+          fi
