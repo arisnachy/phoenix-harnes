@@ -1,0 +1,63 @@
+name: Temporary Cordis mission gate
+
+on:
+  push:
+    branches:
+      - codex/cordis-visual-workspace-20260913
+    paths:
+      - .github/workflows/tmp-cordis-mission-gate.yml
+
+permissions:
+  contents: read
+
+jobs:
+  cordis-mission:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/cordis-visual-workspace-20260913
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Immutable install
+        run: pnpm install --frozen-lockfile
+      - name: Focused Cordis, KIRA, and layout tests
+        run: |
+          pnpm exec vitest run \
+            packages/client/ui-layout/tests/layout-store.client.spec.ts \
+            packages/client/ui-layout/tests/service.client.spec.ts \
+            packages/client/ui-layout/tests/visual-workspace-frame.client.spec.tsx \
+            packages/client/ui-workspace/tests/apply.client.spec.ts \
+            packages/client/ui-workspace/tests/cordis-visual-workspace.client.spec.ts \
+            packages/client/ui-kira-teams/tests/browser-plugin.client.spec.ts \
+            packages/client/ui-subagent/tests/browser-plugin.client.spec.ts
+      - name: Cordis host catalog contract
+        run: pnpm run verify-cordis-catalog
+      - name: Client catalog contract
+        run: pnpm run verify-client-catalog
+      - name: Cordis translation pair has no violation
+        shell: bash
+        run: |
+          set +e
+          pnpm run verify-translation-pairing > /tmp/i18n.log 2>&1
+          set -e
+          cat /tmp/i18n.log
+          if grep -Fq '2026-09-13-cordis-visual-workspace' /tmp/i18n.log; then
+            echo 'Cordis translation pair still violates the pairing gate' >&2
+            exit 1
+          fi
+      - name: Layout exports have no JSDoc violation
+        shell: bash
+        run: |
+          set +e
+          pnpm run verify-export-jsdoc > /tmp/jsdoc.log 2>&1
+          set -e
+          cat /tmp/jsdoc.log
+          if grep -Eq 'packages/client/ui-layout/src/client/(service|stores)\.ts' /tmp/jsdoc.log; then
+            echo 'Cordis layout exports still violate JSDoc gate' >&2
+            exit 1
+          fi
