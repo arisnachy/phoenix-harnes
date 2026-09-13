@@ -562,15 +562,17 @@ export class ProactivityEngine {
   }
 
   private skippedNextRun(task: ProactivityTask, nowMs: number): string | undefined {
-    if (task.recurrence.kind === 'once' || task.catchUp !== 'skip') return undefined
-    if (task.recurrence.kind === 'yearly') {
+    if (task.catchUp !== 'skip') return undefined
+    const recurrence = task.recurrence
+    if (recurrence.kind === 'once') return undefined
+    if (recurrence.kind === 'yearly') {
       const scan = nextYearlyOccurrences(task, nowMs)
       return scan.count > 1 ? scan.future : undefined
     }
     const nextMs = Date.parse(task.nextRunAt)
-    const missed = Math.floor((nowMs - nextMs) / task.recurrence.everyMs)
+    const missed = Math.floor((nowMs - nextMs) / recurrence.everyMs)
     if (missed <= 0) return undefined
-    return new Date(nextMs + (missed + 1) * task.recurrence.everyMs).toISOString()
+    return new Date(nextMs + (missed + 1) * recurrence.everyMs).toISOString()
   }
 
   private async recoverInterrupted(now: Date): Promise<void> {
