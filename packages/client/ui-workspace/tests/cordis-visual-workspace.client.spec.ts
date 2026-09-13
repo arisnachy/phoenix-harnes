@@ -82,7 +82,7 @@ describe('CordisVisualWorkspace', () => {
     expect(view.getByRole('img').getAttribute('alt')).toBe('Custom alt')
 
     act(() => { controller.show({ kind: 'image', src: 'https://example.test/c.png' }) })
-    expect(view.getByRole('img').getAttribute('alt')).toBe('')
+    expect(view.container.querySelector('img')?.getAttribute('alt')).toBe('')
     expect(view.getByText('Cordis')).toBeTruthy()
   })
 
