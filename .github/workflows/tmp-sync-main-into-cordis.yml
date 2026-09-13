@@ -1,0 +1,23 @@
+name: Temporary sync main into Cordis
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/cordis-visual-workspace-20260913
+          fetch-depth: 0
+          persist-credentials: true
+      - run: |
+          git fetch origin main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge --no-edit origin/main
+          git push origin HEAD:codex/cordis-visual-workspace-20260913
