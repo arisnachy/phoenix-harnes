@@ -1,23 +1,24 @@
 /**
- * Workspace plugin, browser half. Two registrations: WorkspaceBrowser fills
- * the sidebar shell's `sidebar.workspaces` hole (the whole browsing region),
- * and WorkspacePicker fills the conversation hero's picker hole
- * (`conversation.hero.workspace` — both hero forms). Both read real Host
- * Workspaces through the global useWorkspaces hook, and each declares its
- * own `single` directory-flow child hole for the composed picker package's
- * client half (see the contract module doc). Export discipline:
- * packages/client/AGENTS.md.
+ * Workspace plugin, browser half. Owns workspace browsing/picking and the
+ * Cordis visual workspace surface used by Phoenix to present rich material
+ * beside the conversation without replacing the chat.
  */
+import { createElement } from 'react'
 import type { ConnectionHandle } from '@phoenix-ai/dsh-client-connection/client'
 import type { HostObservable } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
-// Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+import {
+  CordisVisualWorkspace,
+  CordisVisualWorkspaceController,
+  type CordisVisualContent,
+  type ICordisVisualWorkspace,
+} from './CordisVisualWorkspace.tsx'
 export { CapabilitySurfacePreview, registerCapabilitySurfacePreview } from './CapabilitySurfacePreview.tsx'
 export type { CapabilitySurfacePreviewProps } from './CapabilitySurfacePreview.tsx'
 export { CapabilityArtifactPreview, registerCapabilityArtifactPreview } from './CapabilityArtifactPreview.tsx'
@@ -25,6 +26,8 @@ export type { CapabilityArtifactPreviewProps } from './CapabilityArtifactPreview
 export { callHardnessMission } from './hardness-rpc.ts'
 export { renderGenerativeUi, validateUiSchema } from './generative-ui.ts'
 export type { GenerativeUiRenderModel, UiNode, UiSchema } from './generative-ui.ts'
+export { CordisVisualWorkspaceController } from './CordisVisualWorkspace.tsx'
+export type { CordisVisualContent, ICordisVisualWorkspace } from './CordisVisualWorkspace.tsx'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
@@ -41,29 +44,36 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Dictionary namespace owned by this plugin. */
+declare module '@phoenix-ai/cordis' {
+  interface Context {
+    /** Rich right-side visual surface controlled by Phoenix/Cordis plugins. */
+    visualWorkspace: ICordisVisualWorkspace
+  }
+}
+
 const NS = 'workspace'
 
-/**
- * Required services (cordis fiber inject). The target slots are declared by
- * the ui-sidebar / ui-conversation applies, whose activation order relative
- * to this one is NOT constrained: dsh.client.inject edges are informational
- * (loading/prefetch metadata, never apply sequencing) and neither owner
- * provides a waitable service. apply therefore depends on each slot
- * declaration through `slots.inject()` instead of assuming order.
- */
-export const inject = ['slots', 'sessions', 'workspaces', 'locale', 'connection']
+/** Required browser services. */
+export const inject = ['slots', 'sessions', 'workspaces', 'locale', 'connection', 'layout']
 
-/**
- * Register the browser and picker once their slot declarations are on the
- * ledger. Inject factories return plain callbacks; data reads use the
- * framework's global hooks.
- * @param ctx - client root context.
- */
+/** Register workspace browsing, picking, and the shared Cordis visual surface. */
 export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
   const hostDescription = connection.hostDescription
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workspace: dictionaries')
+
+  const visualWorkspace = new CordisVisualWorkspaceController(ctx.layout)
+  ctx.effect(() => {
+    const disposeService = ctx.reflect.provide('visualWorkspace', visualWorkspace)
+    return () => {
+      visualWorkspace.dispose()
+      void disposeService()
+    }
+  }, 'ui-workspace: Cordis visual workspace service')
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register(
+    { name: 'shell.overlay' },
+    () => createElement(CordisVisualWorkspace, { controller: visualWorkspace, layout: ctx.layout }),
+  ))
 
   const searchSessions: WorkspaceBrowserInjected['searchSessions'] = async (query, signal) => {
     const result = await ctx.sessions.search(query, signal)
@@ -71,8 +81,6 @@ export function apply(ctx: ClientContext): void {
     return result.value
   }
 
-  // Stable per-surface occupancy sources (the renderer's hook cache keys by
-  // source identity): true while the surface's directory-flow hole is filled.
   const flowSource = (hole: 'sidebar.workspaces.directoryFlow' | 'conversation.hero.workspace.directoryFlow'): HostObservable<boolean> => ({
     getSnapshot: () => ctx.slots.entries(hole).length > 0,
     subscribe: listener => ctx.slots.subscribe(hole, listener),
@@ -80,15 +88,11 @@ export function apply(ctx: ClientContext): void {
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
   const browserInjected = (): WorkspaceBrowserInjected => ({
-    // Explicit group actions keep their target; unscoped New Session inherits
-    // the current Session Workspace before the recent-Workspace fallback.
     startSession: (workspaceId) => { ctx.workspaces.startSession(workspaceId) },
     open: (sessionId) => { ctx.sessions.open(sessionId) },
     searchSessions,
     searchResultLimit: ctx.sessions.searchResultLimit,
     renameSession: async (sessionId, title) => {
-      // Row → session-face hop: rename is a per-session verb (ISession), not
-      // a list-service verb; the binding resolves any listed session.
       const session = ctx.sessions.binding(sessionId)?.session
       if (session === undefined) throw new Error(`unknown session "${sessionId}"`)
       const result = await session.rename(title)
@@ -121,8 +125,6 @@ export function apply(ctx: ClientContext): void {
     createWorkspace: input => ctx.workspaces.create(input),
     hooks: { directoryFlow: pickerFlowSource },
   })
-  // Each registration declares its directory-flow child in the same call;
-  // slot injection follows both the owner and declaration HMR lifetimes.
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
     {
       name: 'sidebar.workspaces',
