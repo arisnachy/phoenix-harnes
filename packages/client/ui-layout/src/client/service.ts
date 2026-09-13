@@ -1,7 +1,7 @@
 /**
  * LayoutController: cross-plugin shell panel actions plus shared visual-workspace
- * occupancy. Subagent and Cordis surfaces borrow one right-side dock; the store
- * owns snapshot/restore so callers only announce their active lifetime.
+ * occupancy. Subagent occupancy coordinates stacking for its existing in-flow
+ * card; Cordis occupancy additionally borrows and restores shell geometry.
  */
 import type { BoundActions } from '@phoenix-ai/dsh-client-ui-slots'
 import type { createLayoutStore, WorkspaceOccupant } from './stores.ts'
@@ -26,10 +26,10 @@ export interface ILayout {
   closeDetails(): void
   /**
    * Announce one shared visual-workspace occupant's lifetime.
-   * The first occupant minimizes navigation and opens the right dock; the last
-   * occupant restores the exact pre-workspace panel geometry.
+   * Subagent occupancy coordinates stacking only; Cordis occupancy owns the
+   * temporary sidebar/details snapshot and exact restoration.
    * @param occupant - Stable visual-workspace owner name.
-   * @param active - Whether that owner currently needs the dock.
+   * @param active - Whether that owner currently needs the visual rail.
    */
   setWorkspaceOccupant(occupant: WorkspaceOccupant, active: boolean): void
   /** Read the current visual-workspace occupancy snapshot. */
