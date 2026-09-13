@@ -11,7 +11,7 @@ Make restart ownership survive the Host, prevent invalid configuration from taki
 3. A healthy Host checkpoint becomes the last-known-good profile configuration. If the next Host exits before the health window, the supervisor restores that checkpoint and relaunches once instead of leaving PHOENIX dead.
 4. The Judge prompt contains durable review history for the exact current goal revision: previous verdict summaries, findings, and required changes. The original objective remains authoritative.
 5. Existing staged auto-update restart/rollback semantics remain intact.
-6. Add `pnpm phoenix:restart` and `pnpm phoenix:preflight` as safe operator/model entry points.
+6. Expose a safe operator/model control entry point through `node scripts/phoenix-supervisor-control.mjs restart` and `node scripts/phoenix-supervisor-control.mjs preflight`; callers request lifecycle work instead of killing the Host directly.
 
 ## Verification
 
