@@ -19,10 +19,11 @@ export type ProactivityPhase = 'prepare' | 'deliver'
 /** Terminal status of one attempted phase. */
 export type ProactivityHistoryStatus = 'completed' | 'failed'
 
-/** Supported recurrence forms. Interval schedules stay anchored to the original due-time sequence. */
+/** Supported recurrence forms. Interval schedules stay anchored; yearly schedules preserve local calendar time. */
 export type ProactivityRecurrence =
   | { readonly kind: 'once' }
   | { readonly kind: 'interval'; readonly everyMs: number }
+  | { readonly kind: 'yearly'; readonly everyYears: number; readonly timezone?: string }
 
 /** One immutable execution-history row. */
 export interface ProactivityHistoryEntry {
@@ -128,6 +129,7 @@ export class ProactivityDeferredError extends Error {
 }
 
 const EMPTY_SNAPSHOT: ProactivitySnapshot = { version: 1, tasks: [] }
+const YEARLY_SEARCH_LIMIT = 10_000
 
 function iso(value: string, field: string): string {
   const parsed = Date.parse(value)
@@ -144,6 +146,106 @@ function nonEmpty(value: string, field: string): string {
 function finitePositive(value: number, field: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${field} must be a positive safe integer`)
   return value
+}
+
+function canonicalTimezone(value: string, field: string): string {
+  const timezone = nonEmpty(value, field)
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: timezone }).resolvedOptions().timeZone
+  } catch {
+    throw new Error(`${field} must be a valid IANA timezone`)
+  }
+}
+
+interface ZonedParts {
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
+  second: number
+}
+
+const zonedFormatters = new Map<string, Intl.DateTimeFormat>()
+
+function zonedParts(epochMs: number, timezone: string): ZonedParts {
+  let formatter = zonedFormatters.get(timezone)
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+    zonedFormatters.set(timezone, formatter)
+  }
+  const parts = new Map(formatter.formatToParts(new Date(epochMs)).map(part => [part.type, part.value]))
+  const read = (name: keyof ZonedParts): number => {
+    const value = Number(parts.get(name))
+    if (!Number.isFinite(value)) throw new Error(`could not resolve ${name} in timezone ${timezone}`)
+    return value
+  }
+  return {
+    year: read('year'),
+    month: read('month'),
+    day: read('day'),
+    hour: read('hour'),
+    minute: read('minute'),
+    second: read('second'),
+  }
+}
+
+function timezoneOffsetMs(epochMs: number, timezone: string): number {
+  const parts = zonedParts(epochMs, timezone)
+  const rounded = Math.floor(epochMs / 1000) * 1000
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - rounded
+}
+
+function zonedLocalToEpoch(parts: ZonedParts, milliseconds: number, timezone: string): number {
+  const wallClock = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second, milliseconds)
+  let candidate = wallClock
+  for (let iteration = 0; iteration < 4; iteration++) {
+    const next = wallClock - timezoneOffsetMs(candidate, timezone)
+    if (next === candidate) return next
+    candidate = next
+  }
+  return candidate
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+function addYears(scheduledFor: string, everyYears: number, timezone?: string): string {
+  const sourceMs = Date.parse(scheduledFor)
+  if (timezone === undefined) {
+    const source = new Date(sourceMs)
+    const year = source.getUTCFullYear() + everyYears
+    const month = source.getUTCMonth() + 1
+    const day = Math.min(source.getUTCDate(), daysInMonth(year, month))
+    return new Date(Date.UTC(
+      year,
+      month - 1,
+      day,
+      source.getUTCHours(),
+      source.getUTCMinutes(),
+      source.getUTCSeconds(),
+      source.getUTCMilliseconds(),
+    )).toISOString()
+  }
+
+  const source = zonedParts(sourceMs, timezone)
+  const year = source.year + everyYears
+  const target: ZonedParts = {
+    ...source,
+    year,
+    day: Math.min(source.day, daysInMonth(year, source.month)),
+  }
+  return new Date(zonedLocalToEpoch(target, new Date(sourceMs).getUTCMilliseconds(), timezone)).toISOString()
 }
 
 function cloneTask(task: ProactivityTask): ProactivityTask {
@@ -181,6 +283,22 @@ function parseHistory(value: unknown): ProactivityHistoryEntry[] {
   })
 }
 
+function parseRecurrence(raw: Record<string, unknown>): ProactivityRecurrence {
+  if (raw.kind === 'once') return { kind: 'once' }
+  if (raw.kind === 'interval' && typeof raw.everyMs === 'number') {
+    return { kind: 'interval', everyMs: finitePositive(raw.everyMs, 'recurrence.everyMs') }
+  }
+  if (raw.kind === 'yearly' && typeof raw.everyYears === 'number'
+    && (raw.timezone === undefined || typeof raw.timezone === 'string')) {
+    return {
+      kind: 'yearly',
+      everyYears: finitePositive(raw.everyYears, 'recurrence.everyYears'),
+      ...(raw.timezone === undefined ? {} : { timezone: canonicalTimezone(raw.timezone, 'recurrence.timezone') }),
+    }
+  }
+  throw new Error('invalid proactivity recurrence')
+}
+
 function parseTask(raw: unknown): ProactivityTask {
   if (!isRecord(raw)
     || typeof raw.id !== 'string'
@@ -199,11 +317,7 @@ function parseTask(raw: unknown): ProactivityTask {
       && raw.status !== 'failed' && raw.status !== 'paused' && raw.status !== 'cancelled')) {
     throw new Error('invalid proactivity task')
   }
-  const recurrence: ProactivityRecurrence = raw.recurrence.kind === 'once'
-    ? { kind: 'once' }
-    : raw.recurrence.kind === 'interval' && typeof raw.recurrence.everyMs === 'number'
-      ? { kind: 'interval', everyMs: finitePositive(raw.recurrence.everyMs, 'recurrence.everyMs') }
-      : (() => { throw new Error('invalid proactivity recurrence') })()
+  const recurrence = parseRecurrence(raw.recurrence)
   if (raw.revealAt !== undefined && typeof raw.revealAt !== 'string') throw new Error('invalid revealAt')
   if (raw.preparationInstruction !== undefined && typeof raw.preparationInstruction !== 'string') throw new Error('invalid preparationInstruction')
   if (raw.prepareLeadMs !== undefined && typeof raw.prepareLeadMs !== 'number') throw new Error('invalid prepareLeadMs')
@@ -288,7 +402,28 @@ function hasCompleted(task: ProactivityTask, phase: ProactivityPhase, scheduledF
 
 function nextAfter(task: ProactivityTask, scheduledFor: string): string | undefined {
   if (task.recurrence.kind === 'once') return undefined
-  return new Date(Date.parse(scheduledFor) + task.recurrence.everyMs).toISOString()
+  if (task.recurrence.kind === 'interval') {
+    return new Date(Date.parse(scheduledFor) + task.recurrence.everyMs).toISOString()
+  }
+  return addYears(scheduledFor, task.recurrence.everyYears, task.recurrence.timezone)
+}
+
+function nextYearlyOccurrences(task: ProactivityTask, nowMs: number): { count: number; latest?: string; future: string; all: string[] } {
+  if (task.recurrence.kind !== 'yearly') throw new Error('yearly recurrence required')
+  let cursor = task.nextRunAt
+  let count = 0
+  let latest: string | undefined
+  const all: string[] = []
+  while (Date.parse(cursor) <= nowMs) {
+    count += 1
+    latest = cursor
+    if (all.length < 32) all.push(cursor)
+    const next = nextAfter(task, cursor)
+    if (next === undefined || Date.parse(next) <= Date.parse(cursor)) throw new Error('yearly recurrence did not advance')
+    cursor = next
+    if (count >= YEARLY_SEARCH_LIMIT) throw new Error('yearly recurrence catch-up search exceeded safety limit')
+  }
+  return { count, ...(latest === undefined ? {} : { latest }), future: cursor, all }
 }
 
 /** Durable global scheduler used by Phoenix for user-created and autonomous tasks. */
@@ -331,9 +466,20 @@ export class ProactivityEngine {
       const now = new Date().toISOString()
       const recurrence = input.recurrence ?? { kind: 'once' as const }
       if (recurrence.kind === 'interval') finitePositive(recurrence.everyMs, 'recurrence.everyMs')
+      if (recurrence.kind === 'yearly') {
+        finitePositive(recurrence.everyYears, 'recurrence.everyYears')
+        if (recurrence.timezone !== undefined) canonicalTimezone(recurrence.timezone, 'recurrence.timezone')
+      }
       if ((input.prepareLeadMs === undefined) !== (input.preparationInstruction === undefined)) {
         throw new Error('preparationInstruction and prepareLeadMs must be supplied together')
       }
+      const normalizedRecurrence: ProactivityRecurrence = recurrence.kind === 'yearly'
+        ? {
+            kind: 'yearly',
+            everyYears: recurrence.everyYears,
+            ...(recurrence.timezone === undefined ? {} : { timezone: canonicalTimezone(recurrence.timezone, 'recurrence.timezone') }),
+          }
+        : { ...recurrence }
       const task: ProactivityTask = {
         id: nonEmpty(this.id(), 'id'),
         title: nonEmpty(input.title, 'title'),
@@ -342,7 +488,7 @@ export class ProactivityEngine {
         createdAt: now,
         updatedAt: now,
         nextRunAt: iso(input.runAt, 'runAt'),
-        recurrence: { ...recurrence },
+        recurrence: normalizedRecurrence,
         catchUp: input.catchUp ?? 'latest',
         visibility: input.visibility ?? 'visible',
         ...(input.revealAt === undefined ? {} : { revealAt: iso(input.revealAt, 'revealAt') }),
@@ -402,6 +548,12 @@ export class ProactivityEngine {
     const nextMs = Date.parse(task.nextRunAt)
     if (nowMs < nextMs) return []
     if (task.recurrence.kind === 'once') return [task.nextRunAt]
+    if (task.recurrence.kind === 'yearly') {
+      const scan = nextYearlyOccurrences(task, nowMs)
+      if (task.catchUp === 'skip' && scan.count > 1) return []
+      if (task.catchUp === 'latest') return scan.latest === undefined ? [] : [scan.latest]
+      return scan.all.slice(0, this.maxCatchUpOccurrences)
+    }
     const missed = Math.floor((nowMs - nextMs) / task.recurrence.everyMs)
     if (task.catchUp === 'skip' && missed > 0) return []
     if (task.catchUp === 'latest') return [new Date(nextMs + missed * task.recurrence.everyMs).toISOString()]
@@ -410,7 +562,11 @@ export class ProactivityEngine {
   }
 
   private skippedNextRun(task: ProactivityTask, nowMs: number): string | undefined {
-    if (task.recurrence.kind !== 'interval' || task.catchUp !== 'skip') return undefined
+    if (task.recurrence.kind === 'once' || task.catchUp !== 'skip') return undefined
+    if (task.recurrence.kind === 'yearly') {
+      const scan = nextYearlyOccurrences(task, nowMs)
+      return scan.count > 1 ? scan.future : undefined
+    }
     const nextMs = Date.parse(task.nextRunAt)
     const missed = Math.floor((nowMs - nextMs) / task.recurrence.everyMs)
     if (missed <= 0) return undefined
