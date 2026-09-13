@@ -547,18 +547,20 @@ export class ProactivityEngine {
   private dueOccurrences(task: ProactivityTask, nowMs: number): string[] {
     const nextMs = Date.parse(task.nextRunAt)
     if (nowMs < nextMs) return []
-    if (task.recurrence.kind === 'once') return [task.nextRunAt]
-    if (task.recurrence.kind === 'yearly') {
+    const recurrence = task.recurrence
+    if (recurrence.kind === 'once') return [task.nextRunAt]
+    if (recurrence.kind === 'yearly') {
       const scan = nextYearlyOccurrences(task, nowMs)
       if (task.catchUp === 'skip' && scan.count > 1) return []
       if (task.catchUp === 'latest') return scan.latest === undefined ? [] : [scan.latest]
       return scan.all.slice(0, this.maxCatchUpOccurrences)
     }
-    const missed = Math.floor((nowMs - nextMs) / task.recurrence.everyMs)
+    const everyMs = recurrence.everyMs
+    const missed = Math.floor((nowMs - nextMs) / everyMs)
     if (task.catchUp === 'skip' && missed > 0) return []
-    if (task.catchUp === 'latest') return [new Date(nextMs + missed * task.recurrence.everyMs).toISOString()]
+    if (task.catchUp === 'latest') return [new Date(nextMs + missed * everyMs).toISOString()]
     const count = Math.min(missed + 1, this.maxCatchUpOccurrences)
-    return Array.from({ length: count }, (_, index) => new Date(nextMs + index * task.recurrence.everyMs).toISOString())
+    return Array.from({ length: count }, (_, index) => new Date(nextMs + index * everyMs).toISOString())
   }
 
   private skippedNextRun(task: ProactivityTask, nowMs: number): string | undefined {
