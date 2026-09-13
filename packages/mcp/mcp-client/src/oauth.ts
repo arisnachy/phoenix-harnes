@@ -349,6 +349,8 @@ export class McpOAuthController {
 
   async authorize(session: AuthorizationSession): Promise<void> {
     await this.ready
+    const previous = await this.store.read()
+    if (previous?.tokens !== undefined) await this.store.write(cloneWithout(previous, 'tokens'))
     const state = randomState()
     const attempt = this.callbackServer.begin(state, session.signal)
     const provider = createMcpOAuthProvider({
