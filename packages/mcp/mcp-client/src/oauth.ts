@@ -31,9 +31,8 @@ export interface McpOAuthProviderOptions {
 }
 
 function cloneWithout<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> {
-  const next = { ...value }
-  delete next[key]
-  return next
+  const { [key]: _omitted, ...rest } = value
+  return rest
 }
 
 async function updateState(
@@ -124,7 +123,7 @@ export function createCredentialStateStore(credentials: CredentialProvider, key:
       if (record?.kind !== 'grant' || record.payload === null || typeof record.payload !== 'object' || Array.isArray(record.payload)) {
         return undefined
       }
-      return record.payload as McpOAuthState
+      return record.payload
     },
     async write(state) {
       await credentials.modifyRecord(key, () => Promise.resolve({ kind: 'grant', payload: state }))
@@ -156,7 +155,7 @@ export class McpOAuthCallbackServer {
 
   constructor(serverName: string) {
     this.path = `/mcp/oauth/${encodeURIComponent(serverName)}`
-    this.server = createServer((request, response) => this.handle(request, response))
+    this.server = createServer((request, response) => { this.handle(request, response) })
   }
 
   get redirectUri(): string {
@@ -204,7 +203,7 @@ export class McpOAuthCallbackServer {
       settled: false,
     }
     this.pending = pending
-    const abort = (): void => this.finishError(new Error('MCP OAuth authorization cancelled'))
+    const abort = (): void => { this.finishError(new Error('MCP OAuth authorization cancelled')) }
     signal?.addEventListener('abort', abort, { once: true })
     return {
       code,
@@ -224,11 +223,21 @@ export class McpOAuthCallbackServer {
     this.pending = undefined
     if (!this.server.listening) return
     await new Promise<void>((resolve, reject) => {
-      this.server.close(error => error === undefined ? resolve() : reject(error))
+      this.server.close((error) => {
+        if (error === undefined) resolve()
+        else reject(error)
+      })
     })
   }
 
-  private handle(request: IncomingMessage, response: { statusCode: number; setHeader(name: string, value: string): void; end(body: string): void }): void {
+  private handle(
+    request: IncomingMessage,
+    response: {
+      statusCode: number
+      setHeader(name: string, value: string): void
+      end(body: string): void
+    },
+  ): void {
     const finish = (statusCode: number, message: string): void => {
       response.statusCode = statusCode
       response.setHeader('content-type', 'text/plain; charset=utf-8')
@@ -334,10 +343,12 @@ export class McpOAuthController {
       redirectUrl: this.callbackServer.redirectUri,
       store: this.store,
       state,
-      onAuthorizationUrl: url => session.notify({
-        message: `Continúa en tu navegador para autorizar ${this.serverName}. PHOENIX conserva los tokens solo en el Host.`,
-        url: String(url),
-      }),
+      onAuthorizationUrl: (url) => {
+        session.notify({
+          message: `Continúa en tu navegador para autorizar ${this.serverName}. PHOENIX conserva los tokens solo en el Host.`,
+          url: String(url),
+        })
+      },
     })
     try {
       const first = await auth(provider, { serverUrl: this.serverUrl })
