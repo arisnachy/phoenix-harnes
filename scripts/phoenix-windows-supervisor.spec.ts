@@ -59,4 +59,31 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(cliSource).toContain('phoenix-windows-supervisor.mjs')
     expect(cliSource).toContain('process.exit(result.status ?? 1)')
   })
+
+  it('keeps the supervisor alive and relaunches a host that exits unexpectedly', () => {
+    expect(source).toContain('HOST_RESTART_DELAY_MS')
+    expect(source).toContain('shutdownRequested')
+    expect(source).toContain('host exited unexpectedly')
+    expect(source).toContain('await sleep(HOST_RESTART_DELAY_MS)')
+    expect(source).toContain('continue')
+  })
+
+  it('distinguishes Ctrl-C/termination from a model or host crash', () => {
+    expect(source).toContain("process.once('SIGINT', requestShutdown)")
+    expect(source).toContain("process.once('SIGTERM', requestShutdown)")
+    expect(source).toContain('if (shutdownRequested)')
+  })
+
+  it('preflights changed configuration while the old host is still available', () => {
+    expect(source).toContain('preflightBootConfiguration')
+    expect(source).toContain('PHOENIX_CONFIG_PREFLIGHT')
+    expect(source).toContain('configuration preflight failed; keeping the current PHOENIX host alive')
+  })
+
+  it('restores last-known-good configuration after an early boot crash', () => {
+    expect(source).toContain('persistLastKnownGoodConfiguration')
+    expect(source).toContain('restoreLastKnownGoodConfiguration')
+    expect(source).toContain('configuration changed since the last healthy boot')
+    expect(source).toContain('restored last-known-good configuration')
+  })
 })
