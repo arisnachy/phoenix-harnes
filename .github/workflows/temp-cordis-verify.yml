@@ -1,0 +1,34 @@
+name: TEMP Cordis Verify
+
+on:
+  push:
+    branches:
+      - codex/cordis-visual-workspace-20260913
+
+permissions:
+  contents: read
+
+jobs:
+  verify-cordis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Build client libraries
+        run: pnpm run build:lib:client
+      - name: Run focused Cordis workspace regression tests
+        run: >-
+          pnpm exec vitest run
+          packages/client/ui-layout/tests/layout-store.client.spec.ts
+          packages/client/ui-layout/tests/service.client.spec.ts
+          packages/client/ui-layout/tests/visual-workspace-frame.client.spec.tsx
+          packages/client/ui-workspace/tests/apply.client.spec.ts
+          packages/client/ui-workspace/tests/cordis-visual-workspace.client.spec.ts
+          packages/client/ui-subagent/tests/browser-plugin.client.spec.ts
