@@ -1,0 +1,97 @@
+name: Phoenix Windows Desktop
+
+on:
+  push:
+    branches:
+      - main
+      - stable
+      - feat/windows-desktop-managed-install
+    paths:
+      - 'apps/desktop-windows/**'
+      - 'installer/windows/**'
+      - 'apps/web/public/favicon.png'
+      - 'apps/web/public/favicon.svg'
+      - '.github/workflows/phoenix-windows-desktop.yml'
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'apps/desktop-windows/**'
+      - 'installer/windows/**'
+      - '.github/workflows/phoenix-windows-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-desktop:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Validate bootstrap syntax
+        shell: pwsh
+        run: |
+          $source = Get-Content installer/windows/bootstrap-runtime.ps1 -Raw
+          [void][scriptblock]::Create($source)
+
+      - name: Prepare Phoenix icon
+        shell: pwsh
+        run: |
+          if (-not (Get-Command magick.exe -ErrorAction SilentlyContinue)) {
+            choco install imagemagick.app -y --no-progress
+          }
+          magick apps/web/public/favicon.png -define icon:auto-resize=256,128,64,48,32,16 apps/desktop-windows/phoenix.ico
+          if (-not (Test-Path apps/desktop-windows/phoenix.ico)) { throw 'Phoenix icon generation failed' }
+
+      - name: Publish native launcher
+        shell: pwsh
+        run: |
+          dotnet publish apps/desktop-windows/Phoenix.Desktop.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -o dist/phoenix-desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item apps/desktop-windows/phoenix.ico dist/phoenix-desktop/phoenix.ico
+          Copy-Item installer/windows/bootstrap-runtime.ps1 dist/phoenix-desktop/bootstrap-runtime.ps1
+
+      - name: Launcher smoke test
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--disable-autostart' -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Phoenix launcher smoke test failed: $($process.ExitCode)" }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup compiler was not found' }
+          New-Item -ItemType Directory -Force dist/installer | Out-Null
+          $source = (Resolve-Path dist/phoenix-desktop).Path
+          $output = (Resolve-Path dist/installer).Path
+          & $iscc "/DSourceDir=$source" "/DOutputDir=$output" installer/windows/Phoenix.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path dist/installer/Phoenix-Windows-Setup.exe)) { throw 'Installer artifact missing' }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Phoenix-Windows-Desktop-${{ github.sha }}
+          path: |
+            dist/installer/Phoenix-Windows-Setup.exe
+            dist/phoenix-desktop/Phoenix.exe
+          if-no-files-found: error
+          retention-days: 30
