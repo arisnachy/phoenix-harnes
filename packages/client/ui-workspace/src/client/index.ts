@@ -71,7 +71,7 @@ export function apply(ctx: ClientContext): void {
     }
   }, 'ui-workspace: Cordis visual workspace service')
   ctx.slots.inject('shell.overlay', () => ctx.slots.register(
-    { name: 'shell.overlay' },
+    { name: 'shell.overlay', id: 'cordis-visual-workspace' },
     () => createElement(CordisVisualWorkspace, { controller: visualWorkspace, layout: ctx.layout }),
   ))
 
