@@ -59,4 +59,32 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(cliSource).toContain('phoenix-windows-supervisor.mjs')
     expect(cliSource).toContain('process.exit(result.status ?? 1)')
   })
+
+  it('keeps the supervisor alive and relaunches the Host after an unplanned Host exit', () => {
+    expect(source).toContain('HOST_RESTART_DELAY_MS')
+    expect(source).toContain('unexpectedly; relaunching under supervisor control')
+    expect(source).toContain('await sleep(HOST_RESTART_DELAY_MS)')
+    expect(source).toContain('continue')
+  })
+
+  it('distinguishes an operator shutdown signal from a model or runtime Host exit', () => {
+    expect(source).toContain("process.once('SIGINT'")
+    expect(source).toContain("process.once('SIGTERM'")
+    expect(source).toContain('operatorShutdown = true')
+    expect(source).toContain('if (operatorShutdown)')
+  })
+
+  it('preflights runtime configuration before an intentional runtime restart can stop the live Host', () => {
+    expect(source).toContain('readRuntimeRestartRequest')
+    expect(source).toContain('preflightPhoenixConfiguration')
+    expect(source).toContain('runtime restart rejected by configuration preflight')
+    expect(source).toContain('host.kill()')
+  })
+
+  it('restores last-known-good configuration after a startup crash caused by a changed configuration', () => {
+    expect(source).toContain('captureKnownGoodConfiguration')
+    expect(source).toContain('restoreKnownGoodConfiguration')
+    expect(source).toContain('configuration rollback restored the last-known-good boot state')
+    expect(source).toContain('CONFIG_STABILITY_MS')
+  })
 })
