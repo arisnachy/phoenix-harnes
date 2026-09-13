@@ -44,6 +44,7 @@ export const GOAL_JUDGE_OUTPUT_SCHEMA: ObjectJsonSchema = {
 const READ_ONLY_TOOLS = ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] as const
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 16
+const MAX_HISTORY_ROUNDS = 8
 const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
 type GoalJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
@@ -94,6 +95,70 @@ function reviewProvider(runtime: GoalJudgeRuntime, requested: string, parent: Ag
     .filter(name => canReview(runtime, name))
   const fresh = names.find((name) => runtime.getProvider(name)?.inheritsParentContext !== true)
   return fresh ?? names[0]
+}
+
+/**
+ * Build a bounded, secret-free review dossier from durable goal audit events.
+ * This is the Judge's memory across rounds: the original mission stays fixed,
+ * prior findings stay actionable, and verified executable evidence shows what
+ * the Builder actually delivered rather than what it merely claimed.
+ */
+function durableMissionReviewHistory(parent: Agent, objective: string): object {
+  const current = parent.session.events.findLast(event =>
+    event.type === 'goal/change' && event.data.operation !== 'clear')
+  const sameGoal = current?.type === 'goal/change'
+    && current.data.operation !== 'clear'
+    && current.data.goal.objective === objective
+    ? { goalId: current.data.goal.id, revision: current.data.goal.revision }
+    : undefined
+  const belongsToCurrentGoal = (data: { goalId: string, revision: number }): boolean => sameGoal === undefined
+    || (data.goalId === sameGoal.goalId && data.revision === sameGoal.revision)
+
+  const judgeRounds = parent.session.events
+    .filter((event): event is SessionEvent<'goal/judge'> => event.type === 'goal/judge' && belongsToCurrentGoal(event.data))
+    .slice(-MAX_HISTORY_ROUNDS)
+    .map(event => ({
+      round: event.data.round,
+      verdict: event.data.verdict,
+      summary: event.data.summary,
+      findings: [...event.data.findings],
+      requiredChanges: [...event.data.requiredChanges],
+    }))
+  const gateRounds = parent.session.events
+    .filter((event): event is SessionEvent<'goal/completion-gate'> => event.type === 'goal/completion-gate' && belongsToCurrentGoal(event.data))
+    .slice(-MAX_HISTORY_ROUNDS)
+    .map(event => ({
+      round: event.data.round,
+      checks: { ...event.data.checks },
+      artifactFingerprint: event.data.artifactFingerprint,
+      evidenceLedger: event.data.evidenceLedger.map(entry => ({
+        criterionId: entry.criterionId,
+        criterion: entry.criterion,
+        mandatory: entry.mandatory,
+        status: entry.status,
+        evidence: [...entry.evidence],
+      })),
+      findings: [...event.data.findings],
+      proceduralLessons: [...event.data.proceduralLessons],
+    }))
+  const falsePasses = parent.session.events
+    .filter((event): event is SessionEvent<'goal/false-pass'> => event.type === 'goal/false-pass' && belongsToCurrentGoal(event.data))
+    .slice(-MAX_HISTORY_ROUNDS)
+    .map(event => ({
+      detectedRound: event.data.detectedRound,
+      failureFingerprint: event.data.failureFingerprint,
+      findings: [...event.data.findings],
+      candidateProceduralLessons: [...event.data.candidateProceduralLessons],
+    }))
+
+  return {
+    objective,
+    goalId: sameGoal?.goalId ?? null,
+    revision: sameGoal?.revision ?? null,
+    judgeRounds,
+    gateRounds,
+    falsePasses,
+  }
 }
 
 function gateFailures(gate: GoalCompletionGateResult): string[] {
@@ -279,15 +344,19 @@ export async function judgeGoalCompletion(input: {
   if (provider === undefined) {
     return mayReuseSettledPass(settled, gate) ? settled.result : enforceGate(unavailable(), gate)
   }
+  const history = durableMissionReviewHistory(input.parent, input.objective)
 
   const prompt: ContentBlock[] = [{
     type: 'text',
     text: '<goal_judge>\n'
       + `Original objective: ${JSON.stringify(input.objective)}\n`
       + `Candidate completion round: ${input.round}\n`
+      + `Durable mission review history: ${JSON.stringify(history)}\n`
       + `Independent adversarial gate evidence: ${JSON.stringify(gate)}\n\n`
       + 'Act as the final independent completion Judge. Inspect the current workspace and durable session evidence using only read-only tools. '
       + 'Do not edit files, run commands, call other agents, or change goal state. Treat the original requirement as authoritative. '
+      + 'The durable mission review history is cumulative: do not forget earlier findings, required corrections, false passes, or verified evidence merely because a new round started. '
+      + 'Confirm that every previously required correction was actually addressed, and use the current workspace plus session evidence to determine what the Builder really changed. '
       + 'Cross-check the Evidence Ledger, Builder tests, independently generated adversarial tests, packaged artifact fingerprint, startup behavior, '
       + 'and clean-room evidence. Builder prose such as “all tests pass” is never evidence by itself. Mark every inconsistency as a BLOCKER finding. '
       + 'Return pass only when the whole objective is literally satisfied, every mandatory criterion is verified, every gate dimension passed, and the '
