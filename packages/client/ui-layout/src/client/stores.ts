@@ -1,9 +1,9 @@
 /**
  * The root entry's transient layout store: panel geometry as plain widths in
- * px (0 = closed). Visual workspaces temporarily borrow the shell geometry:
- * the first occupant snapshots the user's sidebar/details preferences, every
- * occupant shares the borrowed layout, and the last occupant restores that
- * snapshot exactly.
+ * px (0 = closed). Subagent and Cordis surfaces share occupancy metadata, but
+ * only Cordis temporarily borrows shell geometry: opening Cordis snapshots
+ * the user's sidebar/details preferences, minimizes navigation, closes ordinary
+ * details, and closing Cordis restores that snapshot exactly.
  */
 import { defineStore, type EngineStoreHandle } from '@phoenix-ai/dsh-client-runtime/client'
 import {
@@ -11,7 +11,7 @@ import {
   SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN,
 } from './columns.ts'
 
-/** Named owners that can borrow the shared visual-workspace dock. */
+/** Named owners that can occupy the shared visual-workspace rail. */
 export type WorkspaceOccupant = 'subagent' | 'cordis'
 
 type LayoutState = {
@@ -35,10 +35,6 @@ type LayoutActions = {
   setWorkspaceOccupant: (draft: LayoutState, occupant: WorkspaceOccupant, active: boolean) => void
 }
 
-function workspaceActive(state: LayoutState): boolean {
-  return state.workspaceSubagent || state.workspaceCordis
-}
-
 /** Create the layout panel store handle. */
 export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutActions> {
   return defineStore({
@@ -56,8 +52,8 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
       setSidebar: (d, px: number) => { d.sidebar = clampWidth(px, SIDEBAR_MIN, SIDEBAR_MAX) },
       setDetails: (d, px: number) => { d.details = clampWidth(px, DETAILS_MIN, DETAILS_MAX) },
       toggleSidebar: (d) => {
-        // A borrowed visual workspace intentionally keeps navigation minimized.
-        if (workspaceActive(d)) return
+        // Cordis keeps navigation minimized for the lifetime of its visual rail.
+        if (d.workspaceCordis) return
         if (d.narrow) d.narrowExpanded = !d.narrowExpanded
         else d.sidebar = d.sidebar === 0 ? SIDEBAR_DEFAULT : 0
       },
@@ -66,37 +62,41 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
         d.narrow = narrow
         d.narrowExpanded = false
       },
-      openDetails: (d) => { if (d.details === 0) d.details = DETAILS_DEFAULT },
-      closeDetails: (d) => {
-        // Tool details may close while a subagent/Cordis surface still owns the dock.
-        if (!workspaceActive(d)) d.details = 0
+      openDetails: (d) => {
+        // The Cordis rail owns the available right-side visual space while open.
+        if (d.workspaceCordis) return
+        if (d.details === 0) d.details = DETAILS_DEFAULT
       },
+      closeDetails: (d) => { d.details = 0 },
       setWorkspaceOccupant: (d, occupant, active) => {
         const current = occupant === 'subagent' ? d.workspaceSubagent : d.workspaceCordis
         if (current === active) return
 
-        const wasActive = workspaceActive(d)
-        if (active && !wasActive) {
+        // The subagent flag coordinates vertical stacking only. KIRA already
+        // reserves its own in-flow width, so changing shell geometry here would
+        // double-shrink the conversation.
+        if (occupant === 'subagent') {
+          d.workspaceSubagent = active
+          return
+        }
+
+        if (active) {
           d.workspaceRestoreSidebar = d.sidebar
           d.workspaceRestoreDetails = d.details
+          d.workspaceCordis = true
           d.sidebar = 0
           d.narrowExpanded = false
-          // The floating workspace itself is contract-width (DETAILS_DEFAULT),
-          // so reserve that same width even when the user previously resized
-          // or closed the ordinary details panel. The exact prior width is
-          // restored when the final workspace owner releases the dock.
-          d.details = DETAILS_DEFAULT
+          // Cordis renders in the same center-flow visual rail as KIRA, so the
+          // ordinary details column is temporarily closed rather than duplicated.
+          d.details = 0
+          return
         }
 
-        if (occupant === 'subagent') d.workspaceSubagent = active
-        else d.workspaceCordis = active
-
-        if (!workspaceActive(d)) {
-          if (d.workspaceRestoreSidebar !== null) d.sidebar = d.workspaceRestoreSidebar
-          if (d.workspaceRestoreDetails !== null) d.details = d.workspaceRestoreDetails
-          d.workspaceRestoreSidebar = null
-          d.workspaceRestoreDetails = null
-        }
+        d.workspaceCordis = false
+        if (d.workspaceRestoreSidebar !== null) d.sidebar = d.workspaceRestoreSidebar
+        if (d.workspaceRestoreDetails !== null) d.details = d.workspaceRestoreDetails
+        d.workspaceRestoreSidebar = null
+        d.workspaceRestoreDetails = null
       },
     },
   })
