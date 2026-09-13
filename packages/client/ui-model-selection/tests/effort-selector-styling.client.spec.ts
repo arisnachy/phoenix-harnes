@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest'
 
 function rule(css: string, selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
-  return css.match(new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\}`, 'u'))?.[1] ?? ''
+  return [...css.matchAll(new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\}`, 'gu'))]
+    .map(match => match[1] ?? '')
+    .join('\n')
 }
 
 describe('Effort selector styling', () => {
