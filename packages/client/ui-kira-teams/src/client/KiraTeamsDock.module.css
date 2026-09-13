@@ -168,19 +168,22 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 12px;
-  border: 1px solid var(--dsh-color-border, var(--border, rgba(0, 0, 0, 0.12)));
-  border-radius: 999px;
-  background: var(--dsh-color-surface, var(--surface, #fff));
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--dsh-color-text, var(--text, inherit));
   font: inherit;
   font-size: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   cursor: pointer;
 }
 
+.pill:hover {
+  background: color-mix(in srgb, var(--dsh-color-accent, #2f6fed) 8%, transparent);
+}
+
 .pillLive {
-  border-color: var(--dsh-color-accent, var(--accent, #2f6fed));
+  color: var(--dsh-color-accent, var(--accent, #2f6fed));
 }
 
 .pillTitle {
@@ -199,9 +202,8 @@
     flex: 0 0 auto;
     width: 100%;
     height: min(42vh, 360px);
-    padding: 8px 12px 12px;
-    border-top: 1px solid var(--dsh-color-border, var(--border, rgba(0, 0, 0, 0.1)));
-    border-left: 0;
+    padding: 8px 0 12px;
+    border: 0;
   }
 
   .dock {
