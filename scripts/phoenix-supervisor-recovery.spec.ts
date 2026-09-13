@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const supervisor = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
-const manifest = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as { scripts?: Record<string, string> }
+const control = readFileSync(resolve('scripts/phoenix-supervisor-control.mjs'), 'utf8')
 
 describe('PHOENIX supervisor-owned restart and configuration recovery', () => {
   it('accepts a generic restart request that the supervisor owns while the Host is still alive', () => {
@@ -26,8 +26,10 @@ describe('PHOENIX supervisor-owned restart and configuration recovery', () => {
     expect(supervisor).toContain('new Host failed before the healthy window; restoring last-known-good configuration')
   })
 
-  it('exposes a safe restart command instead of requiring the model to kill PHOENIX directly', () => {
-    expect(manifest.scripts?.['phoenix:restart']).toBe('node scripts/phoenix-supervisor-control.mjs restart')
-    expect(manifest.scripts?.['phoenix:preflight']).toBe('node scripts/phoenix-supervisor-control.mjs preflight')
+  it('exposes a safe restart control command instead of requiring the model to kill PHOENIX directly', () => {
+    expect(control).toContain("const CONTROL_REQUEST_FILE = 'phoenix-supervisor-request.json'")
+    expect(control).toContain("if (command === 'preflight')")
+    expect(control).toContain("else if (command === 'restart')")
+    expect(control).toContain('the external supervisor will preflight and own the restart')
   })
 })
