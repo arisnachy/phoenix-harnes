@@ -1,6 +1,6 @@
 name: Temporary Cordis mission gate
 
-# rerun after shell.overlay id and TS-spec fixes
+# rerun after decorative-image accessibility assertion fix
 on:
   push:
     branches:
