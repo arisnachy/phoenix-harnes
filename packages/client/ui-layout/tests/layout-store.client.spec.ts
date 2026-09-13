@@ -101,6 +101,7 @@ describe('createLayoutStore', () => {
     actions.setDetails(500)
 
     actions.setWorkspaceOccupant('subagent', true)
+    actions.setWorkspaceOccupant('subagent', true)
     expect(store.getSnapshot()).toMatchObject({
       sidebar: 0,
       details: DETAILS_DEFAULT,
