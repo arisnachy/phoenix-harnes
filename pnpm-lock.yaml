@@ -3023,6 +3023,9 @@ importers:
       '@phoenix-ai/dsh-client-ui-input-trigger':
         specifier: workspace:^
         version: link:../ui-input-trigger
+      '@phoenix-ai/dsh-client-ui-layout':
+        specifier: workspace:^
+        version: link:../ui-layout
       '@phoenix-ai/dsh-client-ui-primitives':
         specifier: workspace:^
         version: link:../ui-primitives
