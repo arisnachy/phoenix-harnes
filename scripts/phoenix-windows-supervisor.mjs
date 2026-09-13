@@ -2,19 +2,31 @@
 /**
  * Windows process supervisor for the PHOENIX Web Host and stable updater.
  *
- * Preparation and activation have separate owners:
- * - the watcher prepares and validates candidates while the Host stays alive;
- * - an explicit restart request makes this supervisor stop the watcher,
- *   activate the prepared candidate synchronously, then launch a fresh Host.
+ * Lifecycle ownership intentionally lives outside the Host:
+ * - the updater watcher prepares candidates while the Host stays alive;
+ * - models/operators request ordinary restarts through a control file;
+ * - the supervisor preflights configuration before it stops a healthy Host;
+ * - a stable Host configuration becomes a persistent last-known-good snapshot;
+ * - an early boot failure restores that snapshot before one bounded retry;
+ * - staged code updates keep their existing verified activation/rollback path.
  *
- * The supervisor therefore remains alive across an update restart. PowerShell
- * must not regain control until activation either completed or failed visibly.
+ * The invariant is simple: the process being repaired is never the final owner
+ * of its own restart or recovery.
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, unlinkSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 
@@ -24,7 +36,20 @@ const updater = join(root, 'scripts', 'phoenix-auto-update.mjs')
 const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
 const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
+const CONTROL_REQUEST_FILE = 'phoenix-supervisor-request.json'
+const CONTROL_RESULT_FILE = 'phoenix-supervisor-last-result.json'
 const WATCHER_RESTART_DELAY_MS = 1000
+const CONTROL_POLL_INTERVAL_MS = 400
+const HOST_HEALTHY_AFTER_MS = 10_000
+const MAX_RECOVERY_ATTEMPTS = 1
+const MAX_UNEXPECTED_RESTARTS = 1
+const RECOVERY_MANIFEST = 'manifest.json'
+const RECOVERY_CONFIG_PATHS = [
+  'profiles/web/package.json',
+  'profiles/web/cordis.patch.yml',
+  'cordis.patch.yml',
+  'codex/enabled.patch.yml',
+]
 
 function gitValue(cwd, args) {
   const result = spawnSync('git', args, {
@@ -80,6 +105,10 @@ function absoluteGitPath(cwd, value) {
   return value === undefined ? undefined : (isAbsolute(value) ? resolve(value) : resolve(cwd, value))
 }
 
+function repositoryGitDir() {
+  return absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-dir']))
+}
+
 function persistentStage() {
   const configured = process.env.PHOENIX_UPDATE_TEMP?.trim()
   const base = configured !== undefined && configured.length > 0
@@ -112,7 +141,7 @@ function recoverStaleStagingIndexLock() {
 }
 
 function restartRequestPath() {
-  const gitDir = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-dir']))
+  const gitDir = repositoryGitDir()
   return gitDir === undefined ? undefined : join(gitDir, RESTART_REQUEST_FILE)
 }
 
@@ -144,21 +173,195 @@ function clearRestartRequest() {
   }
 }
 
+function controlRequestPath() {
+  const gitDir = repositoryGitDir()
+  return gitDir === undefined ? undefined : join(gitDir, CONTROL_REQUEST_FILE)
+}
+
+function controlResultPath() {
+  const gitDir = repositoryGitDir()
+  return gitDir === undefined ? undefined : join(gitDir, CONTROL_RESULT_FILE)
+}
+
+function readControlRequest() {
+  const path = controlRequestPath()
+  if (path === undefined || !existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== 1 || value.action !== 'restart') return undefined
+    return {
+      action: 'restart',
+      reason: typeof value.reason === 'string' ? value.reason.slice(0, 500) : 'operator-or-model-request',
+      requestedAt: Number.isFinite(value.requestedAt) ? value.requestedAt : undefined,
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function clearControlRequest() {
+  const path = controlRequestPath()
+  if (path === undefined) return
+  try {
+    unlinkSync(path)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.error(`[PHOENIX CONTROL] warning: could not clear control request: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+}
+
+function writeControlResult(status, detail) {
+  const path = controlResultPath()
+  if (path === undefined) return
+  try {
+    writeFileSync(path, JSON.stringify({ schema: 1, status, detail, at: Date.now() }, undefined, 2) + '\n')
+  } catch (error) {
+    console.error(`[PHOENIX CONTROL] warning: could not persist control result: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+function dshHome() {
+  const configured = process.env.DSH_HOME?.trim()
+  return configured !== undefined && configured.length > 0 ? resolve(configured) : join(homedir(), '.dsh')
+}
+
+function recoveryDir() {
+  return join(dshHome(), 'recovery', 'last-known-good-web')
+}
+
+function configurationFingerprint() {
+  const home = dshHome()
+  const hash = createHash('sha256')
+  for (const relativePath of RECOVERY_CONFIG_PATHS) {
+    const path = join(home, relativePath)
+    hash.update(relativePath)
+    if (!existsSync(path)) {
+      hash.update('\0missing\0')
+      continue
+    }
+    try {
+      hash.update('\0present\0')
+      hash.update(readFileSync(path))
+    } catch (error) {
+      hash.update(`\0unreadable:${error instanceof Error ? error.message : String(error)}\0`)
+    }
+  }
+  return hash.digest('hex')
+}
+
+function readRecoveryManifest() {
+  const path = join(recoveryDir(), RECOVERY_MANIFEST)
+  if (!existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== 1 || typeof value.fingerprint !== 'string' || !Array.isArray(value.files)) return undefined
+    return value
+  } catch {
+    return undefined
+  }
+}
+
+function saveLastKnownGoodProfile() {
+  const home = dshHome()
+  const destination = recoveryDir()
+  mkdirSync(destination, { recursive: true })
+  const files = []
+  for (const relativePath of RECOVERY_CONFIG_PATHS) {
+    const source = join(home, relativePath)
+    const target = join(destination, relativePath)
+    const present = existsSync(source)
+    files.push({ path: relativePath, present })
+    if (!present) {
+      rmSync(target, { force: true })
+      continue
+    }
+    mkdirSync(dirname(target), { recursive: true })
+    copyFileSync(source, target)
+  }
+  const fingerprint = configurationFingerprint()
+  writeFileSync(join(destination, RECOVERY_MANIFEST), JSON.stringify({
+    schema: 1,
+    fingerprint,
+    savedAt: Date.now(),
+    files,
+  }, undefined, 2) + '\n')
+  return fingerprint
+}
+
+function restoreLastKnownGoodProfile() {
+  const manifest = readRecoveryManifest()
+  if (manifest === undefined || manifest.fingerprint === configurationFingerprint()) return false
+  const home = dshHome()
+  const sourceRoot = recoveryDir()
+  for (const entry of manifest.files) {
+    if (entry === null || typeof entry !== 'object' || typeof entry.path !== 'string') continue
+    if (!RECOVERY_CONFIG_PATHS.includes(entry.path)) continue
+    const target = join(home, entry.path)
+    if (entry.present !== true) {
+      rmSync(target, { force: true })
+      continue
+    }
+    const source = join(sourceRoot, entry.path)
+    if (!existsSync(source)) return false
+    mkdirSync(dirname(target), { recursive: true })
+    copyFileSync(source, target)
+  }
+  return configurationFingerprint() === manifest.fingerprint
+}
+
+function runConfigurationPreflight() {
+  const result = spawnSync(process.execPath, [
+    '--import', 'tsx/esm',
+    'apps/cli/src/bin.ts',
+    'web', '--dump-config',
+  ], {
+    cwd: root,
+    env: {
+      ...hydratePhoenixEnvironment(process.env),
+      PHOENIX_UPDATE_SUPERVISED: '1',
+      PHOENIX_CONFIG_PREFLIGHT: '1',
+    },
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+    timeout: 30_000,
+  })
+  if (result.error !== undefined) {
+    return { ok: false, detail: `preflight launch failed: ${result.error.message}` }
+  }
+  if (result.status === 0) return { ok: true, detail: 'effective web profile parsed and composed successfully' }
+  const detail = [result.stderr, result.stdout]
+    .filter(value => typeof value === 'string' && value.trim().length > 0)
+    .join('\n')
+    .trim()
+    .slice(0, 4000)
+  return { ok: false, detail: detail.length > 0 ? detail : `preflight exited with ${String(result.status ?? 1)}` }
+}
+
 const sleep = ms => new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 
-async function stopWatcher(watcher) {
-  if (watcher === undefined || watcher.exitCode !== null) return
-  const exited = new Promise(resolveExit => watcher.once('exit', resolveExit))
-  watcher.kill()
-  await Promise.race([exited, sleep(1500)])
-  if (watcher.exitCode === null && watcher.pid !== undefined) {
-    spawnSync('taskkill', ['/PID', String(watcher.pid), '/T', '/F'], {
+async function terminateProcessTree(child, graceMs = 3000) {
+  if (child === undefined || child.exitCode !== null) return
+  const exited = new Promise(resolveExit => child.once('exit', resolveExit))
+  child.kill('SIGTERM')
+  await Promise.race([exited, sleep(graceMs)])
+  if (child.exitCode === null && child.pid !== undefined) {
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
       cwd: root,
       windowsHide: true,
       stdio: 'ignore',
     })
     await Promise.race([exited, sleep(1500)])
   }
+}
+
+async function stopWatcher(watcher) {
+  await terminateProcessTree(watcher, 1500)
+}
+
+async function terminateHost(host) {
+  await terminateProcessTree(host, 3000)
 }
 
 function startHost() {
@@ -259,6 +462,86 @@ function superviseWatcher(host) {
   }
 }
 
+function superviseControlRequests(host) {
+  let stopping = false
+  let handling = false
+  let requestedRestart = false
+
+  const inspect = async () => {
+    if (stopping || handling || host.exitCode !== null || host.killed) return
+    const request = readControlRequest()
+    if (request === undefined) return
+    handling = true
+    const preflight = runConfigurationPreflight()
+    if (!preflight.ok) {
+      clearControlRequest()
+      writeControlResult('rejected', preflight.detail)
+      console.error('[PHOENIX CONTROL] configuration preflight failed; restart refused while the current PHOENIX remains alive.')
+      console.error(`[PHOENIX CONTROL] ${preflight.detail}`)
+      handling = false
+      return
+    }
+    clearControlRequest()
+    writeControlResult('accepted', `restart accepted after preflight: ${request.reason}`)
+    requestedRestart = true
+    console.error(`[PHOENIX CONTROL] restart accepted after safe configuration preflight (${request.reason}); supervisor owns shutdown and relaunch.`)
+    await terminateHost(host)
+  }
+
+  const timer = setInterval(() => { void inspect() }, CONTROL_POLL_INTERVAL_MS)
+  timer.unref?.()
+  void inspect()
+
+  return {
+    restartRequested() {
+      return requestedRestart
+    },
+    stop() {
+      stopping = true
+      clearInterval(timer)
+    },
+  }
+}
+
+function armHealthyCheckpoint(host, onHealthy) {
+  let stopped = false
+  let healthy = false
+  let observedFingerprint = configurationFingerprint()
+  let timer
+
+  const schedule = () => {
+    timer = setTimeout(() => {
+      if (stopped || host.exitCode !== null || host.killed) return
+      const currentFingerprint = configurationFingerprint()
+      if (currentFingerprint !== observedFingerprint) {
+        observedFingerprint = currentFingerprint
+        schedule()
+        return
+      }
+      try {
+        saveLastKnownGoodProfile()
+        healthy = true
+        console.error('[PHOENIX RECOVERY] Host remained healthy with stable configuration; last-known-good checkpoint updated.')
+        onHealthy()
+      } catch (error) {
+        console.error(`[PHOENIX RECOVERY] warning: could not persist last-known-good configuration: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }, HOST_HEALTHY_AFTER_MS)
+    timer.unref?.()
+  }
+
+  schedule()
+  return {
+    healthy() {
+      return healthy
+    },
+    stop() {
+      stopped = true
+      if (timer !== undefined) clearTimeout(timer)
+    },
+  }
+}
+
 function preparedActivator() {
   const target = restartRequestTarget()
   const stage = persistentStage()
@@ -298,21 +581,52 @@ function activatePrepared() {
 recoverStaleStagingIndexLock()
 
 let finalCode = 0
+let recoveryAttempts = 0
+let unexpectedRestarts = 0
 while (true) {
   const host = startHost()
   host.once('error', (error) => {
     console.error(`[PHOENIX] host launch failed: ${error.message}`)
   })
   const watcherSupervisor = superviseWatcher(host)
+  const controlSupervisor = superviseControlRequests(host)
+  const health = armHealthyCheckpoint(host, () => {
+    recoveryAttempts = 0
+    unexpectedRestarts = 0
+  })
 
   const hostExit = await new Promise(resolveExit => {
     host.once('exit', (code, signal) => resolveExit({ code, signal }))
   })
   const requested = restartRequested()
+  const controlRequested = controlSupervisor.restartRequested()
 
+  health.stop()
+  controlSupervisor.stop()
   await watcherSupervisor.stop()
 
+  if (controlRequested) {
+    console.error('[PHOENIX CONTROL] Host stopped by the external supervisor; relaunching PHOENIX now...')
+    continue
+  }
+
   if (!requested) {
+    if (!health.healthy() && recoveryAttempts < MAX_RECOVERY_ATTEMPTS) {
+      try {
+        if (restoreLastKnownGoodProfile()) {
+          recoveryAttempts += 1
+          console.error('[PHOENIX RECOVERY] new Host failed before the healthy window; restoring last-known-good configuration and relaunching.')
+          continue
+        }
+      } catch (error) {
+        console.error(`[PHOENIX RECOVERY] automatic configuration restore failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    if (unexpectedRestarts < MAX_UNEXPECTED_RESTARTS) {
+      unexpectedRestarts += 1
+      console.error('[PHOENIX RECOVERY] Host exited without a supervisor stop request; relaunching once under the still-live supervisor.')
+      continue
+    }
     finalCode = hostExit.code ?? (hostExit.signal === null ? 1 : 0)
     break
   }
