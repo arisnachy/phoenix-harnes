@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react'
 import {
   IconChevronDownOutline14, IconRefreshOutline14, StateDot,
 } from '@phoenix-ai/dsh-client-ui-primitives'
+import type { ILayout } from '@phoenix-ai/dsh-client-ui-layout/client'
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import type {
   SessionId, SessionListState, SessionSummary, SubagentAddress,
@@ -19,6 +20,8 @@ export interface KiraTeamsInjected {
     getSnapshot(): SessionListState
     subscribe(fn: () => void): () => void
   }
+  /** Shared shell layout used to announce the expanded subagent window. */
+  layout: Pick<ILayout, 'setWorkspaceOccupant'>
   /** Navigate to one deployed child session. */
   openChild: (address: SubagentAddress) => void
   /** Re-pull the direct-child catalog of one parent. */
@@ -161,11 +164,20 @@ export function lineageMembers(state: SessionListState): {
  * @param props - Shell standard props, injected sessions face, and copy.
  * @returns The card element, or null while the lineage has no active members.
  */
-export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProps) {
+export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeamsDockProps) {
   const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
   const { root, rows } = lineageMembers(state)
   const [collapsed, setCollapsed] = useState(initialCollapsed)
   const runningCount = rows.reduce((total, row) => total + (row.summary.running ? 1 : 0), 0)
+  const workspaceOpen = root !== undefined && rows.length > 0 && !collapsed
+
+  // The expanded subagent card owns the upper half of Phoenix's shared visual
+  // workspace. A collapsed pill does not reserve the dock, so Cordis can use
+  // the full height. Unmount always releases the lease.
+  useEffect(() => {
+    layout.setWorkspaceOccupant('subagent', workspaceOpen)
+    return () => { layout.setWorkspaceOccupant('subagent', false) }
+  }, [layout, workspaceOpen])
 
   // A deployment must never be silent again: a rising running count reopens
   // the dock even after a manual collapse of an all-idle board.

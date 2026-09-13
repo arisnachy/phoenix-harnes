@@ -16,7 +16,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 export type { KiraTeamsDockProps, KiraTeamsInjected } from './KiraTeamsDock.tsx'
 
 /** Required services for the overlay slot contribution. */
-export const inject = ['sessions', 'slots', 'locale']
+export const inject = ['sessions', 'slots', 'locale', 'layout']
 
 /**
  * Client plugin body: register the dictionaries and the frame overlay dock.
@@ -27,6 +27,7 @@ export function apply(ctx: ClientContext): void {
   const sessions = ctx.get('sessions') as unknown as ISessions
   const dockActions = () => ({
     list: sessions.list,
+    layout: ctx.layout,
     openChild(address: SubagentAddress) {
       sessions.openSubagent(address)
     },

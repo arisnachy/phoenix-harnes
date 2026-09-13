@@ -46,9 +46,55 @@
   display: contents;
 }
 
+/* Cordis reuses the same center-flow visual space as the KIRA/subagent card.
+   The overlay becomes one bounded right rail instead of opening a second
+   details column. When KIRA is also active, its card is the upper occupant
+   and Cordis receives the remaining lower space. */
+.centerCol:has([data-cordis-workspace]) {
+  flex-direction: row;
+}
+
+.centerCol:has([data-cordis-workspace]) > [data-shell-overlay] {
+  order: 2;
+  flex: 0 0 min(360px, calc(100% - 56px));
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.centerCol:has([data-cordis-workspace]) > [data-shell-overlay] > [data-kira-teams] {
+  order: 0;
+  flex: 0 1 50%;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  max-height: 50%;
+  box-sizing: border-box;
+}
+
+.centerCol:has([data-cordis-workspace]) > [data-shell-overlay] > [data-cordis-workspace] {
+  order: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 @media (max-width: 760px) {
   .centerCol:has([data-kira-teams]) {
     flex-direction: column;
+  }
+
+  .centerCol:has([data-cordis-workspace]) {
+    flex-direction: column;
+  }
+
+  .centerCol:has([data-cordis-workspace]) > [data-shell-overlay] {
+    order: 2;
+    flex: 0 0 min(42vh, 360px);
+    width: 100%;
+    height: min(42vh, 360px);
   }
 }
 
