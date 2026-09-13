@@ -360,6 +360,10 @@ export class McpOAuthController {
     if (previous?.tokens !== undefined) await this.store.write(cloneWithout(previous, 'tokens'))
     const state = randomState()
     const attempt = this.callbackServer.begin(state, session.signal)
+    // The callback promise may be closed during cleanup before the flow reaches
+    // `await attempt.code` (for example when discovery fails). Mark its rejection
+    // as observed without changing the rejection delivered to the awaiting flow.
+    void attempt.code.catch(() => undefined)
     const provider = createMcpOAuthProvider({
       serverName: this.serverName,
       redirectUrl: this.callbackServer.redirectUri,

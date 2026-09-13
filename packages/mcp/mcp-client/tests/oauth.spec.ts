@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
+import { auth } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { OAuthTokens, OAuthClientInformationMixed } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js'
+vi.mock('@modelcontextprotocol/sdk/client/auth.js', () => ({
+  auth: vi.fn(),
+}))
+
 import {
   McpOAuthCallbackServer,
+  McpOAuthController,
   createCredentialStateStore,
   createMcpOAuthProvider,
   hasUsableMcpOAuthTokens,
@@ -90,7 +96,7 @@ describe('createMcpOAuthProvider', () => {
 
     const second = callback.begin('expected-state')
     const accepted = fetch(`${callback.redirectUri}?code=good-code&state=expected-state`)
-    await expect((await second).code).resolves.toBe('good-code')
+    await expect(second.code).resolves.toBe('good-code')
     expect((await accepted).status).toBe(200)
     await callback.close()
   })
@@ -132,5 +138,31 @@ describe('createMcpOAuthProvider', () => {
     expect(isExpectedMcpOAuthClose(new Error('MCP OAuth callback closed'))).toBe(true)
     expect(isExpectedMcpOAuthClose(new Error('MCP OAuth callback server closed'))).toBe(true)
     expect(isExpectedMcpOAuthClose(new Error('MCP OAuth state did not match'))).toBe(false)
+  })
+
+  it('does not leak a callback rejection when OAuth fails before redirect', async () => {
+    vi.mocked(auth).mockRejectedValueOnce(new Error('discovery failed'))
+    const credentials = {
+      readRecord: vi.fn(async () => undefined),
+      modifyRecord: vi.fn(async (_key: unknown, mutate: (current: unknown) => Promise<unknown>) => mutate(undefined)),
+      deleteRecord: vi.fn(async () => undefined),
+    } as unknown as CredentialProvider
+    const controller = new McpOAuthController(credentials, 'figma-figma', 'https://mcp.figma.com')
+    await controller.ready
+    const unhandled = vi.fn()
+    process.once('unhandledRejection', unhandled)
+    try {
+      await expect(controller.authorize({
+        method: 'oauth',
+        signal: new AbortController().signal,
+        notify: vi.fn(),
+        prompt: vi.fn(),
+      })).rejects.toThrow('discovery failed')
+      await new Promise(resolve => setImmediate(resolve))
+      expect(unhandled).not.toHaveBeenCalled()
+    } finally {
+      process.removeListener('unhandledRejection', unhandled)
+      await controller.close()
+    }
   })
 })
