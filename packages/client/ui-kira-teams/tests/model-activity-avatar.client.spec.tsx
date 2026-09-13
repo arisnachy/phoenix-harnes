@@ -32,6 +32,22 @@ describe('ModelActivityAvatar', () => {
     expect(first.props['data-avatar']).not.toBe(second.props['data-avatar'])
   })
 
+  it('renders a vector figure instead of an emoji character card', () => {
+    const element = ModelActivityAvatar({
+      agentId: 'dragon-agent',
+      activity: { phase: 'running-tools' },
+      running: true,
+      pending: false,
+    })
+    const children = Array.isArray(element.props.children)
+      ? element.props.children
+      : [element.props.children]
+    const glyph = children.find((child: { props?: Record<string, unknown> }) =>
+      child?.props?.['data-agent-glyph'] === true)
+    expect(glyph).toBeDefined()
+    expect(glyph.type).toBe('svg')
+  })
+
   it('exposes model family, phase and state as decorative data', () => {
     const element = ModelActivityAvatar({
       activity: { provider: 'openai-codex', model: 'gpt-5.6-luna', phase: 'running-tools' },

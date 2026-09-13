@@ -1,19 +1,20 @@
 .avatar {
+  --avatar-accent: var(--dsh-color-accent, #2563eb);
   position: relative;
   isolation: isolate;
   display: inline-block;
   flex: none;
-  width: 46px;
-  height: 48px;
-  border-radius: 15px 15px 19px 19px;
-  background: var(--dsh-color-surface, #fff);
-  box-shadow: 0 3px 10px rgb(15 23 42 / 18%);
+  width: 48px;
+  height: 50px;
+  border-radius: 16px;
+  color: var(--avatar-accent);
   opacity: 0.98;
 }
 
 .core,
 .orbit,
-.badge {
+.badge,
+.glyph {
   position: absolute;
   pointer-events: none;
 }
@@ -22,229 +23,91 @@
   z-index: 1;
   inset: 3px;
   overflow: hidden;
-  border: 2px solid var(--avatar-accent, var(--dsh-color-border, #94a3b8));
-  border-radius: 13px 13px 17px 17px;
-  background: var(--dsh-color-surface, #fff);
-  box-shadow: 0 3px 8px rgb(15 23 42 / 20%), inset 1px 1px 4px rgb(255 255 255 / 72%);
-}
-
-.core::before,
-.core::after {
-  position: absolute;
-  content: '';
-}
-
-.core::before {
-  inset: 18%;
-  border-radius: 50%;
-  background: rgb(255 255 255 / 58%);
-  filter: blur(2px);
-  opacity: 0.62;
-}
-
-.core::after {
-  width: 140%;
-  height: 2px;
-  top: 50%;
-  left: -20%;
-  border-radius: 50%;
-  background: rgb(255 255 255 / 45%);
-  transform: rotate(-24deg);
+  border: 1px solid color-mix(in srgb, var(--avatar-accent) 32%, var(--dsh-color-border, transparent));
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 30% 22%, color-mix(in srgb, var(--avatar-accent) 14%, transparent), transparent 54%),
+    var(--dsh-color-surface, #fff);
+  box-shadow:
+    0 4px 12px color-mix(in srgb, var(--dsh-color-text, #0f172a) 13%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--dsh-color-surface, #fff) 86%, transparent);
 }
 
 .orbit {
   z-index: 0;
   inset: 0;
-  border: 1.5px solid var(--avatar-accent, rgb(59 130 246 / 65%));
-  border-radius: 15px 15px 19px 19px;
+  border: 1px solid color-mix(in srgb, var(--avatar-accent) 54%, transparent);
+  border-radius: 17px;
   transform: rotate(-4deg);
 }
 
+.glyph {
+  z-index: 2;
+  inset: 7px;
+  width: 34px;
+  height: 34px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px color-mix(in srgb, currentColor 18%, transparent));
+}
+
 .badge {
-  right: -2px;
-  bottom: -2px;
+  right: -1px;
+  bottom: -1px;
   z-index: 3;
   width: 11px;
   height: 11px;
   border: 2px solid var(--dsh-color-surface, #fff);
   border-radius: 50%;
-  background: #22c55e;
+  background: var(--dsh-color-success, #22c55e);
   box-sizing: border-box;
 }
 
 .avatar[data-state='done'] {
-  opacity: 0.7;
+  opacity: 0.64;
 }
 
 .avatar[data-state='done'] .badge {
-  background: #86efac;
-  box-shadow: inset 0 0 0 1px #16a34a;
+  background: color-mix(in srgb, var(--dsh-color-success, #22c55e) 48%, var(--dsh-color-surface, #fff));
 }
 
 .avatar[data-state='pending'] .badge {
-  background: #f59e0b;
-  box-shadow: 0 0 0 2px rgb(245 158 11 / 18%);
+  background: var(--dsh-color-warning, #f59e0b);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsh-color-warning, #f59e0b) 18%, transparent);
 }
 
-.avatar[data-avatar='sol'] .core {
-  background: radial-gradient(circle at 35% 30%, #fff7c2 0%, #f59e0b 50%, #c2410c 100%);
-}
-
-.avatar[data-avatar='sol'] .orbit {
-  border-color: rgb(245 158 11 / 78%);
-  border-left-color: rgb(251 191 36 / 42%);
-}
-
-.avatar[data-avatar='luna'] .core {
-  background: radial-gradient(circle at 35% 32%, #dbeafe 0%, #6366f1 52%, #312e81 100%);
-}
-
-.avatar[data-avatar='luna'] .core::before {
-  inset: 5% 34% 5% 48%;
-  border-radius: 50%;
-  background: var(--dsh-color-surface, #fff);
-  opacity: 0.82;
-}
-
-.avatar[data-avatar='luna'] .orbit {
-  border-color: rgb(99 102 241 / 78%);
-  border-bottom-color: rgb(191 219 254 / 86%);
-}
-
-.avatar[data-avatar='terra'] .core {
-  background: radial-gradient(circle at 35% 32%, #ccfbf1 0%, #14b8a6 52%, #115e59 100%);
-}
-
-.avatar[data-avatar='terra'] .core::before {
-  inset: 35% -10%;
-  height: 2px;
-  border-radius: 50%;
-  background: rgb(204 251 241 / 78%);
-  box-shadow: 0 -5px 0 rgb(204 251 241 / 46%), 0 5px 0 rgb(204 251 241 / 38%);
-  filter: none;
-  transform: rotate(-10deg);
-}
-
-.avatar[data-avatar='terra'] .orbit {
-  border-color: rgb(20 184 166 / 74%);
-  border-right-color: rgb(125 211 252 / 86%);
-}
-
-.avatar[data-avatar='generic'] .core {
-  background: radial-gradient(circle at 35% 32%, #e0f2fe 0%, #3b82f6 52%, #1e3a8a 100%);
-}
-
-.avatar[data-avatar='generic'][data-variant='1'] .core {
-  background: radial-gradient(circle at 35% 32%, #fce7f3 0%, #ec4899 52%, #831843 100%);
-}
-
-.avatar[data-avatar='generic'][data-variant='2'] .core {
-  background: radial-gradient(circle at 35% 32%, #ede9fe 0%, #8b5cf6 52%, #4c1d95 100%);
-}
-
-.avatar[data-avatar='generic'][data-variant='3'] .core {
-  background: radial-gradient(circle at 35% 32%, #dcfce7 0%, #22c55e 52%, #14532d 100%);
-}
-
-.avatar[data-avatar='eagle'] .core { background: radial-gradient(circle at 35% 28%, #fff7c2, #f59e0b 48%, #92400e); }
-.avatar[data-avatar='wolf'] .core { background: radial-gradient(circle at 35% 28%, #e2e8f0, #64748b 48%, #1e293b); }
-.avatar[data-avatar='fox'] .core { background: radial-gradient(circle at 35% 28%, #fed7aa, #f97316 48%, #9a3412); }
-.avatar[data-avatar='owl'] .core { background: radial-gradient(circle at 35% 28%, #ede9fe, #8b5cf6 48%, #4c1d95); }
-.avatar[data-avatar='lynx'] .core { background: radial-gradient(circle at 35% 28%, #fce7f3, #ec4899 48%, #831843); }
-.avatar[data-avatar='dolphin'] .core { background: radial-gradient(circle at 35% 28%, #cffafe, #06b6d4 48%, #155e75); }
-.avatar[data-avatar='forge'] .core { background: radial-gradient(circle at 35% 28%, #ffedd5, #ea580c 48%, #7c2d12); }
-.avatar[data-avatar='nova'] .core {
-  background: radial-gradient(circle at 35% 28%, #fce7f3 0%, #d946ef 52%, #701a75 100%);
-}
-
-.avatar[data-avatar='prism'] .core {
-  background: conic-gradient(from 210deg, #f97316, #eab308, #22c55e, #06b6d4, #8b5cf6, #f97316);
-}
-
-.avatar[data-avatar='comet'] .core {
-  background: radial-gradient(circle at 35% 28%, #dbeafe 0%, #2563eb 52%, #1e3a8a 100%);
-}
-
-.avatar[data-avatar='aurora'] .core {
-  background: radial-gradient(circle at 35% 28%, #d9f99d 0%, #14b8a6 52%, #115e59 100%);
-}
-
-.avatar[data-avatar='dragon'] .core { background: radial-gradient(circle at 35% 28%, #fecaca, #ef4444 48%, #7f1d1d); }
-
-.avatar[data-avatar='sol'] { --avatar-accent: #d97706; }
-.avatar[data-avatar='luna'] { --avatar-accent: #6366f1; }
-.avatar[data-avatar='terra'] { --avatar-accent: #0f766e; }
-.avatar[data-avatar='generic'] { --avatar-accent: #2563eb; }
-.avatar[data-avatar='nova'] { --avatar-accent: #c026d3; }
-.avatar[data-avatar='prism'] { --avatar-accent: #0d9488; }
-.avatar[data-avatar='comet'] { --avatar-accent: #2563eb; }
-.avatar[data-avatar='aurora'] { --avatar-accent: #0f766e; }
+.avatar[data-avatar='sol'],
 .avatar[data-avatar='eagle'] { --avatar-accent: #d97706; }
+.avatar[data-avatar='luna'] { --avatar-accent: #6366f1; }
+.avatar[data-avatar='terra'],
+.avatar[data-avatar='aurora'] { --avatar-accent: #0f766e; }
+.avatar[data-avatar='generic'],
+.avatar[data-avatar='comet'] { --avatar-accent: #2563eb; }
 .avatar[data-avatar='wolf'] { --avatar-accent: #475569; }
-.avatar[data-avatar='fox'] { --avatar-accent: #ea580c; }
+.avatar[data-avatar='fox'],
+.avatar[data-avatar='forge'] { --avatar-accent: #ea580c; }
 .avatar[data-avatar='owl'] { --avatar-accent: #7c3aed; }
 .avatar[data-avatar='lynx'] { --avatar-accent: #db2777; }
 .avatar[data-avatar='dolphin'] { --avatar-accent: #0891b2; }
-.avatar[data-avatar='forge'] { --avatar-accent: #c2410c; }
+.avatar[data-avatar='nova'] { --avatar-accent: #c026d3; }
+.avatar[data-avatar='prism'] { --avatar-accent: #0d9488; }
 .avatar[data-avatar='dragon'] { --avatar-accent: #dc2626; }
 
-.avatar[data-avatar] .core::after {
-  width: auto;
-  height: auto;
-  top: 50%;
-  left: 50%;
-  background: transparent;
-  font-size: 24px;
-  line-height: 1;
-  text-shadow: 0 1px 2px rgb(15 23 42 / 24%);
-  transform: translate(-50%, -54%);
+.avatar[data-avatar='prism'] .core {
+  background:
+    conic-gradient(from 210deg at 50% 50%,
+      color-mix(in srgb, #f97316 14%, transparent),
+      color-mix(in srgb, #22c55e 12%, transparent),
+      color-mix(in srgb, #06b6d4 14%, transparent),
+      color-mix(in srgb, #8b5cf6 12%, transparent),
+      transparent 82%),
+    var(--dsh-color-surface, #fff);
 }
 
-.avatar[data-avatar='generic'] .core::after { content: '✧'; }
-.avatar[data-avatar='nova'] .core::after { content: '✦'; }
-.avatar[data-avatar='prism'] .core::after { content: '◇'; }
-.avatar[data-avatar='comet'] .core::after { content: '☄'; }
-.avatar[data-avatar='aurora'] .core::after { content: '◌'; }
-.avatar[data-avatar='sol'] .core::after { content: '☼'; }
-.avatar[data-avatar='luna'] .core::after { content: '☾'; }
-.avatar[data-avatar='terra'] .core::after { content: '◍'; }
-
-.avatar[data-avatar='eagle'] .core::after,
-.avatar[data-avatar='wolf'] .core::after,
-.avatar[data-avatar='fox'] .core::after,
-.avatar[data-avatar='owl'] .core::after,
-.avatar[data-avatar='lynx'] .core::after,
-.avatar[data-avatar='dolphin'] .core::after,
-.avatar[data-avatar='forge'] .core::after,
-.avatar[data-avatar='dragon'] .core::after {
-  font-family: 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif;
-  font-size: 20px;
-}
-
-.avatar[data-avatar='eagle'] .core::after { content: '🦅'; }
-.avatar[data-avatar='wolf'] .core::after { content: '🐺'; }
-.avatar[data-avatar='fox'] .core::after { content: '🦊'; }
-.avatar[data-avatar='owl'] .core::after { content: '🦉'; }
-.avatar[data-avatar='lynx'] .core::after { content: '🐆'; }
-.avatar[data-avatar='dolphin'] .core::after { content: '🐬'; }
-.avatar[data-avatar='forge'] .core::after { content: '⚒'; }
-.avatar[data-avatar='dragon'] .core::after { content: '🐉'; }
-
-/* White character cards keep every illustrated glyph legible in dark shells. */
-.avatar[data-avatar='eagle'] .core,
-.avatar[data-avatar='wolf'] .core,
-.avatar[data-avatar='fox'] .core,
-.avatar[data-avatar='owl'] .core,
-.avatar[data-avatar='lynx'] .core,
-.avatar[data-avatar='dolphin'] .core,
-.avatar[data-avatar='forge'] .core,
-.avatar[data-avatar='nova'] .core,
-.avatar[data-avatar='comet'] .core,
-.avatar[data-avatar='prism'] .core,
-.avatar[data-avatar='aurora'] .core,
-.avatar[data-avatar='dragon'] .core {
-  background: #fff;
-}
 .avatar[data-phase='preparing'] .core {
   animation: avatar-breathe 1.8s ease-in-out infinite alternate;
 }
@@ -253,12 +116,23 @@
   animation: avatar-orbit 1.2s linear infinite;
 }
 
-.avatar[data-phase='running-tools'] .core {
+.avatar[data-phase='running-tools'] .glyph {
   animation: avatar-work 900ms ease-in-out infinite alternate;
 }
 
 .avatar[data-phase='verifying'] .orbit {
   animation: avatar-focus 1.4s ease-in-out infinite;
+}
+
+.avatar[data-phase='verifying']::after {
+  position: absolute;
+  z-index: 4;
+  inset: 4px;
+  border-radius: 14px;
+  background: linear-gradient(110deg, transparent 34%, color-mix(in srgb, var(--dsh-color-surface, #fff) 76%, transparent) 50%, transparent 66%);
+  content: '';
+  animation: avatar-scan 1.6s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .avatar[data-state='pending'] {
@@ -269,48 +143,36 @@
   animation: badge-pulse 1.1s ease-in-out infinite;
 }
 
-.avatar[data-phase='verifying']::after {
-  position: absolute;
-  z-index: 4;
-  inset: 3px;
-  border-radius: 50%;
-  background: linear-gradient(110deg, transparent 35%, rgb(255 255 255 / 72%) 50%, transparent 65%);
-  content: '';
-  animation: avatar-scan 1.6s ease-in-out infinite;
-}
-
 @keyframes avatar-breathe {
   to {
-    filter: brightness(1.12);
-    transform: scale(1.06);
+    filter: brightness(1.04);
+    transform: scale(1.025);
   }
 }
 
 @keyframes avatar-orbit {
-  to {
-    transform: rotate(332deg);
-  }
+  to { transform: rotate(356deg); }
 }
 
 @keyframes avatar-work {
   to {
-    filter: saturate(1.2) brightness(1.12);
-    transform: scale(1.08) rotate(2deg);
+    filter: saturate(1.18) brightness(1.08);
+    transform: scale(1.06) rotate(1deg);
   }
 }
 
 @keyframes avatar-focus {
-  0%, 100% { transform: rotate(-28deg) scale(1); }
-  50% { transform: rotate(152deg) scale(1.08); }
+  0%, 100% { transform: rotate(-18deg) scale(1); }
+  50% { transform: rotate(162deg) scale(1.04); }
 }
 
 @keyframes avatar-pending {
-  0%, 100% { filter: saturate(1); transform: translateY(0); }
-  50% { filter: saturate(1.25) brightness(1.08); transform: translateY(-1px); }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
 }
 
 @keyframes badge-pulse {
-  50% { box-shadow: 0 0 0 3px rgb(34 197 94 / 24%); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsh-color-success, #22c55e) 24%, transparent); }
 }
 
 @keyframes avatar-scan {
