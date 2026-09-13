@@ -44,6 +44,8 @@ export const GOAL_JUDGE_OUTPUT_SCHEMA: ObjectJsonSchema = {
 const READ_ONLY_TOOLS = ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] as const
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 16
+const MAX_HISTORY_ITEMS = 12
+const MAX_HISTORY_TEXT = 8_000
 const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
 type GoalJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
@@ -147,6 +149,58 @@ function sessionGatePassed(event: SessionEvent<'goal/completion-gate'>): boolean
     && event.data.evidenceLedger.some(entry => entry.mandatory)
     && event.data.evidenceLedger.every(entry => !entry.mandatory || entry.status === 'verified')
     && event.data.artifactFingerprint.trim().length > 0
+}
+
+/** Find the exact durable goal revision the Judge is reviewing. */
+function currentGoalRevision(parent: Agent, objective: string): { goalId: string; revision: number } | undefined {
+  const current = parent.session.events.findLast(event =>
+    event.type === 'goal/change' && event.data.operation !== 'clear')
+  if (current?.type !== 'goal/change' || current.data.operation === 'clear'
+    || current.data.goal.objective !== objective) return undefined
+  return { goalId: current.data.goal.id, revision: current.data.goal.revision }
+}
+
+/**
+ * Build bounded durable memory for the exact goal revision under review.
+ * The new Judge therefore sees what earlier Judges rejected, what executable
+ * gates observed, and what repair they required instead of reviewing each
+ * round as if it were the first.
+ */
+function durableReviewHistory(parent: Agent, objective: string): string {
+  const current = currentGoalRevision(parent, objective)
+  if (current === undefined) return 'No prior durable review history is recorded for this objective.'
+  const lines: string[] = []
+  for (const event of parent.session.events) {
+    if (event.type === 'goal/judge'
+      && event.data.goalId === current.goalId
+      && event.data.revision === current.revision) {
+      lines.push(
+        `Judge round ${String(event.data.round)}: verdict=${event.data.verdict}; summary=${event.data.summary}; `
+        + `findings=${JSON.stringify(event.data.findings)}; required changes=${JSON.stringify(event.data.requiredChanges)}`,
+      )
+      continue
+    }
+    if (event.type === 'goal/completion-gate'
+      && event.data.goalId === current.goalId
+      && event.data.revision === current.revision) {
+      lines.push(
+        `Executable gate round ${String(event.data.round)}: checks=${JSON.stringify(event.data.checks)}; `
+        + `findings=${JSON.stringify(event.data.findings)}; evidence=${JSON.stringify(event.data.evidenceLedger)}; `
+        + `artifact=${event.data.artifactFingerprint}`,
+      )
+      continue
+    }
+    if (event.type === 'goal/false-pass'
+      && event.data.goalId === current.goalId
+      && event.data.revision === current.revision) {
+      lines.push(
+        `False-pass detected round ${String(event.data.detectedRound)}: failure=${event.data.failureFingerprint}; `
+        + `findings=${JSON.stringify(event.data.findings)}; lessons=${JSON.stringify(event.data.candidateProceduralLessons)}`,
+      )
+    }
+  }
+  if (lines.length === 0) return 'No prior durable review history is recorded for this goal revision.'
+  return lines.slice(-MAX_HISTORY_ITEMS).join('\n').slice(-MAX_HISTORY_TEXT)
 }
 
 /** Find a PASS whose semantic review happened after its exact executable gate. */
@@ -262,6 +316,7 @@ export async function judgeGoalCompletion(input: {
   readonly signal: AbortSignal
 }): Promise<GoalJudgeResult> {
   const settled = settledGoalPass(input.parent, input.objective)
+  const priorReviewHistory = durableReviewHistory(input.parent, input.objective)
   const subagents = input.subagents
   if (subagents === undefined) return settled?.result ?? unavailable()
   const gate = await runAdversarialCompletionGate({
@@ -285,9 +340,12 @@ export async function judgeGoalCompletion(input: {
     text: '<goal_judge>\n'
       + `Original objective: ${JSON.stringify(input.objective)}\n`
       + `Candidate completion round: ${input.round}\n`
-      + `Independent adversarial gate evidence: ${JSON.stringify(gate)}\n\n`
+      + `Durable review history for this exact goal revision:\n${priorReviewHistory}\n`
+      + `Independent adversarial gate evidence for the current round: ${JSON.stringify(gate)}\n\n`
       + 'Act as the final independent completion Judge. Inspect the current workspace and durable session evidence using only read-only tools. '
-      + 'Do not edit files, run commands, call other agents, or change goal state. Treat the original requirement as authoritative. '
+      + 'Do not edit files, run commands, call other agents, or change goal state. Treat the original requirement as authoritative across every repair round. '
+      + 'Use session_search and session_event_search when needed to reconstruct what the Builder actually changed and tested between reviews; never infer implementation quality from Builder prose. '
+      + 'Explicitly verify that every required change from prior Judge rounds was addressed or remains a blocker; do not forget or silently supersede earlier findings. '
       + 'Cross-check the Evidence Ledger, Builder tests, independently generated adversarial tests, packaged artifact fingerprint, startup behavior, '
       + 'and clean-room evidence. Builder prose such as “all tests pass” is never evidence by itself. Mark every inconsistency as a BLOCKER finding. '
       + 'Return pass only when the whole objective is literally satisfied, every mandatory criterion is verified, every gate dimension passed, and the '
