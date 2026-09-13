@@ -18,3 +18,4 @@ jobs:
       - run: pnpm vitest run packages/client/ui-layout/tests/layout-store.client.spec.ts packages/client/ui-layout/tests/service.client.spec.ts packages/client/ui-layout/tests/visual-workspace-frame.client.spec.tsx packages/client/ui-workspace/tests/apply.client.spec.ts packages/client/ui-workspace/tests/cordis-visual-workspace.client.spec.ts packages/client/ui-kira-teams/tests/browser-plugin.client.spec.ts packages/client/ui-subagent/tests/browser-plugin.client.spec.ts
       - run: pnpm run verify-cordis-catalog
       - run: pnpm run verify-client-catalog
+      # Final gate after regenerating the stable-specific client catalog.
