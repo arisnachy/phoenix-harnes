@@ -202,6 +202,9 @@ export class CognitiveRuntimeService extends Service {
    * Render the bounded cognitive workspace consumed by the model at each step.
    * The canonical state remains detached and background/suppressed memory stays
    * outside the prompt budget.
+   * @param sessionId - Exact live session whose cognitive state will be projected.
+   * @param options - Bounded model-context rendering limits.
+   * @returns The model-facing cognitive workspace, or an empty string when no focus exists.
    */
   modelContext(sessionId: SessionId, options: CognitiveModelContextOptions = {}): string {
     return renderCognitiveModelContext(this.get(sessionId), options)
