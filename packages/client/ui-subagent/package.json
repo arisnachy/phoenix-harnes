@@ -35,6 +35,7 @@
         "@phoenix-ai/dsh-client-locale",
         "@phoenix-ai/dsh-client-runtime",
         "@phoenix-ai/dsh-client-ui-conversation",
+        "@phoenix-ai/dsh-client-ui-layout",
         "@phoenix-ai/dsh-client-ui-primitives",
         "@phoenix-ai/dsh-client-ui-input-trigger"
       ],
@@ -51,6 +52,7 @@
     "@phoenix-ai/dsh-client-runtime": "workspace:^",
     "@phoenix-ai/dsh-client-ui-conversation": "workspace:^",
     "@phoenix-ai/dsh-client-ui-input-trigger": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-layout": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-token-meter": "workspace:^",
@@ -62,6 +64,7 @@
     "@phoenix-ai/dsh-client-test-runtime": "workspace:^",
     "@phoenix-ai/dsh-client-ui-conversation": "workspace:^",
     "@phoenix-ai/dsh-client-ui-input-trigger": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-layout": "workspace:^",
     "@phoenix-ai/dsh-client-ui-primitives": "workspace:^",
     "@phoenix-ai/dsh-client-ui-slots": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
