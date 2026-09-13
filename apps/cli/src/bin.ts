@@ -89,6 +89,26 @@ if (rawArgs[0] === 'upstream-update') {
   process.exit(result.status ?? 1)
 }
 
+// Intentional Host restarts are owned by the persistent supervisor. The helper
+// writes a restart request, waits for the supervisor's configuration preflight,
+// and returns the rejection diagnostic to the caller before any live Host is
+// stopped. Keeping this before profile parsing also makes the recovery command
+// available when the current profile configuration is invalid.
+if (rawArgs[0] === 'safe-restart') {
+  const script = resolve(fileURLToPath(new URL('../../../scripts/phoenix-safe-restart.mjs', import.meta.url)))
+  const result = spawnSync(process.execPath, [script, ...rawArgs.slice(1)], {
+    cwd: resolve(script, '..', '..'),
+    env: process.env,
+    stdio: 'inherit',
+    windowsHide: true,
+  })
+  if (result.error !== undefined) {
+    console.error(`[PHOENIX] safe restart launcher failed: ${result.error.message}`)
+    process.exit(1)
+  }
+  process.exit(result.status ?? 1)
+}
+
 if (rawArgs[0] === 'doctor') {
   const { runDoctor } = await import('./doctor.ts')
   process.exit(await runDoctor())

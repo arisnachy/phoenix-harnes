@@ -188,6 +188,59 @@ function mayReuseSettledPass(settled: SettledGoalPass | undefined, gate: GoalCom
     && gate.artifactFingerprint === settled.artifactFingerprint
 }
 
+/**
+ * Build bounded durable review memory for the exact goal revision.
+ *
+ * The Judge child is intentionally fresh, so this explicit ledger prevents a
+ * later review round from forgetting what the user originally asked, what a
+ * prior independent judge found, what it required the builder to change, and
+ * what executable evidence earlier attempts actually produced.
+ */
+function previousReviewHistory(parent: Agent, objective: string, round: number): readonly Record<string, unknown>[] {
+  const current = parent.session.events.findLast(event =>
+    event.type === 'goal/change' && event.data.operation !== 'clear')
+  if (current?.type !== 'goal/change' || current.data.operation === 'clear'
+    || current.data.goal.objective !== objective) return []
+  const goalId = current.data.goal.id
+  const revision = current.data.goal.revision
+  const history = parent.session.events.flatMap((event): Record<string, unknown>[] => {
+    if (event.type === 'goal/judge'
+      && event.data.goalId === goalId
+      && event.data.revision === revision
+      && event.data.round < round) {
+      return [{
+        kind: 'judge',
+        round: event.data.round,
+        verdict: event.data.verdict,
+        summary: event.data.summary,
+        findings: [...event.data.findings],
+        requiredChanges: [...event.data.requiredChanges],
+      }]
+    }
+    if (event.type === 'goal/completion-gate'
+      && event.data.goalId === goalId
+      && event.data.revision === revision
+      && event.data.round < round) {
+      return [{
+        kind: 'completion-gate',
+        round: event.data.round,
+        checks: { ...event.data.checks },
+        evidenceLedger: event.data.evidenceLedger.map(entry => ({
+          criterionId: entry.criterionId,
+          criterion: entry.criterion,
+          mandatory: entry.mandatory,
+          status: entry.status,
+          evidence: [...entry.evidence],
+        })),
+        artifactFingerprint: event.data.artifactFingerprint,
+        findings: [...event.data.findings],
+      }]
+    }
+    return []
+  })
+  return history.slice(-12)
+}
+
 function fingerprintFailure(gate: GoalCompletionGateResult): string {
   const checkPart = Object.entries(gate.checks)
     .filter(([, status]) => status !== 'pass')
@@ -264,6 +317,7 @@ export async function judgeGoalCompletion(input: {
   const settled = settledGoalPass(input.parent, input.objective)
   const subagents = input.subagents
   if (subagents === undefined) return settled?.result ?? unavailable()
+  const history = previousReviewHistory(input.parent, input.objective, input.round)
   const gate = await runAdversarialCompletionGate({
     subagents,
     ...input.llm === undefined ? {} : { llm: input.llm },
@@ -285,15 +339,19 @@ export async function judgeGoalCompletion(input: {
     text: '<goal_judge>\n'
       + `Original objective: ${JSON.stringify(input.objective)}\n`
       + `Candidate completion round: ${input.round}\n`
+      + `Previous independent judge history and durable gate trail: ${JSON.stringify(history)}\n`
       + `Independent adversarial gate evidence: ${JSON.stringify(gate)}\n\n`
       + 'Act as the final independent completion Judge. Inspect the current workspace and durable session evidence using only read-only tools. '
       + 'Do not edit files, run commands, call other agents, or change goal state. Treat the original requirement as authoritative. '
-      + 'Cross-check the Evidence Ledger, Builder tests, independently generated adversarial tests, packaged artifact fingerprint, startup behavior, '
-      + 'and clean-room evidence. Builder prose such as “all tests pass” is never evidence by itself. Mark every inconsistency as a BLOCKER finding. '
-      + 'Return pass only when the whole objective is literally satisfied, every mandatory criterion is verified, every gate dimension passed, and the '
-      + 'delivered artifact is an excellent real-world solution rather than merely a nominal-case implementation. Consider real-world variability, edge cases, '
-      + 'corrupt inputs, alternate supported formats, unexpected conditions, and whether a new user receiving only the final artifact can actually use it. '
-      + 'Return needs_changes for repairable implementation/artifact defects. Return blocked only for a concrete external dependency that genuinely prevents verification.\n'
+      + 'Do not forget or silently drop unresolved findings from earlier review rounds. For every prior required change, verify from current workspace/session evidence '
+      + 'that the builder actually corrected it; if not, carry it forward as a BLOCKER. Use session_search/session_event_search to reconstruct what the builder did '
+      + 'when the durable gate trail alone is insufficient. Cross-check the Evidence Ledger, Builder tests, independently generated adversarial tests, packaged '
+      + 'artifact fingerprint, startup behavior, and clean-room evidence. Builder prose such as “all tests pass” is never evidence by itself. '
+      + 'Mark every inconsistency as a BLOCKER finding. Return pass only when the whole objective is literally satisfied, every mandatory criterion is verified, '
+      + 'every gate dimension passed, all prior judge corrections are resolved, and the delivered artifact is an excellent real-world solution rather than merely '
+      + 'a nominal-case implementation. Consider real-world variability, edge cases, corrupt inputs, alternate supported formats, unexpected conditions, and whether '
+      + 'a new user receiving only the final artifact can actually use it. Return needs_changes for repairable implementation/artifact defects. Return blocked only '
+      + 'for a concrete external dependency that genuinely prevents verification.\n'
       + '</goal_judge>',
   }]
 

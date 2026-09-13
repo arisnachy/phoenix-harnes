@@ -2,13 +2,9 @@
 /**
  * Windows process supervisor for the PHOENIX Web Host and stable updater.
  *
- * Preparation and activation have separate owners:
- * - the watcher prepares and validates candidates while the Host stays alive;
- * - an explicit restart request makes this supervisor stop the watcher,
- *   activate the prepared candidate synchronously, then launch a fresh Host.
- *
- * The supervisor therefore remains alive across an update restart. PowerShell
- * must not regain control until activation either completed or failed visibly.
+ * The supervisor is deliberately outside the Host process. It owns both
+ * update restarts and ordinary runtime restarts so a model can never destroy
+ * the only process capable of bringing PHOENIX back.
  */
 
 import { spawn, spawnSync } from 'node:child_process'
@@ -17,6 +13,17 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
+import {
+  atomicWriteJson,
+  captureKnownGoodConfiguration,
+  clearRuntimeRestartRequest,
+  configurationDiffersFromKnownGood,
+  hasKnownGoodConfiguration,
+  preflightPhoenixConfiguration,
+  restoreKnownGoodConfiguration,
+  runtimeRestartRequestPath,
+  runtimeRestartResultPath,
+} from './phoenix-config-guard.mjs'
 
 const root = resolve(process.cwd())
 const hostArgs = process.argv.slice(2)
@@ -25,6 +32,12 @@ const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
 const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const WATCHER_RESTART_DELAY_MS = 1000
+const HOST_RESTART_DELAY_MS = 750
+const RUNTIME_RESTART_POLL_MS = 250
+const CONFIG_STABILITY_MS = 8000
+
+let operatorShutdown = false
+let activeHost
 
 function gitValue(cwd, args) {
   const result = spawnSync('git', args, {
@@ -144,6 +157,28 @@ function clearRestartRequest() {
   }
 }
 
+function readRuntimeRestartRequest() {
+  const path = runtimeRestartRequestPath()
+  if (!existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== 1 || typeof value.id !== 'string' || value.id.length < 8) return undefined
+    return value
+  } catch {
+    return undefined
+  }
+}
+
+function writeRuntimeRestartResult(request, status, summary) {
+  atomicWriteJson(runtimeRestartResultPath(), {
+    schema: 1,
+    id: request.id,
+    status,
+    summary,
+    completedAt: new Date().toISOString(),
+  })
+}
+
 const sleep = ms => new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 
 async function stopWatcher(watcher) {
@@ -259,6 +294,37 @@ function superviseWatcher(host) {
   }
 }
 
+function superviseRuntimeRestart(host) {
+  let plannedRestart = false
+  let processing = false
+  const timer = setInterval(() => {
+    if (processing || plannedRestart || host.exitCode !== null || host.killed || operatorShutdown) return
+    const request = readRuntimeRestartRequest()
+    if (request === undefined) return
+    processing = true
+    const preflight = preflightPhoenixConfiguration(root)
+    if (!preflight.ok) {
+      clearRuntimeRestartRequest()
+      writeRuntimeRestartResult(request, 'rejected', preflight.summary)
+      console.error('[PHOENIX] runtime restart rejected by configuration preflight; the live Host remains running.')
+      console.error(`[PHOENIX] ${preflight.summary}`)
+      processing = false
+      return
+    }
+    plannedRestart = true
+    clearRuntimeRestartRequest()
+    writeRuntimeRestartResult(request, 'accepted', 'Configuration preflight passed. The persistent supervisor now owns stop/start and recovery.')
+    console.error('[PHOENIX] runtime restart preflight passed; supervisor is stopping only the Host process now...')
+    host.kill()
+  }, RUNTIME_RESTART_POLL_MS)
+  timer.unref?.()
+
+  return {
+    planned() { return plannedRestart },
+    stop() { clearInterval(timer) },
+  }
+}
+
 function preparedActivator() {
   const target = restartRequestTarget()
   const stage = persistentStage()
@@ -295,49 +361,123 @@ function activatePrepared() {
   return result.status ?? 1
 }
 
+function installOperatorShutdownHandlers() {
+  const shutdown = (signal) => {
+    operatorShutdown = true
+    console.error(`[PHOENIX] operator shutdown received (${signal}); automatic relaunch is disabled for this exit.`)
+    if (activeHost !== undefined && activeHost.exitCode === null && !activeHost.killed) activeHost.kill()
+  }
+  process.once('SIGINT', () => shutdown('SIGINT'))
+  process.once('SIGTERM', () => shutdown('SIGTERM'))
+}
+
 recoverStaleStagingIndexLock()
+installOperatorShutdownHandlers()
 
 let finalCode = 0
 while (true) {
   const host = startHost()
+  activeHost = host
+  const hostStartedAt = Date.now()
+  let stableConfigurationCaptured = false
   host.once('error', (error) => {
     console.error(`[PHOENIX] host launch failed: ${error.message}`)
   })
   const watcherSupervisor = superviseWatcher(host)
+  const runtimeRestartSupervisor = superviseRuntimeRestart(host)
+  const stabilityTimer = setTimeout(() => {
+    if (host.exitCode !== null || host.killed || operatorShutdown) return
+    const preflight = preflightPhoenixConfiguration(root)
+    if (!preflight.ok) {
+      console.error(`[PHOENIX] configuration remained live but did not pass stability preflight: ${preflight.summary}`)
+      return
+    }
+    try {
+      captureKnownGoodConfiguration()
+      stableConfigurationCaptured = true
+      console.error('[PHOENIX] boot-critical configuration promoted to last-known-good after the stability window.')
+    } catch (error) {
+      console.error(`[PHOENIX] warning: could not capture last-known-good configuration: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }, CONFIG_STABILITY_MS)
+  stabilityTimer.unref?.()
 
   const hostExit = await new Promise(resolveExit => {
     host.once('exit', (code, signal) => resolveExit({ code, signal }))
   })
+  activeHost = undefined
+  clearTimeout(stabilityTimer)
+  runtimeRestartSupervisor.stop()
   const requested = restartRequested()
 
   await watcherSupervisor.stop()
 
-  if (!requested) {
-    finalCode = hostExit.code ?? (hostExit.signal === null ? 1 : 0)
+  if (operatorShutdown) {
+    finalCode = hostExit.code ?? 0
     break
   }
 
-  const liveStatus = gitStatus(root)
-  if (!liveStatus.ok || liveStatus.entries.length > 0) {
-    clearRestartRequest()
-    reportDirtyActivationBlock(liveStatus)
-    continue
-  }
-
-  console.error('[PHOENIX UPDATE] restart request received; activating prepared update under supervisor control...')
-  const activationCode = activatePrepared()
-  if (activationCode !== 0) {
-    clearRestartRequest()
-    if (activationCode === 12) {
-      console.error('[PHOENIX UPDATE] rollback failed critically; refusing automatic relaunch from an unknown checkout state.')
-      finalCode = activationCode
-      break
+  if (requested) {
+    const liveStatus = gitStatus(root)
+    if (!liveStatus.ok || liveStatus.entries.length > 0) {
+      clearRestartRequest()
+      reportDirtyActivationBlock(liveStatus)
+      await sleep(HOST_RESTART_DELAY_MS)
+      continue
     }
-    console.error(`[PHOENIX UPDATE] activation failed safely with exit code ${String(activationCode)}; relaunching the last-known-good PHOENIX. The prepared update remains available to retry.`)
+
+    console.error('[PHOENIX UPDATE] restart request received; activating prepared update under supervisor control...')
+    const activationCode = activatePrepared()
+    if (activationCode !== 0) {
+      clearRestartRequest()
+      if (activationCode === 12) {
+        console.error('[PHOENIX UPDATE] rollback failed critically; refusing automatic relaunch from an unknown checkout state.')
+        finalCode = activationCode
+        break
+      }
+      console.error(`[PHOENIX UPDATE] activation failed safely with exit code ${String(activationCode)}; relaunching the last-known-good PHOENIX. The prepared update remains available to retry.`)
+      await sleep(HOST_RESTART_DELAY_MS)
+      continue
+    }
+
+    console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
+    await sleep(HOST_RESTART_DELAY_MS)
     continue
   }
 
-  console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
+  if (runtimeRestartSupervisor.planned()) {
+    console.error('[PHOENIX] supervisor-owned runtime restart: relaunching PHOENIX now...')
+    await sleep(HOST_RESTART_DELAY_MS)
+    continue
+  }
+
+  const uptime = Date.now() - hostStartedAt
+  const changedConfiguration = hasKnownGoodConfiguration() && configurationDiffersFromKnownGood()
+  if (uptime < CONFIG_STABILITY_MS && changedConfiguration && !stableConfigurationCaptured) {
+    try {
+      if (restoreKnownGoodConfiguration()) {
+        console.error('[PHOENIX] configuration rollback restored the last-known-good boot state after an early Host failure.')
+      }
+    } catch (error) {
+      console.error(`[PHOENIX] configuration rollback failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  } else {
+    const preflight = preflightPhoenixConfiguration(root)
+    if (!preflight.ok && hasKnownGoodConfiguration()) {
+      try {
+        if (restoreKnownGoodConfiguration()) {
+          console.error('[PHOENIX] configuration rollback restored the last-known-good boot state after preflight rejected the current configuration.')
+        }
+      } catch (error) {
+        console.error(`[PHOENIX] configuration rollback failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  }
+
+  const reason = hostExit.code === null ? `signal ${hostExit.signal ?? 'unknown'}` : `exit code ${String(hostExit.code)}`
+  console.error(`[PHOENIX] Host exited unexpectedly (${reason}); relaunching under supervisor control in ${String(HOST_RESTART_DELAY_MS)}ms.`)
+  await sleep(HOST_RESTART_DELAY_MS)
+  continue
 }
 
 process.exitCode = finalCode
