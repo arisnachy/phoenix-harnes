@@ -3,22 +3,16 @@
   min-width: 0;
 }
 
-/* Figma 313:14108 ToggleButton: 13/20 medium secondary label, 4px gap,
-   12px caption chevron; 28px chip height matches the sibling Plan /
-   Read-only selects in the same tool row. */
 .trigger {
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
-  /* Legacy fallback, then a row-relative cap that grants long names more
-     room without letting this trailing control consume the composer. */
   max-width: 220px;
   max-width: min(360px, 45cqw);
   height: 28px;
   padding: 0 4px 0 8px;
   border: none;
-  /* Rounded chip chrome, matching the sibling permission trigger. */
   border-radius: 24px;
   outline: none;
   background: transparent;
@@ -49,7 +43,6 @@
   white-space: nowrap;
 }
 
-/* Effort value beside the model name (mock's 'High': same 13/20/500, caption tone). */
 .triggerEffort {
   flex: 0 0 auto;
   color: var(--dsw-alias-label-caption);
@@ -72,32 +65,21 @@
   z-index: 20;
   display: flex;
   flex-direction: column;
-  /* Root and effort panes stay compact; the model pane opts into its wider
-     scan-friendly width below. */
   width: max-content;
   min-width: min(240px, calc(100vw - 32px));
   max-width: min(420px, calc(100vw - 32px));
   max-height: min(360px, calc(100vh - 96px));
   overflow: hidden;
   padding: 4px;
-  /* Surface tokens match the Menu primitive card (ui-primitives
-   * Menu.module.css) so every dropdown reads as the same material. */
   border: 1px solid var(--dsw-alias-border-inverted);
   border-radius: 12px;
   background: var(--dsw-specific-menu);
   box-shadow: var(--dsw-shadow-lv3);
   color: var(--dsw-alias-label-primary);
-  /* Elevated surface: the scrollbar thumb takes the l2 elevation tokens.
-     Declared here rather than on the scrolling `.groups` child so the
-     elevation choice sits with the surface; the custom properties inherit
-     down to whichever descendant actually scrolls (see ui-theme
-     styles/scrollbar.css for the rebinding contract). */
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
-/* The catalog is intentionally a stable reading surface instead of growing
-   with the longest adapter id. Narrow viewports still collapse safely. */
 .modelMenu {
   width: min(500px, calc(100vw - 32px));
   max-width: min(500px, calc(100vw - 32px));
@@ -107,31 +89,31 @@
 }
 
 .effortMenu {
-  width: min(340px, calc(100vw - 32px));
-  min-width: min(300px, calc(100vw - 32px));
-  max-width: min(340px, calc(100vw - 32px));
+  width: min(320px, calc(100vw - 32px));
+  min-width: min(280px, calc(100vw - 32px));
+  max-width: min(320px, calc(100vw - 32px));
   max-height: none;
   padding: 0;
-  border-radius: 18px;
+  border-radius: 16px;
 }
 
 .effortSelector {
   --effort-blue: var(--dsw-static-blue-600, #2563eb);
   --effort-blue-soft: var(--dsw-static-blue-100, #dbeafe);
-  padding: 16px 20px 18px;
+  padding: 14px 18px 16px;
   background: var(--dsw-specific-menu);
 }
 
 .effortHeader {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  grid-template-columns: 26px minmax(0, 1fr) 26px;
   align-items: center;
-  min-height: 28px;
+  min-height: 26px;
 }
 
 .effortIcon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   color: var(--effort-blue);
   fill: none;
   stroke: currentColor;
@@ -147,8 +129,8 @@
   min-width: 0;
   gap: 4px;
   color: var(--effort-blue);
-  font-size: 17px;
-  line-height: 22px;
+  font-size: 16px;
+  line-height: 20px;
   font-weight: 650;
 }
 
@@ -161,15 +143,15 @@
 
 .effortValueChevron {
   flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .effortReset {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -179,8 +161,8 @@
 }
 
 .effortReset svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
 }
 
 .effortReset:hover:not(:disabled),
@@ -200,11 +182,11 @@
 }
 
 .effortModel {
-  margin-top: 3px;
+  margin-top: 2px;
   overflow: hidden;
   color: var(--dsw-alias-label-secondary);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 13px;
+  line-height: 18px;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -212,8 +194,8 @@
 
 .effortSlider {
   position: relative;
-  height: 56px;
-  margin-top: 16px;
+  height: 36px;
+  margin-top: 12px;
 }
 
 .effortTrack,
@@ -225,8 +207,8 @@
 }
 
 .effortTrack {
-  top: 6px;
-  height: 44px;
+  top: 4px;
+  height: 28px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--effort-blue-soft);
@@ -241,7 +223,7 @@
 }
 
 .effortStops {
-  top: 25px;
+  top: 15px;
   height: 6px;
   pointer-events: none;
 }
@@ -264,7 +246,7 @@
 .effortRange {
   top: 0;
   width: 100%;
-  height: 56px;
+  height: 36px;
   margin: 0;
   appearance: none;
   outline: none;
@@ -277,33 +259,33 @@
 }
 
 .effortRange::-webkit-slider-runnable-track {
-  height: 44px;
+  height: 28px;
   background: transparent;
 }
 
 .effortRange::-moz-range-track {
-  height: 44px;
+  height: 28px;
   background: transparent;
 }
 
 .effortRange::-webkit-slider-thumb {
-  width: 56px;
-  height: 56px;
-  margin-top: -6px;
+  width: 36px;
+  height: 36px;
+  margin-top: -4px;
   appearance: none;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
   background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: 0 2px 7px rgb(15 23 42 / 15%);
+  box-shadow: 0 2px 6px rgb(15 23 42 / 14%);
 }
 
 .effortRange::-moz-range-thumb {
-  width: 56px;
-  height: 56px;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
   background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: 0 2px 7px rgb(15 23 42 / 15%);
+  box-shadow: 0 2px 6px rgb(15 23 42 / 14%);
 }
 
 .effortRange:focus-visible::-webkit-slider-thumb,
@@ -413,8 +395,6 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-/* Selected model rows retain a quiet fill so scanning does not depend on the
-   trailing check alone. Effort rows use the same restrained treatment. */
 .selected {
   background: var(--dsw-alias-interactive-bg-hover);
 }
@@ -510,9 +490,6 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* Two-level root cells (figma 496:26454 .Menu_cell): 40px row, 10px side
-   padding, 8px gap, 10px radius; 14/22 label in primary, value in the
-   #81858C tertiary tone, right chevron drilling into the sub-list. */
 .cell {
   box-sizing: border-box;
   display: flex;

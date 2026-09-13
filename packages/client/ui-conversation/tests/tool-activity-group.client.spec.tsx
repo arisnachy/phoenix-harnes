@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type {
-  AssistantMessageNode, ConversationNode, ConversationSnapshot, SessionId, SessionListState, WorkspaceListState,
+  AssistantMessageNode, ConversationNode, ConversationSnapshot, RunningToolCall, SessionId, SessionListState,
+  ToolResultNode, WorkspaceListState,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { bindSnapshotSelector } from '@phoenix-ai/dsh-client-test-runtime'
 import { createSnapshotStore, EMPTY_CONVERSATION_VIEWS } from '@phoenix-ai/dsh-client-runtime/client'
@@ -13,7 +14,10 @@ import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
 
 const SID = 'tool-activity' as SessionId
 
-function snapshot(nodes: readonly ConversationNode[]): ConversationSnapshot {
+function snapshot(
+  nodes: readonly ConversationNode[],
+  runningCalls: readonly RunningToolCall[] = [],
+): ConversationSnapshot {
   const base: ConversationSnapshot = {
     sessionId: SID,
     views: EMPTY_CONVERSATION_VIEWS,
@@ -22,10 +26,10 @@ function snapshot(nodes: readonly ConversationNode[]): ConversationSnapshot {
     turnTimings: new Map(),
     turnEnds: new Map(),
     partial: null,
-    runningCalls: [],
+    runningCalls: [...runningCalls],
     pending: [],
     queue: [],
-    running: false,
+    running: runningCalls.length > 0,
     composerPhase: 'active',
     removed: false,
     openState: 'open',
@@ -76,6 +80,35 @@ function assistantWithReasoning(seq: number, visible = true): ConversationNode {
   } as AssistantMessageNode
 }
 
+function runningTool(callId = 'search-1'): RunningToolCall {
+  return {
+    callId,
+    name: 'web_search',
+    argsRaw: '{"query":"cognitiveRuntime"}',
+    turn: 1,
+    step: 1,
+    time: 1_000,
+    callView: null,
+    subCalls: [],
+  }
+}
+
+function settledTool(callId = 'search-1'): ToolResultNode {
+  return {
+    kind: 'tool-result',
+    seq: 2,
+    time: 2_000,
+    callId,
+    call: { name: 'web_search', argsRaw: '{"query":"cognitiveRuntime"}' },
+    callTime: 1_000,
+    content: [],
+    isError: false,
+    callView: null,
+    resultView: null,
+    subCalls: [],
+  }
+}
+
 function emptySessions() {
   return bindSnapshotSelector(createSnapshotStore<SessionListState>({
     ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
@@ -89,8 +122,11 @@ function emptyWorkspaces() {
   }))
 }
 
-function renderChat(nodes: readonly ConversationNode[]) {
-  const source = createSnapshotStore(snapshot(nodes))
+function renderChat(
+  nodes: readonly ConversationNode[],
+  runningCalls: readonly RunningToolCall[] = [],
+) {
+  const source = createSnapshotStore(snapshot(nodes, runningCalls))
   const chat = createChatStore().create()
   const t = ((key: string) => key === 'context.tools' ? 'Tools' : key) as ChatViewSlotProps['t']
   const renderSlot = ((key: string, owner: object, opts?: { fallback?: React.ReactNode }) => {
@@ -168,5 +204,29 @@ describe('chat tool activity grouping', () => {
 
     expect(screen.getAllByRole('button', { name: 'Tools' })).toHaveLength(2)
     expect(screen.getByTestId('node-user')).toBeTruthy()
+  })
+
+  it('shows a running tool live above Tools without duplicating it in history', () => {
+    renderChat([context(1, 'system')], [runningTool()])
+
+    const live = screen.getByTestId('live-tool-activity')
+    expect(live.querySelector('[data-testid="node-tool-call"]')).toBeTruthy()
+    const disclosure = screen.getByRole('button', { name: 'Tools' })
+    expect(disclosure.querySelector('svg[data-tool-activity-chevron]')).toBeTruthy()
+
+    fireEvent.click(disclosure)
+    expect(screen.getAllByTestId('node-tool-call')).toHaveLength(1)
+    expect(screen.getByTestId('node-context')).toBeTruthy()
+  })
+
+  it('moves a finished tool out of the live row and into Tools history', () => {
+    renderChat([context(1, 'system'), settledTool()])
+
+    expect(screen.queryByTestId('live-tool-activity')).toBeNull()
+    expect(screen.queryByTestId('node-tool-call')).toBeNull()
+
+    const disclosure = screen.getByRole('button', { name: 'Tools' })
+    fireEvent.click(disclosure)
+    expect(screen.getByTestId('node-tool-call')).toBeTruthy()
   })
 })
