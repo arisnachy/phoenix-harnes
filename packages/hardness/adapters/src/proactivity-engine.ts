@@ -88,18 +88,10 @@ export interface ProactivityExecution {
 }
 
 /** Safe execution result retained as history and optionally passed from preparation to delivery. */
-export interface ProactivityExecutionResult {
-  readonly summary?: string
-}
+export interface ProactivityExecutionResult { readonly summary?: string }
 
 /** Host seam used by the pure scheduler to perform work. */
 export interface ProactivityExecutor {
-  /**
-   * Execute one phase. Providers should treat `idempotencyKey` as the stable
-   * occurrence identity when their downstream action supports deduplication.
-   * @param input - task, phase, occurrence and prior preparation result.
-   * @returns secret-free summary safe to persist.
-   */
   execute(input: ProactivityExecution): Promise<ProactivityExecutionResult>
 }
 
@@ -111,9 +103,7 @@ export interface ProactivitySnapshot {
 
 /** Storage seam for the durable global task ledger. */
 export interface ProactivityStore {
-  /** @returns the last committed task snapshot. */
   load(): Promise<ProactivitySnapshot>
-  /** @param snapshot - complete next committed task snapshot. */
   save(snapshot: ProactivitySnapshot): Promise<void>
 }
 
@@ -129,10 +119,7 @@ export interface ProactivityListOptions {
   readonly now?: Date
 }
 
-/**
- * Signal that execution cannot proceed yet because its live runtime dependency
- * is absent. The occurrence remains scheduled and accumulates no failure row.
- */
+/** Runtime dependency is temporarily unavailable; keep the occurrence scheduled. */
 export class ProactivityDeferredError extends Error {
   constructor(message: string) {
     super(message)
@@ -160,11 +147,7 @@ function finitePositive(value: number, field: string): number {
 }
 
 function cloneTask(task: ProactivityTask): ProactivityTask {
-  return {
-    ...task,
-    recurrence: { ...task.recurrence },
-    history: task.history.map(entry => ({ ...entry })),
-  }
+  return { ...task, recurrence: { ...task.recurrence }, history: task.history.map(entry => ({ ...entry })) }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -263,13 +246,9 @@ function parseSnapshot(value: unknown): ProactivitySnapshot {
 /** In-memory store used by deterministic tests and ephemeral compositions. */
 export class MemoryProactivityStore implements ProactivityStore {
   private snapshot: ProactivitySnapshot = EMPTY_SNAPSHOT
-
-  /** @returns a defensive copy of the committed snapshot. */
   async load(): Promise<ProactivitySnapshot> {
     return { version: 1, tasks: this.snapshot.tasks.map(cloneTask) }
   }
-
-  /** @param snapshot - snapshot to retain defensively. */
   async save(snapshot: ProactivitySnapshot): Promise<void> {
     this.snapshot = { version: 1, tasks: snapshot.tasks.map(cloneTask) }
   }
@@ -277,22 +256,15 @@ export class MemoryProactivityStore implements ProactivityStore {
 
 /** Atomic JSON-file store for the harness-global task ledger. */
 export class JsonProactivityStore implements ProactivityStore {
-  constructor(private readonly path: string) {
-    nonEmpty(path, 'path')
-  }
-
-  /** @returns validated persisted state, or an empty ledger when the file has never existed. */
+  constructor(private readonly path: string) { nonEmpty(path, 'path') }
   async load(): Promise<ProactivitySnapshot> {
     try {
-      const text = await readFile(this.path, 'utf8')
-      return parseSnapshot(JSON.parse(text) as unknown)
+      return parseSnapshot(JSON.parse(await readFile(this.path, 'utf8')) as unknown)
     } catch (error: unknown) {
       if (isRecord(error) && error.code === 'ENOENT') return EMPTY_SNAPSHOT
       throw error
     }
   }
-
-  /** Persist with write-then-rename so a crash cannot expose a partial JSON document. */
   async save(snapshot: ProactivitySnapshot): Promise<void> {
     const validated = parseSnapshot(snapshot)
     await mkdir(dirname(this.path), { recursive: true })
@@ -323,6 +295,8 @@ function nextAfter(task: ProactivityTask, scheduledFor: string): string | undefi
 export class ProactivityEngine {
   private state: ProactivitySnapshot | undefined
   private tail: Promise<void> = Promise.resolve()
+  private runTail: Promise<void> = Promise.resolve()
+  private recovered = false
   private readonly id: () => string
   private readonly maxCatchUpOccurrences: number
 
@@ -351,19 +325,14 @@ export class ProactivityEngine {
     this.state = snapshot
   }
 
-  /** Create and durably commit a task before returning it. */
   async create(input: CreateProactivityTaskInput): Promise<ProactivityTask> {
     return this.exclusive(async () => {
       const snapshot = await this.snapshot()
       const now = new Date().toISOString()
-      const nextRunAt = iso(input.runAt, 'runAt')
       const recurrence = input.recurrence ?? { kind: 'once' as const }
       if (recurrence.kind === 'interval') finitePositive(recurrence.everyMs, 'recurrence.everyMs')
-      if (input.prepareLeadMs !== undefined && input.preparationInstruction === undefined) {
-        throw new Error('prepareLeadMs requires preparationInstruction')
-      }
-      if (input.preparationInstruction !== undefined && input.prepareLeadMs === undefined) {
-        throw new Error('preparationInstruction requires prepareLeadMs')
+      if ((input.prepareLeadMs === undefined) !== (input.preparationInstruction === undefined)) {
+        throw new Error('preparationInstruction and prepareLeadMs must be supplied together')
       }
       const task: ProactivityTask = {
         id: nonEmpty(this.id(), 'id'),
@@ -372,7 +341,7 @@ export class ProactivityEngine {
         createdBy: input.createdBy,
         createdAt: now,
         updatedAt: now,
-        nextRunAt,
+        nextRunAt: iso(input.runAt, 'runAt'),
         recurrence: { ...recurrence },
         catchUp: input.catchUp ?? 'latest',
         visibility: input.visibility ?? 'visible',
@@ -392,23 +361,18 @@ export class ProactivityEngine {
     })
   }
 
-  /** Return one task, including private details for host-side management. */
   async get(id: string): Promise<ProactivityTask | undefined> {
-    return this.exclusive(async () => cloneTask((await this.snapshot()).tasks.find(task => task.id === id) ?? undefined as never))
-      .catch((error: unknown) => {
-        if (error instanceof TypeError) return undefined
-        throw error
-      })
+    return this.exclusive(async () => {
+      const task = (await this.snapshot()).tasks.find(candidate => candidate.id === id)
+      return task === undefined ? undefined : cloneTask(task)
+    })
   }
 
-  /** List tasks, omitting unrevealed surprises unless the caller explicitly requests host-audit visibility. */
   async list(options: ProactivityListOptions = {}): Promise<ProactivityTask[]> {
     return this.exclusive(async () => {
       const now = (options.now ?? new Date()).getTime()
       return (await this.snapshot()).tasks
-        .filter((task) => options.includeHidden === true
-          || task.visibility !== 'surprise'
-          || now >= Date.parse(task.revealAt ?? task.nextRunAt))
+        .filter(task => options.includeHidden === true || task.visibility !== 'surprise' || now >= Date.parse(task.revealAt ?? task.nextRunAt))
         .map(cloneTask)
     })
   }
@@ -419,8 +383,8 @@ export class ProactivityEngine {
       const index = snapshot.tasks.findIndex(task => task.id === id)
       if (index < 0) throw new Error(`unknown proactivity task: ${id}`)
       const current = snapshot.tasks[index]!
-      if (current.status === 'completed' || current.status === 'cancelled') {
-        if (status !== 'cancelled') throw new Error(`task ${id} is terminal: ${current.status}`)
+      if ((current.status === 'completed' || current.status === 'cancelled') && status !== 'cancelled') {
+        throw new Error(`task ${id} is terminal: ${current.status}`)
       }
       const next: ProactivityTask = { ...current, status, updatedAt: new Date().toISOString() }
       const tasks = [...snapshot.tasks]
@@ -430,11 +394,8 @@ export class ProactivityEngine {
     })
   }
 
-  /** Pause future execution without changing the schedule anchor. */
   pause(id: string): Promise<ProactivityTask> { return this.setStatus(id, 'paused') }
-  /** Resume a paused or failed task at its existing occurrence. */
   resume(id: string): Promise<ProactivityTask> { return this.setStatus(id, 'scheduled') }
-  /** Cancel a task permanently. */
   cancel(id: string): Promise<ProactivityTask> { return this.setStatus(id, 'cancelled') }
 
   private dueOccurrences(task: ProactivityTask, nowMs: number): string[] {
@@ -456,126 +417,169 @@ export class ProactivityEngine {
     return new Date(nextMs + (missed + 1) * task.recurrence.everyMs).toISOString()
   }
 
-  private async executePhase(task: ProactivityTask, phase: ProactivityPhase, scheduledFor: string): Promise<ProactivityTask> {
-    if (hasCompleted(task, phase, scheduledFor)) return task
+  private async recoverInterrupted(now: Date): Promise<void> {
+    if (this.recovered) return
+    await this.exclusive(async () => {
+      if (this.recovered) return
+      const snapshot = await this.snapshot()
+      const recovered = snapshot.tasks.map(task => task.status === 'running'
+        ? { ...task, status: 'scheduled' as const, updatedAt: now.toISOString() }
+        : task)
+      if (recovered.some((task, index) => task !== snapshot.tasks[index])) await this.commit(recovered)
+      this.recovered = true
+    })
+  }
+
+  private async executePhase(taskId: string, phase: ProactivityPhase, scheduledFor: string): Promise<ProactivityTask> {
     const startedAt = new Date().toISOString()
-    const idempotencyKey = occurrenceKey(task.id, phase, scheduledFor)
-    const running: ProactivityTask = { ...task, status: 'running', updatedAt: startedAt }
-    const state = await this.snapshot()
-    await this.commit(state.tasks.map(item => item.id === task.id ? running : item))
+    const idempotencyKey = occurrenceKey(taskId, phase, scheduledFor)
+    const leased = await this.exclusive(async () => {
+      const state = await this.snapshot()
+      const current = state.tasks.find(task => task.id === taskId)
+      if (current === undefined) throw new Error(`unknown proactivity task: ${taskId}`)
+      if (current.status !== 'scheduled' || hasCompleted(current, phase, scheduledFor)) return cloneTask(current)
+      const running: ProactivityTask = { ...current, status: 'running', updatedAt: startedAt }
+      await this.commit(state.tasks.map(item => item.id === taskId ? running : item))
+      return cloneTask(running)
+    })
+
+    if (leased.status !== 'running') return leased
+    const preparationResult = phase === 'deliver' ? completedSummary(leased, 'prepare', scheduledFor) : undefined
+
     try {
-      const preparationResult = phase === 'deliver' ? completedSummary(running, 'prepare', scheduledFor) : undefined
       const result = await this.executor.execute({
         phase,
-        task: cloneTask(running),
+        task: cloneTask(leased),
         scheduledFor,
         idempotencyKey,
-        instruction: phase === 'prepare' ? running.preparationInstruction! : running.instruction,
+        instruction: phase === 'prepare' ? leased.preparationInstruction! : leased.instruction,
         ...(preparationResult === undefined ? {} : { preparationResult }),
       })
       const finishedAt = new Date().toISOString()
-      return {
-        ...running,
-        status: 'scheduled',
-        updatedAt: finishedAt,
-        history: [...running.history, {
-          phase,
-          scheduledFor,
-          idempotencyKey,
-          startedAt,
-          finishedAt,
-          status: 'completed',
-          ...(result.summary === undefined ? {} : { summary: result.summary }),
-        }],
-      }
+      return this.exclusive(async () => {
+        const state = await this.snapshot()
+        const current = state.tasks.find(task => task.id === taskId)
+        if (current === undefined) throw new Error(`unknown proactivity task: ${taskId}`)
+        const externallyStopped = current.status === 'cancelled' || current.status === 'paused'
+        const next: ProactivityTask = {
+          ...current,
+          status: externallyStopped ? current.status : 'scheduled',
+          updatedAt: finishedAt,
+          history: [...current.history, {
+            phase, scheduledFor, idempotencyKey, startedAt, finishedAt, status: 'completed',
+            ...(result.summary === undefined ? {} : { summary: result.summary }),
+          }],
+        }
+        await this.commit(state.tasks.map(item => item.id === taskId ? next : item))
+        return cloneTask(next)
+      })
     } catch (error: unknown) {
-      if (error instanceof ProactivityDeferredError) return { ...task, status: 'scheduled' }
+      if (error instanceof ProactivityDeferredError) {
+        return this.exclusive(async () => {
+          const state = await this.snapshot()
+          const current = state.tasks.find(task => task.id === taskId)
+          if (current === undefined) throw new Error(`unknown proactivity task: ${taskId}`)
+          if (current.status !== 'running') return cloneTask(current)
+          const next: ProactivityTask = { ...current, status: 'scheduled', updatedAt: new Date().toISOString() }
+          await this.commit(state.tasks.map(item => item.id === taskId ? next : item))
+          return cloneTask(next)
+        })
+      }
       const finishedAt = new Date().toISOString()
       const message = error instanceof Error ? error.message : String(error)
-      return {
-        ...running,
-        status: 'failed',
-        updatedAt: finishedAt,
-        history: [...running.history, {
-          phase,
-          scheduledFor,
-          idempotencyKey,
-          startedAt,
-          finishedAt,
-          status: 'failed',
-          error: message,
-        }],
-      }
+      return this.exclusive(async () => {
+        const state = await this.snapshot()
+        const current = state.tasks.find(task => task.id === taskId)
+        if (current === undefined) throw new Error(`unknown proactivity task: ${taskId}`)
+        const externallyStopped = current.status === 'cancelled' || current.status === 'paused'
+        const next: ProactivityTask = {
+          ...current,
+          status: externallyStopped ? current.status : 'failed',
+          updatedAt: finishedAt,
+          history: [...current.history, {
+            phase, scheduledFor, idempotencyKey, startedAt, finishedAt, status: 'failed', error: message,
+          }],
+        }
+        await this.commit(state.tasks.map(item => item.id === taskId ? next : item))
+        return cloneTask(next)
+      })
     }
   }
 
-  private async persistTask(task: ProactivityTask): Promise<void> {
-    const state = await this.snapshot()
-    await this.commit(state.tasks.map(item => item.id === task.id ? task : item))
+  private async advanceAfterDelivery(taskId: string, scheduledFor: string, now: Date): Promise<ProactivityTask> {
+    return this.exclusive(async () => {
+      const state = await this.snapshot()
+      const current = state.tasks.find(task => task.id === taskId)
+      if (current === undefined) throw new Error(`unknown proactivity task: ${taskId}`)
+      if (current.status !== 'scheduled' || !hasCompleted(current, 'deliver', scheduledFor)) return cloneTask(current)
+      const nextRunAt = nextAfter(current, scheduledFor)
+      const next: ProactivityTask = nextRunAt === undefined
+        ? { ...current, status: 'completed', updatedAt: now.toISOString() }
+        : { ...current, nextRunAt, updatedAt: now.toISOString() }
+      await this.commit(state.tasks.map(item => item.id === taskId ? next : item))
+      return cloneTask(next)
+    })
+  }
+
+  private async skipMissed(taskId: string, nextRunAt: string, now: Date): Promise<void> {
+    await this.exclusive(async () => {
+      const state = await this.snapshot()
+      const current = state.tasks.find(task => task.id === taskId)
+      if (current === undefined || current.status !== 'scheduled') return
+      const next: ProactivityTask = { ...current, nextRunAt, updatedAt: now.toISOString() }
+      await this.commit(state.tasks.map(item => item.id === taskId ? next : item))
+    })
   }
 
   private async prepareIfDue(task: ProactivityTask, scheduledFor: string, nowMs: number): Promise<ProactivityTask> {
     if (task.preparationInstruction === undefined || task.prepareLeadMs === undefined) return task
     if (nowMs < Date.parse(scheduledFor) - task.prepareLeadMs) return task
-    const prepared = await this.executePhase(task, 'prepare', scheduledFor)
-    await this.persistTask(prepared)
-    return prepared
+    return this.executePhase(task.id, 'prepare', scheduledFor)
+  }
+
+  private async runDuePass(now: Date): Promise<void> {
+    const nowMs = now.getTime()
+    if (!Number.isFinite(nowMs)) throw new Error('now must be a valid date')
+    await this.recoverInterrupted(now)
+    const ids = await this.exclusive(async () => (await this.snapshot()).tasks.map(task => task.id))
+
+    for (const id of ids) {
+      let task = await this.get(id)
+      if (task === undefined || task.status !== 'scheduled') continue
+
+      const skipped = this.skippedNextRun(task, nowMs)
+      if (skipped !== undefined) {
+        await this.skipMissed(id, skipped, now)
+        continue
+      }
+
+      const due = this.dueOccurrences(task, nowMs)
+      if (due.length === 0) {
+        await this.prepareIfDue(task, task.nextRunAt, nowMs)
+        continue
+      }
+
+      for (const scheduledFor of due) {
+        task = await this.get(id)
+        if (task === undefined || task.status !== 'scheduled') break
+        task = await this.prepareIfDue(task, scheduledFor, nowMs)
+        if (task.status !== 'scheduled') break
+        task = await this.executePhase(id, 'deliver', scheduledFor)
+        if (task.status !== 'scheduled') break
+        task = await this.advanceAfterDelivery(id, scheduledFor, now)
+        if (task.status === 'completed') break
+      }
+    }
   }
 
   /**
-   * Execute every currently due task under a single engine transaction. Running
-   * rows left by a process crash are treated as at-least-once retries with the
-   * same idempotency key; downstream providers can therefore suppress duplicates.
-   * @param now - wall-clock instant used for due/catch-up decisions.
+   * Execute currently due work. Due-pass serialization is separate from the
+   * ledger mutex, so active agents can safely list/create/cancel tasks while a
+   * scheduled execution is awaiting model/tool work.
    */
-  async runDue(now: Date = new Date()): Promise<void> {
-    return this.exclusive(async () => {
-      let snapshot = await this.snapshot()
-      const nowMs = now.getTime()
-      if (!Number.isFinite(nowMs)) throw new Error('now must be a valid date')
-
-      const recovered = snapshot.tasks.map(task => task.status === 'running'
-        ? { ...task, status: 'scheduled' as const, updatedAt: now.toISOString() }
-        : task)
-      if (recovered.some((task, index) => task !== snapshot.tasks[index])) {
-        await this.commit(recovered)
-        snapshot = await this.snapshot()
-      }
-
-      for (const initial of snapshot.tasks) {
-        let task = (await this.snapshot()).tasks.find(candidate => candidate.id === initial.id)!
-        if (task.status !== 'scheduled') continue
-
-        const skipped = this.skippedNextRun(task, nowMs)
-        if (skipped !== undefined) {
-          task = { ...task, nextRunAt: skipped, updatedAt: now.toISOString() }
-          await this.persistTask(task)
-          continue
-        }
-
-        const due = this.dueOccurrences(task, nowMs)
-        if (due.length === 0) {
-          task = await this.prepareIfDue(task, task.nextRunAt, nowMs)
-          if (task.status !== 'scheduled') await this.persistTask(task)
-          continue
-        }
-
-        for (const scheduledFor of due) {
-          task = await this.prepareIfDue(task, scheduledFor, nowMs)
-          if (task.status !== 'scheduled') break
-          task = await this.executePhase(task, 'deliver', scheduledFor)
-          if (task.status !== 'scheduled') {
-            await this.persistTask(task)
-            break
-          }
-          const next = nextAfter(task, scheduledFor)
-          task = next === undefined
-            ? { ...task, status: 'completed', updatedAt: now.toISOString() }
-            : { ...task, nextRunAt: next, updatedAt: now.toISOString() }
-          await this.persistTask(task)
-          if (task.status === 'completed') break
-        }
-      }
-    })
+  runDue(now: Date = new Date()): Promise<void> {
+    const run = this.runTail.then(() => this.runDuePass(now), () => this.runDuePass(now))
+    this.runTail = run.then(() => undefined, () => undefined)
+    return run
   }
 }
