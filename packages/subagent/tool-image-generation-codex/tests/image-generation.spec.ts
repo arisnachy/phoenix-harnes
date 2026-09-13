@@ -82,7 +82,7 @@ async function setup(options: SetupOptions = {}) {
   await ctx.plugin(TestAttachments)
   let lastRequest: SubagentStartRequest | undefined
   let disposeCount = 0
-  ctx.subagents.registerProvider({
+  const removeProvider = ctx.subagents.registerProvider({
     name: 'codex',
     capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
     inheritsParentContext: false,
@@ -106,6 +106,7 @@ async function setup(options: SetupOptions = {}) {
     attachments: ctx.attachments as TestAttachments,
     request: () => lastRequest,
     disposeCount: () => disposeCount,
+    removeProvider,
   }
 }
 
@@ -135,9 +136,9 @@ function text(result: { content: readonly { type: string; text?: string }[] }): 
 
 describe('tool-image-generation-codex', () => {
   it('registers image_generation only while the configured Codex provider is present', async () => {
-    const { ctx } = await setup()
+    const { ctx, removeProvider } = await setup()
     expect(ctx.tools.schemas().some(schema => schema.name === 'image_generation')).toBe(true)
-    ctx.subagents.unregisterProvider('codex')
+    removeProvider()
     expect(ctx.tools.schemas().some(schema => schema.name === 'image_generation')).toBe(false)
   })
 
