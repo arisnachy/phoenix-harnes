@@ -28,7 +28,7 @@ export function PhoenixBrandName() {
         height: 34,
         color: 'var(--dsw-alias-label-primary)',
         fontFamily: "'Avenir Next', Inter, ui-sans-serif, system-ui, sans-serif",
-        fontSize: 22,
+        fontSize: 16,
         fontWeight: 600,
         letterSpacing: '0.18em',
         lineHeight: 1,
