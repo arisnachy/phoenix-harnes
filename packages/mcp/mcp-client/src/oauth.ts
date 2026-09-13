@@ -117,18 +117,31 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
 
 /** Credential-provider adapter that stores only an opaque MCP OAuth grant. */
 export function createCredentialStateStore(credentials: CredentialProvider, key: CredentialKey): McpOAuthStateStore {
+  let volatileState: McpOAuthState | undefined
+  const readPersisted = async (): Promise<McpOAuthState | undefined> => {
+    const record = await credentials.readRecord(key)
+    if (record?.kind !== 'grant' || record.payload === null || typeof record.payload !== 'object' || Array.isArray(record.payload)) {
+      return undefined
+    }
+    return record.payload
+  }
   return {
     async read() {
-      const record = await credentials.readRecord(key)
-      if (record?.kind !== 'grant' || record.payload === null || typeof record.payload !== 'object' || Array.isArray(record.payload)) {
-        return undefined
-      }
-      return record.payload
+      const persisted = await readPersisted()
+      return volatileState === undefined ? persisted : { ...persisted, ...volatileState }
     },
     async write(state) {
-      await credentials.modifyRecord(key, () => Promise.resolve({ kind: 'grant', payload: state }))
+      const persisted = await readPersisted()
+      if (hasUsableMcpOAuthTokens(state)) {
+        volatileState = undefined
+        await credentials.modifyRecord(key, () => Promise.resolve({ kind: 'grant', payload: state }))
+        return
+      }
+      volatileState = state
+      if (hasUsableMcpOAuthTokens(persisted)) await credentials.deleteRecord(key)
     },
     async clear() {
+      volatileState = undefined
       await credentials.deleteRecord(key)
     },
   }
