@@ -156,7 +156,10 @@ export class AdaptiveLearningEngine {
     readonly evidence: string
     readonly projectId?: string
   }): Promise<readonly AdaptiveLearningState[]> {
-    const candidates = this.states({ sessionId: input.sessionId, projectId: input.projectId })
+    const candidates = this.states({
+      sessionId: input.sessionId,
+      ...input.projectId === undefined ? {} : { projectId: input.projectId },
+    })
       .filter(state => state.status === 'candidate')
       .sort((left, right) => right.lastObservedAt - left.lastObservedAt)
       .slice(0, MAX_CONFIRM_RECENT)
@@ -200,7 +203,8 @@ export class AdaptiveLearningEngine {
     const evidence = normalizeText(input.evidence)
     const key = strategyKey(strategy)
     const subject = `${ADAPTIVE_SUBJECT_PREFIX}${key}`
-    const previous = this.states({ projectId: input.projectId }).find(state => state.key === key)
+    const previous = this.states(input.projectId === undefined ? {} : { projectId: input.projectId })
+      .find(state => state.key === key)
     const next = applyOutcome(previous, {
       ...input,
       strategy,
@@ -440,7 +444,7 @@ function cognitiveStore(ctx: Context): AdaptiveMemoryStore {
       return ctx.learningMemory.timeline({
         ...query.projectId === undefined ? {} : { projectId: query.projectId },
         ...query.sessionId === undefined ? {} : { sessionId: query.sessionId },
-        includeHistory: query.includeHistory,
+        ...query.includeHistory === undefined ? {} : { includeHistory: query.includeHistory },
       }).map(cognitiveRow)
     },
     async remember(input) {
