@@ -1,29 +1,22 @@
 .root {
-  position: fixed;
-  z-index: 80;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
+  z-index: 1;
   box-sizing: border-box;
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  width: min(360px, calc(100vw - 56px));
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   pointer-events: auto;
   background: var(--dsw-alias-bg-base);
   border-left: 1px solid var(--dsw-alias-border-l2);
   box-shadow: var(--dsw-shadow-lv2);
-  transition:
-    top var(--ds-transition-duration-slow) var(--ds-ease-in-out),
-    height var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
-/* When the subagent workspace already owns the dock, Cordis takes the lower
-   half instead of covering it. The shared layout lease keeps the chat/sidebar
-   geometry stable until both owners release the dock. */
+/* KIRA remains the upper occupant; the shared parent rail supplies the split. */
 .root[data-under-subagent='true'] {
-  top: 50%;
   border-top: 1px solid var(--dsw-alias-border-l2);
 }
 
@@ -138,16 +131,4 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   text-align: center;
-}
-
-@media (max-width: 760px) {
-  .root {
-    width: calc(100vw - 56px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .root {
-    transition: none;
-  }
 }
