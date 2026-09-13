@@ -7,6 +7,17 @@
 export function isManagedReleaseBranch(branch: string, stableBranch?: string): boolean
 
 /**
+ * Select the safe Git operation for a prepared stable target.
+ * @param input - Git ancestry and installation ownership facts.
+ * @returns the permitted activation operation.
+ */
+export function classifyPreparedActivation(input: {
+  currentIsAncestorTarget: boolean
+  targetIsAncestorCurrent: boolean
+  managed: boolean
+}): 'fast-forward' | 'replace' | 'reject'
+
+/**
  * Classify the stable-channel relation before an updater chooses a mutation.
  * @param input - observed checkout and updater state.
  * @returns the permitted watcher action.

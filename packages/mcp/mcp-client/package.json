@@ -33,6 +33,8 @@
   "license": "MIT",
   "peerDependencies": {
     "@phoenix-ai/dsh-attachment": "workspace:^",
+    "@phoenix-ai/dsh-authorization": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-mcp-connector-registry": "workspace:^",
@@ -48,6 +50,8 @@
   },
   "devDependencies": {
     "@phoenix-ai/dsh-attachment": "workspace:^",
+    "@phoenix-ai/dsh-authorization": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^",
     "@phoenix-ai/dsh-attachment-local": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",

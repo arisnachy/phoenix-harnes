@@ -100,7 +100,10 @@ export {
 } from './image-generation.ts'
 
 export const name = 'llm-pi-ai'
-export const inject = ['llm']
+// The host adapter and the agent-plane image-only variant both need the same
+// runtime seams. Declaring them here makes direct image registration resolve on
+// the mounting agent instead of falling through an unscoped property access.
+export const inject = ['llm', 'tools', 'subprocess', 'attachments']
 
 const NS = settingsNamespace('llm-pi-ai')
 
@@ -161,6 +164,17 @@ function directoryEntries(
 
 /** Register one generic pi-ai adapter for all configured provider routes. */
 export function apply(ctx: Context, config: Config): void {
+  // The agent-plane image row reuses this package without creating a second
+  // provider adapter or settings surface in every mounted session.
+  if (config.imageOnly === true) {
+    // Preset rows are mounted only after the host services exist. Registering
+    // against this exact agent context keeps the tool in the agent layer;
+    // ctx.inject would re-enter through the host service context and make the
+    // registration invisible to the mounting agent.
+    installCodexImageGeneration(ctx)
+    return
+  }
+
   let current: () => Config = () => config
   let lastRaw: Config | undefined
   let memoized: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
@@ -232,13 +246,9 @@ export function apply(ctx: Context, config: Config): void {
   // composition without it (headless, ACP) simply has no surface to sign in
   // from, while everything else this plugin does still works.
   ctx.inject(['authorization'], (authorized) => { registerPiAiFlows(authorized, auth) })
-  // Image generation is an orthogonal Codex-hosted capability. The active text
-  // route may be OpenRouter/free, DeepSeek, or another provider; once the normal
-  // tools/subprocess/attachment stack is composed, the model sees this tool and
-  // the generated raster is committed through the durable attachment store.
-  ctx.inject(['tools', 'subprocess', 'attachments'], (imageCtx) => {
-    installCodexImageGeneration(imageCtx)
-  })
+  // Image generation is registered by the agent-plane `imageOnly` row below.
+  // Keeping it out of this host adapter prevents a model-facing tool from
+  // leaking into the global layer (and into presets that did not opt in).
   // The full installed catalog is configurable from the moment the plugin
   // mounts — dormant or not — so configuration surfaces can offer every
   // pi-ai provider before any route exists. Hand-declared routes join it as

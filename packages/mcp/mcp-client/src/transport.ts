@@ -6,6 +6,7 @@
  * @module
  */
 
+import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
@@ -44,7 +45,12 @@ function validateHttpEndpoint(raw: string): URL {
  * @param config - Resolved plugin config discriminated on `transport`.
  * @returns A connected-ready MCP Transport (stdio or Streamable HTTP).
  */
-export function createTransport(config: Config): Transport {
+export interface TransportOptions {
+  /** Optional OAuth provider used by Streamable HTTP servers. */
+  authProvider?: OAuthClientProvider
+}
+
+export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
     case 'stdio':
       return new StdioClientTransport({
@@ -60,7 +66,10 @@ export function createTransport(config: Config): Transport {
       // object, so the cast records only that widening.
       return new StreamableHTTPClientTransport(
         validateHttpEndpoint(config.url),
-        { requestInit: { headers: config.headers } },
+        {
+          requestInit: { headers: config.headers },
+          ...(options.authProvider === undefined ? {} : { authProvider: options.authProvider }),
+        },
       ) as Transport
   }
 }

@@ -188,7 +188,7 @@ describe('Codex image generation bridge', () => {
     installCodexImageGeneration(context)
     if (tool === undefined) throw new Error('image_generation tool was not registered')
 
-    expect(tool.output.schema.properties.path).toMatchObject({ type: 'string', required: true })
+    expect(tool.output.schema.properties.path).toMatchObject({ type: 'string' })
     expect(tool.output.schema.required).toContain('path')
     expect(tool.output.presentationMeta?.({}, {
       provider: 'codex',

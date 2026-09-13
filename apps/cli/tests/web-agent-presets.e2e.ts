@@ -51,9 +51,9 @@ const MINIMAL_SHELL_DESCRIPTION = process.platform === 'win32'
 * Please run long lived commands in the background, e.g. 'Start-Job' or start a server with Start-Process.`
   : MINIMAL_BASH_DESCRIPTION
 const FULL_AGENT_TOOLS = [
-  'ask_user_question', 'connector_list', 'create_goal', 'edit', 'exit_plan_mode',
-  'get_goal', 'hardness_run', 'interrupt_agent', 'job_kill', 'job_list', 'job_output',
-  'list_agents', 'memory_remember', 'memory_search', SHELL_TOOL, 'ralph', 'read',
+  'ask_user_question', 'computer', 'connector_list', 'create_goal', 'edit', 'exit_plan_mode',
+  'get_goal', 'hardness_run', 'image_generation', 'interrupt_agent', 'job_kill', 'job_list', 'job_output',
+  'list_agents', 'memory_remember', 'memory_search', 'organization_forge', SHELL_TOOL, 'ralph', 'read',
   'read_image', 'send_message', 'skill', 'specialist_lab', 'subagent', 'subagent_fork',
   'todo_write', 'update_goal', 'web_search', 'workflow', 'write',
 ].sort()

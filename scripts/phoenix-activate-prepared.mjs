@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
-import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
+import { classifyPreparedActivation, isManagedReleaseBranch } from './phoenix-update-policy.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
@@ -13,6 +13,7 @@ const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() ||
 const STATE_FILE = 'phoenix-update-state.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
+const MANAGED_MARKER = '.phoenix-managed-install'
 
 function command(bin, args, options = {}) {
   const result = spawnSync(bin, args, {
@@ -143,8 +144,16 @@ function validatePrepared(root) {
   if (current !== prepared.base) {
     throw new Error(`prepared base ${prepared.base} differs from live HEAD ${current}`)
   }
-  if (!git(root, ['merge-base', '--is-ancestor', current, prepared.target], { allowFailure: true }).ok) {
-    throw new Error('prepared target is not a fast-forward from the live checkout')
+  const currentIsAncestorTarget = git(root, ['merge-base', '--is-ancestor', current, prepared.target], { allowFailure: true }).ok
+  const targetIsAncestorCurrent = git(root, ['merge-base', '--is-ancestor', prepared.target, current], { allowFailure: true }).ok
+  const activation = classifyPreparedActivation({
+    currentIsAncestorTarget,
+    targetIsAncestorCurrent,
+    managed: existsSync(join(root, MANAGED_MARKER)),
+  })
+  if (activation === 'reject') {
+    if (targetIsAncestorCurrent) throw new Error('prepared target is older than the live checkout')
+    throw new Error('prepared target diverges from the live checkout and requires a managed installation')
   }
 
   const stage = stageDirectory()
@@ -156,7 +165,7 @@ function validatePrepared(root) {
     throw new Error('prepared staging HEAD no longer matches the requested target')
   }
 
-  return { requestPath, preparedPath, prepared, current, stage }
+  return { requestPath, preparedPath, prepared, current, stage, replacing: activation === 'replace' }
 }
 
 function smoke(root, mode) {
@@ -189,11 +198,12 @@ function rollback(root, previous, target, error) {
 function activate() {
   const root = repositoryRoot()
   const validated = validatePrepared(root)
-  const { requestPath, preparedPath, prepared, current, stage } = validated
+  const { requestPath, preparedPath, prepared, current, stage, replacing } = validated
   const target = prepared.target
-  let merged = false
+  let activated = false
 
-  console.error(`[PHOENIX UPDATE] supervised activation (${prepared.mode}): ${current.slice(0, 12)} -> ${target.slice(0, 12)}`)
+  const action = replacing ? 'managed release realignment' : 'supervised activation'
+  console.error(`[PHOENIX UPDATE] ${action} (${prepared.mode}): ${current.slice(0, 12)} -> ${target.slice(0, 12)}`)
   git(root, ['diff', '--check', current, target])
 
   // Prove a prepared client artifact set is internally consistent before the
@@ -206,11 +216,13 @@ function activate() {
   }
 
   git(root, ['update-ref', 'refs/phoenix/recovery/last-good', current])
+  if (replacing) git(root, ['update-ref', 'refs/phoenix/recovery/pre-stable-realign', current])
 
   try {
     writeState(root, { status: 'applying', phase: 'activate', current, target })
-    git(root, ['merge', '--ff-only', target], { inherit: true })
-    merged = true
+    if (replacing) git(root, ['reset', '--hard', target], { inherit: true })
+    else git(root, ['merge', '--ff-only', target], { inherit: true })
+    activated = true
 
     if (prepared.mode === 'client') {
       writeState(root, { status: 'applying', phase: 'promote', current, target })
@@ -227,13 +239,13 @@ function activate() {
     smoke(root, prepared.mode)
     clearFile(preparedPath)
     clearFile(requestPath)
-    writeState(root, { status: 'updated', phase: 'complete', previous: current, current: target, target })
+    writeState(root, { status: 'updated', phase: replacing ? 'realigned' : 'complete', previous: current, current: target, target })
     console.error(`[PHOENIX UPDATE] activation complete at ${target.slice(0, 12)}.`)
     return 0
   } catch (error) {
     clearFile(requestPath)
-    if (merged && !rollback(root, current, target, error)) return 12
-    if (!merged) {
+    if (activated && !rollback(root, current, target, error)) return 12
+    if (!activated) {
       writeState(root, { status: 'error', phase: 'activate', current, target, detail: error instanceof Error ? error.message : String(error) })
     }
     return 1

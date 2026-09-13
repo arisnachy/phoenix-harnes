@@ -202,6 +202,27 @@ describe('reconnect supervisor', () => {
     expect(mockConnect).toHaveBeenCalledTimes(3)
   })
 
+  it('wakes after the failure cap and starts one fresh generation', async () => {
+    mockConnect
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('needs authorization'))
+      .mockResolvedValueOnce(undefined)
+    const handle = startConnection(ctx, stdioConfig(), resolveReconnectPolicy({ initialDelayMs: 2, maxDelayMs: 4, maxAttempts: 1 }, 'reconnect'))
+
+    await handle.ready
+    await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__remote')).toBeDefined() })
+    instances[0]!.onclose?.()
+    await vi.waitFor(() => { expect(instances).toHaveLength(2) })
+    await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__remote')).toBeUndefined() })
+
+    handle.reconnect()
+
+    await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__remote')).toBeDefined() })
+    expect(instances).toHaveLength(3)
+    expect(mockConnect).toHaveBeenCalledTimes(3)
+    await handle.dispose()
+  })
+
   it('gives up behind an in-flight re-sync and removes the generation it publishes', async () => {
     const { errors } = captureLogs(ctx)
     await apply(ctx, stdioConfig({ initialDelayMs: 2, maxDelayMs: 8, maxAttempts: 1 }))

@@ -16,6 +16,12 @@
       "path": "../../../vendor/schemastery"
     },
     {
+      "path": "../../credentials/credentials"
+    },
+    {
+      "path": "../../credentials/authorization"
+    },
+    {
       "path": "../../llm/llm"
     },
     {

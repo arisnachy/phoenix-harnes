@@ -16,10 +16,11 @@
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { Context } from '@phoenix-ai/cordis'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
-import { createTransport } from './transport.ts'
+import { createTransport, type TransportOptions } from './transport.ts'
 import { syncTools } from './tools.ts'
 import type { ToolBridgeOptions, ToolDisposers } from './tools.ts'
 import type { Config } from './index.ts'
@@ -68,7 +69,8 @@ function httpStatus(error: unknown): number | undefined {
 }
 
 function failureStatus(config: Config, error: unknown): { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode } {
-  if (config.transport === 'streamable-http' && (httpStatus(error) === 401 || httpStatus(error) === 403)) {
+  if (error instanceof UnauthorizedError
+    || (config.transport === 'streamable-http' && (httpStatus(error) === 401 || httpStatus(error) === 403))) {
     return { status: 'auth-required', reasonCode: 'authorization-required' }
   }
   return { status: 'failed', reasonCode: 'connection-failed' }
@@ -120,6 +122,11 @@ export interface ConnectionOutcome {
 /** Handle for one plugin instance's supervised connection. */
 export interface ConnectionHandle {
   /**
+   * Start a fresh connection attempt after the supervisor exhausted its retry budget.
+   * No-op while a generation or reconnect timer is already active.
+   */
+  reconnect(): void
+  /**
    * Settles when the first connection attempt completes (success or failure).
    * The supervisor enters its reconnect loop regardless; the caller decides
    * whether a failed startup is fatal via `failOnStartupError`.
@@ -148,6 +155,7 @@ export function startConnection(
   config: Config,
   policy: ResolvedReconnectPolicy,
   lifecycle?: ConnectionLifecycle | McpConnectorRegistration,
+  transportOptions?: TransportOptions,
 ): ConnectionHandle {
   const label = `mcp-client(${config.serverName})`
   const opts: ToolBridgeOptions = {
@@ -306,7 +314,7 @@ export function startConnection(
       },
     )
     try {
-      await generation.connect(createTransport(config))
+      await generation.connect(createTransport(config, transportOptions))
       if (hasClosed()) {
         attemptSettled = true
         generationDown(generation, { status: 'failed', reasonCode: 'connection-failed' })
@@ -365,7 +373,19 @@ export function startConnection(
     return { error: firstAttemptError ?? new Error(`${label}: initial connection failed`) }
   })
 
+  function reconnect(): void {
+    if (disposed || client !== undefined) return
+    if (reconnectTimer !== undefined) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = undefined
+    }
+    failedAttempts = 0
+    publishStatus?.('starting')
+    settling = connectGeneration(false)
+  }
+
   return {
+    reconnect,
     ready,
     async dispose(): Promise<void> {
       disposed = true

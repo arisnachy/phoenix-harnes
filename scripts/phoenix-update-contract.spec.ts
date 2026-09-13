@@ -22,6 +22,15 @@ describe('prepared client self-update contract', () => {
     )
   })
 
+  it('supports managed realignment when a prepared stable target diverges', () => {
+    const activator = source('scripts/phoenix-activate-prepared.mjs')
+
+    expect(activator).toContain('classifyPreparedActivation')
+    expect(activator).toContain("git(root, ['reset', '--hard', target], { inherit: true })")
+    expect(activator).toContain("refs/phoenix/recovery/pre-stable-realign")
+    expect(activator).toContain('requires a managed installation')
+  })
+
   it('allows verify-only to inspect a stage using the helper from that same stage', () => {
     const promoter = source('scripts/promote-client-artifacts.ts')
 

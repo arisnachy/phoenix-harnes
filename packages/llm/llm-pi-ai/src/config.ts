@@ -259,6 +259,13 @@ export interface ResolvedPiAiProviderProfile
 /** Plugin configuration: the provider routes this instance owns. */
 export interface Config {
   /**
+   * Register only the native image-generation tool in an agent preset. The
+   * host adapter keeps owning provider routes; this mode lets the same package
+   * contribute its model-facing image tool on the agent plane without
+   * registering a second LLM adapter instance.
+   */
+  imageOnly?: boolean
+  /**
    * pi-ai provider routes, keyed by provider. An empty (or omitted) dict is
    * the dormant settings-driven posture: the adapter mounts with no routes
    * and registers them the moment a settings section supplies profiles.
@@ -379,6 +386,7 @@ const profile = z.object({
 
 /** Runtime schema for {@link Config}. */
 export const Config: z<Config> = z.object({
+  imageOnly: z.boolean().default(false),
   providers: z.dict(profile).default({}),
 })
 

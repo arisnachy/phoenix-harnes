@@ -6101,6 +6101,12 @@ importers:
       '@phoenix-ai/dsh-attachment-local':
         specifier: workspace:^
         version: link:../../attachment/attachment-local
+      '@phoenix-ai/dsh-authorization':
+        specifier: workspace:^
+        version: link:../../credentials/authorization
+      '@phoenix-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants

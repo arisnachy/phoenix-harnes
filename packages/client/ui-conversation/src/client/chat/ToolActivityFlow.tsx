@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { ComponentProps } from 'react'
+import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
-import { isRunningTool } from '../contract/chat-nodes.ts'
+import { isRunningTool, isSettledTool } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { ReasoningRow } from './ReasoningRow.tsx'
@@ -37,6 +38,18 @@ type FlowItem =
     readonly anchorKey: string | undefined
     readonly items: readonly ActivityItem[]
   }
+  | {
+    readonly kind: 'images'
+    readonly key: string
+    readonly images: readonly { readonly attachment: ImageAttachmentRef }[]
+  }
+
+function imageActivity(node: OrderedChatNode): readonly { readonly attachment: ImageAttachmentRef }[] {
+  if (node.kind !== 'tool-call') return []
+  const root = (node.data as ToolChatData).root
+  if (!isSettledTool(root)) return []
+  return root.content.flatMap(block => block.type === 'image' ? [{ attachment: block.attachment }] : [])
+}
 
 function isWholeActivity(kind: string): boolean {
   return kind === 'context' || kind === 'tool-call' || kind === 'model-retry'
@@ -95,8 +108,14 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
 
   for (const node of nodes) {
     if (isWholeActivity(node.kind)) {
-      pending.push(activityNode(node))
-      pendingAnchorKey ??= node.key
+      const images = imageActivity(node)
+      if (images.length > 0) {
+        flush()
+        flow.push({ kind: 'images', key: `images:${node.key}`, images })
+      } else {
+        pending.push(activityNode(node))
+        pendingAnchorKey ??= node.key
+      }
       continue
     }
 
@@ -230,14 +249,20 @@ export function ToolActivityFlow({ nodes, ...seatProps }: ToolActivityFlowProps)
     <>
       {flow.map(item => item.kind === 'node'
         ? <ChatNodeSeat key={item.key} nodeKey={item.key} {...seatProps} />
-        : (
-          <ToolActivityGroup
-            key={item.key}
-            items={item.items}
-            anchorKey={item.anchorKey}
-            {...seatProps}
-          />
-        ))}
+        : item.kind === 'images'
+          ? (
+            <div key={item.key} data-chat-flow-kind="generated-image">
+              {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
+            </div>
+          )
+          : (
+            <ToolActivityGroup
+              key={item.key}
+              items={item.items}
+              anchorKey={item.anchorKey}
+              {...seatProps}
+            />
+          ))}
     </>
   )
 }

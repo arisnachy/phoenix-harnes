@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyStableUpdate, isManagedReleaseBranch } from './phoenix-update-policy.mjs'
+import { classifyPreparedActivation, classifyStableUpdate, isManagedReleaseBranch } from './phoenix-update-policy.mjs'
 
 describe('PHOENIX stable update policy', () => {
   it('uses one release-branch contract for main, stable, and development checkouts', () => {
@@ -18,6 +18,32 @@ describe('PHOENIX stable update policy', () => {
       mode: 'auto',
       stableBranch: 'stable',
     })).toBe('replace')
+  })
+
+  it('uses fast-forward activation for newer targets and rejects downgrades', () => {
+    expect(classifyPreparedActivation({
+      currentIsAncestorTarget: true,
+      targetIsAncestorCurrent: false,
+      managed: false,
+    })).toBe('fast-forward')
+    expect(classifyPreparedActivation({
+      currentIsAncestorTarget: false,
+      targetIsAncestorCurrent: true,
+      managed: true,
+    })).toBe('reject')
+  })
+
+  it('limits divergent prepared activation to managed installations', () => {
+    expect(classifyPreparedActivation({
+      currentIsAncestorTarget: false,
+      targetIsAncestorCurrent: false,
+      managed: true,
+    })).toBe('replace')
+    expect(classifyPreparedActivation({
+      currentIsAncestorTarget: false,
+      targetIsAncestorCurrent: false,
+      managed: false,
+    })).toBe('reject')
   })
 
   it('keeps an unmanaged or development checkout protected', () => {

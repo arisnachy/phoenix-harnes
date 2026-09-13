@@ -286,6 +286,15 @@
         subagentProvider: spawn
         maxRounds: 64
 
+# ── native image generation ──────────────────────────────────────────────────
+
+# The host llm-pi-ai row owns provider routes. This agent-plane instance only
+# projects its durable Codex image tool into the standard model catalog.
+- id: tool-image-generation
+  name: '@phoenix-ai/dsh-llm-pi-ai'
+  config:
+    imageOnly: true
+
 # ── remaining model-facing rows ─────────────────────────────────────────────
 
 - id: tool-ask-user

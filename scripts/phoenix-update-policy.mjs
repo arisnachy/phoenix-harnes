@@ -13,6 +13,21 @@ export function isManagedReleaseBranch(branch, stableBranch = 'stable') {
 }
 
 /**
+ * Select the safe Git operation for a prepared stable target.
+ * A target behind the live checkout is never activated. An unrelated target
+ * is accepted only when the caller has already established that the checkout
+ * is a managed release installation.
+ *
+ * @param {{currentIsAncestorTarget: boolean, targetIsAncestorCurrent: boolean, managed: boolean}} input - Git ancestry and installation ownership facts.
+ * @returns {'fast-forward' | 'replace' | 'reject'} the permitted activation operation.
+ */
+export function classifyPreparedActivation({ currentIsAncestorTarget, targetIsAncestorCurrent, managed }) {
+  if (currentIsAncestorTarget) return 'fast-forward'
+  if (targetIsAncestorCurrent) return 'reject'
+  return managed ? 'replace' : 'reject'
+}
+
+/**
  * Classify one stable-channel relation before the updater chooses an action.
  * A history replacement is limited to a managed release checkout; development
  * branches and unmanaged checkouts remain protected from automatic mutation.

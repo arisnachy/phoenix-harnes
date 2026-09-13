@@ -441,7 +441,7 @@ export function installCodexImageGeneration(ctx: Context): void {
         properties: {
           provider: { type: 'string', const: 'codex' },
           model: { type: 'string' },
-          path: { type: 'string', required: true },
+          path: { type: 'string' },
           attachment: {
             type: 'object',
             additionalProperties: true,

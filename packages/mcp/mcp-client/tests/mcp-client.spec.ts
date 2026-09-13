@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { Context } from '@phoenix-ai/cordis'
 import AttachmentStore, { AttachmentError, AttachmentId } from '@phoenix-ai/dsh-attachment'
@@ -1163,6 +1164,37 @@ describe('createTransport', () => {
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
+  })
+
+  it('passes an OAuth provider to StreamableHTTPClientTransport', () => {
+    const config: Config = {
+      transport: 'streamable-http',
+      serverName: 'srv',
+      url: 'https://mcp.example.com/mcp',
+      headers: {},
+      toolCallTimeoutMs: 60_000,
+      failOnStartupError: false,
+    }
+    const provider = {
+      redirectUrl: 'http://127.0.0.1:43210/callback',
+      clientMetadata: {
+        client_name: 'test-client',
+        redirect_uris: ['http://127.0.0.1:43210/callback'],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none',
+      },
+      clientInformation: () => undefined,
+      tokens: () => undefined,
+      saveTokens: () => undefined,
+      redirectToAuthorization: () => undefined,
+      saveCodeVerifier: () => undefined,
+      codeVerifier: () => 'verifier',
+    } satisfies OAuthClientProvider
+
+    const transport = createTransport(config, { authProvider: provider })
+
+    expect(transport).toHaveProperty('_authProvider', provider)
   })
 
   it.each([

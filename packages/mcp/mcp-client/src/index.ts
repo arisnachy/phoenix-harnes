@@ -16,8 +16,12 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
+import type { AuthorizationService } from '@phoenix-ai/dsh-authorization'
+import type { CredentialProvider } from '@phoenix-ai/dsh-credentials'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
+import { McpOAuthController } from './oauth.ts'
+import type { TransportOptions } from './transport.ts'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@phoenix-ai/dsh-tools'
 
@@ -91,6 +95,8 @@ export interface StreamableHttpConfig {
   url: string
   /** Additional headers attached to MCP requests. */
   headers: Record<string, string>
+  /** Whether to attach the host-managed OAuth provider when available. */
+  oauth?: boolean
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -129,6 +135,7 @@ export const Config = z.union([
     serverName: z.string().required().pattern(SERVER_NAME_PATTERN),
     url: z.string().required(),
     headers: z.dict(String).default({}),
+    oauth: z.boolean().default(true),
     toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
     failOnStartupError: z.boolean().default(false),
     startupTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STARTUP_TIMEOUT_MS),
@@ -182,7 +189,46 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // The supervisor owns the client/transport generations, the reconnect
   // loop, and the live tool registrations; disposal stops reconnection,
   // quiesces in-flight work, and unregisters the current generation.
-  const connection = startConnection(ctx, config, reconnect, registration)
+  const authorization = ctx.get('authorization') as AuthorizationService | undefined
+  const credentials = ctx.get('credentials') as CredentialProvider | undefined
+  let oauthController: McpOAuthController | undefined
+  let transportOptions: TransportOptions | undefined
+  if (config.transport === 'streamable-http' && config.oauth !== false
+    && authorization !== undefined && credentials !== undefined) {
+    oauthController = new McpOAuthController(credentials, config.serverName, config.url)
+    await oauthController.ready
+    transportOptions = {
+      authProvider: oauthController.provider(() => {
+        ctx.logger.info(`mcp-client(${config.serverName}): authorization is required`)
+      }),
+    }
+  }
+
+  const connection = startConnection(ctx, config, reconnect, registration, transportOptions)
+
+  if (oauthController !== undefined && authorization !== undefined && credentials !== undefined) {
+    const controller = oauthController
+    ctx.effect(() => authorization.registerFlow({
+      key: controller.key,
+      label: `MCP ${config.serverName}`,
+      methods: [{ id: 'oauth', label: `Authorize ${config.serverName}` }],
+      inspect: async () => {
+        const info = await credentials.describeRecord(controller.key)
+        return info.configured
+          ? { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'oauth' }
+          : undefined
+      },
+      disconnect: async () => {
+        await controller.disconnect()
+        connection.reconnect()
+      },
+      run: async session => {
+        await controller.authorize(session)
+        connection.reconnect()
+      },
+    }), 'mcp-client.oauth-flow')
+    ctx.effect(() => () => { void controller.close() }, 'mcp-client.oauth-callback')
+  }
 
   ctx.effect(() => {
     return () => {

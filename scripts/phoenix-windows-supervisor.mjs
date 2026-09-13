@@ -38,6 +38,23 @@ function gitValue(cwd, args) {
   return value.length === 0 ? undefined : value
 }
 
+function gitSucceeds(cwd, args) {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'ignore', 'ignore'],
+  })
+  return result.status === 0
+}
+
+function preparedTargetIsDivergent(target) {
+  const current = gitValue(root, ['rev-parse', 'HEAD'])
+  if (current === undefined || current === target) return false
+  if (gitSucceeds(root, ['merge-base', '--is-ancestor', current, target])) return false
+  return !gitSucceeds(root, ['merge-base', '--is-ancestor', target, current])
+}
+
 function gitStatus(cwd) {
   const result = spawnSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
     cwd,
@@ -263,8 +280,12 @@ function preparedActivator() {
   const target = restartRequestTarget()
   const stage = persistentStage()
   const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')
+  // A staged checkout can contain an older activator that only accepts
+  // fast-forward history. Divergent targets must use the live activator so it
+  // can apply the current managed-installation policy.
   if (
     target !== undefined
+    && !preparedTargetIsDivergent(target)
     && sameRepository(stage)
     && gitClean(stage)
     && gitValue(stage, ['rev-parse', 'HEAD']) === target

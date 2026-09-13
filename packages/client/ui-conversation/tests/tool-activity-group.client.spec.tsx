@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   AssistantMessageNode, ConversationNode, ConversationSnapshot, RunningToolCall, SessionId, SessionListState,
   ToolResultNode, WorkspaceListState,
 } from '@phoenix-ai/dsh-client-runtime/client'
+import { AttachmentId } from '@phoenix-ai/dsh-attachment'
 import { bindSnapshotSelector } from '@phoenix-ai/dsh-client-test-runtime'
 import { createSnapshotStore, EMPTY_CONVERSATION_VIEWS } from '@phoenix-ai/dsh-client-runtime/client'
-import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../src/client/contract/slots.ts'
+import type { ChatNodeOwnerProps, ChatViewSlotProps, RenderMessageImages } from '../src/client/contract/slots.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { ChatView } from '../src/client/chat/ChatView.tsx'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
@@ -109,6 +110,23 @@ function settledTool(callId = 'search-1'): ToolResultNode {
   }
 }
 
+const generatedAttachment = {
+  attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
+  mediaType: 'image/png' as const,
+  bytes: 4,
+  width: 640,
+  height: 360,
+  name: 'generated.png',
+}
+
+function generatedImageTool(): ToolResultNode {
+  return {
+    ...settledTool('image-1'),
+    call: { name: 'image_generation', argsRaw: '{"prompt":"a photorealistic moon"}' },
+    content: [{ type: 'image', attachment: generatedAttachment }],
+  }
+}
+
 function emptySessions() {
   return bindSnapshotSelector(createSnapshotStore<SessionListState>({
     ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
@@ -125,11 +143,13 @@ function emptyWorkspaces() {
 function renderChat(
   nodes: readonly ConversationNode[],
   runningCalls: readonly RunningToolCall[] = [],
+  renderMessageImages: RenderMessageImages = () => null,
 ) {
   const source = createSnapshotStore(snapshot(nodes, runningCalls))
   const chat = createChatStore().create()
   const t = ((key: string) => key === 'context.tools' ? 'Tools' : key) as ChatViewSlotProps['t']
   const renderSlot = ((key: string, owner: object, opts?: { fallback?: React.ReactNode }) => {
+    if (key === 'conversation.message.images') return renderMessageImages(owner as never)
     if (key !== 'conversation.chat.node') return opts?.fallback ?? null
     const node = (owner as ChatNodeOwnerProps & { node: { kind: string } }).node
     return <div data-testid={`node-${node.kind}`}>{node.kind}</div>
@@ -228,5 +248,18 @@ describe('chat tool activity grouping', () => {
     const disclosure = screen.getByRole('button', { name: 'Tools' })
     fireEvent.click(disclosure)
     expect(screen.getByTestId('node-tool-call')).toBeTruthy()
+  })
+
+  it('renders a generated image result inline without opening Tools', () => {
+    const renderMessageImages = vi.fn(() => <div data-testid="generated-image" />)
+
+    renderChat([generatedImageTool()], [], renderMessageImages)
+
+    expect(screen.getByTestId('generated-image')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Tools' })).toBeNull()
+    expect(renderMessageImages).toHaveBeenCalledWith(expect.objectContaining({
+      images: [{ attachment: generatedAttachment }],
+      align: 'start',
+    }))
   })
 })
