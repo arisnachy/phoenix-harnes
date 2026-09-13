@@ -227,7 +227,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t }: KiraTeamsDockProp
                 activity={activityOf(summary)}
                 running={summary.running}
                 pending={summary.pendingInteraction !== undefined}
-                identity={String(summary.id)}
+                agentId={String(summary.id)}
               />
               <span className={css.name}>{summary.displayTitle}</span>
               <span className={css.agentName}>{agentNameOf(summary)}</span>

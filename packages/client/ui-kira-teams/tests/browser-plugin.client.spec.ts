@@ -8,7 +8,7 @@ import {
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { apply as applyLocale, inject as localeInject } from '@phoenix-ai/dsh-client-locale/client'
 import { activityOf, agentNameOf, KiraTeamsDock, lineageMembers } from '../src/client/KiraTeamsDock.tsx'
-import { avatarVariant } from '../src/client/ModelActivityAvatar.tsx'
+import { agentAvatarKind } from '../src/client/ModelActivityAvatar.tsx'
 import { apply, inject } from '../src/client/index.ts'
 
 function summary(partial: Partial<SessionSummary> & { id: SessionId }): SessionSummary {
@@ -107,9 +107,10 @@ describe('lineageMembers', () => {
     expect(agentNameOf(FAMILY.find(item => item.id === sid('c2'))!)).toBe('Nexo')
   })
 
-  it('keeps fallback avatar identities deterministic and distinct', () => {
-    expect(avatarVariant('c1')).toBe(avatarVariant('c1'))
-    expect(avatarVariant('c1')).not.toBe(avatarVariant('c2'))
+  it('assigns the recovered illustrated avatar roster by agent id', () => {
+    expect(agentAvatarKind('c1')).toBe('lynx')
+    expect(agentAvatarKind('c2')).toBe('dolphin')
+    expect(agentAvatarKind('c1')).not.toBe(agentAvatarKind('c2'))
   })
 
   it('collects only the current lineage subagents with depths, root-walking through children', () => {

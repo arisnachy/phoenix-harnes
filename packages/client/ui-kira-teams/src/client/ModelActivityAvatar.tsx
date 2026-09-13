@@ -3,29 +3,25 @@ import css from './ModelActivityAvatar.module.css'
 
 export type ModelAvatarKind =
   | 'sol' | 'luna' | 'terra' | 'generic'
-  | 'nova' | 'prism' | 'comet' | 'aurora'
+  | 'eagle' | 'wolf' | 'fox' | 'owl' | 'lynx' | 'dolphin'
+  | 'forge' | 'nova' | 'comet' | 'prism' | 'aurora' | 'dragon'
 
 const AGENT_AVATAR_KINDS: readonly ModelAvatarKind[] = [
-  'generic', 'nova', 'prism', 'comet', 'aurora', 'luna', 'sol', 'terra',
+  'eagle', 'wolf', 'fox', 'owl', 'lynx', 'dolphin',
+  'forge', 'nova', 'comet', 'prism', 'aurora', 'dragon',
 ]
 
-/** Stable, lightweight hash for a subagent's visual identity. */
-export function stableAgentIndex(identity: string, length: number): number {
+/** Small deterministic index used to keep one agent's visual identity stable. */
+export function stableAgentIndex(agentId: string, length: number): number {
   if (length <= 0) return 0
   let total = 0
-  for (const character of identity) total += character.codePointAt(0) ?? 0
+  for (const character of agentId) total += character.codePointAt(0) ?? 0
   return total % length
 }
 
-/** Pick a distinct avatar family without exposing the provider model. */
-export function agentAvatarKind(identity: string): ModelAvatarKind {
-  return AGENT_AVATAR_KINDS[stableAgentIndex(identity, AGENT_AVATAR_KINDS.length)] ?? 'generic'
-}
-
-/** Stable four-way palette fallback for callers that need a compact variant. */
-export function avatarVariant(identity: string | undefined): number {
-  if (identity === undefined || identity.length === 0) return 0
-  return stableAgentIndex(identity, 4)
+/** Pick a varied avatar from the agent roster instead of exposing the model family. */
+export function agentAvatarKind(agentId: string): ModelAvatarKind {
+  return AGENT_AVATAR_KINDS[stableAgentIndex(agentId, AGENT_AVATAR_KINDS.length)] ?? 'generic'
 }
 
 export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
@@ -36,14 +32,13 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
   return 'generic'
 }
 
-export function ModelActivityAvatar({ activity, running, pending, identity }: {
+export function ModelActivityAvatar({ agentId, activity, running, pending }: {
+  agentId?: string
   activity: SubagentActivityProjection | undefined
   running: boolean
   pending: boolean
-  /** Stable per-agent identity used for varied avatars. */
-  identity?: string
 }) {
-  const kind = identity === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(identity)
+  const kind = agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId)
   const phase = running
     ? activity?.phase === 'idle' ? 'preparing' : activity?.phase ?? 'preparing'
     : 'idle'
@@ -52,7 +47,6 @@ export function ModelActivityAvatar({ activity, running, pending, identity }: {
     <span
       className={css.avatar}
       data-avatar={kind}
-      data-variant={avatarVariant(identity)}
       data-phase={phase}
       data-state={state}
       aria-hidden="true"
