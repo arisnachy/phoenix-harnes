@@ -107,32 +107,31 @@
 }
 
 .effortMenu {
-  width: min(470px, calc(100vw - 32px));
-  min-width: min(360px, calc(100vw - 32px));
-  max-width: min(470px, calc(100vw - 32px));
+  width: min(340px, calc(100vw - 32px));
+  min-width: min(300px, calc(100vw - 32px));
+  max-width: min(340px, calc(100vw - 32px));
   max-height: none;
   padding: 0;
-  border-radius: 26px;
-  box-shadow: 0 12px 32px rgb(15 23 42 / 10%);
+  border-radius: 18px;
 }
 
 .effortSelector {
   --effort-blue: var(--dsw-static-blue-600, #2563eb);
   --effort-blue-soft: var(--dsw-static-blue-100, #dbeafe);
-  padding: 26px 30px 32px;
+  padding: 16px 20px 18px;
   background: var(--dsw-specific-menu);
 }
 
 .effortHeader {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
   align-items: center;
-  min-height: 34px;
+  min-height: 28px;
 }
 
 .effortIcon {
-  width: 26px;
-  height: 26px;
+  width: 20px;
+  height: 20px;
   color: var(--effort-blue);
   fill: none;
   stroke: currentColor;
@@ -146,11 +145,11 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  gap: 6px;
+  gap: 4px;
   color: var(--effort-blue);
-  font-size: 22px;
-  line-height: 30px;
-  font-weight: 700;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 650;
 }
 
 .effortValue {
@@ -162,15 +161,15 @@
 
 .effortValueChevron {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .effortReset {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -180,8 +179,8 @@
 }
 
 .effortReset svg {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
 }
 
 .effortReset:hover:not(:disabled),
@@ -201,11 +200,11 @@
 }
 
 .effortModel {
-  margin-top: 8px;
+  margin-top: 3px;
   overflow: hidden;
   color: var(--dsw-alias-label-secondary);
-  font-size: 18px;
-  line-height: 26px;
+  font-size: 14px;
+  line-height: 20px;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -213,8 +212,8 @@
 
 .effortSlider {
   position: relative;
-  height: 60px;
-  margin-top: 34px;
+  height: 40px;
+  margin-top: 16px;
 }
 
 .effortTrack,
@@ -226,8 +225,8 @@
 }
 
 .effortTrack {
-  top: 25px;
-  height: 10px;
+  top: 16px;
+  height: 8px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--effort-blue-soft);
@@ -242,7 +241,7 @@
 }
 
 .effortStops {
-  top: 27px;
+  top: 17px;
   height: 6px;
   pointer-events: none;
 }
@@ -265,7 +264,7 @@
 .effortRange {
   top: 0;
   width: 100%;
-  height: 60px;
+  height: 40px;
   margin: 0;
   appearance: none;
   outline: none;
@@ -278,33 +277,33 @@
 }
 
 .effortRange::-webkit-slider-runnable-track {
-  height: 10px;
+  height: 8px;
   background: transparent;
 }
 
 .effortRange::-moz-range-track {
-  height: 10px;
+  height: 8px;
   background: transparent;
 }
 
 .effortRange::-webkit-slider-thumb {
-  width: 56px;
-  height: 56px;
-  margin-top: -23px;
+  width: 36px;
+  height: 36px;
+  margin-top: -14px;
   appearance: none;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
   background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: 0 4px 12px rgb(15 23 42 / 14%);
+  box-shadow: 0 2px 7px rgb(15 23 42 / 15%);
 }
 
 .effortRange::-moz-range-thumb {
-  width: 56px;
-  height: 56px;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
   background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: 0 4px 12px rgb(15 23 42 / 14%);
+  box-shadow: 0 2px 7px rgb(15 23 42 / 15%);
 }
 
 .effortRange:focus-visible::-webkit-slider-thumb,
