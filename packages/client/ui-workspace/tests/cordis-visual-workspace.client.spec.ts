@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 /** Cordis visual workspace controller, lease, and media presentation behavior. */
+import { createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import type { ILayout, WorkspaceOccupancy } from '@phoenix-ai/dsh-client-ui-layout/client'
@@ -18,6 +19,10 @@ function fakeLayout(subagent = false): ILayout {
     getWorkspaceOccupancy: () => occupancy,
     subscribeWorkspaceOccupancy: () => () => {},
   }
+}
+
+function renderWorkspace(controller: CordisVisualWorkspaceController, layout: ILayout) {
+  return render(createElement(CordisVisualWorkspace, { controller, layout }))
 }
 
 afterEach(() => { cleanup() })
@@ -64,7 +69,7 @@ describe('CordisVisualWorkspace', () => {
   it('stays absent while closed and renders image titles and alt fallbacks', () => {
     const layout = fakeLayout()
     const controller = new CordisVisualWorkspaceController(layout)
-    const view = render(<CordisVisualWorkspace controller={controller} layout={layout} />)
+    const view = renderWorkspace(controller, layout)
     expect(view.queryByLabelText('Cordis visual workspace')).toBeNull()
 
     act(() => { controller.show({ kind: 'image', src: 'https://example.test/a.png', title: 'Image' }) })
@@ -91,7 +96,7 @@ describe('CordisVisualWorkspace', () => {
       poster: 'https://example.test/poster.png',
       autoplay: true,
     })
-    const view = render(<CordisVisualWorkspace controller={controller} layout={layout} />)
+    const view = renderWorkspace(controller, layout)
     const video = view.container.querySelector('video') as HTMLVideoElement
     expect(video.controls).toBe(true)
     expect(video.autoplay).toBe(true)
@@ -106,7 +111,7 @@ describe('CordisVisualWorkspace', () => {
     const layout = fakeLayout()
     const controller = new CordisVisualWorkspaceController(layout)
     controller.show({ kind: 'page', url: 'https://example.test/page', title: 'Web page' })
-    const view = render(<CordisVisualWorkspace controller={controller} layout={layout} />)
+    const view = renderWorkspace(controller, layout)
     const frame = view.getByTitle('Web page') as HTMLIFrameElement
     expect(frame.src).toBe('https://example.test/page')
     expect(frame.getAttribute('sandbox')).toContain('allow-scripts')
@@ -121,7 +126,7 @@ describe('CordisVisualWorkspace', () => {
     const layout = fakeLayout()
     const controller = new CordisVisualWorkspaceController(layout)
     controller.show({ kind: 'page', url: 'javascript:alert(1)' })
-    const view = render(<CordisVisualWorkspace controller={controller} layout={layout} />)
+    const view = renderWorkspace(controller, layout)
     expect(view.getByText('Cordis blocked an invalid page URL.')).toBeTruthy()
 
     act(() => { controller.show({ kind: 'page', url: 'not a url' }) })
@@ -132,7 +137,7 @@ describe('CordisVisualWorkspace', () => {
     const layout = fakeLayout(true)
     const controller = new CordisVisualWorkspaceController(layout)
     controller.show({ kind: 'text', text: 'supporting material', title: '   ' })
-    const view = render(<CordisVisualWorkspace controller={controller} layout={layout} />)
+    const view = renderWorkspace(controller, layout)
     const workspace = view.getByLabelText('Cordis visual workspace')
     expect(workspace.getAttribute('data-under-subagent')).toBe('true')
     expect(view.getByText('supporting material')).toBeTruthy()
