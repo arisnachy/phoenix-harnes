@@ -10,6 +10,12 @@ import type { createLayoutStore, WorkspaceOccupant } from './stores.ts'
 export type PanelActions = BoundActions<ReturnType<typeof createLayoutStore>>
 export type { WorkspaceOccupant } from './stores.ts'
 
+/** Current occupants of the shared visual workspace. */
+export interface WorkspaceOccupancy {
+  readonly subagent: boolean
+  readonly cordis: boolean
+}
+
 /** Cross-plugin layout face (`ctx.layout`). */
 export interface ILayout {
   /** Toggle the sidebar panel. */
@@ -26,11 +32,17 @@ export interface ILayout {
    * @param active - Whether that owner currently needs the dock.
    */
   setWorkspaceOccupant(occupant: WorkspaceOccupant, active: boolean): void
+  /** Read the current visual-workspace occupancy snapshot. */
+  getWorkspaceOccupancy(): WorkspaceOccupancy
+  /** Subscribe to visual-workspace occupancy changes. */
+  subscribeWorkspaceOccupancy(listener: () => void): () => void
 }
 
 /** Cross-plugin panel-action face (ctx.layout). */
 export class LayoutController implements ILayout {
   #panels: PanelActions | undefined
+  #occupancy: WorkspaceOccupancy = Object.freeze({ subagent: false, cordis: false })
+  #occupancyListeners = new Set<() => void>()
 
   /** Adopt the root entry's bound store actions. */
   attachPanels(actions: PanelActions): void {
@@ -54,7 +66,19 @@ export class LayoutController implements ILayout {
 
   /** Announce one shared visual-workspace owner's active lifetime. */
   setWorkspaceOccupant(occupant: WorkspaceOccupant, active: boolean): void {
+    if (this.#occupancy[occupant] === active) return
     this.#require().setWorkspaceOccupant(occupant, active)
+    this.#occupancy = Object.freeze({ ...this.#occupancy, [occupant]: active })
+    for (const listener of this.#occupancyListeners) listener()
+  }
+
+  /** Return the stable current occupancy snapshot. */
+  getWorkspaceOccupancy = (): WorkspaceOccupancy => this.#occupancy
+
+  /** Subscribe to occupancy changes. */
+  subscribeWorkspaceOccupancy = (listener: () => void): (() => void) => {
+    this.#occupancyListeners.add(listener)
+    return () => { this.#occupancyListeners.delete(listener) }
   }
 
   #require(): PanelActions {
