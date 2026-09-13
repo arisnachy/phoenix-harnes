@@ -36,11 +36,11 @@
     },
     "./model-context": {
       "types": "./lib/types/model-context.d.ts",
-      "default": "./lib/model-context.js"
+      "default": "./lib/types/model-context.js"
     },
     "./quality-gate": {
       "types": "./lib/types/quality-gate.d.ts",
-      "default": "./lib/quality-gate.js"
+      "default": "./lib/types/quality-gate.js"
     },
     "./types": {
       "types": "./lib/types/types.d.ts",
@@ -52,8 +52,6 @@
   "files": [
     "lib/index.js",
     "lib/invariant.js",
-    "lib/model-context.js",
-    "lib/quality-gate.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts"
   ],
