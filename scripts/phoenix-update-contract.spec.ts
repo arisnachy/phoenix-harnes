@@ -27,7 +27,7 @@ describe('prepared client self-update contract', () => {
 
     expect(activator).toContain('classifyPreparedActivation')
     expect(activator).toContain("git(root, ['reset', '--hard', target], { inherit: true })")
-    expect(activator).toContain("refs/phoenix/recovery/pre-stable-realign")
+    expect(activator).toContain('refs/phoenix/recovery/pre-stable-realign')
     expect(activator).toContain('requires a managed installation')
   })
 

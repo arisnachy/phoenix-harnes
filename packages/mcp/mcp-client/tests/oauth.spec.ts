@@ -5,6 +5,7 @@ import type { OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.
 import {
   McpOAuthCallbackServer,
   createMcpOAuthProvider,
+  hasUsableMcpOAuthTokens,
   type McpOAuthStateStore,
 } from '@phoenix-ai/dsh-mcp-client/src/oauth.ts'
 
@@ -89,5 +90,12 @@ describe('createMcpOAuthProvider', () => {
     await expect((await second).code).resolves.toBe('good-code')
     expect((await accepted).status).toBe(200)
     await callback.close()
+  })
+
+  it('reports connected only when access or refresh tokens exist', () => {
+    expect(hasUsableMcpOAuthTokens(undefined)).toBe(false)
+    expect(hasUsableMcpOAuthTokens({ clientInformation: { client_id: 'id' } })).toBe(false)
+    expect(hasUsableMcpOAuthTokens({ tokens: { access_token: 'access', token_type: 'Bearer' } })).toBe(true)
+    expect(hasUsableMcpOAuthTokens({ tokens: { refresh_token: 'refresh', token_type: 'Bearer' } })).toBe(true)
   })
 })

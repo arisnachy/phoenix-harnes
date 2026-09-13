@@ -222,7 +222,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         await controller.disconnect()
         connection.reconnect()
       },
-      run: async session => {
+      run: async (session) => {
         await controller.authorize(session)
         connection.reconnect()
       },

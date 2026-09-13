@@ -98,7 +98,7 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
         await options.store.clear()
         return
       }
-      await updateState(options.store, current => {
+      await updateState(options.store, (current) => {
         switch (scope) {
           case 'client': return cloneWithout(current, 'clientInformation')
           case 'tokens': return cloneWithout(current, 'tokens')
@@ -282,6 +282,13 @@ export class McpOAuthCallbackServer {
   }
 }
 
+/** Whether a stored state contains a token that the SDK can use or refresh. */
+export function hasUsableMcpOAuthTokens(state: McpOAuthState | undefined): boolean {
+  const tokens = state?.tokens
+  return typeof tokens?.access_token === 'string' && tokens.access_token.length > 0
+    || typeof tokens?.refresh_token === 'string' && tokens.refresh_token.length > 0
+}
+
 function mcpCredentialKey(serverName: string): CredentialKey {
   const id = serverName.toLowerCase().replaceAll('_', '-')
   return credentialKey('mcp-client', id)
@@ -303,6 +310,10 @@ export class McpOAuthController {
     this.store = createCredentialStateStore(credentials, this.key)
     this.callbackServer = new McpOAuthCallbackServer(serverName)
     this.ready = this.callbackServer.start()
+  }
+
+  async isAuthorized(): Promise<boolean> {
+    return hasUsableMcpOAuthTokens(await this.store.read())
   }
 
   provider(onAuthorizationUrl: (url: URL) => void | Promise<void> = () => undefined): OAuthClientProvider {
