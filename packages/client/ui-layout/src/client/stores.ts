@@ -35,7 +35,10 @@ type LayoutActions = {
   setWorkspaceOccupant: (draft: LayoutState, occupant: WorkspaceOccupant, active: boolean) => void
 }
 
-/** Create the layout panel store handle. */
+/**
+ * Create the transient shell-layout store used by AppFrame and ctx.layout.
+ * @returns A fresh layout store handle with panel and visual-workspace actions.
+ */
 export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutActions> {
   return defineStore({
     init: (): LayoutState => ({
