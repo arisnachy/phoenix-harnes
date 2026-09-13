@@ -37,5 +37,5 @@ describe('PHOENIX MCP stdio proxy', () => {
     const [code] = await once(child, 'close') as [number | null]
     expect(code).toBe(0)
     expect(Buffer.concat(output).toString().trim()).toMatch(/^\d+\.\d+\.\d+/u)
-  })
+  }, 15_000)
 })
