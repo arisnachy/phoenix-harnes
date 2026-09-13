@@ -79,7 +79,9 @@ function collectProfileConfig(home) {
 export function collectBootCriticalConfiguration(env = process.env) {
   const home = resolvePhoenixHome(env)
   const paths = collectProfileConfig(home)
+  const homePatch = join(home, 'cordis.patch.yml')
   const codexPatch = join(home, 'codex', 'enabled.patch.yml')
+  if (existsSync(homePatch)) paths.push(homePatch)
   if (existsSync(codexPatch)) paths.push(codexPatch)
   return [...new Set(paths)].sort((left, right) => left.localeCompare(right))
 }

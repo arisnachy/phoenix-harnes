@@ -13,8 +13,9 @@ describe('PHOENIX boot configuration guard contract', () => {
     expect(guard).toContain("PHOENIX_UPDATE_MODE: 'off'")
   })
 
-  it('snapshots only boot configuration rather than credential stores', () => {
+  it('snapshots every boot-critical user patch but never the credential store', () => {
     expect(guard).toContain("CONFIG_FILENAMES = new Set(['package.json', 'cordis.patch.yml', 'pnpm-workspace.yaml'])")
+    expect(guard).toContain("join(home, 'cordis.patch.yml')")
     expect(guard).toContain("join(home, 'codex', 'enabled.patch.yml')")
     expect(guard).not.toContain("'.credentials.yaml'")
   })
