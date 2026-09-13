@@ -178,7 +178,11 @@ function ToolActivityGroup({
   )
 }
 
-/** Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure. */
+/**
+ * Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure.
+ * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
+ * @returns The grouped transcript flow.
+ */
 export function ToolActivityFlow({ nodes, ...seatProps }: ToolActivityFlowProps) {
   const flow = useMemo(() => buildFlow(nodes), [nodes])
   return (
