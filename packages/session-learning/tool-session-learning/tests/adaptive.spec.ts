@@ -28,11 +28,11 @@ class MemoryStore implements AdaptiveMemoryStore {
       subject: input.subject,
       value: input.value,
       summary: input.summary,
-      projectId: input.projectId,
       sessionId: input.sessionId,
       status: 'active',
       occurredAt: input.occurredAt,
       sourceEventType: input.sourceEventType,
+      ...input.projectId === undefined ? {} : { projectId: input.projectId },
     })
   }
 }
