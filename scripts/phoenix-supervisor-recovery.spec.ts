@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const supervisor = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
 const control = readFileSync(resolve('scripts/phoenix-supervisor-control.mjs'), 'utf8')
+const preflight = readFileSync(resolve('scripts/phoenix-config-preflight.mjs'), 'utf8')
 
 describe('PHOENIX supervisor-owned restart and configuration recovery', () => {
   it('accepts a generic restart request that the supervisor owns while the Host is still alive', () => {
@@ -13,10 +14,20 @@ describe('PHOENIX supervisor-owned restart and configuration recovery', () => {
     expect(supervisor).toContain('terminateHost(host)')
   })
 
-  it('preflights the effective web profile before allowing a model-requested restart', () => {
+  it('keeps an independent supervisor-side config gate before shutdown', () => {
     expect(supervisor).toContain('function runConfigurationPreflight()')
     expect(supervisor).toContain("'web', '--dump-config'")
     expect(supervisor).toContain('configuration preflight failed; restart refused while the current PHOENIX remains alive')
+  })
+
+  it('runs a full isolated Host on an OS-assigned port before publishing a restart request', () => {
+    expect(control).toContain("const preflightScript = join(root, 'scripts', 'phoenix-config-preflight.mjs')")
+    expect(control).toContain('const preflightCode = runPreflight()')
+    expect(control).toContain('restart refused; the live Host remains untouched')
+    expect(preflight).toContain("'web', '--port', '0', '--no-open'")
+    expect(preflight).toContain("PHOENIX_AUTO_UPDATE: '0'")
+    expect(preflight).toContain('/dsh web:\\s+https?:\\/\\//u')
+    expect(preflight).toContain('configuration composition and isolated Host startup passed')
   })
 
   it('keeps a last-known-good profile and restores it after an early failed boot', () => {
@@ -30,6 +41,6 @@ describe('PHOENIX supervisor-owned restart and configuration recovery', () => {
     expect(control).toContain("const CONTROL_REQUEST_FILE = 'phoenix-supervisor-request.json'")
     expect(control).toContain("if (command === 'preflight')")
     expect(control).toContain("else if (command === 'restart')")
-    expect(control).toContain('the external supervisor will preflight and own the restart')
+    expect(control).toContain('restart requested after isolated preflight; the external supervisor now owns shutdown and relaunch')
   })
 })
