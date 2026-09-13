@@ -18,7 +18,7 @@ describe('prepared client self-update contract', () => {
     const activator = source('scripts/phoenix-activate-prepared.mjs')
 
     expect(activator).toContain(
-      "node(stage, ['--import', 'tsx/esm', 'scripts/promote-client-artifacts.ts', '--from', stage, '--verify-only'])",
+      "node(stage, ['--import', 'tsx/esm', 'scripts/promote-client-artifacts.ts', '--from', stage, '--verify-only'], { inherit: true })",
     )
   })
 
@@ -32,9 +32,22 @@ describe('prepared client self-update contract', () => {
     const updater = source('scripts/phoenix-auto-update.mjs')
 
     expect(updater).toContain('if (prepared.base !== currentCommit(root)) return false')
-    expect(updater).toContain('if (!cleanWorktree(root)) return false')
+    expect(updater).toContain('return stagedCandidateValid(root, target) && cleanWorktree(root)')
     expect(updater).toContain("const stageStatus = git(stage, ['status', '--porcelain=v1', '--untracked-files=all'], { allowFailure: true })")
     expect(updater).toContain("phase: 'worktree'")
-    expect(updater).toContain('local changes block preparation/activation')
+    expect(updater).toContain('Auto-update is paused to protect user work')
+  })
+
+  it('prepares dirty checkouts in isolated staging and reserves activation for a clean checkout', () => {
+    const updater = source('scripts/phoenix-auto-update.mjs')
+    const applyCaseStart = updater.indexOf("case 'apply':")
+    const unchangedCaseStart = updater.indexOf("case 'unchanged':", applyCaseStart)
+    const applyCase = updater.slice(applyCaseStart, unchangedCaseStart)
+
+    expect(updater).toContain('function stagedCandidateValid(root, target)')
+    expect(updater).toContain('function writePreparedState(root, inspection, plan)')
+    expect(applyCase.indexOf('stageCandidate(root, inspection)')).toBeGreaterThanOrEqual(0)
+    expect(applyCase).not.toContain('const localChanges = worktreeChanges(root)')
+    expect(updater).toContain('local changes remain protected; activation waits for a clean checkout.')
   })
 })

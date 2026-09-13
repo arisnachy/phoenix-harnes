@@ -43,7 +43,7 @@ Default policy is `PHOENIX_UPDATE_MODE=auto`:
 3. fetch the stable-channel manifest;
 4. verify the fetched stable commit exists locally;
 5. refuse downgrade; permit unrelated release history only for a managed `main` or `stable` checkout;
-6. refuse automatic mutation when the worktree contains local changes;
+6. prepare and validate candidates in detached staging even when the worktree contains local changes, but require a clean live worktree before activation;
 7. create a detached temporary Git worktree at the candidate commit;
 8. run a frozen dependency install, full build, and CLI smoke test there;
 9. record the current commit at `refs/phoenix/recovery/last-good`;
@@ -55,7 +55,7 @@ The updater does not read, copy, reset, delete, or migrate `$DSH_HOME`, credenti
 
 ## While PHOENIX is open
 
-The CLI starts a low-frequency update watcher. The default poll is ten minutes. When a new stable SHA appears, the running harness prints an update notice but does not replace its own files while a session is active. In `auto` mode installation is deferred until that PHOENIX process exits, then the candidate is re-fetched and revalidated before installation.
+The CLI starts a low-frequency update watcher. The default poll is ten minutes. When a new stable SHA appears, the running harness prints an update notice but does not replace its own files while a session is active. A locally modified checkout still gets an isolated staging preflight; the watcher records `available` with `phase: worktree`, leaves the host running, and waits for a clean live checkout before activation. In `auto` mode installation is deferred until that PHOENIX process exits, then the candidate is re-fetched and revalidated before installation.
 
 The next Windows launch also performs an update check before boot. Ordinary network/channel failures leave the last-known-good PHOENIX available. Only the exceptional condition where both a live update and its rollback fail uses fatal updater exit code `12`.
 
