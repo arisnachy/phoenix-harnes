@@ -1,10 +1,10 @@
 /** Read-only Cordis service projecting deterministic cognitive state per session. */
 
+import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
-import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
-import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import { SessionId } from '@phoenix-ai/dsh-session'
+import type { UserMessage } from '@phoenix-ai/dsh-session'
 import type { LearningMemoryService } from '@phoenix-ai/dsh-session-learning'
 import { scoreAttention } from './attention.ts'
 import { validateCognitiveState } from './invariant.ts'
@@ -96,17 +96,19 @@ export const Config: z<CognitiveRuntimeConfig> = z.object({
   weights: WeightConfig.default(DEFAULT_CONFIG.weights),
 })
 
-/** Return the latest durable cognitive-runtime snapshot for an agent, including one no longer on the visible surface. */
-function latestProjectedContext(agent: Agent): string | undefined {
-  for (let index = agent.session.events.length - 1; index >= 0; index -= 1) {
-    const event = agent.session.events[index]
-    if (event?.type !== 'user/message'
-      || event.data.source.kind !== 'plugin'
-      || event.data.source.plugin !== CONTEXT_SOURCE) continue
-    const [block] = event.data.content
-    return event.data.content.length === 1 && block?.type === 'text' ? block.text : ''
-  }
-  return undefined
+/** Create one identified user-role snapshot without adding another workspace runtime dependency. */
+function cognitiveContextMessage(text: string): UserMessage {
+  return Object.freeze({
+    id: randomUUID() as UserMessage['id'],
+    role: 'user' as const,
+    content: [{ type: 'text' as const, text }],
+    source: {
+      kind: 'plugin' as const,
+      plugin: CONTEXT_SOURCE,
+      form: 'snapshot' as const,
+      sections: [{ name: CONTEXT_SECTION, text }],
+    },
+  })
 }
 
 /** Event-backed, process-local cognitive runtime service. */
@@ -135,7 +137,7 @@ export class CognitiveRuntimeService extends Service {
     })
     this.ctx.on('session/disposed', (session) => { this.states.delete(String(session.id)) })
 
-    this.ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecision> => {
+    this.ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
       const decision = await next()
       if (decision.kind === 'reject' || signal.aborted) return decision
 
@@ -143,26 +145,26 @@ export class CognitiveRuntimeService extends Service {
       signal.throwIfAborted()
       const state = this.get(agent.id)
       const current = state === undefined ? '' : renderCognitiveContext(state)
-      const previous = latestProjectedContext(agent)
+
+      let previous: string | undefined
+      for (let index = agent.session.events.length - 1; index >= 0; index -= 1) {
+        const event = agent.session.events[index]
+        if (event?.type !== 'user/message'
+          || event.data.source.kind !== 'plugin'
+          || event.data.source.plugin !== CONTEXT_SOURCE) continue
+        const [block] = event.data.content
+        previous = event.data.content.length === 1 && block?.type === 'text' ? block.text : ''
+        break
+      }
+
       const desired = current.length > 0
         ? current
         : previous === undefined ? undefined : COGNITIVE_CONTEXT_CLEARED
       if (desired === undefined || desired === previous) return decision
 
       return {
-        kind: 'enter',
-        messages: [
-          ...decision.messages,
-          createUserMessage({
-            content: [{ type: 'text', text: desired }],
-            source: {
-              kind: 'plugin',
-              plugin: CONTEXT_SOURCE,
-              form: 'snapshot',
-              sections: [{ name: CONTEXT_SECTION, text: desired }],
-            },
-          }),
-        ],
+        kind: 'enter' as const,
+        messages: [...decision.messages, cognitiveContextMessage(desired)],
       }
     }, { prepend: true })
 
