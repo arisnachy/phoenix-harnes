@@ -40,6 +40,8 @@ export type CognitiveFlowCriticality = 'optional' | 'recommended' | 'required-wh
 export type CognitiveMissionKind = 'simple' | 'build' | 'debug' | 'research' | 'architecture' | 'operational' | 'recovery' | 'mixed'
 /** Relative mission complexity, risk, or novelty. */
 export type CognitiveMissionLevel = 'low' | 'medium' | 'high'
+/** Execution depth selected before composing individual cognitive flows. */
+export type CognitiveExecutionMode = 'fast' | 'standard' | 'deep'
 /** Observable completion evidence requested from downstream orchestration. */
 export type CognitiveQualityGate =
   | 'objective-locked'
@@ -102,6 +104,7 @@ export interface CognitiveFlowSelectionReason {
 /** Immutable workflow chosen for one mission profile. */
 export interface CognitiveWorkflowPlan {
   readonly profile: CognitiveMissionProfile
+  readonly executionMode: CognitiveExecutionMode
   readonly selected: readonly CognitiveFlowId[]
   readonly reasons: readonly CognitiveFlowSelectionReason[]
   readonly skipped: readonly CognitiveFlowSelectionReason[]
@@ -170,11 +173,22 @@ const FLOW_BY_ID = new Map(COGNITIVE_FLOW_CATALOG.map(flow => [flow.id, flow] as
 const BUILD_KINDS = new Set<CognitiveMissionKind>(['build', 'architecture', 'mixed'])
 const DEBUG_KINDS = new Set<CognitiveMissionKind>(['debug', 'recovery'])
 const RESEARCH_KINDS = new Set<CognitiveMissionKind>(['research', 'mixed'])
+const NON_FAST_KINDS = new Set<CognitiveMissionKind>(['architecture', 'research', 'recovery', 'mixed'])
 
 function addFlow(selected: Set<CognitiveFlowId>, id: CognitiveFlowId): void {
   const flow = FLOW_BY_ID.get(id)!
   for (const required of flow.requires) addFlow(selected, required)
   selected.add(id)
+}
+
+function executionMode(profile: CognitiveMissionProfile): CognitiveExecutionMode {
+  if (profile.complexity === 'high' || profile.risk === 'high' || profile.novelty === 'high' || profile.previousFailure) return 'deep'
+  if (NON_FAST_KINDS.has(profile.kind)
+    || profile.requiresExternalEvidence
+    || profile.hasIndependentSubtasks
+    || profile.persistent
+    || profile.futureObligation) return 'standard'
+  return 'fast'
 }
 
 function selectedReason(id: CognitiveFlowId, profile: CognitiveMissionProfile): string {
@@ -213,6 +227,7 @@ function qualityGates(selected: ReadonlySet<CognitiveFlowId>): readonly Cognitiv
  * @returns Immutable selected/skipped flows and observable quality gates.
  */
 export function selectCognitiveWorkflow(profile: CognitiveMissionProfile): CognitiveWorkflowPlan {
+  const mode = executionMode(profile)
   const selected = new Set<CognitiveFlowId>()
   addFlow(selected, 'intent-framing')
   addFlow(selected, 'verification-gate')
@@ -227,12 +242,15 @@ export function selectCognitiveWorkflow(profile: CognitiveMissionProfile): Cogni
     addFlow(selected, 'procedural-learning')
     addFlow(selected, 'experience-consolidation')
   }
-  if (BUILD_KINDS.has(profile.kind)) {
+  if (BUILD_KINDS.has(profile.kind) && mode !== 'fast') {
     addFlow(selected, 'brainstorming')
     addFlow(selected, 'architecture-design')
     addFlow(selected, 'implementation-planning')
   }
-  if (profile.requiresCodeChange) addFlow(selected, 'proof-driven-development')
+  if (profile.requiresCodeChange) {
+    if (mode === 'fast') addFlow(selected, 'safe-change')
+    else addFlow(selected, 'proof-driven-development')
+  }
   if (DEBUG_KINDS.has(profile.kind)) {
     addFlow(selected, 'causal-reasoning')
     addFlow(selected, 'systematic-debugging')
@@ -268,7 +286,7 @@ export function selectCognitiveWorkflow(profile: CognitiveMissionProfile): Cogni
     addFlow(selected, 'adversarial-critique')
     addFlow(selected, 'independent-judge')
   }
-  if (profile.userVisibleArtifact && profile.complexity !== 'low') addFlow(selected, 'adversarial-critique')
+  if (mode !== 'fast' && profile.userVisibleArtifact && profile.complexity !== 'low') addFlow(selected, 'adversarial-critique')
   if (profile.persistent && profile.futureObligation) addFlow(selected, 'autonomous-follow-up')
 
   const ordered = Object.freeze(COGNITIVE_FLOW_IDS.filter(id => selected.has(id)))
@@ -278,6 +296,7 @@ export function selectCognitiveWorkflow(profile: CognitiveMissionProfile): Cogni
     .map(flow => Object.freeze({ flow, reason: 'mission profile does not currently trigger this flow' })))
   return Object.freeze({
     profile: Object.freeze({ ...profile }),
+    executionMode: mode,
     selected: ordered,
     reasons,
     skipped,
@@ -330,6 +349,8 @@ export function renderCognitiveWorkflowGuide(locale: 'en' | 'es' = 'en'): string
       'HARDNESS conoce estos flujos cognitivos y debe seleccionar/componer los necesarios antes de formular el plan de ejecución:',
       catalog,
       'Elige el flujo más ligero que preserve la calidad; no uses procesos pesados por ceremonia.',
+      'Los flujos HARDNESS seleccionados son la política de proceso de esta misión. No precargues brainstorming, planificación, revisión u otras skills metodológicas solo porque un catálogo genérico las parezca hacer aplicables; carga skills de proceso únicamente cuando implementen flujos HARDNESS seleccionados.',
+      'Usa fast mode para cambios acotados cosméticos, de redacción, estilo e implementación localizada: haz el cambio seguro mínimo, verifica con evidencia fresca dirigida y escala solo cuando nueva evidencia añada riesgo, alcance, fallo u otro disparador real.',
       'En depuración encuentra la causa raíz antes de proponer una corrección.',
       'Paraleliza únicamente trabajo realmente independiente y usa contextos frescos cuando delegues dominios separados.',
       'Para trabajo complejo o de alto riesgo separa implementación, crítica y juicio independiente.',
@@ -346,6 +367,8 @@ export function renderCognitiveWorkflowGuide(locale: 'en' | 'es' = 'en'): string
     'HARDNESS knows these cognitive flows and must select/compose the necessary ones before formulating the execution plan:',
     catalog,
     'Choose the lightest workflow that preserves quality; do not add heavyweight ceremony without a trigger.',
+    'Selected HARDNESS flows are the process policy for this mission. Do not preload brainstorming, planning, review, or other methodology skills merely because a generic skill catalog makes them look applicable; load process skills only when they implement selected HARDNESS flows.',
+    'Use fast mode for bounded cosmetic, wording, styling, and localized implementation changes: make the smallest safe change, run targeted fresh verification, and escalate only when new evidence adds risk, scope, failure, or another real trigger.',
     'Find root cause before proposing a debugging fix.',
     'Parallelize only independent work and use fresh contexts when delegating separate domains.',
     'For high-complexity or high-risk work separate implementation, adversarial critique, and independent judgment.',
