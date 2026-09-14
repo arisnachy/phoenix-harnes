@@ -55,11 +55,13 @@ export function activityOf(summary: SessionSummary): SubagentActivityProjection 
   return summary.projectionValues?.subagentActivity
 }
 
+// Exact order from the approved 20-avatar KIRA reference. Keep in lock-step
+// with AGENT_AVATAR_KINDS in ModelActivityAvatar.tsx.
 const AGENT_NAMES = [
-  'Vega', 'Nova', 'Prisma', 'Atlas', 'Orión', 'Nexo',
-  'Astra', 'Lumen', 'Pulsar', 'Cometa', 'Aurora', 'Cobalto',
-  'Helix', 'Vector', 'Quasar', 'Senda', 'Zenit', 'Eclipse',
-  'Fénix', 'Argo', 'Órbita', 'Vórtice', 'Solaria', 'Orbe',
+  'Vórtice', 'Aurora', 'Atlas', 'Nova', 'Lumen',
+  'Helix', 'Prisma', 'Orión', 'Vega', 'Eclipse',
+  'Argo', 'Solaria', 'Nexo', 'Astra', 'Lyra',
+  'Zenith', 'Cobalto', 'Quasar', 'Senda', 'Órbita',
 ] as const
 
 /** Resolve a stable KIRA codename shown instead of provider internals. */
