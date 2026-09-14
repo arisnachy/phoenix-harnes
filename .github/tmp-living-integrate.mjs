@@ -53,6 +53,20 @@ replaceOnce(
   "key: 'living',\n    pkg: 'living',",
 )
 
+const toolCatalog = 'scripts/gen-tool-catalog.ts'
+replaceOnce(
+  toolCatalog,
+  "import LocalJobRegistry from '@phoenix-ai/dsh-jobs-local'\n",
+  "import LocalJobRegistry from '@phoenix-ai/dsh-jobs-local'\nimport LocalLivingRegistry from '@phoenix-ai/dsh-living-local'\nimport * as ToolLiving from '@phoenix-ai/dsh-tool-living'\n",
+  "import * as ToolLiving from '@phoenix-ai/dsh-tool-living'",
+)
+replaceOnce(
+  toolCatalog,
+  "  {\n    pkg: '@phoenix-ai/dsh-tool-lsp',\n",
+  "  {\n    pkg: '@phoenix-ai/dsh-tool-living',\n    dir: 'tool-living',\n    source: 'packages/core/tool-living/src/index.ts',\n    requires: ['ctx.tools', 'ctx.living', 'ctx.systemPrompt'],\n    writes: ['tool/call', 'durable living creation manifest', 'live creation state/actions/events through ctx.living', 'tool/result'],\n    async mount(ctx) {\n      const catalogPath = resolve(root, '.tmp', 'tool-catalog-living.json')\n      await ctx.plugin(LocalLivingRegistry, { path: catalogPath })\n      await ctx.plugin(ToolLiving)\n    },\n    note:\n      'Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target.',\n  },\n  {\n    pkg: '@phoenix-ai/dsh-tool-lsp',\n",
+  "pkg: '@phoenix-ai/dsh-tool-living'",
+)
+
 const architecture = 'docs/architecture.md'
 replaceOnce(
   architecture,
