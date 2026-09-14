@@ -1,28 +1,30 @@
 /**
- * Background-job plugin, browser half: contributes one session-header action
- * that renders this session's `ctx.jobs` records. The data arrives entirely
- * through the `jobsBySession` list mirror, so the plugin issues no RPC and
- * holds no state of its own beyond popover visibility.
+ * Background-job and durable-task plugin, browser half. Background jobs come
+ * from the session mirror; Phoenix tasks come from the local-only task RPC.
  */
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
+import type { ConnectionHandle } from '@phoenix-ai/dsh-client-connection/client'
 import { JobListAction } from './JobListAction.tsx'
+import { createTaskCenterAction } from './TaskCenterAction.tsx'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import { en, NS, zh, type JobKey } from './locales.ts'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** Background-job list copy. */
+    /** Background-job and Phoenix task-center copy. */
     'job': JobKey
   }
 }
 
 export type { JobListActionProps } from './JobListAction.tsx'
+export type { TaskCenterActionProps } from './TaskCenterAction.tsx'
 
-/** Required services for locale registration and header-slot contribution. */
-export const inject = ['sessions', 'slots', 'locale']
+/** Required services for locale registration, task RPC, and header-slot contribution. */
+export const inject = ['sessions', 'slots', 'locale', 'connection']
 
 /**
- * Client plugin body: register the dictionaries and the header action.
+ * Client plugin body: register dictionaries, the background-job action, and
+ * the always-addressable Phoenix Task Center.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -36,5 +38,17 @@ export function apply(ctx: ClientContext): void {
       order: 20,
       locale: NS,
     }, JobListAction),
+  )
+
+  const TaskCenterAction = createTaskCenterAction(ctx.get('connection') as ConnectionHandle)
+  ctx.slots.inject(
+    'conversation.session.header.actions',
+    () => ctx.slots.register({
+      name: 'conversation.session.header.actions',
+      id: 'phoenix-task-center',
+      // Beside background jobs, but distinct: scheduled work survives sessions.
+      order: 21,
+      locale: NS,
+    }, TaskCenterAction),
   )
 }
