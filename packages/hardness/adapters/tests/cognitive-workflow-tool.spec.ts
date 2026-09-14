@@ -151,7 +151,7 @@ describe('hardness_workflow tool adapter', () => {
     expect(tool.presentCall?.({ profile: { ...simpleProfile, kind: 'debug' } })).toEqual({
       card: 'generic',
       title: 'HARDNESS workflow · debug',
-      kind: 'query',
+      kind: 'read',
       rawInput: 'debug',
     })
     expect(tool.description).toContain('does not execute tools or grant permissions')
