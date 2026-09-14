@@ -18,9 +18,9 @@ describe('modelAvatarKind', () => {
 })
 
 describe('agentAvatarKind', () => {
-  it('keeps the visual persona aligned with the visible KIRA codename roster', () => {
-    expect(agentAvatarKind('c1')).toBe('orion')
-    expect(agentAvatarKind('c2')).toBe('nexo')
+  it('keeps the exact approved 20-portrait roster aligned with the visible KIRA codename', () => {
+    expect(agentAvatarKind('c1')).toBe('vega')
+    expect(agentAvatarKind('c2')).toBe('eclipse')
   })
 })
 
@@ -40,7 +40,7 @@ describe('ModelActivityAvatar', () => {
     const vectorPortrait = children.find((child: { props?: Record<string, unknown> }) =>
       child?.props?.['data-agent-portrait'] === true)
 
-    expect(element.props['data-avatar']).toBe('orion')
+    expect(element.props['data-avatar']).toBe('vega')
     expect(image).toBeDefined()
     expect(image.type).toBe('span')
     expect(String(image.props.style?.['--portrait-image'])).toMatch(/^url\("data:image\/webp;base64,/u)
@@ -59,7 +59,7 @@ describe('ModelActivityAvatar', () => {
       pending: false,
     })
     expect(element.props).toMatchObject({
-      'data-avatar': 'nexo',
+      'data-avatar': 'eclipse',
       'data-phase': expectedPhase,
       'data-state': 'running',
     })
@@ -80,8 +80,8 @@ describe('ModelActivityAvatar', () => {
     })
     const fallback = ModelActivityAvatar({ activity: undefined, running: true, pending: false })
 
-    expect(done.props).toMatchObject({ 'data-avatar': 'orion', 'data-phase': 'idle', 'data-state': 'done' })
-    expect(pending.props).toMatchObject({ 'data-avatar': 'nexo', 'data-phase': 'running-tools', 'data-state': 'pending' })
+    expect(done.props).toMatchObject({ 'data-avatar': 'vega', 'data-phase': 'idle', 'data-state': 'done' })
+    expect(pending.props).toMatchObject({ 'data-avatar': 'eclipse', 'data-phase': 'running-tools', 'data-state': 'pending' })
     expect(fallback.props).toMatchObject({ 'data-avatar': 'generic', 'data-phase': 'preparing' })
   })
 })
