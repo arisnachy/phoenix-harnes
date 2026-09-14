@@ -58,7 +58,7 @@ export class LocalLivingRegistry extends LivingRegistry {
   private readonly providers = new Map<LivingCreationId, AttachedProvider>()
   private readonly changed = new Set<LivingChangedListener>()
   private readonly eventListeners = new Set<LivingCreationEventListener>()
-  private writeChain: Promise<void> = Promise.resolve()
+  private mutationChain: Promise<void> = Promise.resolve()
 
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx)
@@ -67,27 +67,44 @@ export class LocalLivingRegistry extends LivingRegistry {
     ctx.effect(() => () => this.disposeProviders(), 'living provider teardown')
   }
 
-  async remember(manifest: LivingCreationManifest): Promise<LivingCreationSnapshot> {
+  remember(manifest: LivingCreationManifest): Promise<LivingCreationSnapshot> {
     validateLivingManifest(manifest)
-    const next = new Map(this.manifests)
-    next.set(manifest.id, clone(manifest))
-    await this.persist(next)
-    this.manifests = next
-    this.notifyChanged(manifest.id)
-    return this.inspect(manifest.id)
+    const candidate = clone(manifest)
+    return this.enqueueMutation(async () => {
+      const attachedBefore = this.providers.get(candidate.id)
+      if (attachedBefore !== undefined) this.assertProviderSupports(candidate, attachedBefore.provider)
+
+      const next = new Map(this.manifests)
+      next.set(candidate.id, candidate)
+      await this.persist(next)
+      this.manifests = next
+
+      // A provider may have detached/re-attached while the durable write was in flight.
+      // Never retain a provider whose runtime contract no longer satisfies the committed manifest.
+      const attachedAfter = this.providers.get(candidate.id)
+      if (attachedAfter !== undefined && this.providerCompatibilityError(candidate, attachedAfter.provider) !== undefined) {
+        this.providers.delete(candidate.id)
+        try { attachedAfter.disposeSubscription() } catch { /* committed manifest wins over provider cleanup */ }
+      }
+
+      this.notifyChanged(candidate.id)
+      return this.inspect(candidate.id)
+    })
   }
 
-  async forget(id: LivingCreationId): Promise<void> {
-    this.requireManifest(id)
-    const next = new Map(this.manifests)
-    next.delete(id)
-    await this.persist(next)
+  forget(id: LivingCreationId): Promise<void> {
+    return this.enqueueMutation(async () => {
+      this.requireManifest(id)
+      const next = new Map(this.manifests)
+      next.delete(id)
+      await this.persist(next)
 
-    this.manifests = next
-    const attached = this.providers.get(id)
-    this.providers.delete(id)
-    try { attached?.disposeSubscription() } catch { /* cleanup failures cannot roll back a committed forget */ }
-    this.notifyChanged(id)
+      this.manifests = next
+      const attached = this.providers.get(id)
+      this.providers.delete(id)
+      try { attached?.disposeSubscription() } catch { /* cleanup failures cannot roll back a committed forget */ }
+      this.notifyChanged(id)
+    })
   }
 
   list(): LivingCreationSnapshot[] {
@@ -102,19 +119,14 @@ export class LocalLivingRegistry extends LivingRegistry {
   attach(id: LivingCreationId, provider: LivingCreationProvider): () => void {
     const manifest = this.requireManifest(id)
     if (this.providers.has(id)) throw new Error(`living creation ${id} already has a provider attached`)
-    const achieved = livingProviderLevel(provider)
-    if (livingLevelRank(achieved) < livingLevelRank(manifest.targetLevel)) {
-      throw new Error(`living provider for ${id} achieves ${achieved}, below target ${manifest.targetLevel}`)
-    }
-    if (manifest.targetLevel === 'inhabited') {
-      const actorSet = new Set(provider.actors ?? [])
-      const missing = manifest.actors.filter(actor => !actorSet.has(actor))
-      if (missing.length > 0) throw new Error(`living provider for ${id} is missing declared actors: ${missing.join(', ')}`)
-    }
+    this.assertProviderSupports(manifest, provider)
+
     let active = true
     const emit = (name: string, data: LivingJson): void => {
       if (!active) return
-      if (!manifest.events.includes(name)) throw new Error(`living creation ${id} emitted undeclared event ${JSON.stringify(name)}`)
+      const currentManifest = this.manifests.get(id)
+      if (currentManifest === undefined) return
+      if (!currentManifest.events.includes(name)) throw new Error(`living creation ${id} emitted undeclared event ${JSON.stringify(name)}`)
       const event = { creationId: id, name, data: clone(data) }
       for (const listener of [...this.eventListeners]) {
         try { listener(event) } catch { /* observers cannot break the creation */ }
@@ -194,18 +206,40 @@ export class LocalLivingRegistry extends LivingRegistry {
     }
   }
 
+  private providerCompatibilityError(manifest: LivingCreationManifest, provider: LivingCreationProvider): Error | undefined {
+    const achieved = livingProviderLevel(provider)
+    if (livingLevelRank(achieved) < livingLevelRank(manifest.targetLevel)) {
+      return new Error(`living provider for ${manifest.id} achieves ${achieved}, below target ${manifest.targetLevel}`)
+    }
+    if (manifest.targetLevel === 'inhabited') {
+      const actorSet = new Set(provider.actors ?? [])
+      const missing = manifest.actors.filter(actor => !actorSet.has(actor))
+      if (missing.length > 0) return new Error(`living provider for ${manifest.id} is missing declared actors: ${missing.join(', ')}`)
+    }
+    return undefined
+  }
+
+  private assertProviderSupports(manifest: LivingCreationManifest, provider: LivingCreationProvider): void {
+    const error = this.providerCompatibilityError(manifest, provider)
+    if (error !== undefined) throw error
+  }
+
   private notifyChanged(id: LivingCreationId): void {
     for (const listener of [...this.changed]) {
       try { listener(id) } catch { /* registry observers are isolated */ }
     }
   }
 
+  private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.mutationChain.then(operation)
+    this.mutationChain = result.then(() => undefined, () => undefined)
+    return result
+  }
+
   private persist(next: Map<LivingCreationId, LivingCreationManifest>): Promise<void> {
     const document: PersistedDocument = { version: 1, creations: [...next.values()].map(clone) }
     const content = `${JSON.stringify(document, null, 2)}\n`
-    const write = this.writeChain.then(() => writeFileAtomic(this.config.path, content, { mode: 0o600, dirMode: 0o700 }))
-    this.writeChain = write.catch(() => undefined)
-    return write
+    return writeFileAtomic(this.config.path, content, { mode: 0o600, dirMode: 0o700 })
   }
 
   private disposeProviders(): void {
