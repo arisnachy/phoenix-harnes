@@ -14,7 +14,7 @@ describe('modelAvatarKind', () => {
 })
 
 describe('ModelActivityAvatar', () => {
-  it('renders the recovered illustrated avatar for each agent id', () => {
+  it('keeps one stable visual identity for each agent id', () => {
     const first = ModelActivityAvatar({
       agentId: 'c1',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
@@ -59,6 +59,21 @@ describe('ModelActivityAvatar', () => {
     expect(props['data-phase']).toBe('running-tools')
     expect(props['data-state']).toBe('running')
     expect(props['aria-hidden']).toBe('true')
+  })
+
+  it.each([
+    ['idle', 'preparing'],
+    ['running-tools', 'running-tools'],
+    ['verifying', 'verifying'],
+  ] as const)('maps the live %s activity to the %s reactive phase', (phase, expected) => {
+    const element = ModelActivityAvatar({
+      agentId: 'reactive-agent',
+      activity: { phase },
+      running: true,
+      pending: false,
+    })
+    expect(element.props['data-phase']).toBe(expected)
+    expect(element.props['data-state']).toBe('running')
   })
 
   it('uses idle and pending states without losing model identity', () => {
