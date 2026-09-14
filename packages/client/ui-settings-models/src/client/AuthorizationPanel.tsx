@@ -182,6 +182,12 @@ function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDe
   return ids.includes(liveId) || ids.includes(liveName) || normalize(definition.name) === liveName
 }
 
+function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
+  if (account?.stored === undefined) return false
+  const scopedConnectors = account.telemetry?.connectors
+  return scopedConnectors === undefined || scopedConnectors.length === 0
+}
+
 function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry
@@ -190,7 +196,7 @@ function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
   onAuthorize: (entry: Entry) => void
   pending: boolean
 }): ReactNode {
-  const connectedByAccount = account?.stored !== undefined
+  const connectedByAccount = accountGrantConnectsCatalogEntry(account)
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
   const status = liveStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
@@ -281,7 +287,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, onAuthorized }: 
   const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
     const account = entries.find(entry => entryMatchesFamily(entry, definition.providerFamily))
-    const connected = live?.installed === true || live?.callable === true || account?.stored !== undefined
+    const connected = live?.installed === true || live?.callable === true || accountGrantConnectsCatalogEntry(account)
     return { definition, live, account, connected }
   }), [entries, liveConnectors])
 
