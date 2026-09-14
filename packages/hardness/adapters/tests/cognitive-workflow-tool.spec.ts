@@ -1,5 +1,6 @@
 import { CallId } from '@phoenix-ai/dsh-llm'
 import type { ToolRunContext } from '@phoenix-ai/dsh-tools'
+import type { CognitiveMissionProfile } from '@phoenix-ai/dsh-hardness'
 import { describe, expect, it } from 'vitest'
 import { createCognitiveWorkflowTool } from '../src/cognitive-workflow-tool.ts'
 
@@ -32,6 +33,12 @@ const simpleProfile = {
   repeatedPattern: false,
   userVisibleArtifact: false,
   futureObligation: false,
+}
+
+type WorkflowToolResult = {
+  profile: CognitiveMissionProfile
+  selected: string[]
+  qualityGates: string[]
 }
 
 describe('hardness_workflow tool adapter', () => {
@@ -103,7 +110,7 @@ describe('hardness_workflow tool adapter', () => {
       userVisibleArtifact: true,
     }
 
-    const result = await tool.execute({ profile }, execution())
+    const result = await tool.execute({ profile }, execution()) as WorkflowToolResult
 
     expect(result.selected).toEqual(expect.arrayContaining([
       'context-recovery',
@@ -131,7 +138,7 @@ describe('hardness_workflow tool adapter', () => {
   it('strengthens the returned workflow when bounded evidence changes the mission', async () => {
     const tool = createCognitiveWorkflowTool()
 
-    const result = await tool.execute({ profile: simpleProfile, observation: 'new-risk' }, execution())
+    const result = await tool.execute({ profile: simpleProfile, observation: 'new-risk' }, execution()) as WorkflowToolResult
 
     expect(result.profile.risk).toBe('high')
     expect(result.selected).toEqual(expect.arrayContaining([
@@ -151,7 +158,7 @@ describe('hardness_workflow tool adapter', () => {
   it('turns a discovered future obligation into a persistent follow-up workflow', async () => {
     const tool = createCognitiveWorkflowTool()
 
-    const result = await tool.execute({ profile: simpleProfile, observation: 'future-obligation-discovered' }, execution())
+    const result = await tool.execute({ profile: simpleProfile, observation: 'future-obligation-discovered' }, execution()) as WorkflowToolResult
 
     expect(result.profile).toMatchObject({ persistent: true, futureObligation: true })
     expect(result.selected).toEqual(expect.arrayContaining([
