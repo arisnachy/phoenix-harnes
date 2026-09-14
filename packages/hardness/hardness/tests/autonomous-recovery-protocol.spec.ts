@@ -41,17 +41,18 @@ const input = (patch: Partial<HardnessProtocolInput> = {}): HardnessProtocolInpu
 })
 
 describe('HARDNESS fail-forward protocol', () => {
-  it('treats an unresolved capability as recovery work before asking the user', () => {
+  it('keeps an unresolved capability fail-closed while requiring recovery attempts before user handoff', () => {
     const view = evaluateHardnessProtocol(input({
       route: { kind: 'missing', considered: [], reasons: ['no matching capability'] },
     }))
 
-    expect(view.outcome).toBe('continue')
+    expect(view.outcome).toBe('blocked')
     expect(view.allowedActions).toEqual(expect.arrayContaining([
       'inspect-alternatives',
       'acquire-or-build-capability',
       'replan',
     ]))
+    expect(view.allowedActions).not.toContain('ask-user')
     expect(view.forbiddenActions).toContain('claim-success')
   })
 
