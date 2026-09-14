@@ -3,63 +3,52 @@ import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import { KIRA_PORTRAIT_SHEET } from './KiraPortraitSheet.ts'
 import css from './ModelActivityAvatar.module.css'
 
-/** Visual identities used by model fallbacks and stable KIRA personas. */
+/** Exact visible identities from the user-approved 20-avatar KIRA reference. */
 export type ModelAvatarKind =
   | 'sol' | 'luna' | 'terra' | 'generic'
-  | 'vega' | 'nova' | 'prisma' | 'atlas' | 'orion' | 'nexo'
-  | 'astra' | 'lumen' | 'pulsar' | 'cometa' | 'aurora' | 'cobalto'
-  | 'helix' | 'vector' | 'quasar' | 'senda' | 'zenit' | 'eclipse'
-  | 'fenix' | 'argo' | 'orbita' | 'vortice' | 'solaria' | 'orbe'
-
-type PortraitKey =
   | 'vortice' | 'aurora' | 'atlas' | 'nova' | 'lumen'
   | 'helix' | 'prisma' | 'orion' | 'vega' | 'eclipse'
   | 'argo' | 'solaria' | 'nexo' | 'astra' | 'lyra'
-  | 'zenit' | 'cobalto' | 'quasar' | 'senda' | 'orbita'
+  | 'zenith' | 'cobalto' | 'quasar' | 'senda' | 'orbita'
 
-const AGENT_AVATAR_KINDS: readonly ModelAvatarKind[] = [
-  'vega', 'nova', 'prisma', 'atlas', 'orion', 'nexo',
-  'astra', 'lumen', 'pulsar', 'cometa', 'aurora', 'cobalto',
-  'helix', 'vector', 'quasar', 'senda', 'zenit', 'eclipse',
-  'fenix', 'argo', 'orbita', 'vortice', 'solaria', 'orbe',
-]
+type PortraitKey = Exclude<ModelAvatarKind, 'sol' | 'luna' | 'terra' | 'generic'>
 
-const PORTRAIT_ORDER: readonly PortraitKey[] = [
+// Keep this order in lock-step with AGENT_NAMES in KiraTeamsDock.tsx and with
+// the 5×4 portrait sheet. This is the exact order in the approved reference.
+const AGENT_AVATAR_KINDS: readonly PortraitKey[] = [
   'vortice', 'aurora', 'atlas', 'nova', 'lumen',
   'helix', 'prisma', 'orion', 'vega', 'eclipse',
   'argo', 'solaria', 'nexo', 'astra', 'lyra',
-  'zenit', 'cobalto', 'quasar', 'senda', 'orbita',
+  'zenith', 'cobalto', 'quasar', 'senda', 'orbita',
 ]
+
+const PORTRAIT_ORDER: readonly PortraitKey[] = AGENT_AVATAR_KINDS
 
 const PORTRAIT_ALIAS: Record<ModelAvatarKind, PortraitKey> = {
   sol: 'solaria',
   luna: 'eclipse',
   terra: 'senda',
-  generic: 'vortice',
-  vega: 'vega',
-  nova: 'nova',
-  prisma: 'prisma',
+  generic: 'lyra',
+  vortice: 'vortice',
+  aurora: 'aurora',
   atlas: 'atlas',
+  nova: 'nova',
+  lumen: 'lumen',
+  helix: 'helix',
+  prisma: 'prisma',
   orion: 'orion',
+  vega: 'vega',
+  eclipse: 'eclipse',
+  argo: 'argo',
+  solaria: 'solaria',
   nexo: 'nexo',
   astra: 'astra',
-  lumen: 'lumen',
-  pulsar: 'lyra',
-  cometa: 'quasar',
-  aurora: 'aurora',
+  lyra: 'lyra',
+  zenith: 'zenith',
   cobalto: 'cobalto',
-  helix: 'helix',
-  vector: 'atlas',
   quasar: 'quasar',
   senda: 'senda',
-  zenit: 'zenit',
-  eclipse: 'eclipse',
-  fenix: 'solaria',
-  argo: 'argo',
   orbita: 'orbita',
-  vortice: 'vortice',
-  solaria: 'solaria',
-  orbe: 'lumen',
 }
 
 /** Small deterministic index used to keep one agent's visual identity stable. */
@@ -84,6 +73,7 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
   return 'generic'
 }
 
+/** Locate one exact portrait within the approved 5×4 sheet. */
 function portraitStyle(kind: ModelAvatarKind): CSSProperties {
   const portrait = PORTRAIT_ALIAS[kind]
   const index = PORTRAIT_ORDER.indexOf(portrait)
@@ -104,8 +94,9 @@ export interface ModelActivityAvatarProps {
 }
 
 /**
- * Render one compact KIRA portrait. The portrait itself is the approved raster
- * identity; motion overlays communicate live work without changing the dock.
+ * Render one compact KIRA portrait. The portrait itself is the exact approved
+ * raster identity; restrained motion overlays communicate live work without
+ * changing the KIRA Teams card layout or its 48px avatar footprint.
  */
 export function ModelActivityAvatar({
   activity,
