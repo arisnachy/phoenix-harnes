@@ -128,7 +128,10 @@
     "@phoenix-ai/dsh-web-search-free": "workspace:^",
     "@phoenix-ai/dsh-web-search-openrouter": "workspace:^",
     "@phoenix-ai/dsh-workflow-worker-thread": "workspace:^",
-    "@phoenix-ai/dsh-agent-instructions": "workspace:^"
+    "@phoenix-ai/dsh-agent-instructions": "workspace:^",
+    "@phoenix-ai/dsh-living": "workspace:^",
+    "@phoenix-ai/dsh-living-local": "workspace:^",
+    "@phoenix-ai/dsh-tool-living": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",

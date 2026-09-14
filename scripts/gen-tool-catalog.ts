@@ -39,6 +39,8 @@ import * as ToolSubagentReport from '@phoenix-ai/dsh-tool-subagent-report'
 import SkillRegistry from '@phoenix-ai/dsh-skill'
 import * as SkillFileSystem from '@phoenix-ai/dsh-skill-filesystem'
 import LocalJobRegistry from '@phoenix-ai/dsh-jobs-local'
+import LocalLivingRegistry from '@phoenix-ai/dsh-living-local'
+import * as ToolLiving from '@phoenix-ai/dsh-tool-living'
 import * as ToolAskUser from '@phoenix-ai/dsh-tool-ask-user'
 import * as ToolBash from '@phoenix-ai/dsh-tool-bash'
 import * as ToolPwsh from '@phoenix-ai/dsh-tool-pwsh'
@@ -415,6 +417,20 @@ const TOOL_PACKAGES: ToolPackage[] = [
       + 'Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, '
       + 'and discloses session-local delivery; '
       + 'management reads and mutations require the shared Session persistence barrier.',
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-living',
+    dir: 'tool-living',
+    source: 'packages/core/tool-living/src/index.ts',
+    requires: ['ctx.tools', 'ctx.living', 'ctx.systemPrompt'],
+    writes: ['tool/call', 'durable living creation manifest', 'live creation state/actions/events through ctx.living', 'tool/result'],
+    async mount(ctx) {
+      const catalogPath = resolve(root, '.tmp', 'tool-catalog-living.json')
+      await ctx.plugin(LocalLivingRegistry, { path: catalogPath })
+      await ctx.plugin(ToolLiving)
+    },
+    note:
+      'Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-lsp',

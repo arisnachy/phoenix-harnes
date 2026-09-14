@@ -1105,6 +1105,12 @@ importers:
       '@phoenix-ai/dsh-jobs-local':
         specifier: workspace:^
         version: link:../../jobs/jobs-local
+      '@phoenix-ai/dsh-living':
+        specifier: workspace:^
+        version: link:../../core/living
+      '@phoenix-ai/dsh-living-local':
+        specifier: workspace:^
+        version: link:../../core/living-local
       '@phoenix-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
@@ -1228,6 +1234,9 @@ importers:
       '@phoenix-ai/dsh-tool-jobs':
         specifier: workspace:^
         version: link:../../jobs/tool-jobs
+      '@phoenix-ai/dsh-tool-living':
+        specifier: workspace:^
+        version: link:../../core/tool-living
       '@phoenix-ai/dsh-tool-pwsh':
         specifier: workspace:^
         version: link:../../shell/tool-pwsh
@@ -3891,6 +3900,37 @@ importers:
         specifier: workspace:^
         version: link:../tools
 
+  packages/core/living:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/core/living-local:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-atomic-write':
+        specifier: workspace:^
+        version: link:../../util/atomic-write
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-living':
+        specifier: workspace:^
+        version: link:../living
+
   packages/core/scope:
     devDependencies:
       '@phoenix-ai/cordis':
@@ -3942,6 +3982,24 @@ importers:
       '@phoenix-ai/dsh-scope':
         specifier: workspace:^
         version: link:../scope
+
+  packages/core/tool-living:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-living':
+        specifier: workspace:^
+        version: link:../living
+      '@phoenix-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../system-prompt
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../tools
 
   packages/core/tools:
     dependencies:
