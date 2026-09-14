@@ -18,6 +18,7 @@ const WORKFLOW_OBSERVATIONS = [
   'scope-expanded',
   'independent-subtasks-discovered',
   'repeated-failure',
+  'future-obligation-discovered',
 ] as const satisfies readonly CognitiveWorkflowObservation[]
 
 function projectWorkflowPlan(plan: CognitiveWorkflowPlan) {
@@ -54,6 +55,7 @@ export function createCognitiveWorkflowTool(): ToolDefinition {
           previousFailure: { type: 'boolean', required: true },
           repeatedPattern: { type: 'boolean', required: true },
           userVisibleArtifact: { type: 'boolean', required: true },
+          futureObligation: { type: 'boolean', required: true },
         },
       },
       observation: { type: 'string', enum: WORKFLOW_OBSERVATIONS },
