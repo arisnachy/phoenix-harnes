@@ -74,7 +74,7 @@ export function createCognitiveWorkflowTool(): ToolDefinition {
       },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    execute(args) {
+    async execute(args) {
       const initial = selectCognitiveWorkflow(args.profile as CognitiveMissionProfile)
       const plan = args.observation === undefined
         ? initial
