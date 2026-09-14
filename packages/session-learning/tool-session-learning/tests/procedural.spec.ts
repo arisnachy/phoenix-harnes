@@ -151,6 +151,64 @@ describe('ProceduralLearningEngine', () => {
     expect(context).toContain('validate configuration → run boot check → restart')
     expect(context).toContain('Treat these as validated procedural evidence')
   })
+
+  it('recalls only validated procedures relevant to the current task instead of the strongest unrelated memory', async () => {
+    const engine = new ProceduralLearningEngine(new MemoryStore())
+    await engine.recordExperience({
+      title: 'LG TV connect before request',
+      scope: 'phoenix/lg-tv',
+      trigger: 'Fix LG TV reads that fail before the controller is connected',
+      steps: ['connect to the LG TV', 'wait for ready state', 'send the request'],
+      evidence: 'Verified TV controller mission.',
+      verified: true,
+      ...provenance(6_000),
+    })
+    await engine.recordExperience({
+      title: 'Brand Institute survey browser flow',
+      scope: 'brand-institute',
+      trigger: 'Continue or repair the Brand Institute BrandPoll survey browser workflow',
+      steps: ['inspect the BrandPoll page', 'preserve the active survey session', 'repair the blocked survey step'],
+      evidence: 'Verified Brand Institute browser mission.',
+      verified: true,
+      ...provenance(6_100),
+    })
+    await engine.recordExperience({
+      title: 'Phoenix transcript ordering',
+      scope: 'phoenix/ui',
+      trigger: 'Fix Tools appearing before the visible Phoenix working status',
+      steps: ['render assistant content', 'render working status', 'render tool activity'],
+      evidence: 'Verified Phoenix UI mission.',
+      verified: true,
+      ...provenance(6_200),
+    })
+
+    const recalled = engine.recommend({
+      projectId: 'phoenix',
+      taskContext: 'The Brand Institute BrandPoll survey is blocked again; continue the browser workflow efficiently.',
+      limit: 4,
+    })
+
+    expect(recalled.map(item => item.title)).toEqual(['Brand Institute survey browser flow'])
+  })
+
+  it('returns no automatic procedural recall when the current task is unrelated', async () => {
+    const engine = new ProceduralLearningEngine(new MemoryStore())
+    await engine.recordExperience({
+      title: 'LG TV connect before request',
+      scope: 'phoenix/lg-tv',
+      trigger: 'Fix LG TV reads that fail before the controller is connected',
+      steps: ['connect to the LG TV', 'send the request'],
+      evidence: 'Verified TV controller mission.',
+      verified: true,
+      ...provenance(7_000),
+    })
+
+    expect(engine.recommend({
+      projectId: 'phoenix',
+      taskContext: 'Prepare a neuropsychology literature review with citations.',
+      limit: 4,
+    })).toEqual([])
+  })
 })
 
 describe('ProceduralExperienceTrace', () => {
