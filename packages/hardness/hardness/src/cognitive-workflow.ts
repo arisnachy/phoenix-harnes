@@ -192,15 +192,17 @@ const QUALITY_GATE_ORDER: readonly CognitiveQualityGate[] = [
 ]
 
 function qualityGates(selected: ReadonlySet<CognitiveFlowId>): readonly CognitiveQualityGate[] {
-  const gates = new Set<CognitiveQualityGate>(['objective-locked'])
+  const gates = new Set<CognitiveQualityGate>([
+    'objective-locked',
+    'fresh-verification',
+    'outcome-compared',
+  ])
   if (selected.has('systematic-debugging')) gates.add('root-cause-evidence')
   if (selected.has('architecture-design')) gates.add('design-approved')
   if (selected.has('proof-driven-development')) gates.add('failing-proof-observed')
-  if (selected.has('adversarial-critique') || selected.has('independent-judge')) gates.add('independent-review')
+  if (selected.has('adversarial-critique')) gates.add('independent-review')
   if (selected.has('security-risk-review')) gates.add('risk-reviewed')
   if (selected.has('safe-change')) gates.add('rollback-ready')
-  if (selected.has('verification-gate')) gates.add('fresh-verification')
-  if (selected.has('outcome-evaluation')) gates.add('outcome-compared')
   return Object.freeze(QUALITY_GATE_ORDER.filter(gate => gates.has(gate)))
 }
 
