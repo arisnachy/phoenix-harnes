@@ -50,6 +50,12 @@ export interface TransportOptions {
   authProvider?: OAuthClientProvider
 }
 
+/**
+ * Create the configured MCP transport.
+ * @param config - Resolved MCP transport configuration.
+ * @param options - Optional transport additions such as an OAuth provider.
+ * @returns Stdio or Streamable HTTP transport matching the configuration.
+ */
 export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
     case 'stdio':

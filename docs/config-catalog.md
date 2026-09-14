@@ -1105,11 +1105,18 @@ Source: [`packages/llm/llm-deepseek/src/index.ts:108`](../packages/llm/llm-deeps
 
 ## `@phoenix-ai/dsh-llm-pi-ai`
 
-Requires: `llm`
+Requires: `llm` · `tools` · `subprocess` · `attachments`
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
 export interface Config {
+  /**
+   * Register only the native image-generation tool in an agent preset. The
+   * host adapter keeps owning provider routes; this mode lets the same package
+   * contribute its model-facing image tool on the agent plane without
+   * registering a second LLM adapter instance.
+   */
+  imageOnly?: boolean
   /**
    * pi-ai provider routes, keyed by provider. An empty (or omitted) dict is
    * the dormant settings-driven posture: the adapter mounts with no routes
@@ -1532,6 +1539,8 @@ export interface StreamableHttpConfig {
   url: string
   /** Additional headers attached to MCP requests. */
   headers: Record<string, string>
+  /** Whether to attach the host-managed OAuth provider when available. */
+  oauth?: boolean
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -1555,7 +1564,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:105`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:111`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 
@@ -2936,7 +2945,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/session-learning/tool-session-learning/src/index.ts:20`](../packages/session-learning/tool-session-learning/src/index.ts)
+Source: [`packages/session-learning/tool-session-learning/src/index.ts:21`](../packages/session-learning/tool-session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-tool-session-query"></a>
 
