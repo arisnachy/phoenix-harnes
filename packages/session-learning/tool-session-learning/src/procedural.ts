@@ -2,6 +2,13 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import type { CognitiveMemoryHit, CognitiveMemoryRecord } from '@phoenix-ai/dsh-session-learning'
+import {
+  decodeTaskFingerprint,
+  fingerprintTask,
+  TASK_RELEVANCE_THRESHOLD,
+  taskSimilarity,
+  type TaskFingerprint,
+} from './task-context.ts'
 
 const PROCEDURE_SUBJECT_PREFIX = 'phoenix.learning.procedure.'
 const STATE_VERSION = 1 as const
@@ -105,6 +112,7 @@ export interface ProceduralLearningState {
   readonly firstObservedAt: number
   readonly lastObservedAt: number
   readonly lastEvidence: string
+  readonly taskFingerprint?: TaskFingerprint
   readonly projectId?: string
 }
 
@@ -113,7 +121,19 @@ export interface ProceduralRecommendationQuery {
   readonly projectId?: string
   readonly sessionId?: string
   readonly scope?: string
+  /** Current user task used to reject and rank unrelated procedures. */
+  readonly taskContext?: string
   readonly limit?: number
+}
+
+/** Optional task-context provider used by learn-by-doing completion. */
+export interface ProceduralTaskContextProvider {
+  /**
+   * Return the bounded task currently being executed by a session.
+   * @param sessionId - Active Phoenix session id.
+   * @returns Current user task, or undefined when no reliable task is known.
+   */
+  currentTask(sessionId: string): string | undefined
 }
 
 /** Durable procedure learner with evidence-backed promotion and correction. */
@@ -151,21 +171,35 @@ export class ProceduralLearningEngine {
 
   /**
    * Return only active reusable procedures matching the requested context.
-   * @param query - Optional project, session, scope, and result-count filters.
-   * @returns Active procedures ordered by confidence and recent evidence.
+   * @param query - Optional project, session, scope, task-context, and result-count filters.
+   * @returns Active procedures ordered by task relevance then confidence and recent evidence.
    */
   recommend(query: ProceduralRecommendationQuery = {}): ProceduralLearningState[] {
     const limit = query.limit ?? DEFAULT_LIMIT
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
       throw new TypeError(`procedural recommendation limit must be between 1 and ${String(MAX_LIMIT)}`)
     }
-    return this.states(query)
+    const active = this.states(query)
       .filter(state => state.status === 'active')
       .filter(state => query.scope === undefined || state.scope === normalizeText(query.scope))
-      .sort((left, right) => right.confidence - left.confidence
-        || right.confirmations - left.confirmations
-        || right.lastObservedAt - left.lastObservedAt)
+    if (query.taskContext === undefined || normalizeText(query.taskContext) === '') {
+      return active
+        .sort((left, right) => right.confidence - left.confidence
+          || right.confirmations - left.confirmations
+          || right.lastObservedAt - left.lastObservedAt)
+        .slice(0, limit)
+    }
+
+    const current = fingerprintTask(query.taskContext)
+    return active
+      .map(state => ({ state, relevance: taskSimilarity(current, state.taskFingerprint ?? fingerprintProcedure(state)) }))
+      .filter(item => item.relevance >= TASK_RELEVANCE_THRESHOLD)
+      .sort((left, right) => right.relevance - left.relevance
+        || right.state.confidence - left.state.confidence
+        || right.state.confirmations - left.state.confirmations
+        || right.state.lastObservedAt - left.state.lastObservedAt)
       .slice(0, limit)
+      .map(item => item.state)
   }
 
   private enqueue(task: () => Promise<ProceduralLearningState>): Promise<ProceduralLearningState> {
@@ -194,6 +228,7 @@ export class ProceduralLearningEngine {
       firstObservedAt: previous?.firstObservedAt ?? normalized.occurredAt,
       lastObservedAt: normalized.occurredAt,
       lastEvidence: normalized.evidence,
+      taskFingerprint: fingerprintTask([normalized.title, normalized.scope, normalized.trigger, ...normalized.steps]),
       ...normalized.projectId === undefined ? {} : { projectId: normalized.projectId },
     }
     await this.persist(next, normalized, 'procedural/guided')
@@ -224,6 +259,7 @@ export class ProceduralLearningEngine {
       firstObservedAt: previous?.firstObservedAt ?? normalized.occurredAt,
       lastObservedAt: normalized.occurredAt,
       lastEvidence: normalized.evidence,
+      taskFingerprint: fingerprintTask([normalized.title, normalized.scope, normalized.trigger, ...normalized.steps]),
       ...normalized.projectId === undefined ? {} : { projectId: normalized.projectId },
     }
     await this.persist(next, normalized, input.verified ? 'procedural/experience/verified' : 'procedural/experience/candidate')
@@ -351,6 +387,10 @@ function procedureKey(title: string, scope: string, trigger: string): string {
   return hash.toString(16).padStart(8, '0')
 }
 
+function fingerprintProcedure(state: ProceduralLearningState): TaskFingerprint {
+  return fingerprintTask([state.title, state.scope, state.trigger, ...state.steps])
+}
+
 /**
  * Decode one procedural-memory row without trusting arbitrary stored JSON.
  * @param row - Cognitive-memory row that may contain versioned procedure state.
@@ -368,6 +408,8 @@ export function decodeProceduralState(row: ProceduralStoredMemory): ProceduralLe
   if (!isCount(raw.confirmations) || !isCount(raw.failures) || !isCount(raw.corrections)) return undefined
   if (!isConfidence(raw.confidence) || !isTimestamp(raw.firstObservedAt) || !isTimestamp(raw.lastObservedAt) || typeof raw.lastEvidence !== 'string') return undefined
   if (raw.projectId !== undefined && typeof raw.projectId !== 'string') return undefined
+  const taskFingerprint = raw.taskFingerprint === undefined ? undefined : decodeTaskFingerprint(raw.taskFingerprint)
+  if (raw.taskFingerprint !== undefined && taskFingerprint === undefined) return undefined
   return {
     version: STATE_VERSION,
     key: raw.key,
@@ -384,6 +426,7 @@ export function decodeProceduralState(row: ProceduralStoredMemory): ProceduralLe
     firstObservedAt: raw.firstObservedAt,
     lastObservedAt: raw.lastObservedAt,
     lastEvidence: raw.lastEvidence,
+    ...taskFingerprint === undefined ? {} : { taskFingerprint },
     ...raw.projectId === undefined ? {} : { projectId: raw.projectId },
   }
 }
@@ -475,9 +518,13 @@ export class ProceduralExperienceTrace {
 /**
  * Install autonomous learn-by-doing observation into the session-learning plugin.
  * @param ctx - Cordis context providing session events and cognitive memory.
+ * @param taskContext - Optional source of the actual current task for verified learning.
  * @returns Procedural engine used by automatic learning and guided teaching.
  */
-export function installProceduralLearning(ctx: Context): ProceduralLearningEngine {
+export function installProceduralLearning(
+  ctx: Context,
+  taskContext?: ProceduralTaskContextProvider,
+): ProceduralLearningEngine {
   const engine = new ProceduralLearningEngine(cognitiveStore(ctx))
   const trace = new ProceduralExperienceTrace()
 
@@ -516,10 +563,11 @@ export function installProceduralLearning(ctx: Context): ProceduralLearningEngin
       const steps = trace.complete(sessionId)
       if (steps.length === 0) return
       const title = `Verified procedure: ${steps.slice(0, 3).join(' → ')}`.slice(0, 512)
+      const currentTask = taskContext?.currentTask(sessionId)
       await engine.recordExperience({
         title,
         scope: projectId ?? 'global',
-        trigger: 'A sufficiently similar task reaches verified completion.',
+        trigger: currentTask ?? 'A sufficiently similar task reaches verified completion.',
         steps,
         evidence: 'Phoenix goal completion passed the configured fail-closed verification path.',
         verified: true,
