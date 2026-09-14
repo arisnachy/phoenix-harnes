@@ -96,10 +96,7 @@ export interface ProceduralRecommendationQuery {
   readonly limit?: number
 }
 
-/**
- * Durable procedure learner. Guided teaching is authoritative for the user's
- * workflow; autonomous experience is promoted only after verified outcome.
- */
+/** Durable procedure learner with evidence-backed promotion. */
 export class ProceduralLearningEngine {
   private writeTail: Promise<void> = Promise.resolve()
 
@@ -354,12 +351,24 @@ export function filterProceduralSearchHits(hits: readonly CognitiveMemoryHit[]):
   })
 }
 
-/** Bounded, argument-free trace of actions used during one session. */
+/** Bounded, argument-free trace of observable work used during one session. */
 export class ProceduralExperienceTrace {
   private readonly traces = new Map<string, string[]>()
 
   toolCall(sessionId: string, toolName: string): void {
     this.push(sessionId, `Use tool ${boundedText(toolName, 'tool name').slice(0, 160)}`)
+  }
+
+  decision(sessionId: string, strategy: string): void {
+    const safe = boundedText(strategy, 'strategy decision')
+    rejectSecrets(safe)
+    this.push(sessionId, `Strategy decision: ${safe}`)
+  }
+
+  livingAction(sessionId: string, action: string): void {
+    const safe = boundedText(action, 'Living action')
+    rejectSecrets(safe)
+    this.push(sessionId, `Living action: ${safe}`)
   }
 
   recovery(sessionId: string, lesson: string): void {
@@ -400,13 +409,22 @@ export function installProceduralLearning(ctx: Context): ProceduralLearningEngin
 
     const run = async (): Promise<void> => {
       if (eventType === 'tool/call' && isRecord(data) && typeof data.name === 'string' && data.name.trim() !== '') {
-        trace.toolCall(sessionId, data.name)
+        if (data.name === 'living_act' && isRecord(data.arguments) && typeof data.arguments.action === 'string') {
+          trace.livingAction(sessionId, data.arguments.action)
+        } else {
+          trace.toolCall(sessionId, data.name)
+        }
         return
       }
-      if (eventType === 'hardness/kernel' && isRecord(data) && data.kind === 'learning-recorded'
-        && isRecord(data.learning) && typeof data.learning.solution === 'string') {
-        trace.recovery(sessionId, data.learning.solution)
-        return
+      if (eventType === 'hardness/kernel' && isRecord(data)) {
+        if (data.kind === 'learning-recorded' && isRecord(data.learning) && typeof data.learning.solution === 'string') {
+          trace.recovery(sessionId, data.learning.solution)
+          return
+        }
+        if (data.kind === 'route-selected' && typeof data.strategy === 'string') {
+          trace.decision(sessionId, data.strategy)
+          return
+        }
       }
       if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
         trace.clear(sessionId)
