@@ -45,8 +45,10 @@ function requestText(need: unknown): string {
 function matches(value: string, pattern: RegExp): boolean { return pattern.test(value) }
 
 /**
- * Derive a bounded quality contract from a capability request.
- * Generic guarantees always remain; relevant domain requirements are appended.
+ * Derive a bounded quality contract from a capability request. Generic
+ * guarantees always remain; relevant domain requirements are appended.
+ * @param need - Capability request, including its kind and descriptive fields.
+ * @returns Bounded quality requirements the independent judge must evidence.
  */
 export function qualityRequirementsForNeed(need: unknown): readonly string[] {
   const text = requestText(need)
