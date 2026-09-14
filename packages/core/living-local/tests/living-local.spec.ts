@@ -95,7 +95,7 @@ describe('universal living creations', () => {
     const { root } = await runtime()
     await expect(root.living.remember({
       id: LivingCreationId('broken'), title: 'Broken creation', kind: 'arbitrary', targetLevel: 'controllable',
-      state: [], actions: [], events: [], resources: [], actors: [],
+      state: ['status'], actions: [], events: ['statusChanged'], resources: [], actors: [],
     })).rejects.toThrow(/controllable.*action/i)
   })
 })
