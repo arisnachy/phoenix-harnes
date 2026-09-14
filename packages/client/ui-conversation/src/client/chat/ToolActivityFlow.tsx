@@ -1,11 +1,15 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import { PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool, isSettledTool } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
+import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
+import type { TurnProgress } from './turn-progress.ts'
+import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
 
 type SeatProps = Omit<ComponentProps<typeof ChatNodeSeat>, 'nodeKey'>
@@ -18,6 +22,10 @@ interface OrderedChatNode {
 
 interface ToolActivityFlowProps extends SeatProps {
   readonly nodes: readonly OrderedChatNode[]
+  readonly turnStatus?: {
+    readonly startTime: number | null
+    readonly progress: TurnProgress | null
+  }
 }
 
 type ActivityItem =
@@ -124,8 +132,8 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
       const reasoning = reasoningItems(node, assistant)
       if (reasoning.length > 0) pending.push(...reasoning)
       if (hasAssistantSurface(assistant)) {
-        flush(node.key)
         flow.push({ kind: 'node', key: node.key })
+        flush(node.key)
       } else if (reasoning.length === 0) {
         flush()
         flow.push({ kind: 'node', key: node.key })
@@ -237,32 +245,89 @@ function ToolActivityGroup({
   )
 }
 
+/** Turn-level model activity label retained across first-token, tool, and streaming phases. */
+function TurnStatus({ startTime, progress, t }: {
+  /** The running turn's logged `turn/start` time; null falls back to mount
+   *  time when that boundary is outside the window. */
+  readonly startTime: number | null
+  /** Safe phase derived from the current chat projection. */
+  readonly progress: TurnProgress | null
+  /** The owning view's locale seat. */
+  readonly t: ChatViewSlotProps['t']
+}) {
+  const [mountedAt] = useState(() => Date.now())
+  const anchor = startTime ?? mountedAt
+  const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - anchor))
+  useEffect(() => {
+    const tick = (): void => {
+      setElapsedMs(Math.max(0, Date.now() - anchor))
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => { clearInterval(id) }
+  }, [anchor])
+  const statusKey = progress === 'running-tools'
+    ? 'status.runningTools'
+    : progress === 'verifying'
+      ? 'status.verifying'
+      : progress === 'preparing'
+        ? 'status.preparing'
+        : 'status.thinking'
+  const showClock = elapsedMs >= 15_000
+  return (
+    <div className={chatCss.turnStatus} role="status" aria-live="polite">
+      <span className={chatCss.phoenixActivity} aria-hidden="true">
+        <PhoenixLogo size={28} />
+      </span>
+      <span>{t(statusKey)}</span>
+      {showClock && (
+        <span className={chatCss.turnStatusClock} aria-hidden>
+          {formatRunDuration(elapsedMs, t)}
+        </span>
+      )}
+    </div>
+  )
+}
+
 /**
  * Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure.
+ * Visible assistant prose precedes its technical activity, and the running status precedes a trailing live Tools group.
  * Running Tool rows stay live above the disclosure and join history once settled.
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
-export function ToolActivityFlow({ nodes, ...seatProps }: ToolActivityFlowProps) {
+export function ToolActivityFlow({ nodes, turnStatus, ...seatProps }: ToolActivityFlowProps) {
   const flow = useMemo(() => buildFlow(nodes), [nodes])
+  const statusBeforeIndex = turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
+    ? -1
+    : flow.length - 1
   return (
     <>
-      {flow.map(item => item.kind === 'node'
-        ? <ChatNodeSeat key={item.key} nodeKey={item.key} {...seatProps} />
-        : item.kind === 'images'
-          ? (
-            <div key={item.key} data-chat-flow-kind="generated-image">
-              {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
-            </div>
-          )
-          : (
-            <ToolActivityGroup
-              key={item.key}
-              items={item.items}
-              anchorKey={item.anchorKey}
-              {...seatProps}
-            />
-          ))}
+      {flow.map((item, index) => (
+        <Fragment key={item.key}>
+          {turnStatus !== undefined && index === statusBeforeIndex && (
+            <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress} t={seatProps.t} />
+          )}
+          {item.kind === 'node'
+            ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
+            : item.kind === 'images'
+              ? (
+                <div data-chat-flow-kind="generated-image">
+                  {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
+                </div>
+              )
+              : (
+                <ToolActivityGroup
+                  items={item.items}
+                  anchorKey={item.anchorKey}
+                  {...seatProps}
+                />
+              )}
+        </Fragment>
+      ))}
+      {turnStatus !== undefined && statusBeforeIndex === -1 && (
+        <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress} t={seatProps.t} />
+      )}
     </>
   )
 }
