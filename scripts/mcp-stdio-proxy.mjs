@@ -22,6 +22,19 @@ export function isExpectedStdioBrokenPipe(error) {
 }
 
 const WINDOWS_COMMAND_SHIMS = new Set(['corepack', 'npm', 'npx', 'pnpm', 'yarn'])
+const stdioGuardUrl = new URL('./mcp-stdio-epipe-guard.mjs', import.meta.url).href
+
+export function childEnvironment(env = process.env) {
+  const inheritedNodeOptions = env.NODE_OPTIONS?.trim() ?? ''
+  const guardOption = `--import=${stdioGuardUrl}`
+  if (inheritedNodeOptions.includes(stdioGuardUrl)) return env
+  return {
+    ...env,
+    NODE_OPTIONS: inheritedNodeOptions === ''
+      ? guardOption
+      : `${inheritedNodeOptions} ${guardOption}`,
+  }
+}
 
 export function resolveChildCommand(command, platform = process.platform) {
   if (platform !== 'win32' || !WINDOWS_COMMAND_SHIMS.has(command) || /\.(?:cmd|exe|com|bat)$/i.test(command)) {
@@ -95,7 +108,7 @@ async function main() {
   const cleanupToken = await preserveRefreshToken(await readToken())
   const child = spawn(resolveChildCommand(command), args, {
     cwd: process.cwd(),
-    env: process.env,
+    env: childEnvironment(process.env),
     stdio: ['pipe', 'pipe', 'inherit'],
     windowsHide: true,
     ...childSpawnOptions(command),
