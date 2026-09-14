@@ -13,7 +13,7 @@ export const inject = ['living', 'tools', 'systemPrompt']
 const LEVELS: readonly LivingIntegrationLevel[] = ['static', 'connected', 'reactive', 'controllable', 'inhabited']
 
 /** Standing rule applied to every creation domain, including domains unknown to the harness. */
-export const LIVING_CREATION_POLICY = `Universal Living Creation rule: everything you create or materially modify for the user must remain connected to Phoenix at the strongest meaningful integration level, regardless of its domain, format, or whether Phoenix has seen that kind before. Before treating a creation as delivered, register it with living_register_creation. Use static only when live state has no meaningful role; connected adds observable state; reactive adds events; controllable adds actions; inhabited adds actors that Phoenix or its agents can operate. For any target above static, build the creation with a provider or adapter that attaches through ctx.living.attach(), then call living_inspect_creation and do not claim completion while achieved_level is below target_level. A visual page, file, preview, or Cordis presentation alone is not an operational connection. Do not invent actors or events merely to raise the level: choose the strongest level that is genuinely useful for the creation. This rule is universal; never special-case it to a fixed list of creation types.`
+export const LIVING_CREATION_POLICY = `Universal Living Creation rule: whenever you create or materially modify a user-facing artifact or runnable system, keep it connected to Phoenix at the strongest meaningful integration level, regardless of its domain, format, or whether Phoenix has seen that kind before. Before treating a creation as delivered, register it with living_register_creation. Use static only when live state has no meaningful role; connected adds observable state; reactive adds events; controllable adds actions; inhabited adds actors that Phoenix or its agents can operate. For any target above static, build the creation with a provider or adapter that attaches through ctx.living.attach(), then call living_inspect_creation and do not claim completion while achieved_level is below target_level. A visual page, file, preview, or Cordis presentation alone is not an operational connection. Do not invent actors or events merely to raise the level: choose the strongest level that is genuinely useful for the creation. Runtime loss never means deletion: keep an offline manifest so the creation can reconnect later. Use living_forget_creation only when the user explicitly wants Phoenix to stop remembering the creation or when the creation has been permanently deleted and no reconnection is intended. This rule is universal; never special-case it to a fixed list of creation types.`
 
 interface Summary {
   id: string
@@ -76,7 +76,7 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'living_register_creation',
-    description: 'Remember any creation Phoenix makes, using a self-described operational contract. This accepts arbitrary future creation kinds; kind is descriptive, never an enum.',
+    description: 'Remember any user-facing artifact or runnable system Phoenix creates or materially modifies, using a self-described operational contract. This accepts arbitrary future creation kinds; kind is descriptive, never an enum.',
     parameters: {
       id: { type: 'string', required: true },
       title: { type: 'string', required: true },
@@ -180,5 +180,24 @@ export function apply(ctx: Context): void {
       return Promise.resolve(summary(snapshot))
     },
     presentCall: args => present('Verify living creation', args.id),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'living_forget_creation',
+    description: 'Explicitly delete Phoenix’s durable relationship to one creation and detach its live provider. Use only when the user explicitly wants Phoenix to stop remembering it or the creation was permanently deleted with no reconnection intended; runtime loss alone is never a reason to call this.',
+    parameters: { id: { type: 'string', required: true } },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: { id: { type: 'string', required: true }, forgotten: { type: 'boolean', required: true } },
+      },
+      render: (_args, value) => [{ type: 'text' as const, text: JSON.stringify(value) }],
+    },
+    async execute(args) {
+      const id = LivingCreationId(args.id)
+      await ctx.living.forget(id)
+      return { id: args.id, forgotten: true }
+    },
+    presentCall: args => present('Forget living creation', args.id),
   }))
 }
