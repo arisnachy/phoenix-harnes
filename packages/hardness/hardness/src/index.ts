@@ -46,6 +46,26 @@ export type {
   HardnessProtocolView,
   HardnessVerificationState,
 } from './operating-protocol.ts'
+export {
+  COGNITIVE_FLOW_CATALOG,
+  COGNITIVE_FLOW_IDS,
+  adaptCognitiveWorkflow,
+  renderCognitiveWorkflowGuide,
+  selectCognitiveWorkflow,
+} from './cognitive-workflow.ts'
+export type {
+  CognitiveFlowCost,
+  CognitiveFlowCriticality,
+  CognitiveFlowDescriptor,
+  CognitiveFlowId,
+  CognitiveFlowSelectionReason,
+  CognitiveMissionKind,
+  CognitiveMissionLevel,
+  CognitiveMissionProfile,
+  CognitiveQualityGate,
+  CognitiveWorkflowObservation,
+  CognitiveWorkflowPlan,
+} from './cognitive-workflow.ts'
 
 export type * from './types.ts'
 

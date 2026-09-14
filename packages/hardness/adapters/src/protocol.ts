@@ -1,13 +1,13 @@
 /** Model-facing HARDNESS protocol registration for the canonical prompt service. */
 
-import { renderHardnessProtocol } from '@phoenix-ai/dsh-hardness'
+import { renderCognitiveWorkflowGuide, renderHardnessProtocol } from '@phoenix-ai/dsh-hardness'
 
 /** Minimal structural prompt registrar required by the protocol adapter. */
 export interface HardnessPromptRegistrar {
   section: (section: { readonly name: string; readonly order: number; readonly text: string }) => () => void
 }
 
-/** Install the stable HARDNESS lifecycle guide into the model system prompt.
+/** Install the stable HARDNESS cognitive and lifecycle guides into the model system prompt.
  * @param systemPrompt - canonical prompt registrar receiving the section.
  * @param locale - language used by the guide.
  * @returns disposer for the registered prompt section.
@@ -19,6 +19,6 @@ export function installHardnessProtocol(
   return systemPrompt.section({
     name: 'hardness:operating-protocol',
     order: 150,
-    text: renderHardnessProtocol(locale),
+    text: `${renderCognitiveWorkflowGuide(locale)}\n${renderHardnessProtocol(locale)}`,
   })
 }
