@@ -26,7 +26,12 @@ export { callHardnessMission } from './hardness-rpc.ts'
 export { renderGenerativeUi, validateUiSchema } from './generative-ui.ts'
 export type { GenerativeUiRenderModel, UiNode, UiSchema } from './generative-ui.ts'
 export { CordisVisualWorkspaceController } from './CordisVisualWorkspace.tsx'
-export type { CordisVisualContent, ICordisVisualWorkspace } from './CordisVisualWorkspace.tsx'
+export type {
+  CordisBuiltinContent,
+  CordisVisualContent,
+  CordisVisualSurface,
+  ICordisVisualWorkspace,
+} from './CordisVisualWorkspace.tsx'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
