@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
-import ToolRuntime from '@phoenix-ai/dsh-tools'
+import ToolRuntime, { defineContentToolFixture } from '@phoenix-ai/dsh-tools'
 import AgentRegistry, { agentEvents, Inbox, type Agent } from '@phoenix-ai/dsh-agent'
 import SkillRegistry from '@phoenix-ai/dsh-skill'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
@@ -27,12 +27,20 @@ function testAgent(): Agent {
 }
 
 describe('skill catalog HARDNESS process policy', () => {
-  it('defers process methodology to HARDNESS while keeping domain skills task-driven', async () => {
+  it('defers process methodology to visible HARDNESS while keeping domain skills task-driven', async () => {
     const ctx = new Context()
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(SkillRegistry)
     await ctx.plugin(toolSkill)
+    ctx.tools.register(defineContentToolFixture({
+      name: 'hardness_workflow',
+      description: 'Select HARDNESS workflow.',
+      parameters: {},
+      async execute() {
+        return [{ type: 'text', text: 'selected' }]
+      },
+    }))
     ctx.skills.register({
       name: 'brainstorming',
       description: 'Process skill for design work.',
