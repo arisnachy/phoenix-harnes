@@ -19,6 +19,7 @@ const mission = (patch: Partial<CognitiveMissionProfile> = {}): CognitiveMission
   previousFailure: false,
   repeatedPattern: false,
   userVisibleArtifact: false,
+  futureObligation: false,
   ...patch,
 })
 
@@ -47,6 +48,7 @@ describe('HARDNESS cognitive workflow catalog', () => {
     ])
     expect(plan.selected).not.toContain('brainstorming')
     expect(plan.selected).not.toContain('systematic-debugging')
+    expect(plan.selected).not.toContain('autonomous-follow-up')
     expect(plan.qualityGates).toContain('objective-locked')
     expect(plan.qualityGates).toContain('fresh-verification')
     expect(plan.qualityGates).toContain('outcome-compared')
@@ -177,6 +179,19 @@ describe('HARDNESS cognitive workflow catalog', () => {
     ]))
   })
 
+  it('activates autonomous follow-up only for a durable concrete future obligation', () => {
+    const transient = selectCognitiveWorkflow(mission({ futureObligation: true }))
+    const durable = selectCognitiveWorkflow(mission({ persistent: true, futureObligation: true }))
+
+    expect(transient.selected).not.toContain('autonomous-follow-up')
+    expect(durable.selected).toEqual(expect.arrayContaining([
+      'context-recovery',
+      'recovery-checkpointing',
+      'outcome-evaluation',
+      'autonomous-follow-up',
+    ]))
+  })
+
   it('does not escalate a simple low-complexity artifact solely because it is user-visible', () => {
     const plan = selectCognitiveWorkflow(mission({ userVisibleArtifact: true }))
 
@@ -196,6 +211,7 @@ describe('HARDNESS cognitive workflow catalog', () => {
       previousFailure: true,
       repeatedPattern: true,
       userVisibleArtifact: true,
+      futureObligation: true,
     }))
     const positions = new Map(plan.selected.map((id, index) => [id, index]))
 
@@ -204,7 +220,7 @@ describe('HARDNESS cognitive workflow catalog', () => {
       if (position === undefined) continue
       for (const required of descriptor.requires) {
         const requiredPosition = positions.get(required)
-        expect(requiredPosition, `${required} should be selected before ${descriptor.id}`).toBeDefined()
+        if (requiredPosition === undefined) throw new Error(`${required} should be selected before ${descriptor.id}`)
         expect(requiredPosition).toBeLessThan(position)
       }
     }
@@ -283,6 +299,19 @@ describe('HARDNESS cognitive workflow adaptation', () => {
       'quality-escalation',
       'failure-immunization',
       'metacognitive-review',
+    ]))
+  })
+
+  it('turns a newly discovered future obligation into durable follow-up work', () => {
+    const initial = selectCognitiveWorkflow(mission({ kind: 'operational' }))
+    const adapted = adaptCognitiveWorkflow(initial, 'future-obligation-discovered')
+
+    expect(adapted.profile).toMatchObject({ persistent: true, futureObligation: true })
+    expect(adapted.selected).toEqual(expect.arrayContaining([
+      'context-recovery',
+      'recovery-checkpointing',
+      'outcome-evaluation',
+      'autonomous-follow-up',
     ]))
   })
 })
