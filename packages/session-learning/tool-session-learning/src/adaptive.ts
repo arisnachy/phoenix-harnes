@@ -112,14 +112,22 @@ export class AdaptiveLearningEngine {
 
   constructor(private readonly store: AdaptiveMemoryStore) {}
 
-  /** Record one evidence-bearing outcome and persist the resulting state. */
+  /**
+   * Record one evidence-bearing outcome and persist the resulting state.
+   * @param input - Verified or candidate evidence about one strategy outcome.
+   * @returns The durable adaptive state after applying the observation.
+   */
   recordOutcome(input: AdaptiveOutcomeInput): Promise<AdaptiveLearningState> {
     const task = this.writeTail.then(() => this.recordOutcomeNow(input))
     this.writeTail = task.then(() => undefined, () => undefined)
     return task
   }
 
-  /** Return only currently active, non-expired strategies. */
+  /**
+   * Return only currently active, non-expired strategies.
+   * @param query - Optional project, session, time, and result-count filters.
+   * @returns Active strategies ordered by confidence and supporting evidence.
+   */
   recommend(query: AdaptiveRecommendationQuery = {}): AdaptiveLearningState[] {
     const limit = query.limit ?? DEFAULT_RECOMMEND_LIMIT
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RECOMMEND_LIMIT) {
@@ -147,6 +155,8 @@ export class AdaptiveLearningEngine {
   /**
    * Promote recent candidate strategies from one session after Phoenix's
    * fail-closed goal completion path provides verified success evidence.
+   * @param input - Completion evidence and session provenance for promotion.
+   * @returns Candidate states that were re-observed as verified successes.
    */
   async confirmRecentCandidates(input: {
     readonly sessionId: string
@@ -292,7 +302,11 @@ function adaptiveSummary(state: AdaptiveLearningState): string {
   return `Candidate adaptive strategy awaiting verified outcome: ${state.strategy}.`
 }
 
-/** Decode a cognitive adaptive-state row without trusting arbitrary stored JSON. */
+/**
+ * Decode a cognitive adaptive-state row without trusting arbitrary stored JSON.
+ * @param row - Cognitive memory row that may contain versioned adaptive state.
+ * @returns Valid adaptive state, or undefined when the row is unrelated or invalid.
+ */
 export function decodeAdaptiveState(row: AdaptiveStoredMemory): AdaptiveLearningState | undefined {
   if (row.subject === undefined || !row.subject.startsWith(ADAPTIVE_SUBJECT_PREFIX) || row.value === undefined) return undefined
   let raw: unknown
@@ -329,7 +343,12 @@ export function decodeAdaptiveState(row: AdaptiveStoredMemory): AdaptiveLearning
   }
 }
 
-/** Hide candidates, quarantined, and expired adaptive rows from normal model memory search. */
+/**
+ * Hide candidate, quarantined, and expired adaptive rows from normal model memory search.
+ * @param hits - Cognitive memory search results to filter.
+ * @param now - Timestamp used to evaluate adaptive TTL expiry.
+ * @returns Search results containing only usable adaptive rows plus unrelated memories.
+ */
 export function filterAdaptiveSearchHits(hits: readonly CognitiveMemoryHit[], now: number = Date.now()): CognitiveMemoryHit[] {
   return hits.filter((hit) => {
     if (hit.record.subject === undefined || !hit.record.subject.startsWith(ADAPTIVE_SUBJECT_PREFIX)) return true
@@ -338,7 +357,11 @@ export function filterAdaptiveSearchHits(hits: readonly CognitiveMemoryHit[], no
   })
 }
 
-/** Install autonomous outcome observation into the existing learning plugin. */
+/**
+ * Install autonomous outcome observation into the existing learning plugin.
+ * @param ctx - Cordis context providing session events and learning-memory services.
+ * @returns Adaptive learning engine attached to the current runtime context.
+ */
 export function installAdaptiveLearning(ctx: Context): AdaptiveLearningEngine {
   const engine = new AdaptiveLearningEngine(cognitiveStore(ctx))
   const pendingTools = new Map<string, string>()
