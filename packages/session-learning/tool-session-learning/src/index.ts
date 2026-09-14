@@ -11,6 +11,7 @@ import type {} from '@phoenix-ai/dsh-session-learning'
 import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
 import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts'
 import { filterProceduralSearchHits, installProceduralLearning } from './procedural.ts'
+import { formatProceduralContext } from './procedural-presentation.ts'
 import { formatMemorySearchResult, formatRecentMemoryContext } from './presentation.ts'
 
 /** Cordis plugin name. */
@@ -61,6 +62,18 @@ export function apply(ctx: Context, config: Config): void {
     // full index synchronously here makes every user message pay the cost.
     // Explicit memory_search exposes cognitive recall when relevant.
     text: () => formatRecentMemoryContext(ctx.learningMemory.recall(8)),
+    interpolateVariables: false,
+  })
+  ctx.systemPrompt.context({
+    name: 'context:validated-procedures',
+    order: 119,
+    text: () => {
+      const projectId = ctx.learningMemory.currentProjectId()
+      return formatProceduralContext(procedural.recommend({
+        limit: 4,
+        ...projectId === undefined ? {} : { projectId },
+      }))
+    },
     interpolateVariables: false,
   })
   ctx.tools.register(defineTool({
