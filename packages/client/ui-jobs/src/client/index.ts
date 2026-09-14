@@ -3,9 +3,8 @@
  * from the session mirror; Phoenix tasks come from the local-only task RPC.
  */
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
-import type { ConnectionHandle } from '@phoenix-ai/dsh-client-connection/client'
 import { JobListAction } from './JobListAction.tsx'
-import { createTaskCenterAction } from './TaskCenterAction.tsx'
+import { createTaskCenterAction, type TaskCenterConnection } from './TaskCenterAction.tsx'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import { en, NS, zh, type JobKey } from './locales.ts'
 
@@ -17,7 +16,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 }
 
 export type { JobListActionProps } from './JobListAction.tsx'
-export type { TaskCenterActionProps } from './TaskCenterAction.tsx'
+export type { TaskCenterActionProps, TaskCenterConnection } from './TaskCenterAction.tsx'
 
 /** Required services for locale registration, task RPC, and header-slot contribution. */
 export const inject = ['sessions', 'slots', 'locale', 'connection']
@@ -40,7 +39,7 @@ export function apply(ctx: ClientContext): void {
     }, JobListAction),
   )
 
-  const TaskCenterAction = createTaskCenterAction(ctx.get('connection') as ConnectionHandle)
+  const TaskCenterAction = createTaskCenterAction(ctx.get('connection') as TaskCenterConnection)
   ctx.slots.inject(
     'conversation.session.header.actions',
     () => ctx.slots.register({
