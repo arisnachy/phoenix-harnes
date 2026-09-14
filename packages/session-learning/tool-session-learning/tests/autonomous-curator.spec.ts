@@ -50,6 +50,50 @@ describe('AutonomousMemoryCurator', () => {
     expect(store.writes[0]?.layers).toContain('semantic')
   })
 
+  it('reuses the prior durable subject when the user explicitly corrects it', async () => {
+    const store = new Store()
+    const curator = new AutonomousMemoryCurator(store)
+    await curator.observeUserMessage({
+      text: 'Prefiero que cada vez que cambies Phoenix ejecutes todas las pruebas antes de terminar.',
+      sessionId: 's',
+      eventSeq: 1,
+      occurredAt: 1_000,
+      projectId: 'phoenix',
+    })
+    await curator.observeUserMessage({
+      text: 'Corrijo eso: de ahora en adelante prueba primero el componente afectado y amplía solo si hay riesgo.',
+      sessionId: 's',
+      eventSeq: 2,
+      occurredAt: 1_100,
+      projectId: 'phoenix',
+    })
+
+    expect(store.writes).toHaveLength(2)
+    expect(store.writes[1]?.sourceEventType).toBe('autonomous/user-correction')
+    expect(store.writes[1]?.subject).toBe(store.writes[0]?.subject)
+  })
+
+  it('does not supersede guidance from an unrelated known project', async () => {
+    const store = new Store()
+    const curator = new AutonomousMemoryCurator(store)
+    await curator.observeUserMessage({
+      text: 'Prefiero que siempre verifiques Phoenix antes de terminar.',
+      sessionId: 'a',
+      eventSeq: 1,
+      occurredAt: 1_000,
+      projectId: 'phoenix',
+    })
+    await curator.observeUserMessage({
+      text: 'Corrijo eso: de ahora en adelante usa el flujo nuevo.',
+      sessionId: 'b',
+      eventSeq: 2,
+      occurredAt: 1_100,
+      projectId: 'other',
+    })
+
+    expect(store.writes[1]?.subject).not.toBe(store.writes[0]?.subject)
+  })
+
   it('refuses secret-bearing guidance instead of persisting it', async () => {
     const store = new Store()
     const curator = new AutonomousMemoryCurator(store)
