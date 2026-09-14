@@ -34,6 +34,10 @@ flowchart LR
   cfg --> plugin_dsh_base_agent_default_model
   plugin_dsh_base_jobs["jobs<br/>@phoenix-ai/dsh-jobs-local"]
   cfg --> plugin_dsh_base_jobs
+  plugin_dsh_base_living_local["living-local<br/>@phoenix-ai/dsh-living-local"]
+  cfg --> plugin_dsh_base_living_local
+  plugin_dsh_base_tool_living["tool-living<br/>@phoenix-ai/dsh-tool-living"]
+  cfg --> plugin_dsh_base_tool_living
   plugin_dsh_base_llm_retry["llm-retry<br/>@phoenix-ai/dsh-llm-retry"]
   cfg --> plugin_dsh_base_llm_retry
   plugin_dsh_base_settings["settings<br/>@phoenix-ai/dsh-settings-file"]
@@ -209,6 +213,8 @@ flowchart LR
 | `agent` | `@phoenix-ai/dsh-agent` |
 | `agent-default-model` | `@phoenix-ai/dsh-agent-default-model` |
 | `jobs` | `@phoenix-ai/dsh-jobs-local` |
+| `living-local` | `@phoenix-ai/dsh-living-local` |
+| `tool-living` | `@phoenix-ai/dsh-tool-living` |
 | `llm-retry` | `@phoenix-ai/dsh-llm-retry` |
 | `settings` | `@phoenix-ai/dsh-settings-file` |
 | `user-profile` | `@phoenix-ai/dsh-user-profile` |
