@@ -72,6 +72,73 @@ describe('universal living creations', () => {
     disposeEvent()
   })
 
+  it('serializes concurrent durable mutations without losing either creation', async () => {
+    const { root, path } = await runtime()
+    const first = {
+      id: LivingCreationId('parallel-1'), title: 'Parallel one', kind: 'future-a', targetLevel: 'static' as const,
+      state: [], actions: [], events: [], resources: ['artifact-a'], actors: [],
+    }
+    const second = {
+      id: LivingCreationId('parallel-2'), title: 'Parallel two', kind: 'future-b', targetLevel: 'static' as const,
+      state: [], actions: [], events: [], resources: ['artifact-b'], actors: [],
+    }
+
+    await Promise.all([root.living.remember(first), root.living.remember(second)])
+
+    expect(root.living.list().map(item => item.manifest.id)).toEqual([first.id, second.id])
+    const persisted = JSON.parse(await readFile(path, 'utf8')) as { creations: Array<{ id: string }> }
+    expect(persisted.creations.map(item => item.id)).toEqual([first.id, second.id])
+  })
+
+  it('rejects a manifest upgrade that the attached provider cannot satisfy', async () => {
+    const { root } = await runtime()
+    const id = LivingCreationId('upgrade-1')
+    const controllable = {
+      id, title: 'Upgradeable creation', kind: 'future-upgrade', targetLevel: 'controllable' as const,
+      state: ['status'], actions: ['advance'], events: ['changed'], resources: [], actors: [],
+    }
+    await root.living.remember(controllable)
+    root.living.attach(id, {
+      readState: () => ({ status: 'ready' }),
+      act: () => ({ ok: true }),
+      subscribe: () => () => undefined,
+      actors: ['other-agent'],
+    })
+
+    await expect(root.living.remember({
+      ...controllable,
+      targetLevel: 'inhabited' as const,
+      actors: ['phoenix'],
+    })).rejects.toThrow(/missing declared actors.*phoenix/i)
+
+    expect(root.living.inspect(id)).toMatchObject({
+      connected: true,
+      manifest: { targetLevel: 'controllable', actors: [] },
+    })
+  })
+
+  it('checks emitted events against the latest committed manifest', async () => {
+    const { root } = await runtime()
+    const id = LivingCreationId('events-1')
+    const initial = {
+      id, title: 'Eventful creation', kind: 'future-events', targetLevel: 'reactive' as const,
+      state: ['status'], actions: [], events: ['oldEvent'], resources: [], actors: [],
+    }
+    await root.living.remember(initial)
+    let emit: ((name: string, data: null) => void) | undefined
+    root.living.attach(id, {
+      readState: () => ({ status: 'ready' }),
+      subscribe: callback => {
+        emit = callback as (name: string, data: null) => void
+        return () => undefined
+      },
+    })
+    await root.living.remember({ ...initial, events: ['newEvent'] })
+
+    expect(() => emit?.('oldEvent', null)).toThrow(/undeclared event/i)
+    expect(() => emit?.('newEvent', null)).not.toThrow()
+  })
+
   it('keeps the manifest and provider live when durable forget persistence fails', async () => {
     const { root, path } = await runtime()
     await root.living.remember(ecosystem)
