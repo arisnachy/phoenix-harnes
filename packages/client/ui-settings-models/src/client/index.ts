@@ -44,8 +44,10 @@ const CONNECTORS_NS = 'settings.connectors'
 export type { ModelsSettingsState, ProviderRow } from './store.ts'
 
 /**
- * Refetch the page snapshot only after its first load.
- * @param controller Models settings store whose loaded snapshot may be refreshed.
+ * Refetch the Models snapshot only after its first load.
+ *
+ * @param controller - Models settings store whose loaded snapshot may be refreshed.
+ * @returns Nothing; refresh is dispatched asynchronously when the store is active.
  */
 export function refreshIfLoaded(controller: ModelsSettingsStore): void {
   if (controller.store.getSnapshot().status === 'idle') return
@@ -55,7 +57,12 @@ export function refreshIfLoaded(controller: ModelsSettingsStore): void {
 /** Services required by the Models/Connectors settings plugin. */
 export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope', 'settingsSchema']
 
-/** Register Models, Connectors, and onboarding surfaces. */
+/**
+ * Register Models, Connectors, and onboarding surfaces.
+ *
+ * @param ctx - Browser Cordis context that owns slots, locale, connection, and settings services.
+ * @returns Nothing; registrations are owned and disposed by the Cordis fiber.
+ */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-settings-models: copy dictionaries')
   ctx.effect(
