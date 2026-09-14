@@ -209,11 +209,26 @@ export function installProactivityManagementRuntime(
   }, { authority: 'loopback' })
 }
 
-/** Install startup recovery, live-agent wake recovery, and the periodic due-task pump. */
+/** Install startup recovery, live-agent wake recovery, the task-management channel, and periodic due-task pumping. */
 export function installProactivityRuntime(ctx: Context, engine: ProactivityEngine, pollMs: number): () => void {
   requirePositive(pollMs, 'pollMs')
   let disposed = false
   let pumping = false
+  let activeConnection: HostConnectionHandle | undefined
+  let managementDispose: (() => Promise<void>) | undefined
+
+  const syncManagementRuntime = (): void => {
+    const connection = ctx.get('connection') as HostConnectionHandle | undefined
+    if (connection === activeConnection) return
+    const previous = managementDispose
+    activeConnection = undefined
+    managementDispose = undefined
+    if (previous !== undefined) void previous()
+    if (connection === undefined) return
+    activeConnection = connection
+    managementDispose = installProactivityManagementRuntime(connection, engine)
+  }
+
   const pump = async (): Promise<void> => {
     if (disposed || pumping) return
     pumping = true
@@ -225,13 +240,23 @@ export function installProactivityRuntime(ctx: Context, engine: ProactivityEngin
       pumping = false
     }
   }
+
+  syncManagementRuntime()
   const timer = setInterval(() => { void pump() }, pollMs)
   const disposeCreated = ctx.on('agent/created', () => { void pump() })
+  const disposeServices = ctx.on('internal/service', (serviceName) => {
+    if (serviceName === 'connection') syncManagementRuntime()
+  })
   void pump()
   return () => {
     if (disposed) return
     disposed = true
     clearInterval(timer)
     disposeCreated()
+    disposeServices()
+    const disposeManagement = managementDispose
+    activeConnection = undefined
+    managementDispose = undefined
+    if (disposeManagement !== undefined) void disposeManagement()
   }
 }
