@@ -25,7 +25,7 @@ describe('agentAvatarKind', () => {
 })
 
 describe('ModelActivityAvatar', () => {
-  it('renders the approved raster portrait sheet instead of the old vector face rig', () => {
+  it('renders the approved public portrait sheet instead of an embedded or vector face rig', () => {
     const element = ModelActivityAvatar({
       agentId: 'c1',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
@@ -43,7 +43,9 @@ describe('ModelActivityAvatar', () => {
     expect(element.props['data-avatar']).toBe('vega')
     expect(image).toBeDefined()
     expect(image.type).toBe('span')
-    expect(String(image.props.style?.['--portrait-image'])).toMatch(/^url\("data:image\/webp;base64,/u)
+    expect(String(image.props.style?.['--portrait-image']))
+      .toBe('url("/assets/kira-agents/kira-portraits.webp")')
+    expect(String(image.props.style?.['--portrait-image'])).not.toContain('data:image')
     expect(vectorPortrait).toBeUndefined()
   })
 
