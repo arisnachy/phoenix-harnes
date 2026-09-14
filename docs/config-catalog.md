@@ -1016,6 +1016,19 @@ export interface Config {
 
 Source: [`packages/jobs/jobs-local/src/index.ts:31`](../packages/jobs/jobs-local/src/index.ts)
 
+<a id="phoenix-aidsh-living-local"></a>
+
+## `@phoenix-ai/dsh-living-local`
+
+```ts config-catalog
+export interface Config {
+  /** Owner-private JSON document containing remembered creation manifests. */
+  path: string
+}
+```
+
+Source: [`packages/core/living-local/src/index.ts:25`](../packages/core/living-local/src/index.ts)
+
 <a id="phoenix-aidsh-llm-deepseek"></a>
 
 ## `@phoenix-ai/dsh-llm-deepseek`
@@ -1105,11 +1118,18 @@ Source: [`packages/llm/llm-deepseek/src/index.ts:108`](../packages/llm/llm-deeps
 
 ## `@phoenix-ai/dsh-llm-pi-ai`
 
-Requires: `llm`
+Requires: `llm` · `tools` · `subprocess` · `attachments`
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
 export interface Config {
+  /**
+   * Register only the native image-generation tool in an agent preset. The
+   * host adapter keeps owning provider routes; this mode lets the same package
+   * contribute its model-facing image tool on the agent plane without
+   * registering a second LLM adapter instance.
+   */
+  imageOnly?: boolean
   /**
    * pi-ai provider routes, keyed by provider. An empty (or omitted) dict is
    * the dormant settings-driven posture: the adapter mounts with no routes
@@ -1532,6 +1552,8 @@ export interface StreamableHttpConfig {
   url: string
   /** Additional headers attached to MCP requests. */
   headers: Record<string, string>
+  /** Whether to attach the host-managed OAuth provider when available. */
+  oauth?: boolean
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -1555,7 +1577,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:105`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:111`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 
@@ -2936,7 +2958,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/session-learning/tool-session-learning/src/index.ts:20`](../packages/session-learning/tool-session-learning/src/index.ts)
+Source: [`packages/session-learning/tool-session-learning/src/index.ts:21`](../packages/session-learning/tool-session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-tool-session-query"></a>
 
@@ -3647,6 +3669,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@phoenix-ai/dsh-tool-ask-user` — requires `tools` · `userQuestions` ([`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts))
 - `@phoenix-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
 - `@phoenix-ai/dsh-tool-home-gateway` — requires `tools` · `home` · `systemPrompt` ([`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts))
+- `@phoenix-ai/dsh-tool-living` — requires `living` · `tools` · `systemPrompt` ([`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts))
 - `@phoenix-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
 - `@phoenix-ai/dsh-user-profile` — requires `settings` · `systemPrompt` ([`packages/profile/user-profile/src/index.ts`](../packages/profile/user-profile/src/index.ts))
 - `@phoenix-ai/dsh-workspace` — requires `storageDomain` · `sessionPersistence` ([`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts))
@@ -3663,6 +3686,7 @@ Abstract service classes — a deployment loads a concrete implementation packag
 - `@phoenix-ai/dsh-fs` — abstract `FileSystem` ([`packages/fs/fs/src/index.ts`](../packages/fs/fs/src/index.ts))
 - `@phoenix-ai/dsh-host-directory-picker` — abstract `DirectoryPicker` ([`packages/host/directory-picker/src/index.ts`](../packages/host/directory-picker/src/index.ts))
 - `@phoenix-ai/dsh-jobs` — abstract `JobRegistry` ([`packages/jobs/jobs/src/index.ts`](../packages/jobs/jobs/src/index.ts))
+- `@phoenix-ai/dsh-living` — abstract `LivingRegistry` ([`packages/core/living/src/index.ts`](../packages/core/living/src/index.ts))
 - `@phoenix-ai/dsh-sandbox` — abstract `SandboxProvider` ([`packages/sandbox/sandbox/src/index.ts`](../packages/sandbox/sandbox/src/index.ts))
 - `@phoenix-ai/dsh-session-persistence` — abstract `SessionPersistence` ([`packages/session/session-persistence/src/index.ts`](../packages/session/session-persistence/src/index.ts))
 - `@phoenix-ai/dsh-session-query` — abstract `SessionQueryEngine` ([`packages/session-query/session-query/src/index.ts`](../packages/session-query/session-query/src/index.ts))

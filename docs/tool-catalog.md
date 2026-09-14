@@ -30,6 +30,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `organization_forge`, `specialist_lab`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
 | `@phoenix-ai/dsh-tool-home-gateway` | `home_control`, `home_list_devices` | `ctx.tools`, `ctx.home`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `Home Assistant request at execution time` | - | The schema harvest uses a private fake endpoint and never performs a request. Live deployments remain disabled until the operator supplies a private endpoint, token variable, and both allowlists. |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
+| `@phoenix-ai/dsh-tool-living` | `living_act`, `living_forget_creation`, `living_inspect_creation`, `living_list_creations`, `living_read_state`, `living_register_creation`, `living_verify_creation` | `ctx.tools`, `ctx.living`, `ctx.systemPrompt` | `tool/call`, `durable living creation manifest`, `live creation state/actions/events through ctx.living`, `tool/result` | - | Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target. |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@phoenix-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
@@ -1674,6 +1675,208 @@ List every active reminder in the current session in creation order, including i
 Source: [`packages/schedule/schedule/src/tools.ts`](../packages/schedule/schedule/src/tools.ts)
 
 Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier.
+
+<a id="phoenix-aidsh-tool-living"></a>
+
+## `@phoenix-ai/dsh-tool-living`
+
+### `living_act`
+
+Execute one action declared by a connected creation. The call fails when the creation is offline or the action was not declared.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string"
+    },
+    "input_json": {
+      "type": "string",
+      "description": "JSON value passed to the creation action."
+    }
+  },
+  "required": [
+    "id",
+    "action",
+    "input_json"
+  ]
+}
+```
+
+Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_forget_creation`
+
+Explicitly delete Phoenix’s durable relationship to one creation and detach its live provider. Use only when the user explicitly wants Phoenix to stop remembering it or the creation was permanently deleted with no reconnection intended; runtime loss alone is never a reason to call this.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_inspect_creation`
+
+Inspect one remembered creation and verify its live provider achieved the target integration level before delivery.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_list_creations`
+
+List creations Phoenix remembers, including offline creations that can reconnect later.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_read_state`
+
+Read authoritative live state from a connected creation.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_register_creation`
+
+Remember any user-facing artifact or runnable system Phoenix creates or materially modifies, using a self-described operational contract. This accepts arbitrary future creation kinds; kind is descriptive, never an enum.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "target_level": {
+      "type": "string",
+      "enum": [
+        "static",
+        "connected",
+        "reactive",
+        "controllable",
+        "inhabited"
+      ]
+    },
+    "state": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "actors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "kind",
+    "target_level",
+    "state",
+    "actions",
+    "events",
+    "resources",
+    "actors"
+  ]
+}
+```
+
+Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_verify_creation`
+
+Fail unless a creation has reached its declared target integration level. Use this immediately before claiming a created artifact or system is complete.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target.
 
 <a id="phoenix-aidsh-tool-lsp"></a>
 

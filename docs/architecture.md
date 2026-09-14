@@ -45,6 +45,7 @@ Here are some core packages that contribute to the Cordis tree.
 | [`core/session`](subsystems/session.md) | The append-only `SessionEvent` log and in-memory store | `ctx.sessions` |
 | [`core/system-prompt`](subsystems/system-prompt.md) | Prompt-section and tool-schema assembly | `ctx.systemPrompt` |
 | [`core/tools`](subsystems/tools.md) | The scoped tool registry and guarded execution pipeline | `ctx.tools` |
+| [`core/living`](subsystems/living.md) | Durable identity and operational connection for everything Phoenix creates | `ctx.living` |
 | [`core/agent`](subsystems/core.md) | The `Agent` interface, live registry, and `agent/*` events | `ctx.agents` |
 | [`core/agent-loop`](subsystems/core.md) | The default driver implementing that interface | `ctx.agentLoop` |
 | [`core/scope`](subsystems/scope.md) | The per-agent scoped-registration primitive | library, no key |
@@ -113,6 +114,7 @@ New behavior attaches to a documented extension point. Changing the loop itself 
 |---|---|
 | Add a model provider | register its adapter on `ctx.llm` |
 | Add a model-facing capability | register on `ctx.tools`; its schema joins prompt assembly |
+| Keep a Phoenix-created artifact or system operationally connected | register its self-described manifest on `ctx.living`; attach a provider or adapter for the strongest meaningful live level |
 | Index a capability without replacing its provider | publish a descriptor through `ctx.hardness`; resolve `have` only after evidence-backed verification |
 | Give one session a different capability set | compose an agent preset; a service row there needs an `isolate` realm |
 | Add shell execution | register a `ctx.shell` backend; the local one spawns through `ctx.subprocess` |

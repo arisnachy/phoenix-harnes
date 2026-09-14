@@ -69,6 +69,14 @@
     - id: jobs
       name: '@phoenix-ai/dsh-jobs-local'
 
+    - id: living-local
+      name: '@phoenix-ai/dsh-living-local'
+      config:
+        path: !!js dshHomePath('memory', 'living-creations.json')
+
+    - id: tool-living
+      name: '@phoenix-ai/dsh-tool-living'
+
     - id: llm-retry
       name: '@phoenix-ai/dsh-llm-retry'
 

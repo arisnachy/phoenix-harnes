@@ -1167,6 +1167,66 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'living',
+    summary: 'Service Definition for every creation Phoenix keeps operationally connected.',
+    description: 'Service Definition for every creation Phoenix keeps operationally connected. Implementations persist manifests separately from ephemeral provider attachments.',
+    methods: [
+      {
+        signature: 'abstract remember(manifest: LivingCreationManifest): Promise<LivingCreationSnapshot>',
+        description: 'Persist or replace one self-describing creation manifest.',
+        parameters: [{ name: 'manifest', description: 'Durable identity and declared capabilities to remember.' }],
+        returns: 'Snapshot after the manifest has been committed.',
+      },
+      {
+        signature: 'abstract forget(id: LivingCreationId): Promise<void>',
+        description: 'Explicitly delete one remembered creation and detach any live provider.',
+        parameters: [{ name: 'id', description: 'Creation whose durable identity should be removed.' }],
+      },
+      {
+        signature: 'abstract list(): LivingCreationSnapshot[]',
+        description: 'List fresh snapshots in stable registration order.',
+        parameters: [],
+        returns: 'Current remembered creations with connection and achieved-level state.',
+      },
+      {
+        signature: 'abstract inspect(id: LivingCreationId): LivingCreationSnapshot',
+        description: 'Inspect one remembered creation or throw when unknown.',
+        parameters: [{ name: 'id', description: 'Creation to inspect.' }],
+        returns: 'Fresh manifest and live integration status.',
+      },
+      {
+        signature: 'abstract attach(id: LivingCreationId, provider: LivingCreationProvider): () => void',
+        description: 'Attach an effect-owned runtime provider; disposing it leaves the manifest remembered but offline.',
+        parameters: [{ name: 'id', description: 'Remembered creation receiving the live provider.' }, { name: 'provider', description: 'Runtime implementation for state, events, actions, and actors.' }],
+        returns: 'Idempotent disposer for this exact provider attachment.',
+      },
+      {
+        signature: 'abstract readState(id: LivingCreationId): Promise<LivingState>',
+        description: 'Read authoritative live state.',
+        parameters: [{ name: 'id', description: 'Connected creation to read.' }],
+        returns: 'State supplied by the currently attached provider.',
+      },
+      {
+        signature: 'abstract act(id: LivingCreationId, action: string, input: LivingJson): Promise<LivingJson>',
+        description: 'Execute one declared live action.',
+        parameters: [{ name: 'id', description: 'Connected creation that owns the action.' }, { name: 'action', description: 'Action name declared by the creation manifest.' }, { name: 'input', description: 'JSON-compatible payload passed to the provider.' }],
+        returns: 'JSON-compatible provider result.',
+      },
+      {
+        signature: 'abstract onChanged(listener: LivingChangedListener): () => void',
+        description: 'Subscribe to committed registry and connectivity changes.',
+        parameters: [{ name: 'listener', description: 'Observer invoked with the affected creation id.' }],
+        returns: 'Disposer that unregisters only this observer.',
+      },
+      {
+        signature: 'abstract onCreationEvent(listener: LivingCreationEventListener): () => void',
+        description: 'Subscribe to declared events emitted by connected creations.',
+        parameters: [{ name: 'listener', description: 'Observer receiving creation id, event name, and JSON data.' }],
+        returns: 'Disposer that unregisters only this observer.',
+      },
+    ],
+  },
+  {
     key: 'llm',
     summary: 'The abstract `llm` service: an adapter registry plus a streaming model-call API, interceptable via the `llm/stream` waterfall.',
     description: 'The abstract `llm` service: an adapter registry plus a streaming model-call API, interceptable via the `llm/stream` waterfall.',
@@ -4143,6 +4203,42 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'KvUnitDescriptor',
     declaration: 'export interface KvUnitDescriptor {\n    readonly name: string;\n    readonly version: number;\n    readonly tables: readonly string[];\n    readonly hasGlobal: boolean;\n}',
+  },
+  {
+    name: 'LivingChangedListener',
+    declaration: 'export type LivingChangedListener = (creationId: LivingCreationId) => void;',
+  },
+  {
+    name: 'LivingCreationEvent',
+    declaration: 'export interface LivingCreationEvent {\n    readonly creationId: LivingCreationId;\n    readonly name: string;\n    readonly data: LivingJson;\n}',
+  },
+  {
+    name: 'LivingCreationEventListener',
+    declaration: 'export type LivingCreationEventListener = (event: LivingCreationEvent) => void;',
+  },
+  {
+    name: 'LivingCreationManifest',
+    declaration: 'export interface LivingCreationManifest {\n    readonly id: LivingCreationId;\n    readonly title: string;\n    readonly kind: string;\n    readonly targetLevel: LivingIntegrationLevel;\n    readonly state: readonly string[];\n    readonly actions: readonly string[];\n    readonly events: readonly string[];\n    readonly resources: readonly string[];\n    readonly actors: readonly string[];\n}',
+  },
+  {
+    name: 'LivingCreationProvider',
+    declaration: 'export interface LivingCreationProvider {\n    readonly readState?: () => LivingState | Promise<LivingState>;\n    readonly act?: (action: string, input: LivingJson) => LivingJson | Promise<LivingJson>;\n    readonly subscribe?: (emit: (name: string, data: LivingJson) => void) => (() => void);\n    readonly actors?: readonly string[];\n}',
+  },
+  {
+    name: 'LivingCreationSnapshot',
+    declaration: 'export interface LivingCreationSnapshot {\n    readonly manifest: LivingCreationManifest;\n    readonly connected: boolean;\n    readonly achievedLevel: LivingIntegrationLevel;\n}',
+  },
+  {
+    name: 'LivingIntegrationLevel',
+    declaration: 'export type LivingIntegrationLevel = \'static\' | \'connected\' | \'reactive\' | \'controllable\' | \'inhabited\';',
+  },
+  {
+    name: 'LivingJson',
+    declaration: 'export type LivingJson = null | boolean | number | string | LivingJson[] | {\n    [key: string]: LivingJson;\n};',
+  },
+  {
+    name: 'LivingState',
+    declaration: 'export type LivingState = Record<string, LivingJson>;',
   },
   {
     name: 'LlmAdapter',
