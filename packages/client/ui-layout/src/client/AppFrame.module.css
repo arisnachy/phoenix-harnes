@@ -1,17 +1,13 @@
 .frame {
-  position: relative; /* anchors the drag handles, which straddle column borders */
+  position: relative;
   display: grid;
   grid-template-rows: 100%;
   height: 100%;
   overflow: hidden;
   background: var(--dsw-alias-bg-base);
-  /* Collapse/expand animates the tracks on the deepsuite sider curve
-     (--ds-ease-in-out / --ds-transition-duration-slow, ui-theme base.css). */
   transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
-/* Dragging writes widths at pointer cadence; easing them would detach the
-   column from the handle. */
 .frame[data-dragging] {
   transition: none;
 }
@@ -30,67 +26,87 @@
 }
 
 .centerCol {
+  position: relative;
   min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-/* Keep the teams dock as a real sibling in the center flow so chat receives
-   its own space; the global shell and sidebar keep their geometry untouched. */
-.centerCol:has([data-kira-teams]) {
+/* Floating shell entries remain a true overlay and never participate in the
+   conversation/workspace flex calculation. Feature entries opt back into
+   pointer events themselves. */
+.centerCol > [data-shell-overlay] {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Dedicated structural rail for visual work. It is absent from layout until
+   Cordis or KIRA/subagents actually render content. */
+.centerCol > [data-shell-workspace] {
+  display: none;
+  min-width: 0;
+  min-height: 0;
+}
+
+.centerCol:has(> [data-shell-workspace] [data-kira-teams]),
+.centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) {
   flex-direction: row;
 }
 
-.centerCol:has([data-kira-teams]) > [data-shell-overlay] {
-  display: contents;
-}
-
-/* Cordis reuses the same center-flow visual space as the KIRA/subagent card.
-   The overlay becomes one bounded right rail instead of opening a second
-   details column. When KIRA is also active, its card is the upper occupant
-   and Cordis receives the remaining lower space. */
-.centerCol:has([data-cordis-workspace]) {
-  flex-direction: row;
-}
-
-.centerCol:has([data-cordis-workspace]) > [data-shell-overlay] {
+.centerCol:has(> [data-shell-workspace] [data-kira-teams]) > [data-shell-workspace],
+.centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace] {
   order: 2;
   flex: 0 0 min(360px, calc(100% - 56px));
-  min-width: 0;
+  width: min(360px, calc(100% - 56px));
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.centerCol:has([data-cordis-workspace]) > [data-shell-overlay] > [data-kira-teams] {
+/* KIRA alone keeps its compact card width. Cordis uses the full visual rail. */
+.centerCol:has(> [data-shell-workspace] [data-kira-teams]):not(:has(> [data-shell-workspace] [data-cordis-workspace])) > [data-shell-workspace] {
+  flex-basis: min(318px, 34vw);
+  width: min(318px, 34vw);
+}
+
+/* When both are active they share one rail vertically: KIRA/subagents above,
+   Cordis below. Neither can cover the conversation because the rail is a real
+   flex sibling of the conversation surface. */
+.centerCol > [data-shell-workspace] > [data-kira-teams] {
   order: 0;
-  flex: 0 1 50%;
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  height: auto;
-  max-height: 50%;
   box-sizing: border-box;
 }
 
-.centerCol:has([data-cordis-workspace]) > [data-shell-overlay] > [data-cordis-workspace] {
+.centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace] > [data-kira-teams] {
+  flex: 0 1 50%;
+  height: auto;
+  max-height: 50%;
+}
+
+.centerCol > [data-shell-workspace] > [data-cordis-workspace] {
   order: 1;
   flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
 @media (max-width: 760px) {
-  .centerCol:has([data-kira-teams]) {
+  .centerCol:has(> [data-shell-workspace] [data-kira-teams]),
+  .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) {
     flex-direction: column;
   }
 
-  .centerCol:has([data-cordis-workspace]) {
-    flex-direction: column;
-  }
-
-  .centerCol:has([data-cordis-workspace]) > [data-shell-overlay] {
+  .centerCol:has(> [data-shell-workspace] [data-kira-teams]) > [data-shell-workspace],
+  .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace] {
     order: 2;
     flex: 0 0 min(42vh, 360px);
     width: 100%;
@@ -104,15 +120,10 @@
   border-left: 1px solid var(--dsw-alias-border-l2);
 }
 
-/* The details subtree stays mounted at zero width, so its border must not paint
-   a 1px seam. The collapsed sidebar instead retains a bordered compact rail. */
 .frame[data-details-collapsed] .detailsCol {
   border-left: none;
 }
 
-/* Drag handles are frame children (columns clip overflow): an 8px hit strip
-   centered on the column border via inline left, above column content. Details
-   adds a visible 12x32 pill at vertical center; sidebar keeps only the hit strip. */
 .handle {
   position: absolute;
   top: 0;
@@ -122,8 +133,6 @@
   cursor: col-resize;
   z-index: 2;
   touch-action: none;
-  /* Rides the same curve as the tracks so the pill stays on the moving
-     border during collapse/expand; paused while dragging (frame rule). */
   transition: left var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
@@ -149,8 +158,6 @@
   box-sizing: border-box;
   background: var(--dsw-alias-button-floating-fill);
   border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
-  /* Hover affordance: the details pill hides until the pointer is over its
-     column, the strip itself, or a drag. */
   opacity: 0;
   transition:
     opacity var(--ds-transition-duration-slow) var(--ds-ease-in-out),
