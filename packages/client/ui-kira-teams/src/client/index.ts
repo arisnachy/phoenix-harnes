@@ -1,8 +1,7 @@
-/** Web KIRA teams dock: frame overlay registration and injected sessions face. */
+/** Web KIRA teams dock: in-flow workspace registration and injected sessions face. */
 import type { ClientContext, ISessions, SessionId, SubagentAddress } from '@phoenix-ai/dsh-client-runtime/client'
 import { KiraTeamsDock } from './KiraTeamsDock.tsx'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
-// The 'shell.overlay' slot key is declared by ui-layout's SlotMap merge.
 import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
 import { en, es, NS, zh, type KiraTeamsKey } from './locales.ts'
 
@@ -15,13 +14,10 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 
 export type { KiraTeamsDockProps, KiraTeamsInjected } from './KiraTeamsDock.tsx'
 
-/** Required services for the overlay slot contribution. */
+/** Required services for the shared workspace contribution. */
 export const inject = ['sessions', 'slots', 'locale', 'layout']
 
-/**
- * Client plugin body: register the dictionaries and the frame overlay dock.
- * @param ctx - client root context.
- */
+/** Register the KIRA/subagent card in the same structural rail Cordis uses. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-kira-teams: dictionaries')
   const sessions = ctx.get('sessions') as unknown as ISessions
@@ -36,9 +32,9 @@ export function apply(ctx: ClientContext): void {
     },
   })
   ctx.slots.inject(
-    'shell.overlay',
+    'shell.workspace',
     () => ctx.slots.register({
-      name: 'shell.overlay',
+      name: 'shell.workspace',
       id: 'kira-teams',
       locale: NS,
       inject: dockActions,

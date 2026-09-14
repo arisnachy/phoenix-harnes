@@ -62,13 +62,13 @@ type HoleName =
   | 'sidebar.workspaces'
   | 'conversation.hero.workspace'
   | 'conversation.empty.workspace'
-  | 'shell.overlay'
+  | 'shell.workspace'
 
 /** Declare any subset of the holes with a single root registration ('root' is a single slot). */
 function declare(slots: SlotRegistry, ...names: HoleName[]): () => void {
   const children = Object.fromEntries(names.map(name => [
     name,
-    name === 'shell.overlay'
+    name === 'shell.workspace'
       ? { kind: 'list', scope: 'root' }
       : { kind: 'single', scope: 'root' },
   ]))
@@ -95,15 +95,16 @@ describe('ui-workspace apply', () => {
     expect(after.slots.entries('conversation.hero.workspace')[0]!.component).toBe(WorkspacePicker)
   })
 
-  it('provides the Cordis visual service and registers its overlay when the shell seat exists', async () => {
+  it('provides the Cordis visual service and registers it in the structural workspace rail', async () => {
     const b = await bench()
-    declare(b.slots, 'shell.overlay')
+    declare(b.slots, 'shell.workspace')
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
 
     const visual = b.ctx.get('visualWorkspace') as ICordisVisualWorkspace
     expect(visual).toBeDefined()
-    expect(b.slots.entries('shell.overlay')).toHaveLength(1)
+    expect(b.slots.entries('shell.workspace')).toHaveLength(1)
+    expect(b.slots.entries('shell.overlay')).toHaveLength(0)
 
     visual.show({ kind: 'image', src: 'https://example.test/preview.png', title: 'Preview' })
     expect(b.setWorkspaceOccupant).toHaveBeenCalledWith('cordis', true)
@@ -111,7 +112,7 @@ describe('ui-workspace apply', () => {
     expect(b.setWorkspaceOccupant).toHaveBeenLastCalledWith('cordis', false)
 
     await fiber.dispose()
-    expect(b.slots.entries('shell.overlay')).toHaveLength(0)
+    expect(b.slots.entries('shell.workspace')).toHaveLength(0)
   })
 
   it('routes browser actions and picker creation to the services', async () => {
@@ -192,12 +193,12 @@ describe('ui-workspace apply', () => {
 
   it('unregisters every entry on teardown', async () => {
     const b = await bench()
-    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace', 'shell.overlay')
+    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace', 'shell.workspace')
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     await fiber.dispose()
     expect(b.slots.entries('sidebar.workspaces')).toHaveLength(0)
     expect(b.slots.entries('conversation.hero.workspace')).toHaveLength(0)
-    expect(b.slots.entries('shell.overlay')).toHaveLength(0)
+    expect(b.slots.entries('shell.workspace')).toHaveLength(0)
   })
 })
