@@ -2,6 +2,8 @@ import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, AgentRegistry } from '@phoenix-ai/dsh-agent'
 import { boundContextSummary, createUserMessage, type ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
+import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
+import type { RpcResult } from '@phoenix-ai/dsh-host-apiproxy/api'
 import {
   ProactivityDeferredError,
   type ProactivityEngine,
@@ -9,7 +11,15 @@ import {
   type ProactivityExecutionResult,
   type ProactivityExecutor,
   type ProactivitySenderIdentity,
+  type ProactivityTask,
 } from './proactivity-engine.ts'
+import {
+  DEFAULT_PROACTIVITY_RETRY_POLICY,
+  retryFailedProactivityTasks,
+} from './proactivity-retry.ts'
+
+export { retryFailedProactivityTasks } from './proactivity-retry.ts'
+export type { ProactivityRetryPolicy } from './proactivity-retry.ts'
 
 /** Host configuration for proactive execution and mail identity selection. */
 export interface ProactivityRuntimeConfig {
@@ -20,6 +30,20 @@ export interface ProactivityRuntimeConfig {
   readonly harnessMailIdentity?: string
 }
 
+/** Browser-safe task projection; unrevealed surprises never reach this surface. */
+export interface ProactivityTaskView {
+  readonly id: string
+  readonly title: string
+  readonly status: ProactivityTask['status']
+  readonly nextRunAt: string
+  readonly recurrence: ProactivityTask['recurrence']
+  readonly catchUp: ProactivityTask['catchUp']
+  readonly delivery: ProactivityTask['delivery']
+  readonly senderIdentity: ProactivityTask['senderIdentity']
+  readonly createdBy: ProactivityTask['createdBy']
+  readonly recentHistory: readonly Pick<ProactivityTask['history'][number], 'phase' | 'scheduledFor' | 'finishedAt' | 'status' | 'summary' | 'error'>[]
+}
+
 function requirePositive(value: number, name: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} must be a positive safe integer`)
   return value
@@ -28,8 +52,10 @@ function requirePositive(value: number, name: string): number {
 function chooseAgent(agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'>, targetAgentId?: string): Agent {
   if (targetAgentId !== undefined) {
     const exact = agents.get(targetAgentId as never)
-    if (exact === undefined) throw new ProactivityDeferredError(`target agent is not live: ${targetAgentId}`)
-    return exact
+    if (exact !== undefined) return exact
+    // Session/agent ids can be ephemeral across process restarts. A durable
+    // global task must not become permanently undeliverable just because the
+    // conversation that created it no longer exists.
   }
   const agent = agents.roots()[0] ?? agents.list()[0]
   if (agent === undefined) throw new ProactivityDeferredError('no live Phoenix agent is available')
@@ -81,6 +107,11 @@ function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntime
 /**
  * Create the execution adapter that wakes a live agent for communication and
  * uses an isolated one-shot subagent for private preparation or office work.
+ *
+ * @param agents Registry used to resolve the original or current live Phoenix agent.
+ * @param subagents Optional isolated-work runtime used for private preparation and office work.
+ * @param config Runtime limits, provider selection, and governed mail identity references.
+ * @returns An executor suitable for the durable proactivity engine.
  */
 export function createProactivityExecutor(
   agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'>,
@@ -128,29 +159,105 @@ export function createProactivityExecutor(
   }
 }
 
-/** Install startup recovery, live-agent wake recovery, and the periodic due-task pump. */
+function taskView(task: ProactivityTask): ProactivityTaskView {
+  return {
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    nextRunAt: task.nextRunAt,
+    recurrence: { ...task.recurrence },
+    catchUp: task.catchUp,
+    delivery: task.delivery,
+    senderIdentity: task.senderIdentity,
+    createdBy: task.createdBy,
+    recentHistory: task.history.slice(-10).map(row => ({
+      phase: row.phase,
+      scheduledFor: row.scheduledFor,
+      finishedAt: row.finishedAt,
+      status: row.status,
+      ...(row.summary === undefined ? {} : { summary: row.summary }),
+      ...(row.error === undefined ? {} : { error: row.error }),
+    })),
+  }
+}
+
+function rpcFailure(message: string): RpcResult<never> {
+  return { ok: false, error: { code: 'internal', message, details: {} } }
+}
+
+/** Mount a read-only loopback endpoint used by the browser Task Center. */
+function installProactivityRpc(connection: HostConnectionHandle, engine: ProactivityEngine): () => Promise<void> {
+  return connection.rpc.handle('/phoenix-tasks', async (endpoint): Promise<RpcResult<readonly ProactivityTaskView[]>> => {
+    if (endpoint !== 'list') return rpcFailure(`unknown Phoenix tasks endpoint: ${endpoint}`)
+    try {
+      // `list()` intentionally omits surprises until reveal time. Hidden task
+      // content therefore never crosses the browser transport ahead of time.
+      return { ok: true, value: (await engine.list()).map(taskView) }
+    } catch (error: unknown) {
+      return rpcFailure(error instanceof Error ? error.message : String(error))
+    }
+  }, { authority: 'loopback' })
+}
+
+/**
+ * Install startup recovery, live-agent wake recovery, periodic retries, task RPC,
+ * and the due-task pump.
+ *
+ * @param ctx Cordis context that owns services, lifecycle events, and the host connection.
+ * @param engine Durable proactivity engine whose scheduled work is pumped.
+ * @param pollMs Interval between due-task and retry scans.
+ * @returns A disposer that stops polling and unmounts lifecycle/RPC handlers.
+ */
 export function installProactivityRuntime(ctx: Context, engine: ProactivityEngine, pollMs: number): () => void {
   requirePositive(pollMs, 'pollMs')
   let disposed = false
   let pumping = false
+  let activeConnection: HostConnectionHandle | undefined
+  let rpcDispose: (() => Promise<void>) | undefined
+
+  const syncRpc = (): void => {
+    const connection = ctx.get('connection') as HostConnectionHandle | undefined
+    if (connection === activeConnection) return
+    const previous = rpcDispose
+    activeConnection = undefined
+    rpcDispose = undefined
+    if (previous !== undefined) void previous()
+    if (connection === undefined) return
+    activeConnection = connection
+    rpcDispose = installProactivityRpc(connection, engine)
+  }
+
   const pump = async (): Promise<void> => {
     if (disposed || pumping) return
     pumping = true
     try {
-      await engine.runDue()
+      const now = new Date()
+      await retryFailedProactivityTasks(engine, now, DEFAULT_PROACTIVITY_RETRY_POLICY)
+      await engine.runDue(now)
     } catch (error: unknown) {
       ctx.logger.warn(`proactivity task pump failed: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       pumping = false
     }
   }
+
+  syncRpc()
+  const disposeService = ctx.on('internal/service', (serviceName) => {
+    if (serviceName === 'connection') syncRpc()
+  })
   const timer = setInterval(() => { void pump() }, pollMs)
   const disposeCreated = ctx.on('agent/created', () => { void pump() })
   void pump()
+
   return () => {
     if (disposed) return
     disposed = true
     clearInterval(timer)
     disposeCreated()
+    disposeService()
+    const disposeRpc = rpcDispose
+    activeConnection = undefined
+    rpcDispose = undefined
+    if (disposeRpc !== undefined) void disposeRpc()
   }
 }
