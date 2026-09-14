@@ -1,6 +1,6 @@
 /** Durable task contracts shared by the proactivity engine and its tools. */
 
-export type TaskState = 'scheduled' | 'running' | 'completed' | 'failed' | 'paused'
+export type TaskState = 'scheduled' | 'running' | 'completed' | 'failed' | 'paused' | 'cancelled'
 export type TaskOrigin = 'user' | 'phoenix'
 export type TaskVisibility = 'normal' | 'hidden_until_reveal' | 'internal'
 export type CatchUpPolicy = 'latest' | 'all' | 'skip'
@@ -43,6 +43,7 @@ export interface TaskRunRecord {
   status: TaskRunStatus
   startedAt: string
   finishedAt?: string
+  retryAt?: string
   error?: string
 }
 
