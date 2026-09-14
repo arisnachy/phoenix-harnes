@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import type { ConnectionHandle } from '@phoenix-ai/dsh-client-connection/client'
 import { IconChevronDownOutline14, StateDot, useDismissOnOutsidePointer, type StateDotState } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, TranslateNS } from '@phoenix-ai/dsh-client-ui-slots'
 import { NS } from './locales.ts'
@@ -8,8 +7,19 @@ import css from './JobListAction.module.css'
 export type TaskListActionSlotProps =
   PropsRuntime<'conversation.session.header.actions'> & PropsLocale<typeof NS>
 
+type TaskRpcResult =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly error: { readonly message: string } }
+
+/** Minimal structural contract used by Task Center; the client runtime owns and loads connection. */
+export interface TaskRpcConnection {
+  readonly rpc: {
+    call(channel: string, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<TaskRpcResult>
+  }
+}
+
 export type TaskListActionProps = TaskListActionSlotProps & {
-  readonly connection: ConnectionHandle
+  readonly connection: TaskRpcConnection
 }
 
 type TaskStatus = 'scheduled' | 'running' | 'completed' | 'failed' | 'paused' | 'cancelled'
