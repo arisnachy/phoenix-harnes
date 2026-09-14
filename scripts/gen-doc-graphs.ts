@@ -538,6 +538,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Producers (background bash, PTY sends, and subagent delegations) register running work; tool-jobs is the model-facing controller that reads, lists, and kills it; jobs-local is the process-local registry.',
   },
   {
+    key: 'living',
+    pkg: 'living',
+    title: 'Universal living creation registry',
+    mode: 'seam',
+    implementations: ['living-local'],
+    consumers: ['tool-living'],
+    note: 'Keeps arbitrary Phoenix-created artifacts and systems durably identified while live providers expose their self-described state, events, actions, resources, and actors without coupling the core to a closed creation taxonomy.',
+  },
+  {
     key: 'web',
     pkg: 'web',
     title: 'Web access provider registry',
