@@ -107,6 +107,11 @@ function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntime
 /**
  * Create the execution adapter that wakes a live agent for communication and
  * uses an isolated one-shot subagent for private preparation or office work.
+ *
+ * @param agents Registry used to resolve the original or current live Phoenix agent.
+ * @param subagents Optional isolated-work runtime used for private preparation and office work.
+ * @param config Runtime limits, provider selection, and governed mail identity references.
+ * @returns An executor suitable for the durable proactivity engine.
  */
 export function createProactivityExecutor(
   agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'>,
@@ -194,7 +199,15 @@ function installProactivityRpc(connection: HostConnectionHandle, engine: Proacti
   }, { authority: 'loopback' })
 }
 
-/** Install startup recovery, live-agent wake recovery, periodic retries, task RPC, and the due-task pump. */
+/**
+ * Install startup recovery, live-agent wake recovery, periodic retries, task RPC,
+ * and the due-task pump.
+ *
+ * @param ctx Cordis context that owns services, lifecycle events, and the host connection.
+ * @param engine Durable proactivity engine whose scheduled work is pumped.
+ * @param pollMs Interval between due-task and retry scans.
+ * @returns A disposer that stops polling and unmounts lifecycle/RPC handlers.
+ */
 export function installProactivityRuntime(ctx: Context, engine: ProactivityEngine, pollMs: number): () => void {
   requirePositive(pollMs, 'pollMs')
   let disposed = false
