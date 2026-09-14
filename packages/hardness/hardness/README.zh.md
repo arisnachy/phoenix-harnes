@@ -37,7 +37,7 @@ Model preset 会在 `hardness_run` 旁挂载一个纯 read-only 的 `hardness_wo
 ##### Cognitive routing 与 operating protocol
 
 ```markdown
-先对 mission 分类；非 trivial 工作调用 hardness_workflow，并在 execution planning 前使用其返回的 ordered pipeline 与 quality gates。调试必须先找 root cause；只允许并行真正独立的工作；高复杂度或高风险任务要分离 implementation、adversarial critique 与 independent judgment。新证据可以增强 workflow。共享执行生命周期仍是 inspect → resolve → plan → approve → execute → verify → present → audit；认知流选择本身绝不授予执行权限。
+Classify the mission, call hardness_workflow for non-trivial work, and use the returned ordered pipeline and quality gates before execution planning. Debugging is root-cause-first; only independent work may be parallelized; high-complexity/high-risk work separates implementation, adversarial critique, and independent judgment. New evidence may strengthen the workflow. The shared execution lifecycle remains inspect → resolve → plan → approve → execute → verify → present → audit, and no flow selection grants execution authority.
 ```
 
 #### Token effect
