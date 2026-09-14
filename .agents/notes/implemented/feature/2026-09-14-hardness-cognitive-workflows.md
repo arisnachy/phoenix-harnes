@@ -46,6 +46,16 @@ Models get a stable vocabulary for high-quality work plus a deterministic harnes
 
 The first version intentionally does not infer `CognitiveMissionProfile` from hidden reasoning and does not execute the returned plan. The model or higher-level mission orchestration supplies the bounded profile, while existing workflow/subagent/skill services realize selected procedures and the mission kernel remains the completion authority.
 
+## Autonomy fast path
+
+The router now classifies every supplied mission profile into `fast`, `standard`, or `deep` execution depth before composing flows. Bounded, low-risk, low-novelty localized changes use `fast`: HARDNESS remains the process authority, skips brainstorming/architecture/implementation-plan ceremony, selects the smallest safe change, and requires fresh targeted verification plus outcome comparison. New evidence such as failure, expanded scope, higher risk, external research, persistence, or independent subtasks deterministically escalates the mission to `standard` or `deep` and activates the stronger flows justified by that evidence.
+
+Process skills no longer create a second approval loop merely because a generic skill catalog considers them applicable. The HARDNESS guide tells models to load methodology skills only when they implement flows selected by HARDNESS. During an already-authorized active goal round, routine process approval is not requested again: recoverable execution or verification failures cause repair, alternate routing, capability acquisition/building, or strategy rotation and continuation. Only genuine external dependencies such as required permission, missing credentials, safety policy, exhausted provider quota, explicit denial, or an unsatisfied dependency that cannot be resolved safely may pause autonomous progress.
+
+This does not weaken safety or completion semantics. Fast mode still preserves permission/account authorization, rollback/safe-change expectations, fresh verification, and objective-versus-outcome comparison. A mission is not complete because one tool call succeeded, a test passed, a retry budget ended, or the turn ended; existing independent judge and mission-kernel completion authority remain decisive where configured.
+
 ## Verification
 
 Unit coverage checks catalog uniqueness and prerequisites, lightweight trivial selection, build/design/TDD selection, root-cause-first debugging, high-risk research, parallelization constraints, persistent/repeated recovery and learning, durable future-obligation follow-up, monotonic adaptation after failures or risk changes, quality-gate labels, English/Spanish model guidance, the `hardness_workflow` schema and outputs, model-preset mounting, host-side recursive-index exclusion, and integration of the cognitive guide into the HARDNESS system-prompt section. Existing HARDNESS operating, mission, approval, judge, and evidence tests remain the regression authority for execution safety.
+
+The autonomy extension additionally covers deterministic `fast`/`standard`/`deep` selection, fast-path omission of heavyweight design ceremony, escalation after bounded observations, projected `executionMode`, fail-forward protocol outcomes, active-goal continuation language, and a keyless real-Loader snapshot of the assembled model-visible policy.
