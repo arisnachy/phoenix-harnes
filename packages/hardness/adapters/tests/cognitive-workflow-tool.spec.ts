@@ -31,6 +31,7 @@ const simpleProfile = {
   previousFailure: false,
   repeatedPattern: false,
   userVisibleArtifact: false,
+  futureObligation: false,
 }
 
 describe('hardness_workflow tool adapter', () => {
@@ -59,6 +60,7 @@ describe('hardness_workflow tool adapter', () => {
             'previousFailure',
             'repeatedPattern',
             'userVisibleArtifact',
+            'futureObligation',
           ],
           additionalProperties: false,
         }),
@@ -71,6 +73,7 @@ describe('hardness_workflow tool adapter', () => {
             'scope-expanded',
             'independent-subtasks-discovered',
             'repeated-failure',
+            'future-obligation-discovered',
           ],
         }),
       }),
@@ -142,6 +145,20 @@ describe('hardness_workflow tool adapter', () => {
       'risk-reviewed',
       'rollback-ready',
       'independent-review',
+    ]))
+  })
+
+  it('turns a discovered future obligation into a persistent follow-up workflow', async () => {
+    const tool = createCognitiveWorkflowTool()
+
+    const result = await tool.execute({ profile: simpleProfile, observation: 'future-obligation-discovered' }, execution())
+
+    expect(result.profile).toMatchObject({ persistent: true, futureObligation: true })
+    expect(result.selected).toEqual(expect.arrayContaining([
+      'context-recovery',
+      'recovery-checkpointing',
+      'outcome-evaluation',
+      'autonomous-follow-up',
     ]))
   })
 
