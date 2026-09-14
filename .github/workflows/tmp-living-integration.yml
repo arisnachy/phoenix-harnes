@@ -1,0 +1,77 @@
+name: Temporary Living Creation Integration
+
+on:
+  push:
+    branches:
+      - feat/universal-living-creations-20260913
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.event.head_commit.message != 'chore(living): regenerate integration artifacts'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Wire base composition and host project
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const patchPath = 'packages/bundle/base/cordis.patch.yml'
+          let patch = fs.readFileSync(patchPath, 'utf8')
+          if (!patch.includes("id: living-local")) {
+            const needle = "    - id: jobs\n      name: '@phoenix-ai/dsh-jobs-local'\n\n"
+            const insert = `${needle}    - id: living-local\n      name: '@phoenix-ai/dsh-living-local'\n      config:\n        path: !!js dshHomePath('memory', 'living-creations.json')\n\n    - id: tool-living\n      name: '@phoenix-ai/dsh-tool-living'\n\n`
+            if (!patch.includes(needle)) throw new Error('base jobs row not found')
+            patch = patch.replace(needle, insert)
+            fs.writeFileSync(patchPath, patch)
+          }
+
+          const pkgPath = 'packages/bundle/base/package.json'
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+          for (const name of ['@phoenix-ai/dsh-living', '@phoenix-ai/dsh-living-local', '@phoenix-ai/dsh-tool-living']) {
+            pkg.dependencies[name] = 'workspace:^'
+          }
+          fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
+
+          const tsPath = 'tsconfig.host.json'
+          let ts = fs.readFileSync(tsPath, 'utf8')
+          if (!ts.includes('./packages/core/living')) {
+            const needle = '    { "path": "./packages/core/tools" },\n'
+            const insert = `${needle}    { "path": "./packages/core/living" },\n    { "path": "./packages/core/living-local" },\n    { "path": "./packages/core/tool-living" },\n`
+            if (!ts.includes(needle)) throw new Error('host tools project reference not found')
+            ts = ts.replace(needle, insert)
+            fs.writeFileSync(tsPath, ts)
+          }
+          NODE
+      - name: Install and regenerate derived artifacts
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm run prepare:change
+          pnpm run gen-tool-catalog
+          pnpm run gen-cordis-api
+      - name: Focused living tests
+        run: pnpm exec vitest run packages/core/living-local/tests/living-local.spec.ts packages/core/tool-living/tests/tool-living.spec.ts
+      - name: Verify composition and types
+        run: |
+          pnpm run verify-cordis-config
+          pnpm run typecheck
+      - name: Commit generated integration
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add packages/bundle/base/cordis.patch.yml packages/bundle/base/package.json tsconfig.host.json pnpm-lock.yaml docs packages scripts THIRD_PARTY_NOTICES.md 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo 'No integration changes to commit.'
+            exit 0
+          fi
+          git commit -m 'chore(living): regenerate integration artifacts'
+          git push origin HEAD:feat/universal-living-creations-20260913
