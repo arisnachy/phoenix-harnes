@@ -3,11 +3,11 @@ import {
   ProceduralExperienceTrace,
   ProceduralLearningEngine,
   filterProceduralSearchHits,
-  formatProceduralContext,
   type ProceduralMemoryStore,
   type ProceduralMemoryWrite,
   type ProceduralStoredMemory,
 } from '../src/procedural.ts'
+import { formatProceduralContext } from '../src/procedural-presentation.ts'
 
 class MemoryStore implements ProceduralMemoryStore {
   readonly rows: ProceduralStoredMemory[] = []
