@@ -9,9 +9,24 @@
 import { spawn } from 'node:child_process'
 import process from 'node:process'
 
+const EXPECTED_TRANSPORT_CLOSE = new Set(['EPIPE', 'ERR_STREAM_DESTROYED'])
+const stdioGuardUrl = new URL('./mcp-stdio-epipe-guard.mjs', import.meta.url).href
+
 function resolveChildCommand(command) {
   if (process.platform === 'win32' && command === 'npx') return 'npx.cmd'
   return command
+}
+
+function childEnvironment() {
+  const inheritedNodeOptions = process.env.NODE_OPTIONS?.trim() ?? ''
+  const guardOption = `--import=${stdioGuardUrl}`
+  if (inheritedNodeOptions.includes(stdioGuardUrl)) return process.env
+  return {
+    ...process.env,
+    NODE_OPTIONS: inheritedNodeOptions === ''
+      ? guardOption
+      : `${inheritedNodeOptions} ${guardOption}`,
+  }
 }
 
 function childSpawnOptions(command) {
@@ -20,12 +35,13 @@ function childSpawnOptions(command) {
     stdio: ['pipe', 'pipe', 'inherit'],
     windowsHide: true,
     shell: usesWindowsShim,
+    env: childEnvironment(),
   }
 }
 
 function forwardStreamErrors(stream, label) {
   stream.on('error', (error) => {
-    if (error?.code !== 'EPIPE') {
+    if (!EXPECTED_TRANSPORT_CLOSE.has(error?.code)) {
       console.error(`[PHOENIX MCP proxy] ${label}: ${error instanceof Error ? error.message : String(error)}`)
     }
   })
