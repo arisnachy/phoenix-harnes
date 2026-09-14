@@ -67,4 +67,23 @@ describe('tool-living', () => {
     })
     dispose()
   })
+
+  it('forgets a creation only through the explicit destructive tool and detaches its provider', async () => {
+    const root = await bench()
+    const id = LivingCreationId('retired-1')
+    await root.living.remember({
+      id, title: 'Retired creation', kind: 'future-retired', targetLevel: 'static',
+      state: [], actions: [], events: [], resources: ['artifact'], actors: [],
+    })
+    let detached = false
+    root.living.attach(id, { subscribe: () => () => { detached = true } })
+
+    const forget = root.tools.get('living_forget_creation')
+    expect(forget).toBeDefined()
+    await expect(forget!.execute({ id: 'retired-1' }, {} as never)).resolves.toEqual({ id: 'retired-1', forgotten: true })
+
+    expect(detached).toBe(true)
+    expect(root.living.list()).toEqual([])
+    expect(() => root.living.inspect(id)).toThrow(/unknown living creation/i)
+  })
 })
