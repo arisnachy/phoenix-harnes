@@ -10,8 +10,8 @@ const REQUIRED_CONNECTORS = [
 ] as const
 
 const REQUIRED_PRESETS = [
-  'development', 'security', 'data-analytics', 'documents', 'pdf',
-  'presentations', 'meetings', 'finance', 'research-ai',
+  'default', 'development', 'security', 'data-analytics', 'cloud-data', 'documents',
+  'pdf', 'presentations', 'meetings', 'finance', 'research-ai', 'ai-media',
 ] as const
 
 describe('connector catalog', () => {
