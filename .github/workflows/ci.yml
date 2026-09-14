@@ -54,12 +54,17 @@ jobs:
             exit 0
           fi
           current_sha="$(gh api "repos/${REPOSITORY}/contents/docs/tool-catalog.md?ref=${HEAD_BRANCH}" --jq .sha)"
-          encoded="$(base64 -w0 docs/tool-catalog.md)"
-          gh api --method PUT "repos/${REPOSITORY}/contents/docs/tool-catalog.md" \
-            -f message='docs: regenerate tool catalog for memory_teach' \
-            -f content="$encoded" \
-            -f sha="$current_sha" \
-            -f branch="$HEAD_BRANCH" >/dev/null
+          CURRENT_SHA="$current_sha" HEAD_BRANCH="$HEAD_BRANCH" node <<'NODE'
+          const fs = require('node:fs')
+          const body = {
+            message: 'docs: regenerate tool catalog for memory_teach',
+            content: fs.readFileSync('docs/tool-catalog.md').toString('base64'),
+            sha: process.env.CURRENT_SHA,
+            branch: process.env.HEAD_BRANCH,
+          }
+          fs.writeFileSync('/tmp/catalog-update.json', JSON.stringify(body))
+          NODE
+          gh api --method PUT "repos/${REPOSITORY}/contents/docs/tool-catalog.md" --input /tmp/catalog-update.json >/dev/null
 
   node-24-coverage:
     if: github.event_name == 'pull_request'
