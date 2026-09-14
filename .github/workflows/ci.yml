@@ -39,6 +39,16 @@ jobs:
         env:
           DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
         run: pnpm run check:ci:static
+      - name: Generate tool catalog for reconciliation
+        if: always()
+        run: pnpm run gen-tool-catalog
+      - name: Upload generated tool catalog
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: generated-tool-catalog
+          path: docs/tool-catalog.md
+          if-no-files-found: error
 
   node-24-coverage:
     if: github.event_name == 'pull_request'
