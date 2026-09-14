@@ -3,24 +3,28 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
-import { SystemPrompt } from '@phoenix-ai/dsh-system-prompt'
-import { ToolRuntime } from '@phoenix-ai/dsh-tools'
+import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
+import ToolRuntime from '@phoenix-ai/dsh-tools'
 import { LivingCreationId } from '@phoenix-ai/dsh-living'
 import LocalLivingRegistry from '@phoenix-ai/dsh-living-local'
-import { LIVING_CREATION_POLICY, apply } from '../src/index.ts'
+import * as ToolLiving from '../src/index.ts'
 
-const roots: Context[] = []
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => root.dispose())) })
+const disposers: Array<() => Promise<void>> = []
+afterEach(async () => { await Promise.all(disposers.splice(0).reverse().map(dispose => dispose())) })
 
 async function bench() {
   const root = new Context()
-  roots.push(root)
   const dir = await mkdtemp(join(tmpdir(), 'phoenix-tool-living-'))
-  root.plugin(SystemPrompt, { includeHarnessIdentity: false, includeRuntimeContext: false, persona: '' })
-  root.plugin(ToolRuntime, {})
-  root.plugin(LocalLivingRegistry, { path: join(dir, 'living.json') })
-  await root.start()
-  apply(root)
+  const promptFiber = await root.plugin(SystemPrompt, { includeHarnessIdentity: false, includeRuntimeContext: false, persona: '' })
+  const toolsFiber = await root.plugin(ToolRuntime, {})
+  const livingFiber = await root.plugin(LocalLivingRegistry, { path: join(dir, 'living.json') })
+  const toolFiber = await root.plugin(ToolLiving)
+  disposers.push(
+    () => promptFiber.dispose(),
+    () => toolsFiber.dispose(),
+    () => livingFiber.dispose(),
+    () => toolFiber.dispose(),
+  )
   return root
 }
 
@@ -29,10 +33,10 @@ describe('tool-living', () => {
     const root = await bench()
     const assembly = await root.systemPrompt.assemble()
     const section = assembly.sections.find(item => item.name === 'tool:living')
-    expect(section?.text).toBe(LIVING_CREATION_POLICY)
-    expect(LIVING_CREATION_POLICY).toContain('regardless of its domain, format')
-    expect(LIVING_CREATION_POLICY).toContain('never special-case it to a fixed list')
-    expect(LIVING_CREATION_POLICY).not.toMatch(/chess|hospital|dashboard/i)
+    expect(section?.text).toBe(ToolLiving.LIVING_CREATION_POLICY)
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('regardless of its domain, format')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('never special-case it to a fixed list')
+    expect(ToolLiving.LIVING_CREATION_POLICY).not.toMatch(/chess|hospital|dashboard/i)
   })
 
   it('registers an unknown static creation kind through the model-facing tool', async () => {
