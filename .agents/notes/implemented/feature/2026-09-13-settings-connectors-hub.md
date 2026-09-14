@@ -18,7 +18,7 @@ Settings → Connectors joins three kinds of information without changing runtim
 2. Live connector telemetry provides real installed/callable state and provider-owned management links.
 3. A secret-free catalog describes integrations Phoenix can support and native capability presets. A catalog entry without a registered adapter is explicitly shown as not installed, API-key/adapter required, or MCP-ready; it is never exposed as connected merely because it appears in the catalog.
 
-The catalog includes Google Workspace, Microsoft 365, Box/Dropbox/Notion, Slack/Teams/Zoom, GitHub/Linear/Jira/Vercel/Firebase, Supabase/Neon/MongoDB/Snowflake/BigQuery/PostHog, Hugging Face/OpenAI Platform, Canva/Figma/HeyGen/Magnific, Coursera/Devpost, CRM/sales providers, and finance providers including Binance, Stripe, Plaid, and QuickBooks. Native presets cover Development, Security/Codex Security, Data Analytics, Documents, PDF, Presentations, Meetings, Finance, and Research & AI.
+The catalog includes Google Workspace, Microsoft 365, Box/Dropbox/Notion, Slack/Teams/Zoom, GitHub/Linear/Jira/Vercel/Firebase, Supabase/Neon/MongoDB/Snowflake/BigQuery/PostHog, Hugging Face/OpenAI Platform, Canva/Figma/HeyGen/Magnific, Coursera/Devpost, CRM/sales providers, and finance providers including Binance, Stripe, Plaid, and QuickBooks. Native presets cover Default, Development, Security / Codex Security, Data Analytics, Cloud & Data, Documents, PDF, Presentations, Meetings, Finance, Research & AI, and AI & Media.
 
 The browser catalog contains no credentials. OAuth secrets remain owned by Host credential/authorization services. Remote brand icons are presentation-only metadata. Runtime tool availability remains authoritative: Phoenix can call a connector only after its adapter actually registers tools. Existing MCP tool registration and HARDNESS/tool indexing therefore continue to define what the model can use.
 
@@ -29,6 +29,8 @@ The browser catalog contains no credentials. OAuth secrets remain owned by Host 
 **Build a second MCP/connectors runtime.** Rejected because Phoenix already has authorization, MCP tool registration, connector telemetry, and capability indexing. A parallel runtime would duplicate state and create opportunities for the UI to disagree with what the model can actually invoke.
 
 **Treat every catalog card as immediately available.** Rejected because that would let presentation metadata impersonate runtime capability. Cards without working adapters remain visibly unconfigured and never become callable tools merely by existing in the catalog.
+
+**Ship only the smaller standalone superpower catalog.** Rejected because descriptive metadata alone would not connect users to live OAuth/MCP state or provide the dedicated Settings surface. Its useful preset ideas are folded into this hub instead of creating a second catalog authority.
 
 ## Consequences
 
