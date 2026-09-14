@@ -25,7 +25,7 @@ describe('agentAvatarKind', () => {
 })
 
 describe('ModelActivityAvatar', () => {
-  it('renders the real portrait asset assigned to the visible KIRA identity', () => {
+  it('renders the approved raster portrait sheet instead of the old vector face rig', () => {
     const element = ModelActivityAvatar({
       agentId: 'c1',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
@@ -42,8 +42,8 @@ describe('ModelActivityAvatar', () => {
 
     expect(element.props['data-avatar']).toBe('orion')
     expect(image).toBeDefined()
-    expect(image.type).toBe('img')
-    expect(image.props.src).toBe('/assets/kira-agents/orion.webp')
+    expect(image.type).toBe('span')
+    expect(String(image.props.style?.['--portrait-image'])).toMatch(/^url\("data:image\/webp;base64,/u)
     expect(vectorPortrait).toBeUndefined()
   })
 
