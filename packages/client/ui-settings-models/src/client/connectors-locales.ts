@@ -32,8 +32,11 @@ export const connectorEn = {
   noResults: 'No connectors match this search.',
   setupHint: 'Phoenix exposes a connector to the model only after its adapter is installed and healthy.',
 } as const
+
+/** Translation key set shared by all connector dictionaries. */
 export type ConnectorKey = keyof typeof connectorEn
 
+/** Spanish copy for the dedicated Connectors settings page. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
   nav: 'Conectores',
   title: 'Conectores',
@@ -68,6 +71,7 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
   setupHint: 'Phoenix solo expone un conector al modelo después de que su adapter esté instalado y saludable.',
 }
 
+/** Simplified Chinese copy for the dedicated Connectors settings page. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
   nav: '连接器', title: '连接器',
   intro: '连接外部服务并查看 Phoenix 可使用的原生能力预设。只有已安装且已授权的适配器才会成为可调用工具。',
