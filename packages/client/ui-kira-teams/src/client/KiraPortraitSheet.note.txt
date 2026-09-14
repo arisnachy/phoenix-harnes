@@ -1,0 +1,2 @@
+Source: user-approved KIRA Equipos 20-avatar reference supplied in chat on 2026-09-14.
+Runtime: embedded WebP sprite; portraits are selected by CSS background position and animated by work state.
