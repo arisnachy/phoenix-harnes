@@ -61,6 +61,10 @@ describe('HARDNESS subagent mission judge', () => {
       outputSchema: expect.objectContaining({ required: ['verdict', 'summary', 'evidence', 'required_changes', 'criteria', 'quality'] }) as unknown,
       toolFilter: { allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] },
     }))
+    const options = start.mock.calls[0]?.[1]
+    const prompt = options?.prompt?.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n') ?? ''
+    expect(prompt).toContain('qualityContract')
+    expect(prompt).toMatch(/complete, internally consistent/i)
     expect(dispose).toHaveBeenCalledOnce()
   })
 

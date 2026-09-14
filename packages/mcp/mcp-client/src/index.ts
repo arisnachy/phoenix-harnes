@@ -224,7 +224,13 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         connection.reconnect()
       },
     }), 'mcp-client.oauth-flow')
-    ctx.effect(() => () => { void controller.close() }, 'mcp-client.oauth-callback')
+    ctx.effect(() => () => {
+      // Cancel the authorization attempt before closing its callback server.
+      // Otherwise the pending callback rejection escapes as a load failure
+      // while the Host is restarting or disposing this plugin.
+      authorization.cancel(controller.key)
+      void controller.close()
+    }, 'mcp-client.oauth-callback')
   }
 
   ctx.effect(() => {

@@ -406,6 +406,7 @@ function startWatcher() {
   const updateTemp = process.env.PHOENIX_UPDATE_TEMP?.trim()
   const watcherEnv = {
     ...process.env,
+    PHOENIX_UPDATE_SUPERVISED: '1',
     ...(updateTemp === undefined || updateTemp.length === 0
       ? {}
       : { TEMP: updateTemp, TMP: updateTemp }),
