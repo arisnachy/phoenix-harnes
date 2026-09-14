@@ -434,10 +434,10 @@ function writePreparedState(root, inspection, plan) {
     return
   }
   writeState(root, {
-    status: 'available',
-    phase: 'worktree',
+    status: 'ready',
+    phase: 'runtime',
     ...updateFacts(inspection),
-    detail: `Stable update ${inspection.target.slice(0, 12)} is prepared in isolated staging (${plan.mode}); local changes remain protected; activation waits for a clean checkout.`,
+    detail: `Stable update ${inspection.target.slice(0, 12)} is prepared in isolated staging (${plan.mode}); local changes remain protected; restart to activate the verified isolated runtime.`,
   })
 }
 
@@ -508,7 +508,7 @@ function stageCandidate(root, inspection) {
     if (cleanWorktree(root)) {
       console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} is prepared (${plan.mode}). Restart PHOENIX to activate it.`)
     } else {
-      console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} is prepared in isolated staging; local changes remain protected. Clean the checkout before activation.`)
+      console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} is prepared in isolated staging; local changes remain protected; restart to activate the verified isolated runtime.`)
     }
     return plan
   } catch (error) {

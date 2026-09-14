@@ -19,11 +19,14 @@ import process from 'node:process'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 
 const root = resolve(process.cwd())
+let runtimeRoot = root
 const hostArgs = process.argv.slice(2)
 const updater = join(root, 'scripts', 'phoenix-auto-update.mjs')
 const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
 const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
+const PREPARED_FILE = 'phoenix-update-prepared.json'
+const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
 const HOST_RESTART_REQUEST_FILE = 'phoenix-host-restart-request.json'
 const WATCHER_RESTART_DELAY_MS = 1000
 const HOST_RESTART_DELAY_MS = 1000
@@ -143,6 +146,146 @@ function recoverStaleStagingIndexLock() {
 function gitControlPath(filename) {
   const gitDir = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-dir']))
   return gitDir === undefined ? undefined : join(gitDir, filename)
+}
+
+function preparedPath() {
+  return gitControlPath(PREPARED_FILE)
+}
+
+function activeRuntimePath() {
+  return gitControlPath(ACTIVE_RUNTIME_FILE)
+}
+
+function readPreparedRecord() {
+  const path = preparedPath()
+  if (path === undefined || !existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
+    return value
+  } catch {
+    return undefined
+  }
+}
+
+function runtimeBaseDirectory() {
+  const configured = process.env.PHOENIX_UPDATE_TEMP?.trim()
+  const base = configured !== undefined && configured.length > 0
+    ? resolve(configured)
+    : join(homedir(), 'p')
+  mkdirSync(base, { recursive: true })
+  return base
+}
+
+function persistentRuntime(target) {
+  return join(runtimeBaseDirectory(), `phoenix-runtime-${target.slice(0, 12)}`)
+}
+
+function runChecked(cwd, bin, args, label) {
+  const result = spawnSync(bin, args, {
+    cwd,
+    env: process.env,
+    stdio: 'inherit',
+    windowsHide: false,
+  })
+  if (result.error !== undefined) throw new Error(`${label}: ${result.error.message}`)
+  if ((result.status ?? 1) !== 0) throw new Error(`${label} exited with ${String(result.status ?? 1)}`)
+}
+
+function runPnpm(cwd, args, label) {
+  const commandProcessor = process.env.ComSpec ?? 'cmd.exe'
+  const pnpmCommand = process.env.PHOENIX_PNPM?.trim() || 'corepack pnpm'
+  const commandLine = `${pnpmCommand} ${args.join(' ')}`
+  runChecked(cwd, commandProcessor, ['/d', '/s', '/c', commandLine], label)
+}
+
+function preparedStageForTarget(target) {
+  const prepared = readPreparedRecord()
+  if (prepared?.target !== target) return undefined
+  const stage = persistentStage()
+  if (!sameRepository(stage) || !gitClean(stage)) return undefined
+  if (gitValue(stage, ['rev-parse', 'HEAD']) !== target) return undefined
+  if (!existsSync(join(stage, 'apps', 'cli', 'lib', 'bin.js'))) return undefined
+  return stage
+}
+
+function runtimeIsHealthy(path, target) {
+  return existsSync(path)
+    && sameRepository(path)
+    && gitClean(path)
+    && gitValue(path, ['rev-parse', 'HEAD']) === target
+    && existsSync(join(path, 'apps', 'cli', 'lib', 'bin.js'))
+}
+
+function writeActiveRuntime(target, path) {
+  const markerPath = activeRuntimePath()
+  if (markerPath === undefined) throw new Error('could not resolve active runtime marker path')
+  writeFileSync(markerPath, JSON.stringify({
+    schema: 1,
+    target,
+    path,
+    activatedAt: new Date().toISOString(),
+  }, undefined, 2) + '\n', 'utf8')
+}
+
+function clearActiveRuntime() {
+  const path = activeRuntimePath()
+  if (path === undefined) return
+  try {
+    unlinkSync(path)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.error(`[PHOENIX UPDATE] warning: could not clear active runtime marker: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+}
+
+function activatePreparedRuntime(target) {
+  const stage = preparedStageForTarget(target)
+  if (stage === undefined) throw new Error(`prepared staging candidate ${target.slice(0, 12)} is missing or no longer valid`)
+
+  const runtime = persistentRuntime(target)
+  if (existsSync(runtime) && !sameRepository(runtime)) {
+    throw new Error(`PHOENIX runtime path exists but is not this repository: ${runtime}`)
+  }
+
+  if (!runtimeIsHealthy(runtime, target)) {
+    if (!existsSync(runtime)) {
+      runChecked(root, 'git', ['worktree', 'add', '--detach', '--force', runtime, target], 'create isolated runtime worktree')
+    }
+    runChecked(runtime, 'git', ['reset', '--hard', target], 'reset isolated runtime')
+    runChecked(runtime, 'git', ['clean', '-fd'], 'clean isolated runtime')
+    runPnpm(runtime, ['install', '--frozen-lockfile'], 'install isolated runtime dependencies')
+    runPnpm(runtime, ['run', 'build'], 'build isolated runtime')
+    runChecked(runtime, process.execPath, [join(runtime, 'apps', 'cli', 'lib', 'bin.js'), '--version'], 'smoke-test isolated runtime')
+  }
+
+  if (!runtimeIsHealthy(runtime, target)) {
+    throw new Error(`isolated runtime ${target.slice(0, 12)} failed post-build validation`)
+  }
+  writeActiveRuntime(target, runtime)
+  return { target, path: runtime }
+}
+
+function restoreActiveRuntime() {
+  const markerPath = activeRuntimePath()
+  if (markerPath === undefined || !existsSync(markerPath)) return
+  try {
+    const value = JSON.parse(readFileSync(markerPath, 'utf8'))
+    if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target) || typeof value.path !== 'string') {
+      clearActiveRuntime()
+      return
+    }
+    const candidate = resolve(value.path)
+    if (!runtimeIsHealthy(candidate, value.target)) {
+      clearActiveRuntime()
+      return
+    }
+    runtimeRoot = candidate
+    console.error(`[PHOENIX UPDATE] restored verified isolated runtime ${value.target.slice(0, 12)}; source checkout remains untouched.`)
+  } catch {
+    clearActiveRuntime()
+  }
 }
 
 function restartRequestPath() {
@@ -316,9 +459,10 @@ function preflightBootConfiguration() {
     'apps/cli/src/bin.ts',
     'web', '--dump-config',
   ], {
-    cwd: root,
+    cwd: runtimeRoot,
     env: {
       ...hydratePhoenixEnvironment(process.env),
+      PHOENIX_RUNTIME_ROOT: runtimeRoot,
       PHOENIX_UPDATE_SUPERVISED: '1',
       PHOENIX_CONFIG_PREFLIGHT: '1',
       PHOENIX_AUTO_UPDATE: '0',
@@ -375,11 +519,12 @@ function startHost() {
     'web', '--',
     ...hostArgs,
   ], {
-    cwd: root,
+    cwd: runtimeRoot,
     stdio: 'inherit',
     windowsHide: false,
     env: {
       ...hydratePhoenixEnvironment(process.env),
+      PHOENIX_RUNTIME_ROOT: runtimeRoot,
       PHOENIX_UPDATE_SUPERVISED: '1',
     },
   })
@@ -393,15 +538,6 @@ function startWatcher() {
     || !existsSync(updater)
     || !existsSync(shim)
   ) return undefined
-
-  const startupStatus = gitStatus(root)
-  if (!startupStatus.ok || startupStatus.entries.length > 0) {
-    const detail = startupStatus.ok
-      ? `${String(startupStatus.entries.length)} local change(s) detected`
-      : 'Git worktree status could not be verified'
-    console.error(`[PHOENIX UPDATE] ${detail}; automatic update watcher paused for this session. PHOENIX will start normally.`)
-    return undefined
-  }
 
   const updateTemp = process.env.PHOENIX_UPDATE_TEMP?.trim()
   const watcherEnv = {
@@ -554,6 +690,7 @@ process.once('SIGINT', requestShutdown)
 process.once('SIGTERM', requestShutdown)
 
 recoverStaleStagingIndexLock()
+restoreActiveRuntime()
 recoverConfigurationBeforeFirstBoot()
 
 let finalCode = 0
@@ -609,12 +746,26 @@ while (true) {
     break
   }
 
-  const requested = restartRequested()
-  if (requested) {
+  const requestedTarget = restartRequestTarget()
+  if (requestedTarget !== undefined) {
     const liveStatus = gitStatus(root)
-    if (!liveStatus.ok || liveStatus.entries.length > 0) {
+    if (!liveStatus.ok) {
       clearRestartRequest()
       reportDirtyActivationBlock(liveStatus)
+      continue
+    }
+
+    if (liveStatus.entries.length > 0) {
+      console.error('[PHOENIX UPDATE] local changes detected; activating the verified update in an isolated runtime; the live checkout will not be modified.')
+      try {
+        const runtime = activatePreparedRuntime(requestedTarget)
+        runtimeRoot = runtime.path
+        clearRestartRequest()
+        console.error(`[PHOENIX UPDATE] isolated runtime ${runtime.target.slice(0, 12)} activated; relaunching PHOENIX without touching local changes.`)
+      } catch (error) {
+        clearRestartRequest()
+        console.error(`[PHOENIX UPDATE] isolated runtime activation failed safely: ${error instanceof Error ? error.message : String(error)}`)
+      }
       continue
     }
 
@@ -631,6 +782,8 @@ while (true) {
       continue
     }
 
+    runtimeRoot = root
+    clearActiveRuntime()
     console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
     continue
   }
