@@ -178,6 +178,10 @@ function renderChat(
   return render(<ChatView {...props} />)
 }
 
+function expectBefore(first: HTMLElement, second: HTMLElement): void {
+  expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+}
+
 afterEach(cleanup)
 beforeEach(() => { localStorage.clear() })
 
@@ -202,7 +206,9 @@ describe('chat tool activity grouping', () => {
     renderChat([assistantWithReasoning(1)])
 
     const disclosure = screen.getByRole('button', { name: 'Tools' })
-    expect(screen.getByTestId('node-assistant-step')).toBeTruthy()
+    const assistant = screen.getByTestId('node-assistant-step')
+    expect(assistant).toBeTruthy()
+    expectBefore(assistant, disclosure)
     expect(screen.queryByText('reasoning.title')).toBeNull()
 
     fireEvent.click(disclosure)
@@ -225,12 +231,15 @@ describe('chat tool activity grouping', () => {
     expect(screen.getByTestId('node-user')).toBeTruthy()
   })
 
-  it('shows a running tool live above Tools without duplicating it in history', () => {
+  it('shows the running status before a live tool and keeps the tool above collapsed history', () => {
     renderChat([context(1, 'system')], [runningTool()])
 
+    const status = screen.getByRole('status')
     const live = screen.getByTestId('live-tool-activity')
+    expectBefore(status, live)
     expect(live.querySelector('[data-testid="node-tool-call"]')).toBeTruthy()
     const disclosure = screen.getByRole('button', { name: 'Tools' })
+    expectBefore(live, disclosure)
     expect(disclosure.querySelector('svg[data-tool-activity-chevron]')).toBeTruthy()
 
     fireEvent.click(disclosure)
