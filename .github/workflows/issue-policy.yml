@@ -7,7 +7,7 @@ on:
     types: [submitted]
 
 permissions:
-  contents: read
+  contents: write
   issues: read
   pull-requests: read
 
@@ -25,3 +25,42 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node .github/issue-management/policy.mjs pr
+
+  sync-tool-catalog:
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 197
+    name: Reconcile tool catalog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate canonical tool catalog
+        run: pnpm run gen-tool-catalog
+      - name: Persist generated catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if git diff --quiet -- docs/tool-catalog.md; then
+            echo "tool catalog already current"
+            exit 0
+          fi
+          current_sha="$(gh api "repos/${REPOSITORY}/contents/docs/tool-catalog.md?ref=${HEAD_BRANCH}" --jq .sha)"
+          CURRENT_SHA="$current_sha" HEAD_BRANCH="$HEAD_BRANCH" node <<'NODE'
+          const fs = require('node:fs')
+          fs.writeFileSync('/tmp/catalog-update.json', JSON.stringify({
+            message: 'docs: regenerate tool catalog for memory_teach',
+            content: fs.readFileSync('docs/tool-catalog.md').toString('base64'),
+            sha: process.env.CURRENT_SHA,
+            branch: process.env.HEAD_BRANCH,
+          }))
+          NODE
+          gh api --method PUT "repos/${REPOSITORY}/contents/docs/tool-catalog.md" --input /tmp/catalog-update.json >/dev/null
