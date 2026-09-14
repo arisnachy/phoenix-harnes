@@ -12,6 +12,13 @@ class Store implements AutonomousMemoryStore {
     this.writes.push(input)
     return Promise.resolve()
   }
+
+  findLatestDurableSubject(input: { sessionId: string; projectId?: string }): Promise<string | undefined> {
+    const matching = this.writes.filter(write => input.projectId === undefined
+      ? write.projectId === undefined && write.sessionId === input.sessionId
+      : write.projectId === input.projectId)
+    return Promise.resolve(matching.at(-1)?.subject)
+  }
 }
 
 describe('classifyAutonomousMemory', () => {
@@ -70,6 +77,30 @@ describe('AutonomousMemoryCurator', () => {
 
     expect(store.writes).toHaveLength(2)
     expect(store.writes[1]?.sourceEventType).toBe('autonomous/user-correction')
+    expect(store.writes[1]?.subject).toBe(store.writes[0]?.subject)
+  })
+
+  it('reuses the persisted durable subject after the curator is recreated', async () => {
+    const store = new Store()
+    const beforeRestart = new AutonomousMemoryCurator(store)
+    await beforeRestart.observeUserMessage({
+      text: 'Prefiero que cada vez que cambies Phoenix ejecutes todas las pruebas antes de terminar.',
+      sessionId: 'before-restart',
+      eventSeq: 1,
+      occurredAt: 1_000,
+      projectId: 'phoenix',
+    })
+
+    const afterRestart = new AutonomousMemoryCurator(store)
+    await afterRestart.observeUserMessage({
+      text: 'Corrijo eso: de ahora en adelante prueba primero el componente afectado y amplía solo si hay riesgo.',
+      sessionId: 'after-restart',
+      eventSeq: 1,
+      occurredAt: 2_000,
+      projectId: 'phoenix',
+    })
+
+    expect(store.writes).toHaveLength(2)
     expect(store.writes[1]?.subject).toBe(store.writes[0]?.subject)
   })
 
