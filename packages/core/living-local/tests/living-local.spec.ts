@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
@@ -71,6 +71,25 @@ describe('universal living creations', () => {
     expect(root.living.inspect(ecosystem.id)).toMatchObject({ connected: false, achievedLevel: 'static' })
     await expect(root.living.act(ecosystem.id, 'advanceTime', {})).rejects.toThrow(/offline/i)
     disposeEvent()
+  })
+
+  it('keeps the manifest and provider live when durable forget persistence fails', async () => {
+    const { root, path } = await runtime()
+    await root.living.remember(ecosystem)
+    let disposed = false
+    root.living.attach(ecosystem.id, {
+      readState: () => ({ species: 7, temperature: 24 }),
+      act: async () => ({ accepted: true }),
+      subscribe: () => () => { disposed = true },
+      actors: ['phoenix', 'species-agent'],
+    })
+
+    await rm(path)
+    await mkdir(path)
+    await expect(root.living.forget(ecosystem.id)).rejects.toThrow()
+
+    expect(disposed).toBe(false)
+    expect(root.living.inspect(ecosystem.id)).toMatchObject({ connected: true, achievedLevel: 'inhabited' })
   })
 
   it('rejects a target integration level that the manifest cannot describe', async () => {
