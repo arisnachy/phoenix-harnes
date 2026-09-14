@@ -20,6 +20,7 @@ import { acquireProactivityEngine } from './proactivity-registry.ts'
 import { createProactivityExecutor, installProactivityRuntime } from './proactivity-runtime.ts'
 import { createProactivityTools } from './proactivity-tools.ts'
 import { createHardnessTool } from './hardness-tool.ts'
+import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 
@@ -83,6 +84,7 @@ export type {
 export { installHardnessMissionRuntime, createHardnessAcquisition, createHardnessMissionRunner } from './mission-runtime.ts'
 export type { HardnessMissionRpcPayload, HardnessMissionRunner, HardnessMissionRunnerInput, HardnessMissionRuntimeDependencies } from './mission-runtime.ts'
 export { createHardnessTool } from './hardness-tool.ts'
+export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 export { createConnectorListTool } from './connector-list-tool.ts'
 export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
@@ -177,7 +179,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // Capability projections and the mission/proactivity runtimes are host-owned.
       // Do not repeat them when several sessions mount full presets in one process.
       disposers.push(indexOpenClawExtensions(hardness))
-      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run'] }))
+      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
       // A preset contributes only its scoped connector inventory tool; the
@@ -198,6 +200,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     })
 
     if (modelTools) {
+      disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
       disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
       for (const tool of createProactivityTools(proactivity.engine)) {
         disposers.push(ctx.tools.register(tool))

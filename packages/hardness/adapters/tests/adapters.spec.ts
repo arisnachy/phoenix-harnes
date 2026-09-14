@@ -25,12 +25,16 @@ describe('HARDNESS source adapters', () => {
     const dispose = await apply(context, { judgeProvider: 'spawn', modelTools: false })
     expect(handle).toHaveBeenCalledWith('/hardness', expect.any(Function), { authority: 'loopback' })
     expect(context.tools.get('hardness_run')).toBeUndefined()
+    expect(context.tools.get('hardness_workflow')).toBeUndefined()
     expect(hardness.get('tool:hardness_run' as never)).toBeUndefined()
+    expect(hardness.get('tool:hardness_workflow' as never)).toBeUndefined()
     const assembly = await context.systemPrompt.assemble()
     expect(renderPrompt(assembly)).toContain('<phoenix_hardness_protocol>')
+    expect(renderPrompt(assembly)).toContain('<phoenix_cognitive_workflows>')
 
     dispose()
     expect(context.tools.get('hardness_run')).toBeUndefined()
+    expect(context.tools.get('hardness_workflow')).toBeUndefined()
     await context.fiber.dispose()
   })
 
@@ -46,10 +50,12 @@ describe('HARDNESS source adapters', () => {
     context.provide('approval', { request: vi.fn() } as never)
 
     const dispose = await apply(context, { judgeProvider: 'spawn', modelTools: true })
+    expect(context.tools.get('hardness_workflow')).toBeDefined()
     expect(context.tools.get('hardness_run')).toBeDefined()
     expect(handle).not.toHaveBeenCalled()
 
     dispose()
+    expect(context.tools.get('hardness_workflow')).toBeUndefined()
     await context.fiber.dispose()
   })
 
@@ -65,6 +71,7 @@ describe('HARDNESS source adapters', () => {
     const handle = vi.fn(() => async () => {})
     const dispose = await apply(context, { judgeProvider: 'spawn', modelTools: false })
     expect(context.tools.get('hardness_run')).toBeUndefined()
+    expect(context.tools.get('hardness_workflow')).toBeUndefined()
     expect(handle).not.toHaveBeenCalled()
 
     context.provide('connection', { rpc: { handle } } as never)
@@ -132,14 +139,19 @@ describe('HARDNESS source adapters', () => {
     }
     const tools = { schemas: () => schemas } as unknown as ToolRuntime
 
-    const dispose = indexTools(tools, hardness, { events, exclude: ['hardness_run'] })
+    const dispose = indexTools(tools, hardness, { events, exclude: ['hardness_run', 'hardness_workflow'] })
     expect(hardness.get('tool:mcp__calendar__list' as never)?.description).toBe('List calendar events.')
 
-    schemas = [{ name: 'mcp__calendar__create', description: 'Create a calendar event.' }, { name: 'hardness_run', description: 'internal' }]
+    schemas = [
+      { name: 'mcp__calendar__create', description: 'Create a calendar event.' },
+      { name: 'hardness_run', description: 'internal' },
+      { name: 'hardness_workflow', description: 'internal' },
+    ]
     change?.()
     expect(hardness.get('tool:mcp__calendar__list' as never)).toBeUndefined()
     expect(hardness.get('tool:mcp__calendar__create' as never)?.description).toBe('Create a calendar event.')
     expect(hardness.get('tool:hardness_run' as never)).toBeUndefined()
+    expect(hardness.get('tool:hardness_workflow' as never)).toBeUndefined()
 
     dispose()
     expect(hardness.list()).toEqual([])
