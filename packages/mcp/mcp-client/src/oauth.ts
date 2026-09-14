@@ -311,6 +311,16 @@ export function hasUsableMcpOAuthTokens(state: McpOAuthState | undefined): boole
     || typeof tokens?.refresh_token === 'string' && tokens.refresh_token.length > 0
 }
 
+/**
+ * True only for callback errors caused by disposing the Host while OAuth waits.
+ * @param error - Callback error or close reason to classify.
+ * @returns Whether the error is an expected callback-close condition.
+ */
+export function isExpectedMcpOAuthClose(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message === 'MCP OAuth callback closed' || message === 'MCP OAuth callback server closed'
+}
+
 function mcpCredentialKey(serverName: string): CredentialKey {
   const id = serverName.toLowerCase().replaceAll('_', '-')
   return credentialKey('mcp-client', id)
@@ -324,6 +334,7 @@ export class McpOAuthController {
   private readonly store: McpOAuthStateStore
   private readonly serverName: string
   private readonly serverUrl: string
+  private closed = false
 
   constructor(credentials: CredentialProvider, serverName: string, serverUrl: string) {
     this.serverName = serverName
@@ -375,6 +386,8 @@ export class McpOAuthController {
       const code = await attempt.code
       const final = await auth(provider, { serverUrl: this.serverUrl, authorizationCode: code })
       if (final !== 'AUTHORIZED') throw new Error(`MCP OAuth did not authorize ${this.serverName}`)
+    } catch (error) {
+      if (!this.closed || !isExpectedMcpOAuthClose(error)) throw error
     } finally {
       attempt.close()
     }
@@ -385,6 +398,7 @@ export class McpOAuthController {
   }
 
   async close(): Promise<void> {
+    this.closed = true
     await this.callbackServer.close()
   }
 }

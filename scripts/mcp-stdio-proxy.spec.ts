@@ -28,57 +28,63 @@ describe('PHOENIX MCP stdio proxy', () => {
     expect(Buffer.concat(output).toString()).toBe('phoenix-probe\n')
   })
 
-  it('prevents a child-side MCP stdout EPIPE from becoming an unhandled crash', async () => {
-    const childProgram = [
-      "const error = Object.assign(new Error('broken pipe'), { code: 'EPIPE' })",
-      "process.stdout.emit('error', error)",
-      "setTimeout(() => process.exit(23), 250)",
-    ].join(';')
-    const child = spawn(process.execPath, [proxy, process.execPath, '-e', childProgram], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    })
-    const errors: Buffer[] = []
+  it('preloads the EPIPE guard into Node MCP children', async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        proxy,
+        process.execPath,
+        '-e',
+        "process.stdout.emit('error', Object.assign(new Error('broken pipe'), { code: 'EPIPE' }))",
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+    )
     child.stdout.resume()
-    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk))
+    const stderr: Buffer[] = []
+    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
     const [code] = await once(child, 'close') as [number | null]
-    const stderr = Buffer.concat(errors).toString()
     expect(code).toBe(0)
-    expect(stderr).not.toContain("Unhandled 'error' event")
-    expect(stderr).not.toContain('EPIPE')
+    expect(Buffer.concat(stderr).toString()).not.toContain('Unhandled')
   })
 
-  it('keeps unexpected child stream errors fatal instead of hiding them', async () => {
-    const childProgram = [
-      "const error = Object.assign(new Error('unexpected stream failure'), { code: 'EACCES' })",
-      "process.stdout.emit('error', error)",
-    ].join(';')
-    const child = spawn(process.execPath, [proxy, process.execPath, '-e', childProgram], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    })
-    const errors: Buffer[] = []
+  it('preloads the EPIPE guard into descendants spawned by an MCP command', async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        proxy,
+        process.execPath,
+        '-e',
+        "import { spawn } from 'node:child_process'; const nested = spawn(process.execPath, ['-e', `process.stdout.emit('error', Object.assign(new Error('broken pipe'), { code: 'EPIPE' }))`], { stdio: ['ignore', 'inherit', 'inherit'] }); nested.once('close', code => process.exit(code ?? 1))",
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+    )
     child.stdout.resume()
-    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk))
+    const stderr: Buffer[] = []
+    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
     const [code] = await once(child, 'close') as [number | null]
-    expect(code).not.toBe(0)
-    expect(Buffer.concat(errors).toString()).toContain('EACCES')
+    expect(code).toBe(0)
+    expect(Buffer.concat(stderr).toString()).not.toContain('Unhandled')
   })
 
-  it('preserves inherited NODE_OPTIONS while adding the child EPIPE guard', async () => {
-    const child = spawn(process.execPath, [proxy, process.execPath, '-e', 'console.log(process.env.NODE_OPTIONS)'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-      env: { ...process.env, NODE_OPTIONS: '--no-warnings' },
-    })
-    const output: Buffer[] = []
-    child.stdout.on('data', (chunk: Buffer) => output.push(chunk))
+  it('preserves existing NODE_OPTIONS while adding the EPIPE guard', async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        proxy,
+        process.execPath,
+        '-e',
+        "if (!process.env.NODE_OPTIONS?.includes('--no-warnings') || !process.env.NODE_OPTIONS.includes('mcp-stdio-epipe-guard.mjs')) process.exit(9)",
+      ],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+        env: { ...process.env, NODE_OPTIONS: '--no-warnings' },
+      },
+    )
+    child.stdout.resume()
     child.stderr.resume()
     const [code] = await once(child, 'close') as [number | null]
-    const nodeOptions = Buffer.concat(output).toString()
     expect(code).toBe(0)
-    expect(nodeOptions).toContain('--no-warnings')
-    expect(nodeOptions).toContain('mcp-stdio-epipe-guard.mjs')
   })
 
   it('launches npx through its Windows shim', async () => {

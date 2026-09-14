@@ -34,43 +34,44 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
 }
 
 /**
- * Compact vector marks for stable KIRA identities. They intentionally suggest
- * distinct characters without depending on platform emoji fonts.
+ * Quiet geometric sigils for stable KIRA identities. The previous literal
+ * animal illustrations made the dock read like character cards; these marks
+ * retain recognisable individuality while fitting Phoenix's restrained UI.
  */
 function glyphMarks(kind: ModelAvatarKind): ReactNode {
   switch (kind) {
     case 'eagle':
-      return <path d="M8 28c7-1 10-7 16-16 6 9 9 15 16 16-6 0-10-2-16-7-6 5-10 7-16 7Zm12 4 4 7 4-7" />
+      return <><path d="m13 29 11-12 11 12" /><path d="M18 32h12" /></>
     case 'wolf':
-      return <path d="M11 15 19 9l5 8 5-8 8 6-3 20-10 5-10-5-3-20Zm8 14 5 4 5-4M18 23h.1M30 23h.1" />
+      return <><path d="m24 10 13 14-13 14-13-14 13-14Z" /><path d="M24 17v14M17 24h14" /></>
     case 'fox':
-      return <path d="m10 14 10 4 4-7 4 7 10-4-4 20-10 6-10-6-4-20Zm9 10 5 3 5-3m-5 3v8" />
+      return <><path d="m24 10 12 7v14l-12 7-12-7V17l12-7Z" /><path d="m17 22 7 8 7-8" /></>
     case 'owl':
-      return <><path d="M12 13c5 1 8 0 12-4 4 4 7 5 12 4v16c0 7-5 11-12 13-7-2-12-6-12-13V13Z" /><circle cx="19" cy="24" r="4" /><circle cx="29" cy="24" r="4" /><path d="m21 32 3 3 3-3" /></>
+      return <><circle cx="19" cy="24" r="6" /><circle cx="29" cy="24" r="6" /><path d="m21 33 3 3 3-3" /></>
     case 'lynx':
-      return <><path d="m13 15 5-6 4 8h4l4-8 5 6-2 20-9 6-9-6-2-20Z" /><path d="m18 27 6 4 6-4M24 31v5M17 23h.1M31 23h.1" /></>
+      return <><path d="m14 18 10 9 10-9" /><path d="m14 27 10 9 10-9" /></>
     case 'dolphin':
-      return <><path d="M8 27c7-12 20-15 31-6-7 1-9 5-12 10-6 8-14 7-19-4Zm24-7 4-7 4 8" /><circle cx="27" cy="23" r="1" /></>
+      return <><path d="M10 28c5-8 10-8 14 0s9 8 14 0" /><circle cx="24" cy="17" r="3" /></>
     case 'forge':
-      return <><path d="m13 34 20-20M17 13l5 5-6 6-5-5 6-6ZM28 28l8 8M31 25l6-6" /><path d="M28 12h10v5H28z" /></>
+      return <><path d="M24 11v26M11 24h26" /><path d="m16 16 16 16M32 16 16 32" /></>
     case 'nova':
-      return <path d="m24 7 4 12 12-4-9 9 9 9-12-4-4 12-4-12-12 4 9-9-9-9 12 4 4-12Z" />
-    case 'comet':
-      return <><circle cx="29" cy="21" r="9" /><path d="M22 16 8 10m13 12L6 21m17 7L9 35" /></>
-    case 'prism':
-      return <><path d="m24 8 15 28H9L24 8Z" /><path d="m16 29 8-14 8 14M13 32h22" /></>
-    case 'aurora':
-      return <><path d="M8 31c7-17 12 8 18-9s8 7 14-5" /><path d="M10 37c7-11 12 6 18-6s7 3 11-2" /></>
-    case 'dragon':
-      return <><path d="M12 33c0-12 7-21 19-22l-4 7 9 2-7 5 7 8-10-2-5 10-4-10-5 2Z" /><path d="M19 23h.1M25 35l5 5" /></>
-    case 'sol':
-      return <><circle cx="24" cy="24" r="9" /><path d="M24 6v6m0 24v6M6 24h6m24 0h6M11 11l5 5m16 16 5 5m0-26-5 5M16 32l-5 5" /></>
-    case 'luna':
-      return <path d="M33 36c-12 0-20-9-20-20 0-3 1-6 2-8 1 11 8 18 19 18 3 0 5 0 8-2-2 7-5 12-9 12Z" />
-    case 'terra':
-      return <><circle cx="24" cy="24" r="16" /><path d="M9 24h30M24 8c5 5 7 10 7 16s-2 11-7 16c-5-5-7-10-7-16s2-11 7-16Z" /></>
-    default:
       return <path d="m24 8 4 12 12 4-12 4-4 12-4-12-12-4 12-4 4-12Z" />
+    case 'comet':
+      return <><circle cx="29" cy="20" r="7" /><path d="M23 24 10 35M21 19 8 26M27 27l-8 11" /></>
+    case 'prism':
+      return <><path d="m24 9 15 29H9L24 9Z" /><path d="m17 31 7-13 7 13" /></>
+    case 'aurora':
+      return <><path d="M9 20c5-7 9 7 14 0s9 7 16 0" /><path d="M9 29c5-7 9 7 14 0s9 7 16 0" /></>
+    case 'dragon':
+      return <><path d="M31 14c-10-5-19 3-19 13 0 8 7 13 14 10 6-2 8-9 4-13-3-4-10-3-11 2-1 4 4 7 7 4" /><circle cx="31" cy="14" r="2" /></>
+    case 'sol':
+      return <><circle cx="24" cy="24" r="8" /><path d="M24 8v5m0 22v5M8 24h5m22 0h5M13 13l4 4m14 14 4 4m0-22-4 4M17 31l-4 4" /></>
+    case 'luna':
+      return <path d="M34 35c-11 0-19-8-19-19 0-2 0-4 1-6 2 9 8 15 18 15 3 0 6-1 8-2-2 7-4 10-8 12Z" />
+    case 'terra':
+      return <><circle cx="24" cy="24" r="14" /><path d="M10 24h28M24 10c4 4 6 9 6 14s-2 10-6 14c-4-4-6-9-6-14s2-10 6-14Z" /></>
+    default:
+      return <><circle cx="24" cy="24" r="12" /><path d="M18 24h12M24 18v12" /></>
   }
 }
 
@@ -93,8 +94,9 @@ export function ModelActivityAvatar({ agentId, activity, running, pending }: {
       data-state={state}
       aria-hidden="true"
     >
+      <span className={css.aura} />
+      <span className={css.ring} />
       <span className={css.core} />
-      <span className={css.orbit} />
       <svg
         className={css.glyph}
         data-agent-glyph={true}
@@ -104,6 +106,7 @@ export function ModelActivityAvatar({ agentId, activity, running, pending }: {
       >
         {glyphMarks(kind)}
       </svg>
+      <span className={css.phaseCue}><span className={css.phaseCueInner} /></span>
       <span className={css.badge} />
     </span>
   )

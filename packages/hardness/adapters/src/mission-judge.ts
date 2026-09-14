@@ -7,6 +7,7 @@ import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { resolveStructuredProvider } from '@phoenix-ai/dsh-subagent'
 import type { HardnessMissionJudge, HardnessMissionJudgeInput } from './mission-orchestrator.ts'
 import type { MissionJudgeDecision } from './mission-kernel.ts'
+import { qualityRequirementsForNeed } from './quality-contract.ts'
 
 /** Structured output required from the independent mission judge. */
 export const MISSION_JUDGE_OUTPUT_SCHEMA: ObjectJsonSchema = {
@@ -129,6 +130,7 @@ function prompt(input: HardnessMissionJudgeInput): ContentBlock[] {
     need: input.need,
     goal: input.goal,
     criteria: input.criteria,
+    qualityContract: qualityRequirementsForNeed(input.need),
     artifactId: input.artifactId,
     artifactMime: input.artifactMime,
     rendered: renderedSummary(input.rendered),
@@ -139,13 +141,14 @@ function prompt(input: HardnessMissionJudgeInput): ContentBlock[] {
     text: '<hardness_mission_judge>\n'
       + `Candidate: ${JSON.stringify(review)}\n\n`
       + 'Act as an implacable independent completion judge. Compare the original objective, every deliverable, '
-      + 'every mandatory criterion, and the quality requirements against the actual artifact and durable evidence. '
+      + 'every mandatory criterion, the locked goal quality requirements, and every item in qualityContract against the actual artifact and durable evidence. '
+      + 'The qualityContract is task-specific and mandatory: do not pass the quality gate unless each relevant requirement has concrete evidence. '
       + 'Inspect structure, completeness, visual presentation, security, reproducibility, and relevant similar products. '
       + 'For product, UI, document, or visual requests, use web_search and web_fetch to inspect comparable work '
       + 'when the web tools are available, then require evidence that the candidate meets or exceeds the relevant bar. '
       + 'Do not accept scaffolds, mocks, partial substitutes, or untested assumptions. '
       + 'Use read-only tools only. Do not edit files, run commands, call other agents, or change mission state. '
-      + 'Return pass only when every mandatory criterion and the quality gate are independently evidenced. '
+      + 'Return pass only when every mandatory criterion, the task-specific quality contract, and the quality gate are independently evidenced. '
       + 'Return needs_changes with a specific required_changes list when the mission can continue after repair. '
       + 'Return blocked only when an external condition prevents evaluation. Include the exact evidenceId in '
       + 'evidence when it supports the verdict.\n</hardness_mission_judge>',

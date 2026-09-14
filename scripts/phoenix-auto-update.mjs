@@ -719,6 +719,12 @@ function relaunchPhoenix(root) {
 }
 
 async function finishAfterParentExit(root, pending, preparedTarget) {
+  // A supervised watcher never owns the PHOENIX lifecycle. The external
+  // supervisor serializes Host restarts and must be the only process allowed to
+  // relaunch the application; otherwise a watcher exit can create duplicate
+  // Hosts and concurrent OAuth refreshes.
+  if (process.env.PHOENIX_UPDATE_SUPERVISED === '1') return
+
   const request = readRestartRequest(root)
   if (request !== undefined) {
     clearRestartRequest(root)

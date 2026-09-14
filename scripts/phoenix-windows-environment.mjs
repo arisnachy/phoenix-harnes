@@ -58,8 +58,9 @@ export function readWindowsUserEnvironment(name, options = {}) {
  */
 export function hydratePhoenixEnvironment(parentEnvironment, options = {}) {
   const environment = { ...parentEnvironment }
-  if ((options.platform ?? process.platform) !== 'win32') return environment
-  const readUserValue = options.readUserValue ?? (name => readWindowsUserEnvironment(name, options))
+  const normalizedOptions = typeof options === 'function' ? { readUserValue: options } : options
+  if ((normalizedOptions.platform ?? process.platform) !== 'win32') return environment
+  const readUserValue = normalizedOptions.readUserValue ?? (name => readWindowsUserEnvironment(name, normalizedOptions))
 
   for (const name of PHOENIX_USER_ENV_KEYS) {
     if (typeof environment[name] === 'string' && environment[name].length > 0) continue

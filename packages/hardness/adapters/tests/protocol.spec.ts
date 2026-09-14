@@ -3,10 +3,10 @@ import type { PromptSection } from '@phoenix-ai/dsh-system-prompt'
 import { installHardnessProtocol } from '../src/protocol.ts'
 
 describe('HARDNESS model protocol prompt adapter', () => {
-  it('registers one deterministic model-facing protocol section and disposes it', () => {
+  it('registers one deterministic model-facing cognitive and operating protocol section and disposes it', () => {
     const dispose = vi.fn()
     const systemPrompt = {
-      section: vi.fn(() => dispose),
+      section: vi.fn((_section: PromptSection) => dispose),
     }
 
     const returned = installHardnessProtocol(systemPrompt, 'en')
@@ -16,17 +16,22 @@ describe('HARDNESS model protocol prompt adapter', () => {
       order: 150,
       text: expect.stringContaining('<phoenix_hardness_protocol>') as unknown,
     })
+    const section = systemPrompt.section.mock.calls[0]?.[0]
+    expect(section?.text).toContain('<phoenix_cognitive_workflows>')
+    expect(section?.text).toContain('systematic-debugging')
+    expect(section?.text).toContain('verification-gate')
     expect(returned).toBe(dispose)
     returned()
     expect(dispose).toHaveBeenCalledOnce()
   })
 
-  it('supports the Spanish model-facing guide without executable handles', () => {
+  it('supports the Spanish model-facing guides without executable handles', () => {
     const systemPrompt = { section: vi.fn((_section: PromptSection) => () => {}) }
 
     installHardnessProtocol(systemPrompt, 'es')
 
     const section = systemPrompt.section.mock.calls[0]?.[0]
+    expect(section?.text).toContain('HARDNESS conoce estos flujos cognitivos')
     expect(section?.text).toContain('Pasos obligatorios')
     expect(section?.text).not.toContain('function')
     expect(section?.text).not.toContain('credential')
