@@ -17,7 +17,7 @@
     "website"
   ],
   "scripts": {
-    "build": "tsx scripts/build.ts",
+    "build": "tsx scripts/build.ts && node scripts/phoenix-prepared-restart-bridge.mjs --arm-staging",
     "build:official": "tsx scripts/build.ts --profile official",
     "build:lib": "npm run build:lib:host && npm run build:lib:client",
     "build:lib:host": "tsc -b tsconfig.host.json && tsdown --env.DSH_BUILD_FACE host",
@@ -179,8 +179,8 @@
     "knip": "^6.16.1",
     "lefthook": "^2.1.9",
     "lightningcss": "^1.32.0",
-    "mdast-util-from-markdown": "^2.0.3",
-    "mdast-util-gfm": "^3.1.0",
+    "mdast-util-from-markdown": "^2.0.0",
+    "mdast-util-gfm": "^3.0.0",
     "mermaid": "11.16.0",
     "micromark-extension-gfm": "^3.0.0",
     "oxlint": "1.76.0",
