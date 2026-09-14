@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { advanceAfter, dueOccurrences, initialNextRunAt, nextAnnualEpoch, userView } from '../src/domain.ts'
-import type { TaskRecord } from '../src/types.ts'
+import { advanceAfter, advanceSkipped, dueOccurrences, initialNextRunAt, nextAnnualEpoch, userView } from '../src/domain.ts'
+import type { TaskRecord, TaskRunRecord } from '../src/types.ts'
 
 const base = Date.parse('2026-09-10T15:00:00.000Z')
 
@@ -14,16 +14,61 @@ function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
   }
 }
 
+function run(record: TaskRecord, dueAt: string, status: TaskRunRecord['status'], overrides: Partial<TaskRunRecord> = {}): TaskRunRecord {
+  return {
+    taskId: record.id,
+    occurrenceId: `${record.id}@${dueAt}`,
+    dueAt,
+    status,
+    startedAt: dueAt,
+    ...(status === 'running' ? {} : { finishedAt: dueAt }),
+    ...overrides,
+  }
+}
+
 describe('durable task recurrence', () => {
   it('runs only the latest missed occurrence after the PC returns', () => {
     const due = dueOccurrences(task(), [], base + 3 * 86_400_000 + 10_000)
     expect(due.map(item => item.dueAt)).toEqual(['2026-09-13T15:00:00.000Z'])
   })
 
-  it('never repeats a terminal occurrence', () => {
+  it('never repeats a completed or intentionally skipped occurrence', () => {
     const record = task({ schedule: { kind: 'once', at: '2026-09-10T15:00:00.000Z' } })
     const first = dueOccurrences(record, [], base + 1_000)[0]!
-    expect(dueOccurrences(record, [{ taskId: record.id, occurrenceId: first.occurrenceId, dueAt: first.dueAt, status: 'completed', startedAt: first.dueAt, finishedAt: first.dueAt }], base + 1_000)).toEqual([])
+    expect(dueOccurrences(record, [run(record, first.dueAt, 'completed')], base + 1_000)).toEqual([])
+    expect(dueOccurrences(record, [run(record, first.dueAt, 'skipped')], base + 1_000)).toEqual([])
+  })
+
+  it('retries a failed occurrence after its retry window, including after restart recovery', () => {
+    const record = task({ schedule: { kind: 'once', at: '2026-09-10T15:00:00.000Z' } })
+    const dueAt = '2026-09-10T15:00:00.000Z'
+    const failed = run(record, dueAt, 'failed', { retryAt: '2026-09-10T15:01:00.000Z', error: 'restart' })
+    expect(dueOccurrences(record, [failed], base + 30_000)).toEqual([])
+    expect(dueOccurrences(record, [failed], base + 61_000).map(item => item.dueAt)).toEqual([dueAt])
+  })
+
+  it('advances a skipped overdue recurrence beyond now instead of remaining permanently overdue', () => {
+    const record = task({ catchUp: 'skip' })
+    const advanced = advanceSkipped(record, base + 3 * 86_400_000 + 10_000)
+    expect(advanced.nextRunAt).toBe('2026-09-14T15:00:00.000Z')
+    expect(advanced.state).toBe('scheduled')
+  })
+
+  it('settles a skipped overdue one-shot without executing it', () => {
+    const record = task({ catchUp: 'skip', schedule: { kind: 'once', at: '2026-09-10T15:00:00.000Z' } })
+    const advanced = advanceSkipped(record, base + 1_000)
+    expect(advanced.state).toBe('completed')
+  })
+
+  it('drains catch_up all one occurrence at a time without jumping over missed intervals', () => {
+    const record = task({ catchUp: 'all' })
+    const now = base + 3 * 86_400_000 + 10_000
+    const firstDue = dueOccurrences(record, [], now)[0]!
+    expect(firstDue.dueAt).toBe('2026-09-10T15:00:00.000Z')
+    const afterFirst = advanceAfter(record, firstDue.dueAt, now)
+    expect(afterFirst.nextRunAt).toBe('2026-09-11T15:00:00.000Z')
+    const secondDue = dueOccurrences(afterFirst, [run(record, firstDue.dueAt, 'completed')], now)[0]!
+    expect(secondDue.dueAt).toBe('2026-09-11T15:00:00.000Z')
   })
 
   it('keeps interval recurrence anchored instead of drifting from completion time', () => {
