@@ -46,6 +46,13 @@ replaceOnce(
   "LivingCreationManifest: 'living.md'",
 )
 
+replaceOnce(
+  'scripts/gen-doc-graphs.ts',
+  "  {\n    key: 'web',\n    pkg: 'web',\n",
+  "  {\n    key: 'living',\n    pkg: 'living',\n    title: 'Universal living creation registry',\n    mode: 'seam',\n    implementations: ['living-local'],\n    consumers: ['tool-living'],\n    note: 'Keeps arbitrary Phoenix-created artifacts and systems durably identified while live providers expose their self-described state, events, actions, resources, and actors without coupling the core to a closed creation taxonomy.',\n  },\n  {\n    key: 'web',\n    pkg: 'web',\n",
+  "key: 'living',\n    pkg: 'living',",
+)
+
 const architecture = 'docs/architecture.md'
 replaceOnce(
   architecture,
