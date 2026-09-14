@@ -52,6 +52,9 @@ function delayForAttempt(attempt: number, policy: ProactivityRetryPolicy): numbe
  * backoff has elapsed. Because the deadline is derived from `finishedAt`, a
  * Phoenix restart does not reset or lose the retry clock.
  *
+ * @param engine Durable task engine whose failed tasks may be resumed.
+ * @param now Clock value used to evaluate persisted retry deadlines.
+ * @param requestedPolicy Retry limits and exponential-backoff configuration.
  * @returns the number of tasks moved back to `scheduled` for this pump pass.
  */
 export async function retryFailedProactivityTasks(
