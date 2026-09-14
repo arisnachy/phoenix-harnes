@@ -46,6 +46,16 @@ Model-facing preset 还会挂载纯 `hardness_workflow` tool。模型提供经�
 
 第一版有意不从隐藏推理中推断 `CognitiveMissionProfile`，也不会自行执行返回的 plan。模型或更高层 mission orchestration 提供有限 profile；已有 workflow/subagent/skill service 去实现 selected procedures，而 mission kernel 仍是 completion authority。
 
+## 自主 fast path
+
+Router 现在会先把每个已提供的 mission profile 确定性分类为 `fast`、`standard` 或 `deep`，再组合具体 flow。范围明确、低风险、低新颖性且局部的变更使用 `fast`：HARDNESS 继续拥有过程 authority，但跳过 brainstorming、architecture 与 implementation-plan 仪式，只选择最小安全变更，并要求新的定向验证与结果对照。若出现失败、范围扩大、风险上升、需要外部研究、持久性或独立子任务等新证据，mission 会确定性升级为 `standard` 或 `deep`，并启用该证据真正需要的更强流程。
+
+Generic skill catalog 不再因为某个 methodology skill 看起来“适用”就制造第二次 approval loop。HARDNESS guide 要求只有当 methodology skill 实现当前 HARDNESS 已选择的 flow 时才加载它。在已经授权的 active goal round 中，不会再次为日常过程请求 approval；可恢复的执行或验证失败会触发修复、替代 route、能力获取/构建或策略轮换，然后继续。只有真正的外部依赖——例如必需 permission、缺失 credential、safety policy、provider quota 已耗尽、明确拒绝，或无法安全解决的外部 dependency——才允许暂停自主推进。
+
+这不会削弱安全或完成语义。Fast mode 仍保留 permission/account authorization、safe-change/rollback 预期、fresh verification 与 objective-versus-outcome comparison。某个 tool 成功、某个 test 通过、内部 retry/window 用尽或一次 turn 结束，都不能让 mission 自动完成；在已配置的场景中，独立 judge 与 mission kernel 仍拥有最终完成 authority。
+
 ## 验证
 
 Unit coverage 检查目录唯一性与 prerequisites、轻量 trivial selection、build/design/TDD selection、root-cause-first debugging、高风险 research、parallelization 约束、持久/重复工作的 recovery 与 learning、持久未来义务 follow-up、失败或风险变化后的 monotonic adaptation、quality-gate 标签、英中 model guide、`hardness_workflow` schema 与输出、model-preset mounting、host-side recursive-index exclusion，以及 cognitive guide 注入 HARDNESS system-prompt section。现有 HARDNESS operating、mission、approval、judge 与 evidence 测试继续作为执行安全的 regression authority。
+
+自主扩展还覆盖确定性的 `fast`/`standard`/`deep` 选择、fast path 跳过重型设计仪式、有限 observation 后的升级、`executionMode` 投影、fail-forward protocol 结果、active-goal continuation 文本，以及通过真实 Cordis Loader 组装的、无需密钥的 model-visible policy snapshot。
