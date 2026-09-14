@@ -4,9 +4,8 @@
  */
 import { createElement } from 'react'
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
-import type { ConnectionHandle } from '@phoenix-ai/dsh-client-connection/client'
 import { JobListAction } from './JobListAction.tsx'
-import { TaskListAction, type TaskListActionSlotProps } from './TaskListAction.tsx'
+import { TaskListAction, type TaskListActionSlotProps, type TaskRpcConnection } from './TaskListAction.tsx'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import { en, NS, zh, type JobKey } from './locales.ts'
 
@@ -18,9 +17,9 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 }
 
 export type { JobListActionProps } from './JobListAction.tsx'
-export type { TaskListActionProps, TaskListActionSlotProps } from './TaskListAction.tsx'
+export type { TaskListActionProps, TaskListActionSlotProps, TaskRpcConnection } from './TaskListAction.tsx'
 
-/** Required services for locale registration, header slots, and task RPC. */
+/** Required runtime services. Client runtime already owns/loads connection. */
 export const inject = ['sessions', 'slots', 'locale', 'connection']
 
 /**
@@ -28,7 +27,7 @@ export const inject = ['sessions', 'slots', 'locale', 'connection']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  const connection = ctx.get('connection') as ConnectionHandle | undefined
+  const connection = ctx.get('connection') as TaskRpcConnection | undefined
   if (connection === undefined) throw new Error('ui-jobs requires the client connection service')
   const TaskAction = (props: TaskListActionSlotProps) => createElement(TaskListAction, { ...props, connection })
 
