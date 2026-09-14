@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import type { ConnectionHandle } from '@phoenix-ai/dsh-client-connection/client'
 import { useDismissOnOutsidePointer } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import { NS } from './locales.ts'
@@ -7,6 +6,22 @@ import css from './TaskCenterAction.module.css'
 
 export type TaskCenterActionProps =
   PropsRuntime<'conversation.session.header.actions'> & PropsLocale<typeof NS>
+
+/** Minimal client connection face used by this plugin; avoids a new lockfile dependency. */
+export interface TaskCenterConnection {
+  readonly isLoopback: boolean
+  readonly rpc: {
+    call(
+      channel: string,
+      endpoint: string,
+      payload: unknown,
+      signal?: AbortSignal,
+    ): Promise<
+      | { readonly ok: true; readonly value: unknown }
+      | { readonly ok: false; readonly error: { readonly message: string } }
+    >
+  }
+}
 
 type TaskStatus = 'scheduled' | 'running' | 'completed' | 'failed' | 'paused' | 'cancelled'
 type TaskAction = 'pause' | 'resume' | 'cancel'
@@ -92,17 +107,14 @@ function dueLabel(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
-async function readTasks(connection: ConnectionHandle, signal?: AbortSignal): Promise<TaskView[]> {
+async function readTasks(connection: TaskCenterConnection, signal?: AbortSignal): Promise<TaskView[]> {
   const result = await connection.rpc.call('/phoenix-tasks', 'list', {}, signal)
   if (!result.ok) throw new Error(result.error.message)
   return taskArray(result.value)
 }
 
-/**
- * Bind the visual Task Center to one connection without giving the component
- * direct access to the Cordis container. The Host remains the fact source.
- */
-export function createTaskCenterAction(connection: ConnectionHandle) {
+/** Bind the visual Task Center to one connection while the Host remains the fact source. */
+export function createTaskCenterAction(connection: TaskCenterConnection) {
   return function TaskCenterAction({ t }: TaskCenterActionProps) {
     const [open, setOpen] = useState(false)
     const [tasks, setTasks] = useState<readonly TaskView[]>([])
