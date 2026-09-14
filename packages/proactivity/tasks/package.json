@@ -1,0 +1,36 @@
+{
+  "name": "@phoenix-ai/dsh-tasks",
+  "description": "Durable autonomous task and proactivity engine for Phoenix",
+  "version": "0.1.0",
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
+    "directory": "packages/proactivity/tasks"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./domain": { "types": "./lib/types/domain.d.ts", "default": "./lib/domain.js" },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib/**/*.js", "lib/types/**/*.d.ts"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^"
+  },
+  "devDependencies": {
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/schemastery": "workspace:^"
+  }
+}
