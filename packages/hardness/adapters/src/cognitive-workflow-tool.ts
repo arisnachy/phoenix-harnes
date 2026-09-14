@@ -5,6 +5,7 @@ import {
   selectCognitiveWorkflow,
   type CognitiveMissionProfile,
   type CognitiveWorkflowObservation,
+  type CognitiveWorkflowPlan,
 } from '@phoenix-ai/dsh-hardness'
 import { defineTool, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
@@ -18,6 +19,16 @@ const WORKFLOW_OBSERVATIONS = [
   'independent-subtasks-discovered',
   'repeated-failure',
 ] as const satisfies readonly CognitiveWorkflowObservation[]
+
+function projectWorkflowPlan(plan: CognitiveWorkflowPlan) {
+  return {
+    profile: { ...plan.profile },
+    selected: [...plan.selected],
+    reasons: plan.reasons.map(reason => ({ ...reason })),
+    skipped: plan.skipped.map(reason => ({ ...reason })),
+    qualityGates: [...plan.qualityGates],
+  }
+}
 
 /** Create the pure model-facing cognitive workflow planner.
  * @returns A registry-ready `hardness_workflow` tool that selects no execution authority.
@@ -63,9 +74,10 @@ export function createCognitiveWorkflowTool(): ToolDefinition {
     },
     execute(args) {
       const initial = selectCognitiveWorkflow(args.profile as CognitiveMissionProfile)
-      return args.observation === undefined
+      const plan = args.observation === undefined
         ? initial
         : adaptCognitiveWorkflow(initial, args.observation as CognitiveWorkflowObservation)
+      return projectWorkflowPlan(plan)
     },
     presentCall(args) {
       return {
