@@ -18,7 +18,9 @@ function goal(roundsStarted = 0): GoalView {
 
 describe('goal-round autonomous continuation guidance', () => {
   it('does not pause an authorized mission for process ceremony or internal attempt limits', () => {
-    const text = renderGoalRoundPrompt(goal(), 1)[0]?.text ?? ''
+    const block = renderGoalRoundPrompt(goal(), 1)[0]
+    if (block?.type !== 'text') throw new Error('expected text goal-round prompt')
+    const text = block.text
 
     expect(text).toContain('Do not pause for process-skill ceremony')
     expect(text).toContain('brainstorming or implementation-plan approval')
