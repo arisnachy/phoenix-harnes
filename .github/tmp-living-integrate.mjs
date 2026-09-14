@@ -1,13 +1,20 @@
 import fs from 'node:fs'
 
-const patchPath = 'packages/bundle/base/cordis.patch.yml'
-let patch = fs.readFileSync(patchPath, 'utf8')
-if (!patch.includes('id: living-local')) {
-  const needle = "    - id: jobs\n      name: '@phoenix-ai/dsh-jobs-local'\n\n"
-  const insert = `${needle}    - id: living-local\n      name: '@phoenix-ai/dsh-living-local'\n      config:\n        path: !!js dshHomePath('memory', 'living-creations.json')\n\n    - id: tool-living\n      name: '@phoenix-ai/dsh-tool-living'\n\n`
-  if (!patch.includes(needle)) throw new Error('base jobs row not found')
-  fs.writeFileSync(patchPath, patch.replace(needle, insert))
+function replaceOnce(path, needle, replacement, already) {
+  let text = fs.readFileSync(path, 'utf8')
+  if (already !== undefined && text.includes(already)) return
+  if (!text.includes(needle)) throw new Error(`${path}: expected insertion point not found`)
+  text = text.replace(needle, replacement)
+  fs.writeFileSync(path, text)
 }
+
+const patchPath = 'packages/bundle/base/cordis.patch.yml'
+replaceOnce(
+  patchPath,
+  "    - id: jobs\n      name: '@phoenix-ai/dsh-jobs-local'\n\n",
+  "    - id: jobs\n      name: '@phoenix-ai/dsh-jobs-local'\n\n    - id: living-local\n      name: '@phoenix-ai/dsh-living-local'\n      config:\n        path: !!js dshHomePath('memory', 'living-creations.json')\n\n    - id: tool-living\n      name: '@phoenix-ai/dsh-tool-living'\n\n",
+  'id: living-local',
+)
 
 const pkgPath = 'packages/bundle/base/package.json'
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
@@ -18,11 +25,37 @@ for (const dependency of [
 ]) pkg.dependencies[dependency] = 'workspace:^'
 fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
 
-const tsPath = 'tsconfig.host.json'
-let ts = fs.readFileSync(tsPath, 'utf8')
-if (!ts.includes('./packages/core/living')) {
-  const needle = '    { "path": "./packages/core/tools" },\n'
-  const insert = `${needle}    { "path": "./packages/core/living" },\n    { "path": "./packages/core/living-local" },\n    { "path": "./packages/core/tool-living" },\n`
-  if (!ts.includes(needle)) throw new Error('host tools project reference not found')
-  fs.writeFileSync(tsPath, ts.replace(needle, insert))
-}
+replaceOnce(
+  'tsconfig.host.json',
+  '    { "path": "./packages/core/tools" },\n',
+  '    { "path": "./packages/core/tools" },\n    { "path": "./packages/core/living" },\n    { "path": "./packages/core/living-local" },\n    { "path": "./packages/core/tool-living" },\n',
+  './packages/core/living',
+)
+
+const catalog = 'scripts/gen-cordis-catalog.ts'
+replaceOnce(
+  catalog,
+  "  llm: 'llm-streaming.md',\n",
+  "  llm: 'llm-streaming.md',\n  living: 'living.md',\n",
+  "living: 'living.md'",
+)
+replaceOnce(
+  catalog,
+  "  LspQueryResult: 'lsp.md',\n",
+  "  LspQueryResult: 'lsp.md',\n  LivingChangedListener: 'living.md',\n  LivingCreationEvent: 'living.md',\n  LivingCreationEventListener: 'living.md',\n  LivingCreationId: 'living.md',\n  LivingCreationManifest: 'living.md',\n  LivingCreationProvider: 'living.md',\n  LivingCreationSnapshot: 'living.md',\n  LivingIntegrationLevel: 'living.md',\n  LivingJson: 'living.md',\n  LivingState: 'living.md',\n",
+  "LivingCreationManifest: 'living.md'",
+)
+
+const architecture = 'docs/architecture.md'
+replaceOnce(
+  architecture,
+  '| [`core/tools`](subsystems/tools.md) | The scoped tool registry and guarded execution pipeline | `ctx.tools` |\n',
+  '| [`core/tools`](subsystems/tools.md) | The scoped tool registry and guarded execution pipeline | `ctx.tools` |\n| [`core/living`](subsystems/living.md) | Durable identity and operational connection for everything Phoenix creates | `ctx.living` |\n',
+  '| [`core/living`](subsystems/living.md)',
+)
+replaceOnce(
+  architecture,
+  '| Add a model-facing capability | register on `ctx.tools`; its schema joins prompt assembly |\n',
+  '| Add a model-facing capability | register on `ctx.tools`; its schema joins prompt assembly |\n| Keep a Phoenix-created artifact or system operationally connected | register its self-described manifest on `ctx.living`; attach a provider or adapter for the strongest meaningful live level |\n',
+  '| Keep a Phoenix-created artifact or system operationally connected |',
+)

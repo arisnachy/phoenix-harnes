@@ -27,6 +27,11 @@ jobs:
           pnpm run prepare:change
           pnpm run gen-tool-catalog
           pnpm run gen-cordis-api
+          pnpm run verify-translation-pairing --write packages/core/living/README.md
+          pnpm run verify-translation-pairing --write packages/core/living-local/README.md
+          pnpm run verify-translation-pairing --write packages/core/tool-living/README.md
+          pnpm run verify-translation-pairing --write docs/subsystems/living.md
+          pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-13-universal-living-creations.md
       - name: Test living capability
         run: pnpm exec vitest run packages/core/living-local/tests/living-local.spec.ts packages/core/tool-living/tests/tool-living.spec.ts
       - name: Verify composition and types
