@@ -6,7 +6,9 @@ Durable process-local implementation of `ctx.living`. It keeps creation manifest
 
 ## Behavior
 
-Startup restores remembered manifests as offline creations. `remember()` writes the next complete catalog atomically before publishing it in memory. `attach()` validates that a provider can reach the manifest's target level, subscribes only to declared events, and reports the achieved level from real provider methods. Provider disposal changes connectivity but never deletes the manifest.
+Startup restores remembered manifests as offline creations. Durable `remember()` and `forget()` mutations run through one serialized commit queue, so concurrent updates cannot overwrite one another. Each mutation atomically writes the next complete catalog before publishing it in memory; a failed write leaves both the in-memory manifest set and any attached provider unchanged.
+
+`attach()` validates that a provider can reach the manifest's target level, subscribes only to events declared by the current committed manifest, and reports the achieved level from real provider methods. Replacing a manifest while a provider is attached is admitted only when that provider satisfies the new contract; if a provider changes during the durable write and no longer satisfies the committed manifest, it is detached rather than left falsely connected. Provider disposal changes connectivity but never deletes the manifest.
 
 ## Model Experience
 
