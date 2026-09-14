@@ -218,6 +218,7 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
     return [
       '<phoenix_hardness_protocol>',
       `Pasos obligatorios: ${steps}`,
+      'Antes de formular el plan de ejecución, clasifica la misión y selecciona o adapta el workflow cognitivo HARDNESS; esa selección nunca concede autoridad de ejecución.',
       'Resuelve la capacidad antes de ejecutar.',
       'Solicita aprobación explícita cuando la capacidad declare permisos.',
       'Verifica el resultado antes de presentarlo.',
@@ -232,6 +233,7 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
   return [
     '<phoenix_hardness_protocol>',
     `Required steps: ${steps}`,
+    'Before formulating the execution plan, classify the mission and select or adapt the HARDNESS cognitive workflow; workflow selection never grants execution authority.',
     'Resolve the capability before execution.',
     'Request explicit approval when the capability declares permissions.',
     'Verify the result before presenting it.',
