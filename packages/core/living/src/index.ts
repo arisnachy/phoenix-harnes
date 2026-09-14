@@ -2,7 +2,7 @@
 
 import { Context, Service } from '@phoenix-ai/cordis'
 import type {
-  LivingChangedListener, LivingCreationEventListener, LivingCreationId, LivingCreationManifest,
+  LivingChangedListener, LivingCreationEventListener, LivingCreationId as LivingCreationIdType, LivingCreationManifest,
   LivingCreationProvider, LivingCreationSnapshot, LivingIntegrationLevel, LivingJson, LivingState,
 } from './types.ts'
 
@@ -11,7 +11,7 @@ export type {
   LivingCreationProvider, LivingCreationSnapshot, LivingIntegrationLevel, LivingJson, LivingState,
 } from './types.ts'
 
-export type { LivingCreationId } from './types.ts'
+export type LivingCreationId = LivingCreationIdType
 
 /**
  * Construct a branded creation id after an owning boundary validates its text.
