@@ -60,6 +60,7 @@ export type CognitiveWorkflowObservation =
   | 'scope-expanded'
   | 'independent-subtasks-discovered'
   | 'repeated-failure'
+  | 'future-obligation-discovered'
 
 /** Declarative description of one cognitive flow. It never grants execution authority. */
 export interface CognitiveFlowDescriptor {
@@ -89,6 +90,7 @@ export interface CognitiveMissionProfile {
   readonly previousFailure: boolean
   readonly repeatedPattern: boolean
   readonly userVisibleArtifact: boolean
+  readonly futureObligation: boolean
 }
 
 /** One explainable flow activation in a selected workflow. */
@@ -267,6 +269,7 @@ export function selectCognitiveWorkflow(profile: CognitiveMissionProfile): Cogni
     addFlow(selected, 'independent-judge')
   }
   if (profile.userVisibleArtifact && profile.complexity !== 'low') addFlow(selected, 'adversarial-critique')
+  if (profile.persistent && profile.futureObligation) addFlow(selected, 'autonomous-follow-up')
 
   const ordered = Object.freeze(COGNITIVE_FLOW_IDS.filter(id => selected.has(id)))
   const reasons = Object.freeze(ordered.map(flow => Object.freeze({ flow, reason: selectedReason(flow, profile) })))
@@ -296,6 +299,8 @@ function escalatedProfile(profile: CognitiveMissionProfile, observation: Cogniti
       return { ...profile, hasIndependentSubtasks: true }
     case 'repeated-failure':
       return { ...profile, previousFailure: true, repeatedPattern: true, complexity: 'high' }
+    case 'future-obligation-discovered':
+      return { ...profile, persistent: true, futureObligation: true }
   }
 }
 
@@ -329,6 +334,7 @@ export function renderCognitiveWorkflowGuide(locale: 'en' | 'es' = 'en'): string
       'Paraleliza únicamente trabajo realmente independiente y usa contextos frescos cuando delegues dominios separados.',
       'Para trabajo complejo o de alto riesgo separa implementación, crítica y juicio independiente.',
       'Adapta el flujo cuando nueva evidencia invalide la estrategia actual; un fallo fortalece el proceso, no cierra la misión.',
+      'Una obligación futura concreta vuelve la misión persistente y activa autonomous-follow-up; programar o ejecutar el seguimiento sigue perteneciendo al scheduler autorizado.',
       'Verifica con evidencia fresca antes de DONE y compara el resultado con el objetivo original.',
       'No expongas cadena de pensamiento privada; registra decisiones, evidencia, artefactos y justificación útil para auditoría.',
       'La selección de flujo no concede permisos ni autoridad de ejecución: conserva el protocolo HARDNESS de aprobación y verificación.',
@@ -344,6 +350,7 @@ export function renderCognitiveWorkflowGuide(locale: 'en' | 'es' = 'en'): string
     'Parallelize only independent work and use fresh contexts when delegating separate domains.',
     'For high-complexity or high-risk work separate implementation, adversarial critique, and independent judgment.',
     'Adapt the workflow when new evidence invalidates the current strategy; failure strengthens the process instead of ending the mission.',
+    'A concrete future obligation makes the mission persistent and activates autonomous-follow-up; scheduling or executing that follow-up remains owned by the authorized scheduler.',
     'Require fresh verification evidence before DONE and compare the outcome with the original objective.',
     'Do not expose private chain-of-thought; record decisions, evidence, artifacts, and audit-useful rationale instead.',
     'Workflow selection grants no permission or execution authority; preserve HARDNESS approval and verification gates.',
