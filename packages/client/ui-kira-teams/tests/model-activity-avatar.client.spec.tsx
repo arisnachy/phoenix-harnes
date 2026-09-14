@@ -25,7 +25,7 @@ describe('agentAvatarKind', () => {
 })
 
 describe('ModelActivityAvatar', () => {
-  it('renders a living portrait instead of the old geometric agent glyph', () => {
+  it('renders the real portrait asset assigned to the visible KIRA identity', () => {
     const element = ModelActivityAvatar({
       agentId: 'c1',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
@@ -35,15 +35,16 @@ describe('ModelActivityAvatar', () => {
     const children = Array.isArray(element.props.children)
       ? element.props.children
       : [element.props.children]
-    const portrait = children.find((child: { props?: Record<string, unknown> }) =>
+    const image = children.find((child: { props?: Record<string, unknown> }) =>
+      child?.props?.['data-agent-portrait-image'] === true)
+    const vectorPortrait = children.find((child: { props?: Record<string, unknown> }) =>
       child?.props?.['data-agent-portrait'] === true)
-    const legacyGlyph = children.find((child: { props?: Record<string, unknown> }) =>
-      child?.props?.['data-agent-glyph'] === true)
 
     expect(element.props['data-avatar']).toBe('orion')
-    expect(portrait).toBeDefined()
-    expect(portrait.type).toBe('svg')
-    expect(legacyGlyph).toBeUndefined()
+    expect(image).toBeDefined()
+    expect(image.type).toBe('img')
+    expect(image.props.src).toBe('/assets/kira-agents/orion.webp')
+    expect(vectorPortrait).toBeUndefined()
   })
 
   it.each([
