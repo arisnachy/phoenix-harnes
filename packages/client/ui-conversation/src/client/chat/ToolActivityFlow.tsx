@@ -22,10 +22,10 @@ interface OrderedChatNode {
 
 interface ToolActivityFlowProps extends SeatProps {
   readonly nodes: readonly OrderedChatNode[]
-  readonly turnStatus?: {
+  readonly turnStatus: {
     readonly startTime: number | null
     readonly progress: TurnProgress | null
-  }
+  } | undefined
 }
 
 type ActivityItem =
@@ -291,7 +291,7 @@ function TurnStatus({ startTime, progress, t }: {
 
 /**
  * Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure.
- * Visible assistant prose precedes its technical activity, and the running status precedes a trailing live Tools group.
+ * Visible assistant prose precedes its technical activity, and the running status precedes a trailing Tools group.
  * Running Tool rows stay live above the disclosure and join history once settled.
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
