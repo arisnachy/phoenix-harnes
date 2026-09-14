@@ -80,10 +80,10 @@ export function evaluateHardnessProtocol(input: HardnessProtocolInput): Hardness
   if (input.route.kind !== 'route') {
     return {
       step: 'resolve',
-      outcome: 'continue',
+      outcome: 'blocked',
       allowedActions: ['inspect-alternatives', 'acquire-or-build-capability', 'replan'],
       forbiddenActions: ['approve', 'execute', 'present', 'claim-success'],
-      reason: `${input.route.reasons.join('; ') || `capability resolution is ${input.route.kind}`}; attempt another safe route or acquire/build the missing capability before asking the user`,
+      reason: `${input.route.reasons.join('; ') || `capability resolution is ${input.route.kind}`}; exhaust safe alternatives and acquisition/build recovery before a user handoff`,
     }
   }
 
@@ -222,7 +222,7 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
       'Para toda misión no trivial usa hardness_workflow para obtener del harness el pipeline ordenado, su execution mode y sus quality gates; vuelve a llamarlo cuando cambien riesgo, alcance, independencia o evidencia de fallo.',
       'En fast mode ejecuta el cambio acotado sin ceremonia de diseño o aprobación rutinaria: inspecciona, cambia lo mínimo, verifica de forma dirigida y termina solo con evidencia fresca.',
       'Resuelve la capacidad antes de ejecutar. Una capacidad ausente o una ejecución, verificación o presentación fallida es trabajo de recuperación: inspecciona alternativas, repara, adquiere o construye la capacidad/renderer y cambia de estrategia antes de escalar al usuario.',
-      'No pidas al usuario decisiones rutinarias de archivos, implementación, plan o recuperación cuando el contexto y las herramientas puedan resolverlas. Pide intervención únicamente por permiso o credencial explícitos, safety, cuota agotada o una dependencia externa que Phoenix no pueda satisfacer de forma segura.',
+      'No pidas al usuario decisiones rutinarias de archivos, implementación, plan o recuperación cuando el contexto y las herramientas puedan resolverlas. Pide intervención únicamente por permiso o autorización de cuenta explícitos, safety, cuota agotada o una dependencia externa que Phoenix no pueda satisfacer de forma segura.',
       'Solicita aprobación explícita cuando la capacidad declare permisos.',
       'Verifica el resultado antes de presentarlo.',
       'Registra evidencia antes de afirmar que la operación terminó.',
@@ -240,7 +240,7 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
     'For every non-trivial mission call hardness_workflow to obtain the harness-selected ordered pipeline, execution mode, and quality gates; call it again when risk, scope, independence, or failure evidence changes.',
     'In fast mode execute the bounded change without design ceremony or routine approval: inspect, make the smallest safe change, run targeted verification, and finish only with fresh evidence.',
     'Resolve the capability before execution. A missing capability or failed execution, verification, or presentation is recovery work: inspect alternatives, repair, acquire or build the needed capability/renderer, and change strategy before escalating to the user.',
-    'Do not ask the user for routine file-location, implementation, plan, or recovery decisions when context and tools can resolve them. Ask only for explicit permission or credentials, safety requirements, exhausted provider quota, or a genuine external dependency Phoenix cannot safely satisfy.',
+    'Do not ask the user for routine file-location, implementation, plan, or recovery decisions when context and tools can resolve them. Ask only for explicit permission or account authorization, safety requirements, exhausted provider quota, or a genuine external dependency Phoenix cannot safely satisfy.',
     'Request explicit approval when the capability declares permissions.',
     'Verify the result before presenting it.',
     'Record evidence before claiming that the operation completed.',
