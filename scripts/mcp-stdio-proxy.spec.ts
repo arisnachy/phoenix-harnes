@@ -26,6 +26,26 @@ describe('PHOENIX MCP stdio proxy', () => {
     expect(Buffer.concat(output).toString()).toBe('phoenix-probe\n')
   })
 
+  it('prevents a child-side MCP stdout EPIPE from becoming an unhandled crash', async () => {
+    const childProgram = [
+      "const error = Object.assign(new Error('broken pipe'), { code: 'EPIPE' })",
+      "process.stdout.emit('error', error)",
+      "setTimeout(() => process.exit(23), 250)",
+    ].join(';')
+    const child = spawn(process.execPath, [proxy, process.execPath, '-e', childProgram], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    const errors: Buffer[] = []
+    child.stdout.resume()
+    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk))
+    const [code] = await once(child, 'close') as [number | null]
+    const stderr = Buffer.concat(errors).toString()
+    expect(code).toBe(0)
+    expect(stderr).not.toContain("Unhandled 'error' event")
+    expect(stderr).not.toContain('EPIPE')
+  })
+
   it('launches npx through its Windows shim', async () => {
     const child = spawn(process.execPath, [proxy, 'npx', '--version'], {
       stdio: ['ignore', 'pipe', 'pipe'],
