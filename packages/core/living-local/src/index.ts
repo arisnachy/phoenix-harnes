@@ -79,13 +79,14 @@ export class LocalLivingRegistry extends LivingRegistry {
 
   async forget(id: LivingCreationId): Promise<void> {
     this.requireManifest(id)
-    const attached = this.providers.get(id)
-    attached?.disposeSubscription()
-    this.providers.delete(id)
     const next = new Map(this.manifests)
     next.delete(id)
     await this.persist(next)
+
     this.manifests = next
+    const attached = this.providers.get(id)
+    this.providers.delete(id)
+    try { attached?.disposeSubscription() } catch { /* cleanup failures cannot roll back a committed forget */ }
     this.notifyChanged(id)
   }
 
@@ -119,11 +120,17 @@ export class LocalLivingRegistry extends LivingRegistry {
         try { listener(event) } catch { /* observers cannot break the creation */ }
       }
     }
-    const record: AttachedProvider = { provider, disposeSubscription: () => undefined }
+    let disposeSubscription = (): void => undefined
+    const record: AttachedProvider = {
+      provider,
+      disposeSubscription: () => {
+        active = false
+        disposeSubscription()
+      },
+    }
     this.providers.set(id, record)
     try {
-      const disposeSubscription = provider.subscribe?.(emit) ?? (() => undefined)
-      this.providers.set(id, { provider, disposeSubscription })
+      disposeSubscription = provider.subscribe?.(emit) ?? (() => undefined)
     } catch (error) {
       this.providers.delete(id)
       active = false
@@ -134,11 +141,10 @@ export class LocalLivingRegistry extends LivingRegistry {
     return () => {
       if (disposed) return
       disposed = true
-      active = false
       const current = this.providers.get(id)
       if (current?.provider !== provider) return
-      current.disposeSubscription()
       this.providers.delete(id)
+      try { current.disposeSubscription() } catch { /* provider cleanup is isolated from registry state */ }
       this.notifyChanged(id)
     }
   }
@@ -203,7 +209,9 @@ export class LocalLivingRegistry extends LivingRegistry {
   }
 
   private disposeProviders(): void {
-    for (const attached of this.providers.values()) attached.disposeSubscription()
+    for (const attached of this.providers.values()) {
+      try { attached.disposeSubscription() } catch { /* teardown isolates provider cleanup */ }
+    }
     this.providers.clear()
     this.changed.clear()
     this.eventListeners.clear()
