@@ -1,3 +1,4 @@
+// Verification-only touch: exercises the stable Cordis TypeScript/build path in CI.
 import { useSyncExternalStore } from 'react'
 import type { ILayout } from '@phoenix-ai/dsh-client-ui-layout/client'
 import css from './CordisVisualWorkspace.module.css'
