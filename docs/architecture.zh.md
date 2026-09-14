@@ -109,8 +109,6 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 
 HARDNESS 在 `ctx.hardness` 上增加 provider-neutral 的能力索引和声明式 modality router。descriptor 只是清单投影，不是执行权限：tools 和 skills 仍由各自 registry 负责，所需权限仍然只是声明，而 `have`/`route` 必须有当前的验证证据。`@phoenix-ai/dsh-hardness-atlas-json` 在不保存凭据的前提下原子地持久化带版本的 snapshot；视觉、workspace、sandbox 和 generative UI 消费方仍是独立 authority。
 
-HARDNESS 还持有确定性的认知工作流目录与 mission-profile router。它会在执行规划之前选择 brainstorming、root-cause debugging、research/evidence、proof-driven development、parallel decomposition、adversarial critique、independent judge、recovery 与 learning-oriented consolidation 等程序化 flow，并能在有限的新证据改变 mission 时增强 workflow。这一层只提供 planning guidance：它不会执行 flow、授予权限、替代 `ctx.workflowEngine`/`ctx.subagents`/`ctx.skills`，也不能绕过 HARDNESS 的 `inspect → resolve → plan → approve → execute → verify → present → audit` lifecycle。HARDNESS adapter 会把稳定目录投影到 `ctx.systemPrompt`，实际执行仍由现有 capability 与 mission runtime 负责。
-
 ## 新行为的归属位置
 
 新行为附加到已有文档记录的扩展点。改动循环本身时，本映射随之更新。
@@ -120,7 +118,6 @@ HARDNESS 还持有确定性的认知工作流目录与 mission-profile router。
 | 添加模型提供方 | 在 `ctx.llm` 上注册其适配器 |
 | 添加面向模型的能力 | 在 `ctx.tools` 上注册；其 schema 加入提示词组装 |
 | 在不替换提供方的前提下索引能力 | 通过 `ctx.hardness` 发布 descriptor；只有具备证据支持的验证后才解析为 `have` |
-| 在不创建第二套执行 runtime 的前提下为 mission 选择程序化 workflow | 构造 `CognitiveMissionProfile`，调用 HARDNESS cognitive router，然后通过现有 workflow/subagent/skill/mission authority 实现所选 procedure |
 | 让某个会话拥有不同的能力集合 | 组装一个 agent preset；其中的服务行需要 `isolate` realm |
 | 添加 shell 执行 | 注册 `ctx.shell` 后端；本地后端通过 `ctx.subprocess` spawn 进程 |
 | 添加持久化终端执行 | 注册 `ctx.terminals` 后端和 `dsh-tool-terminal` |

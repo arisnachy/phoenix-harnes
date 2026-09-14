@@ -106,8 +106,6 @@ Seams are why one provider swap changes the whole product. Filesystem and subpro
 
 HARDNESS adds a provider-neutral capability index and declarative modality router on `ctx.hardness`. Its descriptors are an inventory projection, not execution authority: tools and skills remain their source registries, required permissions remain declarations, and `have`/`route` require current verification evidence. `@phoenix-ai/dsh-hardness-atlas-json` persists versioned snapshots atomically without credentials; visual, workspace, sandbox, and generative UI consumers remain separate authorities.
 
-HARDNESS also owns a deterministic cognitive workflow catalog and mission-profile router. It selects procedural flows such as brainstorming, root-cause debugging, research/evidence, proof-driven development, parallel decomposition, adversarial critique, independent judging, recovery, and learning-oriented consolidation before execution planning, and it can strengthen that workflow when bounded evidence changes the mission. This layer is planning guidance only: it does not execute a flow, grant permissions, replace `ctx.workflowEngine`/`ctx.subagents`/`ctx.skills`, or bypass the HARDNESS `inspect → resolve → plan → approve → execute → verify → present → audit` lifecycle. The HARDNESS adapter projects the stable catalog into `ctx.systemPrompt`, while execution remains owned by the existing capability and mission runtimes.
-
 ## Where new behavior goes
 
 New behavior attaches to a documented extension point. Changing the loop itself updates this map.
@@ -118,7 +116,6 @@ New behavior attaches to a documented extension point. Changing the loop itself 
 | Add a model-facing capability | register on `ctx.tools`; its schema joins prompt assembly |
 | Keep a Phoenix-created artifact or system operationally connected | register its self-described manifest on `ctx.living`; attach a provider or adapter for the strongest meaningful live level |
 | Index a capability without replacing its provider | publish a descriptor through `ctx.hardness`; resolve `have` only after evidence-backed verification |
-| Select a procedural workflow for a mission without creating a second execution runtime | build a `CognitiveMissionProfile`, call the HARDNESS cognitive router, then realize the selected procedures through the existing workflow/subagent/skill/mission authorities |
 | Give one session a different capability set | compose an agent preset; a service row there needs an `isolate` realm |
 | Add shell execution | register a `ctx.shell` backend; the local one spawns through `ctx.subprocess` |
 | Add persistent terminal execution | register a `ctx.terminals` backend plus `dsh-tool-terminal` |
