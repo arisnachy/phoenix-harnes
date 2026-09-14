@@ -6,7 +6,7 @@ describe('HARDNESS model protocol prompt adapter', () => {
   it('registers one deterministic model-facing cognitive and operating protocol section and disposes it', () => {
     const dispose = vi.fn()
     const systemPrompt = {
-      section: vi.fn(() => dispose),
+      section: vi.fn((_section: PromptSection) => dispose),
     }
 
     const returned = installHardnessProtocol(systemPrompt, 'en')
