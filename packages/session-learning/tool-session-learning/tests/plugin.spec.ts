@@ -66,6 +66,22 @@ describe('tool-session-learning plugin', () => {
     expect(() => renderContextSnapshot(assembly)).not.toThrow()
     const context = renderContextSnapshot(assembly)
     expect(context).toContain('{ {A=3;while(A!=3){A++;} }')
-    expect(context).not.toContain('summary":"{{A=3')
+    expect(context).not.toContain('summary\":\"{{A=3')
+  })
+
+  it('registers guided procedural teaching and tells the model when to use it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-teach-'))
+    roots.push(root)
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SystemPrompt, { persona: '' })
+    await ctx.plugin(ToolRegistry)
+    await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
+    await ctx.plugin(plugin, {})
+
+    expect(ctx.tools.schemas().map(schema => schema.name)).toContain('memory_teach')
+    const prompt = renderContextSnapshot(await ctx.systemPrompt.assemble())
+    expect(prompt).toContain('memory_teach')
+    expect(prompt).toMatch(/teach|demonstration|procedure/i)
   })
 })
