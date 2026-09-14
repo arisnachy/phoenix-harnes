@@ -69,6 +69,8 @@ export function classifyAutonomousMemory(text: string): AutonomousMemoryCandidat
 
 /** Autonomous curator that turns strong user-authored durability signals into cognitive memory. */
 export class AutonomousMemoryCurator {
+  private readonly lastDurableSubject = new Map<string, string>()
+
   constructor(private readonly store: AutonomousMemoryStore) {}
 
   /**
@@ -83,7 +85,11 @@ export class AutonomousMemoryCurator {
     const sourceEventType = candidate.kind === 'preference'
       ? 'autonomous/user-preference'
       : 'autonomous/user-correction'
-    const subject = `phoenix.learning.autonomous.${candidate.kind}.${memoryKey(candidate.summary)}`
+    const scope = memoryScope(input)
+    const generatedSubject = `phoenix.learning.autonomous.${candidate.kind}.${memoryKey(candidate.summary)}`
+    const subject = candidate.kind === 'correction'
+      ? this.lastDurableSubject.get(scope) ?? generatedSubject
+      : generatedSubject
     await this.store.remember({
       sessionId: input.sessionId,
       eventSeq: input.eventSeq,
@@ -101,8 +107,13 @@ export class AutonomousMemoryCurator {
       value: JSON.stringify({ version: 1, ...candidate }),
       ...input.projectId === undefined ? {} : { projectId: input.projectId },
     })
+    this.lastDurableSubject.set(scope, subject)
     return candidate
   }
+}
+
+function memoryScope(input: AutonomousUserMessage): string {
+  return input.projectId === undefined ? `session:${input.sessionId}` : `project:${input.projectId}`
 }
 
 function normalize(value: string): string {
