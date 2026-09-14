@@ -10,9 +10,12 @@ const MAX_TEXT_CHARS = 2_048
 const DEFAULT_LIMIT = 8
 const MAX_LIMIT = 32
 
+/** Provenance category describing how Phoenix acquired one procedure. */
 export type ProceduralLearningOrigin = 'guided' | 'experience'
+/** Promotion lifecycle controlling whether a learned procedure may be recalled. */
 export type ProceduralLearningStatus = 'candidate' | 'active' | 'quarantined'
 
+/** Minimal cognitive-memory row consumed by the procedural learner. */
 export interface ProceduralStoredMemory {
   readonly subject?: string
   readonly value?: string
@@ -24,6 +27,7 @@ export interface ProceduralStoredMemory {
   readonly sourceEventType: string
 }
 
+/** Durable cognitive-memory write produced by procedural learning. */
 export interface ProceduralMemoryWrite {
   readonly subject: string
   readonly value: string
@@ -37,12 +41,23 @@ export interface ProceduralMemoryWrite {
   readonly projectId?: string
 }
 
+/** Storage seam allowing the procedural policy to be tested independently. */
 export interface ProceduralMemoryStore {
+  /**
+   * Read current or historical procedural-memory rows.
+   * @param query - Optional project, session, and history filters.
+   * @returns Matching durable memory rows.
+   */
   timeline(query?: {
     readonly projectId?: string
     readonly sessionId?: string
     readonly includeHistory?: boolean
   }): readonly ProceduralStoredMemory[]
+  /**
+   * Persist one versioned procedural-memory row.
+   * @param input - Secret-free procedural state and provenance to store.
+   * @returns Completion after the durable write finishes.
+   */
   remember(input: ProceduralMemoryWrite): Promise<void>
 }
 
@@ -53,6 +68,7 @@ interface ProvenanceInput {
   readonly projectId?: string
 }
 
+/** Structured user teaching accepted as an authoritative workflow procedure. */
 export interface TeachProcedureInput extends ProvenanceInput {
   readonly title: string
   readonly scope: string
@@ -61,15 +77,18 @@ export interface TeachProcedureInput extends ProvenanceInput {
   readonly evidence: string
 }
 
+/** Observable work sequence that may be promoted after verified completion. */
 export interface ExperienceProcedureInput extends TeachProcedureInput {
   readonly verified: boolean
 }
 
+/** Explicit correction that quarantines an existing learned procedure. */
 export interface CorrectProcedureInput extends ProvenanceInput {
   readonly key: string
   readonly evidence: string
 }
 
+/** Versioned durable state for one guided or experience-derived procedure. */
 export interface ProceduralLearningState {
   readonly version: typeof STATE_VERSION
   readonly key: string
@@ -89,6 +108,7 @@ export interface ProceduralLearningState {
   readonly projectId?: string
 }
 
+/** Filters used to select reusable active procedures. */
 export interface ProceduralRecommendationQuery {
   readonly projectId?: string
   readonly sessionId?: string
@@ -96,24 +116,44 @@ export interface ProceduralRecommendationQuery {
   readonly limit?: number
 }
 
-/** Durable procedure learner with evidence-backed promotion. */
+/** Durable procedure learner with evidence-backed promotion and correction. */
 export class ProceduralLearningEngine {
   private writeTail: Promise<void> = Promise.resolve()
 
   constructor(private readonly store: ProceduralMemoryStore) {}
 
+  /**
+   * Retain one explicit user-taught procedure as active knowledge.
+   * @param input - Structured, secret-free user teaching with provenance.
+   * @returns The durable active procedural state after the write.
+   */
   teach(input: TeachProcedureInput): Promise<ProceduralLearningState> {
     return this.enqueue(() => this.writeGuided(input))
   }
 
+  /**
+   * Record an observed procedure and promote it only when its result is verified.
+   * @param input - Observable execution steps, evidence, and verification state.
+   * @returns Candidate or active procedural state after applying the evidence.
+   */
   recordExperience(input: ExperienceProcedureInput): Promise<ProceduralLearningState> {
     return this.enqueue(() => this.writeExperience(input))
   }
 
+  /**
+   * Quarantine a learned procedure after an explicit correction.
+   * @param input - Procedure key and corrective evidence with provenance.
+   * @returns Quarantined procedural state after the correction is persisted.
+   */
   correct(input: CorrectProcedureInput): Promise<ProceduralLearningState> {
     return this.enqueue(() => this.writeCorrection(input))
   }
 
+  /**
+   * Return only active reusable procedures matching the requested context.
+   * @param query - Optional project, session, scope, and result-count filters.
+   * @returns Active procedures ordered by confidence and recent evidence.
+   */
   recommend(query: ProceduralRecommendationQuery = {}): ProceduralLearningState[] {
     const limit = query.limit ?? DEFAULT_LIMIT
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
@@ -311,6 +351,11 @@ function procedureKey(title: string, scope: string, trigger: string): string {
   return hash.toString(16).padStart(8, '0')
 }
 
+/**
+ * Decode one procedural-memory row without trusting arbitrary stored JSON.
+ * @param row - Cognitive-memory row that may contain versioned procedure state.
+ * @returns Valid procedural state, or undefined for unrelated or malformed data.
+ */
 export function decodeProceduralState(row: ProceduralStoredMemory): ProceduralLearningState | undefined {
   if (row.subject === undefined || !row.subject.startsWith(PROCEDURE_SUBJECT_PREFIX) || row.value === undefined) return undefined
   let raw: unknown
@@ -343,7 +388,11 @@ export function decodeProceduralState(row: ProceduralStoredMemory): ProceduralLe
   }
 }
 
-/** Hide unverified or corrected procedural memories from ordinary model recall. */
+/**
+ * Hide unverified or corrected procedural memories from ordinary model recall.
+ * @param hits - Cognitive-memory search hits that may include procedure rows.
+ * @returns Hits containing only active procedure rows plus unrelated memories.
+ */
 export function filterProceduralSearchHits(hits: readonly CognitiveMemoryHit[]): CognitiveMemoryHit[] {
   return hits.filter((hit) => {
     if (hit.record.subject === undefined || !hit.record.subject.startsWith(PROCEDURE_SUBJECT_PREFIX)) return true
@@ -355,34 +404,63 @@ export function filterProceduralSearchHits(hits: readonly CognitiveMemoryHit[]):
 export class ProceduralExperienceTrace {
   private readonly traces = new Map<string, string[]>()
 
+  /**
+   * Record one tool choice without retaining raw arguments.
+   * @param sessionId - Session whose experience trace receives the step.
+   * @param toolName - Public tool name chosen during execution.
+   */
   toolCall(sessionId: string, toolName: string): void {
     this.push(sessionId, `Use tool ${boundedText(toolName, 'tool name').slice(0, 160)}`)
   }
 
+  /**
+   * Record one HARDNESS strategy selection.
+   * @param sessionId - Session whose experience trace receives the step.
+   * @param strategy - Bounded strategy label selected by the mission kernel.
+   */
   decision(sessionId: string, strategy: string): void {
     const safe = boundedText(strategy, 'strategy decision')
     rejectSecrets(safe)
     this.push(sessionId, `Strategy decision: ${safe}`)
   }
 
+  /**
+   * Record an action executed inside a Living Creation without its raw payload.
+   * @param sessionId - Session whose experience trace receives the step.
+   * @param action - Declared Living action name.
+   */
   livingAction(sessionId: string, action: string): void {
     const safe = boundedText(action, 'Living action')
     rejectSecrets(safe)
     this.push(sessionId, `Living action: ${safe}`)
   }
 
+  /**
+   * Record one reusable HARDNESS recovery lesson.
+   * @param sessionId - Session whose experience trace receives the lesson.
+   * @param lesson - Secret-free recovery strategy produced by HARDNESS.
+   */
   recovery(sessionId: string, lesson: string): void {
     const safe = boundedText(lesson, 'recovery lesson')
     rejectSecrets(safe)
     this.push(sessionId, `Recovery lesson: ${safe}`)
   }
 
+  /**
+   * Consume and clear the bounded trace at verified completion.
+   * @param sessionId - Session whose observable work is being completed.
+   * @returns Ordered argument-free procedural steps collected for the session.
+   */
   complete(sessionId: string): string[] {
     const steps = [...(this.traces.get(sessionId) ?? [])]
     this.traces.delete(sessionId)
     return steps
   }
 
+  /**
+   * Drop an unfinished trace when its goal is cleared.
+   * @param sessionId - Session whose stale work should be discarded.
+   */
   clear(sessionId: string): void { this.traces.delete(sessionId) }
 
   private push(sessionId: string, value: string): void {
@@ -394,7 +472,11 @@ export class ProceduralExperienceTrace {
   }
 }
 
-/** Install autonomous learn-by-doing observation into the session-learning plugin. */
+/**
+ * Install autonomous learn-by-doing observation into the session-learning plugin.
+ * @param ctx - Cordis context providing session events and cognitive memory.
+ * @returns Procedural engine used by automatic learning and guided teaching.
+ */
 export function installProceduralLearning(ctx: Context): ProceduralLearningEngine {
   const engine = new ProceduralLearningEngine(cognitiveStore(ctx))
   const trace = new ProceduralExperienceTrace()
