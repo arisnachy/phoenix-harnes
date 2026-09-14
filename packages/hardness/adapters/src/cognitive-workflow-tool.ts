@@ -1,0 +1,79 @@
+/** Model-facing pure adapter for the deterministic HARDNESS cognitive workflow router. */
+
+import {
+  adaptCognitiveWorkflow,
+  selectCognitiveWorkflow,
+  type CognitiveMissionProfile,
+  type CognitiveWorkflowObservation,
+} from '@phoenix-ai/dsh-hardness'
+import { defineTool, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+
+const MISSION_KINDS = ['simple', 'build', 'debug', 'research', 'architecture', 'operational', 'recovery', 'mixed'] as const
+const MISSION_LEVELS = ['low', 'medium', 'high'] as const
+const WORKFLOW_OBSERVATIONS = [
+  'execution-failed',
+  'verification-failed',
+  'new-risk',
+  'scope-expanded',
+  'independent-subtasks-discovered',
+  'repeated-failure',
+] as const satisfies readonly CognitiveWorkflowObservation[]
+
+/** Create the pure model-facing cognitive workflow planner.
+ * @returns A registry-ready `hardness_workflow` tool that selects no execution authority.
+ */
+export function createCognitiveWorkflowTool(): ToolDefinition {
+  return defineTool({
+    name: 'hardness_workflow',
+    description: 'Select the deterministic HARDNESS cognitive workflow before execution planning. Use it for non-trivial missions and again when bounded evidence changes the mission. It returns ordered flows, reasons, and quality gates; it does not execute tools or grant permissions.',
+    parameters: {
+      profile: {
+        type: 'object',
+        required: true,
+        additionalProperties: false,
+        properties: {
+          kind: { type: 'string', enum: MISSION_KINDS, required: true },
+          complexity: { type: 'string', enum: MISSION_LEVELS, required: true },
+          risk: { type: 'string', enum: MISSION_LEVELS, required: true },
+          novelty: { type: 'string', enum: MISSION_LEVELS, required: true },
+          requiresCodeChange: { type: 'boolean', required: true },
+          requiresExternalEvidence: { type: 'boolean', required: true },
+          hasIndependentSubtasks: { type: 'boolean', required: true },
+          persistent: { type: 'boolean', required: true },
+          previousFailure: { type: 'boolean', required: true },
+          repeatedPattern: { type: 'boolean', required: true },
+          userVisibleArtifact: { type: 'boolean', required: true },
+        },
+      },
+      observation: { type: 'string', enum: WORKFLOW_OBSERVATIONS },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          profile: { type: 'json', required: true },
+          selected: { type: 'array', items: { type: 'string' }, required: true },
+          reasons: { type: 'json', required: true },
+          skipped: { type: 'json', required: true },
+          qualityGates: { type: 'array', items: { type: 'string' }, required: true },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    execute(args) {
+      const initial = selectCognitiveWorkflow(args.profile as CognitiveMissionProfile)
+      return args.observation === undefined
+        ? initial
+        : adaptCognitiveWorkflow(initial, args.observation as CognitiveWorkflowObservation)
+    },
+    presentCall(args) {
+      return {
+        card: 'generic',
+        title: `HARDNESS workflow · ${args.profile.kind}`,
+        kind: 'read',
+        rawInput: args.profile.kind,
+      }
+    },
+  })
+}
