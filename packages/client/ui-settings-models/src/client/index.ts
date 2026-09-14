@@ -43,7 +43,10 @@ const NS = 'settings.models'
 const CONNECTORS_NS = 'settings.connectors'
 export type { ModelsSettingsState, ProviderRow } from './store.ts'
 
-/** Refetch the page snapshot only after its first load. */
+/**
+ * Refetch the page snapshot only after its first load.
+ * @param controller Models settings store whose loaded snapshot may be refreshed.
+ */
 export function refreshIfLoaded(controller: ModelsSettingsStore): void {
   if (controller.store.getSnapshot().status === 'idle') return
   void controller.load()
