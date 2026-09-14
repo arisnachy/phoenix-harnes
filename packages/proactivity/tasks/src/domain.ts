@@ -93,7 +93,7 @@ function annualMissed(task: TaskRecord, nowMs: number, policy: CatchUpPolicy): s
   return values
 }
 
-/** Select due occurrences after a restart without replaying already terminal occurrence ids. */
+/** Select due occurrences after a restart without replaying completed/skipped occurrence ids. Failed runs remain retryable after retryAt. */
 export function dueOccurrences(task: TaskRecord, runs: readonly TaskRunRecord[], nowMs: number): DueOccurrence[] {
   if (task.state !== 'scheduled') return []
   const next = Date.parse(task.nextRunAt)
@@ -102,10 +102,15 @@ export function dueOccurrences(task: TaskRecord, runs: readonly TaskRunRecord[],
   if (task.schedule.kind === 'once') due = task.catchUp === 'skip' && next < nowMs ? [] : [task.nextRunAt]
   else if (task.schedule.kind === 'interval') due = intervalMissed(task, nowMs, task.catchUp)
   else due = annualMissed(task, nowMs, task.catchUp)
-  const terminal = new Set(runs.filter(run => run.status !== 'running').map(run => run.occurrenceId))
+
+  const terminal = new Set(runs.filter(run => run.status === 'completed' || run.status === 'skipped').map(run => run.occurrenceId))
+  const retryBlocked = new Set(runs
+    .filter(run => run.status === 'failed' && run.retryAt !== undefined && Date.parse(run.retryAt) > nowMs)
+    .map(run => run.occurrenceId))
+
   return due
     .map(dueAt => ({ task, dueAt, occurrenceId: occurrenceId(task.id, dueAt) }))
-    .filter(item => !terminal.has(item.occurrenceId))
+    .filter(item => !terminal.has(item.occurrenceId) && !retryBlocked.has(item.occurrenceId))
 }
 
 /** Advance a task from its scheduled target, never from completion time, so recurrence cannot drift. */
@@ -115,11 +120,25 @@ export function advanceAfter(task: TaskRecord, acceptedDueAt: string, nowMs: num
   if (task.schedule.kind === 'interval') {
     const step = task.schedule.everySeconds * 1000
     const anchor = Date.parse(task.schedule.anchorAt)
-    const after = Math.max(Date.parse(acceptedDueAt), nowMs)
+    const after = task.catchUp === 'all' ? Date.parse(acceptedDueAt) : Math.max(Date.parse(acceptedDueAt), nowMs)
     const n = Math.floor((after - anchor) / step) + 1
     return { ...task, state: 'scheduled', nextRunAt: iso(anchor + Math.max(0, n) * step), updatedAt }
   }
-  return { ...task, state: 'scheduled', nextRunAt: iso(nextAnnualEpoch(task.schedule, Math.max(Date.parse(acceptedDueAt), nowMs))), updatedAt }
+  const after = task.catchUp === 'all' ? Date.parse(acceptedDueAt) : Math.max(Date.parse(acceptedDueAt), nowMs)
+  return { ...task, state: 'scheduled', nextRunAt: iso(nextAnnualEpoch(task.schedule, after)), updatedAt }
+}
+
+/** Settle an overdue task that explicitly chose catch_up=skip, moving its cursor beyond now. */
+export function advanceSkipped(task: TaskRecord, nowMs: number): TaskRecord {
+  const updatedAt = iso(nowMs)
+  if (task.schedule.kind === 'once') return { ...task, state: 'completed', updatedAt }
+  if (task.schedule.kind === 'interval') {
+    const step = task.schedule.everySeconds * 1000
+    const anchor = Date.parse(task.schedule.anchorAt)
+    const n = Math.floor((nowMs - anchor) / step) + 1
+    return { ...task, state: 'scheduled', nextRunAt: iso(anchor + Math.max(0, n) * step), updatedAt }
+  }
+  return { ...task, state: 'scheduled', nextRunAt: iso(nextAnnualEpoch(task.schedule, nowMs)), updatedAt }
 }
 
 export function userView(task: TaskRecord, nowMs: number): UserTaskView | undefined {
