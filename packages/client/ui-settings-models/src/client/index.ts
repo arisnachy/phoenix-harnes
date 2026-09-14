@@ -109,22 +109,20 @@ export function apply(ctx: ClientContext): void {
     }
   }, 'ui-settings-models: pushed invalidations')
 
-  ctx.slots.inject('settings.section', function* () {
-    yield ctx.slots.register({
-      name: 'settings.section',
-      id: 'models',
-      order: 10,
-      label: () => t('nav'),
-      inject: injected,
-    }, ModelsSection)
-    yield ctx.slots.register({
-      name: 'settings.section',
-      id: 'connectors',
-      order: 12,
-      label: () => connectorT('nav'),
-      inject: connectorsInjected,
-    }, ConnectorsSettingsSection)
-  })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'models',
+    order: 10,
+    label: () => t('nav'),
+    inject: injected,
+  }, ModelsSection))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'connectors',
+    order: 12,
+    label: () => connectorT('nav'),
+    inject: connectorsInjected,
+  }, ConnectorsSettingsSection))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'welcome-notice',
