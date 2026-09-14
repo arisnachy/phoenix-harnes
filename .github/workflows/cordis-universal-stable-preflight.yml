@@ -1,0 +1,29 @@
+name: Cordis universal stable preflight
+
+on:
+  push:
+    branches:
+      - fix/stable-cordis-universal-surface-20260914
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.21.1
+      - name: Enable repository pnpm
+        run: corepack enable
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Cordis focused tests
+        run: pnpm exec vitest run packages/client/ui-workspace/tests/cordis-visual-workspace.client.spec.ts packages/client/ui-layout/tests/visual-workspace-frame.client.spec.tsx
+      - name: Phoenix full build
+        run: pnpm run build
+      - name: Translation pairing
+        run: pnpm run verify-translation-pairing
