@@ -26,7 +26,7 @@ export interface TaskFingerprint {
  * @returns Normalized lexical fingerprint suitable for relevance matching.
  */
 export function fingerprintTask(source: string | readonly string[]): TaskFingerprint {
-  const joined = (Array.isArray(source) ? source.join(' ') : source).slice(0, MAX_SOURCE_CHARS)
+  const joined = (typeof source === 'string' ? source : source.join(' ')).slice(0, MAX_SOURCE_CHARS)
   const normalized = normalize(joined)
   const tokens = [...new Set(normalized
     .split(/[^a-z0-9._/-]+/u)
