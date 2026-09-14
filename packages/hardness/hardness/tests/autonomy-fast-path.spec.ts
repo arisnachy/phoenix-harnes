@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { selectCognitiveWorkflow, type CognitiveMissionProfile } from '../src/cognitive-workflow.ts'
+import {
+  renderCognitiveWorkflowGuide,
+  selectCognitiveWorkflow,
+  type CognitiveMissionProfile,
+} from '../src/cognitive-workflow.ts'
 
 const profile = (patch: Partial<CognitiveMissionProfile> = {}): CognitiveMissionProfile => ({
   kind: 'simple',
@@ -76,5 +80,15 @@ describe('HARDNESS autonomy fast path', () => {
     expect(highRisk.selected).toEqual(expect.arrayContaining(['security-risk-review', 'adversarial-critique', 'independent-judge']))
     expect(failed.executionMode).toBe('deep')
     expect(failed.selected).toEqual(expect.arrayContaining(['quality-escalation', 'failure-immunization', 'independent-judge']))
+  })
+
+  it('makes selected HARDNESS flows authoritative over generic process-skill ceremony', () => {
+    const guide = renderCognitiveWorkflowGuide('en')
+
+    expect(guide).toContain('Selected HARDNESS flows are the process policy')
+    expect(guide).toContain('Do not preload brainstorming, planning, review, or other methodology skills')
+    expect(guide).toContain('bounded cosmetic, wording, styling, and localized implementation changes')
+    expect(guide).toContain('fast mode')
+    expect(guide).toContain('escalate only when new evidence adds risk, scope, failure, or another real trigger')
   })
 })
