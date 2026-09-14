@@ -37,14 +37,9 @@ const ecosystem = {
 describe('universal living creations', () => {
   it('accepts unknown creation kinds and persists their self-described manifest offline', async () => {
     const { root, path } = await runtime()
-    root.living.remember(ecosystem)
+    await root.living.remember(ecosystem)
 
-    expect(root.living.inspect(ecosystem.id)).toMatchObject({
-      manifest: ecosystem,
-      connected: false,
-      achievedLevel: 'static',
-    })
-
+    expect(root.living.inspect(ecosystem.id)).toMatchObject({ manifest: ecosystem, connected: false, achievedLevel: 'static' })
     const persisted = JSON.parse(await readFile(path, 'utf8')) as { version: number; creations: unknown[] }
     expect(persisted.version).toBe(1)
     expect(persisted.creations).toEqual([ecosystem])
@@ -52,7 +47,7 @@ describe('universal living creations', () => {
 
   it('derives the achieved level from a real provider and routes state, actions, and events', async () => {
     const { root } = await runtime()
-    root.living.remember(ecosystem)
+    await root.living.remember(ecosystem)
     const events: unknown[] = []
     const disposeEvent = root.living.onCreationEvent(event => events.push(event))
     const disposeProvider = root.living.attach(ecosystem.id, {
@@ -80,16 +75,9 @@ describe('universal living creations', () => {
 
   it('rejects a target integration level that the manifest cannot describe', async () => {
     const { root } = await runtime()
-    expect(() => root.living.remember({
-      id: LivingCreationId('broken'),
-      title: 'Broken creation',
-      kind: 'arbitrary',
-      targetLevel: 'controllable',
-      state: [],
-      actions: [],
-      events: [],
-      resources: [],
-      actors: [],
-    })).toThrow(/controllable.*action/i)
+    await expect(root.living.remember({
+      id: LivingCreationId('broken'), title: 'Broken creation', kind: 'arbitrary', targetLevel: 'controllable',
+      state: [], actions: [], events: [], resources: [], actors: [],
+    })).rejects.toThrow(/controllable.*action/i)
   })
 })
