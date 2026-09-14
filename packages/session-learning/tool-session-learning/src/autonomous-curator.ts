@@ -32,12 +32,14 @@ export interface AutonomousMemoryWrite {
 
 /** Storage seam used by the autonomous curator. */
 export interface AutonomousMemoryStore {
-  /**
-   * Persist one bounded cognitive-memory row.
-   * @param input - Secret-free memory write.
-   * @returns Completion when the write is durable.
-   */
+  /** Persist one bounded cognitive-memory row. */
   remember(input: AutonomousMemoryWrite): Promise<void>
+  /**
+   * Resolve the latest durable autonomous subject in the same project/session
+   * scope. This lets an explicit correction supersede prior guidance even after
+   * the curator process has been recreated.
+   */
+  findLatestDurableSubject?(input: { readonly sessionId: string; readonly projectId?: string }): Promise<string | undefined>
 }
 
 /** Provenance for one user-authored message observed by the curator. */
@@ -87,8 +89,14 @@ export class AutonomousMemoryCurator {
       : 'autonomous/user-correction'
     const scope = memoryScope(input)
     const generatedSubject = `phoenix.learning.autonomous.${candidate.kind}.${memoryKey(candidate.summary)}`
+    const persistedSubject = candidate.kind === 'correction' && this.lastDurableSubject.get(scope) === undefined
+      ? await this.store.findLatestDurableSubject?.({
+        sessionId: input.sessionId,
+        ...input.projectId === undefined ? {} : { projectId: input.projectId },
+      })
+      : undefined
     const subject = candidate.kind === 'correction'
-      ? this.lastDurableSubject.get(scope) ?? generatedSubject
+      ? this.lastDurableSubject.get(scope) ?? persistedSubject ?? generatedSubject
       : generatedSubject
     await this.store.remember({
       sessionId: input.sessionId,
