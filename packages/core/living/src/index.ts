@@ -13,14 +13,22 @@ export type {
 
 export type { LivingCreationId } from './types.ts'
 
-/** Construct a branded creation id after an owning boundary validates its text. */
+/**
+ * Construct a branded creation id after an owning boundary validates its text.
+ * @param value - Stable textual identity supplied by the creation owner.
+ * @returns The same value branded as a living-creation id.
+ */
 export function LivingCreationId(value: string): LivingCreationId {
   return value as LivingCreationId
 }
 
 const LEVELS: readonly LivingIntegrationLevel[] = ['static', 'connected', 'reactive', 'controllable', 'inhabited']
 
-/** Numeric ordering used to compare achieved and requested integration levels. */
+/**
+ * Numeric ordering used to compare achieved and requested integration levels.
+ * @param level - Integration level to rank.
+ * @returns Zero-based rank from static through inhabited.
+ */
 export function livingLevelRank(level: LivingIntegrationLevel): number {
   return LEVELS.indexOf(level)
 }
@@ -34,7 +42,10 @@ function uniqueNormalized(label: string, values: readonly string[]): void {
   }
 }
 
-/** Validate one domain-neutral manifest without interpreting its `kind`. */
+/**
+ * Validate one domain-neutral manifest without interpreting its `kind`.
+ * @param manifest - Self-described creation capabilities and target level.
+ */
 export function validateLivingManifest(manifest: LivingCreationManifest): void {
   if (manifest.id.length === 0 || manifest.id !== manifest.id.trim()) throw new TypeError('living creation id must be a non-empty normalized string')
   if (manifest.title.length === 0 || manifest.title !== manifest.title.trim()) throw new TypeError('living creation title must be a non-empty normalized string')
@@ -52,7 +63,11 @@ export function validateLivingManifest(manifest: LivingCreationManifest): void {
   if (rank >= livingLevelRank('inhabited') && manifest.actors.length === 0) throw new TypeError('inhabited living creation must declare at least one actor')
 }
 
-/** Highest level a concrete provider proves at runtime. */
+/**
+ * Resolve the highest integration level a concrete provider proves at runtime.
+ * @param provider - Runtime methods and actors supplied by one creation.
+ * @returns Highest level justified by the provider's actual capabilities.
+ */
 export function livingProviderLevel(provider: LivingCreationProvider): LivingIntegrationLevel {
   if (provider.readState === undefined) return 'static'
   if (provider.subscribe === undefined) return 'connected'
@@ -77,23 +92,68 @@ export abstract class LivingRegistry extends Service {
     super(ctx, 'living')
   }
 
-  /** Persist or replace one self-describing creation manifest and return its current snapshot. */
+  /**
+   * Persist or replace one self-describing creation manifest.
+   * @param manifest - Durable identity and declared capabilities to remember.
+   * @returns Snapshot after the manifest has been committed.
+   */
   abstract remember(manifest: LivingCreationManifest): Promise<LivingCreationSnapshot>
-  /** Explicitly delete one remembered creation and detach any live provider. */
+
+  /**
+   * Explicitly delete one remembered creation and detach any live provider.
+   * @param id - Creation whose durable identity should be removed.
+   */
   abstract forget(id: LivingCreationId): Promise<void>
-  /** List fresh snapshots in stable registration order. */
+
+  /**
+   * List fresh snapshots in stable registration order.
+   * @returns Current remembered creations with connection and achieved-level state.
+   */
   abstract list(): LivingCreationSnapshot[]
-  /** Inspect one remembered creation or throw when unknown. */
+
+  /**
+   * Inspect one remembered creation or throw when unknown.
+   * @param id - Creation to inspect.
+   * @returns Fresh manifest and live integration status.
+   */
   abstract inspect(id: LivingCreationId): LivingCreationSnapshot
-  /** Attach an effect-owned runtime provider; disposing it leaves the manifest remembered but offline. */
+
+  /**
+   * Attach an effect-owned runtime provider; disposing it leaves the manifest remembered but offline.
+   * @param id - Remembered creation receiving the live provider.
+   * @param provider - Runtime implementation for state, events, actions, and actors.
+   * @returns Idempotent disposer for this exact provider attachment.
+   */
   abstract attach(id: LivingCreationId, provider: LivingCreationProvider): () => void
-  /** Read authoritative live state. */
+
+  /**
+   * Read authoritative live state.
+   * @param id - Connected creation to read.
+   * @returns State supplied by the currently attached provider.
+   */
   abstract readState(id: LivingCreationId): Promise<LivingState>
-  /** Execute one declared live action. */
+
+  /**
+   * Execute one declared live action.
+   * @param id - Connected creation that owns the action.
+   * @param action - Action name declared by the creation manifest.
+   * @param input - JSON-compatible payload passed to the provider.
+   * @returns JSON-compatible provider result.
+   */
   abstract act(id: LivingCreationId, action: string, input: LivingJson): Promise<LivingJson>
-  /** Subscribe to committed registry/connectivity changes. */
+
+  /**
+   * Subscribe to committed registry and connectivity changes.
+   * @param listener - Observer invoked with the affected creation id.
+   * @returns Disposer that unregisters only this observer.
+   */
   abstract onChanged(listener: LivingChangedListener): () => void
-  /** Subscribe to declared events emitted by connected creations. */
+
+  /**
+   * Subscribe to declared events emitted by connected creations.
+   * @param listener - Observer receiving creation id, event name, and JSON data.
+   * @returns Disposer that unregisters only this observer.
+   */
   abstract onCreationEvent(listener: LivingCreationEventListener): () => void
 }
 
