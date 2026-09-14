@@ -3,6 +3,7 @@ import {
   ProceduralExperienceTrace,
   ProceduralLearningEngine,
   filterProceduralSearchHits,
+  formatProceduralContext,
   type ProceduralMemoryStore,
   type ProceduralMemoryWrite,
   type ProceduralStoredMemory,
@@ -132,6 +133,23 @@ describe('ProceduralLearningEngine', () => {
       ...provenance(4_000),
     })).rejects.toThrow(/secret/i)
     expect(store.rows).toHaveLength(0)
+  })
+
+  it('renders active project procedures as bounded automatic context', async () => {
+    const engine = new ProceduralLearningEngine(new MemoryStore())
+    await engine.teach({
+      title: 'Safe configuration restart',
+      scope: 'phoenix/configuration',
+      trigger: 'before restart',
+      steps: ['validate configuration', 'run boot check', 'restart'],
+      evidence: 'Explicit user teaching.',
+      ...provenance(5_000),
+    })
+    const context = formatProceduralContext(engine.recommend({ projectId: 'phoenix', limit: 4 }))
+    expect(context).toContain('<validated_procedures>')
+    expect(context).toContain('Safe configuration restart')
+    expect(context).toContain('validate configuration → run boot check → restart')
+    expect(context).toContain('Treat these as validated procedural evidence')
   })
 })
 
