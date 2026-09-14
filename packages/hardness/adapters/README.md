@@ -6,7 +6,23 @@ Projects metadata from existing PHOENIX tools and skills into the HARDNESS Tool 
 
 The adapters do not execute tools, load skill bodies, or grant permissions; each source registry retains authority.
 
-The adapter separates host-owned indexing from model-facing tools. The host composition mounts `modelTools: false` to index capabilities and install the shared mission runtime once. Full agent presets mount `modelTools: true` to expose `hardness_run` and `connector_list` in their own scope without duplicating the shared HARDNESS registry. Minimal presets can therefore keep a deliberately small catalog.
+The adapter separates host-owned indexing from model-facing tools. The host composition mounts `modelTools: false` to index capabilities and install the shared mission runtime once. Full agent presets mount `modelTools: true` to expose `hardness_run`, `connector_list`, and durable scheduled-task tools in their own scope without duplicating the shared HARDNESS registry. Minimal presets can therefore keep a deliberately small catalog.
+
+## Durable proactive tasks
+
+Phoenix owns one process-shared task engine per durable ledger. By default the ledger is `~/.dsh/phoenix-tasks.json`; writes are atomic and the JSON file is created with user-only permissions where the platform honors POSIX modes. Model-facing scopes and the host runtime share the same in-process engine so they never cache competing snapshots of one task file.
+
+`phoenix_task_create` schedules user-requested or Phoenix-initiated future work. One-shot tasks, anchored interval recurrence, and calendar-safe yearly recurrence are supported. Yearly recurrence accepts an IANA timezone so birthdays and anniversaries remain on the intended local calendar date across leap years. `phoenix_task_list`, `phoenix_task_pause`, `phoenix_task_resume`, and `phoenix_task_cancel` provide the model-facing management surface.
+
+Every occurrence has a stable idempotency key and immutable execution history. A task found in `running` state after a restart is recovered to `scheduled`. If the computer was off at a due time, catch-up policy controls recovery: `latest` runs only the latest missed occurrence, `all` replays bounded missed occurrences, and `skip` advances past old work. Recurrence stays anchored instead of drifting from the time Phoenix happened to restart.
+
+A task may use `visibility: surprise`. It is omitted from ordinary listings until its reveal time (or, for a recurring surprise without an explicit reveal time, until the current delivery occurrence). Optional private preparation can run a configured lead time before delivery and its bounded result is passed into the reveal step. Surprise content remains present in the durable internal ledger for recovery and audit; the feature is presentation-private, not an unaudited secret channel.
+
+The host polls the durable engine and also pumps it when an agent is created. Chat delivery wakes a live target agent with a proactive follow-up. Private preparation, scheduled office work, and email use a configured one-shot subagent provider. If no live execution target exists, execution is deferred without consuming the occurrence.
+
+Email has two independent identity references. `userMailIdentity` identifies the authorized mailbox used for office work sent on the user's behalf. `harnessMailIdentity` identifies Phoenix's own mailbox for direct communication with the user. A task chooses `user`, `harness`, or `auto`; `auto` prefers the Phoenix identity and falls back to the user identity. These references do not contain credentials and scheduled execution does not bypass normal mail-tool authorization or approval.
+
+Relevant configuration keys are `taskLedgerPath`, `taskPollMs`, `privateWorkProvider`, `privateWorkResultChars`, `userMailIdentity`, and `harnessMailIdentity`. The special `:memory:` ledger exists only for deterministic tests and ephemeral compositions.
 
 ## Model Experience
 
@@ -14,7 +30,7 @@ The adapter separates host-owned indexing from model-facing tools. The host comp
 
 #### What the model sees
 
-The model sees a stable capability catalog, the shared HARDNESS lifecycle guide, and a replayable audit trace while execution remains governed by PHOENIX.
+The model sees a stable capability catalog, the shared HARDNESS lifecycle guide, a durable-proactivity guide, and a replayable audit trace while execution remains governed by PHOENIX.
 
 ##### HARDNESS mission guidance
 
@@ -22,6 +38,8 @@ The model sees a stable capability catalog, the shared HARDNESS lifecycle guide,
 Consumers may expose stable capability identifiers such as `tool:<name>`, `skill:<name>`, and `openclaw:<id>` together with compatibility and verification state; execution remains behind PHOENIX approval and canonical registries.
 
 When the canonical system-prompt service is mounted, this package installs the `hardness:operating-protocol` section. It gives every model the same lifecycle vocabulary and requires resolution, approval, verification, presentation, and evidence before a task is described as complete.
+
+Model-facing scopes also install `hardness:proactivity-protocol`. It tells the model to use durable tasks for explicit reminders and useful autonomous follow-ups, avoid duplicates and spam, use private preparation for surprises, preserve calendar timing, and keep all scheduled external actions behind the same authorization policy used for immediate work.
 
 Tool projections may subscribe to `tools/change`; this keeps dynamically connected tools, including MCP tools, represented in HARDNESS while registrations are reversible. The internal `hardness_run` tool is excluded from that projection to prevent recursive routing.
 
@@ -50,13 +68,15 @@ The model also receives the read-only connector_list tool when the authorization
 
 #### Token effect
 
-The protocol section and capability metadata contribute model tokens; indexing source registries alone does not add prompt text.
+The protocol sections, task-tool schemas, and capability metadata contribute model tokens; indexing source registries alone does not add prompt text.
 
 #### KV Cache effect
 
-The projected catalog is cache-friendly while source schemas, extension metadata, and verification state remain unchanged.
+The projected catalog and proactivity protocol are cache-friendly while source schemas, extension metadata, verification state, and visible tool definitions remain unchanged.
 
 ## Known Limitations and Deferred Work
 
 - External extension execution remains governed by the Capability Broker and isolated package-host contract rather than being activated eagerly at startup.
 - Durable mission tracing requires a live agent session; direct unit-level runner calls without one remain unrecorded and are not production proof.
+- Email identities are configuration references only; this package does not create external mailbox accounts. The selected provider/tool must already be configured and authorized.
+- Surprise visibility hides unrevealed content from ordinary task listings and compact tool presentation, but the durable ledger intentionally remains auditable to an authorized operator.
