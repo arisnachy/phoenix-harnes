@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** AppFrame shell geometry while Cordis borrows the in-flow visual rail. */
+/** AppFrame shell geometry while Cordis/KIRA occupy the in-flow visual rail. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
@@ -24,13 +24,21 @@ function mountWith(owner: 'subagent' | 'cordis') {
   const instance = createLayoutStore().create()
   instance.actions.setWorkspaceOccupant(owner, true)
   const useSessions = ((selector: (state: SessionListState) => unknown) => selector({
-    ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
-  } as SessionListState)) as never
-  const renderSlot = ((key: string, _owner: object) => (
-    key === 'shell.overlay'
-      ? <div data-cordis-workspace={owner === 'cordis' || undefined} data-kira-teams={owner === 'subagent' || undefined} />
-      : <div />
-  )) as AppFrameProps['renderSlot']
+    ids: [],
+    byId: {},
+    current: undefined,
+    phase: 'ready',
+    subagentsByParent: {},
+    jobsBySession: {},
+    currentAddress: undefined,
+  } as unknown as SessionListState)) as never
+  const renderSlot = ((key: string, _owner: object) => {
+    if (key === 'shell.workspace') {
+      return <div data-cordis-workspace={owner === 'cordis' || undefined} data-kira-teams={owner === 'subagent' || undefined} />
+    }
+    if (key === 'shell.overlay') return <div data-test-overlay />
+    return <div data-test-slot={key} />
+  }) as AppFrameProps['renderSlot']
   const props = {
     useStore: hookOf(instance),
     actions: instance.actions,
@@ -52,19 +60,26 @@ afterEach(() => {
 })
 
 describe('AppFrame visual workspace', () => {
-  it('minimizes navigation for Cordis while keeping the ordinary details column closed, then restores the shell exactly', () => {
+  it('mounts Cordis in the in-flow workspace rail, never in shell.overlay, and restores shell geometry', () => {
     const { instance, frame } = mountWith('cordis')
 
     expect(frame.style.gridTemplateColumns).toBe('56px minmax(0, 1fr) 0px')
-    expect(frame.querySelector('[data-cordis-workspace]')).toBeTruthy()
+    const workspace = frame.querySelector('[data-shell-workspace]')
+    const cordis = frame.querySelector('[data-cordis-workspace]')
+    expect(workspace).toBeTruthy()
+    expect(cordis).toBeTruthy()
+    expect(workspace?.contains(cordis)).toBe(true)
+    expect(frame.querySelector('[data-shell-overlay]')?.contains(cordis)).toBe(false)
 
     act(() => { instance.actions.setWorkspaceOccupant('cordis', false) })
     expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
   })
 
-  it('does not double-shrink the shell for the subagent card, which already reserves in-flow width', () => {
+  it('mounts the KIRA/subagent card in the same rail so Cordis can stack underneath it', () => {
     const { frame } = mountWith('subagent')
+    const workspace = frame.querySelector('[data-shell-workspace]')
+    const kira = frame.querySelector('[data-kira-teams]')
     expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
-    expect(frame.querySelector('[data-kira-teams]')).toBeTruthy()
+    expect(workspace?.contains(kira)).toBe(true)
   })
 })
