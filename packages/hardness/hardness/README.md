@@ -22,9 +22,15 @@ Quality gates returned with a plan are observable labels such as `objective-lock
 
 ### Structured model-facing router
 
-Model presets mount a pure read-only `hardness_workflow` tool next to `hardness_run`. The model supplies a validated `CognitiveMissionProfile`; the tool returns the ordered selected flows, activation reasons, skipped flows, and quality gates. An optional bounded observation strengthens the profile and recomputes the workflow. The tool never calls another tool, never grants permissions, and is excluded from the host Tool Atlas so HARDNESS does not recursively advertise its own router as an executable capability.
+Model presets mount a pure read-only `hardness_workflow` tool next to `hardness_run`. The model supplies a validated `CognitiveMissionProfile`; the tool returns the execution mode, ordered selected flows, activation reasons, skipped flows, and quality gates. An optional bounded observation strengthens the profile and recomputes the workflow. The tool never calls another tool, never grants permissions, and is excluded from the host Tool Atlas so HARDNESS does not recursively advertise its own router as an executable capability.
 
 For a non-trivial mission the operating protocol tells the model to call `hardness_workflow` before formulating the execution plan, and to call it again when risk, scope, task independence, failure evidence, or a concrete future obligation changes. `future-obligation-discovered` makes the mission persistent and activates `autonomous-follow-up`; the authorized scheduler/proactivity runtime remains solely responsible for actually creating or executing future work.
+
+### Execution modes and process authority
+
+Every workflow plan now includes `executionMode: 'fast' | 'standard' | 'deep'`. A bounded low-risk, low-novelty localized change uses `fast`, which deliberately skips brainstorming, architecture design, implementation-plan ceremony, and non-triggered adversarial review. Fast code changes still select `safe-change` and retain objective locking, rollback readiness, fresh targeted verification, and outcome comparison. Standard and deep modes activate stronger planning, proof, research, review, and judge flows only when the mission profile or fresh evidence justifies them.
+
+Selected HARDNESS flows are the process policy for the mission. A generic methodology-skill catalog must not create a second approval loop merely because brainstorming or planning appears broadly applicable; process skills are loaded only when they implement flows selected by HARDNESS. Bounded observations can only strengthen the workflow: failures, new risk, expanded scope, external-evidence needs, persistence, and independent subtasks cause deterministic escalation instead of premature mission termination.
 
 ## Model Experience
 
@@ -37,7 +43,7 @@ Consumers may expose declarative HARDNESS fields such as `capabilityId`, modalit
 ##### Cognitive routing and operating protocol
 
 ```markdown
-Classify the mission, call hardness_workflow for non-trivial work, and use the returned ordered pipeline and quality gates before execution planning. Debugging is root-cause-first; only independent work may be parallelized; high-complexity/high-risk work separates implementation, adversarial critique, and independent judgment. New evidence may strengthen the workflow. The shared execution lifecycle remains inspect → resolve → plan → approve → execute → verify → present → audit, and no flow selection grants execution authority.
+Classify the mission, call hardness_workflow for non-trivial work, and use the returned execution mode, ordered pipeline, and quality gates before execution planning. Use fast mode for bounded cosmetic, wording, styling, and localized implementation changes; make the smallest safe change and verify it with fresh targeted evidence. Debugging is root-cause-first; only independent work may be parallelized; high-complexity/high-risk work separates implementation, adversarial critique, and independent judgment. New evidence may strengthen the workflow. Selected HARDNESS flows own process policy, so routine process-skill ceremony must not create another approval loop. The shared execution lifecycle remains inspect → resolve → plan → approve → execute → verify → present → audit, and no flow selection grants execution authority.
 ```
 
 #### Token effect
