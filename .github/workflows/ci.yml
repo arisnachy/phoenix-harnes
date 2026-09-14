@@ -35,15 +35,9 @@ jobs:
           cache: pnpm
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
-      - name: Run static gates
-        env:
-          DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
-        run: pnpm run check:ci:static
       - name: Generate tool catalog for reconciliation
-        if: always()
         run: pnpm run gen-tool-catalog
       - name: Commit generated tool catalog to PR branch
-        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
@@ -51,10 +45,9 @@ jobs:
         run: |
           if git diff --quiet -- docs/tool-catalog.md; then
             echo "tool catalog already current"
-            exit 0
-          fi
-          current_sha="$(gh api "repos/${REPOSITORY}/contents/docs/tool-catalog.md?ref=${HEAD_BRANCH}" --jq .sha)"
-          CURRENT_SHA="$current_sha" HEAD_BRANCH="$HEAD_BRANCH" node <<'NODE'
+          else
+            current_sha="$(gh api "repos/${REPOSITORY}/contents/docs/tool-catalog.md?ref=${HEAD_BRANCH}" --jq .sha)"
+            CURRENT_SHA="$current_sha" HEAD_BRANCH="$HEAD_BRANCH" node <<'NODE'
           const fs = require('node:fs')
           const body = {
             message: 'docs: regenerate tool catalog for memory_teach',
@@ -64,7 +57,12 @@ jobs:
           }
           fs.writeFileSync('/tmp/catalog-update.json', JSON.stringify(body))
           NODE
-          gh api --method PUT "repos/${REPOSITORY}/contents/docs/tool-catalog.md" --input /tmp/catalog-update.json >/dev/null
+            gh api --method PUT "repos/${REPOSITORY}/contents/docs/tool-catalog.md" --input /tmp/catalog-update.json >/dev/null
+          fi
+      - name: Run static gates
+        env:
+          DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
+        run: pnpm run check:ci:static
 
   node-24-coverage:
     if: github.event_name == 'pull_request'
