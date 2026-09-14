@@ -67,7 +67,7 @@ export class LocalLivingRegistry extends LivingRegistry {
     ctx.effect(() => () => this.disposeProviders(), 'living provider teardown')
   }
 
-  remember(manifest: LivingCreationManifest): Promise<LivingCreationSnapshot> {
+  async remember(manifest: LivingCreationManifest): Promise<LivingCreationSnapshot> {
     validateLivingManifest(manifest)
     const candidate = clone(manifest)
     return this.enqueueMutation(async () => {
