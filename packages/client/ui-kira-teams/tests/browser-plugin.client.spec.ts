@@ -1,4 +1,4 @@
-/** ui-kira-teams browser half: overlay registration, injected actions, lineage read model. */
+/** ui-kira-teams browser half: workspace registration, injected actions, lineage read model. */
 import { Context } from '@phoenix-ai/cordis'
 import { stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
 import { describe, expect, it } from 'vitest'
@@ -55,7 +55,7 @@ async function provideSlotFaces(ctx: Context): Promise<void> {
   ctx.slots.register({
     name: 'root',
     children: {
-      'shell.overlay': { kind: 'list', scope: 'root' },
+      'shell.workspace': { kind: 'list', scope: 'root' },
     },
   } as never, () => null)
 }
@@ -102,7 +102,6 @@ const FAMILY: SessionSummary[] = [
   }),
   summary({ id: sid('g1'), parentId: sid('c1'), origin: 'subagent', displayTitle: 'nieto', running: false }),
   summary({ id: sid('c2'), parentId: sid('root'), origin: 'subagent', displayTitle: 'CONSTELACIÓN-2', running: false }),
-  // Foreign lineage and ordinary forks stay out of the board.
   summary({ id: sid('x1'), parentId: sid('other'), origin: 'subagent', displayTitle: 'otro-equipo', running: true }),
   summary({ id: sid('f1'), parentId: sid('root'), displayTitle: 'fork-ordinario', running: true }),
 ]
@@ -181,7 +180,6 @@ describe('lineageMembers', () => {
   })
 
   it('collects only the current lineage subagents with depths, root-walking through children', () => {
-    // Selected session is a grandchild: the walk climbs to the ordinary root.
     const { root, rows } = lineageMembers(
       sessionsWith(FAMILY, sid('g1')).list.getSnapshot(),
     )
@@ -227,11 +225,12 @@ describe('apply', () => {
     expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout'])
   })
 
-  it('registers one shell.overlay entry whose inject exposes the sessions face and actions', async () => {
+  it('registers one shell.workspace entry whose inject exposes the sessions face and actions', async () => {
     const { ctx, face, layout } = await fullBench(FAMILY, sid('root'))
-    const entry = ctx.slots.entries('shell.overlay')
+    const entry = ctx.slots.entries('shell.workspace')
       .find(slotEntry => slotEntry.component === KiraTeamsDock)!
     expect(entry).toBeDefined()
+    expect(ctx.slots.entries('shell.overlay')).toHaveLength(0)
     const injected = (entry.inject as unknown as () => {
       list: { getSnapshot(): SessionListState }
       layout: unknown

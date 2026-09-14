@@ -16,9 +16,8 @@ import type {
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
-import { turnProgress, type TurnProgress } from './turn-progress.ts'
+import { turnProgress } from './turn-progress.ts'
 import { ToolActivityFlow } from './ToolActivityFlow.tsx'
-import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
 
 const FOLLOW_THRESHOLD = 24
@@ -112,54 +111,6 @@ function runningTurnStartTime(timeline: ConversationTimelineSnapshot): number | 
     if (turn.status === 'open' && turn.start !== undefined) latest = turn.start.time
   }
   return latest
-}
-
-/** Turn-level model activity label retained across first-token, tool, and streaming phases. */
-function TurnStatus({ startTime, progress, t }: {
-  /** The running turn's logged `turn/start` time; null falls back to mount
-   *  time when that boundary is outside the window. */
-  startTime: number | null
-  /** Safe phase derived from the current chat projection. */
-  progress: TurnProgress | null
-  /** The owning view's locale seat. */
-  t: ChatViewSlotProps['t']
-}) {
-  const [mountedAt] = useState(() => Date.now())
-  // Anchored to turn/start so a mid-turn reload keeps the real
-  // elapsed time and the final footer's Ran-for label matches this clock.
-  const anchor = startTime ?? mountedAt
-  const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - anchor))
-  useEffect(() => {
-    const tick = (): void => {
-      setElapsedMs(Math.max(0, Date.now() - anchor))
-    }
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => { clearInterval(id) }
-  }, [anchor])
-  // Short turns keep the phase label; the clock only appears once the turn
-  // has clearly been running for a while.
-  const statusKey = progress === 'running-tools'
-    ? 'status.runningTools'
-    : progress === 'verifying'
-      ? 'status.verifying'
-      : progress === 'preparing'
-        ? 'status.preparing'
-        : 'status.thinking'
-  const showClock = elapsedMs >= 15_000
-  return (
-    <div className={css.turnStatus} role="status" aria-live="polite">
-      <span className={css.phoenixActivity} aria-hidden="true">
-        <PhoenixLogo size={28} />
-      </span>
-      <span>{t(statusKey)}</span>
-      {showClock && (
-        <span className={css.turnStatusClock} aria-hidden>
-          {formatRunDuration(elapsedMs, t)}
-        </span>
-      )}
-    </div>
-  )
 }
 
 /**
@@ -464,6 +415,7 @@ export function ChatView({
           )}
           <ToolActivityFlow
             nodes={chatNodes}
+            turnStatus={running ? { startTime: runningTurnStart, progress } : undefined}
             useSession={useSession}
             selectedCallId={selectedCallId}
             cwd={cwd}
@@ -481,9 +433,6 @@ export function ChatView({
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}
-          {/* Turn-level loading signal: rides the whole running turn (first-token
-              wait, tool execution, streaming) so it never flickers per step. */}
-          {running && <TurnStatus startTime={runningTurnStart} progress={progress} t={t} />}
           {completionPulse && (
             <div className={css.phoenixCompletion} aria-hidden="true">
               <span className={css.phoenixActivity}>
