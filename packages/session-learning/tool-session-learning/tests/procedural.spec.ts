@@ -136,14 +136,18 @@ describe('ProceduralLearningEngine', () => {
 })
 
 describe('ProceduralExperienceTrace', () => {
-  it('distills successful work into bounded action and recovery steps without raw arguments', () => {
+  it('distills successful work, strategy choices, Living actions, and recovery without raw arguments', () => {
     const trace = new ProceduralExperienceTrace()
     trace.toolCall('session-1', 'web_search')
+    trace.decision('session-1', 'verification-first')
+    trace.livingAction('session-1', 'move_piece')
     trace.toolCall('session-1', 'write_file')
     trace.recovery('session-1', 'Validate the generated file before retrying the renderer.')
 
     expect(trace.complete('session-1')).toEqual([
       'Use tool web_search',
+      'Strategy decision: verification-first',
+      'Living action: move_piece',
       'Use tool write_file',
       'Recovery lesson: Validate the generated file before retrying the renderer.',
     ])
