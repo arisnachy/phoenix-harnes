@@ -96,13 +96,20 @@ describe('HARDNESS model operating protocol', () => {
     expect(view.forbiddenActions).toEqual(['present', 'audit', 'claim-success'])
   })
 
-  it('renders a stable model-facing guide without executable values', () => {
+  it('renders cognitive routing before execution planning without changing execution authority', () => {
     const rendered = renderHardnessProtocol('en')
+    const spanish = renderHardnessProtocol('es')
 
     expect(rendered).toContain('<phoenix_hardness_protocol>')
     expect(rendered).toContain('inspect → resolve → plan → approve → execute → verify → present → audit')
+    expect(rendered).toContain('classify the mission and select or adapt the HARDNESS cognitive workflow')
+    expect(rendered).toContain('For every non-trivial mission call hardness_workflow')
+    expect(rendered).toContain('workflow selection never grants execution authority')
     expect(rendered).toContain('Never execute an unresolved, unapproved, or unverified operation.')
     expect(rendered).toContain('only pass with a passing quality gate may enter DONE')
+    expect(spanish).toContain('clasifica la misión y selecciona o adapta el workflow cognitivo HARDNESS')
+    expect(spanish).toContain('usa hardness_workflow')
+    expect(spanish).toContain('nunca concede autoridad de ejecución')
     expect(rendered).not.toContain('function')
     expect(rendered).not.toContain('credential')
     expect(rendered).toBe(renderHardnessProtocol('en'))

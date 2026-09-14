@@ -218,6 +218,8 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
     return [
       '<phoenix_hardness_protocol>',
       `Pasos obligatorios: ${steps}`,
+      'Antes de formular el plan de ejecución, clasifica la misión y selecciona o adapta el workflow cognitivo HARDNESS; esa selección nunca concede autoridad de ejecución.',
+      'Para toda misión no trivial usa hardness_workflow para obtener del harness el pipeline ordenado y sus quality gates; vuelve a llamarlo cuando cambien riesgo, alcance, independencia o evidencia de fallo.',
       'Resuelve la capacidad antes de ejecutar.',
       'Solicita aprobación explícita cuando la capacidad declare permisos.',
       'Verifica el resultado antes de presentarlo.',
@@ -232,6 +234,8 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
   return [
     '<phoenix_hardness_protocol>',
     `Required steps: ${steps}`,
+    'Before formulating the execution plan, classify the mission and select or adapt the HARDNESS cognitive workflow; workflow selection never grants execution authority.',
+    'For every non-trivial mission call hardness_workflow to obtain the harness-selected ordered pipeline and quality gates; call it again when risk, scope, independence, or failure evidence changes.',
     'Resolve the capability before execution.',
     'Request explicit approval when the capability declares permissions.',
     'Verify the result before presenting it.',
