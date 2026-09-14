@@ -133,6 +133,14 @@ describe('HARDNESS cognitive workflow catalog', () => {
     ]))
   })
 
+  it('uses external-evidence and novelty triggers independently of mission kind and complexity', () => {
+    const evidence = selectCognitiveWorkflow(mission({ requiresExternalEvidence: true }))
+    const novel = selectCognitiveWorkflow(mission({ novelty: 'high' }))
+
+    expect(evidence.selected).toEqual(expect.arrayContaining(['research-evidence', 'adversarial-critique', 'metacognitive-review']))
+    expect(novel.selected).toEqual(expect.arrayContaining(['counterfactual-simulation', 'adversarial-critique', 'independent-judge']))
+  })
+
   it('parallelizes only missions explicitly described as independent', () => {
     const sequential = selectCognitiveWorkflow(mission({ kind: 'build', complexity: 'medium' }))
     const parallel = selectCognitiveWorkflow(mission({
@@ -167,6 +175,12 @@ describe('HARDNESS cognitive workflow catalog', () => {
       'experience-consolidation',
       'quality-escalation',
     ]))
+  })
+
+  it('does not escalate a simple low-complexity artifact solely because it is user-visible', () => {
+    const plan = selectCognitiveWorkflow(mission({ userVisibleArtifact: true }))
+
+    expect(plan.selected).not.toContain('adversarial-critique')
   })
 
   it('keeps prerequisites before dependents in every selected plan', () => {
@@ -211,6 +225,17 @@ describe('HARDNESS cognitive workflow adaptation', () => {
     ]))
   })
 
+  it('raises a low-complexity failed execution to medium without discarding existing flows', () => {
+    const low = selectCognitiveWorkflow(mission())
+    const medium = adaptCognitiveWorkflow(low, 'execution-failed')
+    const alreadyMedium = selectCognitiveWorkflow(mission({ complexity: 'medium' }))
+    const stillMedium = adaptCognitiveWorkflow(alreadyMedium, 'execution-failed')
+
+    expect(medium.profile.complexity).toBe('medium')
+    expect(stillMedium.profile.complexity).toBe('medium')
+    expect(medium.selected).toEqual(expect.arrayContaining(['systematic-debugging', 'quality-escalation']))
+  })
+
   it('adds safety and independent review when new risk appears', () => {
     const initial = selectCognitiveWorkflow(mission())
     const adapted = adaptCognitiveWorkflow(initial, 'new-risk')
@@ -218,6 +243,19 @@ describe('HARDNESS cognitive workflow adaptation', () => {
     expect(adapted.selected).toEqual(expect.arrayContaining([
       'safe-change',
       'security-risk-review',
+      'adversarial-critique',
+      'independent-judge',
+      'metacognitive-review',
+    ]))
+  })
+
+  it('strengthens exploration when scope expands', () => {
+    const initial = selectCognitiveWorkflow(mission({ kind: 'architecture', complexity: 'medium' }))
+    const adapted = adaptCognitiveWorkflow(initial, 'scope-expanded')
+
+    expect(adapted.profile).toMatchObject({ complexity: 'high', novelty: 'high' })
+    expect(adapted.selected).toEqual(expect.arrayContaining([
+      'counterfactual-simulation',
       'adversarial-critique',
       'independent-judge',
       'metacognitive-review',
@@ -263,5 +301,15 @@ describe('HARDNESS cognitive workflow model guide', () => {
     expect(rendered).toContain('Do not expose private chain-of-thought')
     expect(rendered).toContain('Adapt the workflow when new evidence invalidates the current strategy')
     expect(rendered).toBe(renderCognitiveWorkflowGuide('en'))
+    expect(rendered).toBe(renderCognitiveWorkflowGuide())
+  })
+
+  it('renders the Spanish cognitive guide with the same safety boundary', () => {
+    const rendered = renderCognitiveWorkflowGuide('es')
+
+    expect(rendered).toContain('HARDNESS conoce estos flujos cognitivos')
+    expect(rendered).toContain('causa raíz')
+    expect(rendered).toContain('cadena de pensamiento privada')
+    expect(rendered).toContain('no concede permisos ni autoridad de ejecución')
   })
 })
