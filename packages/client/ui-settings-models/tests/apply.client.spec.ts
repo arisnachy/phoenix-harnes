@@ -1,4 +1,4 @@
-/** Models section registration: slot declaration injection, the locale-following label thunk, and HMR recovery. */
+/** Models and Connectors registration: slot injection, locale-following labels, and HMR recovery. */
 import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveSlotLabel } from '@phoenix-ai/dsh-client-ui-slots'
@@ -11,6 +11,7 @@ import {
   WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE, WELCOME_NOTICE_VERSION,
 } from '../src/onboarding-copy.ts'
 import { ModelsSection } from '../src/client/ModelsSection.tsx'
+import { ConnectorsSettingsSection } from '../src/client/AuthorizationPanel.tsx'
 import { DeepSeekOnboardingDialog } from '../src/client/DeepSeekOnboardingDialog.tsx'
 import { WelcomeNotice } from '../src/client/WelcomeNotice.tsx'
 
@@ -51,16 +52,22 @@ function declare(slots: SlotRegistry): () => void {
   )
 }
 
+function section(slots: SlotRegistry, id: string) {
+  return slots.entries('settings.section').find(candidate => candidate.options.id === id)!
+}
+
 describe('ui-settings-models apply', () => {
   it('declares the services it uses', () => {
     expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'settingsScope', 'settingsSchema'])
   })
 
-  it('registers the models nav entry for declarations before or after apply', async () => {
+  it('registers Models and Connectors for declarations before or after apply', async () => {
     const before = await bench()
     declare(before.slots)
     await before.ctx.plugin({ inject: [...inject], apply }).await()
-    const entry = before.slots.entries('settings.section')[0]!
+    expect(before.slots.entries('settings.section')).toHaveLength(2)
+
+    const entry = section(before.slots, 'models')
     expect(entry.component).toBe(ModelsSection)
     expect(entry.options).toMatchObject({ id: 'models', order: 10 })
     // The nav label is a locale-following thunk; owners resolve at read time.
@@ -71,6 +78,17 @@ describe('ui-settings-models apply', () => {
     expect(typeof injected.controller.load).toBe('function')
     expect(injected.hooks.snapshot).toBe(injected.controller.store)
     expect(injected.api).toBeDefined()
+
+    const connectors = section(before.slots, 'connectors')
+    expect(connectors.component).toBe(ConnectorsSettingsSection)
+    expect(connectors.options).toMatchObject({ id: 'connectors', order: 12 })
+    expect(resolveSlotLabel(connectors.options.label)).toBe('连接器')
+    const connectorsInjected = (
+      connectors.inject as unknown as () => import('../src/client/AuthorizationPanel.tsx').ConnectorsSettingsSectionProps
+    )()
+    expect(connectorsInjected.connectorT('nav')).toBe('连接器')
+    expect(connectorsInjected.connectorT('catalog')).toBe('连接器目录')
+
     const onboarding = before.slots.entries('settings.onboarding')
     expect(onboarding).toHaveLength(2)
     expect(onboarding.find(entry => entry.options.id === 'welcome-notice')).toMatchObject({
@@ -92,22 +110,25 @@ describe('ui-settings-models apply', () => {
     expect(after.slots.entries('settings.onboarding')).toHaveLength(0)
     declare(after.slots)
     await Promise.resolve()
-    expect(after.slots.entries('settings.section')[0]!.component).toBe(ModelsSection)
+    expect(section(after.slots, 'models').component).toBe(ModelsSection)
+    expect(section(after.slots, 'connectors').component).toBe(ConnectorsSettingsSection)
     expect(after.slots.entries('settings.onboarding')).toHaveLength(2)
     // The self-inflicted ledger notifications hit the duplicate guard.
-    expect(after.slots.entries('settings.section')).toHaveLength(1)
+    expect(after.slots.entries('settings.section')).toHaveLength(2)
   })
 
-  it('the label thunk follows the active locale without re-registration', async () => {
+  it('the label thunks follow the active locale without re-registration', async () => {
     const b = await bench()
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     b.locale.setLocale('en')
-    expect(resolveSlotLabel(b.slots.entries('settings.section')[0]!.options.label)).toBe('Models')
-    const injected = b.slots.entries('settings.section')[0]!.inject as unknown as () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected
+    expect(resolveSlotLabel(section(b.slots, 'models').options.label)).toBe('Models')
+    expect(resolveSlotLabel(section(b.slots, 'connectors').options.label)).toBe('Connectors')
+    const injected = section(b.slots, 'models').inject as unknown as () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected
     expect(injected().t('deleteTitle')).toBe('Delete {provider}?')
     b.locale.setLocale('zh')
-    expect(resolveSlotLabel(b.slots.entries('settings.section')[0]!.options.label)).toBe('模型')
+    expect(resolveSlotLabel(section(b.slots, 'models').options.label)).toBe('模型')
+    expect(resolveSlotLabel(section(b.slots, 'connectors').options.label)).toBe('连接器')
     expect(injected().t('deleteTitle')).toBe('删除 {provider}？')
   })
 
@@ -119,38 +140,43 @@ describe('ui-settings-models apply', () => {
     b.locale.setLocale('zh')
   })
 
-  it('re-registers after an HMR collapse re-declares the slot (stale disposer must not block)', async () => {
+  it('re-registers both pages after an HMR collapse re-declares the slot', async () => {
     const b = await bench()
     const redeclare = declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    expect(b.slots.entries('settings.section')).toHaveLength(1)
-    // Declarer unload: the cascade removes our entry while our local
-    // disposer variable goes stale.
+    expect(b.slots.entries('settings.section')).toHaveLength(2)
+    // Declarer unload: the cascade removes our entries while local disposer
+    // variables go stale.
     redeclare()
     expect(b.slots.entries('settings.section')).toHaveLength(0)
     expect(b.slots.entries('settings.onboarding')).toHaveLength(0)
     declare(b.slots)
     await Promise.resolve()
-    expect(b.slots.entries('settings.section')[0]!.component).toBe(ModelsSection)
+    expect(section(b.slots, 'models').component).toBe(ModelsSection)
+    expect(section(b.slots, 'connectors').component).toBe(ConnectorsSettingsSection)
     expect(b.slots.entries('settings.onboarding')).toHaveLength(2)
     // The locale path also recovers through the same ledger re-check.
     b.locale.setLocale('en')
-    expect(resolveSlotLabel(b.slots.entries('settings.section')[0]!.options.label)).toBe('Models')
+    expect(resolveSlotLabel(section(b.slots, 'models').options.label)).toBe('Models')
+    expect(resolveSlotLabel(section(b.slots, 'connectors').options.label)).toBe('Connectors')
     b.locale.setLocale('zh')
   })
 
-  it('registers the zh/en nav dictionaries and disposes everything with the fiber', async () => {
+  it('registers both locale namespaces and disposes everything with the fiber', async () => {
     const b = await bench()
     declare(b.slots)
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     expect(b.locale.bind('settings.models')('nav')).toBe('模型')
+    expect(b.locale.bind('settings.connectors')('nav')).toBe('连接器')
     await fiber.dispose()
     expect(b.slots.entries('settings.section')).toHaveLength(0)
     expect(b.slots.entries('settings.onboarding')).toHaveLength(0)
     // The (ns, locale) seats are free again — the dictionary disposers ran.
     expect(() => b.locale.register('settings.models', 'zh', {})).not.toThrow()
     expect(() => b.locale.register('settings.models', 'en', {})).not.toThrow()
+    expect(() => b.locale.register('settings.connectors', 'zh', {})).not.toThrow()
+    expect(() => b.locale.register('settings.connectors', 'en', {})).not.toThrow()
   })
 
   it('keeps remote-browser acknowledgement in process memory', async () => {
@@ -285,8 +311,7 @@ describe('pushed invalidations', () => {
     const b = await bench(true, { describe }, { llm: { providers } })
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    const entry = b.slots.entries('settings.section')
-      .find(candidate => candidate.options.id === 'models')!
+    const entry = section(b.slots, 'models')
     const injected = (
       entry.inject as unknown as
       () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected
