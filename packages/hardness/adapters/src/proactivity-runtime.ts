@@ -1,5 +1,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, AgentRegistry } from '@phoenix-ai/dsh-agent'
+import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
+import type { RpcResult } from '@phoenix-ai/dsh-host-apiproxy/api'
 import { boundContextSummary, createUserMessage, type ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import {
@@ -9,6 +11,7 @@ import {
   type ProactivityExecutionResult,
   type ProactivityExecutor,
   type ProactivitySenderIdentity,
+  type ProactivityTask,
 } from './proactivity-engine.ts'
 
 /** Host configuration for proactive execution and mail identity selection. */
@@ -18,6 +21,28 @@ export interface ProactivityRuntimeConfig {
   readonly privateWorkResultChars: number
   readonly userMailIdentity?: string
   readonly harnessMailIdentity?: string
+}
+
+/** Safe task projection exposed to local UI clients. Surprise contents never cross this boundary. */
+export interface ProactivityTaskView {
+  readonly id: string
+  readonly title: string
+  readonly status: ProactivityTask['status']
+  readonly nextRunAt: string
+  readonly recurrence: ProactivityTask['recurrence']
+  readonly catchUp: ProactivityTask['catchUp']
+  readonly visibility: ProactivityTask['visibility']
+  readonly delivery: ProactivityTask['delivery']
+  readonly senderIdentity: ProactivityTask['senderIdentity']
+  readonly createdBy: ProactivityTask['createdBy']
+  readonly history: readonly {
+    readonly phase: 'prepare' | 'deliver'
+    readonly scheduledFor: string
+    readonly finishedAt: string
+    readonly status: 'completed' | 'failed'
+    readonly summary?: string
+    readonly error?: string
+  }[]
 }
 
 function requirePositive(value: number, name: string): number {
@@ -126,6 +151,62 @@ export function createProactivityExecutor(
       }
     },
   }
+}
+
+function taskView(task: ProactivityTask): ProactivityTaskView {
+  return {
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    nextRunAt: task.nextRunAt,
+    recurrence: { ...task.recurrence },
+    catchUp: task.catchUp,
+    visibility: task.visibility,
+    delivery: task.delivery,
+    senderIdentity: task.senderIdentity,
+    createdBy: task.createdBy,
+    history: task.history.slice(-5).map(row => ({
+      phase: row.phase,
+      scheduledFor: row.scheduledFor,
+      finishedAt: row.finishedAt,
+      status: row.status,
+      ...(row.summary === undefined ? {} : { summary: row.summary }),
+      ...(row.error === undefined ? {} : { error: row.error }),
+    })),
+  }
+}
+
+function rpcFailure(message: string): RpcResult<never> {
+  return { ok: false, error: { code: 'internal', message, details: {} } }
+}
+
+function taskId(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const id = (value as Record<string, unknown>).id
+  return typeof id === 'string' && id.trim().length > 0 ? id.trim() : undefined
+}
+
+/**
+ * Mount the local-only management channel used by Phoenix's visual Task Center.
+ * The engine's ordinary list projection intentionally omits unrevealed surprises.
+ */
+export function installProactivityManagementRuntime(
+  connection: HostConnectionHandle,
+  engine: ProactivityEngine,
+): () => Promise<void> {
+  return connection.rpc.handle('/phoenix-tasks', async (endpoint, raw): Promise<RpcResult<readonly ProactivityTaskView[] | ProactivityTaskView>> => {
+    try {
+      if (endpoint === 'list') return { ok: true, value: (await engine.list()).map(taskView) }
+      const id = taskId(raw)
+      if (id === undefined) return rpcFailure('task operation requires a non-empty id')
+      if (endpoint === 'pause') return { ok: true, value: taskView(await engine.pause(id)) }
+      if (endpoint === 'resume') return { ok: true, value: taskView(await engine.resume(id)) }
+      if (endpoint === 'cancel') return { ok: true, value: taskView(await engine.cancel(id)) }
+      return rpcFailure(`unknown Phoenix task endpoint: ${endpoint}`)
+    } catch (error) {
+      return rpcFailure(error instanceof Error ? error.message : String(error))
+    }
+  }, { authority: 'loopback' })
 }
 
 /** Install startup recovery, live-agent wake recovery, and the periodic due-task pump. */
