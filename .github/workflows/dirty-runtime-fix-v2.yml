@@ -1,0 +1,37 @@
+name: Phoenix dirty runtime fix v2
+
+on:
+  push:
+    branches:
+      - fix/dirty-checkout-activation-20260914
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    if: ${{ !contains(github.event.head_commit.message, '[dirty-runtime-fix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+      - name: Apply patch
+        run: python scripts/apply-dirty-runtime-fix.py
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+      - name: Updater contract tests
+        run: corepack pnpm exec vitest run scripts/phoenix-update-contract.spec.ts
+      - name: Updater self-test
+        run: node scripts/phoenix-auto-update.mjs --self-test
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name "phoenix-ci"
+          git config user.email "127772990+arisnachy@users.noreply.github.com"
+          git add scripts/phoenix-auto-update.mjs scripts/phoenix-windows-supervisor.mjs
+          git commit -m "fix: activate verified updates without touching dirty checkout [dirty-runtime-fix]"
+          git push origin HEAD:fix/dirty-checkout-activation-20260914
