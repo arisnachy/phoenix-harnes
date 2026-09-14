@@ -54,6 +54,7 @@ export {
   selectCognitiveWorkflow,
 } from './cognitive-workflow.ts'
 export type {
+  CognitiveExecutionMode,
   CognitiveFlowCost,
   CognitiveFlowCriticality,
   CognitiveFlowDescriptor,
