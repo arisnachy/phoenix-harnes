@@ -37,18 +37,24 @@ describe('prepared client self-update contract', () => {
     expect(promoter).toContain("if (source === root && !values['verify-only'])")
   })
 
-  it('binds cached prepared updates to the live base and a clean live checkout', () => {
+  it('keeps direct live-checkout activation fail-closed while allowing isolated runtime activation', () => {
     const updater = source('scripts/phoenix-auto-update.mjs')
+    const supervisor = source('scripts/phoenix-windows-supervisor.mjs')
 
     expect(updater).toContain('if (prepared.base !== currentCommit(root)) return false')
     expect(updater).toContain('return stagedCandidateValid(root, target) && cleanWorktree(root)')
     expect(updater).toContain("const stageStatus = git(stage, ['status', '--porcelain=v1', '--untracked-files=all'], { allowFailure: true })")
-    expect(updater).toContain("phase: 'worktree'")
     expect(updater).toContain('Auto-update is paused to protect user work')
+
+    expect(supervisor).toContain('function activatePreparedRuntime(target)')
+    expect(supervisor).toContain('function persistentRuntime(target)')
+    expect(supervisor).toContain('const ACTIVE_RUNTIME_FILE = \'phoenix-active-runtime.json\'')
+    expect(supervisor).toContain('runtimeRoot = runtime.path')
   })
 
-  it('prepares dirty checkouts in isolated staging and reserves activation for a clean checkout', () => {
+  it('prepares dirty checkouts and advertises isolated-runtime activation instead of waiting for a clean checkout', () => {
     const updater = source('scripts/phoenix-auto-update.mjs')
+    const supervisor = source('scripts/phoenix-windows-supervisor.mjs')
     const applyCaseStart = updater.indexOf("case 'apply':")
     const unchangedCaseStart = updater.indexOf("case 'unchanged':", applyCaseStart)
     const applyCase = updater.slice(applyCaseStart, unchangedCaseStart)
@@ -57,6 +63,20 @@ describe('prepared client self-update contract', () => {
     expect(updater).toContain('function writePreparedState(root, inspection, plan)')
     expect(applyCase.indexOf('stageCandidate(root, inspection)')).toBeGreaterThanOrEqual(0)
     expect(applyCase).not.toContain('const localChanges = worktreeChanges(root)')
-    expect(updater).toContain('local changes remain protected; activation waits for a clean checkout.')
+    expect(updater).toContain('local changes remain protected; restart to activate the verified isolated runtime.')
+    expect(updater).not.toContain('activation waits for a clean checkout.')
+
+    expect(supervisor).not.toContain('automatic update watcher paused for this session')
+    expect(supervisor).toContain('activating the verified update in an isolated runtime; the live checkout will not be modified')
+    expect(supervisor).toContain('activatePreparedRuntime(requestedTarget)')
+  })
+
+  it('uses the isolated runtime for host launch and configuration preflight without changing update control ownership', () => {
+    const supervisor = source('scripts/phoenix-windows-supervisor.mjs')
+
+    expect(supervisor).toContain('cwd: runtimeRoot')
+    expect(supervisor).toContain('PHOENIX_RUNTIME_ROOT: runtimeRoot')
+    expect(supervisor).toContain('restoreActiveRuntime()')
+    expect(supervisor).toContain('cwd: root,')
   })
 })
