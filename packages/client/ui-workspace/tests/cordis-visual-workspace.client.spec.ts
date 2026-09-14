@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** Cordis visual workspace controller, lease, and media presentation behavior. */
+/** Cordis visual workspace controller, lease, and universal presentation behavior. */
 import { createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
@@ -66,6 +66,27 @@ describe('CordisVisualWorkspaceController', () => {
 })
 
 describe('CordisVisualWorkspace', () => {
+  it('mounts arbitrary interactive React surfaces without a media/content kind', () => {
+    const layout = fakeLayout()
+    const controller = new CordisVisualWorkspaceController(layout)
+    let moves = 0
+
+    controller.show({
+      title: 'Living chess board',
+      render: () => createElement('button', {
+        type: 'button',
+        onClick: () => { moves += 1 },
+      }, 'Phoenix move'),
+    })
+
+    const view = renderWorkspace(controller, layout)
+    expect(view.getByText('Living chess board')).toBeTruthy()
+    const move = view.getByRole('button', { name: 'Phoenix move' })
+    fireEvent.click(move)
+    expect(moves).toBe(1)
+    expect(layout.setWorkspaceOccupant).toHaveBeenCalledWith('cordis', true)
+  })
+
   it('stays absent while closed and renders image titles and alt fallbacks', () => {
     const layout = fakeLayout()
     const controller = new CordisVisualWorkspaceController(layout)
