@@ -4,7 +4,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   PRIMARY_NODE_VERSION: '24'
@@ -42,13 +42,24 @@ jobs:
       - name: Generate tool catalog for reconciliation
         if: always()
         run: pnpm run gen-tool-catalog
-      - name: Upload generated tool catalog
+      - name: Commit generated tool catalog to PR branch
         if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: generated-tool-catalog
-          path: docs/tool-catalog.md
-          if-no-files-found: error
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if git diff --quiet -- docs/tool-catalog.md; then
+            echo "tool catalog already current"
+            exit 0
+          fi
+          current_sha="$(gh api "repos/${REPOSITORY}/contents/docs/tool-catalog.md?ref=${HEAD_BRANCH}" --jq .sha)"
+          encoded="$(base64 -w0 docs/tool-catalog.md)"
+          gh api --method PUT "repos/${REPOSITORY}/contents/docs/tool-catalog.md" \
+            -f message='docs: regenerate tool catalog for memory_teach' \
+            -f content="$encoded" \
+            -f sha="$current_sha" \
+            -f branch="$HEAD_BRANCH" >/dev/null
 
   node-24-coverage:
     if: github.event_name == 'pull_request'
