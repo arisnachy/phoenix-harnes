@@ -1,17 +1,36 @@
-import { useSyncExternalStore } from 'react'
+import { useSyncExternalStore, type ReactNode } from 'react'
 import type { ILayout } from '@phoenix-ai/dsh-client-ui-layout/client'
 import css from './CordisVisualWorkspace.module.css'
 
-/** Media/document surfaces Cordis may present beside the conversation. */
-export type CordisVisualContent =
+/**
+ * Universal client-side surface for Cordis.
+ *
+ * The render callback may return any React tree: applications, games, editors,
+ * dashboards, maps, terminals, simulations, forms, custom plugin surfaces, or
+ * any future visual capability. Built-in media/document descriptors below are
+ * convenience adapters, not a closed list of what Cordis can present.
+ */
+export interface CordisVisualSurface {
+  readonly title?: string
+  readonly render: () => ReactNode
+}
+
+/** Backward-compatible convenience descriptors understood directly by Cordis. */
+export type CordisBuiltinContent =
   | { readonly kind: 'image'; readonly src: string; readonly title?: string; readonly alt?: string }
   | { readonly kind: 'video'; readonly src: string; readonly title?: string; readonly poster?: string; readonly autoplay?: boolean }
   | { readonly kind: 'page'; readonly url: string; readonly title?: string }
   | { readonly kind: 'text'; readonly text: string; readonly title?: string }
 
+/** Anything Cordis can present: an unrestricted surface or a built-in adapter. */
+export type CordisVisualContent = CordisVisualSurface | CordisBuiltinContent
+
 /** Public client service used by Phoenix plugins to drive the Cordis visual workspace. */
 export interface ICordisVisualWorkspace {
-  /** Show or replace the current visual surface. */
+  /**
+   * Show or replace the current Cordis surface.
+   * Pass `{ render: () => <AnyPhoenixSurface /> }` for arbitrary interactive UI.
+   */
   show(content: CordisVisualContent): void
   /** Close the Cordis surface and restore the shell geometry borrowed by Cordis. */
   close(): void
@@ -77,7 +96,13 @@ function safePageUrl(raw: string): string | null {
   }
 }
 
+function isUniversalSurface(content: CordisVisualContent): content is CordisVisualSurface {
+  return 'render' in content && typeof content.render === 'function'
+}
+
 function Surface({ content }: { content: CordisVisualContent }) {
+  if (isUniversalSurface(content)) return <>{content.render()}</>
+
   switch (content.kind) {
     case 'image':
       return <img className={css.image} src={content.src} alt={content.alt ?? content.title ?? ''} />
