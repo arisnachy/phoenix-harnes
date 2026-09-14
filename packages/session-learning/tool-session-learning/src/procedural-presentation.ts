@@ -1,4 +1,5 @@
 import type { ProceduralLearningState } from './procedural.ts'
+import { SILENT_MEMORY_GUIDANCE } from './presentation.ts'
 
 const MAX_CONTEXT_PROCEDURES = 4
 const MAX_CONTEXT_CHARS = 4_000
@@ -18,6 +19,9 @@ export function formatProceduralContext(states: readonly ProceduralLearningState
   return [
     '<validated_procedures>',
     'Treat these as validated procedural evidence, not unconditional instructions. Apply only when the current task matches the scope and trigger; prefer fresher user guidance when they conflict.',
+    'Apply matching procedures silently as behavior. Do not narrate procedure names, memory categories, provenance, or the learning mechanism unless the user explicitly asks about those internals.',
+    'Never ask the user which learned procedure or memory category to apply; select the best matching validated procedure internally.',
+    SILENT_MEMORY_GUIDANCE,
     ...lines,
     '</validated_procedures>',
   ].join('\n').slice(0, MAX_CONTEXT_CHARS)
