@@ -1,3 +1,5 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
@@ -13,6 +15,10 @@ import {
   installHardnessMissionRuntime,
 } from './mission-runtime.ts'
 import { installHardnessProtocol, type HardnessPromptRegistrar } from './protocol.ts'
+import { installProactivityProtocol } from './proactivity-protocol.ts'
+import { acquireProactivityEngine } from './proactivity-registry.ts'
+import { createProactivityExecutor, installProactivityRuntime } from './proactivity-runtime.ts'
+import { createProactivityTools } from './proactivity-tools.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
@@ -85,18 +91,36 @@ export type { HardnessPromptRegistrar } from './protocol.ts'
 export const name = 'hardness-adapters'
 export const inject = ['hardness', 'tools', 'skills', 'agents', 'approval', 'systemPrompt', 'authorization']
 
-/** HARDNESS mission completion judge configuration. */
+/** HARDNESS mission and durable proactivity configuration. */
 export interface Config {
   /** Structured subagent provider used for independent completion review. */
   judgeProvider?: string
   /** Register model-facing HARDNESS tools in this scope. */
   modelTools?: boolean
+  /** Durable proactive-task ledger. Empty/omitted uses ~/.dsh/phoenix-tasks.json; :memory: is test-only. */
+  taskLedgerPath?: string
+  /** How often the host checks for due scheduled work. */
+  taskPollMs?: number
+  /** One-shot subagent provider used for private preparation and scheduled office work. */
+  privateWorkProvider?: string
+  /** Maximum retained characters from one private preparation result. */
+  privateWorkResultChars?: number
+  /** Configured mail identity reference used for office mail sent on the user's behalf. */
+  userMailIdentity?: string
+  /** Configured mail identity reference Phoenix uses when communicating as itself. */
+  harnessMailIdentity?: string
 }
 
-/** Schemastery validation for the independent mission judge provider. */
+/** Schemastery validation for mission and durable proactivity settings. */
 export const Config: z<Config> = z.object({
   judgeProvider: z.string().default('spawn'),
   modelTools: z.boolean().default(true),
+  taskLedgerPath: z.string().default(''),
+  taskPollMs: z.number().default(15_000),
+  privateWorkProvider: z.string().default('spawn'),
+  privateWorkResultChars: z.number().default(12_000),
+  userMailIdentity: z.string().default(''),
+  harnessMailIdentity: z.string().default(''),
 })
 
 type Disposer = () => void
@@ -121,8 +145,20 @@ function requiredServices(ctx: Context) {
   return { hardness, tools, skills, agents, approval, systemPrompt, authorization, mcpConnectors }
 }
 
+function configuredIdentity(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed
+}
+
+function taskLedgerPath(config: Config): string {
+  const configured = config.taskLedgerPath?.trim()
+  return configured !== undefined && configured.length > 0
+    ? configured
+    : join(homedir(), '.dsh', 'phoenix-tasks.json')
+}
+
 /**
- * Install the HARDNESS projections and mission runtime.
+ * Install the HARDNESS projections, mission runtime, and durable proactive task system.
  * @param ctx - Owning Cordis context with HARDNESS dependencies.
  * @returns Idempotent disposer for every projection installed by this adapter.
  */
@@ -130,11 +166,16 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   const { hardness, tools, skills, agents, approval, systemPrompt, authorization, mcpConnectors } = requiredServices(ctx)
   const modelTools = config.modelTools ?? true
   const disposers: Disposer[] = []
+  const proactivity = acquireProactivityEngine(taskLedgerPath(config))
+  disposers.push(() => proactivity.release())
+
   try {
     disposers.push(installHardnessProtocol(systemPrompt))
+    if (modelTools) disposers.push(installProactivityProtocol(systemPrompt))
+
     if (!modelTools) {
-      // Capability projections and the mission runtime are host-owned. Do not
-      // repeat them when several sessions mount full presets in one process.
+      // Capability projections and the mission/proactivity runtimes are host-owned.
+      // Do not repeat them when several sessions mount full presets in one process.
       disposers.push(indexOpenClawExtensions(hardness))
       disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run'] }))
       disposers.push(await indexSkills(skills, hardness))
@@ -143,6 +184,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // host remains the sole owner of the HARDNESS capability index.
       disposers.push(ctx.tools.register(createConnectorListTool(authorization, mcpConnectors)))
     }
+
     const acquisition = createHardnessAcquisition(hardness)
     const codeRuntime = ctx.get('codeRuntime')
     const pythonCodeRuntime = ctx.get('pythonCodeRuntime') as CodeRuntime | undefined
@@ -154,9 +196,24 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       ...(codeRuntime === undefined ? {} : { codeRuntime }),
       ...(pythonCodeRuntime === undefined ? {} : { pythonCodeRuntime }),
     })
+
     if (modelTools) {
       disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
+      for (const tool of createProactivityTools(proactivity.engine)) {
+        disposers.push(ctx.tools.register(tool))
+      }
+    } else {
+      const runtimeConfig = {
+        pollMs: config.taskPollMs ?? 15_000,
+        privateWorkProvider: config.privateWorkProvider?.trim() || 'spawn',
+        privateWorkResultChars: config.privateWorkResultChars ?? 12_000,
+        ...(configuredIdentity(config.userMailIdentity) === undefined ? {} : { userMailIdentity: configuredIdentity(config.userMailIdentity)! }),
+        ...(configuredIdentity(config.harnessMailIdentity) === undefined ? {} : { harnessMailIdentity: configuredIdentity(config.harnessMailIdentity)! }),
+      }
+      proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
+      disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs))
     }
+
     if (!modelTools) {
       let activeConnection: HostConnectionHandle | undefined
       let missionDispose: (() => Promise<void>) | undefined
@@ -183,8 +240,8 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         })
       }
       syncMissionRuntime()
-      disposers.push(ctx.on('internal/service', (name) => {
-        if (name === 'connection') syncMissionRuntime()
+      disposers.push(ctx.on('internal/service', (serviceName) => {
+        if (serviceName === 'connection') syncMissionRuntime()
       }))
       disposers.push(() => {
         const disposeMission = missionDispose
