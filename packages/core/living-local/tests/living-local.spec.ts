@@ -6,19 +6,18 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { LivingCreationId } from '@phoenix-ai/dsh-living'
 import LivingLocal from '@phoenix-ai/dsh-living-local'
 
-const roots: Context[] = []
+const disposers: Array<() => Promise<void>> = []
 
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map(ctx => ctx.dispose()))
+  await Promise.all(disposers.splice(0).map(dispose => dispose()))
 })
 
 async function runtime() {
   const root = new Context()
-  roots.push(root)
   const dir = await mkdtemp(join(tmpdir(), 'phoenix-living-'))
   const path = join(dir, 'living-creations.json')
-  root.plugin(LivingLocal, { path })
-  await root.start()
+  const fiber = await root.plugin(LivingLocal, { path })
+  disposers.push(() => fiber.dispose())
   return { root, path }
 }
 
