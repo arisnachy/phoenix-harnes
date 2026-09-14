@@ -311,7 +311,11 @@ export function hasUsableMcpOAuthTokens(state: McpOAuthState | undefined): boole
     || typeof tokens?.refresh_token === 'string' && tokens.refresh_token.length > 0
 }
 
-/** True only for callback errors caused by disposing the Host while OAuth waits. */
+/**
+ * True only for callback errors caused by disposing the Host while OAuth waits.
+ * @param error - Callback error or close reason to classify.
+ * @returns Whether the error is an expected callback-close condition.
+ */
 export function isExpectedMcpOAuthClose(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
   return message === 'MCP OAuth callback closed' || message === 'MCP OAuth callback server closed'
