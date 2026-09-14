@@ -207,7 +207,9 @@ function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
         : account !== undefined
           ? { text: t('availableStatus'), className: '' }
           : { text: t('adapterNeededStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
-  const method = account?.methods.find(candidate => candidate.id === 'oauth')
+  const oauthAccount = account !== undefined && account.methods.some(candidate => candidate.id === 'oauth')
+    ? account
+    : undefined
   return (
     <article className={connectorStyles['connectorCard']} data-connector-id={definition.id}>
       <div className={connectorStyles['connectorTop']}>
@@ -232,8 +234,8 @@ function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
         {live?.installUrl !== undefined ? (
           <a className={connectorStyles['connectorLink']} href={live.installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
-        ) : method === undefined || connectedByAccount ? null : (
-          <button className={hubStyles['compactButton']} type="button" disabled={pending || account?.inFlight === true} onClick={() => { onAuthorize(account) }}>
+        ) : oauthAccount === undefined || connectedByAccount ? null : (
+          <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
             {t('authorize')}
           </button>
         )}
