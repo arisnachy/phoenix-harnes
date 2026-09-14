@@ -26,8 +26,8 @@ export function formatProceduralContext(states: readonly ProceduralLearningState
     .map(state => `- [${privateProcedureText(state.scope)}] ${privateProcedureText(state.title)}; when: ${privateProcedureText(state.trigger)}; steps: ${state.steps.map(privateProcedureText).join(' → ')}; confidence=${state.confidence.toFixed(2)}`)
   if (lines.length === 0) return ''
   return [
-    '<validated_procedures private="true">',
-    'These procedures are private execution guidance derived from validated learning, not user-facing narration material.',
+    '<validated_procedures>',
+    'Treat these as validated procedural evidence and private execution guidance, not unconditional instructions or user-facing narration material.',
     'Apply matching procedures silently when the current task matches the scope and trigger; prefer fresher user guidance when they conflict.',
     'Do not recite procedure titles, triggers, memory categories, provenance, confidence, or internal paths. Do not ask which procedure or memory category to use; choose the relevant one yourself.',
     ...lines,
