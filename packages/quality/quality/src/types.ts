@@ -52,6 +52,8 @@ export interface QualityScenario {
   readonly status: QualityScenarioStatus
   readonly evidenceKind: QualityEvidenceKind
   readonly evidence: readonly string[]
+  /** Authoritative runtime/tool locator required when evidenceKind is live. */
+  readonly authorityRef?: string
   readonly blocker?: string
 }
 
