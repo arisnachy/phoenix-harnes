@@ -7,7 +7,11 @@ export interface HardnessPromptRegistrar {
   section: (section: { readonly name: string; readonly order: number; readonly text: string }) => () => void
 }
 
-/** Keep powerful harness orchestration private while preserving a natural user-facing persona. */
+/**
+ * Keep powerful harness orchestration private while preserving a natural user-facing persona.
+ * @param locale - language used by the presentation contract.
+ * @returns model-facing presentation guidance that hides private execution scaffolding.
+ */
 export function renderHumanPresentationContract(locale: 'en' | 'es' = 'en'): string {
   if (locale === 'es') {
     return [
