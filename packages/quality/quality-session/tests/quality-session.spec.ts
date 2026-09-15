@@ -2,6 +2,7 @@ import { Context } from '@phoenix-ai/cordis'
 import AgentRegistry, { Inbox } from '@phoenix-ai/dsh-agent'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
+import { describe, expect, test } from 'vitest'
 import QualitySessionService from '../src/index.ts'
 
 function stubAgentForSession(session: Session): Agent {
