@@ -42,6 +42,41 @@ describe('tool-session-learning plugin', () => {
     expect(snapshot).toContain('untrusted, read-only evidence')
   })
 
+  it('automatically recalls durable cognitive corrections and applies them silently', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-cognitive-context-'))
+    roots.push(root)
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SystemPrompt, { persona: '' })
+    await ctx.plugin(ToolRegistry)
+    await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
+    await ctx.plugin(plugin, {})
+    const session = ctx.sessions.create(SessionId('cognitive-context-session'), { meta: {} })
+
+    await ctx.learningMemory.rememberCognitive({
+      sessionId: String(session.id),
+      eventSeq: session.seq,
+      kind: 'lesson',
+      layers: ['episodic', 'semantic', 'procedural', 'temporal'],
+      content: 'A prior file task failed because the working directory was assumed instead of verified.',
+      summary: 'Verify the actual working directory internally before file operations.',
+      sourceEventType: 'adaptive/verified-correction',
+      occurredAt: Date.now(),
+      confidence: 0.97,
+      importance: 0.95,
+      subject: 'phoenix.learning.file-workdir',
+      value: JSON.stringify({ version: 1, strategy: 'verify-workdir-silently' }),
+    })
+
+    const snapshot = renderContextSnapshot(await ctx.systemPrompt.assemble())
+    expect(snapshot).toContain('Verify the actual working directory internally before file operations.')
+    expect(snapshot).toMatch(/apply.*silently|silently.*apply/i)
+    expect(snapshot).toMatch(/do not.*(?:recite|narrate|dump).*memory/i)
+    expect(snapshot).toMatch(/ask.*only.*blocked|only.*ask.*blocked/i)
+    expect(snapshot).toMatch(/configured|instruction/i)
+    expect(snapshot).toMatch(/learned.*experience|experience.*learned/i)
+  })
+
   it('keeps literal template-looking code in learned context', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-template-code-'))
     roots.push(root)
