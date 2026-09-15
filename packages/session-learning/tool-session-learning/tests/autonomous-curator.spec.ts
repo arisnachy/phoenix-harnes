@@ -18,6 +18,8 @@ describe('classifyAutonomousMemory', () => {
   it('recognizes a naturally stated durable preference without requiring remember language', () => {
     expect(classifyAutonomousMemory('Quiero que siempre verifiques las pruebas relevantes antes de decir que terminaste.')).toMatchObject({
       kind: 'preference',
+      provenance: 'user-preference',
+      application: 'silent',
     })
   })
 
@@ -25,9 +27,12 @@ describe('classifyAutonomousMemory', () => {
     expect(classifyAutonomousMemory('Esta vez no corras todas las pruebas, solo revisa este archivo.')).toBeUndefined()
   })
 
-  it('recognizes an explicit correction as durable corrective evidence', () => {
+  it('recognizes an explicit correction as experiential corrective evidence', () => {
     expect(classifyAutonomousMemory('Corrijo eso: de ahora en adelante prueba primero el componente afectado.')).toMatchObject({
       kind: 'correction',
+      provenance: 'experience-correction',
+      learnedFromExperience: true,
+      application: 'silent',
     })
   })
 })
@@ -48,6 +53,13 @@ describe('AutonomousMemoryCurator', () => {
     expect(store.writes).toHaveLength(1)
     expect(store.writes[0]?.sourceEventType).toBe('autonomous/user-preference')
     expect(store.writes[0]?.layers).toContain('semantic')
+    expect(JSON.parse(store.writes[0]?.value ?? '{}')).toMatchObject({
+      version: 2,
+      provenance: 'user-preference',
+      learnedFromExperience: false,
+      visibility: 'behavior-only',
+      application: 'silent',
+    })
   })
 
   it('reuses the prior durable subject when the user explicitly corrects it', async () => {
@@ -71,6 +83,12 @@ describe('AutonomousMemoryCurator', () => {
     expect(store.writes).toHaveLength(2)
     expect(store.writes[1]?.sourceEventType).toBe('autonomous/user-correction')
     expect(store.writes[1]?.subject).toBe(store.writes[0]?.subject)
+    expect(JSON.parse(store.writes[1]?.value ?? '{}')).toMatchObject({
+      provenance: 'experience-correction',
+      learnedFromExperience: true,
+      visibility: 'behavior-only',
+      application: 'silent',
+    })
   })
 
   it('does not supersede guidance from an unrelated known project', async () => {

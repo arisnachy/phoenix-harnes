@@ -4,6 +4,7 @@ const MAX_TEXT_CHARS = 2_048
 
 /** Durable memory categories that Phoenix may infer from explicit user language. */
 export type AutonomousMemoryKind = 'preference' | 'correction'
+export type AutonomousMemoryProvenance = 'user-preference' | 'experience-correction'
 
 /** Classifier result for one user-authored durable memory candidate. */
 export interface AutonomousMemoryCandidate {
@@ -11,6 +12,9 @@ export interface AutonomousMemoryCandidate {
   readonly summary: string
   readonly confidence: number
   readonly importance: number
+  readonly provenance: AutonomousMemoryProvenance
+  readonly learnedFromExperience: boolean
+  readonly application: 'silent'
 }
 
 /** One durable cognitive-memory write emitted by the autonomous curator. */
@@ -32,11 +36,7 @@ export interface AutonomousMemoryWrite {
 
 /** Storage seam used by the autonomous curator. */
 export interface AutonomousMemoryStore {
-  /**
-   * Persist one bounded cognitive-memory row.
-   * @param input - Secret-free memory write.
-   * @returns Completion when the write is durable.
-   */
+  /** Persist one bounded cognitive-memory row. */
   remember(input: AutonomousMemoryWrite): Promise<void>
 }
 
@@ -51,8 +51,8 @@ export interface AutonomousUserMessage {
 
 /**
  * Classify only strongly signaled durable user guidance; ordinary chatter and one-off instructions are discarded.
- * @param text - User-authored message.
- * @returns Durable candidate or undefined when retention is not justified.
+ * Preferences are remembered as durable guidance. Corrections are the only user-authored candidates classified as
+ * experiential learning because they encode an observed mismatch followed by a behavioral correction.
  */
 export function classifyAutonomousMemory(text: string): AutonomousMemoryCandidate | undefined {
   const summary = normalize(text)
@@ -62,8 +62,28 @@ export function classifyAutonomousMemory(text: string): AutonomousMemoryCandidat
   const correction = /\b(?:corrijo|correccion|eso esta mal|eso es incorrecto|te dije que no|de ahora en adelante|from now on|that is wrong|that's wrong|incorrect|correction)\b/iu.test(folded)
   const transient = /\b(?:esta vez|solo esta vez|por ahora|ahora mismo|temporalmente|this time|just this time|for now|temporarily)\b/iu.test(folded)
   if (transient && !durable) return undefined
-  if (correction) return { kind: 'correction', summary, confidence: 0.96, importance: 0.96 }
-  if (durable) return { kind: 'preference', summary, confidence: 0.93, importance: 0.93 }
+  if (correction) {
+    return {
+      kind: 'correction',
+      summary,
+      confidence: 0.96,
+      importance: 0.96,
+      provenance: 'experience-correction',
+      learnedFromExperience: true,
+      application: 'silent',
+    }
+  }
+  if (durable) {
+    return {
+      kind: 'preference',
+      summary,
+      confidence: 0.93,
+      importance: 0.93,
+      provenance: 'user-preference',
+      learnedFromExperience: false,
+      application: 'silent',
+    }
+  }
   return undefined
 }
 
@@ -73,11 +93,7 @@ export class AutonomousMemoryCurator {
 
   constructor(private readonly store: AutonomousMemoryStore) {}
 
-  /**
-   * Observe one user message and persist it when it clearly expresses durable guidance or correction.
-   * @param input - Message plus session/project provenance.
-   * @returns The retained candidate, or undefined when the message should not be stored.
-   */
+  /** Observe one user message and persist it when it clearly expresses durable guidance or correction. */
   async observeUserMessage(input: AutonomousUserMessage): Promise<AutonomousMemoryCandidate | undefined> {
     const candidate = classifyAutonomousMemory(input.text)
     if (candidate === undefined) return undefined
@@ -104,7 +120,11 @@ export class AutonomousMemoryCurator {
       confidence: candidate.confidence,
       importance: candidate.importance,
       subject,
-      value: JSON.stringify({ version: 1, ...candidate }),
+      value: JSON.stringify({
+        version: 2,
+        ...candidate,
+        visibility: 'behavior-only',
+      }),
       ...input.projectId === undefined ? {} : { projectId: input.projectId },
     })
     this.lastDurableSubject.set(scope, subject)
