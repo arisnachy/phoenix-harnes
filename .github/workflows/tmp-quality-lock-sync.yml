@@ -1,0 +1,37 @@
+name: Temporary quality lock sync
+
+on:
+  push:
+    branches:
+      - feat/quality-foresight-completion-20260915
+    paths:
+      - .github/workflows/tmp-quality-lock-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/quality-foresight-completion-20260915
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Commit lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          if git diff --cached --quiet; then
+            echo "lockfile already synchronized"
+            exit 0
+          fi
+          git commit -m "chore: sync quality workspace lockfile"
+          git push origin HEAD:feat/quality-foresight-completion-20260915
