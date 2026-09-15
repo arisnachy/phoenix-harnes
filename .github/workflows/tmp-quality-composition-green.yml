@@ -1,0 +1,88 @@
+name: Temporary quality composition GREEN
+
+on:
+  push:
+    branches:
+      - feat/quality-foresight-completion-20260915
+    paths:
+      - .github/workflows/tmp-quality-composition-green.yml
+
+permissions:
+  contents: write
+
+jobs:
+  green:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/quality-foresight-completion-20260915
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Mount quality runtime in host and agent presets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          base = Path('packages/bundle/base/cordis.patch.yml')
+          s = base.read_text()
+          anchor = "    - id: goal\n      name: '@phoenix-ai/dsh-goal'\n"
+          addition = "    # Durable Quality/Foresight assessment state is host-owned and keyed by session.\n    - id: quality-session\n      name: '@phoenix-ai/dsh-quality-session'\n\n" + anchor
+          if "- id: quality-session" not in s:
+              if anchor not in s: raise SystemExit('base quality-session anchor missing')
+              s = s.replace(anchor, addition, 1)
+          base.write_text(s)
+
+          pkg = Path('packages/bundle/base/package.json')
+          s = pkg.read_text()
+          goal_dep = '    "@phoenix-ai/dsh-goal-round-driver": "workspace:^",\n'
+          quality_deps = goal_dep + '    "@phoenix-ai/dsh-quality": "workspace:^",\n    "@phoenix-ai/dsh-quality-session": "workspace:^",\n'
+          if '"@phoenix-ai/dsh-quality"' not in s:
+              if goal_dep not in s: raise SystemExit('base package quality dependency anchor missing')
+              s = s.replace(goal_dep, quality_deps, 1)
+          tool_goal_dep = '    "@phoenix-ai/dsh-tool-goal": "workspace:^",\n'
+          if '"@phoenix-ai/dsh-tool-quality"' not in s:
+              if tool_goal_dep not in s: raise SystemExit('base package tool-quality anchor missing')
+              s = s.replace(tool_goal_dep, tool_goal_dep + '    "@phoenix-ai/dsh-tool-quality": "workspace:^",\n', 1)
+          pkg.write_text(s)
+
+          for preset in ['standard', 'code']:
+              p = Path(f'apps/cli/config/agent-presets/{preset}/agent.cordis.yml')
+              s = p.read_text()
+              tool_goal = "- id: tool-goal\n  name: '@phoenix-ai/dsh-tool-goal'\n"
+              tool_quality = "- id: tool-quality\n  name: '@phoenix-ai/dsh-tool-quality'\n\n" + tool_goal
+              if "- id: tool-quality" not in s:
+                  if tool_goal not in s: raise SystemExit(f'{preset} tool-goal anchor missing')
+                  s = s.replace(tool_goal, tool_quality, 1)
+              p.write_text(s)
+
+          ts = Path('tsconfig.base.json')
+          s = ts.read_text()
+          goal_path = '        "./packages/goal/*/src",\n'
+          if '"./packages/quality/*/src"' not in s:
+              if goal_path not in s: raise SystemExit('tsconfig quality path anchor missing')
+              s = s.replace(goal_path, goal_path + '        "./packages/quality/*/src",\n', 1)
+          ts.write_text(s)
+          PY
+      - name: Synchronize workspace lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+      - name: Verify composition and goal quality integration
+        run: >-
+          pnpm exec vitest run
+          packages/bundle/base/tests/quality-base.spec.ts
+          apps/cli/tests/quality-agent-presets.spec.ts
+          packages/goal/tool-goal/tests/quality-tool-wiring.spec.ts
+          packages/goal/tool-goal/tests/quality-judge.spec.ts
+      - name: Commit GREEN composition
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/bundle/base/cordis.patch.yml packages/bundle/base/package.json apps/cli/config/agent-presets/standard/agent.cordis.yml apps/cli/config/agent-presets/code/agent.cordis.yml tsconfig.base.json pnpm-lock.yaml
+          git diff --cached --check
+          git commit -m "feat(bundle): mount quality foresight runtime"
+          git push origin HEAD:feat/quality-foresight-completion-20260915
