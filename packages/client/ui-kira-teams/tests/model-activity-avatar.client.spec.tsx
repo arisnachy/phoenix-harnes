@@ -26,16 +26,16 @@ describe('agentAvatarKind', () => {
 })
 
 describe('portraitSrcForKind', () => {
-  it('ships every persona from the exact approved portrait sheet', () => {
-    expect(portraitSrcForKind('sol')).toBe('/assets/kira-agents/kira-portraits.webp')
-    expect(portraitSrcForKind('luna')).toBe('/assets/kira-agents/kira-portraits.webp')
-    expect(portraitSrcForKind('terra')).toBe('/assets/kira-agents/kira-portraits.webp')
-    expect(portraitSrcForKind('generic')).toBe('/assets/kira-agents/kira-portraits.webp')
+  it('resolves model aliases to stable standalone KIRA portraits', () => {
+    expect(portraitSrcForKind('sol')).toBe('/assets/kira-agents/portraits/solaria.svg')
+    expect(portraitSrcForKind('luna')).toBe('/assets/kira-agents/portraits/eclipse.svg')
+    expect(portraitSrcForKind('terra')).toBe('/assets/kira-agents/portraits/senda.svg')
+    expect(portraitSrcForKind('generic')).toBe('/assets/kira-agents/portraits/lyra.svg')
   })
 })
 
 describe('ModelActivityAvatar', () => {
-  it('renders the approved portrait sheet instead of a vector face rig', () => {
+  it('renders a real standalone portrait img instead of a shared sprite wrapper', () => {
     const element = ModelActivityAvatar({
       agentId: 'c1',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
@@ -52,9 +52,8 @@ describe('ModelActivityAvatar', () => {
 
     expect(element.props['data-avatar']).toBe('vega')
     expect(image).toBeDefined()
-    expect(image.type).toBe('span')
-    expect(String(image.props.style?.['--portrait-image']))
-      .toBe('url("/assets/kira-agents/kira-portraits.webp")')
+    expect(image.type).toBe('img')
+    expect(image.props.src).toBe('/assets/kira-agents/portraits/vega.svg')
     expect(vectorPortrait).toBeUndefined()
   })
 
