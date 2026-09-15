@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-09-15-cognitive-memory-v2.zh.md)
+
 ## Problem
 
 PHOENIX persisted session events and reusable lessons, but automatic recall was optimized for project-scoped procedural guidance rather than reconstructing work history. A new conversation could therefore retain a correction such as “verify the working directory” while still failing to answer evidence-backed questions such as “what did we do yesterday?” across projects.

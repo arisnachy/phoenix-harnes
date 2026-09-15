@@ -24,13 +24,13 @@
 ##### 定向时间连续性
 
 ```markdown
-“昨天做了什么”“学到了什么”或“继续上一个任务”等问题会启用意图感知检索，并使用合适的时间窗口。明确的自传式或历史问题可以跨项目召回证据；普通自动召回和 memory_search 仍保持当前项目范围，除非明确指定具体项目。
+Questions such as “what did we do yesterday?”, “what did you learn?”, or “continue the previous task” activate intent-aware retrieval with the appropriate temporal window. Explicit autobiographical/history questions may recall evidence across projects, while ordinary automatic recall and memory_search remain project-scoped unless a concrete project is requested.
 ```
 
 ##### 持久任务情景
 
 ```markdown
-实质性的用户任务会启动一个有界的进行中轨迹。可以保留公开工具名称，但不会保存原始工具参数或原始工具结果。已验证目标完成会持久化高置信度的 mission 情景；错误可以持久化未验证情景。工作历史优先使用这些结构化情景，并在需要时回退到 Memory v2 上线前已经持久化的用户任务事件。
+A substantive user task starts a bounded in-flight trace. Public tool names may be retained, but raw tool arguments and raw tool results are excluded. Verified goal completion persists a high-confidence mission episode; an error can persist an unverified episode. Work-history recall prefers these structured episodes and can fall back to already-durable pre-v2 user-task events when needed.
 ```
 
 #### Token 影响
