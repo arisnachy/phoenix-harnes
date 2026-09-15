@@ -29,8 +29,8 @@ describe('KIRA floating roster layout regression', () => {
       child?.props?.['data-agent-portrait-image'] === true)
 
     expect(portrait?.type).toBe('img')
-    expect(portrait?.props?.src).toBe('/assets/kira-agents/portraits/cobalto.svg')
-    expect(portraitSrcForKind('cobalto')).toBe('/assets/kira-agents/portraits/cobalto.svg')
+    expect(portrait?.props?.src).toBe('/assets/kira-agents/portraits/cobalto.webp')
+    expect(portraitSrcForKind('cobalto')).toBe('/assets/kira-agents/portraits/cobalto.webp')
     expect(avatar.props['data-phase']).toBe('verifying')
     expect(avatar.props['data-state']).toBe('running')
   })
