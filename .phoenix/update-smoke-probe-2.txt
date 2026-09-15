@@ -1,0 +1,4 @@
+PHOENIX AUTO-UPDATE SMOKE TEST #2
+Date: 2026-09-14 America/Santo_Domingo
+Purpose: harmless repository change to exercise stable auto-update detection, staging, restart, activation, and relaunch after clearing the local development-branch blocker.
+Expected behavior: the running PHOENIX should detect this stable commit and complete the update cycle without manual Git or PowerShell intervention.
