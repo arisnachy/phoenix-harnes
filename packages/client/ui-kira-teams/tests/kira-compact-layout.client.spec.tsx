@@ -2,25 +2,21 @@
 
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { ModelActivityAvatar } from '../src/client/ModelActivityAvatar.tsx'
+import { ModelActivityAvatar, portraitSrcForKind } from '../src/client/ModelActivityAvatar.tsx'
 
 const dockCss = readFileSync(new URL('../src/client/KiraTeamsDock.module.css', import.meta.url), 'utf8')
 const avatarCss = readFileSync(new URL('../src/client/ModelActivityAvatar.module.css', import.meta.url), 'utf8')
 
-type ElementLike = {
-  type?: unknown
-  props?: Record<string, unknown>
-}
-
-describe('KIRA compact floating live-agent card regression', () => {
-  it('keeps the desktop card and live avatar proportionally compact', () => {
-    expect(dockCss).toMatch(/\.root\s*{[^}]*max-width:\s*320px/s)
-    expect(dockCss).toMatch(/\.row\s*{[^}]*grid-template-columns:\s*58px\s+minmax\(0,\s*1fr\)/s)
-    expect(dockCss).toMatch(/\.row\s*{[^}]*min-height:\s*72px/s)
-    expect(avatarCss).toMatch(/\.card\s*{[^}]*width:\s*56px;[^}]*height:\s*56px/s)
+describe('KIRA floating roster layout regression', () => {
+  it('stays a floating window and lays the roster out as a five-column grid on desktop', () => {
+    expect(dockCss).toMatch(/\.root\s*{[^}]*position:\s*fixed/s)
+    expect(dockCss).toMatch(/\.root\s*{[^}]*max-width:\s*760px/s)
+    expect(dockCss).toMatch(/\.list\s*{[^}]*display:\s*grid/s)
+    expect(dockCss).toMatch(/\.list\s*{[^}]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/s)
+    expect(avatarCss).toMatch(/\.card\s*{[^}]*width:\s*58px;[^}]*height:\s*72px/s)
   })
 
-  it('renders the shipped portrait sprite as a real image element with a cache-busted source', () => {
+  it('renders each persona from bundled portrait pixels while keeping phase data for animation', () => {
     const avatar = ModelActivityAvatar({
       kind: 'cobalto',
       activity: { model: 'gpt-5.6-luna', phase: 'verifying' },
@@ -28,17 +24,14 @@ describe('KIRA compact floating live-agent card regression', () => {
       pending: false,
       variant: 'card',
     })
-    const children = (Array.isArray(avatar.props.children)
-      ? avatar.props.children
-      : [avatar.props.children]) as ElementLike[]
-    const viewport = children.find(child => child?.props?.['data-agent-portrait-image'] === true)
-    const viewportChildren = (Array.isArray(viewport?.props?.children)
-      ? viewport.props.children
-      : [viewport?.props?.children]) as ElementLike[]
-    const portrait = viewportChildren.find(child => child?.type === 'img')
+    const children = Array.isArray(avatar.props.children) ? avatar.props.children : [avatar.props.children]
+    const portrait = children.find((child: { props?: Record<string, unknown> }) =>
+      child?.props?.['data-agent-portrait-image'] === true)
 
-    expect(viewport?.type).toBe('span')
-    expect(portrait?.props?.src).toMatch(/^\/assets\/kira-agents\/kira-portraits\.webp\?v=/)
-    expect(portrait?.props?.['data-agent-portrait-sprite']).toBe(true)
+    expect(portrait?.type).toBe('img')
+    expect(portrait?.props?.src).toBe(portraitSrcForKind('cobalto'))
+    expect(portraitSrcForKind('cobalto')).toMatch(/^data:image\/webp;base64,/)
+    expect(avatar.props['data-phase']).toBe('verifying')
+    expect(avatar.props['data-state']).toBe('running')
   })
 })
