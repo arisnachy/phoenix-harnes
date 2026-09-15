@@ -8,8 +8,8 @@ import {
   KiraTeamsDock,
   activityKeyOf,
   agentRoleKeyOf,
+  liveCardsOf,
   performanceKeyOf,
-  rosterCardsOf,
   type KiraTeamsDockProps,
 } from '../src/client/KiraTeamsDock.tsx'
 import { en, es, zh, type KiraTeamsKey } from '../src/client/locales.ts'
@@ -34,8 +34,8 @@ function translate(key: KiraTeamsKey, params?: { count?: number }): string {
   return params?.count === undefined ? value : value.replace('{count}', String(params.count))
 }
 
-describe('approved KIRA floating 20-agent roster', () => {
-  it('keeps all 20 approved identities visible while assigning live sessions into stable slots', () => {
+describe('approved KIRA compact live-agent dock', () => {
+  it('keeps the approved 20 portrait identities available without rendering idle personas', () => {
     expect(KIRA_ROSTER.map(agent => agent.name)).toEqual([
       'Vórtice', 'Aurora', 'Atlas', 'Nova', 'Lumen',
       'Helix', 'Prisma', 'Orión', 'Vega', 'Eclipse',
@@ -52,27 +52,25 @@ describe('approved KIRA floating 20-agent roster', () => {
         subagentActivity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
       },
     })
-    const cards = rosterCardsOf([{ summary: active, depth: 1 }])
+    const cards = liveCardsOf([{ summary: active, depth: 1 }])
 
-    expect(cards).toHaveLength(20)
-    expect(cards.filter(card => card.summary !== undefined)).toHaveLength(1)
-    expect(cards.find(card => card.summary?.id === sid('c1'))?.name).toBe('Vega')
-    expect(cards.find(card => card.summary?.id === sid('c1'))?.kind).toBe('vega')
+    expect(cards).toHaveLength(1)
+    expect(cards[0]?.summary?.id).toBe(sid('c1'))
+    expect(cards[0]?.name).toBe('Vega')
+    expect(cards[0]?.kind).toBe('vega')
   })
 
   it('keeps simultaneous live agents individually identifiable even when hashes collide', () => {
     const one = summary({ id: sid('ab'), parentId: sid('root'), origin: 'subagent', running: true })
     const two = summary({ id: sid('ba'), parentId: sid('root'), origin: 'subagent', running: true })
-    const cards = rosterCardsOf([
+    const cards = liveCardsOf([
       { summary: one, depth: 1 },
       { summary: two, depth: 1 },
     ])
-    const live = cards.filter(card => card.summary !== undefined)
 
-    expect(cards).toHaveLength(20)
-    expect(live).toHaveLength(2)
-    expect(new Set(live.map(card => card.kind)).size).toBe(2)
-    expect(live.map(card => card.summary?.id)).toEqual([sid('ab'), sid('ba')])
+    expect(cards).toHaveLength(2)
+    expect(new Set(cards.map(card => card.kind)).size).toBe(2)
+    expect(cards.map(card => card.summary?.id)).toEqual([sid('ab'), sid('ba')])
   })
 
   it('calls every agent AI while exposing the real duty separately', () => {
@@ -132,7 +130,7 @@ describe('approved KIRA floating 20-agent roster', () => {
     expect(activityKeyOf(working)).toBe('activity.working')
   })
 
-  it('floats as one window containing the full roster while separating role from activity', () => {
+  it('floats above the conversation and renders only the currently live agent', () => {
     const root = summary({ id: sid('root') })
     const supervisor = summary({
       id: sid('supervisor-live'), parentId: root.id, origin: 'subagent', running: true,
@@ -156,9 +154,9 @@ describe('approved KIRA floating 20-agent roster', () => {
 
     const { container } = render(<KiraTeamsDock {...props} />)
 
-    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('floating-roster')
+    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('floating-live')
     expect(setWorkspaceOccupant).toHaveBeenCalledWith('subagent', false)
-    expect(container.querySelectorAll('[data-kira-agent-card]')).toHaveLength(20)
+    expect(container.querySelectorAll('[data-kira-agent-card]')).toHaveLength(1)
     expect(screen.getByText('Supervisor')).toBeTruthy()
     expect(screen.getByText('Preparando')).toBeTruthy()
     expect(screen.getByText('Supervisando misión')).toBeTruthy()
