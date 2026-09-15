@@ -1,18 +1,25 @@
 import {
   siAlibabacloud,
   siAnthropic,
+  siCloudflare,
   siDeepseek,
+  siGithubcopilot,
   siGooglegemini,
   siHuggingface,
   siKimi,
   siMeta,
+  siMinimax,
   siMistralai,
   siMoonshotai,
   siNvidia,
   siOllama,
+  siOpencode,
   siOpenrouter,
   siPerplexity,
   siQwen,
+  siVercel,
+  siXiaomi,
+  siZdotai,
 } from 'simple-icons'
 
 /** Presentation-only metadata for one Host-advertised model row. */
@@ -67,6 +74,13 @@ const PROVIDER_MARKS: readonly ProviderMark[] = [
   providerMark(['kimi'], siKimi),
   providerMark(['moonshot'], siMoonshotai),
   providerMark(['alibaba'], siAlibabacloud),
+  providerMark(['github-copilot', 'githubcopilot', 'copilot'], siGithubcopilot),
+  providerMark(['minimax'], siMinimax),
+  providerMark(['xiaomi'], siXiaomi),
+  providerMark(['zai', 'z.ai'], siZdotai),
+  providerMark(['cloudflare'], siCloudflare),
+  providerMark(['opencode'], siOpencode),
+  providerMark(['vercel'], siVercel),
 ]
 
 const canonicalToken = (token: string): string => {
