@@ -235,11 +235,11 @@ declare module '@phoenix-ai/dsh-session/types' {
 export interface FoldedGoal {
   /** Current goal, absent after a clear or before the first create. */
   readonly goal?: GoalSnapshot
-  /** Highest admitted round for the current goal. */
+  /** Highest admitted round number for this goal. */
   readonly roundsStarted: number
-  /** Current goal creation time, absent without a current goal. */
+  /** Epoch milliseconds of the create mutation. */
   readonly createdAt?: number
-  /** Current goal mutation time, absent without a current goal. */
+  /** Epoch milliseconds of the latest mutation. */
   readonly updatedAt?: number
   /** Latest mutation ref, including a clear tombstone. */
   readonly lastRef?: GoalRef
@@ -266,6 +266,7 @@ export type GoalErrorCode =
   | 'GOAL_INVALID_TRANSITION'
   | 'GOAL_COMPLETION_NOT_VERIFIED'
   | 'GOAL_COMPLETION_GATE_NOT_VERIFIED'
+  | 'GOAL_QUALITY_NOT_READY'
 
 declare module '@phoenix-ai/cordis' {
   interface Events {
