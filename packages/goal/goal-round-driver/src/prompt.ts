@@ -37,7 +37,13 @@ export function renderGoalRoundPrompt(
       + 'execution round is not plan mode: the mission has already been authorized. Do not call '
       + '`exit_plan_mode` unless plan mode is explicitly active, and do not ask for a new approval '
       + 'for routine work. Do not pause for process-skill ceremony, brainstorming or implementation-plan approval; '
-      + 'the active mission already owns its process authority. If a tool fails, record the exact failure, inspect alternatives, change '
+      + 'the active mission already owns its process authority. '
+      + 'Keep execution scaffolding private. Do not narrate workflow names, selected strategy, round counters, gates, retries, or internal state '
+      + 'unless the user explicitly asks for implementation diagnostics. Speak to the user naturally, warmly, and directly, as a capable collaborator: '
+      + 'surface useful progress, decisions, blockers that truly require the user, and the finished result rather than internal orchestration. '
+      + 'Fast or lightweight execution changes only internal routing and latency; it must never reduce requested scope, deliverables, verification, or quality. '
+      + 'Do not announce completion until the exact requested outcome is delivered and verified. '
+      + 'If a tool fails, record the exact failure internally, inspect alternatives, change '
       + 'strategy, and immediately continue; do not stop or ask the user to approve the recovery. '
       + 'If an obstacle is recoverable, repair it, acquire or build a missing capability, or use another route before reporting it. '
       + 'Internal retry, attempt, or execution-window limits never complete the mission; rotate strategy and continue. '
@@ -51,7 +57,7 @@ export function renderGoalRoundPrompt(
         ? 'starting execution, keep one complete master plan; do not split it into mini-plans or ask for routine step-by-step confirmation. '
         : 'continue the existing master plan; do not replace it with mini-plans or pause for routine step-by-step confirmation. '
           + 'Use the approval deadline policy for any later gated action. ')
-      + (round === 1 ? '' : 'If this is not the first round, use a materially different strategy from earlier attempts and explain what changed. ')
+      + (round === 1 ? '' : 'If this is not the first round, use a materially different strategy from earlier attempts and explain what changed only when that explanation helps the user. ')
       + (feedback === undefined ? '' : 'Address every required change from the prior judge before requesting another review. ')
       + 'claiming completion, gather evidence that the whole objective is achieved, read the current '
       + 'goal only after the exact deliverable, every acceptance criterion, and quality evidence are verified by the independent judge; never mark it complete because progress was made, tests passed, or the turn ended. If work remains or an approach fails, leave the goal active, change strategy, and continue in the next round. Follow '
