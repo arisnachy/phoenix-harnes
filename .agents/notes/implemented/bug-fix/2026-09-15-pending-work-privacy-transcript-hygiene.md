@@ -20,6 +20,14 @@ Transient technical chrome remains visible and interactive in Phoenix, but the T
 
 `packages/profile/user-profile/tests/user-profile.spec.ts` pins private-memory relevance, result-first status behavior, exhaustive/scoped pending-work claims, and the ban on unrelated-memory menus. `packages/client/ui-conversation/tests/technical-chrome-copy-isolation.client.spec.ts` pins copy isolation for the Tools disclosure and transient Phoenix status.
 
+## Alternatives considered
+
+**Hide or delete personal memory from model context entirely.** Rejected because relevant durable context is valuable; the defect was inappropriate surfacing, not the existence of memory. The fix keeps memory available while enforcing relevance and privacy boundaries.
+
+**Remove the Tools activity UI from chat.** Rejected because tool activity is useful technical observability. The UI remains visible and interactive, but its transient chrome is excluded from ordinary transcript selection/copy.
+
+**Treat one scheduler lookup as a complete pending-work inventory.** Rejected because outstanding work can live in multiple authoritative systems. Phoenix now scopes completeness to the sources actually checked and must say when coverage is partial.
+
 ## Consequences
 
 Phoenix can still use personal context, scheduled work, goals, missions, inbox state, and project/session state when relevant; the change affects relevance, scope claims, and presentation rather than deleting capabilities. Technical activity remains inspectable in the UI but no longer behaves like assistant prose during normal copying.
