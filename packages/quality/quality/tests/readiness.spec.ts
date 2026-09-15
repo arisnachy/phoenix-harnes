@@ -80,4 +80,27 @@ describe('qualityReadiness', () => {
     }
     expect(qualityReadiness(snapshot).ready).toBe(false)
   })
+
+  test('rejects living work that has only simulated evidence', () => {
+    const current = base()
+    const snapshot: QualityAssessmentSnapshot = { ...current, taskClass: 'living' }
+    const result = qualityReadiness(snapshot)
+    expect(result.ready).toBe(false)
+    expect(result.blockers.join(' ')).toMatch(/live|living/i)
+  })
+
+  test('accepts living work when a material scenario has verified living authority', () => {
+    const current = base()
+    const snapshot: QualityAssessmentSnapshot = {
+      ...current,
+      taskClass: 'living',
+      scenarios: [{
+        ...current.scenarios[0]!,
+        evidenceKind: 'live',
+        authorityRef: 'living:hospital-virtual',
+        evidence: ['living:hospital-virtual state read'],
+      }],
+    }
+    expect(qualityReadiness(snapshot)).toEqual({ ready: true, blockers: [] })
+  })
 })
