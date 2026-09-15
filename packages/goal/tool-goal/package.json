@@ -11,12 +11,12 @@
     "directory": "packages/goal/tool-goal"
   },
   "type": "module",
-  "main": "lib/index.js",
-  "types": "lib/types/index.d.ts",
+  "main": "lib/plugin.js",
+  "types": "lib/types/plugin.d.ts",
   "exports": {
     ".": {
-      "types": "./lib/types/index.d.ts",
-      "default": "./lib/index.js"
+      "types": "./lib/types/plugin.d.ts",
+      "default": "./lib/plugin.js"
     },
     "./invariant": {
       "types": "./lib/types/invariant.d.ts",
@@ -26,6 +26,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "lib/plugin.js",
     "lib/index.js",
     "lib/invariant.js",
     "lib/types/**/*.d.ts"
