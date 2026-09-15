@@ -132,7 +132,16 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(performanceKeyOf(researcher)).toBe('performance.researching')
   })
 
-  it('distinguishes generic live work from preparation', () => {
+  it('shows a runtime-idle live agent as ready while preserving unknown telemetry as working', () => {
+    const ready = summary({
+      id: sid('ready'),
+      parentId: sid('root'),
+      origin: 'subagent',
+      running: true,
+      projectionValues: {
+        subagentActivity: { model: 'gpt-5.6-luna', phase: 'idle' },
+      },
+    })
     const working = summary({
       id: sid('working'),
       parentId: sid('root'),
@@ -140,6 +149,7 @@ describe('approved KIRA compact live-agent dock', () => {
       running: true,
     })
 
+    expect(activityKeyOf(ready)).toBe('activity.ready')
     expect(activityKeyOf(working)).toBe('activity.working')
   })
 })
