@@ -2,12 +2,12 @@
 /**
  * Bridge verified prepared updates into the Windows supervisor restart contract.
  *
- * The stable updater intentionally never kills the Host. This helper converts a
- * verified prepared marker into the two durable requests the external
- * supervisor already understands: activate this exact update target, then
- * restart the Host safely. `--arm-staging` also bootstraps legacy unsupervised
- * Windows Hosts so an update that introduces/fixes the supervisor can activate
- * itself instead of waiting forever for a manual Host exit.
+ * The stable updater itself never owns the Host lifecycle. This helper converts
+ * a verified prepared marker into the two durable requests the external
+ * supervisor understands: activate this exact update target, then restart the
+ * Host safely. `--arm-staging` also bootstraps legacy unsupervised Windows Hosts
+ * so an update that introduces/fixes the supervisor can activate itself instead
+ * of waiting forever for a manual Host exit.
  */
 
 import { spawn, spawnSync } from 'node:child_process'
@@ -124,7 +124,7 @@ function discoverUnsupervisedHostPid() {
     '[Console]::Out.WriteLine(([string]$p.ProcessId + "`t" + [string]$p.ParentProcessId + "`t" + [string]$p.CommandLine))',
     '$cursor = [int]$p.ParentProcessId',
     '}',
-  ].join('; ')
+  ].join('\n')
   const result = spawnSync(powershell, [
     '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script,
   ], {
