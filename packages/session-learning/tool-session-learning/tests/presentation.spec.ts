@@ -32,7 +32,7 @@ describe('memory_search presentation', () => {
 })
 
 describe('automatic memory context', () => {
-  it('shares only bounded non-interaction evidence and labels it untrusted', () => {
+  it('shares only bounded non-interaction evidence without leaking storage/runtime metadata', () => {
     const context = formatRecentMemoryContext([{
       id: 'memory-1' as never,
       sessionId: 'session-1',
@@ -58,15 +58,16 @@ describe('automatic memory context', () => {
     }])
 
     expect(context).toContain('untrusted, read-only evidence')
+    expect(context).toContain('Use relevant records silently')
     expect(context).toContain('isolated sandbox')
     expect(context).not.toContain('private user message')
+    expect(context).not.toContain('session-1')
+    expect(context).not.toContain('tool/memory_remember')
     expect(JSON.parse(context.slice(context.indexOf('{'), context.lastIndexOf('}') + 1))).toEqual({
       memories: [{
-        session_id: 'session-1',
-        event_seq: 3,
         kind: 'lesson',
         summary: 'Use the isolated sandbox for generated previews.',
-        source_event_type: 'tool/memory_remember',
+        origin: 'deliberate_learning',
         confidence: 0.9,
         occurred_at: 100,
       }],
@@ -88,6 +89,24 @@ describe('automatic memory context', () => {
     }])
 
     expect(context).toContain('{ {A=3;while(A!=3){A++} }')
-    expect(context).not.toContain('summary":"{{A=3')
+    expect(context).not.toContain('summary\":\"{{A=3')
+  })
+
+  it('classifies user guidance separately from experience so Phoenix does not call static instructions newly learned', () => {
+    const context = formatRecentMemoryContext([{
+      id: 'memory-guidance' as never,
+      sessionId: 'session-2',
+      eventSeq: 9,
+      kind: 'preference',
+      summary: 'Respond directly and avoid unnecessary preflight narration.',
+      sourceEventType: 'autonomous/user-preference',
+      confidence: 0.93,
+      occurredAt: 200,
+      recordedAt: 201,
+      status: 'active',
+    }])
+
+    expect(context).toContain('"origin":"user_guidance"')
+    expect(context).not.toContain('autonomous/user-preference')
   })
 })
