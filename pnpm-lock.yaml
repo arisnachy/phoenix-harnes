@@ -5034,6 +5034,9 @@ importers:
       '@phoenix-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@phoenix-ai/dsh-quality':
+        specifier: workspace:^
+        version: link:../../quality/quality
       '@phoenix-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -6339,6 +6342,57 @@ importers:
       '@phoenix-ai/dsh-brand':
         specifier: workspace:^
         version: link:../../util/brand
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+
+  packages/quality/quality-session:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-quality':
+        specifier: workspace:^
+        version: link:../quality
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+
+  packages/quality/tool-quality:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-quality':
+        specifier: workspace:^
+        version: link:../quality
+      '@phoenix-ai/dsh-quality-session':
+        specifier: workspace:^
+        version: link:../quality-session
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@phoenix-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/runtime-diagnostics/invariants:
     dependencies:
