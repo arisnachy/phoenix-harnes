@@ -50,7 +50,7 @@
     "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^5.2.2",
     "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
