@@ -1,0 +1,37 @@
+name: Temporary quality living GREEN 2
+
+on:
+  push:
+    branches:
+      - feat/quality-foresight-completion-20260915
+    paths:
+      - .github/workflows/tmp-quality-living-green2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  green:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/quality-foresight-completion-20260915
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: node .github/scripts/tmp-patch-quality-living.mjs
+      - run: pnpm install --lockfile-only --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run packages/goal/tool-goal/tests/living-quality-evidence.spec.ts packages/goal/tool-goal/tests/quality-tool-wiring.spec.ts packages/goal/tool-goal/tests/quality-judge.spec.ts
+      - name: Commit living verification
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/goal/tool-goal/src/completion-gate.ts packages/goal/tool-goal/src/judge.ts packages/goal/tool-goal/src/index.ts packages/goal/tool-goal/package.json pnpm-lock.yaml
+          git diff --cached --check
+          git commit -m "feat(quality): verify live evidence through living registry"
+          git push origin HEAD:feat/quality-foresight-completion-20260915
