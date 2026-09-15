@@ -180,9 +180,11 @@ export function activityKeyOf(summary: SessionSummary): KiraTeamsKey {
   if (!summary.running) return 'activity.done'
   const phase = activityOf(summary)?.phase
   switch (phase) {
+    case 'preparing': return 'activity.preparing'
     case 'running-tools': return 'activity.tools'
     case 'verifying': return 'activity.verifying'
-    default: return phase === undefined ? 'activity.working' : 'activity.preparing'
+    case 'idle': return 'activity.ready'
+    default: return 'activity.working'
   }
 }
 
