@@ -13,14 +13,16 @@
   "types": "lib/types/index.d.ts",
   "exports": {
     ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./invariant": { "types": "./lib/types/invariant.d.ts", "default": "./lib/invariant.js" },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
-  "files": ["lib/index.js", "lib/types/**/*.js", "lib/types/**/*.d.ts"],
+  "files": ["lib/index.js", "lib/invariant.js", "lib/types/**/*.js", "lib/types/**/*.d.ts"],
   "license": "MIT",
   "peerDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-quality": "workspace:^",
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^"
@@ -28,6 +30,7 @@
   "devDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-quality": "workspace:^",
     "@phoenix-ai/dsh-quality-session": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
