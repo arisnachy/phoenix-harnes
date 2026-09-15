@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionId, SessionSummary } from '@phoenix-ai/dsh-client-runtime/client'
-import { KIRA_ROSTER, activityKeyOf, rosterCardsOf } from '../src/client/KiraTeamsDock.tsx'
+import {
+  KIRA_ROSTER,
+  activityKeyOf,
+  agentRoleKeyOf,
+  liveCardsOf,
+  performanceKeyOf,
+} from '../src/client/KiraTeamsDock.tsx'
 import { en, es, zh } from '../src/client/locales.ts'
 import {
   ModelActivityAvatar,
@@ -18,19 +24,15 @@ function summary(partial: Partial<SessionSummary> & { id: SessionId }): SessionS
   } as SessionSummary
 }
 
-describe('approved KIRA reference board', () => {
-  it('exposes the exact 20-persona roster in the approved visual order', () => {
+describe('approved KIRA compact live-agent dock', () => {
+  it('keeps the approved 20 portrait identities available without rendering idle personas', () => {
     expect(KIRA_ROSTER.map(agent => agent.name)).toEqual([
       'Vórtice', 'Aurora', 'Atlas', 'Nova', 'Lumen',
       'Helix', 'Prisma', 'Orión', 'Vega', 'Eclipse',
       'Argo', 'Solaria', 'Nexo', 'Astra', 'Lyra',
       'Zenith', 'Cobalto', 'Quasar', 'Senda', 'Órbita',
     ])
-    expect(new Set(KIRA_ROSTER.map(agent => agent.kind)).size).toBe(20)
-    expect(KIRA_ROSTER.every(agent => agent.tagline.length > 0)).toBe(true)
-  })
 
-  it('keeps all 20 personas visible while live subagents occupy their stable slots', () => {
     const active = summary({
       id: sid('c1'),
       parentId: sid('root'),
@@ -40,18 +42,80 @@ describe('approved KIRA reference board', () => {
         subagentActivity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
       },
     })
-    const cards = rosterCardsOf([{ summary: active, depth: 1 }])
+    const cards = liveCardsOf([{ summary: active, depth: 1 }])
 
-    expect(cards).toHaveLength(20)
-    expect(cards.filter(card => card.summary !== undefined)).toHaveLength(1)
-    expect(cards.find(card => card.name === 'Vega')?.summary?.id).toBe(sid('c1'))
-    expect(cards.find(card => card.name === 'Vórtice')?.summary).toBeUndefined()
+    expect(cards).toHaveLength(1)
+    expect(cards[0]?.summary?.id).toBe(sid('c1'))
+    expect(cards[0]?.name).toBe('Vega')
+    expect(cards[0]?.kind).toBe('vega')
   })
 
-  it('calls every visible KIRA persona AI in every shipped locale', () => {
+  it('keeps simultaneous live agents individually identifiable even when hashes collide', () => {
+    const one = summary({ id: sid('ab'), parentId: sid('root'), origin: 'subagent', running: true })
+    const two = summary({ id: sid('ba'), parentId: sid('root'), origin: 'subagent', running: true })
+    const cards = liveCardsOf([
+      { summary: one, depth: 1 },
+      { summary: two, depth: 1 },
+    ])
+
+    expect(cards).toHaveLength(2)
+    expect(new Set(cards.map(card => card.kind)).size).toBe(2)
+    expect(cards.map(card => card.summary?.id)).toEqual([sid('ab'), sid('ba')])
+  })
+
+  it('calls every agent AI while exposing the real duty separately', () => {
     expect(es['role.agent']).toBe('AI')
     expect(en['role.agent']).toBe('AI')
     expect(zh['role.agent']).toBe('AI')
+
+    const judge = summary({
+      id: sid('judge'),
+      projectionValues: { subagent: { label: 'independent quality judge' } },
+    })
+    const supervisor = summary({
+      id: sid('supervisor'),
+      projectionValues: { subagent: { label: 'mission supervisor and orchestrator' } },
+    })
+    const coder = summary({
+      id: sid('coder'),
+      projectionValues: { subagent: { label: 'fix code and debug implementation' } },
+    })
+    const tester = summary({
+      id: sid('tester'),
+      projectionValues: { subagent: { label: 'QA tester' } },
+    })
+
+    expect(agentRoleKeyOf(judge)).toBe('role.judge')
+    expect(agentRoleKeyOf(supervisor)).toBe('role.supervisor')
+    expect(agentRoleKeyOf(coder)).toBe('role.coder')
+    expect(agentRoleKeyOf(tester)).toBe('role.tester')
+  })
+
+  it('describes what each running agent is actually doing', () => {
+    const judge = summary({
+      id: sid('judge'), running: true,
+      projectionValues: { subagent: { label: 'judge output quality' } },
+    })
+    const supervisor = summary({
+      id: sid('supervisor'), running: true,
+      projectionValues: { subagent: { label: 'supervisor' } },
+    })
+    const coder = summary({
+      id: sid('coder'), running: true,
+      projectionValues: {
+        subagent: { label: 'fixing code' },
+        subagentActivity: { model: 'gpt-5.6-sol', phase: 'running-tools' },
+      },
+    })
+    const researcher = summary({
+      id: sid('research'), running: true,
+      projectionValues: { subagent: { label: 'researcher' } },
+    })
+
+    expect(performanceKeyOf(judge)).toBe('performance.judging')
+    expect(performanceKeyOf(supervisor)).toBe('performance.supervising')
+    expect(performanceKeyOf(coder)).toBe('performance.coding')
+    expect(performanceKeyOf(researcher)).toBe('performance.researching')
   })
 
   it('distinguishes generic live work from preparation', () => {
