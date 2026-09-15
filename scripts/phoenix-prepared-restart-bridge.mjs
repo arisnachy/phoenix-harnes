@@ -2,12 +2,12 @@
 /**
  * Bridge verified prepared updates into the Windows supervisor restart contract.
  *
- * The stable updater intentionally never kills the Host. This helper converts a
- * verified prepared marker into the two durable requests the external
- * supervisor already understands: activate this exact update target, then
- * restart the Host safely. `--arm-staging` exists to bootstrap older
- * supervisors: a verified staging build can arm a detached waiter before the
- * new source has been activated locally.
+ * The updater never owns relaunch or activation. This helper first persists the
+ * exact update and Host-restart requests that the external supervisor consumes.
+ * In permanent Host-watch mode it then stops only that supervised Host, leaving
+ * the supervisor alive to activate, verify, rollback if needed, and relaunch.
+ * `--arm-staging` exists to bootstrap older supervisors: a verified staging
+ * build can arm a detached waiter before the new source has been activated.
  */
 
 import { spawn, spawnSync } from 'node:child_process'
@@ -103,6 +103,22 @@ function parentAlive(pid) {
   }
 }
 
+function stopSupervisedHost(parentPid, target) {
+  if (!parentAlive(parentPid)) return
+  try {
+    // Requests are already durable at this point. Killing only the Host makes
+    // the still-running external supervisor immediately enter its existing
+    // activation/rollback/relaunch path instead of waiting for a manual exit.
+    process.kill(parentPid, 'SIGTERM')
+    console.error(`[PHOENIX UPDATE] prepared ${target.slice(0, 12)} handed off durably; stopping supervised Host ${String(parentPid)} for automatic activation.`)
+  } catch (error) {
+    if (error?.code === 'ESRCH') return
+    // The durable Host-restart request remains as a fallback for the supervisor
+    // poller even when the direct Host stop is denied by the platform.
+    console.error(`[PHOENIX UPDATE] warning: could not stop supervised Host ${String(parentPid)} after durable handoff: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 async function waitForTarget(controlDir, target, timeoutMs, parentPid) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() <= deadline && (parentPid === undefined || parentAlive(parentPid))) {
@@ -121,6 +137,7 @@ async function watchPrepared(controlDir, parentPid) {
     const prepared = readPrepared(controlDir)
     if (prepared !== undefined) {
       requestActivation(controlDir, prepared.target)
+      stopSupervisedHost(parentPid, prepared.target)
       return true
     }
     await sleep(POLL_MS)
