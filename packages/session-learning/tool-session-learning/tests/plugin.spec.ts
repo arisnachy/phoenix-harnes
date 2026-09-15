@@ -75,6 +75,10 @@ describe('tool-session-learning plugin', () => {
     expect(snapshot).toMatch(/ask.*only.*blocked|only.*ask.*blocked/i)
     expect(snapshot).toMatch(/configured|instruction/i)
     expect(snapshot).toMatch(/learned.*experience|experience.*learned/i)
+    expect(snapshot).toMatch(/do not ask .*operation mode/i)
+    expect(snapshot).toMatch(/generalize verified learning/i)
+    expect(snapshot).toMatch(/never enumerate protected personal categories/i)
+    expect(snapshot).toMatch(/solve the user's task first/i)
   })
 
   it('keeps literal template-looking code in learned context', async () => {
