@@ -114,8 +114,8 @@ describe('lineageMembers', () => {
       model: 'gpt-5.6-luna',
       phase: 'running-tools',
     })
-    expect(agentNameOf(child)).toBe('Orión')
-    expect(agentNameOf(FAMILY.find(item => item.id === sid('c2'))!)).toBe('Nexo')
+    expect(agentNameOf(child)).toBe('Vega')
+    expect(agentNameOf(FAMILY.find(item => item.id === sid('c2'))!)).toBe('Eclipse')
   })
 
   it('maps activity phases to visible status labels without exposing prompts', () => {
@@ -173,9 +173,9 @@ describe('lineageMembers', () => {
     expect(activityKeyOf(done)).toBe('activity.done')
   })
 
-  it('assigns the recovered illustrated avatar roster by agent id', () => {
-    expect(agentAvatarKind('c1')).toBe('lynx')
-    expect(agentAvatarKind('c2')).toBe('dolphin')
+  it('assigns the approved 20-portrait avatar roster by agent id', () => {
+    expect(agentAvatarKind('c1')).toBe('vega')
+    expect(agentAvatarKind('c2')).toBe('eclipse')
     expect(agentAvatarKind('c1')).not.toBe(agentAvatarKind('c2'))
   })
 
