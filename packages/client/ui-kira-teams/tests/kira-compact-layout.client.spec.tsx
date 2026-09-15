@@ -7,6 +7,11 @@ import { ModelActivityAvatar } from '../src/client/ModelActivityAvatar.tsx'
 const dockCss = readFileSync(new URL('../src/client/KiraTeamsDock.module.css', import.meta.url), 'utf8')
 const avatarCss = readFileSync(new URL('../src/client/ModelActivityAvatar.module.css', import.meta.url), 'utf8')
 
+type ElementLike = {
+  type?: unknown
+  props?: Record<string, unknown>
+}
+
 describe('KIRA compact floating live-agent card regression', () => {
   it('keeps the desktop card and live avatar proportionally compact', () => {
     expect(dockCss).toMatch(/\.root\s*{[^}]*max-width:\s*320px/s)
@@ -23,13 +28,14 @@ describe('KIRA compact floating live-agent card regression', () => {
       pending: false,
       variant: 'card',
     })
-    const children = Array.isArray(avatar.props.children) ? avatar.props.children : [avatar.props.children]
-    const viewport = children.find((child: { props?: Record<string, unknown> }) =>
-      child?.props?.['data-agent-portrait-image'] === true)
-    const viewportChildren = Array.isArray(viewport?.props?.children)
+    const children = (Array.isArray(avatar.props.children)
+      ? avatar.props.children
+      : [avatar.props.children]) as ElementLike[]
+    const viewport = children.find(child => child?.props?.['data-agent-portrait-image'] === true)
+    const viewportChildren = (Array.isArray(viewport?.props?.children)
       ? viewport.props.children
-      : [viewport?.props?.children]
-    const portrait = viewportChildren.find((child: { type?: unknown }) => child?.type === 'img')
+      : [viewport?.props?.children]) as ElementLike[]
+    const portrait = viewportChildren.find(child => child?.type === 'img')
 
     expect(viewport?.type).toBe('span')
     expect(portrait?.props?.src).toMatch(/^\/assets\/kira-agents\/kira-portraits\.webp\?v=/)
