@@ -24,8 +24,8 @@ function summary(partial: Partial<SessionSummary> & { id: SessionId }): SessionS
   } as SessionSummary
 }
 
-describe('approved KIRA compact live-agent dock', () => {
-  it('keeps the approved 20 portrait identities available without rendering idle personas', () => {
+describe('approved KIRA persistent 20-agent board', () => {
+  it('keeps the approved 20 portrait identities visible while live subagents occupy stable slots', () => {
     expect(KIRA_ROSTER.map(agent => agent.name)).toEqual([
       'Vórtice', 'Aurora', 'Atlas', 'Nova', 'Lumen',
       'Helix', 'Prisma', 'Orión', 'Vega', 'Eclipse',
@@ -43,11 +43,13 @@ describe('approved KIRA compact live-agent dock', () => {
       },
     })
     const cards = liveCardsOf([{ summary: active, depth: 1 }])
+    const occupied = cards.filter(card => card.summary !== undefined)
 
-    expect(cards).toHaveLength(1)
-    expect(cards[0]?.summary?.id).toBe(sid('c1'))
-    expect(cards[0]?.name).toBe('Vega')
-    expect(cards[0]?.kind).toBe('vega')
+    expect(cards).toHaveLength(20)
+    expect(occupied).toHaveLength(1)
+    expect(occupied[0]?.summary?.id).toBe(sid('c1'))
+    expect(occupied[0]?.name).toBe('Vega')
+    expect(occupied[0]?.kind).toBe('vega')
   })
 
   it('keeps simultaneous live agents individually identifiable even when hashes collide', () => {
@@ -57,10 +59,12 @@ describe('approved KIRA compact live-agent dock', () => {
       { summary: one, depth: 1 },
       { summary: two, depth: 1 },
     ])
+    const occupied = cards.filter(card => card.summary !== undefined)
 
-    expect(cards).toHaveLength(2)
-    expect(new Set(cards.map(card => card.kind)).size).toBe(2)
-    expect(cards.map(card => card.summary?.id)).toEqual([sid('ab'), sid('ba')])
+    expect(cards).toHaveLength(20)
+    expect(occupied).toHaveLength(2)
+    expect(new Set(occupied.map(card => card.kind)).size).toBe(2)
+    expect(occupied.map(card => card.summary?.id)).toEqual([sid('ab'), sid('ba')])
   })
 
   it('calls every agent AI while exposing the real duty separately', () => {
