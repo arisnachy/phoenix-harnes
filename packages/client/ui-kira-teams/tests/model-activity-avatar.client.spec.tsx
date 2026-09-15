@@ -3,6 +3,7 @@ import {
   ModelActivityAvatar,
   agentAvatarKind,
   modelAvatarKind,
+  portraitSrcForKind,
 } from '../src/client/ModelActivityAvatar.tsx'
 
 describe('modelAvatarKind', () => {
@@ -24,8 +25,17 @@ describe('agentAvatarKind', () => {
   })
 })
 
+describe('portraitSrcForKind', () => {
+  it('maps every fallback to a real KIRA persona asset', () => {
+    expect(portraitSrcForKind('sol')).toBe('/assets/kira-agents/solaria.webp')
+    expect(portraitSrcForKind('luna')).toBe('/assets/kira-agents/eclipse.webp')
+    expect(portraitSrcForKind('terra')).toBe('/assets/kira-agents/senda.webp')
+    expect(portraitSrcForKind('generic')).toBe('/assets/kira-agents/lyra.webp')
+  })
+})
+
 describe('ModelActivityAvatar', () => {
-  it('renders the approved public portrait sheet instead of an embedded or vector face rig', () => {
+  it('renders a dedicated raster portrait instead of the old shared sprite or vector rig', () => {
     const element = ModelActivityAvatar({
       agentId: 'c1',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
@@ -42,10 +52,8 @@ describe('ModelActivityAvatar', () => {
 
     expect(element.props['data-avatar']).toBe('vega')
     expect(image).toBeDefined()
-    expect(image.type).toBe('span')
-    expect(String(image.props.style?.['--portrait-image']))
-      .toBe('url("/assets/kira-agents/kira-portraits.webp")')
-    expect(String(image.props.style?.['--portrait-image'])).not.toContain('data:image')
+    expect(image.type).toBe('img')
+    expect(image.props.src).toBe('/assets/kira-agents/vega.webp')
     expect(vectorPortrait).toBeUndefined()
   })
 
@@ -67,7 +75,10 @@ describe('ModelActivityAvatar', () => {
     })
   })
 
-  it('keeps pending and completed avatars alive without losing identity', () => {
+  it('keeps ready, pending and completed avatars alive without losing identity', () => {
+    const ready = ModelActivityAvatar({
+      kind: 'argo', activity: undefined, running: false, pending: false, ready: true,
+    })
     const done = ModelActivityAvatar({
       agentId: 'c1',
       activity: { model: 'gpt-5.6-sol', phase: 'verifying' },
@@ -82,6 +93,7 @@ describe('ModelActivityAvatar', () => {
     })
     const fallback = ModelActivityAvatar({ activity: undefined, running: true, pending: false })
 
+    expect(ready.props).toMatchObject({ 'data-avatar': 'argo', 'data-phase': 'idle', 'data-state': 'ready' })
     expect(done.props).toMatchObject({ 'data-avatar': 'vega', 'data-phase': 'idle', 'data-state': 'done' })
     expect(pending.props).toMatchObject({ 'data-avatar': 'eclipse', 'data-phase': 'running-tools', 'data-state': 'pending' })
     expect(fallback.props).toMatchObject({ 'data-avatar': 'generic', 'data-phase': 'preparing' })
