@@ -53,4 +53,14 @@ describe('prepared update auto-activation bridge', () => {
     const manifest = JSON.parse(source('package.json')) as { scripts?: Record<string, string> }
     expect(manifest.scripts?.build).toContain('phoenix-prepared-restart-bridge.mjs --arm-staging')
   })
+
+  it('can bootstrap a prepared update from a legacy unsupervised Windows Host', () => {
+    const bridge = source('scripts/phoenix-prepared-restart-bridge.mjs')
+    expect(bridge).toContain('function discoverUnsupervisedHostPid()')
+    expect(bridge).toContain('phoenix-auto-update.mjs')
+    expect(bridge).toContain('--parent-pid')
+    expect(bridge).toContain("'--shutdown-parent-pid', String(unsupervisedHostPid)")
+    expect(bridge).toContain('process.kill(shutdownParentPid)')
+    expect(bridge).toContain('legacy unsupervised Host')
+  })
 })
