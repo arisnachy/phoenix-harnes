@@ -45,7 +45,7 @@ export interface KiraRosterCard extends KiraRosterEntry {
   depth?: number
 }
 
-/** Approved KIRA portrait identities. Only active members are rendered in the dock. */
+/** Exact 5×4 roster and copy from the user-approved KIRA Teams reference. */
 export const KIRA_ROSTER: readonly KiraRosterEntry[] = [
   { kind: 'vortice', name: 'Vórtice', tagline: 'Convirtiendo ideas en movimiento' },
   { kind: 'aurora', name: 'Aurora', tagline: 'Ilumina nuevos caminos' },
@@ -91,7 +91,7 @@ export function agentNameOf(summary: SessionSummary): string {
   return KIRA_ROSTER[rosterIndexOf(String(summary.id))]?.name ?? 'Vigía'
 }
 
-/** Legacy board expansion retained for API compatibility; the dock no longer renders it. */
+/** Expand live lineage members into the permanent 20-persona board. */
 export function rosterCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
   const cards: KiraRosterCard[] = KIRA_ROSTER.map(entry => ({ ...entry }))
   const occupied = new Set<number>()
@@ -116,29 +116,9 @@ export function rosterCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
   return cards
 }
 
-/** Render one card per live subagent while keeping deterministic portrait identity. */
+/** Compatibility helper: the visible dock always keeps the full KIRA roster. */
 export function liveCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
-  const occupied = new Set<number>()
-  const cards: KiraRosterCard[] = []
-
-  for (const row of rows) {
-    if (occupied.size >= KIRA_ROSTER.length) break
-    const preferred = rosterIndexOf(String(row.summary.id))
-    let slot = preferred
-    for (let offset = 0; offset < KIRA_ROSTER.length; offset += 1) {
-      const candidate = (preferred + offset) % KIRA_ROSTER.length
-      if (!occupied.has(candidate)) {
-        slot = candidate
-        break
-      }
-    }
-    occupied.add(slot)
-    const identity = KIRA_ROSTER[slot]
-    if (identity === undefined) continue
-    cards.push({ ...identity, summary: row.summary, depth: row.depth })
-  }
-
-  return cards
+  return rosterCardsOf(rows)
 }
 
 export function statusKeyOf(summary: SessionSummary): KiraTeamsKey {
@@ -249,20 +229,19 @@ export function lineageMembers(state: SessionListState): {
 
 function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
   const summary = card.summary
-  if (summary === undefined) return null
-
-  const roleKey = agentRoleKeyOf(summary)
-  const actionKey = activityKeyOf(summary)
-  const performanceKey = performanceKeyOf(summary)
-  const hasSpecificDuty = roleKey !== 'role.agent'
+  const actionKey: KiraTeamsKey = summary === undefined ? 'activity.ready' : activityKeyOf(summary)
+  const roleKey = summary === undefined ? 'role.agent' : agentRoleKeyOf(summary)
+  const performanceKey: KiraTeamsKey = summary === undefined ? 'activity.ready' : performanceKeyOf(summary)
+  const hasSpecificDuty = summary !== undefined && roleKey !== 'role.agent'
 
   return (
     <>
       <ModelActivityAvatar
         kind={card.kind}
-        activity={activityOf(summary)}
-        running={summary.running}
-        pending={summary.pendingInteraction !== undefined}
+        activity={summary === undefined ? undefined : activityOf(summary)}
+        running={summary?.running ?? false}
+        pending={summary?.pendingInteraction !== undefined}
+        ready={summary === undefined}
         variant="card"
       />
       <span className={css.agentCopy}>
@@ -283,7 +262,7 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
   )
 }
 
-/** Compact KIRA Teams workspace: original window, one live portrait card per active subagent. */
+/** KIRA Teams visual workspace matching the approved 20-agent reference. */
 export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeamsDockProps) {
   const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
   const { root, rows } = lineageMembers(state)
@@ -316,7 +295,8 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
     })
   }
 
-  const membersKey = rows.length === 1 ? 'count.members.one' : 'count.members.other'
+  const memberCount = KIRA_ROSTER.length
+  const membersKey = memberCount === 1 ? 'count.members.one' : 'count.members.other'
   const runningKey = runningCount === 1 ? 'count.running.one' : 'count.running.other'
 
   if (collapsed) {
@@ -332,7 +312,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
           {runningCount > 0 && <StateDot state="ongoing" />}
           <span className={css.pillTitle}>{t('dock.title')}</span>
           <span className={css.pillCount}>
-            {runningCount > 0 ? t(runningKey, { count: runningCount }) : t(membersKey, { count: rows.length })}
+            {runningCount > 0 ? t(runningKey, { count: runningCount }) : t(membersKey, { count: memberCount })}
           </span>
         </button>
       </div>
@@ -341,7 +321,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
 
   const cards = liveCardsOf(rows)
   return (
-    <div className={css.root} data-kira-teams data-kira-layout="compact-live">
+    <div className={css.root} data-kira-teams data-kira-layout="reference-5x4">
       <section className={css.dock} aria-label={t('team.aria')}>
         <header className={css.header}>
           <button
@@ -358,8 +338,8 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
           <span className={css.counts}>
             <span className={css.countText}>
               {runningCount > 0
-                ? `${t(membersKey, { count: rows.length })} · ${t(runningKey, { count: runningCount })}`
-                : t(membersKey, { count: rows.length })}
+                ? `${t(membersKey, { count: memberCount })} · ${t(runningKey, { count: runningCount })}`
+                : t(membersKey, { count: memberCount })}
             </span>
           </span>
           <button
@@ -375,12 +355,27 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
         <div className={css.list} role="tree" aria-label={t('team.aria')}>
           {cards.map((card) => {
             const summary = card.summary
-            if (summary === undefined) return null
+            if (summary === undefined) {
+              return (
+                <div
+                  key={card.kind}
+                  role="treeitem"
+                  aria-level={1}
+                  aria-disabled="true"
+                  aria-label={`${card.name} · ${t('role.agent')} · ${t('activity.ready')}`}
+                  className={`${css.row} ${css.rowReady}`}
+                  data-agent-kind={card.kind}
+                >
+                  {cardBody(card, t)}
+                </div>
+              )
+            }
+
             const roleKey = agentRoleKeyOf(summary)
             const performanceKey = performanceKeyOf(summary)
             return (
               <button
-                key={String(summary.id)}
+                key={card.kind}
                 type="button"
                 role="treeitem"
                 aria-level={card.depth ?? 1}
@@ -405,6 +400,13 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
             )
           })}
         </div>
+
+        <footer className={css.footer} aria-hidden="true">
+          <span>{t('board.footerLead')}</span>
+          <span className={css.footerRule} />
+          <span className={css.footerAccent} />
+          <span>{t('board.footerBrand')}</span>
+        </footer>
       </section>
     </div>
   )
