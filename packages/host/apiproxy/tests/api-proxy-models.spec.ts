@@ -111,6 +111,15 @@ async function harness(logged?: {
     status: 'running',
     ctx,
     inbox: { nextTurn: [], nextStep: [] },
+    options: logged === undefined
+      ? { provider: 'deepseek-official', model: 'deepseek-chat' }
+      : {
+        provider: logged.provider,
+        model: logged.model,
+        ...logged.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: logged.reasoningEffort },
+      },
   } as unknown as Agent
   ctx.agents.register(agent)
   return { ctx, agent, sessionId: session.id }

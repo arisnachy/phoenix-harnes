@@ -2514,7 +2514,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             // instead of reading the stale options captured at agent creation.
             found.agent.options.provider = selected.provider
             found.agent.options.model = selected.model
-            found.agent.options.reasoningEffort = selected.reasoningEffort
+            if (selected.reasoningEffort === undefined) {
+              delete found.agent.options.reasoningEffort
+            } else {
+              found.agent.options.reasoningEffort = selected.reasoningEffort
+            }
             try {
               await defaults.saveDefaultModelSelection?.(selected)
             } catch (error: unknown) {
