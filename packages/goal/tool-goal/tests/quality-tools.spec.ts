@@ -7,6 +7,7 @@ import { createUserMessage, CallId } from '@phoenix-ai/dsh-llm'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime from '@phoenix-ai/dsh-tools'
+import * as toolGoal from '@phoenix-ai/dsh-tool-goal'
 import { registerQualityTools } from '../src/quality-tools.ts'
 
 const signal = new AbortController().signal
@@ -39,12 +40,17 @@ function openHumanTurn(agent: Agent): void {
   for (const item of claimed) agent.session.append('user/message', item, { surfaceOp: 'append' })
 }
 
-async function harness() {
+async function baseHarness() {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(GoalService)
+  return ctx
+}
+
+async function harness() {
+  const ctx = await baseHarness()
   registerQualityTools(ctx)
   const agent = stubAgent(`quality-tool-${Math.random()}`)
   ctx.agents.register(agent)
@@ -69,6 +75,13 @@ function value(result: Awaited<ReturnType<typeof execute>>): Record<string, unkn
 }
 
 describe('quality model tools', () => {
+  test('the shipped tool-goal package entrypoint wires quality automatically', async () => {
+    const ctx = await baseHarness()
+    await ctx.plugin(toolGoal)
+    expect(ctx.tools.get('quality_get')?.name).toBe('quality_get')
+    expect(ctx.tools.get('quality_record')?.name).toBe('quality_record')
+  })
+
   test('registers quality tools and standing evidence/foresight policy', async () => {
     const { ctx } = await harness()
     expect(ctx.tools.get('quality_get')?.name).toBe('quality_get')
