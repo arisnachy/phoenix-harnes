@@ -32,11 +32,6 @@ export interface AutonomousMemoryWrite {
 
 /** Storage seam used by the autonomous curator. */
 export interface AutonomousMemoryStore {
-  /**
-   * Persist one bounded cognitive-memory row.
-   * @param input - Secret-free memory write.
-   * @returns Completion when the write is durable.
-   */
   remember(input: AutonomousMemoryWrite): Promise<void>
 }
 
@@ -49,17 +44,13 @@ export interface AutonomousUserMessage {
   readonly projectId?: string
 }
 
-/**
- * Classify only strongly signaled durable user guidance; ordinary chatter and one-off instructions are discarded.
- * @param text - User-authored message.
- * @returns Durable candidate or undefined when retention is not justified.
- */
+/** Classify only strongly signaled durable user guidance; ordinary chatter and one-off instructions are discarded. */
 export function classifyAutonomousMemory(text: string): AutonomousMemoryCandidate | undefined {
   const summary = normalize(text)
   if (summary === '' || summary.length > MAX_TEXT_CHARS || containsSecret(summary)) return undefined
   const folded = fold(summary)
   const durable = /\b(?:quiero que siempre|prefiero que|de ahora en adelante|a partir de ahora|cada vez que|siempre que|nunca quiero que|i prefer|from now on|every time|whenever|always)\b/iu.test(folded)
-  const correction = /\b(?:corrijo|correccion|eso esta mal|eso es incorrecto|te dije que no|de ahora en adelante|from now on|that is wrong|that's wrong|incorrect|correction)\b/iu.test(folded)
+  const correction = /\b(?:corrijo|correccion|eso esta mal|eso es incorrecto|te dije que no|no debe ser asi|no deberia ser asi|estas dando (?:muchas|demasiadas) vueltas|sin resultados|termina la tarea antes de narrar|no me preguntes|no preguntes|de ahora en adelante|from now on|that is wrong|that's wrong|incorrect|correction)\b/iu.test(folded)
   const transient = /\b(?:esta vez|solo esta vez|por ahora|ahora mismo|temporalmente|this time|just this time|for now|temporarily)\b/iu.test(folded)
   if (transient && !durable) return undefined
   if (correction) return { kind: 'correction', summary, confidence: 0.96, importance: 0.96 }
@@ -73,11 +64,6 @@ export class AutonomousMemoryCurator {
 
   constructor(private readonly store: AutonomousMemoryStore) {}
 
-  /**
-   * Observe one user message and persist it when it clearly expresses durable guidance or correction.
-   * @param input - Message plus session/project provenance.
-   * @returns The retained candidate, or undefined when the message should not be stored.
-   */
   async observeUserMessage(input: AutonomousUserMessage): Promise<AutonomousMemoryCandidate | undefined> {
     const candidate = classifyAutonomousMemory(input.text)
     if (candidate === undefined) return undefined
