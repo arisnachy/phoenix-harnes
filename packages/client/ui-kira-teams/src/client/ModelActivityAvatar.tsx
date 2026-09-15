@@ -90,8 +90,8 @@ function portraitStyle(kind: ModelAvatarKind, variant: 'compact' | 'card'): CSSP
     '--portrait-image': `url("${KIRA_PORTRAIT_SHEET}")`,
     '--portrait-x': `${(variant === 'card' ? cardX : compactX)[column] ?? 0}%`,
     '--portrait-y': `${row * (100 / 3)}%`,
-    '--portrait-column': String(column),
-    '--portrait-row': String(row),
+    '--portrait-left': `${column * -100}%`,
+    '--portrait-top': `${row * -100}%`,
   } as CSSProperties
 }
 
