@@ -188,7 +188,7 @@ export function activityKeyOf(summary: SessionSummary): KiraTeamsKey {
   }
 }
 
-/** Human-readable duty shown on the live card; phase remains visible as secondary context. */
+/** Human-readable duty shown on the live card while the phase remains independently visible. */
 export function performanceKeyOf(summary: SessionSummary): KiraTeamsKey {
   if (summary.pendingInteraction !== undefined) return 'activity.waiting'
   if (!summary.running) return 'activity.done'
@@ -266,35 +266,43 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
         variant="card"
       />
       <span className={css.agentCopy}>
-        <span className={css.agentName}>{card.name}</span>
-        <span className={css.role}>
-          <span>{t('role.agent')}</span>
-          {hasSpecificDuty && <span className={css.roleDuty}> · {t(roleKey)}</span>}
+        <span className={css.agentHeading}>
+          <span className={css.agentName}>{card.name}</span>
+          <span className={css.role}>
+            <span>{t('role.agent')}</span>
+            {hasSpecificDuty && (
+              <>
+                <span className={css.roleSeparator} aria-hidden="true"> · </span>
+                <span className={css.roleDuty}>{t(roleKey)}</span>
+              </>
+            )}
+          </span>
         </span>
         <span className={css.statusLine} data-activity={actionKey}>
           <span className={css.statusDot} aria-hidden="true" />
-          <span className={css.activity}>{t(performanceKey)}</span>
+          <span className={css.activity}>{t(actionKey)}</span>
         </span>
         <span className={css.tagline}>
-          {hasSpecificDuty ? t(actionKey) : card.tagline}
+          {hasSpecificDuty ? t(performanceKey) : card.tagline}
         </span>
       </span>
     </>
   )
 }
 
-/** Compact KIRA Teams workspace: original window, one live portrait card per active subagent. */
+/** Floating KIRA Teams card: active subagents stay visible without consuming chat layout width. */
 export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeamsDockProps) {
   const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
   const { root, rows } = lineageMembers(state)
   const [collapsed, setCollapsed] = useState(initialCollapsed)
   const runningCount = rows.reduce((total, row) => total + (row.summary.running ? 1 : 0), 0)
-  const workspaceOpen = root !== undefined && rows.length > 0 && !collapsed
 
   useEffect(() => {
-    layout.setWorkspaceOccupant('subagent', workspaceOpen)
+    // This surface intentionally floats over the workspace. Never reserve the
+    // structural subagent rail, otherwise one live member expands the whole side.
+    layout.setWorkspaceOccupant('subagent', false)
     return () => { layout.setWorkspaceOccupant('subagent', false) }
-  }, [layout, workspaceOpen])
+  }, [layout])
 
   const previousRunning = useRef(runningCount)
   useEffect(() => {
@@ -318,10 +326,13 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
 
   const membersKey = rows.length === 1 ? 'count.members.one' : 'count.members.other'
   const runningKey = runningCount === 1 ? 'count.running.one' : 'count.running.other'
+  const countCopy = runningCount > 0
+    ? `${t(membersKey, { count: rows.length })} · ${t(runningKey, { count: runningCount })}`
+    : t(membersKey, { count: rows.length })
 
   if (collapsed) {
     return (
-      <div className={`${css.root} ${css.rootCollapsed}`} data-kira-teams>
+      <div className={`${css.root} ${css.rootCollapsed}`} data-kira-teams data-kira-layout="floating-live">
         <button
           type="button"
           className={`${css.pill} ${runningCount > 0 ? css.pillLive : ''}`}
@@ -331,9 +342,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
         >
           {runningCount > 0 && <StateDot state="ongoing" />}
           <span className={css.pillTitle}>{t('dock.title')}</span>
-          <span className={css.pillCount}>
-            {runningCount > 0 ? t(runningKey, { count: runningCount }) : t(membersKey, { count: rows.length })}
-          </span>
+          <span className={css.pillCount}>{countCopy}</span>
         </button>
       </div>
     )
@@ -341,7 +350,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
 
   const cards = liveCardsOf(rows)
   return (
-    <div className={css.root} data-kira-teams data-kira-layout="compact-live">
+    <div className={css.root} data-kira-teams data-kira-layout="floating-live">
       <section className={css.dock} aria-label={t('team.aria')}>
         <header className={css.header}>
           <button
@@ -353,13 +362,13 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
           >
             <IconChevronDownOutline14 />
           </button>
-          <span className={css.title}>{t('dock.title')}</span>
-          <span className={css.teamMark} aria-hidden="true" />
-          <span className={css.counts}>
-            <span className={css.countText}>
-              {runningCount > 0
-                ? `${t(membersKey, { count: rows.length })} · ${t(runningKey, { count: runningCount })}`
-                : t(membersKey, { count: rows.length })}
+          <span className={css.headerCopy}>
+            <span className={css.headerTitleLine}>
+              <span className={css.title}>{t('dock.title')}</span>
+              <span className={css.teamMark} aria-hidden="true" />
+            </span>
+            <span className={css.counts}>
+              <span className={css.countText}>{countCopy}</span>
             </span>
           </span>
           <button
@@ -377,6 +386,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
             const summary = card.summary
             if (summary === undefined) return null
             const roleKey = agentRoleKeyOf(summary)
+            const actionKey = activityKeyOf(summary)
             const performanceKey = performanceKeyOf(summary)
             return (
               <button
@@ -385,10 +395,11 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
                 role="treeitem"
                 aria-level={card.depth ?? 1}
                 aria-selected={state.current === summary.id}
-                aria-label={`${card.name} · ${t('role.agent')} · ${roleKey === 'role.agent' ? '' : `${t(roleKey)} · `}${t(performanceKey)}`}
+                aria-label={`${card.name} · ${t('role.agent')} · ${roleKey === 'role.agent' ? '' : `${t(roleKey)} · `}${t(actionKey)} · ${t(performanceKey)}`}
                 className={`${css.row} ${summary.running ? css.rowRunning : ''} ${summary.pendingInteraction !== undefined ? css.rowPending : ''}`}
                 data-agent-kind={card.kind}
                 data-agent-role={roleKey}
+                data-agent-activity={actionKey}
                 data-agent-performance={performanceKey}
                 title={summary.displayTitle}
                 onClick={() => {
