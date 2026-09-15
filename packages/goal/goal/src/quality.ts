@@ -1,4 +1,7 @@
+import { randomUUID } from 'node:crypto'
+import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { Branded } from '@phoenix-ai/dsh-brand'
+import type { SessionEvent } from '@phoenix-ai/dsh-session'
 
 export type QualityAssessmentId = Branded<'QualityAssessmentId'>
 export type QualityTaskClass = 'conversational' | 'bounded' | 'substantial' | 'living'
@@ -12,6 +15,11 @@ export type QualityConfidence = 'low' | 'medium' | 'high'
 export type QualityImpact = 'low' | 'medium' | 'high' | 'critical'
 export type RiskForecastStatus = 'open' | 'mitigated' | 'accepted' | 'confirmed' | 'contradicted' | 'unknown'
 export type QualityInnovationStatus = 'pending' | 'implemented' | 'offered' | 'not-applicable'
+
+export interface QualityAssessmentRef {
+  readonly id: QualityAssessmentId
+  readonly revision: number
+}
 
 export interface QualityCriterion {
   readonly id: string
@@ -55,6 +63,8 @@ export interface QualityAssessmentSnapshot {
   readonly revision: number
   readonly objective: string
   readonly taskClass: QualityTaskClass
+  readonly goalId?: string
+  readonly goalRevision?: number
   criteria: QualityCriterion[]
   scenarios: QualityScenario[]
   forecasts: RiskForecast[]
@@ -67,6 +77,64 @@ export interface QualityAssessmentSnapshot {
 export interface QualityReadiness {
   readonly ready: boolean
   readonly blockers: readonly string[]
+}
+
+export interface StartQualityAssessmentRequest {
+  readonly objective: string
+  readonly taskClass: QualityTaskClass
+  readonly goalId?: string
+  readonly goalRevision?: number
+}
+
+export type QualityMutation =
+  | { readonly kind: 'criterion'; readonly criterion: QualityCriterion }
+  | { readonly kind: 'scenario'; readonly scenario: QualityScenario }
+  | { readonly kind: 'forecast'; readonly forecast: RiskForecast }
+  | { readonly kind: 'required-change'; readonly value: string; readonly resolved?: boolean }
+  | { readonly kind: 'innovation'; readonly innovation: QualityInnovation }
+
+export interface QualityChangeMeta {
+  readonly kind: 'quality/change'
+  readonly version: 1
+  readonly operation: 'start' | 'record'
+  readonly assessment: QualityAssessmentSnapshot
+}
+
+declare module '@phoenix-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /** Whole-snapshot quality assessment for one exact mission revision. */
+    'quality/change': QualityChangeMeta
+  }
+}
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+function normalizedText(value: string, label: string): string {
+  const text = value.trim()
+  if (text.length === 0) throw new TypeError(`${label} must be a non-empty string`)
+  return text
+}
+
+function nextTime(previous?: number): number {
+  return previous === undefined ? Date.now() : Math.max(Date.now(), previous)
+}
+
+function replaceById<T extends { readonly id: string }>(values: readonly T[], value: T): T[] {
+  const next = values.filter(item => item.id !== value.id).map(clone)
+  next.push(clone(value))
+  return next
+}
+
+/** Pure last-wins replay of the durable quality stream. */
+export function foldQuality(events: readonly SessionEvent[]): QualityAssessmentSnapshot | undefined {
+  let current: QualityAssessmentSnapshot | undefined
+  for (const event of events) {
+    if (event.type !== 'quality/change') continue
+    current = clone(event.data.assessment)
+  }
+  return current
 }
 
 function scenarioResolved(scenario: QualityScenario): boolean {
@@ -106,4 +174,69 @@ export function qualityReadiness(snapshot: QualityAssessmentSnapshot): QualityRe
   }
 
   return { ready: blockers.length === 0, blockers }
+}
+
+/** Durable, replayable quality ledger sharing the owning Agent session log. */
+export class QualityLedger {
+  get(agent: Agent): QualityAssessmentSnapshot | undefined {
+    const current = foldQuality(agent.session.events)
+    return current === undefined ? undefined : clone(current)
+  }
+
+  start(agent: Agent, request: StartQualityAssessmentRequest): QualityAssessmentSnapshot {
+    const objective = normalizedText(request.objective, 'quality objective')
+    if ((request.goalId === undefined) !== (request.goalRevision === undefined)) {
+      throw new TypeError('goalId and goalRevision must be supplied together')
+    }
+    if (request.goalRevision !== undefined && (!Number.isSafeInteger(request.goalRevision) || request.goalRevision < 1)) {
+      throw new TypeError('goalRevision must be a positive safe integer')
+    }
+    const now = nextTime()
+    const assessment: QualityAssessmentSnapshot = {
+      id: `quality-${randomUUID()}` as QualityAssessmentId,
+      revision: 1,
+      objective,
+      taskClass: request.taskClass,
+      ...request.goalId === undefined ? {} : { goalId: normalizedText(request.goalId, 'goalId'), goalRevision: request.goalRevision },
+      criteria: [],
+      scenarios: [],
+      forecasts: [],
+      requiredChanges: [],
+      createdAt: now,
+      updatedAt: now,
+    }
+    agent.session.append('quality/change', {
+      kind: 'quality/change', version: 1, operation: 'start', assessment: clone(assessment),
+    })
+    return clone(assessment)
+  }
+
+  record(agent: Agent, ref: QualityAssessmentRef, mutation: QualityMutation): QualityAssessmentSnapshot {
+    const current = this.get(agent)
+    if (current === undefined) throw new Error('quality assessment not found')
+    if (current.id !== ref.id || current.revision !== ref.revision) {
+      throw new Error(`stale quality revision: expected ${current.id}@${current.revision}`)
+    }
+
+    const next: QualityAssessmentSnapshot = {
+      ...clone(current),
+      revision: current.revision + 1,
+      updatedAt: nextTime(current.updatedAt),
+    }
+    if (mutation.kind === 'criterion') next.criteria = replaceById(next.criteria, mutation.criterion)
+    if (mutation.kind === 'scenario') next.scenarios = replaceById(next.scenarios, mutation.scenario)
+    if (mutation.kind === 'forecast') next.forecasts = replaceById(next.forecasts, mutation.forecast)
+    if (mutation.kind === 'required-change') {
+      const value = normalizedText(mutation.value, 'required change')
+      next.requiredChanges = mutation.resolved
+        ? next.requiredChanges.filter(item => item !== value)
+        : [...new Set([...next.requiredChanges, value])]
+    }
+    if (mutation.kind === 'innovation') next.innovation = clone(mutation.innovation)
+
+    agent.session.append('quality/change', {
+      kind: 'quality/change', version: 1, operation: 'record', assessment: clone(next),
+    })
+    return clone(next)
+  }
 }
