@@ -34,6 +34,7 @@ export interface ModelSelectionHandoff {
 
 /**
  * Resolve the default quality-preserving execution route for OpenAI Codex orchestrators.
+ * External/API-key providers are never silently rerouted here.
  * @param selection - Current model selection, when one has been chosen.
  * @returns execution handoff for OpenAI Codex, or undefined for other providers.
  */
@@ -44,7 +45,7 @@ export function defaultExecutionHandoff(selection: ModelSelection | undefined): 
     selection: {
       provider: 'openai-codex',
       model: 'gpt-5.6-luna',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('max'),
     },
   }
 }
