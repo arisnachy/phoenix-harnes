@@ -29,4 +29,18 @@ describe('goal-round autonomous continuation guidance', () => {
     expect(text).toContain('permission, credential, safety policy, exhausted provider quota')
     expect(text).toContain('repair it, acquire or build a missing capability, or use another route')
   })
+
+  it('infers applicable edge cases without waiting for the user to enumerate them', () => {
+    const block = renderGoalRoundPrompt(goal(), 1)[0]
+    if (block?.type !== 'text') throw new Error('expected text goal-round prompt')
+    const text = block.text
+
+    expect(text).toContain('infer the relevant unstated edge cases and failure modes')
+    expect(text).toContain('Do not wait for the user to enumerate them')
+    expect(text).toContain('empty, missing, malformed, boundary, duplicate, stale, partial-failure, retry/timeout, permission, concurrency, restart/recovery, and compatibility')
+    expect(text).toContain('only when they are applicable to this objective')
+    expect(text).toContain('Treat applicable inferred cases as mandatory quality criteria')
+    expect(text).toContain('add executable or otherwise reproducible verification for them')
+    expect(text).toContain('explicit requirements and the applicable inferred edge cases')
+  })
 })
