@@ -4,7 +4,7 @@ import type { Agent } from '@phoenix-ai/dsh-agent'
 import { Context } from '@phoenix-ai/cordis'
 import GoalService from '@phoenix-ai/dsh-goal'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
-import { QualityLedger } from '../src/quality.ts'
+import { goalQualityLedger, QualityLedger } from '../src/quality.ts'
 
 function stubAgent(rawId: string): Agent {
   const session = Session.create(SessionId(rawId))
@@ -27,11 +27,13 @@ function stubAgent(rawId: string): Agent {
 }
 
 describe('QualityLedger', () => {
-  test('is mounted on the real GoalService for every normal goal runtime', async () => {
+  test('provides one stable quality capability per real GoalService runtime', async () => {
     const ctx = new Context()
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(GoalService)
-    expect(ctx.goals.quality).toBeInstanceOf(QualityLedger)
+    const first = goalQualityLedger(ctx.goals)
+    expect(first).toBeInstanceOf(QualityLedger)
+    expect(goalQualityLedger(ctx.goals)).toBe(first)
   })
 
   test('persists a revision-bound assessment and replays it in a fresh ledger', () => {
