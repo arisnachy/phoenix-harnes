@@ -108,7 +108,9 @@ export function rosterCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
       }
     }
     occupied.add(slot)
-    cards[slot] = { ...cards[slot], summary: row.summary, depth: row.depth }
+    const card = cards[slot]
+    if (card === undefined) continue
+    cards[slot] = { ...card, summary: row.summary, depth: row.depth }
   }
 
   return cards
