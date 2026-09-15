@@ -19,7 +19,7 @@ async function createMemoryRuntime(path: string): Promise<Context> {
 }
 
 describe('durable mission recall across restart', () => {
-  it('recovers a verified mission from a fresh runtime and explicit cross-project temporal search', async () => {
+  it('recovers a verified mission from a fresh runtime with explicit project and temporal filters', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-episodic-restart-'))
     roots.push(root)
     const path = join(root, 'memory.jsonl')
@@ -45,7 +45,7 @@ describe('durable mission recall across restart', () => {
 
     const restarted = await createMemoryRuntime(path)
     const hits = restarted.learningMemory.searchCognitive('', 20, {
-      includeCrossProject: true,
+      projectId: 'phoenix-harnes',
       layers: ['episodic', 'temporal'],
       from: Date.parse('2026-09-14T04:00:00.000Z'),
       to: Date.parse('2026-09-15T03:59:59.999Z'),
