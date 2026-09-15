@@ -48,6 +48,9 @@ const PORTRAIT_ALIAS: Record<ModelAvatarKind, PortraitKey> = {
   orbita: 'orbita',
 }
 
+/** Bust stale 404/image caches while keeping the public sheet contract stable. */
+const KIRA_PORTRAIT_RENDER_SRC = `${KIRA_PORTRAIT_SHEET}?v=20260915-compact-avatar-2`
+
 /** Small deterministic index used to keep one agent's visual identity stable. */
 export function stableAgentIndex(agentId: string, length: number): number {
   if (length <= 0) return 0
@@ -82,13 +85,13 @@ function portraitStyle(kind: ModelAvatarKind, variant: 'compact' | 'card'): CSSP
   const column = index % 5
   const row = Math.floor(index / 5)
   const compactX = [0, 25, 50, 75, 100]
-  // Card portraits are taller than square cells. These positions center-crop
-  // each square cell while `background-size: auto 400%` preserves proportions.
   const cardX = [2.889, 26.444, 50, 73.556, 97.111]
   return {
     '--portrait-image': `url("${KIRA_PORTRAIT_SHEET}")`,
     '--portrait-x': `${(variant === 'card' ? cardX : compactX)[column] ?? 0}%`,
     '--portrait-y': `${row * (100 / 3)}%`,
+    '--portrait-column': String(column),
+    '--portrait-row': String(row),
   } as CSSProperties
 }
 
@@ -139,7 +142,15 @@ export function ModelActivityAvatar({
         className={css.portraitImage}
         data-agent-portrait-image={true}
         style={portraitStyle(resolvedKind, variant)}
-      />
+      >
+        <img
+          className={css.portraitSprite}
+          src={KIRA_PORTRAIT_RENDER_SRC}
+          alt=""
+          draggable={false}
+          data-agent-portrait-sprite={true}
+        />
+      </span>
       <span className={css.lifeGlint} />
       <span className={css.scanLine} />
       <span className={css.energyRibbon} />
