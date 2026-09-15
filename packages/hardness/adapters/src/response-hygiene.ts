@@ -6,6 +6,7 @@ import type { GenerateOptions, Message, StreamChunk } from '@phoenix-ai/dsh-llm'
 const INTERNAL_MARKER = /(?:AGENTS\.md|CLAUDE\.md|system prompt|developer prompt|prompt interno|instrucciones internas|\bMCP\b|\brouter\b|\bsubagente\b|\bsubagent\b|\bmemory id\b|\b(?:search|read|send|list|fetch|create|update|delete)_[a-z0-9_]+\b)/iu
 const PRIVATE_CONTEXT_MARKER = /(?:contexto familiar|contenido privado|tu familia|tus hijos|tus hijas|tu esposa|tu esposo|tu salud|tu diagnóstico|tu direccion|tu dirección)/iu
 const INTERNAL_DEBUG_REQUEST = /(?:phoenix|harness).*(?:debug|depur|intern|tool|herramient|mcp|prompt|regla|router|subagente|subagent|config|arquitect|c[oó]digo|code)|(?:debug|depur).*(?:phoenix|harness)/iu
+const INTERNAL_TOPIC_REQUEST = /(?:(?:qu[eé]|cu[aá]l|c[oó]mo|dime|explica|expl[ií]came|muestra|mu[eé]strame|what|which|how|explain|show|tell me).*(?:\bMCP\b|\brouter\b|\bsubagente\b|\bsubagent\b|AGENTS\.md|CLAUDE\.md|system prompt|developer prompt|prompt interno|instrucciones internas)|(?:\bMCP\b|\brouter\b|\bsubagente\b|\bsubagent\b|AGENTS\.md|CLAUDE\.md).*(?:qu[eé]|c[oó]mo|explica|what|how|explain))/iu
 const PERSONAL_CONTEXT_REQUEST = /(?:recuerd|memoria|familia|hij[oa]s?|espos[oa]|salud|diagn[oó]stico|direcci[oó]n|datos personales|privacidad)/iu
 const ACTION_REQUEST = /(?:revisa|revisar|busca|buscar|lee|leer|env[ií]a|enviar|manda|mandar|resume|resumir|check|search|find|read|send|summari[sz]e)/iu
 const CAPABILITY_QUESTION = /(?:tienes|tiene|puedes|puede|can you|do you have).*(?:acceso|access|usar|use|conectad|connect)/iu
@@ -24,6 +25,10 @@ function latestHumanPrompt(messages: readonly Message[]): string {
   return ''
 }
 
+function transparencyRequested(prompt: string): boolean {
+  return INTERNAL_DEBUG_REQUEST.test(prompt) || INTERNAL_TOPIC_REQUEST.test(prompt)
+}
+
 function capabilityOnly(prompt: string): boolean {
   return prompt.trim().length <= 160 && CAPABILITY_QUESTION.test(prompt) && !ACTION_REQUEST.test(prompt)
 }
@@ -38,13 +43,13 @@ function sentences(text: string): string[] {
 
 /**
  * Remove internal implementation disclosure and irrelevant private-context boilerplate from visible prose.
- * Explicit Phoenix debugging and explicit personal-memory questions remain transparent to the user.
+ * Explicit Phoenix debugging, implementation-topic questions, and personal-memory questions remain transparent.
  * @param text - complete user-visible text block.
  * @param latestPrompt - latest direct human prompt for relevance decisions.
  * @returns cleaned user-visible prose.
  */
 export function sanitizePhoenixVisibleText(text: string, latestPrompt: string): string {
-  const internalRequested = INTERNAL_DEBUG_REQUEST.test(latestPrompt)
+  const internalRequested = transparencyRequested(latestPrompt)
   const personalRequested = PERSONAL_CONTEXT_REQUEST.test(latestPrompt)
   if (internalRequested) return text
 
@@ -138,7 +143,7 @@ async function* sanitizeConversationStream(
   upstream: AsyncIterable<StreamChunk>,
 ): AsyncIterable<StreamChunk> {
   const prompt = latestHumanPrompt(options.messages)
-  if (options.purpose !== undefined || options.sessionId === undefined || INTERNAL_DEBUG_REQUEST.test(prompt)) {
+  if (options.purpose !== undefined || options.sessionId === undefined || transparencyRequested(prompt)) {
     yield* upstream
     return
   }
