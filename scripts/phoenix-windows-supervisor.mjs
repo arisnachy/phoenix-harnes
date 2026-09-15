@@ -16,6 +16,7 @@ import {
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 
 const root = resolve(process.cwd())
@@ -24,6 +25,7 @@ const hostArgs = process.argv.slice(2)
 const updater = join(root, 'scripts', 'phoenix-auto-update.mjs')
 const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
 const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
+const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() || 'stable'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
@@ -542,6 +544,7 @@ function startWatcher() {
   const updateTemp = process.env.PHOENIX_UPDATE_TEMP?.trim()
   const watcherEnv = {
     ...process.env,
+    PHOENIX_RUNTIME_ROOT: runtimeRoot,
     PHOENIX_UPDATE_SUPERVISED: '1',
     ...(updateTemp === undefined || updateTemp.length === 0
       ? {}
@@ -554,7 +557,7 @@ function startWatcher() {
     '--watch',
     '--parent-pid', String(process.pid),
   ], {
-    cwd: root,
+    cwd: runtimeRoot,
     detached: false,
     stdio: 'inherit',
     windowsHide: true,
@@ -755,13 +758,22 @@ while (true) {
       continue
     }
 
-    if (liveStatus.entries.length > 0) {
-      console.error('[PHOENIX UPDATE] local changes detected; activating the verified update in an isolated runtime; the live checkout will not be modified.')
+    const liveBranch = gitValue(root, ['branch', '--show-current'])
+    const isolationReason = liveStatus.entries.length > 0
+      ? 'local changes'
+      : liveBranch === undefined
+        ? 'detached HEAD'
+        : !isManagedReleaseBranch(liveBranch, STABLE_SOURCE_BRANCH)
+          ? `development branch ${liveBranch}`
+          : undefined
+
+    if (isolationReason !== undefined) {
+      console.error(`[PHOENIX UPDATE] ${isolationReason} detected; activating the verified update in an isolated runtime; the live checkout will not be modified.`)
       try {
         const runtime = activatePreparedRuntime(requestedTarget)
         runtimeRoot = runtime.path
         clearRestartRequest()
-        console.error(`[PHOENIX UPDATE] isolated runtime ${runtime.target.slice(0, 12)} activated; relaunching PHOENIX without touching local changes.`)
+        console.error(`[PHOENIX UPDATE] isolated runtime ${runtime.target.slice(0, 12)} activated; relaunching PHOENIX without touching the source checkout.`)
       } catch (error) {
         clearRestartRequest()
         console.error(`[PHOENIX UPDATE] isolated runtime activation failed safely: ${error instanceof Error ? error.message : String(error)}`)
