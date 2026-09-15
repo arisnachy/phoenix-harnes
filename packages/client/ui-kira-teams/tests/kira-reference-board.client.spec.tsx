@@ -60,11 +60,6 @@ describe('approved KIRA reference board', () => {
       parentId: sid('root'),
       origin: 'subagent',
       running: true,
-      projectionValues: {
-        subagentActivity: { model: 'gpt-5.6-luna', phase: 'thinking' } as SessionSummary['projectionValues'] extends infer _T
-          ? never
-          : never,
-      },
     })
 
     expect(activityKeyOf(working)).toBe('activity.working')
