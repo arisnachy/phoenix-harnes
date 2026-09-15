@@ -82,27 +82,19 @@ describe('approved KIRA floating 20-agent roster', () => {
 
     const judge = summary({
       id: sid('judge'),
-      projectionValues: {
-        subagent: { mode: 'continuable', label: 'independent quality judge', seq: 1 },
-      },
+      projectionValues: { subagent: { mode: 'continuable', label: 'independent quality judge', seq: 1 } },
     })
     const supervisor = summary({
       id: sid('supervisor'),
-      projectionValues: {
-        subagent: { mode: 'continuable', label: 'mission supervisor and orchestrator', seq: 2 },
-      },
+      projectionValues: { subagent: { mode: 'continuable', label: 'mission supervisor and orchestrator', seq: 2 } },
     })
     const coder = summary({
       id: sid('coder'),
-      projectionValues: {
-        subagent: { mode: 'continuable', label: 'fix code and debug implementation', seq: 3 },
-      },
+      projectionValues: { subagent: { mode: 'continuable', label: 'fix code and debug implementation', seq: 3 } },
     })
     const tester = summary({
       id: sid('tester'),
-      projectionValues: {
-        subagent: { mode: 'continuable', label: 'QA tester', seq: 4 },
-      },
+      projectionValues: { subagent: { mode: 'continuable', label: 'QA tester', seq: 4 } },
     })
 
     expect(agentRoleKeyOf(judge)).toBe('role.judge')
@@ -112,18 +104,8 @@ describe('approved KIRA floating 20-agent roster', () => {
   })
 
   it('describes what each running agent is actually doing', () => {
-    const judge = summary({
-      id: sid('judge'), running: true,
-      projectionValues: {
-        subagent: { mode: 'continuable', label: 'judge output quality', seq: 5 },
-      },
-    })
-    const supervisor = summary({
-      id: sid('supervisor'), running: true,
-      projectionValues: {
-        subagent: { mode: 'continuable', label: 'supervisor', seq: 6 },
-      },
-    })
+    const judge = summary({ id: sid('judge'), running: true, projectionValues: { subagent: { mode: 'continuable', label: 'judge output quality', seq: 5 } } })
+    const supervisor = summary({ id: sid('supervisor'), running: true, projectionValues: { subagent: { mode: 'continuable', label: 'supervisor', seq: 6 } } })
     const coder = summary({
       id: sid('coder'), running: true,
       projectionValues: {
@@ -131,12 +113,7 @@ describe('approved KIRA floating 20-agent roster', () => {
         subagentActivity: { model: 'gpt-5.6-sol', phase: 'running-tools' },
       },
     })
-    const researcher = summary({
-      id: sid('research'), running: true,
-      projectionValues: {
-        subagent: { mode: 'continuable', label: 'researcher', seq: 8 },
-      },
-    })
+    const researcher = summary({ id: sid('research'), running: true, projectionValues: { subagent: { mode: 'continuable', label: 'researcher', seq: 8 } } })
 
     expect(performanceKeyOf(judge)).toBe('performance.judging')
     expect(performanceKeyOf(supervisor)).toBe('performance.supervising')
@@ -146,20 +123,10 @@ describe('approved KIRA floating 20-agent roster', () => {
 
   it('shows a runtime-idle live agent as ready while preserving unknown telemetry as working', () => {
     const ready = summary({
-      id: sid('ready'),
-      parentId: sid('root'),
-      origin: 'subagent',
-      running: true,
-      projectionValues: {
-        subagentActivity: { model: 'gpt-5.6-luna', phase: 'idle' },
-      },
+      id: sid('ready'), parentId: sid('root'), origin: 'subagent', running: true,
+      projectionValues: { subagentActivity: { model: 'gpt-5.6-luna', phase: 'idle' } },
     })
-    const working = summary({
-      id: sid('working'),
-      parentId: sid('root'),
-      origin: 'subagent',
-      running: true,
-    })
+    const working = summary({ id: sid('working'), parentId: sid('root'), origin: 'subagent', running: true })
 
     expect(activityKeyOf(ready)).toBe('activity.ready')
     expect(activityKeyOf(working)).toBe('activity.working')
@@ -168,10 +135,7 @@ describe('approved KIRA floating 20-agent roster', () => {
   it('floats as one window containing the full roster while separating role from activity', () => {
     const root = summary({ id: sid('root') })
     const supervisor = summary({
-      id: sid('supervisor-live'),
-      parentId: root.id,
-      origin: 'subagent',
-      running: true,
+      id: sid('supervisor-live'), parentId: root.id, origin: 'subagent', running: true,
       projectionValues: {
         subagent: { mode: 'continuable', label: 'mission supervisor', seq: 1 },
         subagentActivity: { model: 'gpt-5.6-luna', phase: 'preparing' },
@@ -179,17 +143,11 @@ describe('approved KIRA floating 20-agent roster', () => {
     })
     const state = {
       current: root.id,
-      byId: {
-        [String(root.id)]: root,
-        [String(supervisor.id)]: supervisor,
-      },
+      byId: { [String(root.id)]: root, [String(supervisor.id)]: supervisor },
     } as unknown as SessionListState
     const setWorkspaceOccupant = vi.fn()
     const props = {
-      list: {
-        getSnapshot: () => state,
-        subscribe: () => () => undefined,
-      },
+      list: { getSnapshot: () => state, subscribe: () => () => undefined },
       layout: { setWorkspaceOccupant },
       openChild: vi.fn(),
       refresh: vi.fn(),
@@ -209,43 +167,27 @@ describe('approved KIRA floating 20-agent roster', () => {
 
 describe('individual KIRA portrait assets', () => {
   it('resolves every persona to a standalone portrait asset instead of the sprite sheet URL', () => {
-    expect(portraitSrcForKind('vortice')).toBe('/assets/kira-agents/portraits/vortice.webp')
-    expect(portraitSrcForKind('argo')).toBe('/assets/kira-agents/portraits/argo.webp')
-    expect(portraitSrcForKind('orbita')).toBe('/assets/kira-agents/portraits/orbita.webp')
+    expect(portraitSrcForKind('vortice')).toBe('/assets/kira-agents/portraits/vortice.svg')
+    expect(portraitSrcForKind('argo')).toBe('/assets/kira-agents/portraits/argo.svg')
+    expect(portraitSrcForKind('orbita')).toBe('/assets/kira-agents/portraits/orbita.svg')
     expect(new Set(KIRA_ROSTER.map(agent => portraitSrcForKind(agent.kind))).size).toBe(20)
   })
 
   it('renders the individual portrait while keeping live phase data for animation', () => {
-    const ready = ModelActivityAvatar({
-      kind: 'argo', activity: undefined, running: false, pending: false, ready: true, variant: 'card',
-    })
+    const ready = ModelActivityAvatar({ kind: 'argo', activity: undefined, running: false, pending: false, ready: true, variant: 'card' })
     const live = ModelActivityAvatar({
-      kind: 'atlas',
-      activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
-      running: true,
-      pending: false,
-      variant: 'card',
+      kind: 'atlas', activity: { model: 'gpt-5.6-luna', phase: 'running-tools' }, running: true, pending: false, variant: 'card',
     })
     const readyChildren = Array.isArray(ready.props.children) ? ready.props.children : [ready.props.children]
     const liveChildren = Array.isArray(live.props.children) ? live.props.children : [live.props.children]
-    const readyPortrait = readyChildren.find((child: { props?: Record<string, unknown> }) =>
-      child?.props?.['data-agent-portrait-image'] === true)
-    const livePortrait = liveChildren.find((child: { props?: Record<string, unknown> }) =>
-      child?.props?.['data-agent-portrait-image'] === true)
+    const readyPortrait = readyChildren.find((child: { props?: Record<string, unknown> }) => child?.props?.['data-agent-portrait-image'] === true)
+    const livePortrait = liveChildren.find((child: { props?: Record<string, unknown> }) => child?.props?.['data-agent-portrait-image'] === true)
 
-    expect(ready.props).toMatchObject({
-      'data-avatar': 'argo',
-      'data-phase': 'idle',
-      'data-state': 'ready',
-    })
+    expect(ready.props).toMatchObject({ 'data-avatar': 'argo', 'data-phase': 'idle', 'data-state': 'ready' })
     expect(readyPortrait?.type).toBe('img')
-    expect(readyPortrait?.props?.src).toBe('/assets/kira-agents/portraits/argo.webp')
-    expect(live.props).toMatchObject({
-      'data-avatar': 'atlas',
-      'data-phase': 'running-tools',
-      'data-state': 'running',
-    })
+    expect(readyPortrait?.props?.src).toBe('/assets/kira-agents/portraits/argo.svg')
+    expect(live.props).toMatchObject({ 'data-avatar': 'atlas', 'data-phase': 'running-tools', 'data-state': 'running' })
     expect(livePortrait?.type).toBe('img')
-    expect(livePortrait?.props?.src).toBe('/assets/kira-agents/portraits/atlas.webp')
+    expect(livePortrait?.props?.src).toBe('/assets/kira-agents/portraits/atlas.svg')
   })
 })
