@@ -2,6 +2,8 @@
 
 Status: implemented
 
+[English](2026-09-15-sandbox-safe-vitest-runner.md) | 中文
+
 ## Problem
 
 在禁止 `child_process.spawn` 的 agent 沙箱中，`pnpm run test` 根本无法启动，而测试套件本身是健康的。在第一个测试文件加载之前，就已经发生了两次相互独立的 spawn。
