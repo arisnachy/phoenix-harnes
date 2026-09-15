@@ -451,6 +451,53 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('deletes reasoningEffort from the live route when the selected model declares none', async () => {
+    const { ctx, agent, sessionId } = await harness({
+      provider: 'openai-codex',
+      model: 'gpt-5.6-sol',
+      reasoningEffort: ReasoningEffortId('high'),
+    })
+    registerTextOnly(ctx)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'openai-codex', model: 'gpt-5.6-sol' }),
+      cwd: '/tmp',
+    })
+
+    // Start on an effort-carrying route, as the OpenAI root handoff does.
+    expect(agent.options).toMatchObject({ reasoningEffort: ReasoningEffortId('high') })
+
+    expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'text-only', model: 'plain',
+    })))
+
+    // A route that declares no effort must not leave the stale OpenAI effort on
+    // the live Agent route; the delete branch is what satisfies
+    // exactOptionalPropertyTypes.
+    expect(agent.options).toEqual({ provider: 'text-only', model: 'plain' })
+    expect('reasoningEffort' in agent.options).toBe(false)
+    await ctx.fiber.dispose()
+  })
+
+  it('keeps a non-OpenAI root on its own provider across a switch, never Luna', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    registerTextOnly(ctx)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+
+    expect(agent.options).toMatchObject({ provider: 'deepseek-official', model: 'deepseek-chat' })
+    expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'text-only', model: 'plain',
+    })))
+
+    // Non-OpenAI roots inherit the selected route; the delegator must never
+    // substitute the OpenAI/Luna family for a provider that is not OpenAI.
+    expect(agent.options).toMatchObject({ provider: 'text-only', model: 'plain' })
+    expect(agent.options.provider).not.toBe('openai-codex')
+    await ctx.fiber.dispose()
+  })
+
   it('saves an accepted selection as the default and survives a storage failure', async () => {
     const { ctx, sessionId } = await harness()
     const saved: unknown[] = []
