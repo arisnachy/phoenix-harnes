@@ -1,19 +1,32 @@
 /** Read-only Cordis service projecting deterministic cognitive state per session. */
 
+import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { SessionId } from '@phoenix-ai/dsh-session'
+import type { UserMessage } from '@phoenix-ai/dsh-session'
 import type { LearningMemoryService } from '@phoenix-ai/dsh-session-learning'
 import { scoreAttention } from './attention.ts'
 import { validateCognitiveState } from './invariant.ts'
 import { partitionWorkingMemory } from './working-memory.ts'
 import { createGlobalWorkspace } from './workspace.ts'
 import { cloneAttentionCandidate } from './clone.ts'
+import {
+  COGNITIVE_CONTEXT_CLEARED,
+  isCognitiveRuntimeProjection,
+  renderCognitiveContext,
+} from './context.ts'
 import type { AttentionWeights, CognitiveState } from './types.ts'
 
 export { scoreAttention } from './attention.ts'
 export { partitionWorkingMemory } from './working-memory.ts'
 export { createGlobalWorkspace } from './workspace.ts'
+export {
+  COGNITIVE_CONTEXT_CLEARED,
+  COGNITIVE_CONTEXT_MARKER,
+  isCognitiveRuntimeProjection,
+  renderCognitiveContext,
+} from './context.ts'
 export type * from './types.ts'
 
 declare module '@phoenix-ai/cordis' {
@@ -50,6 +63,8 @@ export type Config = CognitiveRuntimeConfig
 
 const MAX_CANDIDATES = 128
 const MAX_REGION = 128
+const CONTEXT_SOURCE = 'cognitive-runtime'
+const CONTEXT_SECTION = 'cognitive-runtime:workspace'
 const DEFAULT_CONFIG: CognitiveRuntimeConfig = {
   maxCandidates: 64,
   activeLimit: 8,
@@ -81,6 +96,21 @@ export const Config: z<CognitiveRuntimeConfig> = z.object({
   weights: WeightConfig.default(DEFAULT_CONFIG.weights),
 })
 
+/** Create one identified user-role snapshot without adding another workspace runtime dependency. */
+function cognitiveContextMessage(text: string): UserMessage {
+  return Object.freeze({
+    id: randomUUID() as UserMessage['id'],
+    role: 'user' as const,
+    content: [{ type: 'text' as const, text }],
+    source: {
+      kind: 'plugin' as const,
+      plugin: CONTEXT_SOURCE,
+      form: 'snapshot' as const,
+      sections: [{ name: CONTEXT_SECTION, text }],
+    },
+  })
+}
+
 /** Event-backed, process-local cognitive runtime service. */
 export class CognitiveRuntimeService extends Service {
   static inject = ['sessions', 'learningMemory']
@@ -98,7 +128,7 @@ export class CognitiveRuntimeService extends Service {
     this.config = Object.freeze({ ...resolved, weights: Object.freeze({ ...resolved.weights }) })
   }
 
-  /** Seed existing sessions and subscribe to the canonical live event stream. */
+  /** Seed existing sessions, follow the canonical event stream, and project cognition into every model step. */
   protected async [Service.init](): Promise<void> {
     this.ctx.on('session/created', (session) => { void this.enqueue(() => this.refreshSafe(session.id)) })
     this.ctx.on('session/event', (session, event) => {
@@ -106,6 +136,38 @@ export class CognitiveRuntimeService extends Service {
       void this.enqueue(() => this.refreshSafe(session.id))
     })
     this.ctx.on('session/disposed', (session) => { this.states.delete(String(session.id)) })
+
+    this.ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
+      const decision = await next()
+      if (decision.kind === 'reject' || signal.aborted) return decision
+
+      await this.ready()
+      signal.throwIfAborted()
+      const state = this.get(agent.id)
+      const current = state === undefined ? '' : renderCognitiveContext(state)
+
+      let previous: string | undefined
+      for (let index = agent.session.events.length - 1; index >= 0; index -= 1) {
+        const event = agent.session.events[index]
+        if (event?.type !== 'user/message'
+          || event.data.source.kind !== 'plugin'
+          || event.data.source.plugin !== CONTEXT_SOURCE) continue
+        const [block] = event.data.content
+        previous = event.data.content.length === 1 && block?.type === 'text' ? block.text : ''
+        break
+      }
+
+      const desired = current.length > 0
+        ? current
+        : previous === undefined ? undefined : COGNITIVE_CONTEXT_CLEARED
+      if (desired === undefined || desired === previous) return decision
+
+      return {
+        kind: 'enter' as const,
+        messages: [...decision.messages, cognitiveContextMessage(desired)],
+      }
+    }, { prepend: true })
+
     await this.enqueue(async () => {
       for (const session of this.ctx.sessions.list()) await this.refreshSafe(session.id)
     })
@@ -154,7 +216,9 @@ export class CognitiveRuntimeService extends Service {
       return undefined
     }
     await this.ctx.learningMemory.ready()
-    const records = this.ctx.learningMemory.cognitiveForSession(sessionId, this.config.maxCandidates)
+    const eligible = this.ctx.learningMemory.cognitiveForSession(sessionId, MAX_CANDIDATES)
+      .filter(record => !isCognitiveRuntimeProjection(record))
+    const records = eligible.slice(Math.max(0, eligible.length - this.config.maxCandidates))
     const candidates = scoreAttention(records, this.config.weights)
     const partition = partitionWorkingMemory(candidates, this.config.activeLimit, this.config.backgroundLimit)
     const observedSeq = records.reduce((max, record) => Math.max(max, record.eventSeq), -1)
