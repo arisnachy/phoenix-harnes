@@ -1,0 +1,46 @@
+name: One-shot CI type fix
+
+on:
+  push:
+    branches:
+      - fix/ci-type-blockers-20260914
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/ci-type-blockers-20260914
+      - name: Patch exact TypeScript blockers
+        shell: python
+        run: |
+          from pathlib import Path
+
+          kira = Path('packages/client/ui-kira-teams/src/client/KiraTeamsDock.tsx')
+          text = kira.read_text(encoding='utf-8')
+          old = "    occupied.add(slot)\n    cards[slot] = { ...cards[slot], summary: row.summary, depth: row.depth }"
+          new = "    occupied.add(slot)\n    const card = cards[slot]\n    if (card === undefined) continue\n    cards[slot] = { ...card, summary: row.summary, depth: row.depth }"
+          if old not in text:
+              raise SystemExit('KiraTeamsDock expected source not found')
+          kira.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          auth = Path('packages/client/ui-settings-models/src/client/AuthorizationPanel.tsx')
+          text = auth.read_text(encoding='utf-8')
+          old = "  live?: ConnectorTelemetry\n  account?: Entry\n"
+          new = "  live?: ConnectorTelemetry | undefined\n  account?: Entry | undefined\n"
+          if old not in text:
+              raise SystemExit('AuthorizationPanel expected source not found')
+          auth.write_text(text.replace(old, new, 1), encoding='utf-8')
+      - name: Commit exact fixes
+        run: |
+          git config user.name "phoenix-ci-fix"
+          git config user.email "actions@users.noreply.github.com"
+          git add packages/client/ui-kira-teams/src/client/KiraTeamsDock.tsx packages/client/ui-settings-models/src/client/AuthorizationPanel.tsx
+          git diff --cached --check
+          git commit -m "fix(ui): clear TypeScript CI blockers"
+          git push origin HEAD:fix/ci-type-blockers-20260914
