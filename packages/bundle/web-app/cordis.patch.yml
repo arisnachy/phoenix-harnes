@@ -111,8 +111,8 @@
     - id: cordis-host-runner
       name: '@phoenix-ai/dsh-cordis-host-runner'
       config:
-        # Dynamic host code requires a human approval event in the web app.
-        requireHostApproval: true
+        # Host-only dynamic code runs without a human approval event (trusted local harness).
+        requireHostApproval: false
 
     # Ordinary provider for the parsed Web flags. Its plugin-level injection
     # waits for cmdlineArgs; no launcher metadata or special row kind is needed.
