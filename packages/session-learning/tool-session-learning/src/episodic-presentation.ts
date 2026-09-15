@@ -18,25 +18,12 @@ export function formatDirectedMemoryContext(
 ): string {
   if (intent.kind === 'ordinary') return ''
 
-  const evidence = hits
-    .filter(hit => !intent.excludeProfileSubjects || !isProfileSubject(hit.record.subject))
-    .flatMap((hit) => {
-      if (intent.kind === 'work-history' || intent.kind === 'backward-task') {
-        if (hit.record.kind !== 'mission' || !isMissionEpisodeSubject(hit.record.subject)) return []
-        const episode = decodeMissionEpisode(hit.record.value)
-        if (episode === undefined) return []
-        return [{
-          type: 'work' as const,
-          occurred_at: episode.endedAt,
-          project: episode.projectId,
-          task: safeText(episode.userIntent),
-          outcome: safeText(episode.outcome),
-          verified: episode.verification === 'verified',
-        }]
-      }
-
+  const eligible = hits.filter(hit => !intent.excludeProfileSubjects || !isProfileSubject(hit.record.subject))
+  const evidence = intent.kind === 'work-history' || intent.kind === 'backward-task'
+    ? workEvidence(eligible)
+    : eligible.flatMap((hit) => {
       if (intent.kind === 'learning-history') {
-        if (!['lesson', 'skill', 'success', 'error'].includes(hit.record.kind)) return []
+        if (!['lesson', 'skill'].includes(hit.record.kind)) return []
         return [{
           type: 'learning' as const,
           occurred_at: hit.record.provenance.occurredAt,
@@ -66,8 +53,7 @@ export function formatDirectedMemoryContext(
       }
 
       return []
-    })
-    .slice(0, MAX_DIRECTED_RECORDS)
+    }).slice(0, MAX_DIRECTED_RECORDS)
 
   if (evidence.length === 0) return ''
 
@@ -80,6 +66,42 @@ export function formatDirectedMemoryContext(
     JSON.stringify({ kind: intent.kind, evidence }),
     '</phoenix-directed-memory>',
   ].join('\n')
+}
+
+function workEvidence(hits: readonly CognitiveMemoryHit[]): readonly object[] {
+  const episodes = hits.flatMap((hit) => {
+    if (hit.record.kind !== 'mission' || !isMissionEpisodeSubject(hit.record.subject)) return []
+    const episode = decodeMissionEpisode(hit.record.value)
+    if (episode === undefined) return []
+    return [{
+      type: 'work' as const,
+      occurred_at: episode.endedAt,
+      project: episode.projectId,
+      task: safeText(episode.userIntent),
+      outcome: safeText(episode.outcome),
+      verified: episode.verification === 'verified',
+    }]
+  }).slice(0, MAX_DIRECTED_RECORDS)
+  if (episodes.length > 0) return episodes
+
+  // Compatibility bridge: installations upgraded to Memory v2 can answer about
+  // pre-v2 work immediately from already-durable user-message events. This is
+  // intentionally bounded and only used when no structured mission exists.
+  return hits.flatMap((hit) => {
+    if (hit.record.kind !== 'conversation' || hit.record.provenance.sourceEventType !== 'user/message') return []
+    const task = stripEventPrefix(hit.record.summary)
+    if (task.length < 8) return []
+    return [{
+      type: 'prior-work-evidence' as const,
+      occurred_at: hit.record.provenance.occurredAt,
+      project: hit.record.projectId,
+      task: safeText(task),
+    }]
+  }).slice(0, MAX_DIRECTED_RECORDS)
+}
+
+function stripEventPrefix(value: string): string {
+  return value.replace(/^user\/message:\s*/iu, '').trim()
 }
 
 function isProfileSubject(subject: string | undefined): boolean {
