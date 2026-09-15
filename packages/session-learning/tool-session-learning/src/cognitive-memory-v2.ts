@@ -120,13 +120,10 @@ export function installCognitiveMemoryV2(ctx: Context): void {
 function projectIdFromSession(session: unknown): string | undefined {
   if (!isRecord(session) || !isRecord(session.header)) return undefined
   const cwd = session.header.cwd
-  if (typeof cwd === 'string' && cwd.trim() !== '') {
-    const parts = cwd.replace(/\\/gu, '/').split('/').filter(Boolean)
-    const project = parts.at(-1)?.trim()
-    if (project !== undefined && project !== '') return project.slice(0, 256)
-  }
-  const preset = session.header.agentPreset
-  return typeof preset === 'string' && preset.trim() !== '' ? preset.trim().slice(0, 256) : undefined
+  if (typeof cwd !== 'string' || cwd.trim() === '') return undefined
+  const parts = cwd.replace(/\\/gu, '/').split('/').filter(Boolean)
+  const project = parts.at(-1)?.trim()
+  return project === undefined || project === '' ? undefined : project.slice(0, 256)
 }
 
 function messageText(data: unknown): string | undefined {
