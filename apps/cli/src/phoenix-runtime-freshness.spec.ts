@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -40,10 +40,16 @@ function advance(root: string): { readonly target: string, readonly head: string
   return { target, head: git(root, ['rev-parse', 'HEAD']) }
 }
 
+function portraitArtifact(root: string): string {
+  return join(root, 'apps', 'web', 'dist', 'assets', 'kira-agents', 'kira-portraits.webp')
+}
+
 function writeFreshClientArtifacts(root: string, head: string): void {
   mkdirSync(join(root, '.dsh-build'), { recursive: true })
   mkdirSync(join(root, 'apps', 'web', 'dist'), { recursive: true })
+  mkdirSync(join(root, 'apps', 'web', 'dist', 'assets', 'kira-agents'), { recursive: true })
   writeFileSync(join(root, 'apps', 'web', 'dist', 'index.html'), '<!doctype html>\n', 'utf8')
+  writeFileSync(portraitArtifact(root), 'portrait fixture', 'utf8')
   writeFileSync(join(root, '.dsh-build', 'client-build-environment.json'), JSON.stringify({
     environment: { DSH_CLIENT_COMMIT_HASH: head.slice(0, 7) },
   }), 'utf8')
@@ -72,13 +78,17 @@ describe('PHOENIX runtime freshness', () => {
     expect(sourceCheckoutSupersedesRuntime(root, target, head)).toBe(false)
   })
 
-  it('recognizes client artifacts only when both the build record and web bundle match the source commit', () => {
+  it('recognizes client artifacts only when the build record, web bundle, and required KIRA assets match the source', () => {
     const root = repository()
     const head = git(root, ['rev-parse', 'HEAD'])
     writeFreshClientArtifacts(root, head)
 
     expect(clientArtifactsAreFresh(root, head)).toBe(true)
 
+    unlinkSync(portraitArtifact(root))
+    expect(clientArtifactsAreFresh(root, head)).toBe(false)
+
+    writeFileSync(portraitArtifact(root), 'portrait fixture', 'utf8')
     writeFileSync(join(root, '.dsh-build', 'client-build-environment.json'), JSON.stringify({
       environment: { DSH_CLIENT_COMMIT_HASH: '0000000' },
     }), 'utf8')
