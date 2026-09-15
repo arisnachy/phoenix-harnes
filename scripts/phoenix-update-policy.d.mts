@@ -28,4 +28,5 @@ export function classifyStableUpdate(input: {
   managed: boolean
   mode: string
   stableBranch: string
-}): 'apply' | 'replace' | 'notify' | 'development' | 'pause' | 'unchanged'
+  isolatedRuntime?: boolean
+}): 'apply' | 'replace' | 'isolate' | 'notify' | 'development' | 'pause' | 'unchanged'
