@@ -1,0 +1,159 @@
+name: Temporary quality judge GREEN
+
+on:
+  push:
+    branches:
+      - feat/quality-foresight-completion-20260915
+    paths:
+      - .github/workflows/tmp-quality-judge-green.yml
+
+permissions:
+  contents: write
+
+jobs:
+  green:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/quality-foresight-completion-20260915
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Implement quality-aware goal judge
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('packages/goal/tool-goal/src/judge.ts')
+          s = p.read_text()
+          old = "import type { GoalJudgeAuditEntry } from '@phoenix-ai/dsh-goal'\n"
+          new = old + "import { qualityReadiness, type QualityAssessmentSnapshot, type QualityMutation, type QualityService } from '@phoenix-ai/dsh-quality'\n"
+          if "qualityReadiness" not in s:
+              if old not in s: raise SystemExit('quality import anchor missing')
+              s = s.replace(old, new, 1)
+
+          type_anchor = "type GoalJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>\n  & Partial<Pick<SubagentRuntime, 'list'>>\n"
+          type_insert = type_anchor + "type GoalQualityRuntime = Pick<QualityService, 'get' | 'start' | 'record'>\n"
+          if "type GoalQualityRuntime" not in s:
+              if type_anchor not in s: raise SystemExit('quality runtime type anchor missing')
+              s = s.replace(type_anchor, type_insert, 1)
+
+          marker = "/**\n * Run the adversarial Tester first, then a fresh read-only Judge. A Judge PASS\n"
+          helper = r'''interface QualityGateState {
+            readonly snapshot: QualityAssessmentSnapshot
+            readonly blockers: readonly string[]
+          }
+
+          function syncQualityAssessment(
+            quality: GoalQualityRuntime,
+            parent: Agent,
+            objective: string,
+            gate: GoalCompletionGateResult,
+          ): QualityGateState {
+            let current = quality.get(parent)
+            if (current === undefined || current.objective !== objective) {
+              current = quality.start(parent, { objective, taskClass: 'substantial' })
+            }
+            let snapshot: QualityAssessmentSnapshot = current
+            const record = (mutation: QualityMutation): void => {
+              snapshot = quality.record(parent, { id: snapshot.id, revision: snapshot.revision }, mutation)
+            }
+
+            for (const entry of gate.evidenceLedger) {
+              record({
+                kind: 'criterion',
+                value: {
+                  id: entry.criterionId,
+                  text: entry.criterion,
+                  tier: 'requested',
+                  mandatory: entry.mandatory,
+                  status: entry.status,
+                  evidence: [...entry.evidence],
+                },
+              })
+            }
+            for (const scenario of gate.realWorldScenarios) record({ kind: 'scenario', value: scenario })
+            for (const forecast of gate.riskForecasts) record({ kind: 'forecast', value: forecast })
+            record({ kind: 'innovation', value: gate.innovationOpportunity })
+
+            // Required changes describe the current evidence, so stale blockers from a
+            // previous round must not make the new readiness calculation self-referential.
+            if (snapshot.requiredChanges.length > 0) record({ kind: 'required-changes', value: [] })
+            const readiness = qualityReadiness(snapshot)
+            const blockers = [
+              ...gate.foresightComplete ? [] : ['foresight evidence is incomplete'],
+              ...readiness.blockers,
+            ]
+            if (blockers.length > 0) record({ kind: 'required-changes', value: blockers })
+            return { snapshot, blockers }
+          }
+
+          function enforceQuality(result: GoalJudgeResult, quality: QualityGateState | undefined): GoalJudgeResult {
+            if (quality === undefined || quality.blockers.length === 0) return result
+            const qualityFindings = quality.blockers.map(blocker => `QUALITY BLOCKER: ${blocker}`)
+            const requiredChanges = [
+              ...quality.blockers.map(blocker => `Resolve quality blocker and re-run verification: ${blocker}.`),
+              ...result.requiredChanges,
+            ].slice(0, MAX_ITEMS)
+            return {
+              verdict: result.verdict === 'blocked' ? 'blocked' : 'needs_changes',
+              summary: `Quality/Foresight evidence is not ready for completion. ${result.summary}`.slice(0, MAX_TEXT),
+              findings: [...qualityFindings, ...result.findings].slice(0, MAX_ITEMS),
+              requiredChanges,
+            }
+          }
+
+          '''
+          if "function syncQualityAssessment(" not in s:
+              if marker not in s: raise SystemExit('helper insertion anchor missing')
+              s = s.replace(marker, helper + marker, 1)
+
+          input_anchor = "  readonly round: number\n  readonly signal: AbortSignal\n}): Promise<GoalJudgeResult> {"
+          input_repl = "  readonly round: number\n  readonly signal: AbortSignal\n  readonly quality?: GoalQualityRuntime\n}): Promise<GoalJudgeResult> {"
+          if "readonly quality?: GoalQualityRuntime" not in s:
+              if input_anchor not in s: raise SystemExit('judge input anchor missing')
+              s = s.replace(input_anchor, input_repl, 1)
+
+          gate_anchor = "  recordCompletionGate(input.parent, input.objective, input.round, gate)\n  if (mayReuseSettledPass(settled, gate) && gateIsInfrastructureOnlyBlocked(gate)) return settled.result\n"
+          gate_repl = "  recordCompletionGate(input.parent, input.objective, input.round, gate)\n  const qualityGate = input.quality === undefined\n    ? undefined\n    : syncQualityAssessment(input.quality, input.parent, input.objective, gate)\n  if (mayReuseSettledPass(settled, gate) && gateIsInfrastructureOnlyBlocked(gate)) {\n    return enforceQuality(settled.result, qualityGate)\n  }\n"
+          if "const qualityGate = input.quality" not in s:
+              if gate_anchor not in s: raise SystemExit('gate sync anchor missing')
+              s = s.replace(gate_anchor, gate_repl, 1)
+
+          provider_anchor = "  if (provider === undefined) {\n    return mayReuseSettledPass(settled, gate) ? settled.result : enforceGate(unavailable(), gate)\n  }"
+          provider_repl = "  if (provider === undefined) {\n    const result = mayReuseSettledPass(settled, gate) ? settled.result : enforceGate(unavailable(), gate)\n    return enforceQuality(result, qualityGate)\n  }"
+          if provider_anchor in s:
+              s = s.replace(provider_anchor, provider_repl, 1)
+
+          settled_anchor = "  if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) return settled.result\n  return enforceGate(judged, gate)"
+          settled_repl = "  if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) {\n    return enforceQuality(settled.result, qualityGate)\n  }\n  return enforceQuality(enforceGate(judged, gate), qualityGate)"
+          if settled_anchor in s:
+              s = s.replace(settled_anchor, settled_repl, 1)
+          elif "return enforceQuality(enforceGate(judged, gate), qualityGate)" not in s:
+              raise SystemExit('final quality enforcement anchor missing')
+
+          p.write_text(s)
+          PY
+      - name: Resolve quality source group for focused Vitest
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tsconfig.base.json'); s=p.read_text()
+          if '"./packages/quality/*/src"' not in s:
+              s=s.replace('"./packages/goal/*/src",','"./packages/goal/*/src",\n        "./packages/quality/*/src",')
+          p.write_text(s)
+          PY
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run packages/goal/tool-goal/tests/quality-judge.spec.ts
+      - name: Commit GREEN implementation
+        run: |
+          git checkout -- tsconfig.base.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/goal/tool-goal/src/judge.ts
+          git diff --cached --check
+          git commit -m "feat(goal): enforce quality foresight readiness"
+          git push origin HEAD:feat/quality-foresight-completion-20260915

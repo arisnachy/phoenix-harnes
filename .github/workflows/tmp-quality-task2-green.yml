@@ -1,0 +1,57 @@
+name: Temporary quality task2 GREEN
+
+on:
+  push:
+    branches:
+      - feat/quality-foresight-completion-20260915
+    paths:
+      - .github/workflows/tmp-quality-task2-green.yml
+
+permissions:
+  contents: write
+
+jobs:
+  green:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Wire quality packages into TypeScript aggregates
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          base = Path('tsconfig.base.json')
+          text = base.read_text()
+          if '"./packages/quality/*/src"' not in text:
+              text = text.replace('"./packages/goal/*/src",', '"./packages/goal/*/src",\n        "./packages/quality/*/src",')
+          if '"./packages/quality/*/src/invariant.ts"' not in text:
+              text = text.replace('"./packages/goal/*/src/invariant.ts",', '"./packages/goal/*/src/invariant.ts",\n        "./packages/quality/*/src/invariant.ts",')
+          base.write_text(text)
+
+          host = Path('tsconfig.host.json')
+          text = host.read_text()
+          marker = '{ "path": "./packages/quality/quality" },'
+          addition = marker + '\n    { "path": "./packages/quality/quality-session" },'
+          if './packages/quality/quality-session' not in text:
+              text = text.replace(marker, addition)
+          host.write_text(text)
+          PY
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm exec vitest run packages/quality/quality-session/tests/quality-session.spec.ts
+      - run: pnpm exec tsc -p packages/quality/quality/tsconfig.json --noEmit
+      - run: pnpm exec tsc -p packages/quality/quality-session/tsconfig.json --noEmit
+      - name: Commit verified wiring and lockfile
+        run: |
+          git config user.name "arisnachy"
+          git config user.email "127772990+arisnachy@users.noreply.github.com"
+          git add tsconfig.base.json tsconfig.host.json pnpm-lock.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(quality): wire packages into workspace graph"
+            git push origin HEAD:feat/quality-foresight-completion-20260915
+          fi

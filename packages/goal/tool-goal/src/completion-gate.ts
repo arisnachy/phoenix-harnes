@@ -2,6 +2,8 @@
 
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock, LlmRuntime } from '@phoenix-ai/dsh-llm'
+import { LivingCreationId, livingLevelRank, type LivingRegistry } from '@phoenix-ai/dsh-living'
+import type { QualityInnovation, QualityScenario, RiskForecast } from '@phoenix-ai/dsh-quality'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
 import { resolveGoalJudgeAgentOptions } from './judge-route.ts'
@@ -38,6 +40,11 @@ export interface GoalCompletionGateResult {
   readonly cleanRoomEvidence: string
   readonly findings: readonly string[]
   readonly proceduralLessons: readonly string[]
+  /** True when the richer edge-case/forecast/innovation analysis is structurally complete and truthful. */
+  readonly foresightComplete: boolean
+  readonly realWorldScenarios: readonly QualityScenario[]
+  readonly riskForecasts: readonly RiskForecast[]
+  readonly innovationOpportunity: QualityInnovation
 }
 
 interface AdversarialCase {
@@ -47,11 +54,18 @@ interface AdversarialCase {
 
 type CompletionRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
+type LivingReadRuntime = Pick<LivingRegistry, 'inspect' | 'readState'>
 
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 32
-const EXECUTION_TOOLS = ['bash', 'read', 'read_image', 'glob', 'grep'] as const
+const EXECUTION_TOOLS = ['bash', 'read', 'read_image', 'glob', 'grep', 'living_inspect_creation', 'living_read_state', 'living_verify_creation'] as const
 const EVIDENCE_STATUSES = ['pending', 'implemented', 'tested', 'verified', 'failed', 'blocked_external'] as const
+const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
+const SCENARIO_STATUSES = ['pending', 'pass', 'fail', 'untested', 'accepted-risk'] as const
+const EVIDENCE_KINDS = ['static', 'simulated', 'live'] as const
+const RISK_LEVELS = ['low', 'medium', 'high'] as const
+const FORECAST_STATUSES = ['open', 'mitigated', 'accepted', 'confirmed', 'contradicted', 'unknown'] as const
+const INNOVATION_STATUSES = ['pending', 'implemented', 'offered', 'not-applicable'] as const
 
 const DESIGN_SCHEMA: ObjectJsonSchema = {
   type: 'object',
@@ -109,6 +123,45 @@ const EXECUTION_SCHEMA: ObjectJsonSchema = {
     clean_room_evidence: { type: 'string' },
     findings: { type: 'array', items: { type: 'string' } },
     procedural_lessons: { type: 'array', items: { type: 'string' } },
+    real_world_scenarios: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          id: { type: 'string' }, title: { type: 'string' },
+          severity: { type: 'string', enum: [...SEVERITIES] },
+          status: { type: 'string', enum: [...SCENARIO_STATUSES] },
+          evidence_kind: { type: 'string', enum: [...EVIDENCE_KINDS] },
+          evidence: { type: 'array', items: { type: 'string' } },
+          authority_ref: { type: 'string' }, blocker: { type: 'string' },
+        },
+        required: ['id', 'title', 'severity', 'status', 'evidence_kind', 'evidence'],
+      },
+    },
+    risk_forecasts: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          id: { type: 'string' }, scenario: { type: 'string' },
+          likelihood: { type: 'string', enum: [...RISK_LEVELS] },
+          confidence: { type: 'string', enum: [...RISK_LEVELS] },
+          impact: { type: 'string', enum: [...SEVERITIES] },
+          evidence: { type: 'array', items: { type: 'string' } },
+          mitigation: { type: 'string' }, status: { type: 'string', enum: [...FORECAST_STATUSES] },
+        },
+        required: ['id', 'scenario', 'likelihood', 'confidence', 'impact', 'evidence', 'mitigation', 'status'],
+      },
+    },
+    innovation: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        status: { type: 'string', enum: [...INNOVATION_STATUSES] },
+        rationale: { type: 'string' },
+        evidence: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['status', 'rationale', 'evidence'],
+    },
   },
   required: ['checks', 'evidence_ledger', 'artifact_fingerprint', 'clean_room_evidence', 'findings', 'procedural_lessons'],
 }
@@ -117,8 +170,16 @@ function normalizedText(value: unknown): value is string {
   return typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= MAX_TEXT
 }
 
+function normalizedMaybeEmpty(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() === value && value.length <= MAX_TEXT
+}
+
 function normalizedList(value: unknown): value is string[] {
   return Array.isArray(value) && value.length <= MAX_ITEMS && value.every(normalizedText)
+}
+
+function enumValue<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+  return typeof value === 'string' && allowed.includes(value as T) ? value as T : undefined
 }
 
 function readCases(value: unknown): AdversarialCase[] | undefined {
@@ -165,6 +226,57 @@ function readLedger(value: unknown): CompletionEvidenceEntry[] | undefined {
   return entries
 }
 
+function readScenarios(value: unknown): QualityScenario[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_ITEMS) return undefined
+  const result: QualityScenario[] = []
+  for (const item of value) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) return undefined
+    const record = item as Record<string, unknown>
+    const severity = enumValue(record.severity, SEVERITIES)
+    const status = enumValue(record.status, SCENARIO_STATUSES)
+    const evidenceKind = enumValue(record.evidence_kind, EVIDENCE_KINDS)
+    if (!normalizedText(record.id) || !normalizedText(record.title) || severity === undefined || status === undefined
+      || evidenceKind === undefined || !normalizedList(record.evidence)) return undefined
+    if (record.authority_ref !== undefined && !normalizedText(record.authority_ref)) return undefined
+    if (record.blocker !== undefined && !normalizedText(record.blocker)) return undefined
+    result.push({
+      id: record.id, title: record.title, severity, status, evidenceKind, evidence: record.evidence,
+      ...typeof record.authority_ref === 'string' ? { authorityRef: record.authority_ref } : {},
+      ...typeof record.blocker === 'string' ? { blocker: record.blocker } : {},
+    })
+  }
+  return result
+}
+
+function readForecasts(value: unknown): RiskForecast[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_ITEMS) return undefined
+  const result: RiskForecast[] = []
+  for (const item of value) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) return undefined
+    const record = item as Record<string, unknown>
+    const likelihood = enumValue(record.likelihood, RISK_LEVELS)
+    const confidence = enumValue(record.confidence, RISK_LEVELS)
+    const impact = enumValue(record.impact, SEVERITIES)
+    const status = enumValue(record.status, FORECAST_STATUSES)
+    if (!normalizedText(record.id) || !normalizedText(record.scenario) || likelihood === undefined
+      || confidence === undefined || impact === undefined || status === undefined || !normalizedList(record.evidence)
+      || !normalizedMaybeEmpty(record.mitigation)) return undefined
+    result.push({
+      id: record.id, scenario: record.scenario, likelihood, confidence, impact,
+      evidence: record.evidence, mitigation: record.mitigation, status,
+    })
+  }
+  return result
+}
+
+function readInnovation(value: unknown): QualityInnovation | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  const status = enumValue(record.status, INNOVATION_STATUSES)
+  if (status === undefined || !normalizedText(record.rationale) || !normalizedList(record.evidence)) return undefined
+  return { status, rationale: record.rationale, evidence: record.evidence }
+}
+
 function readExecution(value: unknown): GoalCompletionGateResult | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
@@ -185,20 +297,39 @@ function readExecution(value: unknown): GoalCompletionGateResult | undefined {
     || !normalizedText(record.clean_room_evidence)
     || !normalizedList(record.findings)
     || !normalizedList(record.procedural_lessons)) return undefined
+
+  const scenarios = record.real_world_scenarios === undefined ? [] : readScenarios(record.real_world_scenarios)
+  const forecasts = record.risk_forecasts === undefined ? [] : readForecasts(record.risk_forecasts)
+  const innovation = record.innovation === undefined ? undefined : readInnovation(record.innovation)
+  if (scenarios === undefined || forecasts === undefined || (record.innovation !== undefined && innovation === undefined)) return undefined
+
+  const liveAuthorityFindings = scenarios
+    .filter(item => item.evidenceKind === 'live' && item.status === 'pass' && item.authorityRef === undefined)
+    .map(item => `Claimed live evidence for ${item.id} lacks an authoritative runtime authority reference.`)
+  const foresightComplete = record.real_world_scenarios !== undefined
+    && record.risk_forecasts !== undefined
+    && innovation !== undefined
+    && liveAuthorityFindings.length === 0
+
   return {
     checks: { requirements, builderTests, adversarialTests, startup, artifactIntegrity, cleanRoom },
     evidenceLedger,
     artifactFingerprint: record.artifact_fingerprint,
     cleanRoomEvidence: record.clean_room_evidence,
-    findings: record.findings,
+    findings: [...record.findings, ...liveAuthorityFindings],
     proceduralLessons: record.procedural_lessons,
+    foresightComplete,
+    realWorldScenarios: scenarios,
+    riskForecasts: forecasts,
+    innovationOpportunity: innovation ?? {
+      status: 'pending', rationale: 'Foresight and innovation evidence was not supplied by this verifier.', evidence: [],
+    },
   }
 }
 
 /**
- * Check whether every required completion dimension has concrete evidence.
- * @param result - structured evidence returned by the independent tester.
- * @returns true only when all six checks, mandatory criteria, artifact identity, and clean-room evidence pass.
+ * Check whether every legacy required completion dimension has concrete evidence.
+ * Rich quality readiness is enforced separately so older sessions remain replayable.
  */
 export function completionGatePassed(result: GoalCompletionGateResult): boolean {
   return Object.values(result.checks).every(value => value === 'pass')
@@ -212,12 +343,8 @@ export function completionGatePassed(result: GoalCompletionGateResult): boolean 
 function unavailable(reason: string): GoalCompletionGateResult {
   return {
     checks: {
-      requirements: 'blocked',
-      builderTests: 'blocked',
-      adversarialTests: 'blocked',
-      startup: 'blocked',
-      artifactIntegrity: 'blocked',
-      cleanRoom: 'blocked',
+      requirements: 'blocked', builderTests: 'blocked', adversarialTests: 'blocked',
+      startup: 'blocked', artifactIntegrity: 'blocked', cleanRoom: 'blocked',
     },
     evidenceLedger: [{
       criterionId: 'VERIFIER-INFRA',
@@ -230,6 +357,10 @@ function unavailable(reason: string): GoalCompletionGateResult {
     cleanRoomEvidence: reason,
     findings: [reason],
     proceduralLessons: [`Completion verification workflow failed: ${reason}`],
+    foresightComplete: false,
+    realWorldScenarios: [],
+    riskForecasts: [],
+    innovationOpportunity: { status: 'pending', rationale: 'Independent verifier is unavailable.', evidence: [] },
   }
 }
 
@@ -262,14 +393,60 @@ async function runStructured(
   }
 }
 
-/**
- * Run a two-stage independent completion test. Stage one sees only the original
- * requirement and invents fresh attacks. Stage two executes those attacks,
- * packages the deliverable, verifies a clean extracted copy, and reports all
- * six completion dimensions.
- * @param input - verifier runtime, active model route, original objective, round, and cancellation signal.
- * @returns structured independent evidence for the exact completion attempt.
- */
+async function verifyLivingEvidence(
+  result: GoalCompletionGateResult,
+  living: LivingReadRuntime | undefined,
+): Promise<GoalCompletionGateResult> {
+  const scenarios: QualityScenario[] = []
+  const findings = [...result.findings]
+  let valid = true
+  for (const scenario of result.realWorldScenarios) {
+    if (scenario.evidenceKind !== 'live' || scenario.status !== 'pass') {
+      scenarios.push(scenario)
+      continue
+    }
+    const reference = scenario.authorityRef
+    if (reference === undefined || !reference.startsWith('living:') || reference.slice('living:'.length).trim().length === 0) {
+      valid = false
+      const blocker = `Live scenario ${scenario.id} does not name a valid living:<creation-id> authority.`
+      findings.push(blocker)
+      scenarios.push({ ...scenario, status: 'untested', blocker })
+      continue
+    }
+    if (living === undefined) {
+      valid = false
+      const blocker = `Live scenario ${scenario.id} cannot be verified because the living registry is unavailable.`
+      findings.push(blocker)
+      scenarios.push({ ...scenario, status: 'untested', blocker })
+      continue
+    }
+    const rawId = reference.slice('living:'.length)
+    try {
+      const id = LivingCreationId(rawId)
+      const snapshot = living.inspect(id)
+      if (!snapshot.connected) throw new Error(`living creation ${rawId} is offline`)
+      if (livingLevelRank(snapshot.achievedLevel) < livingLevelRank(snapshot.manifest.targetLevel)) {
+        throw new Error(`living creation ${rawId} achieves ${snapshot.achievedLevel}, below target ${snapshot.manifest.targetLevel}`)
+      }
+      if (snapshot.manifest.state.length > 0) await living.readState(id)
+      scenarios.push(scenario)
+    } catch (error) {
+      valid = false
+      const detail = error instanceof Error ? error.message : String(error)
+      const blocker = `Live authority ${reference} failed verification: ${detail}`.slice(0, MAX_TEXT)
+      findings.push(blocker)
+      scenarios.push({ ...scenario, status: 'untested', blocker })
+    }
+  }
+  return {
+    ...result,
+    foresightComplete: result.foresightComplete && valid,
+    realWorldScenarios: scenarios,
+    findings: findings.slice(0, MAX_ITEMS),
+  }
+}
+
+/** Run fresh independent adversarial and foresight verification for one completion attempt. */
 export async function runAdversarialCompletionGate(input: {
   readonly subagents: CompletionRuntime | undefined
   readonly llm?: Pick<LlmRuntime, 'resolveModelInfo'>
@@ -278,6 +455,7 @@ export async function runAdversarialCompletionGate(input: {
   readonly objective: string
   readonly round: number
   readonly signal: AbortSignal
+  readonly living?: LivingReadRuntime
 }): Promise<GoalCompletionGateResult> {
   if (input.subagents === undefined) return unavailable('No independent tester runtime is mounted.')
   const provider = reviewProvider(input.subagents, input.provider, input.parent)
@@ -303,13 +481,8 @@ export async function runAdversarialCompletionGate(input: {
       + '</adversarial_test_design>',
   }]
   const designed = await runStructured(input.subagents, provider, {
-    label: 'goal-adversarial-test-design',
-    prompt: designPrompt,
-    parent: input.parent,
-    signal: input.signal,
-    agentOptions,
-    outputSchema: DESIGN_SCHEMA,
-    toolFilter: { allow: [] },
+    label: 'goal-adversarial-test-design', prompt: designPrompt, parent: input.parent, signal: input.signal,
+    agentOptions, outputSchema: DESIGN_SCHEMA, toolFilter: { allow: [] },
   })
   const cases = readCases(designed)
   if (cases === undefined) return unavailable('Independent adversarial test design did not produce valid fresh cases.')
@@ -322,27 +495,22 @@ export async function runAdversarialCompletionGate(input: {
       + `Fresh adversarial cases designed without workspace access: ${JSON.stringify(cases)}\n\n`
       + 'Act as the independent completion Tester, not the Builder. Inspect the implementation only now. Verify all six dimensions separately: '
       + 'requirements, Builder-owned tests, fresh adversarial tests, startup, artifact integrity, and clean-room verification. '
-      + 'Build an evidence_ledger from the original requirement. Give every acceptance criterion a stable criterion_id, literal criterion text, mandatory flag, '
-      + 'status, and concrete evidence references. At least one criterion must be mandatory; never classify every original requirement as optional. '
-      + 'Mandatory criteria are verified only when current reproducible evidence demonstrates them; Builder prose is not evidence. '
-      + 'For adversarial tests, turn the supplied cases into new executable checks; do not merely rerun or rename existing Builder tests. '
-      + 'Actively try to break the solution with edge conditions, corrupt/partial input, supported alternate representations, and unexpected real-world conditions. '
-      + 'Then create the final deliverable exactly as a user would receive it. Compute a stable fingerprint for that packaged artifact. '
-      + 'Create a brand-new OS temporary directory outside the workspace, copy/extract only the packaged deliverable into it, and run startup plus the relevant '
-      + 'verification against that clean copy. Do not use workspace-only files, caches, installed links, or unshipped dependencies to make clean-room pass. '
-      + 'Compare the original requirement, Builder claims/tests, actual artifact contents, and clean-room behavior. Any inconsistency is a failure/blocker. '
-      + 'Ask three final questions: Did the mission do everything requested? Did it comply literally? Even if literal, is it an excellent solution under real-world variability? '
-      + 'Record concise procedural_lessons for every discovered failure pattern so PHOENIX can avoid repeating it.\n'
+      + 'Build an evidence_ledger from the original requirement. At least one original criterion must be mandatory and current reproducible evidence is required for verified. '
+      + 'Turn the supplied adversarial cases into genuinely new executable checks and actively try corrupt/partial input, alternate supported representations, unexpected state, restart behavior, dependency failure, concurrency/load, and realistic human or agent mistakes when relevant. '
+      + 'Create the final deliverable exactly as the user would receive it, fingerprint it, extract/copy only that package into a brand-new OS temporary directory, and verify startup plus relevant behavior there without workspace-only files or caches. '
+      + 'Also return real_world_scenarios describing the materially relevant edge cases you actually checked. Label evidence_kind strictly as static, simulated, or live. '
+      + 'A live PASS is allowed only when an authoritative runtime/tool path was actually observed; for Phoenix-created systems use authority_ref exactly as living:<creation-id> after inspecting/verifying it with the read-only living tools. Never call a mock, unit test, synthetic fixture, screenshot, or inference live evidence. '
+      + 'After observing the artifact, forecast plausible failures that may occur after delivery. For each risk_forecast separate likelihood from confidence, state impact, evidence, mitigation, and status. Forecasts are hypotheses, not facts. Ask what triggers the failure, how it would be detected, and what should be repaired now. '
+      + 'Finally perform one bounded innovation evaluation only after requested work is satisfied. Return implemented, offered, or not-applicable (pending only when the evaluation itself cannot be completed). Innovation must never hide unfinished requested work or add unjustified permissions/dependencies. '
+      + 'Compare requirement, claims, tests, packaged artifact, clean-room behavior, edge-case evidence, and forecasts. Any inconsistency is a finding. '
+      + 'Record concise procedural_lessons for discovered failure patterns.\n'
       + '</adversarial_completion_gate>',
   }]
   const executed = await runStructured(input.subagents, provider, {
-    label: 'goal-adversarial-tester',
-    prompt: executePrompt,
-    parent: input.parent,
-    signal: input.signal,
-    agentOptions,
-    outputSchema: EXECUTION_SCHEMA,
-    toolFilter: { allow: [...EXECUTION_TOOLS] },
+    label: 'goal-adversarial-tester', prompt: executePrompt, parent: input.parent, signal: input.signal,
+    agentOptions, outputSchema: EXECUTION_SCHEMA, toolFilter: { allow: [...EXECUTION_TOOLS] },
   })
-  return readExecution(executed) ?? unavailable('Independent adversarial execution did not return valid clean-room evidence.')
+  const parsed = readExecution(executed)
+  if (parsed === undefined) return unavailable('Independent adversarial execution did not return valid clean-room evidence.')
+  return verifyLivingEvidence(parsed, input.living)
 }

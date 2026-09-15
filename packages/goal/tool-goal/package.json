@@ -36,11 +36,13 @@
     "@phoenix-ai/dsh-goal": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-quality": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-living": "workspace:^"
   },
   "dependencies": {
     "@phoenix-ai/schemastery": "workspace:^"
@@ -51,10 +53,12 @@
     "@phoenix-ai/dsh-goal": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-quality": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-living": "workspace:^"
   }
 }

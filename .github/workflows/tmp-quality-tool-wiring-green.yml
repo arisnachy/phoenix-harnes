@@ -1,0 +1,63 @@
+name: Temporary quality tool wiring GREEN
+
+on:
+  push:
+    branches:
+      - feat/quality-foresight-completion-20260915
+    paths:
+      - .github/workflows/tmp-quality-tool-wiring-green.yml
+
+permissions:
+  contents: write
+
+jobs:
+  green:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/quality-foresight-completion-20260915
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Wire quality into goal completion
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('packages/goal/tool-goal/src/index.ts')
+          s=p.read_text()
+          old="        const subagents = ctx.get('subagents')\n        const llm = ctx.get('llm', false)\n"
+          new="        const subagents = ctx.get('subagents')\n        const llm = ctx.get('llm', false)\n        const quality = ctx.get('quality', false)\n"
+          if "const quality = ctx.get('quality', false)" not in s:
+              if old not in s: raise SystemExit('quality lookup anchor missing')
+              s=s.replace(old,new,1)
+          old2="          subagents,\n          ...llm === undefined ? {} : { llm },\n          provider: resolved.judgeProvider,"
+          new2="          subagents,\n          ...llm === undefined ? {} : { llm },\n          ...quality === undefined ? {} : { quality },\n          provider: resolved.judgeProvider,"
+          if "...quality === undefined ? {} : { quality }," not in s:
+              if old2 not in s: raise SystemExit('quality argument anchor missing')
+              s=s.replace(old2,new2,1)
+          p.write_text(s)
+          PY
+      - name: Resolve quality source group for focused Vitest
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tsconfig.base.json'); s=p.read_text()
+          if '"./packages/quality/*/src"' not in s:
+              s=s.replace('"./packages/goal/*/src",','"./packages/goal/*/src",\n        "./packages/quality/*/src",')
+          p.write_text(s)
+          PY
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run packages/goal/tool-goal/tests/quality-tool-wiring.spec.ts packages/goal/tool-goal/tests/quality-judge.spec.ts
+      - name: Commit GREEN wiring
+        run: |
+          git checkout -- tsconfig.base.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/goal/tool-goal/src/index.ts
+          git diff --cached --check
+          git commit -m "feat(goal): wire quality service into completion"
+          git push origin HEAD:feat/quality-foresight-completion-20260915
