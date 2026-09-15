@@ -182,6 +182,27 @@ function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDe
   return ids.includes(liveId) || ids.includes(liveName) || normalize(definition.name) === liveName
 }
 
+function definitionFromLiveConnector(live: ConnectorTelemetry): ConnectorDefinition {
+  return {
+    id: live.id,
+    aliases: [live.name],
+    name: live.name,
+    category: live.category ?? 'Codex App',
+    description: live.description ?? 'Discovered from the live Codex / ChatGPT app directory.',
+    mode: 'oauth',
+    ...(live.iconUrl === undefined ? {} : { logoUrl: live.iconUrl }),
+    capabilities: ['codex-app'],
+  }
+}
+
+function ownerForLiveConnector(entries: readonly Entry[], live: ConnectorTelemetry | undefined): Entry | undefined {
+  if (live === undefined) return undefined
+  return entries.find(entry => entry.telemetry?.connectors?.some(candidate => (
+    normalize(candidate.id) === normalize(live.id)
+    || normalize(candidate.name) === normalize(live.name)
+  )) === true)
+}
+
 function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   if (account?.stored === undefined) return false
   const scopedConnectors = account.telemetry?.connectors
@@ -233,7 +254,15 @@ function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
       <div className={connectorStyles['connectorFooter']}>
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
         {live?.installUrl !== undefined ? (
-          <a className={connectorStyles['connectorLink']} href={live.installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
+          <a
+            className={connectorStyles['connectorLink']}
+            href={live.installUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`${live.installed === true ? 'Manage' : 'Connect'} ${definition.name}`}
+          >
+            {live.installed === true ? t('configure') : t('authorize')}
+          </a>
         ) : oauthAccount === undefined || connectedByAccount ? null : (
           <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
             {t('authorize')}
@@ -286,12 +315,26 @@ export function ConnectorsSettingsSection({ api, t, connectorT, onAuthorized }: 
     [entries],
   )
 
-  const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
+  const catalogDefinitions = useMemo(() => {
+    const definitions: ConnectorDefinition[] = [...CONNECTOR_CATALOG]
+    const seen = new Set(definitions.map(definition => normalize(definition.id)))
+    for (const live of liveConnectors) {
+      if (definitions.some(definition => liveMatchesDefinition(live, definition))) continue
+      const key = normalize(live.id)
+      if (seen.has(key)) continue
+      definitions.push(definitionFromLiveConnector(live))
+      seen.add(key)
+    }
+    return definitions
+  }, [liveConnectors])
+
+  const catalogRows = useMemo(() => catalogDefinitions.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
-    const account = entries.find(entry => entryMatchesFamily(entry, definition.providerFamily))
+    const account = ownerForLiveConnector(entries, live)
+      ?? entries.find(entry => entryMatchesFamily(entry, definition.providerFamily))
     const connected = live?.installed === true || live?.callable === true || accountGrantConnectsCatalogEntry(account)
     return { definition, live, account, connected }
-  }), [entries, liveConnectors])
+  }), [catalogDefinitions, entries, liveConnectors])
 
   const visibleRows = catalogRows.filter(({ definition, connected }) => {
     if (filter === 'connected' && !connected) return false

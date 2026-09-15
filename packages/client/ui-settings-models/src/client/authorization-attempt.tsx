@@ -50,6 +50,15 @@ export function useAuthorizationAttempt(
   const [answer, setAnswer] = useState('')
   const [failure, setFailure] = useState<string | undefined>()
   const opened = useRef(new Set<string>())
+  const reservedPopup = useRef<Window | null>(null)
+
+  useEffect(() => () => {
+    const popup = reservedPopup.current
+    reservedPopup.current = null
+    if (popup !== null && !popup.closed) {
+      try { popup.close() } catch { /* best-effort browser cleanup */ }
+    }
+  }, [])
 
   useEffect(() => {
     if (api === undefined || attempt?.status !== 'pending') return
@@ -58,6 +67,11 @@ export function useAuthorizationAttempt(
       void api.status({ attemptId: attempt.id, after: attempt.nextSeq }).then((response) => {
         if (stale) return
         if (!response.result.ok) {
+          const popup = reservedPopup.current
+          reservedPopup.current = null
+          if (popup !== null && !popup.closed) {
+            try { popup.close() } catch { /* best-effort browser cleanup */ }
+          }
           setAttempt(undefined)
           setFailure(response.result.error.message)
           return
@@ -66,7 +80,17 @@ export function useAuthorizationAttempt(
         const latest = view.notices.at(-1)?.notice
         if (latest?.url !== undefined && !opened.current.has(latest.url)) {
           opened.current.add(latest.url)
-          window.open(latest.url, '_blank', 'noopener,noreferrer')
+          const popup = reservedPopup.current
+          reservedPopup.current = null
+          if (popup !== null && !popup.closed) {
+            try {
+              popup.location.assign(latest.url)
+            } catch {
+              window.open(latest.url, '_blank', 'noopener,noreferrer')
+            }
+          } else {
+            window.open(latest.url, '_blank', 'noopener,noreferrer')
+          }
         }
         const message = latest?.message ?? attempt.message
         const url = latest?.url ?? attempt.url
@@ -81,9 +105,21 @@ export function useAuthorizationAttempt(
           ...view.prompt === undefined ? {} : { prompt: view.prompt },
           ...view.error === undefined ? {} : { error: view.error },
         })
+        if (view.status !== 'pending' && latest?.url === undefined) {
+          const popup = reservedPopup.current
+          reservedPopup.current = null
+          if (popup !== null && !popup.closed) {
+            try { popup.close() } catch { /* best-effort browser cleanup */ }
+          }
+        }
         if (view.status === 'authorized') onAuthorized()
       }, (error: unknown) => {
         if (stale) return
+        const popup = reservedPopup.current
+        reservedPopup.current = null
+        if (popup !== null && !popup.closed) {
+          try { popup.close() } catch { /* best-effort browser cleanup */ }
+        }
         setAttempt(undefined)
         setFailure(String(error))
       })
@@ -95,13 +131,41 @@ export function useAuthorizationAttempt(
     if (api === undefined) return
     setFailure(undefined)
     setAttempt(undefined)
+
+    const previous = reservedPopup.current
+    reservedPopup.current = null
+    if (previous !== null && !previous.closed) {
+      try { previous.close() } catch { /* best-effort browser cleanup */ }
+    }
+
+    let popup: Window | null = null
+    if (method === 'oauth') {
+      try {
+        popup = window.open('about:blank', '_blank')
+        if (popup !== null) popup.opener = null
+      } catch {
+        popup = null
+      }
+      reservedPopup.current = popup
+    }
+
     void api.begin({ key, method }).then((response) => {
       if (!response.result.ok) {
+        if (reservedPopup.current === popup) reservedPopup.current = null
+        if (popup !== null && !popup.closed) {
+          try { popup.close() } catch { /* best-effort browser cleanup */ }
+        }
         setFailure(response.result.error.message)
         return
       }
       setAttempt({ id: response.result.value.attemptId, status: 'pending', nextSeq: 0 })
-    }, (error: unknown) => { setFailure(String(error)) })
+    }, (error: unknown) => {
+      if (reservedPopup.current === popup) reservedPopup.current = null
+      if (popup !== null && !popup.closed) {
+        try { popup.close() } catch { /* best-effort browser cleanup */ }
+      }
+      setFailure(String(error))
+    })
   }
 
   const submitAnswer = (): void => {
@@ -122,6 +186,11 @@ export function useAuthorizationAttempt(
 
   const cancel = (): void => {
     if (api === undefined || attempt === undefined) return
+    const popup = reservedPopup.current
+    reservedPopup.current = null
+    if (popup !== null && !popup.closed) {
+      try { popup.close() } catch { /* best-effort browser cleanup */ }
+    }
     void api.cancel({ attemptId: attempt.id }).finally(() => {
       setAttempt((current) => {
         if (current === undefined) return current
