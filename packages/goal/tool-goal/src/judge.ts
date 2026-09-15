@@ -2,6 +2,7 @@
 
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock, LlmRuntime } from '@phoenix-ai/dsh-llm'
+import type { LivingRegistry } from '@phoenix-ai/dsh-living'
 import type { GoalJudgeAuditEntry } from '@phoenix-ai/dsh-goal'
 import { qualityReadiness, type QualityAssessmentSnapshot, type QualityMutation, type QualityService } from '@phoenix-ai/dsh-quality'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
@@ -50,6 +51,7 @@ const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission 
 type GoalJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
 type GoalQualityRuntime = Pick<QualityService, 'get' | 'start' | 'record'>
+type GoalLivingRuntime = Pick<LivingRegistry, 'inspect' | 'readState'>
 
 function normalizedText(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value === value.trim() && value.length <= MAX_TEXT
@@ -392,6 +394,7 @@ export async function judgeGoalCompletion(input: {
   readonly round: number
   readonly signal: AbortSignal
   readonly quality?: GoalQualityRuntime
+  readonly living?: GoalLivingRuntime
 }): Promise<GoalJudgeResult> {
   const settled = settledGoalPass(input.parent, input.objective)
   const subagents = input.subagents
@@ -404,6 +407,7 @@ export async function judgeGoalCompletion(input: {
     objective: input.objective,
     round: input.round,
     signal: input.signal,
+    ...input.living === undefined ? {} : { living: input.living },
   })
   recordCompletionGate(input.parent, input.objective, input.round, gate)
   const qualityGate = input.quality === undefined

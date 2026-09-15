@@ -5040,6 +5040,9 @@ importers:
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-living':
+        specifier: workspace:^
+        version: link:../../core/living
       '@phoenix-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm

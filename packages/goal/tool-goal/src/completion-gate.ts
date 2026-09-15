@@ -2,6 +2,7 @@
 
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock, LlmRuntime } from '@phoenix-ai/dsh-llm'
+import { LivingCreationId, livingLevelRank, type LivingRegistry } from '@phoenix-ai/dsh-living'
 import type { QualityInnovation, QualityScenario, RiskForecast } from '@phoenix-ai/dsh-quality'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
@@ -53,10 +54,11 @@ interface AdversarialCase {
 
 type CompletionRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
+type LivingReadRuntime = Pick<LivingRegistry, 'inspect' | 'readState'>
 
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 32
-const EXECUTION_TOOLS = ['bash', 'read', 'read_image', 'glob', 'grep'] as const
+const EXECUTION_TOOLS = ['bash', 'read', 'read_image', 'glob', 'grep', 'living_inspect_creation', 'living_read_state', 'living_verify_creation'] as const
 const EVIDENCE_STATUSES = ['pending', 'implemented', 'tested', 'verified', 'failed', 'blocked_external'] as const
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
 const SCENARIO_STATUSES = ['pending', 'pass', 'fail', 'untested', 'accepted-risk'] as const
@@ -391,6 +393,59 @@ async function runStructured(
   }
 }
 
+async function verifyLivingEvidence(
+  result: GoalCompletionGateResult,
+  living: LivingReadRuntime | undefined,
+): Promise<GoalCompletionGateResult> {
+  const scenarios: QualityScenario[] = []
+  const findings = [...result.findings]
+  let valid = true
+  for (const scenario of result.realWorldScenarios) {
+    if (scenario.evidenceKind !== 'live' || scenario.status !== 'pass') {
+      scenarios.push(scenario)
+      continue
+    }
+    const reference = scenario.authorityRef
+    if (reference === undefined || !reference.startsWith('living:') || reference.slice('living:'.length).trim().length === 0) {
+      valid = false
+      const blocker = `Live scenario ${scenario.id} does not name a valid living:<creation-id> authority.`
+      findings.push(blocker)
+      scenarios.push({ ...scenario, status: 'untested', blocker })
+      continue
+    }
+    if (living === undefined) {
+      valid = false
+      const blocker = `Live scenario ${scenario.id} cannot be verified because the living registry is unavailable.`
+      findings.push(blocker)
+      scenarios.push({ ...scenario, status: 'untested', blocker })
+      continue
+    }
+    const rawId = reference.slice('living:'.length)
+    try {
+      const id = LivingCreationId(rawId)
+      const snapshot = living.inspect(id)
+      if (!snapshot.connected) throw new Error(`living creation ${rawId} is offline`)
+      if (livingLevelRank(snapshot.achievedLevel) < livingLevelRank(snapshot.manifest.targetLevel)) {
+        throw new Error(`living creation ${rawId} achieves ${snapshot.achievedLevel}, below target ${snapshot.manifest.targetLevel}`)
+      }
+      if (snapshot.manifest.state.length > 0) await living.readState(id)
+      scenarios.push(scenario)
+    } catch (error) {
+      valid = false
+      const detail = error instanceof Error ? error.message : String(error)
+      const blocker = `Live authority ${reference} failed verification: ${detail}`.slice(0, MAX_TEXT)
+      findings.push(blocker)
+      scenarios.push({ ...scenario, status: 'untested', blocker })
+    }
+  }
+  return {
+    ...result,
+    foresightComplete: result.foresightComplete && valid,
+    realWorldScenarios: scenarios,
+    findings: findings.slice(0, MAX_ITEMS),
+  }
+}
+
 /** Run fresh independent adversarial and foresight verification for one completion attempt. */
 export async function runAdversarialCompletionGate(input: {
   readonly subagents: CompletionRuntime | undefined
@@ -400,6 +455,7 @@ export async function runAdversarialCompletionGate(input: {
   readonly objective: string
   readonly round: number
   readonly signal: AbortSignal
+  readonly living?: LivingReadRuntime
 }): Promise<GoalCompletionGateResult> {
   if (input.subagents === undefined) return unavailable('No independent tester runtime is mounted.')
   const provider = reviewProvider(input.subagents, input.provider, input.parent)
@@ -443,7 +499,7 @@ export async function runAdversarialCompletionGate(input: {
       + 'Turn the supplied adversarial cases into genuinely new executable checks and actively try corrupt/partial input, alternate supported representations, unexpected state, restart behavior, dependency failure, concurrency/load, and realistic human or agent mistakes when relevant. '
       + 'Create the final deliverable exactly as the user would receive it, fingerprint it, extract/copy only that package into a brand-new OS temporary directory, and verify startup plus relevant behavior there without workspace-only files or caches. '
       + 'Also return real_world_scenarios describing the materially relevant edge cases you actually checked. Label evidence_kind strictly as static, simulated, or live. '
-      + 'A live PASS is allowed only when an authoritative runtime/tool path was actually observed; provide authority_ref such as a concrete living/runtime/tool locator. Never call a mock, unit test, synthetic fixture, screenshot, or inference live evidence. '
+      + 'A live PASS is allowed only when an authoritative runtime/tool path was actually observed; for Phoenix-created systems use authority_ref exactly as living:<creation-id> after inspecting/verifying it with the read-only living tools. Never call a mock, unit test, synthetic fixture, screenshot, or inference live evidence. '
       + 'After observing the artifact, forecast plausible failures that may occur after delivery. For each risk_forecast separate likelihood from confidence, state impact, evidence, mitigation, and status. Forecasts are hypotheses, not facts. Ask what triggers the failure, how it would be detected, and what should be repaired now. '
       + 'Finally perform one bounded innovation evaluation only after requested work is satisfied. Return implemented, offered, or not-applicable (pending only when the evaluation itself cannot be completed). Innovation must never hide unfinished requested work or add unjustified permissions/dependencies. '
       + 'Compare requirement, claims, tests, packaged artifact, clean-room behavior, edge-case evidence, and forecasts. Any inconsistency is a finding. '
@@ -454,5 +510,7 @@ export async function runAdversarialCompletionGate(input: {
     label: 'goal-adversarial-tester', prompt: executePrompt, parent: input.parent, signal: input.signal,
     agentOptions, outputSchema: EXECUTION_SCHEMA, toolFilter: { allow: [...EXECUTION_TOOLS] },
   })
-  return readExecution(executed) ?? unavailable('Independent adversarial execution did not return valid clean-room evidence.')
+  const parsed = readExecution(executed)
+  if (parsed === undefined) return unavailable('Independent adversarial execution did not return valid clean-room evidence.')
+  return verifyLivingEvidence(parsed, input.living)
 }
