@@ -30,6 +30,12 @@ describe('classifyAutonomousMemory', () => {
       kind: 'correction',
     })
   })
+
+  it('learns natural corrective feedback even when the user does not say correction or remember', () => {
+    expect(classifyAutonomousMemory('No debe ser así: estás dando muchas vueltas sin resultados; termina la tarea antes de narrar el proceso.')).toMatchObject({
+      kind: 'correction',
+    })
+  })
 })
 
 describe('AutonomousMemoryCurator', () => {
