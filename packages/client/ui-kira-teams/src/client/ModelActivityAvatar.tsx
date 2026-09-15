@@ -1,6 +1,5 @@
-import type { CSSProperties } from 'react'
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
-import { KIRA_PORTRAIT_SHEET } from './KiraPortraitSheet.ts'
+import { KIRA_AGENT_PORTRAITS, type KiraPortraitKey } from './KiraAgentPortraits.ts'
 import css from './ModelActivityAvatar.module.css'
 
 /** Exact visible identities from the user-approved 20-avatar KIRA reference. */
@@ -11,9 +10,9 @@ export type ModelAvatarKind =
   | 'argo' | 'solaria' | 'nexo' | 'astra' | 'lyra'
   | 'zenith' | 'cobalto' | 'quasar' | 'senda' | 'orbita'
 
-type PortraitKey = Exclude<ModelAvatarKind, 'sol' | 'luna' | 'terra' | 'generic'>
+type PortraitKey = KiraPortraitKey
 
-/** Stable persona order shared with the approved 5×4 KIRA portrait sheet. */
+/** Stable persona order shared with the approved 5×4 KIRA roster. */
 const AGENT_AVATAR_KINDS: readonly PortraitKey[] = [
   'vortice', 'aurora', 'atlas', 'nova', 'lumen',
   'helix', 'prisma', 'orion', 'vega', 'eclipse',
@@ -48,9 +47,6 @@ const PORTRAIT_ALIAS: Record<ModelAvatarKind, PortraitKey> = {
   orbita: 'orbita',
 }
 
-/** Bust stale 404/image caches while keeping the public sheet contract stable. */
-const KIRA_PORTRAIT_RENDER_SRC = `${KIRA_PORTRAIT_SHEET}?v=20260915-compact-avatar-2`
-
 /** Small deterministic index used to keep one agent's visual identity stable. */
 export function stableAgentIndex(agentId: string, length: number): number {
   if (length <= 0) return 0
@@ -73,26 +69,9 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
   return 'generic'
 }
 
-/** Public sheet path containing the exact 20 approved portrait cells. */
-export function portraitSrcForKind(_kind: ModelAvatarKind): string {
-  return KIRA_PORTRAIT_SHEET
-}
-
-/** Locate one persona within the 5×4 sheet without stretching its face. */
-function portraitStyle(kind: ModelAvatarKind, variant: 'compact' | 'card'): CSSProperties {
-  const portrait = PORTRAIT_ALIAS[kind]
-  const index = AGENT_AVATAR_KINDS.indexOf(portrait)
-  const column = index % 5
-  const row = Math.floor(index / 5)
-  const compactX = [0, 25, 50, 75, 100]
-  const cardX = [2.889, 26.444, 50, 73.556, 97.111]
-  return {
-    '--portrait-image': `url("${KIRA_PORTRAIT_SHEET}")`,
-    '--portrait-x': `${(variant === 'card' ? cardX : compactX)[column] ?? 0}%`,
-    '--portrait-y': `${row * (100 / 3)}%`,
-    '--portrait-left': `${column * -100}%`,
-    '--portrait-top': `${row * -100}%`,
-  } as CSSProperties
+/** Resolve one KIRA identity to its standalone public portrait asset. */
+export function portraitSrcForKind(kind: ModelAvatarKind): string {
+  return KIRA_AGENT_PORTRAITS[PORTRAIT_ALIAS[kind]]
 }
 
 export interface ModelActivityAvatarProps {
@@ -138,20 +117,13 @@ export function ModelActivityAvatar({
       <span className={css.aura} />
       <span className={css.ring} />
       <span className={css.core} />
-      <span
+      <img
         className={css.portraitImage}
+        src={portraitSrcForKind(resolvedKind)}
+        alt=""
+        draggable={false}
         data-agent-portrait-image={true}
-        style={portraitStyle(resolvedKind, variant)}
-      >
-        <img
-          className={css.portraitSprite}
-          src={KIRA_PORTRAIT_RENDER_SRC}
-          alt=""
-          draggable={false}
-          data-agent-portrait-sprite={true}
-          style={{ left: 'var(--portrait-left)', top: 'var(--portrait-top)' } as CSSProperties}
-        />
-      </span>
+      />
       <span className={css.lifeGlint} />
       <span className={css.scanLine} />
       <span className={css.energyRibbon} />
