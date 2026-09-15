@@ -8,6 +8,7 @@
     { "path": "../../core/agent" },
     { "path": "../../core/system-prompt" },
     { "path": "../../core/tools" },
+    { "path": "../../runtime-diagnostics/invariants" },
     { "path": "../quality" }
   ]
 }
