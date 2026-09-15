@@ -30,7 +30,7 @@ describe('connectors settings section', () => {
     expect(container.childElementCount).toBe(0)
   })
 
-  it('renders presets and the broad connector catalog without claiming adapters are connected', async () => {
+  it('defaults the connector catalog to connected and reveals the broad catalog on demand', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
@@ -44,6 +44,12 @@ describe('connectors settings section', () => {
     expect(screen.getByText('Cloud & Data')).toBeTruthy()
     expect(screen.getByText('Presentations')).toBeTruthy()
     expect(screen.getByText('AI & Media')).toBeTruthy()
+    // The catalog defaults to the connected filter: non-operational adapters
+    // stay out of the default view instead of flooding it with "not installed".
+    expect(screen.queryByText('Adapter not installed')).toBeNull()
+
+    // Revealing the broad catalog still lists unconnected adapters.
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
     expect(screen.getByText('Devpost')).toBeTruthy()
     expect(screen.getByText('Microsoft Teams')).toBeTruthy()
     expect(screen.getByText('Firebase')).toBeTruthy()
@@ -120,6 +126,7 @@ describe('connectors settings section', () => {
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
     renderHub(api)
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
     const search = screen.getByRole('searchbox', { name: 'Search connectors' })
     fireEvent.change(search, { target: { value: 'hackathons' } })
     expect(screen.getByText('Devpost')).toBeTruthy()
