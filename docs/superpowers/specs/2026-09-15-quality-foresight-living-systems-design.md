@@ -47,7 +47,7 @@ Innovation never substitutes for unfinished requested work. PHOENIX must satisfy
 
 A substantial assessment includes an adversarial challenge pass. PHOENIX derives only scenarios relevant to the work instead of blindly applying a generic checklist. Candidate dimensions include empty, malformed, extreme, duplicate, stale, and contradictory inputs; partial data; concurrent operations; retries and idempotency; process restart; persistence recovery; network, provider, storage, and dependency outages; permission or credential denial; cancellation; slow responses and load; API or schema drift; timezone and clock boundaries; human misuse; accessibility and platform differences; privacy and security failures; corrupt state; and agent or model mistakes.
 
-Each `QualityScenario` records a concrete precondition, expected invariant, execution method, evidence reference, observed result, and severity. A scenario that cannot be executed is not silently marked as passed. It remains `untested` with the exact external dependency or missing capability recorded.
+Each `QualityScenario` records a concrete precondition, expected invariant, execution method, evidence reference, observed result, and severity. A scenario that cannot be executed is not silently marked as passed. It remains `untested` with the exact external dependency or missing capability recorded. A material untested scenario blocks completion unless the user explicitly accepts that residual risk and existing safety or authority policy permits acceptance.
 
 The system favors generated or property-based cases when the domain supports them, but every high-severity scenario must also have a human-readable description so an independent judge can determine whether the test is relevant rather than merely numerous.
 
@@ -79,7 +79,7 @@ A repair cannot erase prior failed evidence. New evidence supersedes the current
 
 The final quality verdict reuses the existing independent goal-judge mechanism rather than introducing a second judge family. The judge receives the original objective, current criteria, bounded evidence, challenge outcomes, unresolved forecasts, living-integration status, and innovation disposition. It remains read-only.
 
-`pass` requires that requested criteria are satisfied, no unresolved material defect remains, required edge cases have evidence, any claimed live behavior has live evidence, and a living creation has passed its declared integration verification. `needs_changes` returns concrete repairs and keeps the mission active. `blocked` is reserved for a real external dependency or authority the harness cannot safely satisfy.
+`pass` requires that requested criteria are satisfied, no unresolved material defect remains, required edge cases have evidence or a policy-permitted explicit residual-risk acceptance, any claimed live behavior has live evidence, and a living creation has passed its declared integration verification. `needs_changes` returns concrete repairs and keeps the mission active. `blocked` is reserved for a real external dependency or authority the harness cannot safely satisfy and that the user has not validly accepted as residual risk.
 
 Self-reported completion never substitutes for the independent verdict on substantial or living work.
 
@@ -121,9 +121,9 @@ For a substantial mission PHOENIX may report completion only when all applicable
 
 - the user's requested criteria are satisfied with fresh evidence;
 - professional quality requirements that materially apply are satisfied;
-- relevant adversarial scenarios have passed or are explicitly blocked by an external dependency;
+- relevant adversarial scenarios have passed, or every material untested scenario has an explicit policy-permitted residual-risk acceptance from the user;
 - claims about real runtime behavior are backed by real runtime evidence;
-- material forecasted risks are repaired, mitigated, or explicitly accepted by the user when acceptance is required;
+- material forecasted risks are repaired, mitigated, or explicitly accepted by the user when acceptance is required and permitted;
 - the independent judge returns `pass`;
 - innovation has been evaluated and is either implemented with evidence, offered, or legitimately `not-applicable`;
 - every Phoenix-created living artifact has passed the existing `living_verify_creation` requirement at its declared target level;
