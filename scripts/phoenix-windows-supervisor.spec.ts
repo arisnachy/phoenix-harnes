@@ -24,12 +24,6 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain("|| updateMode === 'off'")
   })
 
-  it('does not start the updater watcher on a dirty live checkout', () => {
-    expect(source).toContain('const startupStatus = gitStatus(root)')
-    expect(source).toContain('if (!startupStatus.ok || startupStatus.entries.length > 0)')
-    expect(source).toContain('automatic update watcher paused for this session')
-  })
-
   it('uses only an exact clean verified staged activator for prepared self-updates', () => {
     expect(source).toContain('function preparedActivator()')
     expect(source).toContain("const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')")
@@ -51,11 +45,23 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(cliSource).toContain("const runtimeSourceRoot = resolve(supervisor, '..', '..')")
   })
 
-  it('pauses activation before invoking the prepared activator when the live checkout is dirty', () => {
+  it('routes dirty live checkouts through the verified isolated runtime', () => {
     expect(source).toContain('const liveStatus = gitStatus(root)')
-    expect(source).toContain('if (!liveStatus.ok || liveStatus.entries.length > 0)')
-    expect(source).toContain('reportDirtyActivationBlock(liveStatus)')
-    expect(source).toContain('Commit, stash, or intentionally discard those changes')
+    expect(source).toContain('liveStatus.entries.length > 0')
+    expect(source).toContain('activatePreparedRuntime(requestedTarget)')
+    expect(source).toContain('the live checkout will not be modified')
+  })
+
+  it('routes clean development branches through the isolated runtime without moving the source branch', () => {
+    expect(source).toContain("import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'")
+    expect(source).toContain("const liveBranch = gitValue(root, ['branch', '--show-current'])")
+    expect(source).toContain('!isManagedReleaseBranch(liveBranch, STABLE_SOURCE_BRANCH)')
+    expect(source).toContain('development branch')
+    expect(source).toContain('activatePreparedRuntime(requestedTarget)')
+  })
+
+  it('passes the active runtime root to the stable watcher so isolated updates do not loop forever', () => {
+    expect(source).toContain('PHOENIX_RUNTIME_ROOT: runtimeRoot')
   })
 
   it('hydrates the current user Google token before launching each Host', () => {
