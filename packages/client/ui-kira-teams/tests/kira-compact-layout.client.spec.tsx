@@ -16,7 +16,7 @@ describe('KIRA floating roster layout regression', () => {
     expect(avatarCss).toMatch(/\.card\s*{[^}]*width:\s*58px;[^}]*height:\s*72px/s)
   })
 
-  it('renders each persona from a standalone portrait asset while keeping phase data for animation', () => {
+  it('renders each persona from bundled portrait pixels while keeping phase data for animation', () => {
     const avatar = ModelActivityAvatar({
       kind: 'cobalto',
       activity: { model: 'gpt-5.6-luna', phase: 'verifying' },
@@ -29,8 +29,8 @@ describe('KIRA floating roster layout regression', () => {
       child?.props?.['data-agent-portrait-image'] === true)
 
     expect(portrait?.type).toBe('img')
-    expect(portrait?.props?.src).toBe('/assets/kira-agents/portraits/cobalto.svg')
-    expect(portraitSrcForKind('cobalto')).toBe('/assets/kira-agents/portraits/cobalto.svg')
+    expect(portrait?.props?.src).toBe(portraitSrcForKind('cobalto'))
+    expect(portraitSrcForKind('cobalto')).toMatch(/^data:image\/webp;base64,/)
     expect(avatar.props['data-phase']).toBe('verifying')
     expect(avatar.props['data-state']).toBe('running')
   })
