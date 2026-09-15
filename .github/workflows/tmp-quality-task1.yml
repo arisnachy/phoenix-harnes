@@ -23,4 +23,4 @@ jobs:
           node-version: 24
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vitest run packages/quality/quality/tests/readiness.spec.ts
-      - run: pnpm exec tsc -p packages/quality/quality/tsconfig.json --noEmit
+      - run: pnpm exec tsc -b packages/quality/quality/tsconfig.json
