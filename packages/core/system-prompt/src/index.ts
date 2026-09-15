@@ -295,7 +295,7 @@ function interpolate(
     }
     const value = variables[name]
     if (value === undefined) {
-      throw new Error(`prompt variable "{{${name}}" has no value for this assembly (${kind} "${input.name}")`)
+      throw new Error(`prompt variable "{{${name}}}" has no value for this assembly (${kind} "${input.name}")`)
     }
     result += text.slice(last, open) + value
     last = open + group[0].length
