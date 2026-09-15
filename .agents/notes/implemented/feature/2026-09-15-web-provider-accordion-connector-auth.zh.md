@@ -14,7 +14,7 @@ Status: implemented
 
 连接器目录新增 `codex`（原生，OpenAI 家族）与 `openclaw`（原生）条目，使两个运行时都能在设置 → 连接器中连同其真实遥测一起呈现。`useAuthorizationAttempt.begin` 在点击手势内同步打开一个空白同源窗口，状态轮询在后端返回授权 URL 后把该窗口导航过去；当拦截器仍然拒绝时则回退为普通链接。
 
-`workflow-worker-thread` 新增一个回归测试，断言非 OpenAI 的根任务继承父级路由（不附加 `agentOptions`），因此 `gpt-5.6-luna` 只会被强加给 `openai-codex` 根任务。
+`workflow-worker-thread` 新增一个回归测试，断言非 OpenAI 的根任务继承父级路由（不附加 `agentOptions`），因此 `gpt-5.6-luna` 只会被强加给 `openai-codex` 根任务。`api-proxy.selectModel` 也会在同一个提交里把解析出的 provider、model 与 effort 写回到实时的 `agent.options`：委派方读取的是该对象，因此若缺少这次写入，从 `openai-codex` 切换走之后仍会保留旧路由，`childRoute` 也仍会强制使用 `gpt-5.6-luna`。一个宿主测试覆盖了「先切换、后委派」的路径。
 
 ## Alternatives considered
 
