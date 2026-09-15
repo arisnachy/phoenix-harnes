@@ -32,7 +32,6 @@
   "files": [
     "lib/index.js",
     "lib/invariant.js",
-    "lib/ledger.js",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
