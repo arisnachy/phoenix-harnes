@@ -206,6 +206,31 @@ describe('dsh-workflow-worker-thread', () => {
     },
   )
 
+  it('inherits the exact parent route for non-OpenAI roots instead of routing to Luna', async () => {
+    const { ctx, provider } = await setup({
+      config: {
+        maxConcurrentAgents: 2,
+        maxTotalAgents: 2,
+        childRoute: {
+          whenProvider: 'openai-codex',
+          provider: 'openai-codex',
+          model: 'gpt-5.6-luna',
+          reasoningEffort: 'high',
+        },
+      },
+    })
+    const result = await run(
+      ctx,
+      fakeParent({ provider: 'deepseek-official', model: 'deepseek-v4-pro' }),
+      scripted("return await agent('review the focused change')"),
+    )
+    expect(result.stopReason).toBe('completed')
+    expect(result.agentsStarted).toBe(1)
+    // No agentOptions means the in-process driver inherits the parent's
+    // provider/model pair — Luna must never be forced onto non-OpenAI roots.
+    expect(provider.runs[0]?.request.agentOptions).toBeUndefined()
+  })
+
   describe('script execution over a real worker thread', () => {
     it('runs a script end-to-end: agent() text results, phases, log, args, return value, events', async () => {
       const { ctx, parent, provider } = await setup({ reply: (_request, index) => text(`answer-${index}`) })

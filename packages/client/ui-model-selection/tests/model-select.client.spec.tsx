@@ -327,6 +327,12 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.getAllByText('Preview').length).toBeGreaterThan(0)
     expect(screen.getByRole('menuitemradio', { name: 'Gemini 2.5 Computer Use' })).toBeTruthy()
 
+    // Provider groups start collapsed except the current one; expand each
+    // before asserting its packaged mark.
+    for (const name of ['OpenAI', 'OpenRouter', 'DeepSeek', 'Acme Gateway']) {
+      fireEvent.click(screen.getByRole('menuitem', { name }))
+    }
+
     const expectedMarks = [
       ['Gemini', 'googlegemini'],
       ['OpenAI', 'openai'],
@@ -358,5 +364,76 @@ describe('ModelSelect reasoning effort', () => {
 
     expect(screen.queryByRole('button')).toBeNull()
     expect(load).not.toHaveBeenCalled()
+  })
+})
+
+describe('ModelSelect provider accordion', () => {
+  const groups = [
+    {
+      id: 'alpha',
+      name: 'Alpha',
+      models: [{ id: 'a1', name: 'Alpha-One' }],
+    },
+    {
+      id: 'beta',
+      name: 'Beta',
+      models: [
+        { id: 'b1', name: 'Beta-One' },
+        { id: 'b2', name: 'Beta-Two' },
+      ],
+    },
+  ]
+
+  it('expands only the selected provider group by default and toggles groups independently', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      groups,
+      current: { provider: 'beta', model: 'b1' },
+    }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Beta One/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+
+    // The current provider is open; every other provider starts collapsed.
+    expect(screen.getByRole('menuitemradio', { name: 'Beta One' })).toBeTruthy()
+    expect(screen.getByRole('menuitemradio', { name: 'Beta Two' })).toBeTruthy()
+    expect(screen.queryByRole('menuitemradio', { name: 'Alpha One' })).toBeNull()
+
+    // Expanding Alpha reveals its models without hiding Beta's.
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Alpha' }))
+    expect(screen.getByRole('menuitemradio', { name: 'Alpha One' })).toBeTruthy()
+    expect(screen.getByRole('menuitemradio', { name: 'Beta One' })).toBeTruthy()
+
+    // Collapsing Beta hides its models.
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Beta' }))
+    expect(screen.queryByRole('menuitemradio', { name: 'Beta One' })).toBeNull()
+    expect(screen.getByRole('menuitemradio', { name: 'Alpha One' })).toBeTruthy()
+  })
+
+  it('expands the first provider when the current model is no longer advertised', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      groups,
+      current: { provider: 'removed', model: 'removed-model' },
+    }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: '选择模型' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    expect(screen.getByRole('menuitemradio', { name: 'Alpha One' })).toBeTruthy()
+    expect(screen.queryByRole('menuitemradio', { name: 'Beta One' })).toBeNull()
   })
 })
