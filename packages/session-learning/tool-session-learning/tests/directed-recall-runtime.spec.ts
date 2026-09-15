@@ -64,4 +64,54 @@ describe('directed autobiographical recall runtime', () => {
     expect(snapshot).not.toContain('episodic/mission/verified')
     expect(snapshot).not.toContain('session://')
   })
+
+  it('keeps directed recall bound to the session being assembled when chats interleave', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-directed-recall-isolation-'))
+    roots.push(root)
+    const path = join(root, 'memory.jsonl')
+    const first = await createRuntime(path)
+    const recorder = new EpisodicMissionRecorder({
+      async remember(input) {
+        await first.learningMemory.rememberCognitive(input)
+      },
+    })
+    const now = Date.now()
+    recorder.observeUserMessage('prior-private-session', 'Corrige el actualizador de Phoenix y verifica la activación.', {
+      occurredAt: now - 60_000,
+      projectId: 'phoenix-harnes',
+    })
+    await recorder.complete('prior-private-session', {
+      eventSeq: 9,
+      occurredAt: now - 30_000,
+      verified: true,
+      outcome: 'Updater activation was verified.',
+    })
+    await first.learningMemory.ready()
+
+    const restarted = await createRuntime(path)
+    const historySession = restarted.sessions.create(SessionId('history-chat'), { meta: { cwd: 'C:\\workspace\\phoenix-harnes' } })
+    historySession.append('user/message', {
+      content: [{ type: 'text', text: '¿Qué hicimos en los proyectos anteriores?' }],
+      source: { kind: 'user' },
+    } as never, { surfaceOp: 'append' })
+
+    const ordinarySession = restarted.sessions.create(SessionId('ordinary-chat'), { meta: { cwd: 'C:\\workspace\\unrelated-project' } })
+    ordinarySession.append('user/message', {
+      content: [{ type: 'text', text: 'Dime hola.' }],
+      source: { kind: 'user' },
+    } as never, { surfaceOp: 'append' })
+    await restarted.learningMemory.ready()
+
+    const historySnapshot = renderContextSnapshot(await restarted.systemPrompt.assemble({
+      agent: { session: historySession },
+    } as never))
+    const ordinarySnapshot = renderContextSnapshot(await restarted.systemPrompt.assemble({
+      agent: { session: ordinarySession },
+    } as never))
+
+    expect(historySnapshot).toContain('Corrige el actualizador de Phoenix')
+    expect(historySnapshot).toContain('Updater activation was verified.')
+    expect(ordinarySnapshot).not.toContain('Corrige el actualizador de Phoenix')
+    expect(ordinarySnapshot).not.toContain('Updater activation was verified.')
+  })
 })
