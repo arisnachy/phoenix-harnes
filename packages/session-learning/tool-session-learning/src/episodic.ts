@@ -4,8 +4,10 @@ import type { CognitiveMemoryInput, CognitiveMemoryLayer } from '@phoenix-ai/dsh
 
 const EPISODE_SUBJECT_PREFIX = 'phoenix.episode.mission.'
 const STATE_VERSION = 1 as const
-const MAX_TEXT_CHARS = 2_048
-const MAX_TOOLS = 16
+const MAX_TEXT_CHARS = 768
+const MAX_PROJECT_CHARS = 256
+const MAX_TOOL_CHARS = 96
+const MAX_TOOLS = 8
 
 /** Verification state retained with one durable mission episode. */
 export type MissionVerification = 'verified' | 'unverified'
@@ -26,10 +28,7 @@ export interface MissionEpisode {
 
 /** Minimal storage capability used by the recorder. */
 export interface EpisodicMemoryStore {
-  /**
-   * Persist one cognitive mission record.
-   * @param input - Secret-free canonical cognitive input.
-   */
+  /** Persist one cognitive mission record. */
   remember(input: CognitiveMemoryInput): Promise<void>
 }
 
@@ -62,16 +61,11 @@ export class EpisodicMissionRecorder {
   /** @param store - Durable cognitive memory writer. */
   constructor(private readonly store: EpisodicMemoryStore) {}
 
-  /**
-   * Observe the effective task without storing raw model context.
-   * @param sessionId - Active session id.
-   * @param text - User task text.
-   * @param options - Time and optional project evidence.
-   */
+  /** Observe the effective task without storing raw model context. */
   observeUserMessage(sessionId: string, text: string, options: MissionStartOptions): void {
     validateTimestamp(options.occurredAt, 'mission start')
     const safeText = sanitize(text)
-    if (safeText.length < 2) return
+    if (!isSubstantiveTask(safeText)) return
     const existing = this.traces.get(sessionId)
     if (existing === undefined) {
       this.traces.set(sessionId, {
@@ -79,42 +73,27 @@ export class EpisodicMissionRecorder {
         userIntent: safeText,
         startedAt: options.occurredAt,
         tools: [],
-        ...options.projectId === undefined ? {} : { projectId: bounded(options.projectId) },
+        ...options.projectId === undefined ? {} : { projectId: boundProject(options.projectId) },
       })
       return
     }
     existing.userIntent = safeText
-    if (options.projectId !== undefined) existing.projectId = bounded(options.projectId)
+    if (options.projectId !== undefined) existing.projectId = boundProject(options.projectId)
   }
 
-  /**
-   * Record one public tool choice and deliberately ignore its raw arguments.
-   * @param sessionId - Active session id.
-   * @param toolName - Public tool name.
-   * @param _arguments - Raw arguments intentionally not retained.
-   */
+  /** Record one public tool choice and deliberately ignore its raw arguments. */
   observeToolCall(sessionId: string, toolName: string, _arguments?: unknown): void {
     const trace = this.traces.get(sessionId)
     if (trace === undefined || trace.tools.length >= MAX_TOOLS) return
-    const safeName = sanitize(toolName).slice(0, 160)
+    const safeName = sanitize(toolName).slice(0, MAX_TOOL_CHARS)
     if (safeName === '' || trace.tools.includes(safeName)) return
     trace.tools.push(safeName)
   }
 
-  /**
-   * Observe only success/failure presence; raw result content is intentionally discarded.
-   * @param _sessionId - Active session id.
-   * @param _result - Raw result intentionally not retained.
-   * @param _isError - Whether the result represented an error.
-   */
+  /** Observe only success/failure presence; raw result content is intentionally discarded. */
   observeToolResult(_sessionId: string, _result: unknown, _isError: boolean): void {}
 
-  /**
-   * Finish and persist one mission when a tracked user task exists.
-   * @param sessionId - Completing session.
-   * @param options - Terminal evidence and verification state.
-   * @returns The persisted episode, or undefined when no task was tracked.
-   */
+  /** Finish and persist one mission when a tracked user task exists. */
   async complete(sessionId: string, options: MissionCompletionOptions): Promise<MissionEpisode | undefined> {
     validateTimestamp(options.occurredAt, 'mission completion')
     if (!Number.isSafeInteger(options.eventSeq) || options.eventSeq < 0) throw new TypeError('mission eventSeq must be a non-negative safe integer')
@@ -168,11 +147,7 @@ export class EpisodicMissionRecorder {
   }
 }
 
-/**
- * Decode versioned mission state without trusting arbitrary stored JSON.
- * @param value - Stored cognitive value.
- * @returns Valid mission episode or undefined for unrelated/malformed data.
- */
+/** Decode versioned mission state without trusting arbitrary stored JSON. */
 export function decodeMissionEpisode(value: string | undefined): MissionEpisode | undefined {
   if (value === undefined) return undefined
   let raw: unknown
@@ -181,9 +156,10 @@ export function decodeMissionEpisode(value: string | undefined): MissionEpisode 
   if (typeof raw.id !== 'string' || typeof raw.sessionId !== 'string' || typeof raw.userIntent !== 'string') return undefined
   if (!isTimestamp(raw.startedAt) || !isTimestamp(raw.endedAt) || raw.endedAt < raw.startedAt) return undefined
   if (raw.verification !== 'verified' && raw.verification !== 'unverified') return undefined
-  if (!Array.isArray(raw.tools) || !raw.tools.every(tool => typeof tool === 'string')) return undefined
-  if (typeof raw.outcome !== 'string') return undefined
-  if (raw.projectId !== undefined && typeof raw.projectId !== 'string') return undefined
+  if (!Array.isArray(raw.tools) || raw.tools.length > MAX_TOOLS || !raw.tools.every(tool => typeof tool === 'string' && tool.length <= MAX_TOOL_CHARS)) return undefined
+  if (typeof raw.outcome !== 'string' || raw.outcome.length > MAX_TEXT_CHARS) return undefined
+  if (raw.userIntent.length > MAX_TEXT_CHARS) return undefined
+  if (raw.projectId !== undefined && (typeof raw.projectId !== 'string' || raw.projectId.length > MAX_PROJECT_CHARS)) return undefined
   return {
     version: STATE_VERSION,
     id: raw.id,
@@ -222,6 +198,14 @@ function sanitize(value: string): string {
 
 function bounded(value: string): string {
   return value.replace(/\s+/gu, ' ').trim().slice(0, MAX_TEXT_CHARS)
+}
+
+function boundProject(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim().slice(0, MAX_PROJECT_CHARS)
+}
+
+function isSubstantiveTask(value: string): boolean {
+  return value.length >= 8 && /[\p{L}\p{N}]/u.test(value)
 }
 
 function validateTimestamp(value: number, field: string): void {
