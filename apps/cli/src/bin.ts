@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { loadLayeredEnv } from '@phoenix-ai/dsh-app-boot'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { parseDshArgs } from './args.ts'
+import { preparePhoenixWebRuntime } from './phoenix-runtime-freshness.ts'
 
 // Both the source tree (apps/cli/src) and the bundled bin (apps/cli/lib) sit
 // one directory under apps/cli, so the checked-in manifest resolves with the
@@ -44,10 +45,18 @@ if (
     fileURLToPath(new URL('../../../scripts/phoenix-windows-supervisor.mjs', import.meta.url)),
   )
   if (existsSync(supervisor)) {
+    const runtimeSourceRoot = resolve(supervisor, '..', '..')
+    try {
+      preparePhoenixWebRuntime(runtimeSourceRoot)
+    } catch (error) {
+      console.error(`[PHOENIX] runtime freshness check failed: ${error instanceof Error ? error.message : String(error)}`)
+      process.exit(1)
+    }
+
     const forwardedArgs = rawArgs.slice(1)
     if (forwardedArgs[0] === '--') forwardedArgs.shift()
     const result = spawnSync(process.execPath, [supervisor, ...forwardedArgs], {
-      cwd: resolve(supervisor, '..', '..'),
+      cwd: runtimeSourceRoot,
       env: process.env,
       stdio: 'inherit',
       windowsHide: false,
