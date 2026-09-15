@@ -26,11 +26,12 @@ describe('agentAvatarKind', () => {
 })
 
 describe('portraitSrcForKind', () => {
-  it('resolves model aliases to stable standalone KIRA portraits', () => {
-    expect(portraitSrcForKind('sol')).toBe('/assets/kira-agents/portraits/solaria.svg')
-    expect(portraitSrcForKind('luna')).toBe('/assets/kira-agents/portraits/eclipse.svg')
-    expect(portraitSrcForKind('terra')).toBe('/assets/kira-agents/portraits/senda.svg')
-    expect(portraitSrcForKind('generic')).toBe('/assets/kira-agents/portraits/lyra.svg')
+  it('resolves model aliases to stable bundled KIRA portraits', () => {
+    expect(portraitSrcForKind('sol')).toBe(portraitSrcForKind('solaria'))
+    expect(portraitSrcForKind('luna')).toBe(portraitSrcForKind('eclipse'))
+    expect(portraitSrcForKind('terra')).toBe(portraitSrcForKind('senda'))
+    expect(portraitSrcForKind('generic')).toBe(portraitSrcForKind('lyra'))
+    expect(portraitSrcForKind('sol')).toMatch(/^data:image\/webp;base64,/)
   })
 })
 
@@ -53,7 +54,8 @@ describe('ModelActivityAvatar', () => {
     expect(element.props['data-avatar']).toBe('vega')
     expect(image).toBeDefined()
     expect(image.type).toBe('img')
-    expect(image.props.src).toBe('/assets/kira-agents/portraits/vega.svg')
+    expect(image.props.src).toBe(portraitSrcForKind('vega'))
+    expect(image.props.src).toMatch(/^data:image\/webp;base64,/)
     expect(vectorPortrait).toBeUndefined()
   })
 
