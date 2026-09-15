@@ -19,7 +19,14 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
   it('runs the watcher from the active runtime so an isolated update becomes the new version baseline', () => {
+    expect(supervisor).toContain("const activeUpdater = join(runtimeRoot, 'scripts', 'phoenix-auto-update.mjs')")
+    expect(supervisor).toContain("const activeShim = join(runtimeRoot, 'scripts', 'phoenix-windows-command-shim.mjs')")
     expect(supervisor).toContain('cwd: runtimeRoot')
     expect(supervisor).toContain('PHOENIX_RUNTIME_ROOT: runtimeRoot')
+  })
+
+  it('clears the consumed prepared marker before relaunching an isolated runtime', () => {
+    expect(supervisor).toContain('function clearPreparedRecord()')
+    expect(supervisor).toContain('clearPreparedRecord()')
   })
 })
