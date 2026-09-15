@@ -190,8 +190,8 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
 
 function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
   definition: ConnectorDefinition
-  live?: ConnectorTelemetry
-  account?: Entry
+  live?: ConnectorTelemetry | undefined
+  account?: Entry | undefined
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
   pending: boolean
