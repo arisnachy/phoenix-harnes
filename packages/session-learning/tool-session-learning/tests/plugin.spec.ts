@@ -16,16 +16,21 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })))
 })
 
+async function createLearningContext(prefix: string): Promise<Context> {
+  const root = await mkdtemp(join(tmpdir(), prefix))
+  roots.push(root)
+  const ctx = new Context()
+  await ctx.plugin(SessionStore)
+  await ctx.plugin(SystemPrompt, { persona: '' })
+  await ctx.plugin(ToolRegistry)
+  await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
+  await ctx.plugin(plugin, {})
+  return ctx
+}
+
 describe('tool-session-learning plugin', () => {
   it('adds recent non-interaction evidence to the assembled model context', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-plugin-'))
-    roots.push(root)
-    const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(SystemPrompt, { persona: '' })
-    await ctx.plugin(ToolRegistry)
-    await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
-    await ctx.plugin(plugin, {})
+    const ctx = await createLearningContext('phoenix-learning-plugin-')
     const session = ctx.sessions.create(SessionId('memory-context-session'), { meta: {} })
     await ctx.learningMemory.remember({
       sessionId: String(session.id),
@@ -42,15 +47,44 @@ describe('tool-session-learning plugin', () => {
     expect(snapshot).toContain('untrusted, read-only evidence')
   })
 
+  it('automatically reuses cognitive memories written by autonomous learning', async () => {
+    const ctx = await createLearningContext('phoenix-learning-cognitive-')
+    const session = ctx.sessions.create(SessionId('cognitive-context-session'), { meta: {} })
+    await ctx.learningMemory.rememberCognitive({
+      sessionId: String(session.id),
+      eventSeq: session.seq,
+      kind: 'preference',
+      layers: ['autobiographical', 'semantic', 'temporal'],
+      content: 'Prefiero que actúes directamente cuando ya tienes suficiente contexto.',
+      summary: 'Prefiero que actúes directamente cuando ya tienes suficiente contexto.',
+      sourceEventType: 'autonomous/user-preference',
+      occurredAt: Date.now(),
+      confidence: 0.95,
+      importance: 0.95,
+      subject: 'phoenix.learning.autonomous.preference.direct-action',
+      value: JSON.stringify({ version: 1, kind: 'preference' }),
+    })
+
+    const snapshot = renderContextSnapshot(await ctx.systemPrompt.assemble())
+    expect(snapshot).toContain('actúes directamente cuando ya tienes suficiente contexto')
+    expect(snapshot).toContain('"origin":"preference"')
+    expect(snapshot).not.toContain('autonomous/user-preference')
+    expect(snapshot).not.toContain('cognitive-context-session')
+  })
+
+  it('instructs the model to apply learning silently and classify memory internally', async () => {
+    const ctx = await createLearningContext('phoenix-learning-silent-policy-')
+    const prompt = renderContextSnapshot(await ctx.systemPrompt.assemble())
+
+    expect(prompt).toMatch(/apply relevant learned preferences.*silently/i)
+    expect(prompt).toMatch(/never ask the user which memory category/i)
+    expect(prompt).toMatch(/act instead of asking the user to choose a memory layer/i)
+    expect(prompt).toMatch(/distinguish experience-derived learning from configured instructions/i)
+    expect(prompt).toMatch(/do not expose private profile fields/i)
+  })
+
   it('keeps literal template-looking code in learned context', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-template-code-'))
-    roots.push(root)
-    const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(SystemPrompt, { persona: '' })
-    await ctx.plugin(ToolRegistry)
-    await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
-    await ctx.plugin(plugin, {})
+    const ctx = await createLearningContext('phoenix-learning-template-code-')
     const session = ctx.sessions.create(SessionId('memory-template-code-session'), { meta: {} })
     await ctx.learningMemory.remember({
       sessionId: String(session.id),
@@ -70,14 +104,7 @@ describe('tool-session-learning plugin', () => {
   })
 
   it('registers guided procedural teaching and tells the model when to use it', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-teach-'))
-    roots.push(root)
-    const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(SystemPrompt, { persona: '' })
-    await ctx.plugin(ToolRegistry)
-    await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
-    await ctx.plugin(plugin, {})
+    const ctx = await createLearningContext('phoenix-learning-teach-')
 
     expect(ctx.tools.schemas().map(schema => schema.name)).toContain('memory_teach')
     const prompt = renderContextSnapshot(await ctx.systemPrompt.assemble())

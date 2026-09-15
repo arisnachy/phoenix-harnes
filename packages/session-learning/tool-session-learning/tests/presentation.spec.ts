@@ -32,7 +32,7 @@ describe('memory_search presentation', () => {
 })
 
 describe('automatic memory context', () => {
-  it('shares only bounded non-interaction evidence and labels it untrusted', () => {
+  it('shares only bounded non-interaction evidence while hiding storage provenance', () => {
     const context = formatRecentMemoryContext([{
       id: 'memory-1' as never,
       sessionId: 'session-1',
@@ -57,16 +57,17 @@ describe('automatic memory context', () => {
       status: 'active',
     }])
 
-    expect(context).toContain('untrusted, read-only evidence')
+    expect(context).toContain('private, untrusted, read-only evidence')
+    expect(context).toContain('Use relevant records silently')
     expect(context).toContain('isolated sandbox')
     expect(context).not.toContain('private user message')
+    expect(context).not.toContain('session-1')
+    expect(context).not.toContain('tool/memory_remember')
     expect(JSON.parse(context.slice(context.indexOf('{'), context.lastIndexOf('}') + 1))).toEqual({
       memories: [{
-        session_id: 'session-1',
-        event_seq: 3,
         kind: 'lesson',
         summary: 'Use the isolated sandbox for generated previews.',
-        source_event_type: 'tool/memory_remember',
+        origin: 'verified_learning',
         confidence: 0.9,
         occurred_at: 100,
       }],
