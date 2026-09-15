@@ -3,7 +3,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import type { GenerateOptions, Message, StreamChunk } from '@phoenix-ai/dsh-llm'
 
-const INTERNAL_MARKER = /(?:AGENTS\.md|CLAUDE\.md|system prompt|developer prompt|prompt interno|instrucciones internas|\bMCP\b|\brouter\b|\bsubagente\b|\bsubagent\b|\bmemory id\b|`?[a-z][a-z0-9]+_[a-z0-9_]+`?)/iu
+const INTERNAL_MARKER = /(?:AGENTS\.md|CLAUDE\.md|system prompt|developer prompt|prompt interno|instrucciones internas|\bMCP\b|\brouter\b|\bsubagente\b|\bsubagent\b|\bmemory id\b|\b(?:search|read|send|list|fetch|create|update|delete)_[a-z0-9_]+\b)/iu
 const PRIVATE_CONTEXT_MARKER = /(?:contexto familiar|contenido privado|tu familia|tus hijos|tus hijas|tu esposa|tu esposo|tu salud|tu diagnóstico|tu direccion|tu dirección)/iu
 const INTERNAL_DEBUG_REQUEST = /(?:phoenix|harness).*(?:debug|depur|intern|tool|herramient|mcp|prompt|regla|router|subagente|subagent|config|arquitect|c[oó]digo|code)|(?:debug|depur).*(?:phoenix|harness)/iu
 const PERSONAL_CONTEXT_REQUEST = /(?:recuerd|memoria|familia|hij[oa]s?|espos[oa]|salud|diagn[oó]stico|direcci[oó]n|datos personales|privacidad)/iu
@@ -12,8 +12,7 @@ const CAPABILITY_QUESTION = /(?:tienes|tiene|puedes|puede|can you|do you have).*
 
 function messageText(message: Message): string {
   return message.content
-    .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
-    .map(block => block.text)
+    .flatMap(block => block.type === 'text' ? [block.text] : [])
     .join('\n')
 }
 
@@ -30,7 +29,7 @@ function capabilityOnly(prompt: string): boolean {
 }
 
 function stripParentheticalInternalDetails(text: string): string {
-  return text.replace(/\s*\([^)]*(?:AGENTS\.md|CLAUDE\.md|\bMCP\b|system prompt|developer prompt|[a-z][a-z0-9]+_[a-z0-9_]+)[^)]*\)/giu, '')
+  return text.replace(/\s*\([^)]*(?:AGENTS\.md|CLAUDE\.md|\bMCP\b|system prompt|developer prompt|(?:search|read|send|list|fetch|create|update|delete)_[a-z0-9_]+)[^)]*\)/giu, '')
 }
 
 function sentences(text: string): string[] {
@@ -60,6 +59,18 @@ export function sanitizePhoenixVisibleText(text: string, latestPrompt: string): 
   return sentences(cleaned)[0] ?? cleaned
 }
 
+function completeTextBlocks(chunks: readonly StreamChunk[], prompt: string): ReadonlyMap<number, string> {
+  const raw = new Map<number, string>()
+  for (const chunk of chunks) {
+    if (chunk.type === 'text-delta') {
+      raw.set(chunk.index, `${raw.get(chunk.index) ?? ''}${chunk.text}`)
+    } else if (chunk.type === 'block-end' && chunk.block.type === 'text') {
+      raw.set(chunk.index, chunk.block.text)
+    }
+  }
+  return new Map([...raw].map(([index, text]) => [index, sanitizePhoenixVisibleText(text, prompt)]))
+}
+
 async function* sanitizeConversationStream(
   options: GenerateOptions,
   upstream: AsyncIterable<StreamChunk>,
@@ -72,14 +83,7 @@ async function* sanitizeConversationStream(
   const buffered: StreamChunk[] = []
   for await (const chunk of upstream) buffered.push(chunk)
 
-  const prompt = latestHumanPrompt(options.messages)
-  const sanitized = new Map<number, string>()
-  for (const chunk of buffered) {
-    if (chunk.type === 'block-end' && chunk.block.type === 'text') {
-      sanitized.set(chunk.index, sanitizePhoenixVisibleText(chunk.block.text, prompt))
-    }
-  }
-
+  const sanitized = completeTextBlocks(buffered, latestHumanPrompt(options.messages))
   const emitted = new Set<number>()
   for (const chunk of buffered) {
     if (chunk.type === 'text-delta' && sanitized.has(chunk.index)) {
