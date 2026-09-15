@@ -7,12 +7,13 @@ import { ModelActivityAvatar, portraitSrcForKind } from '../src/client/ModelActi
 const dockCss = readFileSync(new URL('../src/client/KiraTeamsDock.module.css', import.meta.url), 'utf8')
 const avatarCss = readFileSync(new URL('../src/client/ModelActivityAvatar.module.css', import.meta.url), 'utf8')
 
-describe('KIRA floating roster layout regression', () => {
-  it('stays a floating window and lays the roster out as a five-column grid on desktop', () => {
+describe('KIRA compact live-agent layout regression', () => {
+  it('stays a small floating window and stacks only live agent rows', () => {
     expect(dockCss).toMatch(/\.root\s*{[^}]*position:\s*fixed/s)
-    expect(dockCss).toMatch(/\.root\s*{[^}]*max-width:\s*760px/s)
-    expect(dockCss).toMatch(/\.list\s*{[^}]*display:\s*grid/s)
-    expect(dockCss).toMatch(/\.list\s*{[^}]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/s)
+    expect(dockCss).toMatch(/\.root\s*{[^}]*max-width:\s*320px/s)
+    expect(dockCss).toMatch(/\.list\s*{[^}]*display:\s*flex/s)
+    expect(dockCss).toMatch(/\.list\s*{[^}]*flex-direction:\s*column/s)
+    expect(dockCss).not.toMatch(/grid-template-columns:\s*repeat\(5,/s)
     expect(avatarCss).toMatch(/\.card\s*{[^}]*width:\s*58px;[^}]*height:\s*72px/s)
   })
 
