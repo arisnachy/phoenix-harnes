@@ -240,3 +240,14 @@ export class QualityLedger {
     return clone(next)
   }
 }
+
+const qualityByGoalRuntime = new WeakMap<object, QualityLedger>()
+
+/** Return the one process-local QualityLedger facade for an owning goal runtime. */
+export function goalQualityLedger(owner: object): QualityLedger {
+  let ledger = qualityByGoalRuntime.get(owner)
+  if (ledger !== undefined) return ledger
+  ledger = new QualityLedger()
+  qualityByGoalRuntime.set(owner, ledger)
+  return ledger
+}
