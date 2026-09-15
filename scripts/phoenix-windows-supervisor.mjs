@@ -22,8 +22,6 @@ import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 const root = resolve(process.cwd())
 let runtimeRoot = root
 const hostArgs = process.argv.slice(2)
-const updater = join(root, 'scripts', 'phoenix-auto-update.mjs')
-const shim = join(root, 'scripts', 'phoenix-windows-command-shim.mjs')
 const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() || 'stable'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
@@ -152,6 +150,18 @@ function gitControlPath(filename) {
 
 function preparedPath() {
   return gitControlPath(PREPARED_FILE)
+}
+
+function clearPreparedRecord() {
+  const path = preparedPath()
+  if (path === undefined) return
+  try {
+    unlinkSync(path)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.error(`[PHOENIX UPDATE] warning: could not clear consumed prepared marker: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
 }
 
 function activeRuntimePath() {
@@ -534,11 +544,13 @@ function startHost() {
 
 function startWatcher() {
   const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()
+  const activeUpdater = join(runtimeRoot, 'scripts', 'phoenix-auto-update.mjs')
+  const activeShim = join(runtimeRoot, 'scripts', 'phoenix-windows-command-shim.mjs')
   if (
     process.env.PHOENIX_AUTO_UPDATE === '0'
     || updateMode === 'off'
-    || !existsSync(updater)
-    || !existsSync(shim)
+    || !existsSync(activeUpdater)
+    || !existsSync(activeShim)
   ) return undefined
 
   const updateTemp = process.env.PHOENIX_UPDATE_TEMP?.trim()
@@ -552,8 +564,8 @@ function startWatcher() {
   }
 
   return spawn(process.execPath, [
-    shim,
-    updater,
+    activeShim,
+    activeUpdater,
     '--watch',
     '--parent-pid', String(process.pid),
   ], {
@@ -772,6 +784,7 @@ while (true) {
       try {
         const runtime = activatePreparedRuntime(requestedTarget)
         runtimeRoot = runtime.path
+        clearPreparedRecord()
         clearRestartRequest()
         console.error(`[PHOENIX UPDATE] isolated runtime ${runtime.target.slice(0, 12)} activated; relaunching PHOENIX without touching the source checkout.`)
       } catch (error) {
