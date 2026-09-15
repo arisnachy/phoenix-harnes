@@ -117,12 +117,12 @@ export function ModelActivityAvatar({
 }: ModelActivityAvatarProps) {
   const resolvedKind = kind
     ?? (agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId))
-  const state = ready ? 'ready' : pending ? 'pending' : running ? 'running' : 'done'
-  const phase = !running
-    ? 'idle'
-    : activity?.phase === 'running-tools' || activity?.phase === 'verifying'
-      ? activity.phase
-      : 'preparing'
+  const phase = running ? (activity?.phase ?? 'preparing') : 'idle'
+  const state = pending
+    ? 'pending'
+    : ready || (running && phase === 'idle')
+      ? 'ready'
+      : running ? 'running' : 'done'
 
   return (
     <span
