@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  createSpeechOutput, hasSpeechOutput, type SpeechSynthesisUtteranceLike,
+  conversationalSpeechText, createSpeechOutput, hasSpeechOutput, type SpeechSynthesisUtteranceLike,
 } from '../src/client/speech-output.ts'
 
 class FakeUtterance implements SpeechSynthesisUtteranceLike {
@@ -60,9 +60,39 @@ describe('speech output adapter', () => {
     const utterance = speak.mock.calls[0]?.[0]
     expect(utterance?.text).toBe('Hola Phoenix. Abre el panel')
     expect(utterance?.voice?.name).toBe('Natural Spanish')
-    expect(utterance?.rate).toBe(0.96)
-    expect(utterance?.pitch).toBe(1.02)
+    expect(utterance?.rate).toBe(0.93)
+    expect(utterance?.pitch).toBe(1)
     expect(utterance?.volume).toBe(0.98)
+  })
+
+  it('speaks a human summary from structured status instead of telemetry', () => {
+    const spoken = conversationalSpeechText(
+      '{"status":"complete","summary":"Corregí el inicio de Phoenix y verifiqué el artefacto.","tokens":18342,"revision":7,"sha":"abcdef1234567890"}',
+      'es-DO',
+    )
+
+    expect(spoken).toBe('Corregí el inicio de Phoenix y verifiqué el artefacto.')
+    expect(spoken).not.toContain('18342')
+    expect(spoken).not.toContain('abcdef')
+  })
+
+  it('drops telemetry-only lines while preserving meaningful human speech', () => {
+    const spoken = conversationalSpeechText(
+      'DONE\nTokens: 18432\nCache: 9271\nRevision: 7\nTerminé la auditoría y corregí dos errores.',
+      'es-DO',
+    )
+
+    expect(spoken).toContain('Terminé la auditoría y corregí dos errores.')
+    expect(spoken).not.toContain('18432')
+    expect(spoken).not.toContain('9271')
+    expect(spoken).not.toContain('Revision')
+  })
+
+  it('turns status-only structured output into a natural spoken update', () => {
+    expect(conversationalSpeechText('{"phase":"complete","tokens":12345}', 'es-DO'))
+      .toBe('Terminé la tarea y la verificación salió bien.')
+    expect(conversationalSpeechText('{"status":"needs_changes","revision":8}', 'es-DO'))
+      .toBe('Encontré un problema que debo corregir antes de dar la tarea por terminada.')
   })
 
   it('redacts bearer credentials before sending text to speech', () => {
@@ -77,7 +107,7 @@ describe('speech output adapter', () => {
   it('redacts credential values in JSON-shaped text', () => {
     const { value, speak } = scope()
     const output = createSpeechOutput(() => {}, 'es-DO', value)
-    const escapedJson = '{"api_key":"escaped' + String.fromCharCode(92) + '"key"}'
+    const escapedJson = '{"api_key":"escaped' + String.fromCharCode(92) + '\"key"}'
     const credentialKeys = [
       'api_secret', 'access_token', 'auth', 'auth_token', 'private_key',
       'refresh_token', 'secret', 'session_token', 'token',
@@ -131,6 +161,22 @@ describe('speech output adapter', () => {
     output.speak('Hola arisnachy')
 
     expect(speak.mock.calls[0]?.[0].voice?.name).toBe('Microsoft Sabina Online (Natural)')
+  })
+
+  it('prefers a natural feminine online voice over a generic local voice', () => {
+    const { value, speak } = scope()
+    value.speechSynthesis = {
+      ...value.speechSynthesis,
+      getVoices: () => [
+        { name: 'Generic Spanish Female', lang: 'es-DO', localService: true },
+        { name: 'Microsoft Dalia Online (Natural)', lang: 'es-MX', localService: false },
+      ],
+    }
+    const output = createSpeechOutput(() => {}, 'es-DO', value)
+
+    output.speak('La misión quedó verificada.')
+
+    expect(speak.mock.calls[0]?.[0].voice?.name).toBe('Microsoft Dalia Online (Natural)')
   })
 
   it('ignores synchronous completion from cancelled speech when replacing it', () => {
