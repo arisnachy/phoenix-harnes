@@ -28,7 +28,11 @@ export interface MissionEpisode {
 
 /** Minimal storage capability used by the recorder. */
 export interface EpisodicMemoryStore {
-  /** Persist one cognitive mission record. */
+  /**
+   * Persist one cognitive mission record.
+   * @param input - Secret-free cognitive record to persist.
+   * @returns A promise that resolves after durable storage completes.
+   */
   remember(input: CognitiveMemoryInput): Promise<void>
 }
 
@@ -61,7 +65,12 @@ export class EpisodicMissionRecorder {
   /** @param store - Durable cognitive memory writer. */
   constructor(private readonly store: EpisodicMemoryStore) {}
 
-  /** Observe the effective task without storing raw model context. */
+  /**
+   * Observe the effective task without storing raw model context.
+   * @param sessionId - Session that received the user request.
+   * @param text - User-visible task text to retain in bounded form.
+   * @param options - Occurrence time and optional project identity.
+   */
   observeUserMessage(sessionId: string, text: string, options: MissionStartOptions): void {
     validateTimestamp(options.occurredAt, 'mission start')
     const safeText = sanitize(text)
@@ -81,7 +90,12 @@ export class EpisodicMissionRecorder {
     if (options.projectId !== undefined) existing.projectId = boundProject(options.projectId)
   }
 
-  /** Record one public tool choice and deliberately ignore its raw arguments. */
+  /**
+   * Record one public tool choice and deliberately ignore its raw arguments.
+   * @param sessionId - Session that invoked the tool.
+   * @param toolName - Public tool name safe to retain as procedural evidence.
+   * @param _arguments - Raw arguments, intentionally discarded to avoid retaining secrets.
+   */
   observeToolCall(sessionId: string, toolName: string, _arguments?: unknown): void {
     const trace = this.traces.get(sessionId)
     if (trace === undefined || trace.tools.length >= MAX_TOOLS) return
@@ -90,10 +104,20 @@ export class EpisodicMissionRecorder {
     trace.tools.push(safeName)
   }
 
-  /** Observe only success/failure presence; raw result content is intentionally discarded. */
+  /**
+   * Observe only result presence without retaining raw result content.
+   * @param _sessionId - Session that produced the result.
+   * @param _result - Raw tool result, intentionally discarded.
+   * @param _isError - Whether the result reported an error.
+   */
   observeToolResult(_sessionId: string, _result: unknown, _isError: boolean): void {}
 
-  /** Finish and persist one mission when a tracked user task exists. */
+  /**
+   * Finish and persist one mission when a tracked user task exists.
+   * @param sessionId - Session whose in-flight mission reached a terminal outcome.
+   * @param options - Event sequence, time, verification state, and bounded outcome evidence.
+   * @returns The persisted episode, or undefined when no substantive mission is tracked.
+   */
   async complete(sessionId: string, options: MissionCompletionOptions): Promise<MissionEpisode | undefined> {
     validateTimestamp(options.occurredAt, 'mission completion')
     if (!Number.isSafeInteger(options.eventSeq) || options.eventSeq < 0) throw new TypeError('mission eventSeq must be a non-negative safe integer')
@@ -141,13 +165,20 @@ export class EpisodicMissionRecorder {
     return episode
   }
 
-  /** Drop an abandoned in-flight task without inventing a terminal outcome. */
+  /**
+   * Drop an abandoned in-flight task without inventing a terminal outcome.
+   * @param sessionId - Session whose transient mission trace should be discarded.
+   */
   clear(sessionId: string): void {
     this.traces.delete(sessionId)
   }
 }
 
-/** Decode versioned mission state without trusting arbitrary stored JSON. */
+/**
+ * Decode versioned mission state without trusting arbitrary stored JSON.
+ * @param value - Stored cognitive value to decode.
+ * @returns A validated mission episode, or undefined for malformed or unrelated values.
+ */
 export function decodeMissionEpisode(value: string | undefined): MissionEpisode | undefined {
   if (value === undefined) return undefined
   let raw: unknown
@@ -174,7 +205,11 @@ export function decodeMissionEpisode(value: string | undefined): MissionEpisode 
   }
 }
 
-/** Return whether a cognitive subject belongs to a durable mission episode. */
+/**
+ * Return whether a cognitive subject belongs to a durable mission episode.
+ * @param subject - Optional cognitive subject identifier.
+ * @returns True when the subject uses the mission-episode namespace.
+ */
 export function isMissionEpisodeSubject(subject: string | undefined): boolean {
   return subject?.startsWith(EPISODE_SUBJECT_PREFIX) === true
 }
