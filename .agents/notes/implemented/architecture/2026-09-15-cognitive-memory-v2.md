@@ -8,7 +8,7 @@ PHOENIX persisted session events and reusable lessons, but automatic recall was 
 
 ## Decision
 
-`@phoenix-ai/dsh-session-learning` remains the canonical durable cognitive store. Its ordinary cognitive search stays scoped to the current project, while `includeCrossProject` is an explicit opt-in for directed autobiographical retrieval so broader history questions do not weaken normal isolation.
+`@phoenix-ai/dsh-session-learning` remains the canonical durable cognitive store and keeps its public search behavior project-scoped. Broader autobiographical retrieval is owned by the Memory v2 consumer: only an explicit history, learning, diagnostic, backward-reference, or profile-memory intent can assemble bounded active records across projects. This keeps ordinary search and automatic guidance isolated without adding a global-search escape hatch to the base service.
 
 `@phoenix-ai/dsh-tool-session-learning` records bounded mission episodes from observable session work. An episode retains the user task, project, timestamps, public tool names, terminal outcome, and verification state; raw tool arguments and raw tool results are excluded. Verified `goal/change` completion produces high-confidence mission evidence, while an error may produce unverified evidence. The existing `ProceduralLearningEngine` continues to consume verified completion independently, so episodic continuity does not create a second procedure store.
 
@@ -16,13 +16,13 @@ The model-facing consumer classifies explicit memory questions into work history
 
 Directed presentation contains only evidence needed for a natural answer. It omits storage IDs, session IDs, source URIs, event names, confidence labels, layer labels, filesystem paths, and raw tool payloads. Profile subjects remain separate from work-history and learning-history answers unless the user explicitly asks about profile memory.
 
-Model-visible directed evidence is reconstructable from durable session/cognitive events. The keyless headless snapshot boots the real Loader composition, records a verified mission, restarts the runtime, asks about prior projects, and pins the assembled human-facing memory block.
+Model-visible directed evidence is reconstructable from durable session/cognitive events. The runtime regression suite records a verified mission, disposes the first runtime, starts a fresh runtime over the same ledger, asks from a different project about prior work, and verifies that the assembled context contains the prior task/outcome without exposing internal session or event plumbing. Separate restart tests cover durable episode persistence.
 
 ## Alternatives considered
 
 **Persist `RecentTaskLedger`.** This would preserve a bounded task list across restart, but it would create a second durable history mechanism beside the cognitive ledger and would not naturally support temporal, project, lifecycle, or provenance filters.
 
-**Make every automatic recall cross-project.** This would make history easier to find but would mix unrelated projects into ordinary turns and increase irrelevant context. Cross-project access is therefore explicit and intent-directed.
+**Make every automatic recall cross-project.** This would make history easier to find but would mix unrelated projects into ordinary turns and increase irrelevant context. Cross-project access is therefore intent-directed and private to explicit autobiographical recall.
 
 **Derive history from Git commits or repository recency.** Repository state is useful evidence for code work but does not represent non-code tasks, failed attempts, conversations, or work performed outside Git. Session-derived episodes remain the canonical continuity source.
 

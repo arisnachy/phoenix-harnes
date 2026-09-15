@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-15-cognitive-memory-v2.md
-2026-09-15-cognitive-memory-v2.md: 0a6556a4cc2fd1b8b266d16d3e4bc2efbd761e26
-2026-09-15-cognitive-memory-v2.zh.md: e7892dc08845499cbaa3866da330e64dc16d4c7f
+2026-09-15-cognitive-memory-v2.md: b32beade0085883ddc21a8c348dad909c0d80e28
+2026-09-15-cognitive-memory-v2.zh.md: 6364712e9d0cdfb31d19da6a20786a847c413ba7
