@@ -46,6 +46,10 @@ export function renderGoalRoundPrompt(
       + 'If `ask_user_question` returns after its deadline, treat the selected recommendation as an '
       + 'automatic decision for this step, never as mission completion, cancellation, or a blocker; '
       + 'continue the mission and change strategy if that decision is not sufficient. '
+      + 'Before execution, infer the relevant unstated edge cases and failure modes from the objective and the system being changed. '
+      + 'Do not wait for the user to enumerate them. Consider empty, missing, malformed, boundary, duplicate, stale, partial-failure, retry/timeout, permission, concurrency, restart/recovery, and compatibility cases, '
+      + 'only when they are applicable to this objective; do not invent irrelevant requirements. Treat applicable inferred cases as mandatory quality criteria, '
+      + 'implement defensively where appropriate, and add executable or otherwise reproducible verification for them. '
       + 'Before '
       + (round === 1
         ? 'starting execution, keep one complete master plan; do not split it into mini-plans or ask for routine step-by-step confirmation. '
@@ -53,8 +57,8 @@ export function renderGoalRoundPrompt(
           + 'Use the approval deadline policy for any later gated action. ')
       + (round === 1 ? '' : 'If this is not the first round, use a materially different strategy from earlier attempts and explain what changed. ')
       + (feedback === undefined ? '' : 'Address every required change from the prior judge before requesting another review. ')
-      + 'claiming completion, gather evidence that the whole objective is achieved, read the current '
-      + 'goal only after the exact deliverable, every acceptance criterion, and quality evidence are verified by the independent judge; never mark it complete because progress was made, tests passed, or the turn ended. If work remains or an approach fails, leave the goal active, change strategy, and continue in the next round. Follow '
+      + 'claiming completion, gather evidence that the whole objective is achieved, including the explicit requirements and the applicable inferred edge cases, and read the current '
+      + 'goal only after the exact deliverable, every acceptance criterion, inferred quality criterion, and quality evidence are verified by the independent judge; never mark it complete because progress was made, tests passed, or the turn ended. If work remains or an approach fails, leave the goal active, change strategy, and continue in the next round. Follow '
       + 'the configured goal-tool policy before reporting a blocker.\n'
       + '</goal_round>',
   }]
