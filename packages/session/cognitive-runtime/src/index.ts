@@ -1,19 +1,26 @@
-/** Read-only Cordis service projecting deterministic cognitive state per session. */
+/** Cordis service projecting deterministic cognition into live agent execution. */
 
+import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
-import { SessionId } from '@phoenix-ai/dsh-session'
+import { SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'
 import type { LearningMemoryService } from '@phoenix-ai/dsh-session-learning'
 import { scoreAttention } from './attention.ts'
 import { validateCognitiveState } from './invariant.ts'
 import { partitionWorkingMemory } from './working-memory.ts'
 import { createGlobalWorkspace } from './workspace.ts'
 import { cloneAttentionCandidate } from './clone.ts'
+import { renderCognitiveModelContext } from './model-context.ts'
+import type { CognitiveModelContextOptions } from './model-context.ts'
+import { COMPLETION_AUDIT_PROMPT, turnNeedsQualityAudit } from './quality-gate.ts'
 import type { AttentionWeights, CognitiveState } from './types.ts'
 
 export { scoreAttention } from './attention.ts'
 export { partitionWorkingMemory } from './working-memory.ts'
 export { createGlobalWorkspace } from './workspace.ts'
+export { renderCognitiveModelContext } from './model-context.ts'
+export type { CognitiveModelContextOptions } from './model-context.ts'
+export { COMPLETION_AUDIT_PROMPT, turnNeedsQualityAudit } from './quality-gate.ts'
 export type * from './types.ts'
 
 declare module '@phoenix-ai/cordis' {
@@ -48,8 +55,54 @@ export interface CognitiveRuntimeConfig {
 /** Compatibility name for the resolved cognitive-runtime configuration. */
 export type Config = CognitiveRuntimeConfig
 
+interface ModelAssemblyLike {
+  readonly agent?: { readonly id?: unknown }
+}
+
+interface PromptRegistryLike {
+  context(input: {
+    readonly name: string
+    readonly order: number
+    readonly interpolateVariables: boolean
+    readonly text: (context: ModelAssemblyLike) => string
+  }): void
+}
+
+interface PromptContextLike {
+  readonly systemPrompt: PromptRegistryLike
+}
+
+interface CognitiveSteeringMessage {
+  readonly id: string
+  readonly role: 'user'
+  readonly content: readonly [{ readonly type: 'text'; readonly text: string }]
+  readonly source: { readonly kind: 'plugin'; readonly plugin: string }
+}
+
+interface AgentBridgeLike {
+  readonly id: SessionId
+  readonly session: { readonly events: readonly SessionEvent[] }
+  steer(message: CognitiveSteeringMessage): void
+}
+
+interface AgentTurnStoppingPayloadLike {
+  readonly agent: AgentBridgeLike
+  readonly turn: number
+}
+
+type OptionalPromptInjector = (
+  names: readonly string[],
+  callback: (context: PromptContextLike) => void,
+) => void
+
+type AgentTurnStoppingRegistrar = (
+  name: 'agent/turn-stopping',
+  listener: (payload: AgentTurnStoppingPayloadLike) => void,
+) => unknown
+
 const MAX_CANDIDATES = 128
 const MAX_REGION = 128
+const COGNITIVE_CONTEXT_ORDER = 7_000
 const DEFAULT_CONFIG: CognitiveRuntimeConfig = {
   maxCandidates: 64,
   activeLimit: 8,
@@ -89,6 +142,7 @@ export class CognitiveRuntimeService extends Service {
   /** Resolved immutable configuration used by every snapshot. */
   readonly config: Readonly<CognitiveRuntimeConfig>
   private readonly states = new Map<string, CognitiveState>()
+  private readonly auditedTurns = new Map<string, Set<number>>()
   private operationTail: Promise<void> = Promise.resolve()
 
   /** @param ctx - Host context containing sessions and learning memory. */
@@ -96,16 +150,33 @@ export class CognitiveRuntimeService extends Service {
     super(ctx, 'cognitiveRuntime')
     const resolved = resolveConfig(config)
     this.config = Object.freeze({ ...resolved, weights: Object.freeze({ ...resolved.weights }) })
+    this.registerOptionalPromptBridge(ctx)
   }
 
   /** Seed existing sessions and subscribe to the canonical live event stream. */
   protected async [Service.init](): Promise<void> {
     this.ctx.on('session/created', (session) => { void this.enqueue(() => this.refreshSafe(session.id)) })
     this.ctx.on('session/event', (session, event) => {
+      if (event.type === 'turn/end') this.clearAudit(session.id, event.data.turn)
       if (event.type === 'assistant/chunk' || event.ignorable === true) return
       void this.enqueue(() => this.refreshSafe(session.id))
     })
-    this.ctx.on('session/disposed', (session) => { this.states.delete(String(session.id)) })
+    this.ctx.on('session/disposed', (session) => {
+      this.states.delete(String(session.id))
+      this.auditedTurns.delete(String(session.id))
+    })
+
+    // Agent integration is intentionally capability-coupled rather than a
+    // package dependency: the base composition mounts both services, while
+    // isolated cognitive-runtime tests and diagnostics remain agent-free.
+    const onAgentStopping = this.ctx.on.bind(this.ctx) as unknown as AgentTurnStoppingRegistrar
+    onAgentStopping('agent/turn-stopping', ({ agent, turn }) => {
+      const alreadyAudited = this.wasAudited(agent.id, turn)
+      if (!turnNeedsQualityAudit(agent.session.events, turn, alreadyAudited)) return
+      this.markAudited(agent.id, turn)
+      agent.steer(createCompletionAuditMessage())
+    })
+
     await this.enqueue(async () => {
       for (const session of this.ctx.sessions.list()) await this.refreshSafe(session.id)
     })
@@ -128,12 +199,40 @@ export class CognitiveRuntimeService extends Service {
   }
 
   /**
+   * Render the bounded cognitive workspace consumed by the model at each step.
+   * The canonical state remains detached and background/suppressed memory stays
+   * outside the prompt budget.
+   * @param sessionId - Exact live session whose cognitive state will be projected.
+   * @param options - Bounded model-context rendering limits.
+   * @returns The model-facing cognitive workspace, or an empty string when no focus exists.
+   */
+  modelContext(sessionId: SessionId, options: CognitiveModelContextOptions = {}): string {
+    return renderCognitiveModelContext(this.get(sessionId), options)
+  }
+
+  /**
    * Rebuild one session's state through the serialized refresh queue.
    * @param sessionId - Session identity to refresh.
    * @returns The newly rebuilt state, the retained prior state after failure, or `undefined` for a missing session.
    */
   async refresh(sessionId: SessionId): Promise<CognitiveState | undefined> {
     return this.enqueue(() => this.refreshSafe(sessionId))
+  }
+
+  /** Register model-facing state only when the optional prompt capability exists. */
+  private registerOptionalPromptBridge(ctx: Context): void {
+    const injectPrompt = ctx.inject.bind(ctx) as unknown as OptionalPromptInjector
+    injectPrompt(['systemPrompt'], (promptCtx) => {
+      promptCtx.systemPrompt.context({
+        name: 'cognitive-runtime:workspace',
+        order: COGNITIVE_CONTEXT_ORDER,
+        interpolateVariables: false,
+        text: (context) => {
+          const sessionId = sessionIdFromAssembly(context)
+          return sessionId === undefined ? '' : this.modelContext(sessionId)
+        },
+      })
+    })
   }
 
   /** Rebuild one state and retain the last successful value after a failure. */
@@ -172,6 +271,39 @@ export class CognitiveRuntimeService extends Service {
     this.operationTail = next.then(() => undefined, () => undefined)
     return next
   }
+
+  private wasAudited(sessionId: SessionId, turn: number): boolean {
+    return this.auditedTurns.get(String(sessionId))?.has(turn) === true
+  }
+
+  private markAudited(sessionId: SessionId, turn: number): void {
+    const key = String(sessionId)
+    const turns = this.auditedTurns.get(key) ?? new Set<number>()
+    turns.add(turn)
+    this.auditedTurns.set(key, turns)
+  }
+
+  private clearAudit(sessionId: SessionId, turn: number): void {
+    const key = String(sessionId)
+    const turns = this.auditedTurns.get(key)
+    if (turns === undefined) return
+    turns.delete(turn)
+    if (turns.size === 0) this.auditedTurns.delete(key)
+  }
+}
+
+function createCompletionAuditMessage(): CognitiveSteeringMessage {
+  return Object.freeze({
+    id: randomUUID(),
+    role: 'user' as const,
+    content: Object.freeze([Object.freeze({ type: 'text' as const, text: COMPLETION_AUDIT_PROMPT })]) as CognitiveSteeringMessage['content'],
+    source: Object.freeze({ kind: 'plugin' as const, plugin: 'cognitive-runtime' }),
+  })
+}
+
+function sessionIdFromAssembly(context: ModelAssemblyLike): SessionId | undefined {
+  const candidate = context.agent?.id
+  return typeof candidate === 'string' && candidate.length > 0 ? SessionId(candidate) : undefined
 }
 
 function resolveConfig(config: CognitiveRuntimeConfig): CognitiveRuntimeConfig {
