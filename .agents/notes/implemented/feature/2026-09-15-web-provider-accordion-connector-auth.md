@@ -14,7 +14,7 @@ The composer model selector rendered every provider group fully expanded under a
 
 The connector catalog gains `codex` (native, OpenAI family) and `openclaw` (native) entries so both runtimes surface in Settings → Connectors alongside their real telemetry. `useAuthorizationAttempt.begin` opens a blank same-origin window synchronously inside the click gesture and the status poll navigates it to the consent URL once the backend returns one, falling back to a plain link when a blocker still refuses.
 
-`workflow-worker-thread` adds a regression test asserting that a non-OpenAI root inherits the parent route (no `agentOptions`), so `gpt-5.6-luna` is only ever forced onto `openai-codex` roots.
+`workflow-worker-thread` adds a regression test asserting that a non-OpenAI root inherits the parent route (no `agentOptions`), so `gpt-5.6-luna` is only ever forced onto `openai-codex` roots. `api-proxy.selectModel` also writes the resolved provider, model, and effort back onto the live `agent.options` in the same commit: delegators read that object, so without the write a model switch away from `openai-codex` left the stale route and `childRoute` kept forcing `gpt-5.6-luna`. A host test covers the switch-then-delegate path.
 
 ## Alternatives considered
 
