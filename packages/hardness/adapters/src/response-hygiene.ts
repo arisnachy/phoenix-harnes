@@ -56,10 +56,15 @@ export function sanitizePhoenixVisibleText(text: string, latestPrompt: string): 
   })
   const cleaned = kept.join(' ').replace(/\s+([,.;:!?])/gu, '$1').replace(/\s{2,}/gu, ' ').trim()
   if (!capabilityOnly(latestPrompt) || cleaned.length === 0) return cleaned
-  return sentences(cleaned)[0] ?? cleaned
+  return sentences(cleaned)[0]!
 }
 
-function completeTextBlocks(chunks: readonly StreamChunk[], prompt: string): ReadonlyMap<number, string> {
+interface SanitizedTextBlocks {
+  readonly raw: ReadonlyMap<number, string>
+  readonly clean: ReadonlyMap<number, string>
+}
+
+function completeTextBlocks(chunks: readonly StreamChunk[], prompt: string): SanitizedTextBlocks {
   const raw = new Map<number, string>()
   for (const chunk of chunks) {
     if (chunk.type === 'text-delta') {
@@ -68,42 +73,79 @@ function completeTextBlocks(chunks: readonly StreamChunk[], prompt: string): Rea
       raw.set(chunk.index, chunk.block.text)
     }
   }
-  return new Map([...raw].map(([index, text]) => [index, sanitizePhoenixVisibleText(text, prompt)]))
+  return {
+    raw,
+    clean: new Map([...raw].map(([index, text]) => [index, sanitizePhoenixVisibleText(text, prompt)])),
+  }
+}
+
+function textChanged(blocks: SanitizedTextBlocks): boolean {
+  for (const [index, rawText] of blocks.raw) {
+    if (blocks.clean.get(index) !== rawText) return true
+  }
+  return false
+}
+
+function appendPendingText(output: StreamChunk[], blocks: SanitizedTextBlocks, emitted: Set<number>): void {
+  for (const [index, text] of blocks.clean) {
+    if (emitted.has(index)) continue
+    emitted.add(index)
+    if (text.length > 0) output.push({ type: 'text-delta', index, text })
+  }
+}
+
+/**
+ * Rewrite complete model chunks so only sanitized text can reach the durable transcript or UI.
+ * If visible text changes, provider replay state is dropped because it still represents the unsanitized response.
+ * @param chunks - complete chunks from one ordinary conversation model call.
+ * @param latestPrompt - latest direct human prompt.
+ * @returns chunks carrying the same non-text behavior and sanitized text blocks.
+ */
+export function sanitizePhoenixChunks(chunks: readonly StreamChunk[], latestPrompt: string): StreamChunk[] {
+  const blocks = completeTextBlocks(chunks, latestPrompt)
+  const changed = textChanged(blocks)
+  const emitted = new Set<number>()
+  const output: StreamChunk[] = []
+
+  for (const chunk of chunks) {
+    if (chunk.type === 'text-delta') continue
+    if (chunk.type === 'block-end' && chunk.block.type === 'text') {
+      const text = blocks.clean.get(chunk.index) ?? chunk.block.text
+      emitted.add(chunk.index)
+      if (text.length > 0) output.push({ type: 'text-delta', index: chunk.index, text })
+      output.push({ ...chunk, block: { ...chunk.block, text } })
+      continue
+    }
+    if (chunk.type === 'finish') {
+      appendPendingText(output, blocks, emitted)
+      if (changed && chunk.replayState !== undefined) {
+        const { replayState: _replayState, ...safeFinish } = chunk
+        output.push(safeFinish)
+      } else {
+        output.push(chunk)
+      }
+      continue
+    }
+    output.push(chunk)
+  }
+
+  appendPendingText(output, blocks, emitted)
+  return output
 }
 
 async function* sanitizeConversationStream(
   options: GenerateOptions,
   upstream: AsyncIterable<StreamChunk>,
 ): AsyncIterable<StreamChunk> {
-  if (options.purpose !== undefined || options.sessionId === undefined) {
+  const prompt = latestHumanPrompt(options.messages)
+  if (options.purpose !== undefined || options.sessionId === undefined || INTERNAL_DEBUG_REQUEST.test(prompt)) {
     yield* upstream
     return
   }
 
   const buffered: StreamChunk[] = []
   for await (const chunk of upstream) buffered.push(chunk)
-
-  const sanitized = completeTextBlocks(buffered, latestHumanPrompt(options.messages))
-  const emitted = new Set<number>()
-  for (const chunk of buffered) {
-    if (chunk.type === 'text-delta' && sanitized.has(chunk.index)) {
-      if (emitted.has(chunk.index)) continue
-      emitted.add(chunk.index)
-      const text = sanitized.get(chunk.index) ?? ''
-      if (text.length > 0) yield { ...chunk, text }
-      continue
-    }
-    if (chunk.type === 'block-end' && chunk.block.type === 'text') {
-      const text = sanitized.get(chunk.index) ?? chunk.block.text
-      if (!emitted.has(chunk.index) && text.length > 0) {
-        emitted.add(chunk.index)
-        yield { type: 'text-delta', index: chunk.index, text }
-      }
-      yield { ...chunk, block: { ...chunk.block, text } }
-      continue
-    }
-    yield chunk
-  }
+  yield* sanitizePhoenixChunks(buffered, prompt)
 }
 
 /**
