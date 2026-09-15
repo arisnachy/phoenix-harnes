@@ -15,7 +15,6 @@ import {
 } from './ModelActivityAvatar.tsx'
 import css from './KiraTeamsDock.module.css'
 
-/** Sessions face plus business actions supplied by the slot registration. */
 export interface KiraTeamsInjected {
   list: {
     getSnapshot(): SessionListState
@@ -45,7 +44,6 @@ export interface KiraRosterCard extends KiraRosterEntry {
   depth?: number
 }
 
-/** Permanent KIRA roster: all 20 approved identities always live inside one floating window. */
 export const KIRA_ROSTER: readonly KiraRosterEntry[] = [
   { kind: 'vortice', name: 'Vórtice', tagline: 'Convirtiendo ideas en movimiento' },
   { kind: 'aurora', name: 'Aurora', tagline: 'Ilumina nuevos caminos' },
@@ -91,11 +89,9 @@ export function agentNameOf(summary: SessionSummary): string {
   return KIRA_ROSTER[rosterIndexOf(String(summary.id))]?.name ?? 'Vigía'
 }
 
-/** Expand live lineage members into the permanent 20-persona board. */
 export function rosterCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
   const cards: KiraRosterCard[] = KIRA_ROSTER.map(entry => ({ ...entry }))
   const occupied = new Set<number>()
-
   for (const row of rows) {
     if (occupied.size >= cards.length) break
     const preferred = rosterIndexOf(String(row.summary.id))
@@ -112,11 +108,9 @@ export function rosterCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
     if (card === undefined) continue
     cards[slot] = { ...card, summary: row.summary, depth: row.depth }
   }
-
   return cards
 }
 
-/** Backward-compatible live-only projection retained for external callers. */
 export function liveCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
   return rosterCardsOf(rows).filter(card => card.summary !== undefined)
 }
@@ -137,29 +131,18 @@ function normalizedAgentLabel(summary: SessionSummary): string {
 
 export function agentRoleKeyOf(summary: SessionSummary): KiraTeamsKey {
   const label = normalizedAgentLabel(summary)
-  if (/\b(juez|judge|reviewer|review|revisor|revisión|revision|quality|calidad|auditor)\b/u.test(label)) {
-    return 'role.judge'
-  }
-  if (/\b(supervisor|supervise|supervising|orchestrator|orchestrate|coordinator|coordinate|lead|manager|director|supervisar|coordinar|orquestar)\b/u.test(label)) {
-    return 'role.supervisor'
-  }
-  if (/\b(code|coding|coder|developer|engineer|debug|debugger|fix|fixing|repair|implement|implementation|programmer|programador|desarrollador|código|codigo|arreglar|reparar|depurar|implementar)\b/u.test(label)) {
-    return 'role.coder'
-  }
-  if (/\b(qa|test|tests|tester|testing|prueba|pruebas|probar|validación|validacion)\b/u.test(label)) {
-    return 'role.tester'
-  }
-  if (/\b(investigador|investigadora|investigar|research|researcher|referencia|referencias|reference|references)\b/u.test(label)) {
-    return 'role.researcher'
-  }
+  if (/\b(juez|judge|reviewer|review|revisor|revisión|revision|quality|calidad|auditor)\b/u.test(label)) return 'role.judge'
+  if (/\b(supervisor|supervise|supervising|orchestrator|orchestrate|coordinator|coordinate|lead|manager|director|supervisar|coordinar|orquestar)\b/u.test(label)) return 'role.supervisor'
+  if (/\b(code|coding|coder|developer|engineer|debug|debugger|fix|fixing|repair|implement|implementation|programmer|programador|desarrollador|código|codigo|arreglar|reparar|depurar|implementar)\b/u.test(label)) return 'role.coder'
+  if (/\b(qa|test|tests|tester|testing|prueba|pruebas|probar|validación|validacion)\b/u.test(label)) return 'role.tester'
+  if (/\b(investigador|investigadora|investigar|research|researcher|referencia|referencias|reference|references)\b/u.test(label)) return 'role.researcher'
   return 'role.agent'
 }
 
 export function activityKeyOf(summary: SessionSummary): KiraTeamsKey {
   if (summary.pendingInteraction !== undefined) return 'activity.waiting'
   if (!summary.running) return 'activity.done'
-  const phase = activityOf(summary)?.phase
-  switch (phase) {
+  switch (activityOf(summary)?.phase) {
     case 'preparing': return 'activity.preparing'
     case 'running-tools': return 'activity.tools'
     case 'verifying': return 'activity.verifying'
@@ -168,7 +151,6 @@ export function activityKeyOf(summary: SessionSummary): KiraTeamsKey {
   }
 }
 
-/** Human-readable duty shown while the phase remains independently visible. */
 export function performanceKeyOf(summary: SessionSummary): KiraTeamsKey {
   if (summary.pendingInteraction !== undefined) return 'activity.waiting'
   if (!summary.running) return 'activity.done'
@@ -182,17 +164,11 @@ export function performanceKeyOf(summary: SessionSummary): KiraTeamsKey {
   }
 }
 
-export function lineageMembers(state: SessionListState): {
-  root: SessionSummary | undefined
-  rows: MemberRow[]
-} {
+export function lineageMembers(state: SessionListState): { root: SessionSummary | undefined; rows: MemberRow[] } {
   const byId = state.byId
   let root = state.current === undefined ? undefined : byId[state.current]
   const walked = new Set<SessionId>()
-  while (
-    root !== undefined && root.origin === 'subagent'
-    && root.parentId !== undefined && !walked.has(root.id)
-  ) {
+  while (root !== undefined && root.origin === 'subagent' && root.parentId !== undefined && !walked.has(root.id)) {
     walked.add(root.id)
     const parent = byId[root.parentId]
     if (parent === undefined) break
@@ -208,12 +184,9 @@ export function lineageMembers(state: SessionListState): {
     for (const parentId of frontier) {
       const childDepth = (depth.get(parentId) ?? 0) + 1
       for (const summary of Object.values(byId)) {
-        if (summary.origin !== 'subagent' || summary.parentId !== parentId) continue
-        if (depth.has(summary.id)) continue
+        if (summary.origin !== 'subagent' || summary.parentId !== parentId || depth.has(summary.id)) continue
         depth.set(summary.id, childDepth)
-        if (summary.running || summary.pendingInteraction !== undefined) {
-          rows.push({ summary, depth: childDepth })
-        }
+        if (summary.running || summary.pendingInteraction !== undefined) rows.push({ summary, depth: childDepth })
         next.push(summary.id)
       }
     }
@@ -230,71 +203,32 @@ export function lineageMembers(state: SessionListState): {
 function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
   const summary = card.summary
   if (summary === undefined) {
-    return (
-      <>
-        <ModelActivityAvatar
-          kind={card.kind}
-          activity={undefined}
-          running={false}
-          pending={false}
-          ready={true}
-          variant="card"
-        />
-        <span className={css.agentCopy}>
-          <span className={css.agentHeading}>
-            <span className={css.agentName}>{card.name}</span>
-            <span className={css.role}>{t('role.agent')}</span>
-          </span>
-          <span className={css.statusLine} data-activity="activity.ready">
-            <span className={css.statusDot} aria-hidden="true" />
-            <span className={css.activity}>{t('activity.ready')}</span>
-          </span>
-          <span className={css.tagline}>{card.tagline}</span>
-        </span>
-      </>
-    )
+    return <>
+      <ModelActivityAvatar kind={card.kind} activity={undefined} running={false} pending={false} ready variant="card" />
+      <span className={css.agentCopy}>
+        <span className={css.agentHeading}><span className={css.agentName}>{card.name}</span><span className={css.role}>{t('role.agent')}</span></span>
+        <span className={css.statusLine} data-activity="activity.ready"><span className={css.statusDot} aria-hidden="true" /><span className={css.activity}>{t('activity.ready')}</span></span>
+        <span className={css.tagline}>{card.tagline}</span>
+      </span>
+    </>
   }
-
   const roleKey = agentRoleKeyOf(summary)
   const actionKey = activityKeyOf(summary)
   const performanceKey = performanceKeyOf(summary)
   const hasSpecificDuty = roleKey !== 'role.agent'
-
-  return (
-    <>
-      <ModelActivityAvatar
-        kind={card.kind}
-        activity={activityOf(summary)}
-        running={summary.running}
-        pending={summary.pendingInteraction !== undefined}
-        variant="card"
-      />
-      <span className={css.agentCopy}>
-        <span className={css.agentHeading}>
-          <span className={css.agentName}>{card.name}</span>
-          <span className={css.role}>
-            <span>{t('role.agent')}</span>
-            {hasSpecificDuty && (
-              <>
-                <span className={css.roleSeparator} aria-hidden="true"> · </span>
-                <span className={css.roleDuty}>{t(roleKey)}</span>
-              </>
-            )}
-          </span>
-        </span>
-        <span className={css.statusLine} data-activity={actionKey}>
-          <span className={css.statusDot} aria-hidden="true" />
-          <span className={css.activity}>{t(actionKey)}</span>
-        </span>
-        <span className={css.tagline}>
-          {hasSpecificDuty ? t(performanceKey) : card.tagline}
-        </span>
+  return <>
+    <ModelActivityAvatar kind={card.kind} activity={activityOf(summary)} running={summary.running} pending={summary.pendingInteraction !== undefined} variant="card" />
+    <span className={css.agentCopy}>
+      <span className={css.agentHeading}>
+        <span className={css.agentName}>{card.name}</span>
+        <span className={css.role}><span>{t('role.agent')}</span>{hasSpecificDuty && <><span className={css.roleSeparator} aria-hidden="true"> · </span><span className={css.roleDuty}>{t(roleKey)}</span></>}</span>
       </span>
-    </>
-  )
+      <span className={css.statusLine} data-activity={actionKey}><span className={css.statusDot} aria-hidden="true" /><span className={css.activity}>{t(actionKey)}</span></span>
+      <span className={css.tagline}>{hasSpecificDuty ? t(performanceKey) : card.tagline}</span>
+    </span>
+  </>
 }
 
-/** Floating KIRA Teams window: all 20 personas remain visible and live slots react to runtime state. */
 export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeamsDockProps) {
   const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
   const { root, rows } = lineageMembers(state)
@@ -316,12 +250,8 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
 
   const toggleCollapse = (event: MouseEvent<HTMLButtonElement>): void => {
     event.stopPropagation()
-    setCollapsed((current) => {
-      try {
-        window.localStorage.setItem(COLLAPSE_KEY, current ? '0' : '1')
-      } catch {
-        /* persistence is best-effort */
-      }
+    setCollapsed(current => {
+      try { window.localStorage.setItem(COLLAPSE_KEY, current ? '0' : '1') } catch { /* best effort */ }
       return !current
     })
   }
@@ -332,107 +262,34 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
     ? `${t(membersKey, { count: rows.length })} · ${t(runningKey, { count: runningCount })}`
     : t(membersKey, { count: rows.length })
 
-  if (collapsed) {
-    return (
-      <div className={`${css.root} ${css.rootCollapsed}`} data-kira-teams data-kira-layout="floating-roster">
-        <button
-          type="button"
-          className={`${css.pill} ${runningCount > 0 ? css.pillLive : ''}`}
-          aria-expanded={false}
-          aria-label={t('dock.expand')}
-          onClick={toggleCollapse}
-        >
-          {runningCount > 0 && <StateDot state="ongoing" />}
-          <span className={css.pillTitle}>{t('dock.title')}</span>
-          <span className={css.pillCount}>{countCopy}</span>
-        </button>
-      </div>
-    )
-  }
+  if (collapsed) return <div className={`${css.root} ${css.rootCollapsed}`} data-kira-teams data-kira-layout="floating-roster">
+    <button type="button" className={`${css.pill} ${runningCount > 0 ? css.pillLive : ''}`} aria-expanded={false} aria-label={t('dock.expand')} onClick={toggleCollapse}>
+      {runningCount > 0 && <StateDot state="ongoing" />}
+      <span className={css.pillTitle}>{t('dock.title')}</span><span className={css.pillCount}>{countCopy}</span>
+    </button>
+  </div>
 
   const cards = rosterCardsOf(rows)
-  return (
-    <div className={css.root} data-kira-teams data-kira-layout="floating-roster">
-      <section className={css.dock} aria-label={t('team.aria')}>
-        <header className={css.header}>
-          <button
-            type="button"
-            className={css.collapse}
-            aria-expanded={true}
-            aria-label={t('dock.collapse')}
-            onClick={toggleCollapse}
-          >
-            <IconChevronDownOutline14 />
-          </button>
-          <span className={css.headerCopy}>
-            <span className={css.headerTitleLine}>
-              <span className={css.title}>{t('dock.title')}</span>
-              <span className={css.teamMark} aria-hidden="true" />
-            </span>
-            <span className={css.counts}>
-              <span className={css.countText}>{countCopy}</span>
-            </span>
-          </span>
-          <button
-            type="button"
-            className={css.refresh}
-            aria-label={t('dock.refresh')}
-            onClick={() => { refresh(root.id) }}
-          >
-            <IconRefreshOutline14 />
-          </button>
-        </header>
-
-        <div className={css.list} role="tree" aria-label={t('team.aria')}>
-          {cards.map((card) => {
-            const summary = card.summary
-            if (summary === undefined) {
-              return (
-                <div
-                  key={card.kind}
-                  className={`${css.row} ${css.rowReady}`}
-                  role="treeitem"
-                  aria-disabled="true"
-                  data-kira-agent-card
-                  data-agent-kind={card.kind}
-                >
-                  {cardBody(card, t)}
-                </div>
-              )
-            }
-
-            const roleKey = agentRoleKeyOf(summary)
-            const actionKey = activityKeyOf(summary)
-            const performanceKey = performanceKeyOf(summary)
-            return (
-              <button
-                key={String(summary.id)}
-                type="button"
-                role="treeitem"
-                aria-selected={state.current === summary.id}
-                className={`${css.row} ${summary.running ? css.rowRunning : ''} ${summary.pendingInteraction !== undefined ? css.rowPending : ''}`}
-                data-kira-agent-card
-                data-agent-kind={card.kind}
-                data-agent-id={String(summary.id)}
-                data-agent-role={roleKey}
-                data-agent-activity={actionKey}
-                data-agent-performance={performanceKey}
-                title={summary.displayTitle}
-                onClick={() => {
-                  if (summary.parentId === undefined) return
-                  openChild({
-                    parentSessionId: summary.parentId,
-                    childSessionId: summary.id,
-                    mode: 'continuable',
-                  })
-                }}
-              >
-                {cardBody(card, t)}
-              </button>
-            )
-          })}
-        </div>
-      </section>
-    </div>
-  )
+  return <div className={css.root} data-kira-teams data-kira-layout="floating-roster">
+    <section className={css.dock} aria-label={t('team.aria')}>
+      <header className={css.header}>
+        <button type="button" className={css.collapse} aria-expanded aria-label={t('dock.collapse')} onClick={toggleCollapse}><IconChevronDownOutline14 /></button>
+        <span className={css.headerCopy}><span className={css.headerTitleLine}><span className={css.title}>{t('dock.title')}</span><span className={css.teamMark} aria-hidden="true" /></span><span className={css.counts}><span className={css.countText}>{countCopy}</span></span></span>
+        <button type="button" className={css.refresh} aria-label={t('dock.refresh')} onClick={() => { refresh(root.id) }}><IconRefreshOutline14 /></button>
+      </header>
+      <div className={css.list} role="tree" aria-label={t('team.aria')}>
+        {cards.map(card => {
+          const summary = card.summary
+          if (summary === undefined) return <div key={card.kind} className={`${css.row} ${css.rowReady}`} role="treeitem" aria-disabled="true" data-kira-agent-card data-agent-kind={card.kind}>{cardBody(card, t)}</div>
+          const roleKey = agentRoleKeyOf(summary)
+          const actionKey = activityKeyOf(summary)
+          const performanceKey = performanceKeyOf(summary)
+          return <button key={String(summary.id)} type="button" role="treeitem" aria-selected={state.current === summary.id} className={`${css.row} ${summary.running ? css.rowRunning : ''} ${summary.pendingInteraction !== undefined ? css.rowPending : ''}`} data-kira-agent-card data-agent-kind={card.kind} data-agent-id={String(summary.id)} data-agent-role={roleKey} data-agent-activity={actionKey} data-agent-performance={performanceKey} title={summary.displayTitle} onClick={() => {
+            if (summary.parentId === undefined) return
+            openChild({ parentSessionId: summary.parentId, childSessionId: summary.id, mode: 'continuable' })
+          }}>{cardBody(card, t)}</button>
+        })}
+      </div>
+    </section>
+  </div>
 }
