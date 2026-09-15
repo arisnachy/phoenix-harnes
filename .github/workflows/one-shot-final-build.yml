@@ -1,0 +1,23 @@
+name: One-shot final Phoenix build verification
+
+on:
+  push:
+    branches:
+      - verify/final-build-20260914
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Run memory learning tests
+        run: pnpm exec vitest run packages/session-learning/tool-session-learning/tests/presentation.spec.ts packages/session-learning/tool-session-learning/tests/autonomous-curator.spec.ts packages/session-learning/tool-session-learning/tests/plugin.spec.ts
+      - name: Build-typecheck affected packages with project references
+        run: pnpm exec tsc -b packages/session-learning/tool-session-learning/tsconfig.json packages/client/ui-kira-teams/tsconfig.json packages/client/ui-settings-models/tsconfig.json
