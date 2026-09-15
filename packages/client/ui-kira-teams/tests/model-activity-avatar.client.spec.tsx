@@ -59,22 +59,26 @@ describe('ModelActivityAvatar', () => {
   })
 
   it.each([
-    ['idle', 'preparing'],
-    ['running-tools', 'running-tools'],
-    ['verifying', 'verifying'],
-  ] as const)('exposes %s work as the reactive %s motion state', (inputPhase, expectedPhase) => {
-    const element = ModelActivityAvatar({
-      agentId: 'c2',
-      activity: { model: 'gpt-5.6-luna', phase: inputPhase },
-      running: true,
-      pending: false,
-    })
-    expect(element.props).toMatchObject({
-      'data-avatar': 'eclipse',
-      'data-phase': expectedPhase,
-      'data-state': 'running',
-    })
-  })
+    ['preparing', 'preparing', 'running'],
+    ['running-tools', 'running-tools', 'running'],
+    ['verifying', 'verifying', 'running'],
+    ['idle', 'idle', 'ready'],
+  ] as const)(
+    'exposes %s work as the reactive %s motion state',
+    (inputPhase, expectedPhase, expectedState) => {
+      const element = ModelActivityAvatar({
+        agentId: 'c2',
+        activity: { model: 'gpt-5.6-luna', phase: inputPhase },
+        running: true,
+        pending: false,
+      })
+      expect(element.props).toMatchObject({
+        'data-avatar': 'eclipse',
+        'data-phase': expectedPhase,
+        'data-state': expectedState,
+      })
+    },
+  )
 
   it('keeps ready, pending and completed avatars alive without losing identity', () => {
     const ready = ModelActivityAvatar({
