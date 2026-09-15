@@ -62,10 +62,22 @@ export interface ConnectionLifecycle {
   setTools(toolNames: readonly string[]): void
 }
 
+/**
+ * The HTTP status carried by a failed connection attempt. The MCP SDK signals a
+ * Streamable HTTP failure with `StreamableHTTPError.code` and attaches no
+ * `status`, while other throwers use `status`; reading both keeps the
+ * authorization classification independent of which one raised the error. A
+ * non-numeric `code` (a Node network code such as `ECONNREFUSED`) is not an HTTP
+ * status and is ignored.
+ *
+ * @param error - The rejection value from a connection or tool-sync attempt.
+ * @returns The HTTP status the error carries, or undefined when it carries none.
+ */
 function httpStatus(error: unknown): number | undefined {
   if (typeof error !== 'object' || error === null) return undefined
-  const status = (error as { status?: unknown }).status
-  return typeof status === 'number' ? status : undefined
+  const { status, code } = error as { status?: unknown; code?: unknown }
+  if (typeof status === 'number') return status
+  return typeof code === 'number' ? code : undefined
 }
 
 function failureStatus(config: Config, error: unknown): { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode } {

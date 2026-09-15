@@ -446,4 +446,52 @@ describe('apply (plugin lifecycle)', () => {
     }])
     expect(JSON.stringify(ctx.mcpConnectors.list())).not.toContain('private provider detail')
   })
+
+  it('classifies the SDK StreamableHTTPError 401 carried in error.code as auth-required', async () => {
+    const httpConfig: Config = {
+      transport: 'streamable-http',
+      serverName: 'web-auth-code',
+      url: 'http://localhost:3000/mcp',
+      headers: {},
+      toolCallTimeoutMs: 30_000,
+      failOnStartupError: false,
+      reconnect: { enabled: false },
+    }
+    // The SDK raises StreamableHTTPError with `code` and no `status`, so this is
+    // the form a 401 from a non-loopback MCP endpoint actually reaches.
+    mockConnect.mockRejectedValue({ code: 401, message: 'private provider detail' })
+
+    await apply(ctx, httpConfig)
+
+    expect(ctx.mcpConnectors.list()).toEqual([{
+      serverName: 'web-auth-code',
+      transport: 'streamable-http',
+      status: 'auth-required',
+      reasonCode: 'authorization-required',
+      toolNames: [],
+    }])
+  })
+
+  it('does not read a non-numeric network code as an HTTP status', async () => {
+    const httpConfig: Config = {
+      transport: 'streamable-http',
+      serverName: 'web-network-code',
+      url: 'http://localhost:3000/mcp',
+      headers: {},
+      toolCallTimeoutMs: 30_000,
+      failOnStartupError: false,
+      reconnect: { enabled: false },
+    }
+    mockConnect.mockRejectedValue({ code: 'ECONNREFUSED', message: 'connect failed' })
+
+    await apply(ctx, httpConfig)
+
+    expect(ctx.mcpConnectors.list()).toEqual([{
+      serverName: 'web-network-code',
+      transport: 'streamable-http',
+      status: 'failed',
+      reasonCode: 'connection-failed',
+      toolNames: [],
+    }])
+  })
 })
