@@ -2509,6 +2509,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 : { reasoningEffort: resolved.reasoningEffort },
             }
             selectionFor(found.agent).current = selected
+            // Synchronize the live Agent route so delegators (subagent /
+            // workflow childRoute) inherit the newly selected provider/model
+            // instead of reading the stale options captured at agent creation.
+            found.agent.options.provider = selected.provider
+            found.agent.options.model = selected.model
+            found.agent.options.reasoningEffort = selected.reasoningEffort
             try {
               await defaults.saveDefaultModelSelection?.(selected)
             } catch (error: unknown) {
