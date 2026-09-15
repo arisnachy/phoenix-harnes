@@ -1,0 +1,20 @@
+# PHOENIX profile layer. Apply after the standard dsh-base bundle.
+# It adds PHOENIX policy/intelligence while keeping the DSH capability seams.
+- insert:
+    - id: phoenix-runtime
+      name: '@deepseek-ai/dsh-phoenix-runtime'
+      config:
+        routing: true
+        failover: true
+        agentRoi: true
+        localEvolution: true
+        maxFailoversPerStep: 2
+
+    # Official Codex app-server bridge. Registration alone grants no authority;
+    # PHOENIX routing/ROI and the existing subagent tool remain the gate.
+    - id: subagent-codex
+      name: '@deepseek-ai/dsh-subagent-codex'
+
+    # Official Claude Code Agent SDK bridge. Same authority boundary as Codex.
+    - id: subagent-claude-code
+      name: '@deepseek-ai/dsh-subagent-claude-code'
