@@ -1,13 +1,18 @@
-import { describe, expect, it } from 'vitest'
-import type { SessionId, SessionSummary } from '@phoenix-ai/dsh-client-runtime/client'
+// @vitest-environment jsdom
+
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import type { SessionId, SessionListState, SessionSummary } from '@phoenix-ai/dsh-client-runtime/client'
 import {
   KIRA_ROSTER,
+  KiraTeamsDock,
   activityKeyOf,
   agentRoleKeyOf,
   liveCardsOf,
   performanceKeyOf,
+  type KiraTeamsDockProps,
 } from '../src/client/KiraTeamsDock.tsx'
-import { en, es, zh } from '../src/client/locales.ts'
+import { en, es, zh, type KiraTeamsKey } from '../src/client/locales.ts'
 import {
   ModelActivityAvatar,
   portraitSrcForKind,
@@ -22,6 +27,11 @@ function summary(partial: Partial<SessionSummary> & { id: SessionId }): SessionS
     updatedAt: 0,
     ...partial,
   } as SessionSummary
+}
+
+function translate(key: KiraTeamsKey, params?: { count?: number }): string {
+  const value = es[key]
+  return params?.count === undefined ? value : value.replace('{count}', String(params.count))
 }
 
 describe('approved KIRA compact live-agent dock', () => {
@@ -151,6 +161,46 @@ describe('approved KIRA compact live-agent dock', () => {
 
     expect(activityKeyOf(ready)).toBe('activity.ready')
     expect(activityKeyOf(working)).toBe('activity.working')
+  })
+
+  it('floats above the conversation without reserving the workspace rail and separates role from activity', () => {
+    const root = summary({ id: sid('root') })
+    const supervisor = summary({
+      id: sid('supervisor-live'),
+      parentId: root.id,
+      origin: 'subagent',
+      running: true,
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'mission supervisor', seq: 1 },
+        subagentActivity: { model: 'gpt-5.6-luna', phase: 'preparing' },
+      },
+    })
+    const state = {
+      current: root.id,
+      byId: {
+        [String(root.id)]: root,
+        [String(supervisor.id)]: supervisor,
+      },
+    } as unknown as SessionListState
+    const setWorkspaceOccupant = vi.fn()
+    const props = {
+      list: {
+        getSnapshot: () => state,
+        subscribe: () => () => undefined,
+      },
+      layout: { setWorkspaceOccupant },
+      openChild: vi.fn(),
+      refresh: vi.fn(),
+      t: translate,
+    } as unknown as KiraTeamsDockProps
+
+    const { container } = render(<KiraTeamsDock {...props} />)
+
+    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('floating-live')
+    expect(setWorkspaceOccupant).toHaveBeenCalledWith('subagent', false)
+    expect(screen.getByText('Supervisor')).toBeTruthy()
+    expect(screen.getByText('Preparando')).toBeTruthy()
+    expect(screen.getByText('Supervisando misión')).toBeTruthy()
   })
 })
 
