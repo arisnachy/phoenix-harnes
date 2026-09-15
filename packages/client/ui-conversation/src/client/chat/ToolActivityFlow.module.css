@@ -21,6 +21,7 @@
   background: transparent;
   font: var(--dsw-font-s-strong-14);
   cursor: pointer;
+  user-select: none;
 }
 
 .toggle:hover {

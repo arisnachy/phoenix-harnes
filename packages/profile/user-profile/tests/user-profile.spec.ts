@@ -90,6 +90,17 @@ describe('user profile validation and projection helpers', () => {
     expect(text).toContain('Do not repeatedly remind the user that you are an AI')
   })
 
+  it('keeps personal memory relevant and pending-work claims evidence-scoped', () => {
+    const text = renderAssistantIdentity({ name: 'KIRA', gender: 'feminine' })
+
+    expect(text).toContain('Treat personal profile and memory as private background context')
+    expect(text).toContain('mention a family member, health detail, private preference, or other personal fact only when it is directly relevant')
+    expect(text).toContain('For simple status, lookup, and review requests, retrieve first and lead with the result')
+    expect(text).toContain('When the user asks what is pending')
+    expect(text).toContain('Never claim that nothing else is pending unless every authoritative source in the intended scope was actually checked')
+    expect(text).toContain('Do not turn unrelated memories into a menu of suggested topics')
+  })
+
   it('rejects an assistant gender outside the supported presentation modes', () => {
     expect(() => { validateUserProfileUpdate({ assistantGender: 'robot' }) }).toThrow('assistantGender')
   })

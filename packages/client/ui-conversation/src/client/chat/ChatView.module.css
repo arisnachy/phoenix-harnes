@@ -70,7 +70,9 @@
    tool rows match Think chrome (no selected ring). */
 
 /* Turn activity keeps a compact one-line footprint. The text shimmer and
-   blue-gold emblem orbit share one calm cadence; reduced-motion keeps both static. */
+   blue-gold emblem orbit share one calm cadence; reduced-motion keeps both static.
+   It is transient technical chrome, not assistant prose, so normal transcript
+   selection/copy skips it. */
 .turnStatus {
   align-self: flex-start;
   flex: none;
@@ -80,6 +82,7 @@
   height: 30px;
   font: var(--dsw-font-s-strong-14);
   white-space: nowrap;
+  user-select: none;
   background: linear-gradient(
     90deg,
     var(--dsw-static-deepseek-500) 0%,
