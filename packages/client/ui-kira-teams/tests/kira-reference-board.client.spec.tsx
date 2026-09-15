@@ -70,19 +70,27 @@ describe('approved KIRA compact live-agent dock', () => {
 
     const judge = summary({
       id: sid('judge'),
-      projectionValues: { subagent: { label: 'independent quality judge' } },
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'independent quality judge', seq: 1 },
+      },
     })
     const supervisor = summary({
       id: sid('supervisor'),
-      projectionValues: { subagent: { label: 'mission supervisor and orchestrator' } },
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'mission supervisor and orchestrator', seq: 2 },
+      },
     })
     const coder = summary({
       id: sid('coder'),
-      projectionValues: { subagent: { label: 'fix code and debug implementation' } },
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'fix code and debug implementation', seq: 3 },
+      },
     })
     const tester = summary({
       id: sid('tester'),
-      projectionValues: { subagent: { label: 'QA tester' } },
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'QA tester', seq: 4 },
+      },
     })
 
     expect(agentRoleKeyOf(judge)).toBe('role.judge')
@@ -94,22 +102,28 @@ describe('approved KIRA compact live-agent dock', () => {
   it('describes what each running agent is actually doing', () => {
     const judge = summary({
       id: sid('judge'), running: true,
-      projectionValues: { subagent: { label: 'judge output quality' } },
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'judge output quality', seq: 5 },
+      },
     })
     const supervisor = summary({
       id: sid('supervisor'), running: true,
-      projectionValues: { subagent: { label: 'supervisor' } },
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'supervisor', seq: 6 },
+      },
     })
     const coder = summary({
       id: sid('coder'), running: true,
       projectionValues: {
-        subagent: { label: 'fixing code' },
+        subagent: { mode: 'continuable', label: 'fixing code', seq: 7 },
         subagentActivity: { model: 'gpt-5.6-sol', phase: 'running-tools' },
       },
     })
     const researcher = summary({
       id: sid('research'), running: true,
-      projectionValues: { subagent: { label: 'researcher' } },
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'researcher', seq: 8 },
+      },
     })
 
     expect(performanceKeyOf(judge)).toBe('performance.judging')
