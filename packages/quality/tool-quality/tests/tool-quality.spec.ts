@@ -5,6 +5,7 @@ import { Session, SessionId } from '@phoenix-ai/dsh-session'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime from '@phoenix-ai/dsh-tools'
 import QualitySessionService from '@phoenix-ai/dsh-quality-session'
+import { describe, expect, test } from 'vitest'
 import * as ToolQuality from '../src/index.ts'
 
 function stubAgent(): Agent {
