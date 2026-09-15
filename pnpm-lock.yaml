@@ -6328,6 +6328,18 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
 
+  packages/quality/quality:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@phoenix-ai/dsh-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+
   packages/runtime-diagnostics/invariants:
     dependencies:
       '@phoenix-ai/schemastery':
