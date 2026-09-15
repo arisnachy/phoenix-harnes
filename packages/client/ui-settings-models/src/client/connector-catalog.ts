@@ -73,6 +73,8 @@ export const CONNECTOR_CATALOG: readonly ConnectorDefinition[] = [
   { id: 'plaid', name: 'Plaid', category: 'Finance', description: 'Connect supported financial-account data through a provider adapter.', mode: 'api-key', providerFamily: 'plaid', logoUrl: icon('plaid'), capabilities: ['banking-data', 'transactions'] },
   { id: 'quickbooks', name: 'QuickBooks', category: 'Finance', description: 'Work with accounting, invoices, expenses, and business finances.', mode: 'oauth', providerFamily: 'quickbooks', logoUrl: icon('quickbooks'), capabilities: ['accounting', 'invoices', 'expenses'] },
   { id: 'openai-platform', aliases: ['openai'], name: 'OpenAI Platform', category: 'AI', description: 'Configure OpenAI API access for development and model workflows.', mode: 'api-key', providerFamily: 'openai', logoUrl: icon('openai'), capabilities: ['models', 'api', 'development'] },
+  { id: 'codex', aliases: ['chatgpt'], name: 'Codex', category: 'Agents', description: 'Delegate coding and agent work to OpenAI Codex.', mode: 'native', providerFamily: 'openai', logoUrl: icon('openai'), capabilities: ['agents', 'code', 'delegation'] },
+  { id: 'openclaw', name: 'OpenClaw', category: 'Agents', description: 'Connect the OpenClaw agent runtime and its local CLI tools.', mode: 'native', capabilities: ['agents', 'local-tools'] },
   { id: 'custom-mcp', name: 'Custom MCP Server', category: 'Automation', description: 'Attach any compatible stdio or Streamable HTTP MCP server to Phoenix.', mode: 'mcp', capabilities: ['dynamic-tools'] },
 ] as const
 

@@ -82,6 +82,12 @@ export function ModelSelect(
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
   const [effortDraftKey, setEffortDraftKey] = useState<string | null>(null)
+  // Provider accordion: manual toggles win; otherwise only the group holding
+  // the current model stays expanded, falling back to the first group when
+  // the current model is no longer advertised. Keeping the catalog collapsed
+  // by default stops long directories from burying or visually clipping the
+  // first rows (the old always-expanded list scrolled under sticky headers).
+  const [groupToggles, setGroupToggles] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -273,6 +279,26 @@ export function ModelSelect(
     return (node: HTMLElement | null) => { itemRefs.current[at] = node }
   }
 
+  const defaultExpandedGroupId = (): string | undefined => {
+    const current = state.current
+    const holder = state.groups.find(group =>
+      current !== null && group.models.some(model => model.id === current.model))
+    return holder?.id ?? state.groups[0]?.id
+  }
+
+  const groupExpanded = (groupId: string): boolean => {
+    const manual = groupToggles.get(groupId)
+    return manual ?? groupId === defaultExpandedGroupId()
+  }
+
+  const toggleGroup = (groupId: string): void => {
+    setGroupToggles(previous => {
+      const next = new Map(previous)
+      next.set(groupId, !groupExpanded(groupId))
+      return next
+    })
+  }
+
   return (
     <div ref={rootRef} className={css.root} onKeyDown={onRootKeyDown} onBlur={onBlur}>
       <button
@@ -346,10 +372,28 @@ export function ModelSelect(
               <div className={clsx(css.groups, 'scrollable')}>
                 {state.groups.map((group) => {
                   const headingId = `${id}-${group.id}`
+                  const expanded = groupExpanded(group.id)
                   return (
-                    <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
-                      <div className={css.groupTitle} id={headingId}>{group.name}</div>
-                      {group.models.map((model) => {
+                    <section
+                      role="group"
+                      aria-labelledby={headingId}
+                      className={clsx(css.group, !expanded && css.groupCollapsed)}
+                      key={group.id}
+                    >
+                      <button
+                        ref={itemRef()}
+                        type="button"
+                        role="menuitem"
+                        className={css.groupHeader}
+                        id={headingId}
+                        aria-expanded={expanded}
+                        onClick={() => { toggleGroup(group.id) }}
+                      >
+                        <IconChevronRightOutline14 className={clsx(css.groupChevron, expanded && css.groupChevronOpen)} />
+                        <span className={css.groupName}>{group.name}</span>
+                        <span className={css.groupCount} aria-hidden="true">{group.models.length}</span>
+                      </button>
+                      {expanded && group.models.map((model) => {
                         const selected = state.current?.provider === group.id && state.current.model === model.id
                         const presentation = presentModel(model.name, model.description)
                         return (

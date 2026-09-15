@@ -351,18 +351,61 @@
   border-top: 1px solid var(--dsw-alias-border-l3);
 }
 
-.groupTitle {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 9px 12px 5px;
-  background: var(--dsw-specific-menu);
+.groupCollapsed {
+  padding-bottom: 0;
+}
+
+.groupHeader {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  padding: 6px 8px 4px;
+  border: none;
+  border-radius: 8px;
+  outline: none;
+  background: transparent;
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   line-height: 16px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+
+.groupHeader:hover,
+.groupHeader:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.groupChevron {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
+  transition: transform 120ms ease;
+}
+
+.groupChevronOpen {
+  transform: rotate(90deg);
+}
+
+.groupName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupCount {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .option {

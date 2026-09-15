@@ -50,6 +50,7 @@ export function useAuthorizationAttempt(
   const [answer, setAnswer] = useState('')
   const [failure, setFailure] = useState<string | undefined>()
   const opened = useRef(new Set<string>())
+  const popupRef = useRef<Window | null>(null)
 
   useEffect(() => {
     if (api === undefined || attempt?.status !== 'pending') return
@@ -66,7 +67,11 @@ export function useAuthorizationAttempt(
         const latest = view.notices.at(-1)?.notice
         if (latest?.url !== undefined && !opened.current.has(latest.url)) {
           opened.current.add(latest.url)
-          window.open(latest.url, '_blank', 'noopener,noreferrer')
+          if (popupRef.current !== null && !popupRef.current.closed) {
+            popupRef.current.location.replace(latest.url)
+          } else {
+            window.open(latest.url, '_blank')
+          }
         }
         const message = latest?.message ?? attempt.message
         const url = latest?.url ?? attempt.url
@@ -95,6 +100,11 @@ export function useAuthorizationAttempt(
     if (api === undefined) return
     setFailure(undefined)
     setAttempt(undefined)
+    // Open a blank same-origin window synchronously inside the click gesture
+    // so popup blockers allow it; the poll navigates that window once the
+    // backend supplies the consent URL. When the blocker still refuses, the
+    // progress surface falls back to a plain link.
+    popupRef.current = window.open('', '_blank')
     void api.begin({ key, method }).then((response) => {
       if (!response.result.ok) {
         setFailure(response.result.error.message)
@@ -122,6 +132,7 @@ export function useAuthorizationAttempt(
 
   const cancel = (): void => {
     if (api === undefined || attempt === undefined) return
+    popupRef.current?.close()
     void api.cancel({ attemptId: attempt.id }).finally(() => {
       setAttempt((current) => {
         if (current === undefined) return current
