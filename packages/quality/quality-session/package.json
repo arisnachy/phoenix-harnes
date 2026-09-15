@@ -1,19 +1,18 @@
 {
-  "name": "@phoenix-ai/dsh-quality",
-  "description": "Evidence-backed quality readiness and foresight contract for PHOENIX missions",
+  "name": "@phoenix-ai/dsh-quality-session",
+  "description": "Session-backed durable provider for PHOENIX quality assessments",
   "version": "0.1.1-rc.2",
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
-    "directory": "packages/quality/quality"
+    "directory": "packages/quality/quality-session"
   },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
   "exports": {
     ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
-    "./types": { "types": "./lib/types/types.d.ts", "default": "./lib/types/types.js" },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -22,13 +21,13 @@
   "peerDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
-    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-quality": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
-    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-quality": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^"
   }
 }

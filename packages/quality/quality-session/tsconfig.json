@@ -7,6 +7,6 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/agent" },
     { "path": "../../core/session" },
-    { "path": "../../util/brand" }
+    { "path": "../quality" }
   ]
 }

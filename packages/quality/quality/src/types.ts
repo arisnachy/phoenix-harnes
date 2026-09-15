@@ -110,3 +110,26 @@ export type QualityMutation =
   | { readonly kind: 'forecast'; readonly value: RiskForecast }
   | { readonly kind: 'required-changes'; readonly value: readonly string[] }
   | { readonly kind: 'innovation'; readonly value: QualityInnovation }
+
+/** Durable whole-snapshot mutation for one quality assessment. */
+export type QualityChange =
+  | {
+    readonly kind: 'quality/change'
+    readonly version: 1
+    readonly operation: 'start' | 'record'
+    readonly assessment: QualityAssessmentSnapshot
+  }
+  | {
+    readonly kind: 'quality/change'
+    readonly version: 1
+    readonly operation: 'clear'
+    readonly cleared: QualityAssessmentRef
+    readonly clearedAt: number
+  }
+
+declare module '@phoenix-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /** Full replayable quality state or a clear tombstone. */
+    'quality/change': QualityChange
+  }
+}
