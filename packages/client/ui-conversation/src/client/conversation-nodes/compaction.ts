@@ -8,7 +8,7 @@ import { compactSource, compactSummary, updateCompactionState } from './command.
 
 declare module '@phoenix-ai/dsh-client-ui-conversation/client' {
   interface ChatNodeDataMap {
-    /** Automatic compaction checkpoint marker. */
+    /** Automatic compaction checkpoint retained for history/debug projection. */
     compaction: CompactionSummaryNode
   }
 }
@@ -52,7 +52,10 @@ export const compactionDefinition: ConversationNodeDefinition<CompactionState> =
     const state = context.state ?? fallbackState(context)
     if (state.checkpoint === undefined) return null
     const marker = compactSummary(state.summary, state.checkpoint)
-    return chatNode(context, 'compaction', marker.seq, marker)
+    // Automatic context maintenance remains queryable in the assembled
+    // history but is not part of the human conversation. A user-issued
+    // `/compact` command owns its own visible command card separately.
+    return chatNode(context, 'compaction', marker.seq, marker, { visibility: 'hidden' })
   },
 }
 
