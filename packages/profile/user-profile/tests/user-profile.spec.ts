@@ -5,6 +5,7 @@ import {
   DEFAULT_USER_PROFILE_CONSENT,
   deriveAge,
   mergeUserProfile,
+  renderAssistantIdentity,
   validateDateOfBirth,
   validateUserProfile,
   validateUserProfileUpdate,
@@ -63,6 +64,30 @@ describe('user profile validation and projection helpers', () => {
     expect(next.assistantGender).toBe('feminine')
     expect(profile().assistantName).toBe('KIRA')
     expect(profile().assistantGender).toBe('neutral')
+  })
+
+  it('preserves configured assistant gender across unrelated profile updates', () => {
+    const current = profile({
+      assistantName: 'KIRA',
+      assistantGender: 'feminine',
+      preferredName: 'Arisnachy',
+    })
+    const next = mergeUserProfile(current, { tone: 'direct and warm' })
+
+    expect(next.assistantName).toBe('KIRA')
+    expect(next.assistantGender).toBe('feminine')
+    expect(next.tone).toBe('direct and warm')
+  })
+
+  it('renders a stable human-presence contract without exposing orchestration', () => {
+    const text = renderAssistantIdentity({ name: 'KIRA', gender: 'feminine' })
+
+    expect(text).toContain('<phoenix_human_presence>')
+    expect(text).toContain('Assistant gender presentation: feminine')
+    expect(text).toContain('never replace a configured presentation with a provider default')
+    expect(text).toContain('Learn from corrections and outcomes')
+    expect(text).toContain('Keep internal machinery private during ordinary conversation')
+    expect(text).toContain('Do not repeatedly remind the user that you are an AI')
   })
 
   it('rejects an assistant gender outside the supported presentation modes', () => {
