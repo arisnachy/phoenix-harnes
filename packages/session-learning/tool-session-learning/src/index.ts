@@ -153,12 +153,11 @@ export function apply(ctx: Context, config: Config): void {
   })
   ctx.tools.register(defineTool({
     name: 'memory_search',
-    description: 'Search Phoenix cognitive memory with bounded provenance, layers, project, temporal, entity, confidence, cross-project scope, and validated procedural knowledge.',
+    description: 'Search Phoenix cognitive memory with bounded provenance, layers, project, temporal, entity, confidence, and validated procedural knowledge.',
     parameters: {
       query: { type: 'string', description: 'Words to find in memory summaries or provenance. Omit to list recent memories.' },
       limit: { type: 'integer', description: 'Optional result count, capped by the configured maximum.' },
       project_id: { type: 'string', description: 'Optional project filter. Automatic recall is scoped to the current project.' },
-      cross_project: { type: 'boolean', description: 'Explicitly search across projects for directed autobiographical/history recall.' },
       layer: { type: 'string', enum: ['autobiographical', 'working', 'episodic', 'semantic', 'procedural', 'prospective', 'associative', 'temporal'], description: 'Optional memory-layer filter.' },
       from: { type: 'integer', description: 'Optional inclusive Unix-millisecond lower bound.' },
       to: { type: 'integer', description: 'Optional inclusive Unix-millisecond upper bound.' },
@@ -171,14 +170,12 @@ export function apply(ctx: Context, config: Config): void {
       if (!Number.isSafeInteger(requested) || requested < 1) throw new TypeError('limit must be a positive safe integer')
       const filters: {
         projectId?: string
-        includeCrossProject?: boolean
         layers?: readonly CognitiveMemoryLayer[]
         from?: number
         to?: number
         includeHistory?: boolean
       } = {}
       if (args.project_id !== undefined) filters.projectId = args.project_id
-      if (args.cross_project !== undefined) filters.includeCrossProject = args.cross_project
       if (args.layer !== undefined) filters.layers = [args.layer]
       if (args.from !== undefined) filters.from = args.from
       if (args.to !== undefined) filters.to = args.to

@@ -48,19 +48,6 @@ export interface Config {
   maxRecords?: number
 }
 
-/** Explicit cognitive search policy layered on top of canonical ledger filters. */
-export type CognitiveSearchOptions = Omit<CognitiveMemoryQuery, 'query' | 'limit'> & {
-  /** Bypass implicit current-project scoping when the caller deliberately requests autobiographical/global recall. */
-  includeCrossProject?: boolean
-}
-
-/** Explicit cognitive recall policy with optional result bound. */
-export type CognitiveRecallOptions = Omit<CognitiveMemoryQuery, 'limit'> & {
-  limit?: number
-  /** Bypass implicit current-project scoping when directed recall requires cross-project evidence. */
-  includeCrossProject?: boolean
-}
-
 /** Config schema; the path is explicit so profiles cannot scatter memory files. */
 export const Config: z<Config> = z.object({
   path: z.string().required(),
@@ -154,18 +141,15 @@ export class LearningMemoryService extends Service {
 
   /**
    * Search cognitive memory with project, temporal, entity, and layer filters.
-   * Default behavior remains current-project scoped. Directed autobiographical
-   * callers may explicitly opt into cross-project recall.
    * @param query - Words to match against normalized memory content.
    * @param limit - Maximum number of ranked hits.
-   * @param filters - Optional metadata, lifecycle, and project-scope filters.
+   * @param filters - Optional metadata and lifecycle filters.
    * @returns Ranked cognitive memory hits with explainable reasons.
    */
-  searchCognitive(query: string = '', limit: number = 50, filters: CognitiveSearchOptions = {}): CognitiveMemoryHit[] {
-    const { includeCrossProject = false, projectId, ...rest } = filters
-    const project = projectId ?? (includeCrossProject ? undefined : this.currentProject)
+  searchCognitive(query: string = '', limit: number = 50, filters: Omit<CognitiveMemoryQuery, 'query' | 'limit'> = {}): CognitiveMemoryHit[] {
+    const project = filters.projectId ?? this.currentProject
     return this.cognitive.search({
-      ...rest,
+      ...filters,
       ...project === undefined ? {} : { projectId: project },
       query,
       limit,
@@ -173,19 +157,16 @@ export class LearningMemoryService extends Service {
   }
 
   /**
-   * Read bounded cognitive context for automatic or directed recall.
-   * Automatic callers stay current-project scoped unless cross-project recall
-   * is explicitly requested.
+   * Read bounded, project-scoped cognitive context for automatic recall.
    * @param query - Optional query and filter set.
    * @returns Ranked active cognitive memory hits.
    */
-  recallCognitive(query: CognitiveRecallOptions = {}): CognitiveMemoryHit[] {
-    const { includeCrossProject = false, projectId, limit = 20, ...rest } = query
-    const project = projectId ?? (includeCrossProject ? undefined : this.currentProject)
+  recallCognitive(query: Omit<CognitiveMemoryQuery, 'limit'> & { limit?: number } = {}): CognitiveMemoryHit[] {
+    const project = query.projectId ?? this.currentProject
     return this.cognitive.search({
-      ...rest,
+      ...query,
       ...project === undefined ? {} : { projectId: project },
-      limit,
+      limit: query.limit ?? 20,
     })
   }
 

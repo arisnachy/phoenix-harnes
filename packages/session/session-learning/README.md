@@ -17,7 +17,7 @@ The path is explicit because memory records contain user-provided text. The serv
 
 ## Safety and model experience
 
-The ledger does not silently change permissions, credentials, or trusted plugins. Explicit retention signals such as “this is important”, “remember this”, “always”, and “I prefer” are promoted automatically to high-confidence semantic memory; ordinary events remain lower-confidence autobiographical and episodic history. Contradictory semantic values keep their old record and validity interval while the new record points to the superseded value. Summaries and content are bounded and redact bearer tokens, common credential assignments, URLs, and email addresses before persistence. Cognitive search is current-project scoped by default; directed autobiographical consumers must opt into `includeCrossProject` explicitly, so broad history questions do not weaken ordinary project isolation.
+The ledger does not silently change permissions, credentials, or trusted plugins. Explicit retention signals such as “this is important”, “remember this”, “always”, and “I prefer” are promoted automatically to high-confidence semantic memory; ordinary events remain lower-confidence autobiographical and episodic history. Contradictory semantic values keep their old record and validity interval while the new record points to the superseded value. Summaries and content are bounded and redact bearer tokens, common credential assignments, URLs, and email addresses before persistence. Automatic model recall is project-scoped and remains untrusted evidence.
 
 ## Model Experience
 
@@ -25,11 +25,11 @@ The ledger does not silently change permissions, credentials, or trusted plugins
 
 #### What the model sees
 
-The service itself adds no prompt or tool schema. A separately composed memory consumer can call `searchCognitive()`, `recallCognitive()`, `timeline()`, `cognitiveForSession()`, and `workingMemory()`. `searchCognitive()` and `recallCognitive()` inherit the current project unless the caller explicitly requests cross-project retrieval. `cognitiveForSession()` is a read-only projection of active records for exactly one `SessionId`; it returns at most 128 newest records in persisted chronological order without changing the canonical session log or cognitive ledger. Consumers remain responsible for selecting bounded records and presenting them as untrusted evidence rather than instructions.
+The service itself adds no prompt or tool schema. A separately composed memory consumer can call `searchCognitive()`, `timeline()`, `cognitiveForSession()`, and `workingMemory()` and must render returned records with their layers, project, entities, relations, source URI, and confidence. `cognitiveForSession()` is a read-only projection of active records for exactly one `SessionId`; it returns at most 128 newest records in persisted chronological order without changing the canonical session log or cognitive ledger. The shipped learning-tool consumer calls `recallCognitive()` during assembly for bounded project-scoped evidence; summaries are protected against prompt-variable delimiters and remain untrusted evidence rather than instructions.
 
 #### Token effect
 
-The observer adds no tokens. A composed memory consumer spends only the bounded records it selects.
+The observer adds no tokens. A future explicit memory consumer spends only the bounded records it selects.
 
 #### KV Cache effect
 

@@ -11,7 +11,7 @@ Model-facing memory tools and continuity policy over PHOENIX's persistent cognit
   name: '@phoenix-ai/dsh-tool-session-learning'
 ```
 
-The plugin requires `tools`, `systemPrompt`, and `learningMemory`. `memory_search` is read-only and supports project, explicit cross-project, layer, time-window, and superseded-history filters. `memory_remember` stores bounded preferences or verified lessons, while `memory_teach` stores structured user-taught procedures. None of these operations can change permissions, credentials, or trusted plugins.
+The plugin requires `tools`, `systemPrompt`, and `learningMemory`. `memory_search` is read-only and supports project, layer, time-window, and superseded-history filters. `memory_remember` stores bounded preferences or verified lessons, while `memory_teach` stores structured user-taught procedures. None of these operations can change permissions, credentials, or trusted plugins. Cross-project autobiographical recall is reserved for the intent-aware runtime path used when the user explicitly asks about prior work or learning.
 
 ## Model Experience
 
@@ -19,13 +19,19 @@ The plugin requires `tools`, `systemPrompt`, and `learningMemory`. `memory_searc
 
 #### What the model sees
 
-Ordinary turns receive only bounded project-scoped evidence and validated procedures. A user question such as “what did we do yesterday?”, “what did you learn?”, or “continue the previous task” activates intent-aware retrieval with temporal and project scope appropriate to that request. Work-history recall prefers structured mission episodes and can use already-durable pre-episode user-task events as a compatibility fallback. The directed context contains task/outcome evidence needed for a natural answer but omits memory IDs, source URIs, event names, layer labels, confidence labels, storage paths, and raw tool arguments.
+Ordinary turns receive only bounded project-scoped evidence and validated procedures. Directed history context contains only the task and outcome evidence needed for a natural answer; it omits memory IDs, source URIs, event names, layer labels, confidence labels, storage paths, and raw tool arguments.
 
-`memory_search` can still return bounded diagnostic JSON when the model explicitly needs technical provenance. Its `cross_project` flag must be requested deliberately; normal automatic recall remains isolated to the active project.
+##### Directed temporal continuity
+
+```markdown
+Questions such as “what did we do yesterday?”, “what did you learn?”, or “continue the previous task” activate intent-aware retrieval with the appropriate temporal window. Explicit autobiographical/history questions may recall evidence across projects, while ordinary automatic recall and memory_search remain project-scoped unless a concrete project is requested.
+```
 
 ##### Durable mission episodes
 
-A substantive user task begins a bounded in-flight trace. Public tool names may be retained, but raw tool arguments and raw tool results are excluded. Verified goal completion persists a high-confidence `mission` episode; an error can persist an unverified episode. The same verified completion events already consumed by procedural learning continue to reinforce reusable procedures, so episodic continuity does not create a second skill store.
+```markdown
+A substantive user task starts a bounded in-flight trace. Public tool names may be retained, but raw tool arguments and raw tool results are excluded. Verified goal completion persists a high-confidence mission episode; an error can persist an unverified episode. Work-history recall prefers these structured episodes and can fall back to already-durable pre-v2 user-task events when needed.
+```
 
 #### Token effect
 

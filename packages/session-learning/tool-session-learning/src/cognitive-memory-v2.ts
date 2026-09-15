@@ -1,11 +1,12 @@
 /** Runtime wiring for PHOENIX Cognitive Memory v2. */
 
 import type { Context } from '@phoenix-ai/cordis'
-import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
+import type { CognitiveMemoryHit } from '@phoenix-ai/dsh-session-learning'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { EpisodicMissionRecorder } from './episodic.ts'
 import { formatDirectedMemoryContext } from './episodic-presentation.ts'
 import { resolveMemoryIntent } from './memory-intent.ts'
+import type { ResolvedMemoryIntent } from './memory-intent.ts'
 
 /**
  * Install durable mission capture and intent-aware directed recall on one Cordis context.
@@ -18,6 +19,7 @@ export function installCognitiveMemoryV2(ctx: Context): void {
     },
   })
   let latestUserMessage = ''
+  let latestProjectId: string | undefined
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
@@ -31,6 +33,7 @@ export function installCognitiveMemoryV2(ctx: Context): void {
       const text = messageText(data)
       if (text === undefined) return
       latestUserMessage = text
+      latestProjectId = projectId
       recorder.observeUserMessage(sessionId, text, {
         occurredAt,
         ...projectId === undefined ? {} : { projectId },
@@ -96,25 +99,27 @@ export function installCognitiveMemoryV2(ctx: Context): void {
       })
       if (intent.kind === 'ordinary') return ''
 
-      const filters: {
-        includeCrossProject?: boolean
-        layers?: readonly CognitiveMemoryLayer[]
-        from?: number
-        to?: number
-        includeHistory?: boolean
-      } = {
-        includeCrossProject: intent.crossProject,
-        includeHistory: false,
-      }
-      if (intent.layers.length > 0) filters.layers = intent.layers
-      if (intent.from !== undefined) filters.from = intent.from
-      if (intent.to !== undefined) filters.to = intent.to
-
-      const hits = ctx.learningMemory.searchCognitive('', 128, filters)
+      const hits = directedMemoryHits(ctx, intent, latestProjectId)
       return formatDirectedMemoryContext(intent, hits)
     },
     interpolateVariables: false,
   })
+}
+
+function directedMemoryHits(
+  ctx: Context,
+  intent: ResolvedMemoryIntent,
+  currentProjectId: string | undefined,
+): CognitiveMemoryHit[] {
+  return ctx.learningMemory.allCognitiveRecords()
+    .filter(record => record.status === 'active')
+    .filter(record => intent.layers.length === 0 || intent.layers.some(layer => record.layers.includes(layer)))
+    .filter(record => intent.crossProject || currentProjectId === undefined || record.projectId === currentProjectId)
+    .filter(record => intent.from === undefined || record.provenance.occurredAt >= intent.from)
+    .filter(record => intent.to === undefined || record.provenance.occurredAt <= intent.to)
+    .sort((left, right) => right.provenance.occurredAt - left.provenance.occurredAt || right.eventSeq - left.eventSeq)
+    .slice(0, 128)
+    .map(record => ({ record, score: 1, reasons: ['directed-memory'] }))
 }
 
 function projectIdFromSession(session: unknown): string | undefined {
