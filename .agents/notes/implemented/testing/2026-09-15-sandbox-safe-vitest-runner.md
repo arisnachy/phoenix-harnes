@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-09-15-sandbox-safe-vitest-runner.zh.md)
+
 ## Problem
 
 `pnpm run test` cannot start inside an agent sandbox that denies `child_process.spawn`, even though the suite itself is healthy. Two independent spawns happen before the first test file loads.
