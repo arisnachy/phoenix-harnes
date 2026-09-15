@@ -5,9 +5,9 @@
  * The stable updater intentionally never kills the Host. This helper converts a
  * verified prepared marker into the two durable requests the external
  * supervisor already understands: activate this exact update target, then
- * restart the Host safely. `--arm-staging` exists to bootstrap older
- * supervisors: a verified staging build can arm a detached waiter before the
- * new source has been activated locally.
+ * restart the Host safely. `--arm-staging` also bootstraps legacy unsupervised
+ * Windows Hosts so an update that introduces/fixes the supervisor can activate
+ * itself instead of waiting forever for a manual Host exit.
  */
 
 import { spawn, spawnSync } from 'node:child_process'
@@ -103,12 +103,65 @@ function parentAlive(pid) {
   }
 }
 
-async function waitForTarget(controlDir, target, timeoutMs, parentPid) {
+function updaterParentPid(commandLine) {
+  const match = /(?:^|\s)--parent-pid(?:\s+|=)(\d+)(?:\s|$)/u.exec(commandLine)
+  if (match === null) return undefined
+  const pid = Number(match[1])
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined
+}
+
+function discoverUnsupervisedHostPid() {
+  if (process.platform !== 'win32') return undefined
+
+  const powershell = process.env.SystemRoot?.trim()
+    ? join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+    : 'powershell.exe'
+  const script = [
+    `$cursor = ${String(process.pid)}`,
+    'while ($cursor -gt 0) {',
+    '$p = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $cursor) -ErrorAction SilentlyContinue',
+    'if ($null -eq $p) { break }',
+    '[Console]::Out.WriteLine(([string]$p.ProcessId + "`t" + [string]$p.ParentProcessId + "`t" + [string]$p.CommandLine))',
+    '$cursor = [int]$p.ParentProcessId',
+    '}',
+  ].join('; ')
+  const result = spawnSync(powershell, [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script,
+  ], {
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+  if (result.status !== 0 || typeof result.stdout !== 'string') return undefined
+
+  for (const line of result.stdout.split(/\r?\n/u)) {
+    const fields = line.split('\t')
+    if (fields.length < 3) continue
+    const commandLine = fields.slice(2).join('\t')
+    if (!commandLine.includes('phoenix-auto-update.mjs') || !commandLine.includes('--watch')) continue
+    const hostPid = updaterParentPid(commandLine)
+    if (hostPid !== undefined && hostPid !== process.pid && parentAlive(hostPid)) return hostPid
+  }
+  return undefined
+}
+
+function requestLegacyHostShutdown(shutdownParentPid) {
+  if (!parentAlive(shutdownParentPid)) return
+  try {
+    console.error(`[PHOENIX UPDATE] prepared update is verified; restarting legacy unsupervised Host ${String(shutdownParentPid)} so activation can complete.`)
+    process.kill(shutdownParentPid)
+  } catch (error) {
+    console.error(`[PHOENIX UPDATE] warning: could not restart legacy unsupervised Host ${String(shutdownParentPid)}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+async function waitForTarget(controlDir, target, timeoutMs, parentPid, shutdownParentPid) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() <= deadline && (parentPid === undefined || parentAlive(parentPid))) {
     const prepared = readPrepared(controlDir)
     if (prepared?.target === target) {
       requestActivation(controlDir, target)
+      if (shutdownParentPid !== undefined) requestLegacyHostShutdown(shutdownParentPid)
       return true
     }
     await sleep(POLL_MS)
@@ -129,7 +182,6 @@ async function watchPrepared(controlDir, parentPid) {
 }
 
 function armFromStaging() {
-  if (process.env.PHOENIX_UPDATE_SUPERVISED !== '1') return 0
   const root = resolve(process.cwd())
   const controlDir = repositoryControlDirectory(root)
   const gitDir = worktreeGitDirectory(root)
@@ -138,12 +190,26 @@ function armFromStaging() {
   if (controlDir.toLowerCase() === gitDir.toLowerCase()) return 0
   if (!/^[0-9a-f]{40}$/iu.test(target)) return 0
 
-  const child = spawn(process.execPath, [
+  const supervised = process.env.PHOENIX_UPDATE_SUPERVISED === '1'
+  const unsupervisedHostPid = supervised ? undefined : discoverUnsupervisedHostPid()
+  if (!supervised && unsupervisedHostPid === undefined) {
+    // A normal/manual build from a linked worktree must never restart anything.
+    // Only a staged build that can prove it is descended from the legacy
+    // update watcher is allowed to bootstrap an unsupervised Host restart.
+    return 0
+  }
+
+  const args = [
     scriptPath,
     '--wait-target', target,
     '--common-dir', controlDir,
     '--timeout-ms', String(DEFAULT_TIMEOUT_MS),
-  ], {
+  ]
+  if (unsupervisedHostPid !== undefined) {
+    args.push('--shutdown-parent-pid', String(unsupervisedHostPid))
+  }
+
+  const child = spawn(process.execPath, args, {
     cwd: root,
     detached: true,
     stdio: 'ignore',
@@ -151,14 +217,24 @@ function armFromStaging() {
     env: process.env,
   })
   child.unref()
-  console.error(`[PHOENIX UPDATE] armed automatic activation for prepared ${target.slice(0, 12)}.`)
+  if (unsupervisedHostPid !== undefined) {
+    console.error(`[PHOENIX UPDATE] armed automatic activation for prepared ${target.slice(0, 12)} from legacy unsupervised Host ${String(unsupervisedHostPid)}.`)
+  } else {
+    console.error(`[PHOENIX UPDATE] armed automatic activation for prepared ${target.slice(0, 12)}.`)
+  }
   return 0
 }
 
 async function main() {
-  if (process.env.PHOENIX_UPDATE_SUPERVISED !== '1') return 0
-
   if (process.argv.includes('--arm-staging')) return armFromStaging()
+
+  const waitTarget = argValue('--wait-target')
+  const shutdownParentRaw = argValue('--shutdown-parent-pid')
+  const shutdownParentPid = shutdownParentRaw === undefined ? undefined : Number(shutdownParentRaw)
+  const legacyBootstrap = waitTarget !== undefined
+    && Number.isInteger(shutdownParentPid)
+    && shutdownParentPid > 0
+  if (process.env.PHOENIX_UPDATE_SUPERVISED !== '1' && !legacyBootstrap) return 0
 
   const explicitControlDir = argValue('--common-dir')
   const controlDir = explicitControlDir === undefined
@@ -166,12 +242,11 @@ async function main() {
     : resolve(explicitControlDir)
   if (controlDir === undefined) return 0
 
-  const waitTarget = argValue('--wait-target')
   if (waitTarget !== undefined) {
     if (!/^[0-9a-f]{40}$/iu.test(waitTarget)) throw new Error('--wait-target must be a 40-character commit SHA')
     const requestedTimeout = Number(argValue('--timeout-ms') ?? DEFAULT_TIMEOUT_MS)
     const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0 ? requestedTimeout : DEFAULT_TIMEOUT_MS
-    return await waitForTarget(controlDir, waitTarget, timeoutMs) ? 0 : 2
+    return await waitForTarget(controlDir, waitTarget, timeoutMs, undefined, legacyBootstrap ? shutdownParentPid : undefined) ? 0 : 2
   }
 
   const parentPid = Number(argValue('--parent-pid'))
