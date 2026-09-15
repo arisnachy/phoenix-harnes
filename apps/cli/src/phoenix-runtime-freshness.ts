@@ -5,6 +5,7 @@ import process from 'node:process'
 
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
 const CLIENT_BUILD_RECORD = '.dsh-build/client-build-environment.json'
+const KIRA_PORTRAIT_ARTIFACT = ['apps', 'web', 'dist', 'assets', 'kira-agents', 'kira-portraits.webp'] as const
 
 interface ActiveRuntimeRecord {
   readonly schema: 1
@@ -100,10 +101,11 @@ function clientBuildCommit(root: string): string | undefined {
   }
 }
 
-/** Whether the browser bundle recorded for this checkout belongs to the current source commit. */
+/** Whether the browser bundle recorded for this checkout is complete and belongs to the current source commit. */
 export function clientArtifactsAreFresh(root: string, sourceHead: string): boolean {
   return clientBuildCommit(root) === sourceHead.slice(0, 7).toLowerCase()
     && existsSync(resolve(root, 'apps', 'web', 'dist', 'index.html'))
+    && existsSync(resolve(root, ...KIRA_PORTRAIT_ARTIFACT))
 }
 
 function rebuildClientArtifacts(root: string): void {
@@ -136,10 +138,10 @@ export function preparePhoenixWebRuntime(root: string): void {
   if (reconcileActiveRuntime(root, sourceHead) === 'isolated') return
   if (clientArtifactsAreFresh(root, sourceHead)) return
 
-  console.error(`[PHOENIX] browser artifacts are stale for ${sourceHead.slice(0, 12)}; rebuilding the client before launch...`)
+  console.error(`[PHOENIX] browser artifacts are stale or incomplete for ${sourceHead.slice(0, 12)}; rebuilding the client before launch...`)
   rebuildClientArtifacts(root)
   if (!clientArtifactsAreFresh(root, sourceHead)) {
-    throw new Error(`client build completed but ${CLIENT_BUILD_RECORD} does not match ${sourceHead.slice(0, 7)}`)
+    throw new Error(`client build completed but required web artifacts do not match ${sourceHead.slice(0, 7)}`)
   }
   console.error(`[PHOENIX] browser artifacts now match source ${sourceHead.slice(0, 12)}.`)
 }
