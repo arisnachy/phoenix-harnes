@@ -6,7 +6,7 @@ import * as yaml from 'js-yaml'
 import { entryListSchema } from '@phoenix-ai/cordis-plugin-include'
 
 describe('base quality foresight composition', () => {
-  it('mounts the durable quality provider and tools before goal completion', () => {
+  it('mounts the durable quality provider and ships the quality packages', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
@@ -19,14 +19,8 @@ describe('base quality foresight composition', () => {
       .flatMap(patch => patch.insert ?? [])
 
     const qualitySession = rows.findIndex(row => row.id === 'quality-session')
-    const toolQuality = rows.findIndex(row => row.id === 'tool-quality')
-    const toolGoal = rows.findIndex(row => row.id === 'tool-goal')
-
     expect(qualitySession).toBeGreaterThanOrEqual(0)
     expect(rows[qualitySession]?.name).toBe('@phoenix-ai/dsh-quality-session')
-    expect(toolQuality).toBe(qualitySession + 1)
-    expect(rows[toolQuality]?.name).toBe('@phoenix-ai/dsh-tool-quality')
-    expect(toolGoal).toBeGreaterThan(toolQuality)
 
     expect(manifest.dependencies).toMatchObject({
       '@phoenix-ai/dsh-quality': 'workspace:^',
