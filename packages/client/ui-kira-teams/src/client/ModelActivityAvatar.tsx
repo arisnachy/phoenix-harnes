@@ -1,6 +1,4 @@
-import type { CSSProperties } from 'react'
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
-import { KIRA_PORTRAIT_SHEET } from './KiraPortraitSheet.ts'
 import css from './ModelActivityAvatar.module.css'
 
 /** Exact visible identities from the user-approved 20-avatar KIRA reference. */
@@ -13,16 +11,13 @@ export type ModelAvatarKind =
 
 type PortraitKey = Exclude<ModelAvatarKind, 'sol' | 'luna' | 'terra' | 'generic'>
 
-// Keep this order in lock-step with AGENT_NAMES in KiraTeamsDock.tsx and with
-// the 5×4 portrait sheet. This is the exact order in the approved reference.
+/** Stable persona order shared with the KIRA Teams roster. */
 const AGENT_AVATAR_KINDS: readonly PortraitKey[] = [
   'vortice', 'aurora', 'atlas', 'nova', 'lumen',
   'helix', 'prisma', 'orion', 'vega', 'eclipse',
   'argo', 'solaria', 'nexo', 'astra', 'lyra',
   'zenith', 'cobalto', 'quasar', 'senda', 'orbita',
 ]
-
-const PORTRAIT_ORDER: readonly PortraitKey[] = AGENT_AVATAR_KINDS
 
 const PORTRAIT_ALIAS: Record<ModelAvatarKind, PortraitKey> = {
   sol: 'solaria',
@@ -73,17 +68,9 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
   return 'generic'
 }
 
-/** Locate one exact portrait within the approved 5×4 sheet. */
-function portraitStyle(kind: ModelAvatarKind): CSSProperties {
-  const portrait = PORTRAIT_ALIAS[kind]
-  const index = PORTRAIT_ORDER.indexOf(portrait)
-  const column = index % 5
-  const row = Math.floor(index / 5)
-  return {
-    '--portrait-image': `url("${KIRA_PORTRAIT_SHEET}")`,
-    '--portrait-x': `${column * 25}%`,
-    '--portrait-y': `${row * (100 / 3)}%`,
-  } as CSSProperties
+/** Resolve the dedicated raster file for one visible persona. */
+export function portraitSrcForKind(kind: ModelAvatarKind): string {
+  return `/assets/kira-agents/${PORTRAIT_ALIAS[kind]}.webp`
 }
 
 export interface ModelActivityAvatarProps {
@@ -91,21 +78,30 @@ export interface ModelActivityAvatarProps {
   running: boolean
   pending: boolean
   agentId?: string
+  /** Explicit board persona; wins over the agent-id/model fallbacks. */
+  kind?: ModelAvatarKind
+  /** A roster persona that is available but not currently occupied by a subagent. */
+  ready?: boolean
+  /** Compact is backward-compatible; card matches the approved board portrait scale. */
+  variant?: 'compact' | 'card'
 }
 
 /**
- * Render one compact KIRA portrait. The portrait itself is the exact approved
- * raster identity; restrained motion overlays communicate live work without
- * changing the KIRA Teams card layout or its 48px avatar footprint.
+ * Render one KIRA portrait using the exact approved raster identity. Motion
+ * communicates work state while the underlying face remains stable.
  */
 export function ModelActivityAvatar({
   activity,
   running,
   pending,
   agentId,
+  kind,
+  ready = false,
+  variant = 'compact',
 }: ModelActivityAvatarProps) {
-  const kind = agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId)
-  const state = pending ? 'pending' : running ? 'running' : 'done'
+  const resolvedKind = kind
+    ?? (agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId))
+  const state = ready ? 'ready' : pending ? 'pending' : running ? 'running' : 'done'
   const phase = !running
     ? 'idle'
     : activity?.phase === 'running-tools' || activity?.phase === 'verifying'
@@ -114,8 +110,8 @@ export function ModelActivityAvatar({
 
   return (
     <span
-      className={css.avatar}
-      data-avatar={kind}
+      className={`${css.avatar} ${variant === 'card' ? css.card : ''}`}
+      data-avatar={resolvedKind}
       data-phase={phase}
       data-state={state}
       aria-hidden="true"
@@ -123,10 +119,13 @@ export function ModelActivityAvatar({
       <span className={css.aura} />
       <span className={css.ring} />
       <span className={css.core} />
-      <span
+      <img
         className={css.portraitImage}
         data-agent-portrait-image={true}
-        style={portraitStyle(kind)}
+        src={portraitSrcForKind(resolvedKind)}
+        alt=""
+        draggable={false}
+        decoding="async"
       />
       <span className={css.lifeGlint} />
       <span className={css.scanLine} />
