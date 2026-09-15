@@ -122,7 +122,7 @@ export function statusKeyOf(summary: SessionSummary): KiraTeamsKey {
   switch (activityOf(summary)?.phase) {
     case 'running-tools': return 'status.tools'
     case 'verifying': return 'status.verifying'
-    default: return 'status.preparing'
+    default: return 'status.running'
   }
 }
 
@@ -140,10 +140,11 @@ export function agentRoleKeyOf(summary: SessionSummary): KiraTeamsKey {
 export function activityKeyOf(summary: SessionSummary): KiraTeamsKey {
   if (summary.pendingInteraction !== undefined) return 'activity.waiting'
   if (!summary.running) return 'activity.done'
-  switch (activityOf(summary)?.phase) {
+  const phase = activityOf(summary)?.phase
+  switch (phase) {
     case 'running-tools': return 'activity.tools'
     case 'verifying': return 'activity.verifying'
-    default: return 'activity.preparing'
+    default: return phase === undefined ? 'activity.working' : 'activity.preparing'
   }
 }
 
@@ -276,7 +277,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
 
   const cards = rosterCardsOf(rows)
   return (
-    <div className={css.root} data-kira-teams>
+    <div className={css.root} data-kira-teams data-kira-layout="reference-5x4">
       <section className={css.dock} aria-label={t('team.aria')}>
         <header className={css.header}>
           <button

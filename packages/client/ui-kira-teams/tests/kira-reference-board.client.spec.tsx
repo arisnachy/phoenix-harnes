@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionId, SessionSummary } from '@phoenix-ai/dsh-client-runtime/client'
-import { KIRA_ROSTER, rosterCardsOf } from '../src/client/KiraTeamsDock.tsx'
+import { KIRA_ROSTER, activityKeyOf, rosterCardsOf } from '../src/client/KiraTeamsDock.tsx'
+import { en, es, zh } from '../src/client/locales.ts'
 import {
   ModelActivityAvatar,
   portraitSrcForKind,
@@ -45,6 +46,23 @@ describe('approved KIRA reference board', () => {
     expect(cards.filter(card => card.summary !== undefined)).toHaveLength(1)
     expect(cards.find(card => card.name === 'Vega')?.summary?.id).toBe(sid('c1'))
     expect(cards.find(card => card.name === 'Vórtice')?.summary).toBeUndefined()
+  })
+
+  it('calls every visible KIRA persona AI in every shipped locale', () => {
+    expect(es['role.agent']).toBe('AI')
+    expect(en['role.agent']).toBe('AI')
+    expect(zh['role.agent']).toBe('AI')
+  })
+
+  it('distinguishes generic live work from preparation', () => {
+    const working = summary({
+      id: sid('working'),
+      parentId: sid('root'),
+      origin: 'subagent',
+      running: true,
+    })
+
+    expect(activityKeyOf(working)).toBe('activity.working')
   })
 })
 
