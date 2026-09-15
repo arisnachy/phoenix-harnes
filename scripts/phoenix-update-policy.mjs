@@ -30,16 +30,20 @@ export function classifyPreparedActivation({ currentIsAncestorTarget, targetIsAn
 /**
  * Classify one stable-channel relation before the updater chooses an action.
  * A history replacement is limited to a managed release checkout; development
- * branches and unmanaged checkouts remain protected from automatic mutation.
+ * branches are never mutated. A supervised installation may still prepare the
+ * stable target for an isolated runtime that leaves the source checkout intact.
  *
- * @param {{status: string, branch: string, managed: boolean, mode: string, stableBranch: string}} input - observed checkout and updater state.
- * @returns {'apply' | 'replace' | 'notify' | 'development' | 'pause' | 'unchanged'} the permitted watcher action.
+ * @param {{status: string, branch: string, managed: boolean, mode: string, stableBranch: string, isolatedRuntime?: boolean}} input - observed checkout and updater state.
+ * @returns {'apply' | 'replace' | 'isolate' | 'notify' | 'development' | 'pause' | 'unchanged'} the permitted watcher action.
  */
-export function classifyStableUpdate({ status, branch, managed, mode, stableBranch }) {
+export function classifyStableUpdate({ status, branch, managed, mode, stableBranch, isolatedRuntime = false }) {
   if (status !== 'upgrade' && status !== 'diverged') return 'unchanged'
 
   const releaseBranch = isManagedReleaseBranch(branch, stableBranch)
-  if (!releaseBranch) return status === 'upgrade' ? 'development' : 'pause'
+  if (!releaseBranch) {
+    if (mode === 'auto' && isolatedRuntime) return 'isolate'
+    return status === 'upgrade' ? 'development' : 'pause'
+  }
   if (mode === 'notify') return 'notify'
   if (status === 'diverged') return managed ? 'replace' : 'pause'
   return 'apply'
