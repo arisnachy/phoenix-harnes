@@ -19,7 +19,9 @@ function goal(): GoalView {
 describe('goal-round human output contract', () => {
   it('keeps execution scaffolding private while preserving full mission quality', () => {
     const block = renderGoalRoundPrompt(goal(), 1)[0]
-    if (block?.type !== 'text') throw new Error('expected text goal-round prompt')
+    if (block === undefined || !('text' in block) || typeof block.text !== 'string') {
+      throw new Error('expected text goal-round prompt')
+    }
     const text = block.text
 
     expect(text).toContain('Keep execution scaffolding private')
