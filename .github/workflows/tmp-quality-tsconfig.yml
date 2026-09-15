@@ -1,0 +1,42 @@
+name: Temporary quality tsconfig registration
+
+on:
+  push:
+    branches:
+      - feat/quality-foresight-completion-20260915
+    paths:
+      - .github/workflows/tmp-quality-tsconfig.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-host-face:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/quality-foresight-completion-20260915
+          fetch-depth: 0
+      - name: Register quality package in host aggregate
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('tsconfig.host.json')
+          text = path.read_text()
+          needle = '    { "path": "./packages/core/tool-living" },\n'
+          addition = needle + '    { "path": "./packages/quality/quality" },\n'
+          if './packages/quality/quality' not in text:
+              if needle not in text:
+                  raise SystemExit('host aggregate insertion point not found')
+              path.write_text(text.replace(needle, addition, 1))
+      - name: Commit host aggregate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tsconfig.host.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "build: register quality package in host aggregate"
+          git push origin HEAD:feat/quality-foresight-completion-20260915
