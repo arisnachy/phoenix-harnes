@@ -45,6 +45,12 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('&& !preparedTargetIsDivergent(target)')
   })
 
+  it('reconciles stale runtime and client artifacts before the Windows supervisor starts', () => {
+    expect(cliSource).toContain("import { preparePhoenixWebRuntime } from './phoenix-runtime-freshness.ts'")
+    expect(cliSource).toContain('preparePhoenixWebRuntime(runtimeSourceRoot)')
+    expect(cliSource).toContain("const runtimeSourceRoot = resolve(supervisor, '..', '..')")
+  })
+
   it('pauses activation before invoking the prepared activator when the live checkout is dirty', () => {
     expect(source).toContain('const liveStatus = gitStatus(root)')
     expect(source).toContain('if (!liveStatus.ok || liveStatus.entries.length > 0)')
