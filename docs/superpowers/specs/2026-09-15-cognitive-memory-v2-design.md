@@ -2,37 +2,33 @@
 
 ## Objetivo
 
-Convertir la memoria actual de PHOENIX en un sistema cognitivo persistente que recuerde experiencias, consolide conocimiento, aprenda procedimientos por observación y resultados verificados, reutilice soluciones diagnósticas, gestione incertidumbre y responda de forma humana sin narrar su infraestructura interna.
+Convertir la memoria actual de PHOENIX en un sistema cognitivo persistente que recuerde experiencias, consolide conocimiento, aprenda procedimientos a partir de resultados verificados, reutilice soluciones diagnósticas, gestione incertidumbre y mantenga una conversación humana sin narrar su infraestructura interna.
 
 El sistema no modifica los pesos del modelo. Aprende mediante memoria durable, eventos, evidencia, procedimientos, relaciones, consolidación y recuperación contextual.
 
-## Principios de diseño
+## Principios
 
-1. **La experiencia produce evidencia, no verdad automática.** Ejecutar algo una vez no basta para convertirlo en una regla. Los resultados deben conservar su procedencia, verificación, confianza y vigencia.
-2. **Recordar y aprender son procesos distintos.** Un episodio puede recordarse aunque haya terminado mal; una habilidad reutilizable solo se promueve cuando existe evidencia suficiente.
-3. **La memoria sirve al trabajo y no domina la conversación.** PHOENIX aplica recuerdos relevantes de forma silenciosa y solo explica detalles internos cuando el usuario los pide.
-4. **La respuesta humana es una responsabilidad separada del almacenamiento.** La memoria puede contener estados, confianza, fallos y evidencia; la respuesta final los traduce a lenguaje natural apropiado sin volcar etiquetas técnicas.
-5. **Los recuerdos se recuperan por intención, tiempo, proyecto, similitud y relaciones.** Preguntas como “¿qué hicimos ayer?”, “hazlo como la otra vez” o “¿cómo arreglaste ese error?” no dependen de que la conversación anterior siga abierta.
-6. **Los recuerdos pueden corregirse, degradarse, supersederse o retirarse.** La memoria no congela procedimientos obsoletos.
-7. **Lo visible al modelo permanece reconstruible desde hechos durables.** La implementación conserva la regla de PHOENIX de que todo contexto model-visible debe poder derivarse del registro durable correspondiente.
+1. **La experiencia produce evidencia, no verdad automática.** Ejecutar algo una vez no basta para convertirlo en regla.
+2. **Recordar y aprender son procesos distintos.** Un episodio puede conservarse aunque termine mal; una habilidad reusable solo se promueve cuando existe evidencia suficiente.
+3. **La memoria sirve al trabajo.** PHOENIX aplica recuerdos relevantes silenciosamente y explica el mecanismo interno solo cuando el usuario lo pide.
+4. **La expresión humana está separada del almacenamiento.** La memoria puede guardar estados, confianza, fallos y evidencia; la respuesta final los traduce a lenguaje natural sin volcar etiquetas técnicas.
+5. **La recuperación entiende intención, tiempo, proyecto, similitud y relaciones.** “Ayer”, “la otra vez”, “el último proyecto” y “cómo arreglaste eso” deben resolverse sin depender de que el chat previo siga abierto.
+6. **Los recuerdos evolucionan.** Pueden reforzarse, degradarse, ponerse en cuarentena, supersederse o retirarse.
+7. **Lo visible al modelo sigue siendo reconstruible desde hechos durables.** Cognitive Memory v2 respeta la regla model-visible/logged de PHOENIX.
 
 ## Base existente que se conserva
 
 `@phoenix-ai/dsh-tool-session-learning` ya aporta `memory_search`, `memory_remember`, `memory_teach`, curación autónoma, aprendizaje adaptativo, aprendizaje procedural, contexto reciente y recomendaciones de procedimientos verificados.
 
-`ProceduralLearningEngine` ya distingue aprendizaje guiado y por experiencia, estados `candidate`, `active` y `quarantined`, confirmaciones, fallos, correcciones, confianza, huellas de tarea y promoción basada en verificación.
+`ProceduralLearningEngine` ya distingue aprendizaje guiado y por experiencia, usa estados `candidate`, `active` y `quarantined`, y conserva confirmaciones, fallos, correcciones, confianza y huellas de tarea.
 
-Cognitive Memory v2 no sustituye esas capacidades. Las integra dentro de una arquitectura más completa y añade persistencia episódica, consolidación semántica, memoria diagnóstica, metamemoria, recuperación temporal y una capa explícita de expresión humana.
+Cognitive Memory v2 no reemplaza esas capacidades. Añade persistencia episódica, consolidación semántica, memoria diagnóstica enlazada, metamemoria, recuperación temporal y una capa explícita de expresión humana.
 
 ## Arquitectura
 
-La arquitectura queda dividida en ocho responsabilidades pequeñas y testeables.
+### EpisodicMemory — qué vivió PHOENIX
 
-### 1. EpisodicMemory — qué vivió PHOENIX
-
-Cada misión significativa produce uno o más episodios durables. Un episodio representa trabajo real ocurrido, no una conclusión inferida.
-
-Cada episodio incluye como mínimo:
+Cada misión significativa produce un episodio durable basado en eventos reales.
 
 ```yaml
 id: episode-<stable-id>
@@ -54,56 +50,44 @@ verification:
 source_events: []
 ```
 
-Los episodios se derivan de eventos de sesión, objetivos, herramientas, resultados y evidencia de finalización. No se construyen a partir de commit recency ni de una descripción inventada después de los hechos.
+Los episodios se derivan de eventos de sesión, objetivos, herramientas, resultados y evidencia de finalización. No se reconstruyen desde recencia de commits ni desde descripciones inventadas después de los hechos.
 
-La memoria episódica permite responder preguntas temporales y autobiográficas del propio trabajo de PHOENIX, incluidas “ayer”, “la semana pasada”, “el último proyecto”, “qué aprendiste de eso” y “continúa lo anterior”.
+Esta capa responde preguntas como “¿qué hicimos ayer?”, “¿qué proyecto trabajamos la semana pasada?”, “¿qué aprendiste de eso?” y “continúa lo anterior”.
 
-### 2. SemanticMemory — qué sabe PHOENIX
+### SemanticMemory — qué sabe PHOENIX
 
-La memoria semántica consolida hechos o relaciones estables extraídos de episodios, correcciones y fuentes confiables.
+La memoria semántica consolida hechos y relaciones estables extraídos de episodios, correcciones y fuentes confiables.
 
-Una memoria semántica conserva:
+Cada registro conserva proposición normalizada, entidades, relaciones, scope, evidencia favorable y contradictoria, confianza, fecha de validación, procedencia y estado `active`, `superseded`, `obsolete` o `forgotten`.
 
-- proposición normalizada;
-- entidades y relaciones;
-- alcance o dominio;
-- evidencia de soporte y contradicción;
-- confianza;
-- fecha de última validación;
-- procedencia;
-- estado `active`, `superseded`, `obsolete` o `forgotten`.
+El consolidator deduplica conocimiento repetido. Una contradicción nunca sobrescribe silenciosamente una versión anterior; mantiene ambas procedencias y marca cuál supersede a cuál cuando la evidencia lo justifica.
 
-El consolidator evita duplicados y mantiene versiones cuando el conocimiento cambia. Una afirmación nueva no sobrescribe silenciosamente una anterior contradictoria; ambas quedan relacionadas y una puede superseder a la otra con evidencia.
+### ProceduralMemory — cómo sabe hacerlo
 
-### 3. ProceduralMemory — cómo sabe hacerlo
+El motor procedural existente sigue siendo la base.
 
-El motor procedural existente sigue siendo la base del aprendizaje de habilidades.
+Cognitive Memory v2 conecta episodios verificados con ese motor para que secuencias repetibles puedan convertirse en procedimientos.
 
-Cognitive Memory v2 amplía su ciclo para capturar automáticamente secuencias de trabajo reutilizables a partir de episodios verificados. Ejemplos:
+Ejemplos: completar una encuesta, diagnosticar un fallo de arranque, configurar una integración o repetir una tarea de navegación con la misma intención.
 
-- completar una encuesta concreta en un sitio;
-- diagnosticar y reparar un fallo de arranque;
-- preparar una publicación siguiendo una secuencia estable;
-- configurar una integración;
-- repetir una tarea de navegación o edición con la misma intención.
-
-Una experiencia reusable pasa por:
+El ciclo persistente es:
 
 ```text
 observed
   -> candidate
-  -> validated
   -> active
   -> reinforced | degraded | quarantined | retired
 ```
 
-`candidate` nunca guía automáticamente una misión. `active` requiere verificación suficiente. Una corrección explícita, fallo repetido o cambio de entorno puede degradar o poner en cuarentena el procedimiento.
+La validación es evidencia, no un estado persistente aparte. `candidate` no guía automáticamente una misión. Una experiencia pasa a `active` solo cuando la política de promoción considera suficiente la evidencia. Éxitos posteriores la refuerzan; fallos, cambios de entorno o correcciones explícitas reducen confianza o la ponen en cuarentena.
 
-La representación procedural mantiene pasos concretos, trigger, scope, dependencias, invariantes, entorno, éxitos, fallos, confianza y última validación. Los selectores frágiles de UI no se tratan como conocimiento universal; se guardan como evidencia contextual que debe revalidarse.
+Cada procedimiento conserva trigger, scope, pasos, dependencias, invariantes, fingerprint de entorno, éxitos, fallos, confianza, última validación y referencias a episodios que lo respaldan.
 
-### 4. DiagnosticMemory — problema, causa y solución
+Los selectores frágiles de UI se guardan como evidencia contextual y deben revalidarse; no se tratan como conocimiento universal.
 
-La memoria diagnóstica integra, no duplica, el Failure Learning Core existente.
+### DiagnosticMemory — problema, causa y solución
+
+Cognitive Memory v2 integra el Failure Learning Core existente en vez de crear un ledger paralelo.
 
 Cada caso enlaza:
 
@@ -119,28 +103,21 @@ síntoma
   -> prevención
 ```
 
-Los intentos fallidos siguen siendo valiosos porque reducen búsquedas futuras. Una solución solo puede convertirse en recomendación automática cuando existe evidencia suficiente y sigue siendo pertinente al entorno actual.
+Los intentos fallidos permanecen como evidencia útil para descartar rutas futuras. Solo soluciones verificadas y vigentes pueden obtener prioridad automática.
 
-Los casos diagnósticos se vinculan con episodios y procedimientos para que PHOENIX pueda recordar tanto “qué pasó” como “cómo lo solucionó”.
+Los casos diagnósticos enlazan episodios y procedimientos para que PHOENIX recuerde tanto qué ocurrió como cómo lo solucionó.
 
-### 5. RelationshipMemory — preferencias y forma de trabajar
+### RelationshipMemory — cómo trabaja con el usuario
 
-Las preferencias del usuario, correcciones de estilo, decisiones recurrentes, formatos y convenciones se mantienen separadas de la historia técnica de PHOENIX.
+Preferencias, correcciones de estilo, decisiones recurrentes, formatos y convenciones se mantienen separadas de la historia técnica de PHOENIX.
 
-La recuperación de esta capa sigue la regla de relevancia: una preferencia personal o de trabajo solo se inyecta cuando mejora materialmente la tarea actual.
+La recuperación aplica relevancia estricta. “¿Qué aprendiste?” no debe responderse con una lista de datos personales.
 
-Preguntas como “¿qué aprendiste?” no deben responderse con una lista de datos personales del usuario. El intent router diferencia entre:
+El intent router distingue entre memoria del usuario, aprendizaje conductual de PHOENIX, historia de proyectos, procedimientos aprendidos, conocimiento semántico y casos diagnósticos.
 
-- memoria sobre el usuario;
-- aprendizaje conductual de PHOENIX;
-- historia de proyectos y misiones;
-- procedimientos aprendidos;
-- conocimiento semántico;
-- casos diagnósticos.
+### MetaMemory — qué tan confiable es lo recordado
 
-### 6. MetaMemory — qué tan confiable es lo que recuerda
-
-Cada memoria reutilizable obtiene señales de calidad comunes:
+Las memorias reutilizables comparten señales de calidad:
 
 ```yaml
 confidence: 0.0..1.0
@@ -154,79 +131,73 @@ environment_fingerprint: <optional>
 status: candidate | active | degraded | quarantined | retired
 ```
 
-La confianza no es decorativa. Participa en recuperación, promoción y aplicación automática.
+La confianza participa en ranking, promoción y aplicación automática. Una memoria vieja o dependiente de un entorno cambiante puede seguir apareciendo como evidencia, pero debe revalidarse antes de gobernar acciones importantes.
 
-Una memoria envejecida o dependiente de un entorno cambiante puede seguir apareciendo como evidencia, pero debe revalidarse antes de gobernar acciones relevantes.
+### MemoryConsolidator — de experiencias a conocimiento
 
-### 7. MemoryConsolidator — de experiencias a conocimiento
+Un plugin dedicado consolida memoria después de una misión o durante mantenimiento seguro. Nunca reescribe el episodio original.
 
-El consolidator ejecuta trabajo bounded después de una misión o durante momentos seguros de mantenimiento. No reescribe el historial original.
-
-Sus responsabilidades son:
+Responsabilidades:
 
 - agrupar episodios similares;
 - detectar hechos repetidos;
-- proponer procedimientos reusable;
+- proponer procedimientos reutilizables;
 - reforzar procedimientos que vuelven a funcionar;
 - degradar los que fallan;
 - relacionar síntomas con soluciones;
 - detectar contradicciones;
-- deduplicar memorias semánticas;
+- deduplicar memoria semántica;
 - actualizar metamemoria;
-- conservar siempre procedencia y referencias al material original.
+- mantener procedencia completa.
 
-La consolidación produce registros nuevos o versiones supersedentes. Nunca borra evidencia histórica silenciosamente.
+La consolidación crea registros nuevos o versiones supersedentes. Nunca elimina evidencia histórica silenciosamente.
 
-### 8. MemoryRetriever + HumanExpression — recordar bien y sonar humano
+### MemoryRetriever + HumanExpression — recordar bien y sonar humano
 
-La recuperación empieza por clasificar la intención de memoria antes de buscar.
-
-Ejemplos:
+La recuperación clasifica primero la intención.
 
 ```text
 “¿Qué hicimos ayer?”
   -> episodic + temporal + cross-project
 
 “Hazlo como la otra vez”
-  -> resolved task reference + episodic + procedural
+  -> task reference + episodic + procedural
 
 “¿Cómo arreglaste aquel EPIPE?”
   -> diagnostic + procedural + episodic
 
 “¿Qué aprendiste?”
   -> recent behavioral/procedural/semantic learning
-  -> NO perfil personal salvo que la pregunta lo pida
+  -> no perfil personal salvo que la pregunta lo pida
 ```
 
-El retriever resuelve expresiones temporales a ventanas absolutas usando la zona horaria configurada de PHOENIX y conserva esa resolución como evidencia de la búsqueda.
+El retriever resuelve expresiones temporales a ventanas absolutas usando la zona horaria configurada y conserva esa resolución como parte de la evidencia de búsqueda.
 
-La capa `HumanExpression` recibe recuerdos ya seleccionados y aplica reglas conversacionales:
+`HumanExpression` recibe recuerdos ya seleccionados y controla la presentación:
 
-- responder primero a la intención del usuario;
-- no decir “consulté la memoria”, “cargué el ledger” o equivalentes salvo petición técnica;
-- no enumerar categorías internas de memoria en respuestas normales;
-- usar expresiones naturales como “Ayer trabajamos en…” o “La última vez ese error terminó siendo…” cuando la evidencia lo respalda;
-- reconocer incertidumbre con lenguaje natural y específico;
-- no fingir familiaridad cuando no existe evidencia;
-- no recitar datos personales para demostrar memoria;
-- no confundir instrucciones configuradas con aprendizaje por experiencia;
-- mantener la calidez y continuidad sin antropomorfizar estados internos inexistentes.
+- responde primero a la intención del usuario;
+- no dice “consulté la memoria”, “cargué el ledger” o equivalentes en una respuesta normal;
+- no enumera categorías internas de memoria;
+- usa frases naturales como “Ayer trabajamos en…” cuando hay evidencia;
+- expresa incertidumbre de forma concreta y humana;
+- no finge familiaridad cuando la evidencia falta;
+- no recita datos personales para demostrar memoria;
+- no presenta instrucciones configuradas como aprendizaje por experiencia;
+- mantiene calidez y continuidad sin fingir emociones o conciencia.
 
-La expresión humana nunca altera la evidencia almacenada; solo controla cómo se presenta y cuánto se muestra.
+La capa humana no modifica la evidencia almacenada; solo decide cómo y cuánto mostrar.
 
-## Flujo de aprendizaje por experiencia
-
-El flujo general es:
+## Aprendizaje por experiencia
 
 ```text
 user intent
-  -> turn/session events
+  -> durable session events
   -> observable execution
   -> outcome
   -> episode
-  -> verification
+  -> verification evidence
   -> consolidation
-  -> semantic / procedural / diagnostic candidate
+  -> semantic/procedural/diagnostic candidate
   -> promotion policy
   -> future retrieval
   -> reuse
@@ -234,7 +205,7 @@ user intent
   -> reinforcement or degradation
 ```
 
-### Ejemplo: aprender a completar una encuesta
+### Ejemplo: aprender una encuesta
 
 Primera ejecución:
 
@@ -248,13 +219,13 @@ abrir sitio
   -> confirmar resultado
 ```
 
-El episodio conserva la misión completa. Si el resultado queda verificado, el consolidator genera o refuerza un procedimiento con scope, trigger, pasos, dependencias y evidencia.
+El episodio conserva la misión. Si el resultado queda verificado, el consolidator genera o refuerza un procedimiento con scope, trigger, pasos, dependencias y evidencia.
 
-En una ejecución futura, PHOENIX recupera ese procedimiento si el dominio, intención y tarea son suficientemente similares. Antes de ejecutar pasos frágiles, revalida las condiciones que pudieron cambiar.
+En una ejecución futura PHOENIX recupera ese procedimiento cuando intención, dominio y tarea son suficientemente similares. Antes de reutilizar detalles frágiles, revalida las condiciones que pudieron cambiar.
 
-Si la interfaz cambió, el procedimiento no fuerza selectores antiguos. El fallo queda asociado a la habilidad, reduce su confianza y PHOENIX vuelve a explorar hasta producir una versión nueva validada.
+Si la interfaz cambió, no fuerza selectores antiguos. El fallo queda asociado a la habilidad, reduce su confianza y activa nueva exploración hasta obtener otra versión validada.
 
-### Ejemplo: aprender a diagnosticar y reparar
+### Ejemplo: aprender un diagnóstico
 
 ```text
 síntoma: PHOENIX no inicia
@@ -269,108 +240,65 @@ síntoma: PHOENIX no inicia
   -> regresión PASS
 ```
 
-La próxima vez que aparezca un síntoma similar, PHOENIX recupera el caso completo. Los intentos fallidos ayudan a descartar rutas; la solución verificada obtiene prioridad solo cuando el entorno sigue siendo compatible.
+La siguiente vez, PHOENIX recupera el caso completo. Los intentos fallidos ayudan a evitar callejones conocidos; la solución verificada obtiene prioridad solo si el entorno sigue siendo compatible.
 
 ## Persistencia y continuidad entre sesiones
 
-`RecentTaskLedger` no será la única fuente para referencias recientes. La referencia rápida en memoria se mantiene para el turno actual, pero las tareas significativas se proyectan también a memoria episódica durable.
+`RecentTaskLedger` se mantiene como ayuda rápida para el turno vivo, pero deja de ser la única fuente de referencias recientes. Las misiones significativas se proyectan también a memoria episódica durable.
 
-Al reiniciar PHOENIX o abrir una conversación distinta:
+Después de reiniciar PHOENIX o abrir otra conversación:
 
-1. la sesión nueva no necesita cargar conversaciones enteras;
-2. el retriever puede consultar episodios y procedimientos relevantes;
-3. una referencia temporal o semántica activa una búsqueda bounded;
-4. solo los recuerdos seleccionados llegan al contexto del modelo;
+1. la nueva sesión no necesita cargar conversaciones enteras;
+2. el retriever consulta episodios y procedimientos relevantes;
+3. referencias temporales o semánticas activan búsquedas bounded;
+4. solo memoria seleccionada llega al contexto del modelo;
 5. la respuesta se genera sin exponer el mecanismo interno.
 
-## Recuperación automática y presupuesto de contexto
+## Presupuesto de contexto
 
-La memoria no se vuelca completa en cada request.
+No se vuelca toda la memoria en cada request.
 
-Se mantienen dos rutas:
+La continuidad ligera inyecta solo preferencias, correcciones y procedimientos de alta confianza relacionados con la tarea.
 
-### Continuidad ligera
+La recuperación dirigida se activa para historia, tiempo, proyectos, diagnóstico o procedimientos. El ranking combina similitud, proyecto, tiempo, entidades, relaciones, confianza, importancia, confirmaciones, fallos, vigencia, contradicciones y afinidad con el entorno.
 
-Inyección automática de un conjunto pequeño de preferencias, correcciones y procedimientos de alta confianza relacionados con la tarea actual.
-
-### Recuperación dirigida
-
-Cuando la intención exige historia, tiempo, proyectos, diagnóstico o procedimientos, el retriever ejecuta una búsqueda específica con límites de resultados, capas y ventana temporal.
-
-El ranking combina:
-
-- similitud con la tarea;
-- proyecto;
-- tiempo;
-- entidades y relaciones;
-- confianza;
-- importancia;
-- confirmaciones/fallos;
-- vigencia;
-- evidencia de contradicción;
-- afinidad con el entorno actual.
-
-Una búsqueda vacía global no se usa como sustituto de comprender la pregunta.
+Una búsqueda global vacía no sustituye comprender la pregunta.
 
 ## Seguridad y privacidad
 
-El sistema aplica redacción de secretos antes de persistir contenido reusable.
+La memoria reusable redacta secretos antes de persistir.
 
-No se consolidan automáticamente:
+No se consolidan automáticamente credenciales, tokens, secretos privados, contenido marcado para olvidar, inferencias sensibles innecesarias, información de terceros sin justificación operativa ni hipótesis no verificadas como hechos.
 
-- credenciales;
-- tokens;
-- secretos privados;
-- contenido marcado para olvidar;
-- inferencias sensibles no necesarias;
-- información de terceros sin justificación operativa;
-- hipótesis no verificadas como hechos.
-
-Las acciones aprendidas siguen bajo las mismas políticas de permisos, aprobaciones, sandbox y seguridad del harness. Aprender “cómo hacerlo” no concede permiso para hacerlo.
+Aprender un procedimiento no concede permiso para ejecutarlo. Sandbox, permisos, aprobaciones y políticas siguen gobernando las acciones.
 
 ## Cambios de paquetes previstos
 
-La implementación debe respetar la arquitectura plugin-first de PHOENIX.
-
 ### `packages/session-learning/tool-session-learning`
 
-Se conserva como consumidor model-facing y coordinador ligero. Debe dejar de poseer estado efímero que sea necesario para continuidad durable.
+Se conserva como consumidor model-facing y coordinador ligero. Debe dejar de poseer estado efímero cuando ese estado sea necesario para continuidad durable.
 
-Responsabilidades previstas:
+Responsabilidades: intent-aware recall, herramientas de memoria, presentación humana bounded y puente hacia aprendizaje procedural.
 
-- intent-aware memory recall;
-- integración con `memory_search`, `memory_remember` y `memory_teach`;
-- presentación humana y bounded del recuerdo;
-- puente hacia aprendizaje procedural existente.
+### Proveedor `@phoenix-ai/dsh-session-learning`
 
-### `@phoenix-ai/dsh-session-learning` / proveedor de memoria cognitiva
+Se amplía el servicio durable existente en lugar de crear una segunda base incompatible.
 
-Se ampliará el servicio durable existente en lugar de crear una segunda base de datos incompatible.
+Debe soportar episodios, consultas temporales, relaciones de procedencia, consolidación/versionado, metamemoria y referencias cruzadas entre episodios, procedimientos, fallos y conocimiento semántico.
 
-Debe soportar:
+### Nuevo `@phoenix-ai/dsh-memory-consolidator`
 
-- episodios;
-- relaciones de procedencia;
-- consultas temporales;
-- consolidación/versionado;
-- metamemoria;
-- referencias cruzadas entre episodios, procedimientos, fallos y conocimiento semántico.
+Plugin dedicado a convertir evidencia durable en conocimiento consolidado. Consume eventos y el servicio de memoria; produce nuevas memorias o versiones. No escribe prompts directamente.
 
-### Nuevo plugin de consolidación cognitiva
+### Failure Learning Core
 
-Se recomienda un plugin dedicado, por ejemplo `@phoenix-ai/dsh-memory-consolidator`, para mantener la lógica de consolidación fuera del tool plugin.
-
-Consume eventos durables y el servicio de memoria; produce nuevas memorias y actualizaciones versionadas. No escribe prompts directamente.
-
-### Integración con Failure Learning Core
-
-Cognitive Memory v2 enlaza casos diagnósticos con la memoria de fallos existente. No introduce un ledger paralelo de errores.
+Los casos diagnósticos se enlazan con la memoria de fallos existente. No se crea un segundo registro de errores.
 
 ## Eventos y reconstrucción
 
-Los hechos que alimentan memoria model-visible deben derivarse de eventos durables ya existentes o de nuevos eventos del dominio de memoria.
+Los hechos que alimentan memoria model-visible deben derivarse de eventos durables existentes o de nuevos eventos propios de memoria.
 
-Si se añaden eventos, deben describir hechos, no prompts derivados. Ejemplos posibles:
+Posibles eventos:
 
 ```text
 memory/episode-recorded
@@ -380,129 +308,95 @@ memory/procedure-degraded
 memory/knowledge-superseded
 ```
 
-Los payloads incluyen IDs opacos y referencias, no textos secretos ni contexto ilimitado.
+Los payloads contienen IDs opacos y referencias bounded, no contexto ilimitado ni secretos.
 
 ## Política de promoción
 
-### Procedimiento guiado explícitamente por el usuario
+Un procedimiento enseñado explícitamente por el usuario puede entrar `active` con alta confianza cuando la instrucción es clara y segura, conservando origen `guided`.
 
-Puede entrar `active` con alta confianza cuando la instrucción es clara y segura, conservando su origen `guided`.
+Una experiencia observada comienza como `candidate`. Con evidencia verificada suficiente puede pasar a `active`. Repeticiones exitosas aumentan confirmaciones y confianza. Fallos reducen confianza y pueden producir `degraded` o `quarantined`. Una corrección explícita del usuario pone en cuarentena la versión afectada hasta nueva evidencia.
 
-### Procedimiento aprendido por experiencia
-
-Primera observación sin verificación: `candidate`.
-
-Resultado verificado y evidence-backed: puede promoverse según la política actual y el riesgo de la acción.
-
-Repeticiones exitosas: aumentan confirmaciones y confianza.
-
-Fallos: reducen confianza y pueden activar `degraded` o `quarantined`.
-
-Corrección explícita del usuario: cuarentena inmediata de la versión afectada hasta nueva evidencia.
-
-Acciones de alto riesgo no ganan permisos por promoción de memoria.
+Las acciones de alto riesgo nunca ganan permisos por promoción de memoria.
 
 ## Comportamiento humano esperado
 
-La memoria debe mejorar la sensación de continuidad sin convertir a PHOENIX en un narrador de arquitectura.
-
-### Correcto
+Correcto:
 
 > Ayer trabajamos principalmente en la memoria de Phoenix, HARDNESS, los conectores y los agentes de KIRA. En memoria, lo más importante fue que empezamos a enseñar a Phoenix a aplicar correcciones y procedimientos sin tener que pedírselo cada vez.
 
-### Incorrecto
+Incorrecto:
 
-> Consulté EpisodicMemory, SemanticMemory y ProceduralMemory. Cargué 8 registros con confianza mayor de 0.85 y ejecuté el MemoryRetriever.
+> Consulté EpisodicMemory, SemanticMemory y ProceduralMemory. Cargué ocho registros y ejecuté MemoryRetriever.
 
-### Correcto ante incertidumbre
+Correcto ante incertidumbre:
 
 > Recuerdo el trabajo del updater y los agentes de KIRA, pero no tengo evidencia suficiente para afirmar que el cambio de conectores quedó terminado ese día.
 
-### Incorrecto ante incertidumbre
-
-> No hicimos ningún proyecto.
-
-La ausencia de evidencia para un detalle no permite negar actividad cuando existen episodios que demuestran trabajo relacionado.
+La falta de evidencia para un detalle no permite negar actividad cuando otros episodios prueban que sí hubo trabajo.
 
 ## Pruebas requeridas
 
 ### Persistencia y recuperación
 
-- Registrar una misión, recrear el servicio y recuperarla en una sesión nueva.
-- Registrar varias misiones en proyectos distintos y recuperar “ayer” cross-project.
-- Resolver expresiones temporales a la ventana correcta.
-- Evitar que `RecentTaskLedger` efímero sea la única evidencia de una referencia previa.
+- registrar una misión, recrear el servicio y recuperarla en una sesión nueva;
+- recuperar “ayer” en varios proyectos;
+- resolver ventanas temporales correctamente;
+- probar que una referencia previa sobrevive aunque desaparezca `RecentTaskLedger`.
 
-### Aprendizaje procedural
+### Procedimientos
 
-- Experiencia no verificada permanece candidata.
-- Experiencia verificada se promueve conforme a la política.
-- Repeticiones exitosas refuerzan la habilidad.
-- Fallo posterior degrada la confianza.
-- Corrección del usuario pone en cuarentena la versión aplicable.
-- Un procedimiento no relacionado no entra al contexto.
+- experiencia no verificada permanece `candidate`;
+- evidencia verificada suficiente permite `active`;
+- éxitos repetidos refuerzan la habilidad;
+- fallo posterior degrada confianza;
+- corrección explícita pone en cuarentena la versión afectada;
+- procedimientos no relacionados no entran al contexto.
 
-### Consolidación semántica
+### Semántica y diagnóstico
 
-- Duplicados se fusionan sin perder procedencia.
-- Contradicciones producen versiones relacionadas, no overwrite silencioso.
-- Recuerdo superseded solo aparece cuando se solicita historia.
-
-### Diagnóstico
-
-- Un fallo conocido recupera causa y solución verificadas.
-- Intentos fallidos previos no se presentan como soluciones.
-- Cambio de entorno fuerza revalidación cuando aplica.
+- duplicados se consolidan sin perder procedencia;
+- contradicciones crean versiones relacionadas;
+- recuerdos superseded solo aparecen cuando se solicita historia;
+- fallos conocidos recuperan causa y solución verificadas;
+- intentos fallidos no se presentan como soluciones;
+- cambios de entorno fuerzan revalidación cuando corresponde.
 
 ### Humanidad
 
 Snapshots keyless deben demostrar que:
 
-- “¿qué hicimos ayer?” responde con proyectos reales sin exponer categorías internas;
+- “¿qué hicimos ayer?” devuelve proyectos reales sin exponer categorías internas;
 - “¿qué aprendiste?” diferencia aprendizaje de instrucciones configuradas;
-- “hazlo como la otra vez” recupera procedimiento y ejecuta sin preguntar categorías de memoria;
-- una respuesta normal no contiene `ledger`, `retriever`, `procedural state`, `confidence=...` ni nombres de archivos internos salvo petición técnica;
-- los datos personales no se enumeran para demostrar memoria;
-- incertidumbre se expresa naturalmente y sin negar hechos soportados.
+- “hazlo como la otra vez” recupera el procedimiento sin preguntar qué memoria usar;
+- respuestas normales no contienen nombres de archivos, stores, `ledger`, `retriever`, estados internos o plumbing salvo petición técnica;
+- datos personales no se enumeran para demostrar memoria;
+- incertidumbre se expresa naturalmente sin negar hechos soportados.
 
 ### Seguridad
 
 - secretos se redactan antes de persistencia reusable;
 - contenido olvidado no reaparece;
 - procedimientos aprendidos no elevan permisos;
-- recuerdos candidatos o en cuarentena no guían ejecución automática;
-- datos no relacionados no se filtran entre proyectos sin intención cross-project válida.
-
-## Métricas
-
-- porcentaje de referencias previas resueltas correctamente;
-- exactitud temporal de recuerdos;
-- procedimientos reaplicados con éxito;
-- procedimientos degradados antes de causar fallos repetidos;
-- falsos recuerdos o atribuciones incorrectas;
-- preguntas de aclaración evitadas gracias a memoria válida;
-- tokens de contexto consumidos por memoria;
-- frecuencia de exposición accidental de plumbing interno;
-- tasa de correcciones del usuario sobre recuerdos;
-- tiempo hasta recuperar una solución diagnóstica conocida.
+- candidatos y cuarentenas no guían ejecución automática;
+- datos no relacionados no cruzan proyectos sin intención cross-project válida.
 
 ## Criterios de aceptación
 
-1. Una misión relevante queda disponible después de reiniciar PHOENIX y abrir otra conversación.
-2. “¿Qué hicimos ayer?” consulta episodios por tiempo y no depende del historial visible del chat.
-3. PHOENIX aprende procedimientos de ejecuciones verificadas y puede reutilizarlos en tareas similares.
+1. Una misión relevante se recupera después de reiniciar PHOENIX y abrir otra conversación.
+2. “¿Qué hicimos ayer?” usa memoria episódica temporal y no depende del chat visible.
+3. PHOENIX aprende procedimientos de ejecuciones verificadas y los reutiliza en tareas similares.
 4. Una ejecución fallida se recuerda como experiencia sin convertirse en habilidad activa.
-5. Procedimientos repetidamente exitosos se refuerzan; fallos y correcciones degradan o ponen en cuarentena versiones obsoletas.
-6. Casos diagnósticos vinculan síntomas, intentos, causa, solución y verificación sin duplicar el Failure Learning Core.
-7. La recuperación distingue perfil del usuario, historia de proyectos, aprendizaje conductual, conocimiento y procedimientos.
+5. Éxitos refuerzan procedimientos; fallos y correcciones degradan o ponen en cuarentena versiones obsoletas.
+6. Los casos diagnósticos conectan síntomas, intentos, causa, solución y verificación sin duplicar Failure Learning Core.
+7. La recuperación diferencia perfil del usuario, proyectos, aprendizaje conductual, conocimiento y procedimientos.
 8. La memoria automática permanece bounded y relevante.
-9. La expresión conversacional no expone nombres de subsistemas, prompts, tool plumbing, rutas internas o categorías de memoria salvo petición técnica.
-10. PHOENIX mantiene una voz cálida, natural y orientada a la tarea aun cuando use memoria compleja por debajo.
-11. Las nuevas rutas cuentan con pruebas unitarias, integración y snapshots keyless de comportamiento real.
+9. Las respuestas normales no exponen subsistemas, prompts, tool plumbing, rutas internas ni categorías de memoria salvo petición técnica.
+10. PHOENIX mantiene una voz cálida, natural y orientada a la tarea mientras usa memoria compleja por debajo.
+11. Las nuevas rutas tienen pruebas unitarias, integración y snapshots keyless de comportamiento real.
 12. Las verificaciones focales, typecheck y gates documentales de los paquetes afectados pasan antes de integrar el cambio.
 
 ## Fuera de alcance
 
-Cognitive Memory v2 no entrena pesos, no crea permisos nuevos, no sustituye sandbox o aprobaciones, no convierte todo transcript en contexto automático, no memoriza secretos por conveniencia y no obliga a PHOENIX a fingir emociones o conciencia.
+Cognitive Memory v2 no entrena pesos, no crea permisos nuevos, no sustituye sandbox o aprobaciones, no convierte el transcript completo en contexto automático, no memoriza secretos por conveniencia y no obliga a PHOENIX a fingir emociones o conciencia.
 
-Su objetivo es más concreto: que PHOENIX tenga continuidad verificable, aprenda de lo que realmente hace, reutilice experiencia correcta, corrija conocimiento obsoleto y converse con la naturalidad de alguien que recuerda el trabajo compartido sin recitar su maquinaria interna.
+Su objetivo es que PHOENIX tenga continuidad verificable, aprenda de lo que realmente hace, reutilice experiencia correcta, corrija conocimiento obsoleto y converse con la naturalidad de alguien que recuerda el trabajo compartido sin recitar su maquinaria interna.
