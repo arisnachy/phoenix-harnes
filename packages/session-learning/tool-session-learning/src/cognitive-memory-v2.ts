@@ -8,6 +8,11 @@ import { formatDirectedMemoryContext } from './episodic-presentation.ts'
 import { resolveMemoryIntent } from './memory-intent.ts'
 import type { ResolvedMemoryIntent } from './memory-intent.ts'
 
+interface DirectedMemoryRequest {
+  readonly text: string
+  readonly projectId?: string
+}
+
 /**
  * Install durable mission capture and intent-aware directed recall on one Cordis context.
  * @param ctx - Runtime context that owns sessions, cognitive memory, and the system prompt.
@@ -18,8 +23,7 @@ export function installCognitiveMemoryV2(ctx: Context): void {
       await ctx.learningMemory.rememberCognitive(input)
     },
   })
-  let latestUserMessage = ''
-  let latestProjectId: string | undefined
+  const latestUserMessage = new WeakMap<object, DirectedMemoryRequest>()
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
@@ -32,8 +36,10 @@ export function installCognitiveMemoryV2(ctx: Context): void {
     if (eventType === 'user/message') {
       const text = messageText(data)
       if (text === undefined) return
-      latestUserMessage = text
-      latestProjectId = projectId
+      latestUserMessage.set(session, {
+        text,
+        ...projectId === undefined ? {} : { projectId },
+      })
       recorder.observeUserMessage(sessionId, text, {
         occurredAt,
         ...projectId === undefined ? {} : { projectId },
@@ -90,16 +96,20 @@ export function installCognitiveMemoryV2(ctx: Context): void {
   ctx.systemPrompt.context({
     name: 'context:directed-memory-v2',
     order: 116,
-    text: () => {
-      if (latestUserMessage === '') return ''
+    text: (assemblyContext) => {
+      const session = assemblySession(assemblyContext)
+      if (session === undefined) return ''
+      const request = latestUserMessage.get(session)
+      if (request === undefined) return ''
+
       const now = Date.now()
-      const intent = resolveMemoryIntent(latestUserMessage, {
+      const intent = resolveMemoryIntent(request.text, {
         now,
         timezoneOffsetMinutes: -new Date(now).getTimezoneOffset(),
       })
       if (intent.kind === 'ordinary') return ''
 
-      const hits = directedMemoryHits(ctx, intent, latestProjectId)
+      const hits = directedMemoryHits(ctx, intent, request.projectId)
       return formatDirectedMemoryContext(intent, hits)
     },
     interpolateVariables: false,
@@ -120,6 +130,12 @@ function directedMemoryHits(
     .sort((left, right) => right.provenance.occurredAt - left.provenance.occurredAt || right.eventSeq - left.eventSeq)
     .slice(0, 128)
     .map(record => ({ record, score: 1, reasons: ['directed-memory'] }))
+}
+
+function assemblySession(context: unknown): object | undefined {
+  if (!isRecord(context) || !isRecord(context.agent)) return undefined
+  const session = context.agent.session
+  return typeof session === 'object' && session !== null ? session : undefined
 }
 
 function projectIdFromSession(session: unknown): string | undefined {

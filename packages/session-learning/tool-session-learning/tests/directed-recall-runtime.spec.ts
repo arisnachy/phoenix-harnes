@@ -56,7 +56,9 @@ describe('directed autobiographical recall runtime', () => {
     } as never, { surfaceOp: 'append' })
     await restarted.learningMemory.ready()
 
-    const snapshot = renderContextSnapshot(await restarted.systemPrompt.assemble())
+    const snapshot = renderContextSnapshot(await restarted.systemPrompt.assemble({
+      agent: { session: querySession },
+    } as never))
     expect(snapshot).toContain('Mejora los avatares reactivos de KIRA')
     expect(snapshot).toContain('Reactive states were verified.')
     expect(snapshot).toContain('Answer directly and conversationally')
