@@ -32,6 +32,11 @@ export interface AutonomousMemoryWrite {
 
 /** Storage seam used by the autonomous curator. */
 export interface AutonomousMemoryStore {
+  /**
+   * Persist one bounded cognitive-memory row.
+   * @param input - Secret-free memory write.
+   * @returns Completion when the write is durable.
+   */
   remember(input: AutonomousMemoryWrite): Promise<void>
 }
 
@@ -44,7 +49,11 @@ export interface AutonomousUserMessage {
   readonly projectId?: string
 }
 
-/** Classify only strongly signaled durable user guidance; ordinary chatter and one-off instructions are discarded. */
+/**
+ * Classify only strongly signaled durable user guidance; ordinary chatter and one-off instructions are discarded.
+ * @param text - User-authored message.
+ * @returns Durable candidate or undefined when retention is not justified.
+ */
 export function classifyAutonomousMemory(text: string): AutonomousMemoryCandidate | undefined {
   const summary = normalize(text)
   if (summary === '' || summary.length > MAX_TEXT_CHARS || containsSecret(summary)) return undefined
@@ -64,6 +73,11 @@ export class AutonomousMemoryCurator {
 
   constructor(private readonly store: AutonomousMemoryStore) {}
 
+  /**
+   * Observe one user message and persist it when it clearly expresses durable guidance or correction.
+   * @param input - Message plus session/project provenance.
+   * @returns The retained candidate, or undefined when the message should not be stored.
+   */
   async observeUserMessage(input: AutonomousUserMessage): Promise<AutonomousMemoryCandidate | undefined> {
     const candidate = classifyAutonomousMemory(input.text)
     if (candidate === undefined) return undefined
