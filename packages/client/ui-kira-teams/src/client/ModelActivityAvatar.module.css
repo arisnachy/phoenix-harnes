@@ -1,5 +1,8 @@
 .avatar {
   --avatar-surface: var(--dsh-color-surface, #fff);
+  --portrait-image: none;
+  --portrait-x: 0%;
+  --portrait-y: 0%;
   position: relative;
   isolation: isolate;
   display: inline-block;
@@ -82,12 +85,12 @@
 .portraitImage {
   z-index: 3;
   inset: 3px;
-  width: calc(100% - 6px);
-  height: calc(100% - 6px);
   display: block;
   border-radius: 13px;
-  object-fit: cover;
-  object-position: center;
+  background-image: var(--portrait-image);
+  background-repeat: no-repeat;
+  background-size: auto 400%;
+  background-position: var(--portrait-x) var(--portrait-y);
   user-select: none;
   filter: saturate(1.08) contrast(1.025) drop-shadow(0 1px 1px rgb(10 45 80 / 12%));
   transform: translateZ(0) scale(1.015);
