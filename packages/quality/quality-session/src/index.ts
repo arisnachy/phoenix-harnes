@@ -113,13 +113,14 @@ export class SessionQualityService extends QualityService {
   }
 
   start(agent: Agent, request: StartQualityAssessmentRequest): QualityAssessmentSnapshot {
-    normalizedText('quality objective', request.objective)
+    const objective = request.objective.trim()
+    normalizedText('quality objective', objective)
     if (!TASK_CLASSES.includes(request.taskClass)) throw new TypeError(`unknown quality task class ${JSON.stringify(request.taskClass)}`)
     const now = Date.now()
     const assessment: QualityAssessmentSnapshot = {
       id: QualityAssessmentId(`quality-${randomUUID()}`),
       revision: 1,
-      objective: request.objective,
+      objective,
       taskClass: request.taskClass,
       criteria: (request.criteria ?? []).map(criterion),
       scenarios: [],
