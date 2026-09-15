@@ -425,6 +425,7 @@ export function apply(ctx: Context, config: Config): void {
       if (args.action === 'complete' && resolved.requireJudge) {
         const subagents = ctx.get('subagents')
         const llm = ctx.get('llm', false)
+        const quality = ctx.get('quality', false)
         const currentGoal = ctx.goals.get(execution.agent)
         if (currentGoal === undefined || currentGoal.id !== ref.id || currentGoal.revision !== ref.revision) {
           throw new HarnessError('goal completion judge requires the current goal revision', 'GOAL_TOOL_STALE_REVISION')
@@ -432,6 +433,7 @@ export function apply(ctx: Context, config: Config): void {
         judge = await judgeGoalCompletion({
           subagents,
           ...llm === undefined ? {} : { llm },
+          ...quality === undefined ? {} : { quality },
           provider: resolved.judgeProvider,
           parent: execution.agent,
           objective: currentGoal.objective,
