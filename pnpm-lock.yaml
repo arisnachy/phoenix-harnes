@@ -1135,6 +1135,12 @@ importers:
       '@phoenix-ai/dsh-pwsh-sandbox':
         specifier: workspace:^
         version: link:../../shell/pwsh-sandbox
+      '@phoenix-ai/dsh-quality':
+        specifier: workspace:^
+        version: link:../../quality/quality
+      '@phoenix-ai/dsh-quality-session':
+        specifier: workspace:^
+        version: link:../../quality/quality-session
       '@phoenix-ai/dsh-repeat-tool-reminder':
         specifier: workspace:^
         version: link:../../guard/repeat-tool-reminder
@@ -1240,6 +1246,9 @@ importers:
       '@phoenix-ai/dsh-tool-pwsh':
         specifier: workspace:^
         version: link:../../shell/tool-pwsh
+      '@phoenix-ai/dsh-tool-quality':
+        specifier: workspace:^
+        version: link:../../quality/tool-quality
       '@phoenix-ai/dsh-tool-ralph':
         specifier: workspace:^
         version: link:../../workflow/tool-ralph

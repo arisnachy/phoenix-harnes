@@ -266,6 +266,7 @@
         "./packages/compaction/*/src",
         "./packages/context/*/src",
         "./packages/goal/*/src",
+        "./packages/quality/*/src",
         "./packages/feedback/*/src",
         "./packages/schedule/*/src",
         "./packages/guard/*/src",
