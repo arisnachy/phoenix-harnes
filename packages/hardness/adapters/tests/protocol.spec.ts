@@ -31,6 +31,7 @@ describe('HARDNESS model protocol prompt adapter', () => {
     installHardnessProtocol(systemPrompt, 'en')
 
     const text = systemPrompt.section.mock.calls[0]?.[0]?.text
+    if (typeof text !== 'string') throw new Error('expected model-facing prompt text')
     expect(text).toContain('<phoenix_human_presentation>')
     expect(text).toContain('Treat workflow labels, execution modes, quality gates, retries, model routing, and tool orchestration as private execution scaffolding')
     expect(text).toContain('Do not expose them as user-facing headings, status narration, or implementation jargon')
@@ -45,13 +46,14 @@ describe('HARDNESS model protocol prompt adapter', () => {
 
     installHardnessProtocol(systemPrompt, 'es')
 
-    const section = systemPrompt.section.mock.calls[0]?.[0]
-    expect(section?.text).toContain('HARDNESS conoce estos flujos cognitivos')
-    expect(section?.text).toContain('Pasos obligatorios')
-    expect(section?.text).toContain('<phoenix_human_presentation>')
-    expect(section?.text).toContain('Trata las etiquetas de flujo, modos de ejecución, quality gates, reintentos, enrutamiento de modelos y orquestación de herramientas como andamiaje privado de ejecución')
-    expect(section?.text).toContain('Habla de forma natural, cálida, directa y en el idioma del usuario')
-    expect(section?.text).not.toContain('function')
-    expect(section?.text).not.toContain('credential')
+    const text = systemPrompt.section.mock.calls[0]?.[0]?.text
+    if (typeof text !== 'string') throw new Error('expected model-facing prompt text')
+    expect(text).toContain('HARDNESS conoce estos flujos cognitivos')
+    expect(text).toContain('Pasos obligatorios')
+    expect(text).toContain('<phoenix_human_presentation>')
+    expect(text).toContain('Trata las etiquetas de flujo, modos de ejecución, quality gates, reintentos, enrutamiento de modelos y orquestación de herramientas como andamiaje privado de ejecución')
+    expect(text).toContain('Habla de forma natural, cálida, directa y en el idioma del usuario')
+    expect(text).not.toContain('function')
+    expect(text).not.toContain('credential')
   })
 })
