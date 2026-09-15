@@ -27,6 +27,8 @@ When an exact live agent is idle with an active, armed goal and remaining capaci
 
 The retained prompt names the JSON-quoted objective and `round/maxGoalRounds`, treats the current workspace, tool results, and durable session state as authoritative, requires evidence before completion, and tells the model to use a materially different strategy after the first unsuccessful round. A question result marked `automatic: true` is explicitly a step decision only; it cannot complete, cancel, or block the active mission, and the model must continue or change strategy. It leaves the goal active when work remains. Quoting preserves multiline or tag-like objective text as data. Goal lifecycle mutations still require the independent authority checks in `dsh-tool-goal`.
 
+An admitted goal round is execution, not a new planning-approval phase. Routine process-skill ceremony, brainstorming approval, and implementation-plan approval must not pause an already-authorized mission. Recoverable tool, execution, verification, or presentation failures require immediate repair, an alternate route, capability acquisition/building, or strategy rotation. Internal retry/attempt/round-window limits never complete the mission. Only a genuine external dependency—permission, credential, safety policy, exhausted provider quota, explicit denial, or an unsatisfied dependency that cannot be resolved safely—may pause autonomous progress.
+
 ## Idle checkpoint
 
 At whole-agent idle, durable goal phase and revision are authoritative. An active, armed goal with capacity reserves its next round; completion, pause, blocking, and edits suppress continuation. A cap opens a fresh active revision instead of completing or blocking the mission. The driver does not classify the preceding activity by correlating the goal message with `turn/end`, so provider errors and token limits remain attempt-level outcomes.
@@ -50,7 +52,7 @@ Each admitted round is one retained user-role `<goal_round>` block naming the fu
 ##### Goal-round protocol
 
 ```markdown
-The model receives the complete objective and positive round number in the retained `<goal_round>` block.
+The model receives the complete objective and positive round number in the retained `<goal_round>` block. The mission is already authorized: do not ask for routine process approval. Continue through recoverable failures by repairing or changing strategy, and only pause for a genuine external dependency. Completion still requires fresh whole-objective evidence and the configured independent judge.
 ```
 
 ##### Judge feedback

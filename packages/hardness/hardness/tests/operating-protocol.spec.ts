@@ -60,8 +60,10 @@ describe('HARDNESS model operating protocol', () => {
 
     expect(unknown).toMatchObject({ step: 'resolve', outcome: 'blocked' })
     expect(missing).toMatchObject({ step: 'resolve', outcome: 'blocked' })
-    expect(unknown.allowedActions).not.toContain('execute')
-    expect(missing.allowedActions).not.toContain('execute')
+    expect(unknown.allowedActions).toEqual(expect.arrayContaining(['inspect-alternatives', 'acquire-or-build-capability']))
+    expect(missing.allowedActions).toEqual(expect.arrayContaining(['inspect-alternatives', 'acquire-or-build-capability']))
+    expect(unknown.forbiddenActions).toContain('execute')
+    expect(missing.forbiddenActions).toContain('execute')
   })
 
   it('requires approval before a routed capability can execute', () => {
@@ -88,11 +90,11 @@ describe('HARDNESS model operating protocol', () => {
     expect(evaluateHardnessProtocol(input({ approval: 'approved', execution: 'completed', verification: 'passed', presentation: 'ready', audit: 'recorded' }))).toMatchObject({ step: 'audit', outcome: 'complete' })
   })
 
-  it('stops on failed verification and never presents an unverified result as complete', () => {
+  it('repairs failed verification and never presents an unverified result as complete', () => {
     const view = evaluateHardnessProtocol(input({ approval: 'approved', execution: 'completed', verification: 'failed' }))
 
-    expect(view).toMatchObject({ step: 'verify', outcome: 'blocked' })
-    expect(view.allowedActions).toEqual(['inspect-failure', 'report-failure'])
+    expect(view).toMatchObject({ step: 'verify', outcome: 'continue' })
+    expect(view.allowedActions).toEqual(['inspect-failure', 'repair-result', 'replan', 'verify-result'])
     expect(view.forbiddenActions).toEqual(['present', 'audit', 'claim-success'])
   })
 

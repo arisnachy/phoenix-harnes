@@ -81,9 +81,9 @@ export function evaluateHardnessProtocol(input: HardnessProtocolInput): Hardness
     return {
       step: 'resolve',
       outcome: 'blocked',
-      allowedActions: ['report-blocker', 'ask-for-missing-capability'],
+      allowedActions: ['inspect-alternatives', 'acquire-or-build-capability', 'replan'],
       forbiddenActions: ['approve', 'execute', 'present', 'claim-success'],
-      reason: input.route.reasons.join('; ') || `capability resolution is ${input.route.kind}`,
+      reason: `${input.route.reasons.join('; ') || `capability resolution is ${input.route.kind}`}; exhaust safe alternatives and acquisition/build recovery before a user handoff`,
     }
   }
 
@@ -141,11 +141,11 @@ export function evaluateHardnessProtocol(input: HardnessProtocolInput): Hardness
 
   if (input.execution === 'failed') {
     return {
-      step: 'verify',
-      outcome: 'blocked',
-      allowedActions: ['inspect-failure', 'report-failure'],
+      step: 'execute',
+      outcome: 'continue',
+      allowedActions: ['inspect-failure', 'select-alternative', 'repair-or-build-capability', 'replan'],
       forbiddenActions: ['present', 'audit', 'claim-success'],
-      reason: 'execution failed and its result cannot be presented as verified',
+      reason: 'execution failed; inspect the failure and immediately repair, build, or select a materially different route',
     }
   }
 
@@ -162,10 +162,10 @@ export function evaluateHardnessProtocol(input: HardnessProtocolInput): Hardness
   if (input.verification === 'failed') {
     return {
       step: 'verify',
-      outcome: 'blocked',
-      allowedActions: ['inspect-failure', 'report-failure'],
+      outcome: 'continue',
+      allowedActions: ['inspect-failure', 'repair-result', 'replan', 'verify-result'],
       forbiddenActions: ['present', 'audit', 'claim-success'],
-      reason: 'verification failed',
+      reason: 'verification failed; repair the result or verification path and run fresh verification again',
     }
   }
 
@@ -182,10 +182,10 @@ export function evaluateHardnessProtocol(input: HardnessProtocolInput): Hardness
   if (input.presentation === 'failed') {
     return {
       step: 'present',
-      outcome: 'blocked',
-      allowedActions: ['report-rendering-blocker'],
+      outcome: 'continue',
+      allowedActions: ['select-alternative-renderer', 'acquire-or-build-renderer', 'render-verified-result'],
       forbiddenActions: ['audit', 'claim-success'],
-      reason: 'no approved renderer produced a presentable artifact',
+      reason: 'presentation failed; select, repair, acquire, or build a renderer and present the same verified result again',
     }
   }
 
@@ -219,14 +219,16 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
       '<phoenix_hardness_protocol>',
       `Pasos obligatorios: ${steps}`,
       'Antes de formular el plan de ejecución, clasifica la misión y selecciona o adapta el workflow cognitivo HARDNESS; esa selección nunca concede autoridad de ejecución.',
-      'Para toda misión no trivial usa hardness_workflow para obtener del harness el pipeline ordenado y sus quality gates; vuelve a llamarlo cuando cambien riesgo, alcance, independencia o evidencia de fallo.',
-      'Resuelve la capacidad antes de ejecutar.',
+      'Para toda misión no trivial usa hardness_workflow para obtener del harness el pipeline ordenado, su execution mode y sus quality gates; vuelve a llamarlo cuando cambien riesgo, alcance, independencia o evidencia de fallo.',
+      'En fast mode ejecuta el cambio acotado sin ceremonia de diseño o aprobación rutinaria: inspecciona, cambia lo mínimo, verifica de forma dirigida y termina solo con evidencia fresca.',
+      'Resuelve la capacidad antes de ejecutar. Una capacidad ausente o una ejecución, verificación o presentación fallida es trabajo de recuperación: inspecciona alternativas, repara, adquiere o construye la capacidad/renderer y cambia de estrategia antes de escalar al usuario.',
+      'No pidas al usuario decisiones rutinarias de archivos, implementación, plan o recuperación cuando el contexto y las herramientas puedan resolverlas. Pide intervención únicamente por permiso o autorización de cuenta explícitos, safety, cuota agotada o una dependencia externa que Phoenix no pueda satisfacer de forma segura.',
       'Solicita aprobación explícita cuando la capacidad declare permisos.',
       'Verifica el resultado antes de presentarlo.',
       'Registra evidencia antes de afirmar que la operación terminó.',
       'Bloquea el objetivo original, sus entregables, criterios y requisitos de calidad; un fallo de intento, plan, herramienta o estrategia solo activa WALL_PROTOCOL y recuperación.',
-      'Somete la evidencia a un juez independiente e implacable: debe revisar completitud, estructura, presentación visual, seguridad, reproducibilidad y criterios; solo un pass con quality gate aprobado permite DONE.',
-      'Nunca cierres una misión por progreso, pruebas parciales, un scaffold, un mock, un sustituto parcial o un turno terminado; needs_changes y blocked la mantienen activa o esperando una dependencia externa.',
+      'Usa juicio independiente cuando el workflow HARDNESS lo seleccione o el kernel de misión lo requiera; solo un pass con quality gate aprobado permite DONE.',
+      'Nunca cierres una misión por progreso, pruebas parciales, un scaffold, un mock, un sustituto parcial, un turno terminado o un límite interno de reintentos; cambia estrategia y mantén la misión activa hasta resultado verificado o dependencia externa real.',
       'Nunca ejecutes una operación no resuelta, no aprobada o no verificada.',
       '</phoenix_hardness_protocol>',
     ].join('\n')
@@ -235,14 +237,16 @@ export function renderHardnessProtocol(locale: 'en' | 'es' = 'en'): string {
     '<phoenix_hardness_protocol>',
     `Required steps: ${steps}`,
     'Before formulating the execution plan, classify the mission and select or adapt the HARDNESS cognitive workflow; workflow selection never grants execution authority.',
-    'For every non-trivial mission call hardness_workflow to obtain the harness-selected ordered pipeline and quality gates; call it again when risk, scope, independence, or failure evidence changes.',
-    'Resolve the capability before execution.',
+    'For every non-trivial mission call hardness_workflow to obtain the harness-selected ordered pipeline, execution mode, and quality gates; call it again when risk, scope, independence, or failure evidence changes.',
+    'In fast mode execute the bounded change without design ceremony or routine approval: inspect, make the smallest safe change, run targeted verification, and finish only with fresh evidence.',
+    'Resolve the capability before execution. A missing capability or failed execution, verification, or presentation is recovery work: inspect alternatives, repair, acquire or build the needed capability/renderer, and change strategy before escalating to the user.',
+    'Do not ask the user for routine file-location, implementation, plan, or recovery decisions when context and tools can resolve them. Ask only for explicit permission or account authorization, safety requirements, exhausted provider quota, or a genuine external dependency Phoenix cannot safely satisfy.',
     'Request explicit approval when the capability declares permissions.',
     'Verify the result before presenting it.',
     'Record evidence before claiming that the operation completed.',
     'Lock the original objective, deliverables, criteria, and quality requirements; a failed attempt, plan, tool, or strategy only activates WALL_PROTOCOL and recovery.',
-    'Submit evidence to an implacable independent judge: it must inspect completeness, structure, visual presentation, security, reproducibility, and every criterion; only pass with a passing quality gate may enter DONE.',
-    'Never close a mission because work progressed, partial tests passed, a scaffold or mock exists, or a turn ended; needs_changes and blocked keep it active or waiting for an external dependency.',
+    'Use an independent judge when the selected HARDNESS workflow or mission kernel requires one; only pass with a passing quality gate may enter DONE.',
+    'Never close a mission because work progressed, partial tests passed, a scaffold or mock exists, a turn ended, or an internal retry limit was reached; change strategy and keep the mission active until verified completion or a genuine external dependency.',
     'Never execute an unresolved, unapproved, or unverified operation.',
     '</phoenix_hardness_protocol>',
   ].join('\n')

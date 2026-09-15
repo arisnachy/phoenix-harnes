@@ -11,6 +11,7 @@ import { defineTool, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
 const MISSION_KINDS = ['simple', 'build', 'debug', 'research', 'architecture', 'operational', 'recovery', 'mixed'] as const
 const MISSION_LEVELS = ['low', 'medium', 'high'] as const
+const EXECUTION_MODES = ['fast', 'standard', 'deep'] as const
 const WORKFLOW_OBSERVATIONS = [
   'execution-failed',
   'verification-failed',
@@ -24,6 +25,7 @@ const WORKFLOW_OBSERVATIONS = [
 function projectWorkflowPlan(plan: CognitiveWorkflowPlan) {
   return {
     profile: { ...plan.profile },
+    executionMode: plan.executionMode,
     selected: [...plan.selected],
     reasons: plan.reasons.map(reason => ({ ...reason })),
     skipped: plan.skipped.map(reason => ({ ...reason })),
@@ -37,7 +39,7 @@ function projectWorkflowPlan(plan: CognitiveWorkflowPlan) {
 export function createCognitiveWorkflowTool(): ToolDefinition {
   return defineTool({
     name: 'hardness_workflow',
-    description: 'Select the deterministic HARDNESS cognitive workflow before execution planning. Use it for non-trivial missions and again when bounded evidence changes the mission. It returns ordered flows, reasons, and quality gates; it does not execute tools or grant permissions.',
+    description: 'Select the deterministic HARDNESS cognitive workflow before execution planning. Use it for non-trivial missions and again when bounded evidence changes the mission. It returns execution depth, ordered flows, reasons, and quality gates; it does not execute tools or grant permissions.',
     parameters: {
       profile: {
         type: 'object',
@@ -66,6 +68,7 @@ export function createCognitiveWorkflowTool(): ToolDefinition {
         additionalProperties: false,
         properties: {
           profile: { type: 'json', required: true },
+          executionMode: { type: 'string', enum: EXECUTION_MODES, required: true },
           selected: { type: 'array', items: { type: 'string' }, required: true },
           reasons: { type: 'json', required: true },
           skipped: { type: 'json', required: true },

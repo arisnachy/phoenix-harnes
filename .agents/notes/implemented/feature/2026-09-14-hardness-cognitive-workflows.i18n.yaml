@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-14-hardness-cognitive-workflows.md
-2026-09-14-hardness-cognitive-workflows.md: daeebf8520fdb55b7bdf44976725ce7faa68e885
-2026-09-14-hardness-cognitive-workflows.zh.md: ba0ee38641a20f83bfd976659a51ba0500253de0
+2026-09-14-hardness-cognitive-workflows.md: a0c2ba3f2e53b1d5cd9acbe0c7d7decb2bd75788
+2026-09-14-hardness-cognitive-workflows.zh.md: 8897bff41a8d9990e4e533b079d84cf7075da6d0

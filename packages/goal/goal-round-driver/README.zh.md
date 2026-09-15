@@ -27,6 +27,8 @@
 
 保留的提示词会点明经过 JSON 引用的目标与 `round/maxGoalRounds`，将当前工作区、工具结果和持久会话状态视为权威信息，要求在完成前提供证据，并要求第一次未成功后使用与早先尝试实质不同的策略。带有 `automatic: true` 的问题结果明确只是步骤决定，不能完成、取消或阻塞活动任务；模型必须继续执行或更换策略。工作仍未完成时保持目标 active。引用可将多行或形似标签的目标文本保留为数据。goal 生命周期变更仍必须通过 `dsh-tool-goal` 的独立权限检查。
 
+已准入的 goal round 是执行阶段，不是新的 planning-approval 阶段。Routine process-skill 仪式、brainstorming approval 和 implementation-plan approval 不能暂停已经授权的 mission。可恢复的 tool、execution、verification 或 presentation failure 必须立即触发修复、替代 route、能力获取/构建或策略轮换。内部 retry/attempt/round-window limit 永远不能完成 mission。只有真正的外部依赖——permission、credential、safety policy、provider quota 已耗尽、明确拒绝，或无法安全解决的外部 dependency——才允许暂停自主推进。
+
 ## Idle 检查点
 
 整个 agent 进入 idle 时，持久 goal phase 和 revision 具有权威性。phase 为 active、已启用续行且仍有容量的 goal 会预留下一 Round；达到上限会创建新的 active revision，而不是完成或阻塞任务。完成、暂停、阻塞和编辑都会阻止续行。驱动器不会通过关联 goal 消息与 `turn/end` 来对前一段活动分类，因此提供方错误和 token 上限仍是尝试级结果。
@@ -50,7 +52,7 @@
 ##### Goal Round 协议
 
 ```markdown
-The model receives the complete objective and positive round number in the retained `<goal_round>` block.
+The model receives the complete objective and positive round number in the retained `<goal_round>` block. The mission is already authorized: do not ask for routine process approval. Continue through recoverable failures by repairing or changing strategy, and only pause for a genuine external dependency. Completion still requires fresh whole-objective evidence and the configured independent judge.
 ```
 
 ##### Judge 反馈

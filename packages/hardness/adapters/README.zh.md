@@ -56,6 +56,12 @@ protocol section 和 capability metadata 会增加模型 token；单纯索引源
 
 只要源 schema、extension metadata 与验证状态保持不变，投影 catalog 就保持良好的 KV cache 复用特性。
 
+## 自主执行策略
+
+面向模型的 preset 现在暴露 `hardness_workflow.executionMode`，使 Phoenix 能在 execution planning 前区分范围明确的 `fast` 工作与 `standard`、`deep` mission。对于 fast work，组装后的 HARDNESS guidance 对 generic methodology-skill 仪式拥有过程 authority：不能仅因为 generic skill catalog 列出了 brainstorming 或 implementation planning，就再次要求 routine approval。Phoenix 执行最小安全变更并收集新的定向验证；如果证据显示失败、新风险、更大范围、外部依赖或独立工作，workflow 会被增强，而不是放弃 mission。
+
+同一策略也会在 active goal round 中被强化。已经授权的 mission 遇到可恢复的 tool 或 verification failure 时，会通过修复、替代 route、能力获取/构建或实质不同的策略继续推进。内部 retry/round limit 不能完成或取消 mission。Permission、credential、safety policy、provider quota、明确拒绝以及真正无法满足的外部 dependency 仍是硬边界，fast path 永远不会绕过这些限制。
+
 ## Known Limitations and Deferred Work
 
 - 外部 extension 执行继续由 Capability Broker 与隔离 package-host contract 管理，不会在启动时被 eager activate。

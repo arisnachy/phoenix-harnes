@@ -74,6 +74,12 @@ The protocol sections, task-tool schemas, and capability metadata contribute mod
 
 The projected catalog and proactivity protocol are cache-friendly while source schemas, extension metadata, verification state, and visible tool definitions remain unchanged.
 
+## Autonomous execution policy
+
+Model-facing presets expose `hardness_workflow.executionMode` so Phoenix can distinguish bounded `fast` work from `standard` and `deep` missions before execution planning. For fast work, the assembled HARDNESS guidance is authoritative over generic methodology-skill ceremony: routine brainstorming or implementation-plan approval is not re-requested merely because a generic skill catalog lists those processes. Phoenix makes the smallest safe change and gathers fresh targeted verification; if evidence reveals failure, new risk, wider scope, external dependencies, or independent work, the workflow is strengthened rather than abandoned.
+
+The same policy is reinforced in active goal rounds. An already-authorized mission continues through recoverable tool and verification failures using repair, alternate routes, capability acquisition/building, or a materially different strategy. Internal retry/round limits cannot complete or cancel the mission. Permission, credentials, safety policy, provider quota, explicit denial, and genuinely unsatisfied external dependencies remain hard boundaries and are never bypassed by the fast path.
+
 ## Known Limitations and Deferred Work
 
 - External extension execution remains governed by the Capability Broker and isolated package-host contract rather than being activated eagerly at startup.
