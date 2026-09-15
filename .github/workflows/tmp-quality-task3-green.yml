@@ -36,3 +36,4 @@ jobs:
       - run: pnpm exec tsc -p packages/quality/quality/tsconfig.json --noEmit
       - run: pnpm exec tsc -p packages/quality/quality-session/tsconfig.json --noEmit
       - run: pnpm exec tsc -p packages/quality/tool-quality/tsconfig.json --noEmit
+      # This workflow is intentionally temporary; final verification runs after bundle integration.
