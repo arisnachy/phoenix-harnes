@@ -2,11 +2,15 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
+import type {} from '@phoenix-ai/dsh-system-prompt'
 import { EpisodicMissionRecorder } from './episodic.ts'
 import { formatDirectedMemoryContext } from './episodic-presentation.ts'
 import { resolveMemoryIntent } from './memory-intent.ts'
 
-/** Install durable mission capture and intent-aware directed recall. */
+/**
+ * Install durable mission capture and intent-aware directed recall on one Cordis context.
+ * @param ctx - Runtime context that owns sessions, cognitive memory, and the system prompt.
+ */
 export function installCognitiveMemoryV2(ctx: Context): void {
   const recorder = new EpisodicMissionRecorder({
     async remember(input) {
@@ -40,8 +44,7 @@ export function installCognitiveMemoryV2(ctx: Context): void {
     }
 
     if (eventType === 'tool/result') {
-      const isError = toolResultIsError(data)
-      recorder.observeToolResult(sessionId, data, isError)
+      recorder.observeToolResult(sessionId, data, toolResultIsError(data))
       return
     }
 
@@ -107,7 +110,7 @@ export function installCognitiveMemoryV2(ctx: Context): void {
       if (intent.from !== undefined) filters.from = intent.from
       if (intent.to !== undefined) filters.to = intent.to
 
-      const hits = ctx.learningMemory.searchCognitive('', 48, filters)
+      const hits = ctx.learningMemory.searchCognitive('', 128, filters)
       return formatDirectedMemoryContext(intent, hits)
     },
     interpolateVariables: false,
