@@ -58,6 +58,13 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('Commit, stash, or intentionally discard those changes')
   })
 
+  it('observes a prepared update restart request while the Host is still alive', () => {
+    expect(source).toContain('if (restartRequested())')
+    expect(source).toContain("return { kind: 'update-restart', lastObservedFingerprint }")
+    expect(source).toContain("hostEvent.kind === 'update-restart'")
+    expect(source).toContain('prepared update requested; stopping the current Host under supervisor control')
+  })
+
   it('hydrates the current user Google token before launching each Host', () => {
     expect(source).toContain("import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'")
     expect(source).toContain('...hydratePhoenixEnvironment(process.env)')
