@@ -260,7 +260,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, onAuthorized }: 
   const [disconnectingKey, setDisconnectingKey] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<ConnectorFilter>('all')
+  const [filter, setFilter] = useState<ConnectorFilter>('connected')
   const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } = useAuthorizationAttempt(api, () => {
     setRefresh(current => current + 1)
     onAuthorized()
