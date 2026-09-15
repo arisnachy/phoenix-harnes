@@ -18,14 +18,14 @@ describe('modelAvatarKind', () => {
 })
 
 describe('agentAvatarKind', () => {
-  it('keeps the visual persona aligned with the visible KIRA codename roster', () => {
-    expect(agentAvatarKind('c1')).toBe('orion')
-    expect(agentAvatarKind('c2')).toBe('nexo')
+  it('keeps the exact approved 20-portrait roster aligned with the visible KIRA codename', () => {
+    expect(agentAvatarKind('c1')).toBe('vega')
+    expect(agentAvatarKind('c2')).toBe('eclipse')
   })
 })
 
 describe('ModelActivityAvatar', () => {
-  it('renders a living portrait instead of the old geometric agent glyph', () => {
+  it('renders the approved public portrait sheet instead of an embedded or vector face rig', () => {
     const element = ModelActivityAvatar({
       agentId: 'c1',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
@@ -35,15 +35,18 @@ describe('ModelActivityAvatar', () => {
     const children = Array.isArray(element.props.children)
       ? element.props.children
       : [element.props.children]
-    const portrait = children.find((child: { props?: Record<string, unknown> }) =>
+    const image = children.find((child: { props?: Record<string, unknown> }) =>
+      child?.props?.['data-agent-portrait-image'] === true)
+    const vectorPortrait = children.find((child: { props?: Record<string, unknown> }) =>
       child?.props?.['data-agent-portrait'] === true)
-    const legacyGlyph = children.find((child: { props?: Record<string, unknown> }) =>
-      child?.props?.['data-agent-glyph'] === true)
 
-    expect(element.props['data-avatar']).toBe('orion')
-    expect(portrait).toBeDefined()
-    expect(portrait.type).toBe('svg')
-    expect(legacyGlyph).toBeUndefined()
+    expect(element.props['data-avatar']).toBe('vega')
+    expect(image).toBeDefined()
+    expect(image.type).toBe('span')
+    expect(String(image.props.style?.['--portrait-image']))
+      .toBe('url("/assets/kira-agents/kira-portraits.webp")')
+    expect(String(image.props.style?.['--portrait-image'])).not.toContain('data:image')
+    expect(vectorPortrait).toBeUndefined()
   })
 
   it.each([
@@ -58,7 +61,7 @@ describe('ModelActivityAvatar', () => {
       pending: false,
     })
     expect(element.props).toMatchObject({
-      'data-avatar': 'nexo',
+      'data-avatar': 'eclipse',
       'data-phase': expectedPhase,
       'data-state': 'running',
     })
@@ -79,8 +82,8 @@ describe('ModelActivityAvatar', () => {
     })
     const fallback = ModelActivityAvatar({ activity: undefined, running: true, pending: false })
 
-    expect(done.props).toMatchObject({ 'data-avatar': 'orion', 'data-phase': 'idle', 'data-state': 'done' })
-    expect(pending.props).toMatchObject({ 'data-avatar': 'nexo', 'data-phase': 'running-tools', 'data-state': 'pending' })
+    expect(done.props).toMatchObject({ 'data-avatar': 'vega', 'data-phase': 'idle', 'data-state': 'done' })
+    expect(pending.props).toMatchObject({ 'data-avatar': 'eclipse', 'data-phase': 'running-tools', 'data-state': 'pending' })
     expect(fallback.props).toMatchObject({ 'data-avatar': 'generic', 'data-phase': 'preparing' })
   })
 })
