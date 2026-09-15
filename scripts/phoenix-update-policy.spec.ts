@@ -46,7 +46,7 @@ describe('PHOENIX stable update policy', () => {
     })).toBe('reject')
   })
 
-  it('keeps an unmanaged or development checkout protected', () => {
+  it('keeps an unmanaged or development checkout protected without runtime isolation', () => {
     expect(classifyStableUpdate({
       status: 'diverged',
       branch: 'stable',
@@ -60,7 +60,27 @@ describe('PHOENIX stable update policy', () => {
       managed: true,
       mode: 'auto',
       stableBranch: 'stable',
+      isolatedRuntime: false,
     })).toBe('development')
+  })
+
+  it('allows supervised development checkouts to update only through an isolated runtime', () => {
+    expect(classifyStableUpdate({
+      status: 'upgrade',
+      branch: 'kira/restart-function-fix',
+      managed: false,
+      mode: 'auto',
+      stableBranch: 'stable',
+      isolatedRuntime: true,
+    })).toBe('isolate')
+    expect(classifyStableUpdate({
+      status: 'diverged',
+      branch: 'codex/work',
+      managed: false,
+      mode: 'auto',
+      stableBranch: 'stable',
+      isolatedRuntime: true,
+    })).toBe('isolate')
   })
 
   it('reports a managed replacement without mutating in notify mode', () => {
