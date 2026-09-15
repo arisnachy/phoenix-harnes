@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'
-import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import SystemPrompt, { renderContextSnapshot } from '@phoenix-ai/dsh-system-prompt'
 import ToolRegistry from '@phoenix-ai/dsh-tools'
 import LearningMemoryService from '@phoenix-ai/dsh-session-learning'
@@ -51,10 +50,10 @@ describe('directed autobiographical recall runtime', () => {
 
     const restarted = await createRuntime(path)
     const querySession = restarted.sessions.create(SessionId('history-query-session'), { meta: { cwd: 'C:\\workspace\\other-project' } })
-    querySession.append('user/message', createUserMessage({
+    querySession.append('user/message', {
       content: [{ type: 'text', text: '¿Qué hicimos en los proyectos anteriores?' }],
       source: { kind: 'user' },
-    }), { surfaceOp: 'append' })
+    } as never, { surfaceOp: 'append' })
     await restarted.learningMemory.ready()
 
     const snapshot = renderContextSnapshot(await restarted.systemPrompt.assemble())
