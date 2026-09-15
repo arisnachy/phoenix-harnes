@@ -180,9 +180,11 @@ describe('Phoenix response hygiene', () => {
       { type: 'text-delta', index: 0, text: 'AGENTS.md search_emails' },
       { type: 'finish', reason: { kind: 'stop' } },
     ]
+    const nonSession = request('¿Tienes acceso?')
+    delete nonSession.sessionId
 
     expect(await collect(listener!(request('Resumen', { purpose: 'session-title' }), () => stream(raw)))).toEqual(raw)
-    expect(await collect(listener!(request('¿Tienes acceso?', { sessionId: undefined }), () => stream(raw)))).toEqual(raw)
+    expect(await collect(listener!(nonSession, () => stream(raw)))).toEqual(raw)
     expect(await collect(listener!(request('Depura Phoenix y dime qué tool interno usa Gmail'), () => stream(raw)))).toEqual(raw)
   })
 
