@@ -4,13 +4,15 @@
  *
  * Invariants:
  * - only the official stable channel can nominate a commit;
- * - only a clean `main` or promoted `stable` worktree can be activated automatically;
+ * - only a clean `main` or promoted `stable` worktree can be activated in-place;
+ * - supervised development checkouts may update through a verified isolated runtime;
  * - the nominated commit must be reachable from the configured main remote;
  * - candidates are validated in a persistent short-path staging worktree;
  * - local changes never prevent an isolated candidate from being prepared;
  * - client-only changes use an incremental client build; critical changes stay full;
  * - the live checkout is not mutated while PHOENIX is serving a session;
- * - the current commit is recorded as a recovery ref before activation;
+ * - updater control markers are shared through the common Git directory across worktrees;
+ * - the current commit is recorded as a recovery ref before in-place activation;
  * - a failed live install/build rolls back to that commit automatically;
  * - $DSH_HOME, credentials, sessions and project data are never touched.
  */
@@ -105,20 +107,24 @@ function gitCommonDirectory(root) {
   return isAbsolute(result.stdout) ? resolve(result.stdout) : resolve(root, result.stdout)
 }
 
+function controlDirectory(root) {
+  return gitCommonDirectory(root) ?? gitDirectory(root)
+}
+
 function statePath(root) {
-  return join(gitDirectory(root), STATE_FILE)
+  return join(controlDirectory(root), STATE_FILE)
 }
 
 function preparedPath(root) {
-  return join(gitDirectory(root), PREPARED_FILE)
+  return join(controlDirectory(root), PREPARED_FILE)
 }
 
 function restartRequestPath(root) {
-  return join(gitDirectory(root), RESTART_REQUEST_FILE)
+  return join(controlDirectory(root), RESTART_REQUEST_FILE)
 }
 
 function refreshRequestPath(root) {
-  return join(gitDirectory(root), REFRESH_REQUEST_FILE)
+  return join(controlDirectory(root), REFRESH_REQUEST_FILE)
 }
 
 function remoteMatchesExpected(root) {
@@ -273,6 +279,7 @@ function stableUpdateAction(root, inspection) {
     managed: isManagedInstall(root),
     mode: UPDATE_MODE,
     stableBranch: STABLE_SOURCE_BRANCH,
+    isolatedRuntime: process.env.PHOENIX_UPDATE_SUPERVISED === '1',
   })
 }
 
@@ -832,6 +839,7 @@ async function watch(root, parentPid) {
           pending = inspection
           writeState(root, { status: 'available', phase: 'notify', ...updateFacts(inspection) })
           break
+        case 'isolate':
         case 'apply':
         case 'replace': {
           pending = inspection
