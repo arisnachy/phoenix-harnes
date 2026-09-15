@@ -48,29 +48,29 @@ describe('approved KIRA reference board', () => {
   })
 })
 
-describe('approved KIRA portrait assets', () => {
-  it('uses one real asset per persona instead of a shared sprite or vector fallback', () => {
-    expect(portraitSrcForKind('vortice')).toBe('/assets/kira-agents/vortice.webp')
-    expect(portraitSrcForKind('argo')).toBe('/assets/kira-agents/argo.webp')
-    expect(portraitSrcForKind('orbita')).toBe('/assets/kira-agents/orbita.webp')
+describe('approved KIRA portrait identities', () => {
+  it('uses the shipped exact 20-portrait reference sheet rather than a vector fallback', () => {
+    expect(portraitSrcForKind('vortice')).toBe('/assets/kira-agents/kira-portraits.webp')
+    expect(portraitSrcForKind('argo')).toBe('/assets/kira-agents/kira-portraits.webp')
+    expect(portraitSrcForKind('orbita')).toBe('/assets/kira-agents/kira-portraits.webp')
   })
 
-  it('renders ready personas vividly and keeps live phase data for animation', () => {
+  it('crops each persona to its own cell and keeps live phase data for animation', () => {
     const ready = ModelActivityAvatar({
-      kind: 'argo',
-      activity: undefined,
-      running: false,
-      pending: false,
-      ready: true,
+      kind: 'argo', activity: undefined, running: false, pending: false, ready: true, variant: 'card',
     })
     const live = ModelActivityAvatar({
       kind: 'atlas',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
       running: true,
       pending: false,
+      variant: 'card',
     })
     const readyChildren = Array.isArray(ready.props.children) ? ready.props.children : [ready.props.children]
-    const portrait = readyChildren.find((child: { props?: Record<string, unknown> }) =>
+    const liveChildren = Array.isArray(live.props.children) ? live.props.children : [live.props.children]
+    const readyPortrait = readyChildren.find((child: { props?: Record<string, unknown> }) =>
+      child?.props?.['data-agent-portrait-image'] === true)
+    const livePortrait = liveChildren.find((child: { props?: Record<string, unknown> }) =>
       child?.props?.['data-agent-portrait-image'] === true)
 
     expect(ready.props).toMatchObject({
@@ -78,12 +78,16 @@ describe('approved KIRA portrait assets', () => {
       'data-phase': 'idle',
       'data-state': 'ready',
     })
-    expect(portrait?.type).toBe('img')
-    expect(portrait?.props?.src).toBe('/assets/kira-agents/argo.webp')
+    expect(readyPortrait?.type).toBe('span')
+    expect(String(readyPortrait?.props?.style?.['--portrait-image']))
+      .toBe('url("/assets/kira-agents/kira-portraits.webp")')
+    expect(readyPortrait?.props?.style?.['--portrait-y']).toBe(`${2 * (100 / 3)}%`)
     expect(live.props).toMatchObject({
       'data-avatar': 'atlas',
       'data-phase': 'running-tools',
       'data-state': 'running',
     })
+    expect(livePortrait?.props?.style?.['--portrait-x']).toBe('50%')
+    expect(readyPortrait?.props?.style?.['--portrait-x']).not.toBe(livePortrait?.props?.style?.['--portrait-x'])
   })
 })
