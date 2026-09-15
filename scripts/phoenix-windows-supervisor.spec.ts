@@ -45,6 +45,15 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('&& !preparedTargetIsDivergent(target)')
   })
 
+  it('does not restore a stale isolated runtime when a clean source checkout has advanced past it', () => {
+    expect(source).toContain('function sourceCheckoutSupersedesRuntime(target)')
+    expect(source).toContain("const sourceHead = gitValue(root, ['rev-parse', 'HEAD'])")
+    expect(source).toContain('const sourceStatus = gitStatus(root)')
+    expect(source).toContain("gitSucceeds(root, ['merge-base', '--is-ancestor', target, sourceHead])")
+    expect(source).toContain('clearActiveRuntime()')
+    expect(source).toContain('source checkout is newer than the saved isolated runtime')
+  })
+
   it('pauses activation before invoking the prepared activator when the live checkout is dirty', () => {
     expect(source).toContain('const liveStatus = gitStatus(root)')
     expect(source).toContain('if (!liveStatus.ok || liveStatus.entries.length > 0)')
