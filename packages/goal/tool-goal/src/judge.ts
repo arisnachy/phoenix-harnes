@@ -3,6 +3,7 @@
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock, LlmRuntime } from '@phoenix-ai/dsh-llm'
 import type { GoalJudgeAuditEntry } from '@phoenix-ai/dsh-goal'
+import { qualityReadiness, type QualityAssessmentSnapshot, type QualityMutation, type QualityService } from '@phoenix-ai/dsh-quality'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
@@ -48,6 +49,7 @@ const MAX_HISTORY_ROUNDS = 8
 const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
 type GoalJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
+type GoalQualityRuntime = Pick<QualityService, 'get' | 'start' | 'record'>
 
 function normalizedText(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value === value.trim() && value.length <= MAX_TEXT
@@ -311,6 +313,70 @@ function recordCompletionGate(parent: Agent, objective: string, round: number, g
   })
 }
 
+interface QualityGateState {
+  readonly snapshot: QualityAssessmentSnapshot
+  readonly blockers: readonly string[]
+}
+
+function syncQualityAssessment(
+  quality: GoalQualityRuntime,
+  parent: Agent,
+  objective: string,
+  gate: GoalCompletionGateResult,
+): QualityGateState {
+  let current = quality.get(parent)
+  if (current === undefined || current.objective !== objective) {
+    current = quality.start(parent, { objective, taskClass: 'substantial' })
+  }
+  let snapshot: QualityAssessmentSnapshot = current
+  const record = (mutation: QualityMutation): void => {
+    snapshot = quality.record(parent, { id: snapshot.id, revision: snapshot.revision }, mutation)
+  }
+
+  for (const entry of gate.evidenceLedger) {
+    record({
+      kind: 'criterion',
+      value: {
+        id: entry.criterionId,
+        text: entry.criterion,
+        tier: 'requested',
+        mandatory: entry.mandatory,
+        status: entry.status,
+        evidence: [...entry.evidence],
+      },
+    })
+  }
+  for (const scenario of gate.realWorldScenarios) record({ kind: 'scenario', value: scenario })
+  for (const forecast of gate.riskForecasts) record({ kind: 'forecast', value: forecast })
+  record({ kind: 'innovation', value: gate.innovationOpportunity })
+
+  // Required changes describe the current evidence, so stale blockers from a
+  // previous round must not make the new readiness calculation self-referential.
+  if (snapshot.requiredChanges.length > 0) record({ kind: 'required-changes', value: [] })
+  const readiness = qualityReadiness(snapshot)
+  const blockers = [
+    ...gate.foresightComplete ? [] : ['foresight evidence is incomplete'],
+    ...readiness.blockers,
+  ]
+  if (blockers.length > 0) record({ kind: 'required-changes', value: blockers })
+  return { snapshot, blockers }
+}
+
+function enforceQuality(result: GoalJudgeResult, quality: QualityGateState | undefined): GoalJudgeResult {
+  if (quality === undefined || quality.blockers.length === 0) return result
+  const qualityFindings = quality.blockers.map(blocker => `QUALITY BLOCKER: ${blocker}`)
+  const requiredChanges = [
+    ...quality.blockers.map(blocker => `Resolve quality blocker and re-run verification: ${blocker}.`),
+    ...result.requiredChanges,
+  ].slice(0, MAX_ITEMS)
+  return {
+    verdict: result.verdict === 'blocked' ? 'blocked' : 'needs_changes',
+    summary: `Quality/Foresight evidence is not ready for completion. ${result.summary}`.slice(0, MAX_TEXT),
+    findings: [...qualityFindings, ...result.findings].slice(0, MAX_ITEMS),
+    requiredChanges,
+  }
+}
+
 /**
  * Run the adversarial Tester first, then a fresh read-only Judge. A Judge PASS
  * is accepted only when the programmatic gate and requirement ledger pass.
@@ -325,6 +391,7 @@ export async function judgeGoalCompletion(input: {
   readonly objective: string
   readonly round: number
   readonly signal: AbortSignal
+  readonly quality?: GoalQualityRuntime
 }): Promise<GoalJudgeResult> {
   const settled = settledGoalPass(input.parent, input.objective)
   const subagents = input.subagents
@@ -339,10 +406,16 @@ export async function judgeGoalCompletion(input: {
     signal: input.signal,
   })
   recordCompletionGate(input.parent, input.objective, input.round, gate)
-  if (mayReuseSettledPass(settled, gate) && gateIsInfrastructureOnlyBlocked(gate)) return settled.result
+  const qualityGate = input.quality === undefined
+    ? undefined
+    : syncQualityAssessment(input.quality, input.parent, input.objective, gate)
+  if (mayReuseSettledPass(settled, gate) && gateIsInfrastructureOnlyBlocked(gate)) {
+    return enforceQuality(settled.result, qualityGate)
+  }
   const provider = reviewProvider(subagents, input.provider, input.parent)
   if (provider === undefined) {
-    return mayReuseSettledPass(settled, gate) ? settled.result : enforceGate(unavailable(), gate)
+    const result = mayReuseSettledPass(settled, gate) ? settled.result : enforceGate(unavailable(), gate)
+    return enforceQuality(result, qualityGate)
   }
   const history = durableMissionReviewHistory(input.parent, input.objective)
 
@@ -389,8 +462,10 @@ export async function judgeGoalCompletion(input: {
   } finally {
     if (run !== undefined) await run.dispose()
   }
-  if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) return settled.result
-  return enforceGate(judged, gate)
+  if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) {
+    return enforceQuality(settled.result, qualityGate)
+  }
+  return enforceQuality(enforceGate(judged, gate), qualityGate)
 }
 
 /**
