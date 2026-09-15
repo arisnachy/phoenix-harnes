@@ -124,7 +124,7 @@ export function apply(ctx: Context, config: Config): void {
         includeHistory: false,
       })
       const usable = filterProceduralSearchHits(filterAdaptiveSearchHits(hits))
-        .filter(hit => hit.record.confidence >= 0.8 && hit.record.importance >= 0.7)
+        .filter(record => record.confidence >= 0.8 && record.importance >= 0.7)
         .slice(0, 6)
       return formatRecentMemoryContext(usable)
     },
