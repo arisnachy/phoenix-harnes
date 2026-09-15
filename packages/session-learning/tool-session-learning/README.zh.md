@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-此包提供面向模型的 `memory_search` 和 `memory_remember` 工具，用于访问 PHOENIX 的持久化认知日志。搜索返回有界的层、稳定 ID、项目、实体、关系、来源 URI、时间坐标以及可解释的置信度和排序信号。自动上下文按项目隔离，并在注入前保护不可信文本中的提示变量分隔符。
+此包在 PHOENIX 的持久化认知日志之上提供面向模型的记忆工具和连续性策略。普通自动召回保持当前项目范围；插件从可观察工作记录有界任务情景，通过现有的已验证结果引擎学习可复用程序，并且只在用户明确询问历史、学习、诊断、向后引用或个人资料时启用更广的时间检索。
 
 ## 组合
 
@@ -11,37 +11,31 @@
   name: '@phoenix-ai/dsh-tool-session-learning'
 ```
 
-该工具需要 `tools`、`systemPrompt` 和 `learningMemory`。搜索是只读的；记忆操作不能修改提示词、权限、工具或凭据。搜索支持项目、层、时间窗口和已替代历史过滤。自动上下文最多包含八条当前项目的认知记录，并排除原始对话记录。
+插件需要 `tools`、`systemPrompt` 和 `learningMemory`。`memory_search` 是只读操作，支持项目、显式跨项目、层、时间窗口和已替代历史过滤。`memory_remember` 保存有界偏好或已验证经验，`memory_teach` 保存结构化的用户教授程序。它们都不能改变权限、凭据或可信插件。
 
 ## 模型体验
 
-### 显式记忆检索和学习
+### 显式与自动连续性
 
 #### 模型看到的内容
 
-`memory_search` 返回包含 `id`、`session_id`、`event_seq`、`kind`、`layers`、`project_id`、`entities`、`relations`、`source_uri`、`confidence`、`importance`、`frequency`、`score` 和 `reasons` 的有界 JSON。显式遗忘的记录不会返回。
+普通轮次只接收有界的当前项目证据和已验证程序。当用户询问“昨天做了什么”“学到了什么”或“继续上一个任务”等问题时，插件按请求意图选择合适的时间和项目范围。工作历史优先使用结构化任务情景，也可把情景功能上线前已经持久化的用户任务事件作为兼容回退。定向上下文只包含生成自然回答所需的任务和结果证据，不暴露记忆 ID、来源 URI、事件名称、层标签、置信度标签、存储路径或原始工具参数。
 
-##### 自动连续性上下文
+当模型明确需要技术来源时，`memory_search` 仍可返回有界的诊断 JSON。`cross_project` 必须显式请求；普通自动召回仍隔离在当前项目。
 
-```markdown
-Each model assembly receives up to eight active project-scoped cognitive records as untrusted read-only evidence. Raw conversation records remain excluded from automatic injection; use memory_search with a project or time filter when the task requires them.
-```
+##### 持久任务情景
 
-##### 显式学习记录
-
-```markdown
-memory_remember stores one bounded preference, lesson, or skill from the current session. The ledger applies the same provenance, retention, and credential-redaction rules used for automatic observations.
-```
+实质性的用户任务会启动一个有界的进行中轨迹。可以保留公开工具名称，但不会保存原始工具参数或原始工具结果。已验证目标完成会持久化高置信度的 `mission` 情景；错误可以持久化未验证情景。程序学习继续消费同一组已验证完成事件，因此情景连续性不会创建第二套技能存储。
 
 #### Token 影响
 
-只有模型调用工具时才会增加 token；结果数量受配置上限限制。
+普通连续性保持有界。定向历史检索检查有界候选集，最多呈现十二条证据；显式工具调用仍受 `maxResults` 限制。
 
 #### KV 缓存影响
 
-结果作为普通工具消息追加到当前请求之后，不会改写较早的对话历史。
+记忆上下文组装到动态请求后缀，不会改写更早的对话历史。
 
 ## 已知限制和后续工作
 
-- 经验评判、技能提升、记忆管理命令和浏览器记忆面板属于后续阶段。
-- 检索是结合归一化词法、实体、关系、元数据和新近度的确定性混合检索；未来可以在不替换规范日志的情况下增加向量提供者。
+- 确定性混合排序器不宣称等同于向量语义检索；未来可以在同一认知日志后增加向量提供者。
+- 浏览器记忆检查和面向用户的记忆管理仍属于独立 UI 工作。
