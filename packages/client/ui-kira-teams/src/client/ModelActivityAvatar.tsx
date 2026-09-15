@@ -149,6 +149,7 @@ export function ModelActivityAvatar({
           alt=""
           draggable={false}
           data-agent-portrait-sprite={true}
+          style={{ left: 'var(--portrait-left)', top: 'var(--portrait-top)' } as CSSProperties}
         />
       </span>
       <span className={css.lifeGlint} />
