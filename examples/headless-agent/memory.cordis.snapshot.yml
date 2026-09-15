@@ -1,0 +1,15 @@
+# Keyless Loader composition for durable cognitive-memory replay. The base
+# headless app supplies sessions, tools, and system-prompt services; these two
+# production plugins add the durable ledger and model-facing recall policy.
+- id: base
+  name: '@phoenix-ai/cordis-plugin-include'
+  config:
+    path: ./cordis.yml
+    patches:
+      - insert:
+          - id: session-learning
+            name: '@phoenix-ai/dsh-session-learning'
+            config:
+              path: ./.snapshot-memory.jsonl
+          - id: tool-session-learning
+            name: '@phoenix-ai/dsh-tool-session-learning'
