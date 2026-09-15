@@ -84,4 +84,22 @@ describe('tool-session-learning plugin', () => {
     expect(prompt).toContain('memory_teach')
     expect(prompt).toMatch(/teach|demonstration|procedure/i)
   })
+
+  it('requires silent application of learned behavior instead of reciting internals or asking the user to choose memory mechanics', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-human-behavior-'))
+    roots.push(root)
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SystemPrompt, { persona: '' })
+    await ctx.plugin(ToolRegistry)
+    await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
+    await ctx.plugin(plugin, {})
+
+    const prompt = renderContextSnapshot(await ctx.systemPrompt.assemble())
+    expect(prompt).toMatch(/apply relevant learned .* silently/i)
+    expect(prompt).toMatch(/do not ask .* memory categor/i)
+    expect(prompt).toMatch(/do not recite .* internal/i)
+    expect(prompt).toMatch(/experience-derived/i)
+    expect(prompt).toMatch(/solve the user's task first/i)
+  })
 })
