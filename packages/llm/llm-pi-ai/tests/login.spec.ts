@@ -165,4 +165,41 @@ describe('pi-ai login flows', () => {
     })).resolves.toEqual({ status: 'cancelled' })
     expect(seen?.aborted).toBe(true)
   })
+
+  it('reports a stored grant as the route account, and nothing before it', async () => {
+    const ctx = await harness()
+    const label = ctx.authorization.list().find(entry => entry.key === ANTHROPIC)?.label
+
+    // Nothing stored yet: the route must not claim a connected account.
+    await expect(ctx.authorization.inspect(ANTHROPIC)).resolves.toBeUndefined()
+
+    await attempt(ctx, () => Promise.resolve())
+
+    await expect(ctx.authorization.inspect(ANTHROPIC)).resolves.toEqual({
+      kind: 'account',
+      provider: label,
+      accountType: 'oauth',
+    })
+  })
+
+  it('reports a stored api key as an api-key account', async () => {
+    const ctx = await harness()
+    const deepseek = recordKeyFor('deepseek')
+    const label = ctx.authorization.list().find(entry => entry.key === deepseek)?.label
+    login.mockImplementation(async (providerId: string) => {
+      const key: Credential = { type: 'api_key', key: 'sk-test' }
+      await credentialStoreFrom(ctx).modify(providerId, () => Promise.resolve(key))
+      return key
+    })
+
+    await expect(ctx.authorization.begin({
+      key: deepseek, interaction: surface(), method: 'api-key',
+    })).resolves.toEqual({ status: 'authorized' })
+
+    await expect(ctx.authorization.inspect(deepseek)).resolves.toEqual({
+      kind: 'account',
+      provider: label,
+      accountType: 'apiKey',
+    })
+  })
 })

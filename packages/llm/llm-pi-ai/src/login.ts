@@ -111,6 +111,22 @@ export function registerPiAiFlows(ctx: Context, auth: PiAiAuthInjection): void {
       key: recordKeyFor(providerId),
       label: provider.name,
       methods: [first, ...rest],
+      // A stored credential record is what makes this route usable, so the
+      // settings surface reports the route as connected exactly when one
+      // exists. Without this inspection a provider the user already
+      // authenticated reports nothing and reads as not connected.
+      async inspect() {
+        const credentials = ctx.get('credentials')
+        if (credentials === undefined) return undefined
+        const stored = await credentials.listRecords()
+        const record = stored.find(entry => entry.key === recordKeyFor(providerId))
+        if (record === undefined) return undefined
+        return {
+          kind: 'account',
+          provider: provider.name,
+          accountType: record.kind === 'api-key' ? 'apiKey' : 'oauth',
+        }
+      },
       async run(session) {
         const models = createModels(auth)
         models.setProvider(provider)
