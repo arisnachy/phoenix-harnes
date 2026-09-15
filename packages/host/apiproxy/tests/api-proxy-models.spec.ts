@@ -412,6 +412,36 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('synchronizes the live Agent route before delegation after a model switch', async () => {
+    const { ctx, agent, sessionId } = await harness({
+      provider: 'openai-codex',
+      model: 'gpt-5.6-sol',
+      reasoningEffort: ReasoningEffortId('high'),
+    })
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'openai-codex', model: 'gpt-5.6-sol', reasoningEffort: ReasoningEffortId('high') }),
+      cwd: '/tmp',
+    })
+
+    expect(agent.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-5.6-sol' })
+    expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'max',
+    })))
+
+    // Delegators inspect the live Agent route, not the prompt-selection ref.
+    expect(agent.options).toMatchObject({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-pro',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-pro',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+    await ctx.fiber.dispose()
+  })
+
   it('saves an accepted selection as the default and survives a storage failure', async () => {
     const { ctx, sessionId } = await harness()
     const saved: unknown[] = []
