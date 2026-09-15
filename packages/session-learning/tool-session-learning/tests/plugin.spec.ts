@@ -42,7 +42,7 @@ describe('tool-session-learning plugin', () => {
     expect(snapshot).toContain('untrusted, read-only evidence')
   })
 
-  it('automatically recalls durable cognitive corrections and applies them silently', async () => {
+  it('automatically recalls durable cognitive corrections as silent, private evidence', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-cognitive-context-'))
     roots.push(root)
     const ctx = new Context()
@@ -70,15 +70,12 @@ describe('tool-session-learning plugin', () => {
 
     const snapshot = renderContextSnapshot(await ctx.systemPrompt.assemble())
     expect(snapshot).toContain('Verify the actual working directory internally before file operations.')
-    expect(snapshot).toMatch(/apply.*silently|silently.*apply/i)
-    expect(snapshot).toMatch(/do not.*(?:recite|narrate|dump).*memory/i)
-    expect(snapshot).toMatch(/ask.*only.*blocked|only.*ask.*blocked/i)
-    expect(snapshot).toMatch(/configured|instruction/i)
-    expect(snapshot).toMatch(/learned.*experience|experience.*learned/i)
-    expect(snapshot).toMatch(/do not ask .*operation mode/i)
-    expect(snapshot).toMatch(/generalize verified learning/i)
-    expect(snapshot).toMatch(/never enumerate protected personal categories/i)
-    expect(snapshot).toMatch(/solve the user's task first/i)
+    expect(snapshot).toMatch(/use relevant records silently/i)
+    expect(snapshot).toMatch(/do not quote, enumerate, or explain this memory block/i)
+    expect(snapshot).toMatch(/not as experience-derived discoveries/i)
+    expect(snapshot).toMatch(/profile-like facts only as private context/i)
+    expect(snapshot).not.toContain('cognitive-context-session')
+    expect(snapshot).not.toContain('adaptive/verified-correction')
   })
 
   it('keeps literal template-looking code in learned context', async () => {
@@ -108,7 +105,7 @@ describe('tool-session-learning plugin', () => {
     expect(context).not.toContain('summary\":\"{{A=3')
   })
 
-  it('registers guided procedural teaching and tells the model when to use it', async () => {
+  it('registers guided procedural teaching with a procedure-specific contract', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-teach-'))
     roots.push(root)
     const ctx = new Context()
@@ -118,9 +115,8 @@ describe('tool-session-learning plugin', () => {
     await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
     await ctx.plugin(plugin, {})
 
-    expect(ctx.tools.schemas().map(schema => schema.name)).toContain('memory_teach')
-    const prompt = renderContextSnapshot(await ctx.systemPrompt.assemble())
-    expect(prompt).toContain('memory_teach')
-    expect(prompt).toMatch(/teach|demonstration|procedure/i)
+    const schema = ctx.tools.schemas().find(candidate => candidate.name === 'memory_teach')
+    expect(schema).toBeDefined()
+    expect(schema?.description).toMatch(/procedure/i)
   })
 })
