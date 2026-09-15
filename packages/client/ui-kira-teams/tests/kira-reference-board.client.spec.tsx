@@ -166,11 +166,13 @@ describe('approved KIRA floating 20-agent roster', () => {
 })
 
 describe('individual KIRA portrait assets', () => {
-  it('resolves every persona to a standalone portrait asset instead of the sprite sheet URL', () => {
-    expect(portraitSrcForKind('vortice')).toBe('/assets/kira-agents/portraits/vortice.svg')
-    expect(portraitSrcForKind('argo')).toBe('/assets/kira-agents/portraits/argo.svg')
-    expect(portraitSrcForKind('orbita')).toBe('/assets/kira-agents/portraits/orbita.svg')
-    expect(new Set(KIRA_ROSTER.map(agent => portraitSrcForKind(agent.kind))).size).toBe(20)
+  it('embeds all 20 approved persona portraits as independent image payloads', () => {
+    expect(portraitSrcForKind('vortice')).toMatch(/^data:image\/webp;base64,/)
+    expect(portraitSrcForKind('argo')).toMatch(/^data:image\/webp;base64,/)
+    expect(portraitSrcForKind('orbita')).toMatch(/^data:image\/webp;base64,/)
+    const portraitSources = KIRA_ROSTER.map(agent => portraitSrcForKind(agent.kind))
+    expect(new Set(portraitSources).size).toBe(20)
+    expect(portraitSources.every(source => source.length > 1000)).toBe(true)
   })
 
   it('renders the individual portrait while keeping live phase data for animation', () => {
@@ -185,9 +187,9 @@ describe('individual KIRA portrait assets', () => {
 
     expect(ready.props).toMatchObject({ 'data-avatar': 'argo', 'data-phase': 'idle', 'data-state': 'ready' })
     expect(readyPortrait?.type).toBe('img')
-    expect(readyPortrait?.props?.src).toBe('/assets/kira-agents/portraits/argo.svg')
+    expect(readyPortrait?.props?.src).toBe(portraitSrcForKind('argo'))
     expect(live.props).toMatchObject({ 'data-avatar': 'atlas', 'data-phase': 'running-tools', 'data-state': 'running' })
     expect(livePortrait?.type).toBe('img')
-    expect(livePortrait?.props?.src).toBe('/assets/kira-agents/portraits/atlas.svg')
+    expect(livePortrait?.props?.src).toBe(portraitSrcForKind('atlas'))
   })
 })
