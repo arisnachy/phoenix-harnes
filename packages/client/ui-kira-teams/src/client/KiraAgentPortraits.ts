@@ -11,4 +11,5 @@ export const KIRA_AGENT_PORTRAITS = {
   ...KIRA_PORTRAIT_GROUP_4,
 } as const
 
+/** Public key union for the 20 bundled KIRA portrait identities. */
 export type KiraPortraitKey = keyof typeof KIRA_AGENT_PORTRAITS
