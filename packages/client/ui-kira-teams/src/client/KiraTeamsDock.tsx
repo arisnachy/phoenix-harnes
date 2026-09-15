@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { useSyncExternalStore } from 'react'
 import {
   IconChevronDownOutline14, IconRefreshOutline14, StateDot,
@@ -10,38 +10,67 @@ import type {
 } from '@phoenix-ai/dsh-client-runtime/client'
 import type { PropsLocale, PropsRuntime, TranslateNS } from '@phoenix-ai/dsh-client-ui-slots'
 import { NS, type KiraTeamsKey } from './locales.ts'
-import { ModelActivityAvatar, stableAgentIndex } from './ModelActivityAvatar.tsx'
+import {
+  ModelActivityAvatar, stableAgentIndex, type ModelAvatarKind,
+} from './ModelActivityAvatar.tsx'
 import css from './KiraTeamsDock.module.css'
 
 /** Sessions face plus business actions supplied by the slot registration. */
 export interface KiraTeamsInjected {
-  /** Live session-list mirror backing the dock's read model. */
   list: {
     getSnapshot(): SessionListState
     subscribe(fn: () => void): () => void
   }
-  /** Shared shell layout used to announce the expanded subagent window. */
   layout: Pick<ILayout, 'setWorkspaceOccupant'>
-  /** Navigate to one deployed child session. */
   openChild: (address: SubagentAddress) => void
-  /** Re-pull the direct-child catalog of one parent. */
   refresh: (parentSessionId: SessionId) => void
 }
 
-/** Full props for the frame-overlay teams dock. */
 export type KiraTeamsDockProps =
   PropsRuntime<'shell.overlay'> & KiraTeamsInjected & PropsLocale<typeof NS>
 
-/** One rendered member row: summary plus lineage depth for indentation. */
-interface MemberRow {
+export interface MemberRow {
   summary: SessionSummary
   depth: number
 }
 
-/** Collapsed-state persistence key (session-local convenience, not identity). */
+export interface KiraRosterEntry {
+  kind: ModelAvatarKind
+  name: string
+  tagline: string
+}
+
+export interface KiraRosterCard extends KiraRosterEntry {
+  summary?: SessionSummary
+  depth?: number
+}
+
+/** Exact 5×4 roster and copy from the user-approved KIRA Teams reference. */
+export const KIRA_ROSTER: readonly KiraRosterEntry[] = [
+  { kind: 'vortice', name: 'Vórtice', tagline: 'Convirtiendo ideas en movimiento' },
+  { kind: 'aurora', name: 'Aurora', tagline: 'Ilumina nuevos caminos' },
+  { kind: 'atlas', name: 'Atlas', tagline: 'Sostiene lo importante' },
+  { kind: 'nova', name: 'Nova', tagline: 'Acelera lo posible' },
+  { kind: 'lumen', name: 'Lumen', tagline: 'Da claridad a tus ideas' },
+  { kind: 'helix', name: 'Helix', tagline: 'Conecta, resuelve, evoluciona' },
+  { kind: 'prisma', name: 'Prisma', tagline: 'Convierte ideas en posibilidades' },
+  { kind: 'orion', name: 'Orión', tagline: 'Visión estratégica para ir más lejos' },
+  { kind: 'vega', name: 'Vega', tagline: 'Agilidad que crea impacto' },
+  { kind: 'eclipse', name: 'Eclipse', tagline: 'Explora lo que otros no ven' },
+  { kind: 'argo', name: 'Argo', tagline: 'Tu soporte en cada paso' },
+  { kind: 'solaria', name: 'Solaria', tagline: 'Energía para un futuro mejor' },
+  { kind: 'nexo', name: 'Nexo', tagline: 'Une personas, ideas y resultados' },
+  { kind: 'astra', name: 'Astra', tagline: 'Da forma a lo extraordinario' },
+  { kind: 'lyra', name: 'Lyra', tagline: 'Armoniza ideas en soluciones' },
+  { kind: 'zenith', name: 'Zenith', tagline: 'Profundiza hoy para un mejor mañana' },
+  { kind: 'cobalto', name: 'Cobalto', tagline: 'Convierte desafíos en oportunidades' },
+  { kind: 'quasar', name: 'Quasar', tagline: 'Expande lo extraordinario' },
+  { kind: 'senda', name: 'Senda', tagline: 'Encuentra el camino ideal' },
+  { kind: 'orbita', name: 'Órbita', tagline: 'Mantiene todo en equilibrio' },
+] as const
+
 const COLLAPSE_KEY = 'dsh.kira-teams.collapsed'
 
-/** Read the persisted collapse bit, tolerating storage denial. */
 function initialCollapsed(): boolean {
   try {
     return window.localStorage.getItem(COLLAPSE_KEY) === '1'
@@ -50,26 +79,41 @@ function initialCollapsed(): boolean {
   }
 }
 
-/** Read the durable provider-neutral activity projection for one member. */
 export function activityOf(summary: SessionSummary): SubagentActivityProjection | undefined {
   return summary.projectionValues?.subagentActivity
 }
 
-// Exact order from the approved 20-avatar KIRA reference. Keep in lock-step
-// with AGENT_AVATAR_KINDS in ModelActivityAvatar.tsx.
-const AGENT_NAMES = [
-  'Vórtice', 'Aurora', 'Atlas', 'Nova', 'Lumen',
-  'Helix', 'Prisma', 'Orión', 'Vega', 'Eclipse',
-  'Argo', 'Solaria', 'Nexo', 'Astra', 'Lyra',
-  'Zenith', 'Cobalto', 'Quasar', 'Senda', 'Órbita',
-] as const
-
-/** Resolve a stable KIRA codename shown instead of provider internals. */
-export function agentNameOf(summary: SessionSummary): string {
-  return AGENT_NAMES[stableAgentIndex(String(summary.id), AGENT_NAMES.length)] ?? 'Vigía'
+function rosterIndexOf(agentId: string): number {
+  return stableAgentIndex(agentId, KIRA_ROSTER.length)
 }
 
-/** Pick the localized legacy status that matches the live activity projection. */
+export function agentNameOf(summary: SessionSummary): string {
+  return KIRA_ROSTER[rosterIndexOf(String(summary.id))]?.name ?? 'Vigía'
+}
+
+/** Expand live lineage members into the permanent 20-persona board. */
+export function rosterCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
+  const cards: KiraRosterCard[] = KIRA_ROSTER.map(entry => ({ ...entry }))
+  const occupied = new Set<number>()
+
+  for (const row of rows) {
+    if (occupied.size >= cards.length) break
+    const preferred = rosterIndexOf(String(row.summary.id))
+    let slot = preferred
+    for (let offset = 0; offset < cards.length; offset += 1) {
+      const candidate = (preferred + offset) % cards.length
+      if (!occupied.has(candidate)) {
+        slot = candidate
+        break
+      }
+    }
+    occupied.add(slot)
+    cards[slot] = { ...cards[slot], summary: row.summary, depth: row.depth }
+  }
+
+  return cards
+}
+
 export function statusKeyOf(summary: SessionSummary): KiraTeamsKey {
   if (summary.pendingInteraction !== undefined) return 'status.waiting'
   if (!summary.running) return 'status.done'
@@ -80,23 +124,17 @@ export function statusKeyOf(summary: SessionSummary): KiraTeamsKey {
   }
 }
 
-/**
- * Derive a compact human role from the durable subagent label. The display
- * deliberately stays provider-neutral: labels describe the job, never the
- * underlying model or transport.
- */
 export function agentRoleKeyOf(summary: SessionSummary): KiraTeamsKey {
   const label = summary.projectionValues?.subagent?.label?.trim().toLocaleLowerCase() ?? ''
-  if (
-    /\b(juez|judge|reviewer|review|revisor|revisión|revision|quality|calidad|auditor)\b/u.test(label)
-  ) return 'role.judge'
-  if (
-    /\b(investigador|investigadora|research|researcher|referencia|referencias|reference|references)\b/u.test(label)
-  ) return 'role.researcher'
+  if (/\b(juez|judge|reviewer|review|revisor|revisión|revision|quality|calidad|auditor)\b/u.test(label)) {
+    return 'role.judge'
+  }
+  if (/\b(investigador|investigadora|research|researcher|referencia|referencias|reference|references)\b/u.test(label)) {
+    return 'role.researcher'
+  }
   return 'role.agent'
 }
 
-/** Resolve the member's current visible action independently from its role. */
 export function activityKeyOf(summary: SessionSummary): KiraTeamsKey {
   if (summary.pendingInteraction !== undefined) return 'activity.waiting'
   if (!summary.running) return 'activity.done'
@@ -107,12 +145,6 @@ export function activityKeyOf(summary: SessionSummary): KiraTeamsKey {
   }
 }
 
-/**
- * Resolve the current lineage's ordinary root and collect every subagent
- * descendant beneath it with BFS depths. Ordinary forks terminate propagation
- * through the `origin === 'subagent'` chain check, matching the header
- * catalog's lineage semantics.
- */
 export function lineageMembers(state: SessionListState): {
   root: SessionSummary | undefined
   rows: MemberRow[]
@@ -130,6 +162,7 @@ export function lineageMembers(state: SessionListState): {
     root = parent
   }
   if (root === undefined) return { root: undefined, rows: [] }
+
   const depth = new Map<SessionId, number>([[root.id, 0]])
   const rows: MemberRow[] = []
   let frontier: SessionId[] = [root.id]
@@ -144,7 +177,6 @@ export function lineageMembers(state: SessionListState): {
         if (summary.running || summary.pendingInteraction !== undefined) {
           rows.push({ summary, depth: childDepth })
         }
-        // Continue through settled parents so active grandchildren remain visible.
         next.push(summary.id)
       }
     }
@@ -158,14 +190,33 @@ export function lineageMembers(state: SessionListState): {
   return { root, rows }
 }
 
-/**
- * In-flow teams card: the active board of subagents the current lineage has
- * deployed. It reserves shell space instead of covering the conversation and
- * exposes stable KIRA identities, roles, and current actions without leaking
- * provider or model internals.
- * @param props - Shell standard props, injected sessions face, and copy.
- * @returns The card element, or null while the lineage has no active members.
- */
+function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
+  const summary = card.summary
+  const actionKey: KiraTeamsKey = summary === undefined ? 'activity.ready' : activityKeyOf(summary)
+  return (
+    <>
+      <ModelActivityAvatar
+        kind={card.kind}
+        activity={summary === undefined ? undefined : activityOf(summary)}
+        running={summary?.running ?? false}
+        pending={summary?.pendingInteraction !== undefined}
+        ready={summary === undefined}
+        variant="card"
+      />
+      <span className={css.agentCopy}>
+        <span className={css.agentName}>{card.name}</span>
+        <span className={css.role}>{t('role.agent')}</span>
+        <span className={css.statusLine} data-activity={actionKey}>
+          <span className={css.statusDot} aria-hidden="true" />
+          <span className={css.activity}>{t(actionKey)}</span>
+        </span>
+        <span className={css.tagline}>{card.tagline}</span>
+      </span>
+    </>
+  )
+}
+
+/** KIRA Teams visual workspace matching the approved 20-agent reference. */
 export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeamsDockProps) {
   const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
   const { root, rows } = lineageMembers(state)
@@ -173,16 +224,11 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
   const runningCount = rows.reduce((total, row) => total + (row.summary.running ? 1 : 0), 0)
   const workspaceOpen = root !== undefined && rows.length > 0 && !collapsed
 
-  // The expanded subagent card owns the upper half of Phoenix's shared visual
-  // workspace. A collapsed pill does not reserve the dock, so Cordis can use
-  // the full height. Unmount always releases the lease.
   useEffect(() => {
     layout.setWorkspaceOccupant('subagent', workspaceOpen)
     return () => { layout.setWorkspaceOccupant('subagent', false) }
   }, [layout, workspaceOpen])
 
-  // A deployment must never be silent again: a rising running count reopens
-  // the dock even after a manual collapse of an all-idle board.
   const previousRunning = useRef(runningCount)
   useEffect(() => {
     if (runningCount > previousRunning.current) setCollapsed(false)
@@ -208,7 +254,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
 
   if (collapsed) {
     return (
-      <div className={css.root} data-kira-teams>
+      <div className={`${css.root} ${css.rootCollapsed}`} data-kira-teams>
         <button
           type="button"
           className={`${css.pill} ${runningCount > 0 ? css.pillLive : ''}`}
@@ -226,6 +272,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
     )
   }
 
+  const cards = rosterCardsOf(rows)
   return (
     <div className={css.root} data-kira-teams>
       <section className={css.dock} aria-label={t('team.aria')}>
@@ -240,8 +287,8 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
             <IconChevronDownOutline14 />
           </button>
           <span className={css.title}>{t('dock.title')}</span>
+          <span className={css.teamMark} aria-hidden="true" />
           <span className={css.counts}>
-            {runningCount > 0 && <StateDot state="ongoing" />}
             <span className={css.countText}>
               {runningCount > 0
                 ? `${t(membersKey, { count: rows.length })} · ${t(runningKey, { count: runningCount })}`
@@ -257,20 +304,36 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
             <IconRefreshOutline14 />
           </button>
         </header>
+
         <div className={css.list} role="tree" aria-label={t('team.aria')}>
-          {rows.map(({ summary, depth }) => {
-            const roleKey = agentRoleKeyOf(summary)
-            const actionKey = activityKeyOf(summary)
+          {cards.map((card) => {
+            const summary = card.summary
+            if (summary === undefined) {
+              return (
+                <div
+                  key={card.kind}
+                  role="treeitem"
+                  aria-level={1}
+                  aria-disabled="true"
+                  aria-label={`${card.name} · ${t('role.agent')} · ${t('activity.ready')}`}
+                  className={`${css.row} ${css.rowReady}`}
+                  data-agent-kind={card.kind}
+                >
+                  {cardBody(card, t)}
+                </div>
+              )
+            }
+
             return (
               <button
-                key={summary.id}
+                key={card.kind}
                 type="button"
                 role="treeitem"
-                aria-level={depth}
+                aria-level={card.depth ?? 1}
                 aria-selected={state.current === summary.id}
-                aria-label={`${agentNameOf(summary)} · ${t(roleKey)} · ${t(actionKey)}`}
+                aria-label={`${card.name} · ${t('role.agent')} · ${t(activityKeyOf(summary))}`}
                 className={`${css.row} ${summary.running ? css.rowRunning : ''} ${summary.pendingInteraction !== undefined ? css.rowPending : ''}`}
-                style={{ paddingInlineStart: 12 + depth * 14 }}
+                data-agent-kind={card.kind}
                 title={summary.displayTitle}
                 onClick={() => {
                   if (summary.parentId === undefined) return
@@ -281,27 +344,21 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
                   })
                 }}
               >
-                <ModelActivityAvatar
-                  activity={activityOf(summary)}
-                  running={summary.running}
-                  pending={summary.pendingInteraction !== undefined}
-                  agentId={String(summary.id)}
-                />
-                <span className={css.agentCopy}>
-                  <span className={css.agentHeading}>
-                    <span className={css.agentName}>{agentNameOf(summary)}</span>
-                    <span className={css.role}>{t(roleKey)}</span>
-                  </span>
-                  <span className={css.activity}>{t(actionKey)}</span>
-                </span>
+                {cardBody(card, t)}
               </button>
             )
           })}
         </div>
+
+        <footer className={css.footer} aria-hidden="true">
+          <span>{t('board.footerLead')}</span>
+          <span className={css.footerRule} />
+          <span className={css.footerAccent} />
+          <span>{t('board.footerBrand')}</span>
+        </footer>
       </section>
     </div>
   )
 }
 
-/** Keep TranslateNS in the type surface for parity with sibling plugins. */
 export type DockTranslate = TranslateNS<typeof NS>
