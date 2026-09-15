@@ -76,9 +76,12 @@ export interface CompletionInnovationOpportunity {
 export interface GoalCompletionGateResult {
   readonly checks: CompletionGateChecks
   readonly evidenceLedger: readonly CompletionEvidenceEntry[]
-  readonly realWorldScenarios: readonly CompletionRealWorldScenario[]
-  readonly riskForecasts: readonly CompletionRiskForecast[]
-  readonly innovationOpportunity: CompletionInnovationOpportunity
+  /** Additive foresight evidence; absent on legacy in-memory fixtures and old callers. */
+  readonly realWorldScenarios?: readonly CompletionRealWorldScenario[]
+  /** Additive future-risk evidence; absent on legacy in-memory fixtures and old callers. */
+  readonly riskForecasts?: readonly CompletionRiskForecast[]
+  /** Additive innovation disposition; absent on legacy in-memory fixtures and old callers. */
+  readonly innovationOpportunity?: CompletionInnovationOpportunity
   readonly artifactFingerprint: string
   readonly cleanRoomEvidence: string
   readonly findings: readonly string[]
