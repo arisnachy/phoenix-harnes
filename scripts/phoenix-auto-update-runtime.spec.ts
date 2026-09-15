@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const updater = readFileSync(resolve('scripts/phoenix-auto-update.mjs'), 'utf8')
 const supervisor = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
+const build = readFileSync(resolve('scripts/build.ts'), 'utf8')
 
 describe('PHOENIX supervised updater runtime isolation', () => {
   it('shares updater control markers through the common Git directory across worktrees', () => {
@@ -28,5 +29,11 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   it('clears the consumed prepared marker before relaunching an isolated runtime', () => {
     expect(supervisor).toContain('function clearPreparedRecord()')
     expect(supervisor).toContain('clearPreparedRecord()')
+  })
+
+  it('arms the prepared restart bridge after updater-driven incremental client builds', () => {
+    expect(build).toContain("if (scope === 'client') armPreparedRestart(root, buildEnvironment)")
+    expect(build).toContain("'phoenix-prepared-restart-bridge.mjs'")
+    expect(build).toContain("'--arm-staging'")
   })
 })

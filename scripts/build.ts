@@ -75,6 +75,22 @@ function ensureClientHostPrerequisites(environment: NodeJS.ProcessEnv): void {
   }
 }
 
+/** Arm the prepared-update restart bridge for updater-driven incremental client builds. */
+function armPreparedRestart(root: string, environment: NodeJS.ProcessEnv): void {
+  const bridge = resolve(root, 'scripts', 'phoenix-prepared-restart-bridge.mjs')
+  if (!existsSync(bridge)) return
+  const result = spawnSync(process.execPath, [bridge, '--arm-staging'], {
+    cwd: root,
+    env: environment,
+    stdio: 'inherit',
+    windowsHide: true,
+  })
+  if (result.error !== undefined) throw result.error
+  if (result.status !== 0) {
+    throw new Error(`build: prepared restart bridge exited with ${String(result.status ?? result.signal)}`)
+  }
+}
+
 /** Run the full build or the safe client-only incremental build. */
 function main(): void {
   const { values } = parseArgs({
@@ -105,6 +121,12 @@ function main(): void {
   console.log(
     `build: ${scope} recorded ${String(record.artifacts.fileCount)} client artifact(s) with ${String(Object.keys(record.environment).length)} public value(s)`,
   )
+
+  // Full builds already arm this bridge through the package-level build script.
+  // Incremental client builds bypass that wrapper, so arm it here as well.
+  // Normal/manual linked-worktree builds remain safe because the bridge itself
+  // refuses to restart anything unless it can prove updater/supervisor ancestry.
+  if (scope === 'client') armPreparedRestart(root, buildEnvironment)
 }
 
 if (import.meta.main) main()
