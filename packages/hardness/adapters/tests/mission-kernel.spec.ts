@@ -134,9 +134,11 @@ describe('MissionPersistenceKernel', () => {
     value.dependencyAvailable('mcp:calendar')
     value.dependencyAvailable('mcp:calendar')
 
-    expect(value.snapshot()).toMatchObject({ status: 'ACTIVE', missingDependency: undefined })
+    expect(value.snapshot()).toMatchObject({ status: 'ACTIVE' })
+    expect(value.snapshot()).not.toHaveProperty('missingDependency')
     expect(events.filter(event => event.kind === 'dependency-available')).toHaveLength(1)
-    expect(replayMissionKernel(events, 'mission-1', 1)).toMatchObject({ status: 'ACTIVE', missingDependency: undefined })
+    expect(replayMissionKernel(events, 'mission-1', 1)).toMatchObject({ status: 'ACTIVE' })
+    expect(replayMissionKernel(events, 'mission-1', 1)).not.toHaveProperty('missingDependency')
   })
 
    it('only explicit cancellation can terminate without verified delivery', () => {
@@ -172,8 +174,9 @@ describe('MissionPersistenceKernel', () => {
       winningAuthority: 'judge', resolution: 'higher-authority-wins',
     })
     expect(resolveMissionAuthorityConflict('goal', 'goal', 'two goal revisions disagree')).toMatchObject({
-      winningAuthority: undefined, resolution: 'blocked-tie',
+      resolution: 'blocked-tie',
     })
+    expect(resolveMissionAuthorityConflict('goal', 'goal', 'two goal revisions disagree')).not.toHaveProperty('winningAuthority')
   })
 
   it('persists authority conflicts and replays an ambiguous conflict as WAITING_EXTERNAL', () => {
@@ -186,8 +189,9 @@ describe('MissionPersistenceKernel', () => {
     expect(events.at(-1)).toMatchObject({
       kind: 'authority-conflict',
       status: 'WAITING_EXTERNAL',
-      conflict: { resolution: 'blocked-tie', winningAuthority: undefined },
+      conflict: { resolution: 'blocked-tie' },
     })
+    expect(events.at(-1)?.kind === 'authority-conflict' ? events.at(-1).conflict : undefined).not.toHaveProperty('winningAuthority')
     expect(replayMissionKernel(events, 'mission-1', 1).status).toBe('WAITING_EXTERNAL')
   })
 })
