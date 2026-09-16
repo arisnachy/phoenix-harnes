@@ -28,9 +28,32 @@ describe('native bash resolution', () => {
     writeFileSync(executable, '')
     const env = { ProgramW6432: root, ProgramFiles: join(root, 'other') }
     expect(candidateBashPaths(env)[0]).toBe(executable)
-    expect(resolveBashPath(undefined, env, 'win32')).toBe(executable)
+    expect(resolveBashPath(undefined, env, 'win32', () => true)).toBe(executable)
     expect(() => resolveBashPath(undefined, { ProgramFiles: join(root, 'missing') }, 'win32'))
-      .toThrow('requires Git Bash')
+      .toThrow('requires a healthy Git Bash')
+  })
+
+  it('skips an installed Git Bash executable that fails its health probe', () => {
+    const firstRoot = mkdtempSync(join(tmpdir(), 'phoenix-git-bash-unhealthy-'))
+    const secondRoot = mkdtempSync(join(tmpdir(), 'phoenix-git-bash-healthy-'))
+    const first = join(firstRoot, 'Git', 'bin', 'bash.exe')
+    const second = join(secondRoot, 'Git', 'bin', 'bash.exe')
+    mkdirSync(join(firstRoot, 'Git', 'bin'), { recursive: true })
+    mkdirSync(join(secondRoot, 'Git', 'bin'), { recursive: true })
+    writeFileSync(first, '')
+    writeFileSync(second, '')
+    const probed: string[] = []
+    const resolved = resolveBashPath(
+      undefined,
+      { ProgramW6432: firstRoot, ProgramFiles: secondRoot },
+      'win32',
+      (candidate) => {
+        probed.push(candidate)
+        return candidate === second
+      },
+    )
+    expect(resolved).toBe(second)
+    expect(probed).toEqual([first, second])
   })
 })
 

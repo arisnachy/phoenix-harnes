@@ -6,6 +6,20 @@ import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 /** A failure belongs to disposable work inside a mission, never to the mission itself. */
 export type MissionFailureScope = 'attempt' | 'plan' | 'tool' | 'strategy'
 
+/** Sources that can make a governed mission decision. Higher precedence wins. */
+export type MissionAuthority = 'safety' | 'approval' | 'goal' | 'judge' | 'router' | 'executor' | 'presentation'
+
+/** Stable precedence used to resolve disagreements between governed decisions. */
+export const MISSION_AUTHORITY_PRECEDENCE: Readonly<Record<MissionAuthority, number>> = Object.freeze({
+  safety: 7,
+  approval: 6,
+  goal: 5,
+  judge: 4,
+  router: 3,
+  executor: 2,
+  presentation: 1,
+})
+
 /** Durable mission states. A mission only terminates in `DONE`. */
 export type MissionStatus = 'ACTIVE' | 'RECOVERING' | 'WAITING_EXTERNAL' | 'VERIFYING' | 'DONE'
 
@@ -57,6 +71,15 @@ export interface MissionLearning {
   readonly evidence: readonly string[]
 }
 
+/** Durable record of a disagreement between two governed authorities. */
+export interface MissionAuthorityConflict {
+  readonly left: MissionAuthority
+  readonly right: MissionAuthority
+  readonly winningAuthority?: MissionAuthority
+  readonly resolution: 'higher-authority-wins' | 'blocked-tie'
+  readonly reason: string
+}
+
 /** Quality verdict required in addition to functional criterion evidence. */
 export interface MissionQualityGate {
   readonly verdict: 'pass' | 'fail'
@@ -99,6 +122,7 @@ export interface MissionKernelState {
   readonly lastRootCause?: string
   readonly selectedRoute?: string
   readonly routes: readonly MissionRoute[]
+  readonly authorityConflicts: readonly MissionAuthorityConflict[]
   readonly missingDependency?: string
   readonly judge?: MissionJudgeDecision
   readonly quality?: MissionQualityGate
@@ -142,6 +166,13 @@ export type MissionKernelEvent =
     readonly strategy: string
   }
   | {
+    readonly kind: 'authority-conflict'
+    readonly missionId: string
+    readonly revision: number
+    readonly conflict: MissionAuthorityConflict
+    readonly status: 'ACTIVE' | 'WAITING_EXTERNAL'
+  }
+  | {
     readonly kind: 'criterion'
     readonly missionId: string
     readonly revision: number
@@ -150,14 +181,21 @@ export type MissionKernelEvent =
     readonly evidence: readonly string[]
   }
   | {
-    readonly kind: 'dependency-missing'
-    readonly missionId: string
-    readonly revision: number
-    readonly dependency: string
-    readonly detail: string
-  }
-  | {
-    readonly kind: 'skill-registered'
+     readonly kind: 'dependency-missing'
+     readonly missionId: string
+     readonly revision: number
+     readonly dependency: string
+     readonly detail: string
+   }
+   | {
+     readonly kind: 'dependency-available'
+     readonly missionId: string
+     readonly revision: number
+     readonly dependency: string
+     readonly status: 'ACTIVE'
+   }
+   | {
+     readonly kind: 'skill-registered'
     readonly missionId: string
     readonly revision: number
     readonly skillId: string
@@ -239,6 +277,32 @@ function route(value: MissionRoute): MissionRoute {
   })
 }
 
+/** Resolve one authority disagreement without granting authority to the caller.
+ * @param left - First authority in the disagreement.
+ * @param right - Second authority in the disagreement.
+ * @param reason - Secret-free explanation retained in the mission log.
+ * @returns The deterministic resolution record; ties are blocked.
+ */
+export function resolveMissionAuthorityConflict(
+  left: MissionAuthority,
+  right: MissionAuthority,
+  reason: string,
+): MissionAuthorityConflict {
+  const exactReason = text(reason, 'authority conflict reason')
+  const leftPrecedence = MISSION_AUTHORITY_PRECEDENCE[left]
+  const rightPrecedence = MISSION_AUTHORITY_PRECEDENCE[right]
+  if (leftPrecedence === rightPrecedence) {
+    return Object.freeze({ left, right, resolution: 'blocked-tie', reason: exactReason })
+  }
+  return Object.freeze({
+    left,
+    right,
+    winningAuthority: leftPrecedence > rightPrecedence ? left : right,
+    resolution: 'higher-authority-wins',
+    reason: exactReason,
+  })
+}
+
 function goal(value: MissionGoalLock): MissionGoalLock {
   const criteria = value.acceptanceCriteria.slice(0, MAX_ITEMS).map(item => Object.freeze({
     id: text(item.id, 'criterion id'), description: text(item.description, 'criterion description'), mandatory: item.mandatory,
@@ -269,7 +333,7 @@ function criteriaFor(value: MissionGoalLock): readonly MissionCriterion[] {
 function initial(missionId: string, revision: number, lockedGoal: MissionGoalLock = emptyGoal()): MissionKernelState {
   return {
     missionId: text(missionId, 'id'), revision, status: 'ACTIVE', goal: lockedGoal, criteria: criteriaFor(lockedGoal),
-    attempts: 0, failures: 0, routes: [], learnings: [],
+    attempts: 0, failures: 0, routes: [], authorityConflicts: [], learnings: [],
   }
 }
 
@@ -390,13 +454,27 @@ export class MissionPersistenceKernel {
     this.assertOpen()
     const name = text(dependency, 'dependency')
     const exactDetail = text(detail, 'dependency detail')
+    if (this.state.status === 'WAITING_EXTERNAL' && this.state.missingDependency === name && this.state.lastRootCause === exactDetail) return this.state
     this.emit({ kind: 'dependency-missing', missionId: this.input.missionId, revision: this.input.revision, dependency: name, detail: exactDetail })
     this.emit({ kind: 'wall-opened', missionId: this.input.missionId, revision: this.input.revision,
       reason: `external dependency unavailable: ${name}; ${exactDetail}`, status: 'WAITING_EXTERNAL', missingDependency: name })
     return this.state
   }
 
-  /** Register a skill after it has been tested; ATLAS remains the source of truth.
+  /** Mark the expected external dependency available and reopen the waiting mission.
+    * @param dependency - Stable name of the dependency that became available.
+    * @returns Active state; repeated notifications are idempotent.
+    */
+   dependencyAvailable(dependency: string): MissionKernelState {
+     this.assertOpen()
+     const name = text(dependency, 'dependency')
+     if (this.state.status === 'ACTIVE' && this.state.missingDependency === undefined) return this.state
+     if (this.state.status !== 'WAITING_EXTERNAL' || this.state.missingDependency !== name) throw new Error(`dependency is not waiting: ${name}`)
+     this.emit({ kind: 'dependency-available', missionId: this.input.missionId, revision: this.input.revision, dependency: name, status: 'ACTIVE' })
+     return this.state
+   }
+
+   /** Register a skill after it has been tested; ATLAS remains the source of truth.
    * @param skillId - Stable skill identifier.
    * @param tested - Whether the skill passed its validation run.
    * @returns Current state.
@@ -447,6 +525,22 @@ export class MissionPersistenceKernel {
     const normalized = routes.slice(0, MAX_ITEMS).map(route)
     if (normalized.length === 0) return this.state
     this.emit({ kind: 'routes-proposed', missionId: this.input.missionId, revision: this.input.revision, routes: normalized })
+    return this.state
+  }
+
+  /** Record and resolve a disagreement without bypassing higher authority.
+   * @param input - Two authorities and a secret-free conflict reason.
+   * @returns Updated state; equal authority is WAITING_EXTERNAL.
+   */
+  recordAuthorityConflict(input: {
+    readonly left: MissionAuthority
+    readonly right: MissionAuthority
+    readonly reason: string
+  }): MissionKernelState {
+    this.assertOpen()
+    const conflict = resolveMissionAuthorityConflict(input.left, input.right, input.reason)
+    const status = conflict.resolution === 'blocked-tie' ? 'WAITING_EXTERNAL' : 'ACTIVE'
+    this.emit({ kind: 'authority-conflict', missionId: this.input.missionId, revision: this.input.revision, conflict, status })
     return this.state
   }
 
@@ -513,6 +607,7 @@ export class MissionPersistenceKernel {
    */
   resume(): MissionKernelState {
     if (this.state.status === 'DONE') throw new Error('mission is not resumable')
+    if (this.state.status === 'ACTIVE') return this.state
     this.emit({ kind: 'resumed', missionId: this.input.missionId, revision: this.input.revision, status: 'ACTIVE' })
     return this.state
   }
@@ -553,7 +648,7 @@ export function replayMissionKernel(
   for (const event of events) {
     if (event.missionId !== missionId || event.revision !== revision) continue
     switch (event.kind) {
-      case 'started': state = { ...state, status: 'ACTIVE', goal: event.goal, criteria: criteriaFor(event.goal) }; break
+      case 'started': state = { ...state, status: 'ACTIVE', goal: event.goal, criteria: criteriaFor(event.goal), authorityConflicts: [] }; break
       case 'failure': state = {
         ...state,
         status: event.status,
@@ -566,8 +661,19 @@ export function replayMissionKernel(
       }; break
       case 'routes-proposed': state = { ...state, routes: event.routes }; break
       case 'route-selected': state = { ...state, selectedRoute: event.routeId }; break
+      case 'authority-conflict': state = {
+        ...state,
+        status: event.status,
+        authorityConflicts: [...state.authorityConflicts, event.conflict],
+      }; break
       case 'criterion': state = { ...state, criteria: state.criteria.map(item => item.id === event.criterionId ? { ...item, status: event.status, evidence: event.evidence } : item) }; break
       case 'dependency-missing': state = { ...state, status: 'WAITING_EXTERNAL', missingDependency: event.dependency, lastRootCause: event.detail }; break
+       case 'dependency-available': {
+         const { missingDependency, ...withoutDependency } = state
+         void missingDependency
+         state = { ...withoutDependency, status: event.status }
+         break
+       }
       case 'judge': state = { ...state, status: event.status, judge: event.decision,
         ...(event.quality === undefined ? {} : { quality: event.quality }),
         criteria: event.status === 'DONE' && event.terminalReason === 'verified'

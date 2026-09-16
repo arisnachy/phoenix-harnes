@@ -12,8 +12,10 @@ import type { CapabilityApproval, CapabilityExecutor } from './execution-bridge.
 import { ArtifactRuntime } from './artifact-runtime.ts'
 import { runHardnessMission, type HardnessMissionResult } from './mission-orchestrator.ts'
 import type { HardnessMissionJudge } from './mission-orchestrator.ts'
+import { createDeterministicMissionJudge } from './mission-local-judge.ts'
 import { createSubagentMissionJudge } from './mission-judge.ts'
 import { createHardnessMissionAudit } from './mission-audit.ts'
+import { createHardnessMissionTelemetry, type HardnessMissionTelemetry } from './mission-telemetry.ts'
 import type { OpenClawCapabilityBroker } from './openclaw/broker.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 
@@ -35,6 +37,8 @@ export interface HardnessMissionRunnerInput {
 /** Direct governed runner shared by model-facing tools and host RPC adapters. */
 export interface HardnessMissionRunner {
   readonly run: (input: HardnessMissionRunnerInput) => Promise<HardnessMissionResult>
+  /** Aggregated audit metrics; absent only on minimal test doubles. */
+  readonly telemetry?: HardnessMissionTelemetry
 }
 
 /** Live PHOENIX services required to mount the governed HARDNESS mission runtime. */
@@ -143,17 +147,20 @@ function createApproval(deps: Pick<HardnessMissionRuntimeDependencies, 'approval
 export function createHardnessMissionRunner(deps: Omit<HardnessMissionRuntimeDependencies, 'connection' | 'agents'>): HardnessMissionRunner {
   const artifacts = createArtifacts()
   const approval = createApproval(deps)
-  const judge = deps.judge ?? (deps.subagents === undefined ? undefined : createSubagentMissionJudge({
+  const telemetry = createHardnessMissionTelemetry()
+  const judge = deps.judge ?? (deps.subagents === undefined ? createDeterministicMissionJudge() : createSubagentMissionJudge({
     subagents: deps.subagents,
     provider: deps.judgeProvider ?? 'spawn',
   }))
   return {
-    run: input => runHardnessMission({
+    telemetry,
+     run: input => runHardnessMission({
       hardness: deps.hardness,
       acquisition: deps.acquisition,
       tools: deps.tools,
       approval,
       artifacts,
+       telemetry,
       ...(input.context.agent === undefined ? {} : { audit: createHardnessMissionAudit(input.context.agent.session) }),
       ...(deps.executor === undefined ? {} : { executor: deps.executor }),
       ...(judge === undefined ? {} : { judge }),

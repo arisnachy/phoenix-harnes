@@ -101,10 +101,50 @@ export interface CognitiveFlowSelectionReason {
   readonly reason: string
 }
 
+/** Numeric measurements derived from the serializable mission profile. */
+export interface CognitiveWorkflowMeasurements {
+  readonly complexityScore: number
+  readonly riskScore: number
+  readonly noveltyScore: number
+  readonly evidenceScore: number
+}
+
+/** Fixed thresholds used to select fast, standard, or deep execution. */
+export interface CognitiveWorkflowThresholds {
+  readonly fastMaxComplexity: number
+  readonly fastMaxRisk: number
+  readonly fastMaxEvidence: number
+  readonly deepMinComplexity: number
+  readonly deepMinRisk: number
+  readonly deepMinEvidence: number
+}
+
+/** Explicit bounds for one selected execution mode. */
+export interface CognitiveExecutionBudget {
+  readonly maxAttempts: number
+  readonly maxRecoveryAttempts: number
+  readonly maxExternalSources: number
+  readonly maxParallelSubtasks: number
+  readonly maxReviewPasses: number
+}
+
+/** Stable routing thresholds shared by every deterministic plan. */
+export const COGNITIVE_ROUTING_THRESHOLDS: CognitiveWorkflowThresholds = Object.freeze({
+  fastMaxComplexity: 2,
+  fastMaxRisk: 2,
+  fastMaxEvidence: 4,
+  deepMinComplexity: 3,
+  deepMinRisk: 3,
+  deepMinEvidence: 6,
+})
+
 /** Immutable workflow chosen for one mission profile. */
 export interface CognitiveWorkflowPlan {
   readonly profile: CognitiveMissionProfile
   readonly executionMode: CognitiveExecutionMode
+  readonly measurements: CognitiveWorkflowMeasurements
+  readonly thresholds: CognitiveWorkflowThresholds
+  readonly budget: CognitiveExecutionBudget
   readonly selected: readonly CognitiveFlowId[]
   readonly reasons: readonly CognitiveFlowSelectionReason[]
   readonly skipped: readonly CognitiveFlowSelectionReason[]
@@ -181,13 +221,44 @@ function addFlow(selected: Set<CognitiveFlowId>, id: CognitiveFlowId): void {
   selected.add(id)
 }
 
-function executionMode(profile: CognitiveMissionProfile): CognitiveExecutionMode {
-  if (profile.complexity === 'high' || profile.risk === 'high' || profile.novelty === 'high' || profile.previousFailure) return 'deep'
+const LEVEL_SCORES: Readonly<Record<CognitiveMissionLevel, number>> = Object.freeze({ low: 1, medium: 2, high: 3 })
+
+const EXECUTION_BUDGETS: Readonly<Record<CognitiveExecutionMode, CognitiveExecutionBudget>> = Object.freeze({
+  fast: Object.freeze({ maxAttempts: 1, maxRecoveryAttempts: 1, maxExternalSources: 0, maxParallelSubtasks: 0, maxReviewPasses: 0 }),
+  standard: Object.freeze({ maxAttempts: 2, maxRecoveryAttempts: 2, maxExternalSources: 3, maxParallelSubtasks: 4, maxReviewPasses: 1 }),
+  deep: Object.freeze({ maxAttempts: 3, maxRecoveryAttempts: 3, maxExternalSources: 8, maxParallelSubtasks: 8, maxReviewPasses: 2 }),
+})
+
+function measurements(profile: CognitiveMissionProfile): CognitiveWorkflowMeasurements {
+  const evidenceScore = (profile.requiresCodeChange ? 2 : 0)
+    + (profile.requiresExternalEvidence ? 3 : 0)
+    + (profile.userVisibleArtifact ? 2 : 0)
+    + (profile.hasIndependentSubtasks ? 1 : 0)
+    + (profile.persistent ? 1 : 0)
+    + (profile.futureObligation ? 1 : 0)
+    + (profile.previousFailure ? 2 : 0)
+  return Object.freeze({
+    complexityScore: LEVEL_SCORES[profile.complexity],
+    riskScore: LEVEL_SCORES[profile.risk],
+    noveltyScore: LEVEL_SCORES[profile.novelty],
+    evidenceScore,
+  })
+}
+
+function executionMode(profile: CognitiveMissionProfile, measured: CognitiveWorkflowMeasurements): CognitiveExecutionMode {
+  if (measured.complexityScore >= COGNITIVE_ROUTING_THRESHOLDS.deepMinComplexity
+    || measured.riskScore >= COGNITIVE_ROUTING_THRESHOLDS.deepMinRisk
+    || measured.noveltyScore >= COGNITIVE_ROUTING_THRESHOLDS.deepMinComplexity
+    || measured.evidenceScore >= COGNITIVE_ROUTING_THRESHOLDS.deepMinEvidence
+    || profile.previousFailure) return 'deep'
   if (NON_FAST_KINDS.has(profile.kind)
     || profile.requiresExternalEvidence
     || profile.hasIndependentSubtasks
     || profile.persistent
-    || profile.futureObligation) return 'standard'
+    || profile.futureObligation
+    || measured.complexityScore > COGNITIVE_ROUTING_THRESHOLDS.fastMaxComplexity
+    || measured.riskScore > COGNITIVE_ROUTING_THRESHOLDS.fastMaxRisk
+    || measured.evidenceScore > COGNITIVE_ROUTING_THRESHOLDS.fastMaxEvidence) return 'standard'
   return 'fast'
 }
 
@@ -227,7 +298,8 @@ function qualityGates(selected: ReadonlySet<CognitiveFlowId>): readonly Cognitiv
  * @returns Immutable selected/skipped flows and observable quality gates.
  */
 export function selectCognitiveWorkflow(profile: CognitiveMissionProfile): CognitiveWorkflowPlan {
-  const mode = executionMode(profile)
+  const measured = measurements(profile)
+  const mode = executionMode(profile, measured)
   const selected = new Set<CognitiveFlowId>()
   addFlow(selected, 'intent-framing')
   addFlow(selected, 'verification-gate')
@@ -297,6 +369,9 @@ export function selectCognitiveWorkflow(profile: CognitiveMissionProfile): Cogni
   return Object.freeze({
     profile: Object.freeze({ ...profile }),
     executionMode: mode,
+    measurements: measured,
+    thresholds: COGNITIVE_ROUTING_THRESHOLDS,
+    budget: EXECUTION_BUDGETS[mode],
     selected: ordered,
     reasons,
     skipped,

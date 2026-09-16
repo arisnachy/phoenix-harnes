@@ -12,6 +12,7 @@ import type {
   CapabilityExecutor,
 } from './execution-bridge.ts'
 import type { HardnessMissionAuditEntry, HardnessMissionAuditWriter } from './mission-audit.ts'
+import type { HardnessMissionTelemetry } from './mission-telemetry.ts'
 import { executeCapabilityNeed } from './execution-bridge.ts'
 import {
   artifactFromToolResult,
@@ -53,6 +54,8 @@ export interface HardnessMissionInput {
   readonly approval: CapabilityApproval
   readonly artifacts: Pick<ArtifactRuntime, 'render'>
   readonly audit?: HardnessMissionAuditWriter
+  /** Optional in-memory observer fed from the same audit rows. */
+  readonly telemetry?: HardnessMissionTelemetry
   readonly executor?: CapabilityExecutor
   readonly judge?: HardnessMissionJudge
   /** Optional exact objective lock supplied by a higher-level mission supervisor. */
@@ -107,17 +110,24 @@ function auditEntry(
   input: HardnessMissionInput,
   entry: Omit<HardnessMissionAuditEntry, 'callId' | 'capabilityKind'>,
 ): boolean {
-  if (input.audit === undefined) return true
-  try {
-    input.audit.record({
-      callId: input.context.callId,
-      capabilityKind: input.need.kind ?? 'unknown',
-      ...entry,
-    })
-    return true
-  } catch {
-    return false
+  const row = {
+    callId: input.context.callId,
+    capabilityKind: input.need.kind ?? 'unknown',
+    ...entry,
   }
+  if (input.audit !== undefined) {
+    try {
+      input.audit.record(row)
+    } catch {
+      return false
+    }
+  }
+  try {
+    input.telemetry?.record(row)
+  } catch {
+    // Telemetry is observational and cannot turn a governed mission into a blocker.
+  }
+  return true
 }
 
 function auditUnavailable(): HardnessMissionResult {
@@ -367,6 +377,7 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
       return blocked(input, 'resolve', reason, 'capability-unavailable')
     }
     if (execution.kind === 'denied') {
+      kernel.recordAuthorityConflict({ left: 'approval', right: 'executor', reason: 'approval was not granted; execution cannot override the broker decision' })
       kernel.fail({ scope: 'plan', strategy: 'baseline', cause: execution.reason, rootCause: 'approval was not granted',
         fingerprint: 'approval-denied', blocked: true, routes: recoveryRoutes('approval') })
       return blocked(input, 'approve', execution.reason, 'approval-denied', capability)

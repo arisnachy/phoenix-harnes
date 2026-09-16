@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
-import { createSubagentMissionJudge } from '../src/mission-judge.ts'
+import { createDeterministicMissionJudge, createSubagentMissionJudge } from '../src/mission-judge.ts'
 
 function input() {
   return {
@@ -20,8 +20,35 @@ function input() {
   }
 }
 
-describe('HARDNESS subagent mission judge', () => {
-  it('requests a fresh structured read-only review and disposes it', async () => {
+describe('HARDNESS mission judges', () => {
+  it('passes locally when every tested criterion has durable evidence', async () => {
+    await expect(createDeterministicMissionJudge()(input())).resolves.toEqual({
+      verdict: 'pass',
+      summary: 'The artifact and every mandatory criterion have deterministic evidence.',
+      evidence: ['evidence:forecast'],
+      requiredChanges: [],
+      criteria: [{ id: 'artifact', verdict: 'pass', evidence: ['evidence:forecast'], findings: [] }],
+      quality: {
+        verdict: 'pass',
+        summary: 'The artifact is present, rendered, and covered by tested criteria.',
+        evidence: ['evidence:forecast'],
+        findings: [],
+      },
+    })
+  })
+
+  it('requests repair instead of passing a criterion without evidence', async () => {
+    const candidate = input()
+    candidate.criteria[0]!.evidence = []
+    await expect(createDeterministicMissionJudge()(candidate)).resolves.toMatchObject({
+      verdict: 'needs_changes',
+      requiredChanges: ['provide evidence for criterion artifact'],
+      criteria: [{ id: 'artifact', verdict: 'fail', evidence: [], findings: ['criterion is not tested with durable evidence'] }],
+      quality: { verdict: 'fail' },
+    })
+  })
+
+  it('requests a fresh structured read-only semantic review and disposes it', async () => {
     const dispose = vi.fn(async () => {})
     const start = vi.fn<SubagentRuntime['start']>(async () => ({
       id: 'judge-run' as never,

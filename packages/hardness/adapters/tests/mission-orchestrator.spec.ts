@@ -211,6 +211,34 @@ describe('HARDNESS mission orchestrator', () => {
     await ctx.fiber.dispose()
   })
 
+  it('records approval authority when the broker denies execution', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const acquisition = new AcquisitionRegistry(hardness)
+    acquisition.register(async need => need.kind === 'weather' ? descriptor : undefined)
+    const session = { events: [], append: vi.fn() }
+
+    const result = await runHardnessMission({
+      hardness,
+      acquisition,
+      tools: { execute: vi.fn() },
+      approval: { request: vi.fn(async () => ({ kind: 'denied' as const, reason: 'user declined' })) },
+      artifacts: new ArtifactRuntime(),
+      need: { kind: 'weather' },
+      args: {},
+      context: { callId: 'mission-approval-denied' as never, signal: new AbortController().signal, agent: { session } as never },
+    })
+
+    expect(result).toMatchObject({ kind: 'blocked', reason: 'user declined' })
+    expect(session.append).toHaveBeenCalledWith('hardness/kernel', expect.objectContaining({
+      kind: 'authority-conflict',
+      status: 'ACTIVE',
+      conflict: expect.objectContaining({ left: 'approval', right: 'executor', winningAuthority: 'approval' }),
+    }))
+    await ctx.fiber.dispose()
+  })
+
   it('does not close or promote a mission when no judge is available', async () => {
     const ctx = new Context()
     await ctx.plugin(HardnessRegistry)

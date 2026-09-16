@@ -99,6 +99,38 @@ describe('HARDNESS production mission runtime', () => {
     await ctx.fiber.dispose()
   })
 
+  it('uses the local judge when no semantic subagent runtime is mounted', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const acquisition = new AcquisitionRegistry(hardness)
+    acquisition.register(async need => need.kind === 'weather' ? {
+      id: 'tool:weather-local' as never, kind: 'weather', name: 'Weather', description: 'fixture', inputs: [], outputs: ['forecast'], dependencies: [], requiredPermissions: [], provider: 'fixture', location: 'tool-registry', version: '1', compatibility: [], limitations: [], modalities: ['native'], status: 'experimental',
+    } : undefined)
+    const execute = vi.fn<ToolRuntime['execute']>(async () => ({
+      isError: false as const, value: null, content: [], meta: { artifact: { id: 'weather-local', mime: 'text/plain', data: 'Sunny' } },
+    }))
+    const runner = createHardnessMissionRunner({
+      hardness,
+      tools: { execute },
+      acquisition,
+      approval: { request: vi.fn(async () => 'allowed-once' as const) } as never,
+    })
+    const agent = { session: { append: vi.fn(), events: [] } } as unknown as Agent
+
+    await expect(runner.run({
+      need: { kind: 'weather' },
+      args: {},
+      context: { callId: 'call-local' as never, signal: new AbortController().signal, agent },
+    })).resolves.toMatchObject({
+      kind: 'completed',
+      artifact: { id: 'weather-local', mime: 'text/plain' },
+      rendered: { kind: 'hardness-artifact', artifactId: 'weather-local' },
+    })
+    expect(execute).toHaveBeenCalledOnce()
+    await ctx.fiber.dispose()
+  })
+
   it('renders a generated raster through the production HARDNESS artifact runtime', async () => {
     const ctx = new Context()
     await ctx.plugin(HardnessRegistry)

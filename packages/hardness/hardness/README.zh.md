@@ -22,13 +22,13 @@ HARDNESS 还提供确定性的第一方认知工作流目录。`CognitiveMission
 
 ### 面向模型的结构化 router
 
-Model preset 会在 `hardness_run` 旁挂载一个纯 read-only 的 `hardness_workflow` tool。模型提供经过验证的 `CognitiveMissionProfile`；该 tool 返回 execution mode、有序 selected flows、activation reasons、skipped flows 与 quality gates。可选的有限 observation 会增强 profile 并重新计算 workflow。这个 tool 不会调用其他 tool、不会授予权限，并且从 host Tool Atlas 中排除，因此 HARDNESS 不会把自己的 router 递归宣传为可执行 capability。
+Model preset 会在 `hardness_run` 旁挂载一个纯 read-only 的 `hardness_workflow` tool。模型提供经过验证的 `CognitiveMissionProfile`；该 tool 返回 execution mode、复杂度/风险/新颖性/证据的数值测量、routing thresholds、明确的 execution budget、有序 selected flows、activation reasons、skipped flows 与 quality gates。可选的有限 observation 会增强 profile 并重新计算 workflow。这个 tool 不会调用其他 tool、不会授予权限，并且从 host Tool Atlas 中排除，因此 HARDNESS 不会把自己的 router 递归宣传为可执行 capability。
 
 对于非 trivial mission，operating protocol 要求模型在制定 execution plan 前调用 `hardness_workflow`；当风险、范围、任务独立性、failure evidence 或明确未来义务发生变化时再次调用。`future-obligation-discovered` 会把 mission 转成 persistent 并激活 `autonomous-follow-up`；真正创建或执行未来工作仍只属于已授权的 scheduler/proactivity runtime。
 
 ### Execution mode 与过程 authority
 
-每个 workflow plan 现在都包含 `executionMode: 'fast' | 'standard' | 'deep'`。范围明确、低风险、低新颖性且局部的变更使用 `fast`，会有意跳过 brainstorming、architecture design、implementation-plan 仪式以及未被真实触发的 adversarial review。Fast code change 仍选择 `safe-change`，并保留 objective locking、rollback readiness、fresh targeted verification 与 outcome comparison。只有当 mission profile 或新的证据确实需要时，standard/deep 才启用更强的 planning、proof、research、review 与 judge flow。
+每个 workflow plan 都包含 `executionMode: 'fast' | 'standard' | 'deep'`、数值测量、routing thresholds 与有界 execution budget。Fast budget 允许 1 次 attempt、1 次 recovery attempt、0 个外部 source、0 个并行子任务和 0 次 review；standard 分别允许 2、2、3、4 和 1；deep 分别允许 3、3、8、8 和 2。范围明确、低风险、低新颖性且局部的变更使用 `fast`，会有意跳过 brainstorming、architecture design、implementation-plan 仪式以及未被真实触发的 adversarial review。Fast code change 仍选择 `safe-change`，并保留 objective locking、rollback readiness、fresh targeted verification 与 outcome comparison。只有当 mission profile 或新的证据确实需要时，standard/deep 才启用更强的 planning、proof、research、review 与 judge flow。
 
 当前 mission 的过程策略由 HARDNESS 已选择的 flow 决定。Generic methodology-skill catalog 不能仅因为 brainstorming 或 planning 看起来普遍适用就制造第二次 approval loop；process skill 只有在实现 HARDNESS 已选择 flow 时才应加载。有限 observation 只能增强流程：失败、新风险、范围扩大、外部证据需求、持久性和独立子任务会导致确定性升级，而不是让 mission 过早结束。
 

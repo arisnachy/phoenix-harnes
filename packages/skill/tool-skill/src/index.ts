@@ -431,11 +431,11 @@ function assertPositiveInteger(name: string, value: number, minimum = 1): void {
 }
 
 /**
- * A whitespace-bounded `/name` token (the public skill-name grammar) anywhere
- * in the text — the same word-boundary shape the transcript chip decoration
- * uses, so a gesture reads as one wherever it sits in the sentence. A second
- * `/` or any non-boundary character breaks the match, which keeps file paths
- * (`/usr/bin`) and fractions (`5/8`) out.
+ * A whitespace-bounded `/name` or `./name` token (the public skill-name
+ * grammar) anywhere in the text — the same word-boundary shape the transcript
+ * chip decoration uses, so a gesture reads as one wherever it sits in the
+ * sentence. A second `/` or any non-boundary character breaks the match, which
+ * keeps file paths (`/usr/bin`, `foo/name`) and fractions (`5/8`) out.
  */
 async function readEnglishOverlayCatalog(root: string): Promise<Record<string, EnglishSkillOverlay>> {
   const filePath = join(root, 'overlays.json')
@@ -479,7 +479,7 @@ async function readEnglishOverlayCatalog(root: string): Promise<Record<string, E
   return catalog
 }
 
-const SKILL_GESTURE = /(^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/g
+const SKILL_GESTURE = /(^|\s)(?:\.\/|\/)([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/g
 
 /**
  * `/name` gesture tokens from the claimed user messages, deduplicated in
