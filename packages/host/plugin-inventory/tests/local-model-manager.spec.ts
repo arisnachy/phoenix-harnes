@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { createLocalModelPaths } from '../src/local-model/paths.js'
 import {
   createLocalModelRuntimeManager,
-  LocalModelRuntimeFault,
   type LocalModelRuntimeManagerDependencies,
   type LocalServerHandle,
 } from '../src/local-model/manager.js'
@@ -75,14 +74,14 @@ describe('LocalModelRuntimeManager', () => {
     const { dependencies } = harness({ mode: 'off', installedModelIds: ['qwen3.5-4b-q4-k-m'] })
     const manager = await createLocalModelRuntimeManager(dependencies)
     const promise = manager.ensureRunning()
-    await expect(promise).rejects.toMatchObject<Partial<LocalModelRuntimeFault>>({ code: 'local-model-disabled' })
+    await expect(promise).rejects.toMatchObject({ code: 'local-model-disabled' })
     expect(dependencies.spawnServer).not.toHaveBeenCalled()
   })
 
   it('refuses to start when the selected model is not installed', async () => {
     const { dependencies } = harness()
     const manager = await createLocalModelRuntimeManager(dependencies)
-    await expect(manager.ensureRunning()).rejects.toMatchObject<Partial<LocalModelRuntimeFault>>({ code: 'model-not-installed' })
+    await expect(manager.ensureRunning()).rejects.toMatchObject({ code: 'model-not-installed' })
   })
 
   it('stops the supervised child without stopping the Phoenix host', async () => {
