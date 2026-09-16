@@ -62,7 +62,29 @@ describe('Codex automatic runtime model discovery', () => {
     expect(server.paths).toEqual(['/responses'])
   })
 
-  it('reuses a recent live catalog instead of spawning discovery for every selector read', async () => {
+  it('refreshes on each selector listing so a later Codex release appears without a Phoenix update', async () => {
+    const discoverModels = vi.fn()
+      .mockResolvedValueOnce([{ id: 'gpt-6-astra', name: 'GPT-6-Astra' }])
+      .mockResolvedValueOnce([
+        { id: 'gpt-6-astra', name: 'GPT-6-Astra' },
+        { id: 'gpt-6-sol', name: 'GPT-6-Sol' },
+      ])
+    const adapter = new PiAiAdapter({
+      profiles: () => resolveProfiles({ 'openai-codex': {} }),
+      resolveApiKey: () => Promise.resolve(undefined),
+      auth: memoryAuth(),
+      discoverModels,
+    })
+
+    const before = await adapter.listModels('openai-codex')
+    const after = await adapter.listModels('openai-codex')
+
+    expect(before.map(model => model.id)).not.toContain('gpt-6-sol')
+    expect(after.map(model => model.id)).toContain('gpt-6-sol')
+    expect(discoverModels).toHaveBeenCalledTimes(2)
+  })
+
+  it('reuses a discovered live-only model for later turns without spawning Codex again', async () => {
     const discoverModels = vi.fn(async () => [
       { id: 'gpt-future-auto', name: 'GPT Future Auto' },
     ])
@@ -74,9 +96,51 @@ describe('Codex automatic runtime model discovery', () => {
     })
 
     await adapter.listModels('openai-codex')
-    await adapter.listModels('openai-codex')
+    await adapter.resolveModel('openai-codex', 'gpt-future-auto')
     await adapter.resolveModel('openai-codex', 'gpt-future-auto')
 
+    expect(discoverModels).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the last good live catalog when a later selector refresh fails', async () => {
+    const discoverModels = vi.fn()
+      .mockResolvedValueOnce([{ id: 'gpt-future-auto', name: 'GPT Future Auto' }])
+      .mockRejectedValueOnce(new Error('temporary Codex failure'))
+    const adapter = new PiAiAdapter({
+      profiles: () => resolveProfiles({ 'openai-codex': {} }),
+      resolveApiKey: () => Promise.resolve(undefined),
+      auth: memoryAuth(),
+      discoverModels,
+    })
+
+    const first = await adapter.listModels('openai-codex')
+    const stale = await adapter.listModels('openai-codex')
+
+    expect(first).toEqual(stale)
+    expect(discoverModels).toHaveBeenCalledTimes(2)
+  })
+
+  it('coalesces concurrent selector refreshes instead of launching duplicate Codex app-servers', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const discoverModels = vi.fn(async () => {
+      await gate
+      return [{ id: 'gpt-future-auto', name: 'GPT Future Auto' }]
+    })
+    const adapter = new PiAiAdapter({
+      profiles: () => resolveProfiles({ 'openai-codex': {} }),
+      resolveApiKey: () => Promise.resolve(undefined),
+      auth: memoryAuth(),
+      discoverModels,
+    })
+
+    const first = adapter.listModels('openai-codex')
+    const second = adapter.listModels('openai-codex')
+    await Promise.resolve()
+    expect(discoverModels).toHaveBeenCalledTimes(1)
+    release?.()
+
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2)
     expect(discoverModels).toHaveBeenCalledTimes(1)
   })
 })
