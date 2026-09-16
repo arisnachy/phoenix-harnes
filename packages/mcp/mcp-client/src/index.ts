@@ -21,12 +21,15 @@ import type { CredentialProvider } from '@phoenix-ai/dsh-credentials'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
 import { McpOAuthController } from './oauth.ts'
+import { checkPlatformCompatibility } from './platform.ts'
+import type { SupportedPlatform } from './platform.ts'
 import type { TransportOptions } from './transport.ts'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@phoenix-ai/dsh-tools'
 
 export type { McpResult } from './tools.ts'
 export type { ReconnectConfig, ResolvedReconnectPolicy } from './connection.ts'
+export type { SupportedPlatform } from './platform.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'mcp-client'
@@ -71,6 +74,8 @@ export interface StdioConfig {
   env: Record<string, string>
   /** Working directory for the child process. */
   cwd: string
+  /** Host platforms on which this stdio server may run; omission is cross-platform unless Phoenix knows the server is platform-bound. */
+  supportedPlatforms?: SupportedPlatform[]
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -125,6 +130,7 @@ export const Config = z.union([
     args: z.array(String).default([]),
     env: z.dict(String).default({}),
     cwd: z.string().default(''),
+    supportedPlatforms: z.array(String).default([]),
     toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
     failOnStartupError: z.boolean().default(false),
     startupTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STARTUP_TIMEOUT_MS),
@@ -154,6 +160,21 @@ export const Config = z.union([
  * @returns startup readiness after connection and initial tool discovery settle.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
+  // Platform-bound stdio servers must be rejected before startConnection() can
+  // construct an SDK transport and spawn a child process. This keeps persisted
+  // XcodeBuildMCP configs harmless on Windows/Linux and prevents pointless
+  // reconnect loops around an executable that can never work on this host.
+  if (config.transport === 'stdio') {
+    const compatibility = checkPlatformCompatibility(config)
+    if (!compatibility.compatible) {
+      const supported = compatibility.supportedPlatforms?.join(', ') ?? 'none'
+      const message = `mcp-client(${config.serverName}): incompatible host platform ${compatibility.platform}; supported platform(s): ${supported}`
+      ctx.logger.warn(`${message} — skipping MCP server before process spawn`)
+      if (config.failOnStartupError) throw new Error(message)
+      return
+    }
+  }
+
   // Fail loud at load: reconnect misconfiguration (including programmatic
   // construction that bypassed Schemastery) rejects THIS instance before any
   // effect registers.
