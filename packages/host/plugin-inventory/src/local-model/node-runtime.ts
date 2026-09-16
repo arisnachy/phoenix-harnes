@@ -14,12 +14,6 @@ import {
   type LocalServerHandle,
 } from './manager.js'
 
-/** Fixed loopback port used by the first-class `phoenix-local` LLM route. */
-export const PHOENIX_LOCAL_PORT = 17_842
-
-/** Fixed OpenAI-compatible endpoint exposed by Phoenix Local when running. */
-export const PHOENIX_LOCAL_BASE_URL = `http://127.0.0.1:${String(PHOENIX_LOCAL_PORT)}/v1`
-
 function phoenixHome(): string {
   const configured = process.env['DSH_HOME']?.trim()
   return configured === undefined || configured.length === 0
@@ -36,20 +30,22 @@ async function pathExists(target: string): Promise<boolean> {
   }
 }
 
-async function assertPortFree(port: number): Promise<number> {
-  await new Promise<void>((resolve, reject) => {
+async function allocateLoopbackPort(): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
     const server = net.createServer()
     server.unref()
-    server.once('error', (error) => reject(new LocalModelRuntimeFault(
-      'port-unavailable',
-      `Phoenix Local no puede usar el puerto local ${String(port)}. Cierra el proceso que lo está usando e inténtalo de nuevo.`,
-      { cause: error },
-    )))
-    server.listen(port, '127.0.0.1', () => {
-      server.close(error => error === undefined ? resolve() : reject(error))
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      if (address === null || typeof address === 'string') {
+        server.close()
+        reject(new LocalModelRuntimeFault('port-unavailable', 'Phoenix Local no pudo reservar un puerto loopback.'))
+        return
+      }
+      const port = address.port
+      server.close(error => error === undefined ? resolve(port) : reject(error))
     })
   })
-  return port
 }
 
 function spawnLocalServer(executable: string, args: string[], onExit: (error?: Error) => void): LocalServerHandle {
@@ -112,8 +108,9 @@ async function probeHealth(baseUrl: string, timeoutMs: number): Promise<void> {
 
 /**
  * Create the production Phoenix Local runtime manager for this Host process.
- * The manager owns only `$DSH_HOME/local-models`, binds inference to loopback,
- * and never downloads a model until Settings asks it to install one.
+ * The heavy llama-server receives an ephemeral loopback port and stays hidden
+ * behind Phoenix's stable 17842 proxy; no model is downloaded until Settings
+ * explicitly asks to install one.
  */
 export async function createNodeLocalModelRuntimeManager(): Promise<LocalModelRuntimeManager> {
   const paths = createLocalModelPaths(path.join(phoenixHome(), 'local-models'), process.platform)
@@ -132,9 +129,9 @@ export async function createNodeLocalModelRuntimeManager(): Promise<LocalModelRu
     downloadArtifact: downloadVerifiedArtifact,
     extractArchive: extractArchiveWithTar,
     pathExists,
-    mkdir,
-    remove: rm,
-    allocatePort: () => assertPortFree(PHOENIX_LOCAL_PORT),
+    mkdir: (target, options) => mkdir(target, options),
+    remove: (target, options) => rm(target, options),
+    allocatePort: allocateLoopbackPort,
     spawnServer: spawnLocalServer,
     probeHealth,
     freeMemoryBytes: freemem,
