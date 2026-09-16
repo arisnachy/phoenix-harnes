@@ -69,35 +69,55 @@
 /* Selection still sets data-selected for details linkage; no outline —
    tool rows match Think chrome (no selected ring). */
 
-/* Turn activity keeps a compact one-line footprint. The text shimmer and
-   blue-gold emblem orbit share one calm cadence; reduced-motion keeps both static.
-   It is transient technical chrome, not assistant prose, so normal transcript
-   selection/copy skips it. */
+/* Turn activity is intentionally one calm line. The base copy stays gray;
+   only a narrow highlight sweeps through the glyphs, never across a card or
+   background. The emblem animation is driven by data-activity from the real
+   runtime projection rather than a decorative timer. */
 .turnStatus {
   align-self: flex-start;
   flex: none;
   display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   height: 30px;
+  color: var(--dsw-alias-label-secondary);
   font: var(--dsw-font-s-strong-14);
   white-space: nowrap;
   user-select: none;
+}
+
+.turnStatusText {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
   background: linear-gradient(
-    90deg,
-    var(--dsw-static-deepseek-500) 0%,
-    var(--dsw-static-deepseek-500) 40%,
-    var(--dsw-static-deepseek-200) 50%,
-    var(--dsw-static-deepseek-500) 60%,
-    var(--dsw-static-deepseek-500) 100%
+    100deg,
+    var(--dsw-alias-label-secondary) 0%,
+    var(--dsw-alias-label-secondary) 42%,
+    var(--dsw-static-deepseek-500) 48%,
+    var(--dsw-static-deepseek-200) 51%,
+    var(--dsw-static-deepseek-500) 54%,
+    var(--dsw-alias-label-secondary) 60%,
+    var(--dsw-alias-label-secondary) 100%
   );
   background-position: 100% 0;
-  background-size: 250% 100%;
+  background-size: 260% 100%;
   background-clip: text;
-  color: transparent;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: dsh-turn-status-shimmer 2.4s linear infinite;
+  animation: dsh-turn-status-shimmer 2.35s linear infinite;
+}
+
+.turnStatusDetail {
+  min-width: 0;
+  max-width: min(300px, 34vw);
+  overflow: hidden;
+  color: var(--dsw-alias-label-caption);
+  font: var(--dsw-font-xs-13);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .phoenixActivity {
@@ -151,6 +171,48 @@
   animation: phoenix-breathe 1.8s ease-in-out infinite alternate;
 }
 
+.phoenixActivity[data-activity='preparing']::before {
+  animation-duration: 3.8s;
+}
+
+.phoenixActivity[data-activity='thinking']::before {
+  animation-duration: 3.1s;
+  animation-direction: reverse;
+}
+
+.phoenixActivity[data-activity='thinking']::after {
+  animation-duration: 1.25s;
+}
+
+.phoenixActivity[data-activity='searching']::before,
+.phoenixActivity[data-activity='browsing']::before {
+  animation: phoenix-scan 1.55s ease-in-out infinite;
+}
+
+.phoenixActivity[data-activity='reading'] > img {
+  animation: phoenix-read 1.7s ease-in-out infinite;
+}
+
+.phoenixActivity[data-activity='writing'] > img {
+  animation: phoenix-write 1.25s ease-in-out infinite;
+}
+
+.phoenixActivity[data-activity='executing']::before {
+  animation-duration: 0.9s;
+}
+
+.phoenixActivity[data-activity='executing']::after {
+  animation-duration: 0.72s;
+}
+
+.phoenixActivity[data-activity='verifying']::before {
+  animation: phoenix-verify 1.35s ease-in-out infinite;
+}
+
+.phoenixActivity[data-activity='verifying']::after {
+  animation-duration: 1.05s;
+}
+
 .phoenixCompletion {
   align-self: flex-start;
   height: 32px;
@@ -167,6 +229,50 @@
   to {
     opacity: 0.78;
     transform: scale(1.08);
+  }
+}
+
+@keyframes phoenix-scan {
+  0%,
+  100% {
+    transform: rotate(-18deg) scale(0.96);
+  }
+
+  50% {
+    transform: rotate(198deg) scale(1.05);
+  }
+}
+
+@keyframes phoenix-read {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-1px) scale(1.04);
+  }
+}
+
+@keyframes phoenix-write {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+
+  50% {
+    transform: translateX(1px) rotate(1.5deg);
+  }
+}
+
+@keyframes phoenix-verify {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(0.96);
+  }
+
+  55% {
+    transform: rotate(360deg) scale(1.08);
   }
 }
 
@@ -188,12 +294,11 @@
 }
 
 .turnStatusClock {
-  margin-left: 8px;
+  margin-left: 6px;
+  color: var(--dsw-alias-label-caption);
   font: var(--dsw-font-xs-13);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
-  color: var(--dsw-alias-label-caption);
-  -webkit-text-fill-color: var(--dsw-alias-label-caption);
 }
 
 @keyframes dsh-turn-status-shimmer {
@@ -203,13 +308,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .turnStatus {
-    background-position: 0 0;
-    background-size: 100% 100%;
+  .turnStatusText {
+    color: var(--dsw-alias-label-secondary);
+    background: none;
+    -webkit-text-fill-color: currentColor;
     animation: none;
   }
 
   .phoenixActivity,
+  .phoenixActivity > img,
   .phoenixActivity::before,
   .phoenixActivity::after,
   .phoenixCompletion {
