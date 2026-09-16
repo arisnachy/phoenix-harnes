@@ -107,7 +107,8 @@ describe('turnProgress', () => {
   })
 
   it.each([
-    ['web_search', 'browsing', 'running-tools'],
+    ['web_search', 'searching', 'running-tools'],
+    ['browser_open', 'browsing', 'running-tools'],
     ['read_file', 'reading', 'running-tools'],
     ['Glob', 'searching', 'running-tools'],
     ['update_file', 'writing', 'running-tools'],
