@@ -186,12 +186,13 @@ describe('MissionPersistenceKernel', () => {
     value.recordAuthorityConflict({ left: 'goal', right: 'goal', reason: 'two goal revisions disagree' })
 
     expect(value.snapshot()).toMatchObject({ status: 'WAITING_EXTERNAL', authorityConflicts: [expect.objectContaining({ resolution: 'blocked-tie' })] })
-    expect(events.at(-1)).toMatchObject({
+    const lastEvent = events.at(-1)
+    expect(lastEvent).toMatchObject({
       kind: 'authority-conflict',
       status: 'WAITING_EXTERNAL',
       conflict: { resolution: 'blocked-tie' },
     })
-    expect(events.at(-1)?.kind === 'authority-conflict' ? events.at(-1).conflict : undefined).not.toHaveProperty('winningAuthority')
+    expect(lastEvent?.kind === 'authority-conflict' ? lastEvent.conflict : undefined).not.toHaveProperty('winningAuthority')
     expect(replayMissionKernel(events, 'mission-1', 1).status).toBe('WAITING_EXTERNAL')
   })
 })
