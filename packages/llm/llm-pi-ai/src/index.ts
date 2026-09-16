@@ -58,11 +58,18 @@
 import type { Context } from '@phoenix-ai/cordis'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError } from '@phoenix-ai/dsh-llm'
-import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@phoenix-ai/dsh-llm'
+import type {
+  AdapterRegistrationHandle,
+  DirectoryRegistrationHandle,
+  LlmConfigurableProvider,
+  LlmDiscoveredModel,
+} from '@phoenix-ai/dsh-llm'
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
-import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
+import { CodexAutoRefreshingPiAiAdapter } from './codex-auto-adapter.ts'
+import { listCodexModels } from './codex-discovery.ts'
+import { CODEX_PROVIDER, withCodexLiveCatalog } from './codex-live-catalog.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
@@ -176,24 +183,27 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   let current: () => Config = () => config
+  let liveCodexModels: readonly LlmDiscoveredModel[] = []
   let lastRaw: Config | undefined
+  let lastLiveCodexModels: readonly LlmDiscoveredModel[] = liveCodexModels
   let memoized: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
   /**
    * The resolved profiles for the current configuration, memoized by the raw
-   * snapshot's identity — which is also what makes the adapter's own snapshot
-   * stable across operations that observe no change.
+   * snapshot and live Codex catalog identities. A new live account catalog
+   * therefore rebuilds only the next adapter snapshot; any in-flight call keeps
+   * the immutable generation it already captured.
    *
-   * No fallback for an unserviceable snapshot lives here: the section schema
-   * resolves the whole profile set, so a write that could not be served is
-   * refused where it is written, and the settings seam keeps a namespace's
-   * last good value for a stored section that fails. Anything reaching this
-   * point has already resolved once.
+   * No fallback for an unserviceable settings snapshot lives here: the section
+   * schema resolves the stored profile set, while the live overlay is runtime
+   * metadata and never writes generated model rows back to settings.
    */
   const profiles = (): ReadonlyMap<string, ResolvedPiAiProviderProfile> => {
     const raw = current()
-    if (raw === lastRaw && memoized !== undefined) return memoized
-    const next = resolveProfiles(raw.providers)
+    if (raw === lastRaw && liveCodexModels === lastLiveCodexModels && memoized !== undefined) return memoized
+    const effective = withCodexLiveCatalog(raw, liveCodexModels)
+    const next = resolveProfiles(effective.providers)
     lastRaw = raw
+    lastLiveCodexModels = liveCodexModels
     memoized = next
     return next
   }
@@ -224,11 +234,36 @@ export function apply(ctx: Context, config: Config): void {
     )
   }
 
+  let codexRefreshFailing = false
+  /**
+   * Refresh only an already configured native Codex route. The live result is
+   * an in-memory overlay: an empty/failing probe keeps the previous catalog,
+   * while a changed non-empty answer invalidates the adapter snapshot by
+   * replacing the catalog array identity.
+   */
+  const refreshCodexCatalog = async (provider: string, signal?: AbortSignal): Promise<void> => {
+    if (provider !== CODEX_PROVIDER || current().providers?.[CODEX_PROVIDER] === undefined) return
+    try {
+      const discovered = await listCodexModels(signal)
+      if (discovered.length > 0 && !deepEqualJson(discovered, liveCodexModels)) {
+        liveCodexModels = [...discovered]
+      }
+      codexRefreshFailing = false
+    } catch (error: unknown) {
+      if (signal?.aborted) return
+      if (!codexRefreshFailing) {
+        ctx.logger.warn('llm-pi-ai: live Codex model refresh failed; keeping the previous catalog')
+        ctx.logger.warn(error)
+      }
+      codexRefreshFailing = true
+    }
+  }
+
   // One store and one ambient context for the whole plugin instance: both read
   // through `ctx` per call, so they stay correct across the collection rebuilds
   // a configuration change causes, and a sign-in survives one.
   const auth = { credentials: credentialStoreFrom(ctx), authContext: authContextFrom(ctx) }
-  const adapter = new PiAiAdapter({
+  const adapter = new CodexAutoRefreshingPiAiAdapter({
     profiles,
     resolveApiKey,
     auth,
@@ -239,7 +274,7 @@ export function apply(ctx: Context, config: Config): void {
         + ` sending that message as provider-neutral content (${reason})`,
       )
     },
-  })
+  }, refreshCodexCatalog)
   // Independent of the route set: signing in is what makes a route worth
   // adding, so the flows are offered before any profile names their provider.
   // Scoped to the authorization seam rather than injected outright, because a
@@ -354,6 +389,14 @@ export function apply(ctx: Context, config: Config): void {
         ctx.logger.error('llm-pi-ai: keeping the previous configurable-provider directory after a refused update')
         ctx.logger.error(error)
       }
+      // Warm the account catalog in the background whenever settings activate
+      // or change the Codex route. Model selection and unknown-id recovery also
+      // refresh synchronously, so this is an optimization rather than a gate.
+      void refreshCodexCatalog(CODEX_PROVIDER)
     },
   })
+  // Composition may already contain an active Codex route before the settings
+  // provider produces its first change notification. Warm it without delaying
+  // plugin load; absence of the route makes this a no-op.
+  void refreshCodexCatalog(CODEX_PROVIDER)
 }
