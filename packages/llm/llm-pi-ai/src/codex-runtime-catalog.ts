@@ -3,9 +3,14 @@
  *
  * The Settings discovery seam already asks Codex app-server for the live
  * catalog, but runtime selectors and exact model resolution historically kept
- * using the bundled pi-ai snapshot. This module keeps a short-lived live
+ * using the bundled pi-ai snapshot. This module keeps the last successful live
  * catalog and materializes a descriptor for a newly advertised Codex model so
  * it can be selected immediately without writing model ids into settings.
+ *
+ * Freshness follows real demand instead of a timer: every selector listing
+ * refreshes the account catalog, while exact lookup reuses a model already
+ * learned from a successful listing and refreshes only when an id is unknown.
+ * Concurrent selector refreshes share one app-server request.
  *
  * @module dsh-llm-pi-ai/codex-runtime-catalog
  */
@@ -14,9 +19,6 @@ import type { Api, Model, ModelThinkingLevel } from '@earendil-works/pi-ai'
 import { LlmError } from '@phoenix-ai/dsh-llm'
 import type { LlmDiscoveredModel } from '@phoenix-ai/dsh-llm'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
-
-/** Avoid repeatedly starting Codex app-server while a selector re-renders. */
-export const CODEX_RUNTIME_CATALOG_TTL_MS = 15_000
 
 /** Discovery metadata Codex contributes beyond the provider-neutral shape. */
 export interface CodexRuntimeDiscoveredModel extends LlmDiscoveredModel {
@@ -31,44 +33,76 @@ const PI_REASONING_LEVEL_SET = new Set<string>(PI_REASONING_LEVELS)
 
 type RuntimeReasoning = Pick<Model<Api>, 'reasoning'> & Partial<Pick<Model<Api>, 'thinkingLevelMap'>>
 
-/** One cached account-visible catalog. */
-interface CachedCatalog {
-  checkedAt: number
-  models: readonly CodexRuntimeDiscoveredModel[]
-}
-
 /**
- * Small stale-while-error cache around live Codex discovery.
- * Successful reads are reused briefly; a refresh failure keeps the last good
- * catalog instead of making a model picker disappear because one subprocess
- * launch failed. Before the first successful read, failures stay visible.
+ * Last-good live catalog with demand-driven refresh.
+ *
+ * Selector listings are precise freshness signals, so they interrogate Codex
+ * whenever they are requested rather than waiting for a fixed polling/TTL
+ * interval. Concurrent selector reads share one no-signal discovery request.
+ * Exact model lookup first checks the last-good catalog; a live-only model
+ * therefore stays cheap on later turns, while a previously unseen id triggers
+ * one fresh discovery. A refresh failure retains the last-good catalog so one
+ * failed subprocess launch cannot make a working picker disappear.
  */
 export class CodexRuntimeCatalog {
-  private cached: CachedCatalog | undefined
+  private cached: readonly CodexRuntimeDiscoveredModel[] | undefined
+  private inFlight: Promise<readonly CodexRuntimeDiscoveredModel[]> | undefined
 
   constructor(
     private readonly discover: (signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>,
-    private readonly ttlMs = CODEX_RUNTIME_CATALOG_TTL_MS,
-    private readonly now: () => number = Date.now,
   ) {}
 
-  /**
-   * Return the recent account-visible Codex catalog, refreshing after the TTL.
-   *
-   * @param signal - Optional cancellation signal forwarded to live discovery.
-   * @returns The current live catalog, or the last good catalog after a refresh failure.
-   */
-  async list(signal?: AbortSignal): Promise<readonly CodexRuntimeDiscoveredModel[]> {
-    const cached = this.cached
-    if (cached !== undefined && this.now() - cached.checkedAt < this.ttlMs) return cached.models
+  /** Run one live discovery, retaining the last successful non-empty answer. */
+  private async refresh(signal?: AbortSignal): Promise<readonly CodexRuntimeDiscoveredModel[]> {
+    const previous = this.cached
     try {
       const models = await this.discover(signal) as readonly CodexRuntimeDiscoveredModel[]
-      this.cached = { checkedAt: this.now(), models }
+      if (models.length === 0) {
+        throw new LlmError('Codex model/list returned an empty live catalog', 'DISCOVERY_FAILED')
+      }
+      this.cached = models
       return models
     } catch (error: unknown) {
-      if (cached !== undefined) return cached.models
+      if (signal?.aborted) throw error
+      if (previous !== undefined) return previous
       throw error
     }
+  }
+
+  /**
+   * Refresh and return the account-visible Codex catalog.
+   *
+   * Calls without a cancellation signal may come from the same selector render
+   * fan-out, so they share one in-flight app-server request. Signal-bearing
+   * calls stay independent so one caller's cancellation cannot abort another.
+   *
+   * @param signal - Optional cancellation signal forwarded to live discovery.
+   * @returns The refreshed live catalog, or the last good catalog after a refresh failure.
+   */
+  async list(signal?: AbortSignal): Promise<readonly CodexRuntimeDiscoveredModel[]> {
+    if (signal !== undefined) return this.refresh(signal)
+    if (this.inFlight !== undefined) return this.inFlight
+    const request = this.refresh()
+    this.inFlight = request
+    try {
+      return await request
+    } finally {
+      if (this.inFlight === request) this.inFlight = undefined
+    }
+  }
+
+  /**
+   * Resolve one live Codex id cheaply after it has already been discovered.
+   * A cache miss is also a freshness signal: refresh once, then search again.
+   *
+   * @param id - Exact Codex model id.
+   * @param signal - Optional request cancellation signal.
+   * @returns The live model row, or undefined when Codex does not advertise it.
+   */
+  async find(id: string, signal?: AbortSignal): Promise<CodexRuntimeDiscoveredModel | undefined> {
+    const known = this.cached?.find(model => model.id === id)
+    if (known !== undefined) return known
+    return (await this.list(signal)).find(model => model.id === id)
   }
 }
 
