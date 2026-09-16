@@ -21,8 +21,8 @@ describe('Phoenix Local catalog', () => {
       version: 'b10964',
       archiveName: 'llama-b10964-bin-win-cpu-x64.zip',
       sourceUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b10964/llama-b10964-bin-win-cpu-x64.zip',
-      sha256: '3245342858a293854962cc631185ef56ba4cea943564ba32fb2bb24398958ff8',
-      archiveSizeBytes: 64672927,
+      sha256: '917f39c076402c421224824607397af20f53625a60defc20e8dd22446bf4c5d7',
+      archiveSizeBytes: 18427629,
       executableRelativePath: 'llama-server.exe',
     })
   })
