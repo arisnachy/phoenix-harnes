@@ -231,10 +231,15 @@ describe('chat tool activity grouping', () => {
     expect(screen.getByTestId('node-user')).toBeTruthy()
   })
 
-  it('shows the running status before a live tool and keeps the tool above collapsed history', () => {
+  it('shows one human status line before a live tool and keeps technical identity in the tooltip', () => {
     renderChat([context(1, 'system')], [runningTool()])
 
     const status = screen.getByRole('status')
+    expect(status.dataset.phase).toBe('running-tools')
+    expect(status.dataset.activity).toBe('searching')
+    expect(status.textContent).toContain('status.searching')
+    expect(status.textContent).not.toContain('web_search')
+    expect(status.title).toContain('web_search')
     const live = screen.getByTestId('live-tool-activity')
     expectBefore(status, live)
     expect(live.querySelector('[data-testid="node-tool-call"]')).toBeTruthy()
