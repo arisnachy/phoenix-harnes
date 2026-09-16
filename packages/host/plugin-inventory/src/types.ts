@@ -68,3 +68,65 @@ export interface PhoenixUpdateRestartReceipt {
 export interface PhoenixUpdateRefreshReceipt {
   readonly accepted: boolean
 }
+
+/** User-selectable Phoenix Local runtime policy. */
+export type PhoenixLocalModelMode = 'off' | 'on-demand' | 'always-on'
+
+/** Public Phoenix Local lifecycle state. */
+export type PhoenixLocalModelPhase =
+  | 'not-installed'
+  | 'installing'
+  | 'ready'
+  | 'starting'
+  | 'running'
+  | 'stopping'
+  | 'error'
+
+/** One installable local-model choice safe to show in Settings. */
+export interface PhoenixLocalModelCatalogEntry {
+  readonly id: string
+  readonly displayName: string
+  readonly sizeBytes: number
+  readonly estimatedRamBytes: number
+  readonly contextWindow: number
+  readonly maxTokens: number
+  readonly recommended: boolean
+}
+
+/** Sanitized download progress; filesystem paths never cross the Host boundary. */
+export interface PhoenixLocalModelProgress {
+  readonly receivedBytes: number
+  readonly totalBytes?: number
+}
+
+/** Sanitized local runtime error suitable for Settings and chat surfaces. */
+export interface PhoenixLocalModelError {
+  readonly code: string
+  readonly message: string
+}
+
+/** Complete trusted-client snapshot of Phoenix Local. */
+export interface PhoenixLocalModelSnapshot {
+  readonly mode: PhoenixLocalModelMode
+  readonly selectedModelId: string
+  readonly installedModelIds: readonly string[]
+  readonly phase: PhoenixLocalModelPhase
+  readonly progress?: PhoenixLocalModelProgress
+  readonly error?: PhoenixLocalModelError
+  readonly catalog: readonly PhoenixLocalModelCatalogEntry[]
+}
+
+/** Model-address request used by install/uninstall/default actions. */
+export interface PhoenixLocalModelRequest {
+  readonly modelId: string
+}
+
+/** Runtime-mode request used by Settings. */
+export interface PhoenixLocalModeRequest {
+  readonly mode: PhoenixLocalModelMode
+}
+
+/** Loopback endpoint receipt used internally before local inference. */
+export interface PhoenixLocalEndpointReceipt {
+  readonly baseUrl: string
+}
