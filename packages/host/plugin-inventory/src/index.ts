@@ -13,6 +13,7 @@ import {
 import {
   createNodeLocalModelRuntimeManager,
   getLocalModelCatalog,
+  startPhoenixLocalProxy,
   type LocalModelRuntimeManager,
   type LocalModelRuntimeSnapshot,
 } from './local-model/index.ts'
@@ -87,6 +88,12 @@ export class PluginInventoryGateway extends TypertRemoteService {
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
     this.localModel = createNodeLocalModelRuntimeManager()
+    // This proxy is intentionally tiny: it owns no model weights. A request to
+    // the normal `phoenix-local` LLM route wakes llama-server only when needed.
+    void startPhoenixLocalProxy(this.localModel).catch((error: unknown) => {
+      ctx.logger.error('phoenix-local: loopback proxy could not start')
+      ctx.logger.error(error)
+    })
   }
 
   /**
@@ -153,8 +160,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
-   * Ensure the on-demand runtime is healthy before the LLM adapter opens its
-   * OpenAI-compatible request. This is also a trusted remote for diagnostics.
+   * Ensure the on-demand runtime is healthy before local inference. This is
+   * also exposed to trusted clients as a diagnostic action.
    */
   @Remote('ensureLocalModelRunning')
   async ensureLocalModelRunning(): Promise<PhoenixLocalEndpointReceipt> {
