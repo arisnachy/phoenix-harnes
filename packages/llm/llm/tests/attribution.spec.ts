@@ -1,6 +1,11 @@
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
-import { APP_IDENTITY, attributionHeaders, userAgent } from '@phoenix-ai/dsh-llm'
+import {
+  APP_IDENTITY,
+  attributionHeaders,
+  openRouterAttributionHeaders,
+  userAgent,
+} from '@phoenix-ai/dsh-llm'
 import type { AppIdentity } from '@phoenix-ai/dsh-llm'
 
 const manifest = createRequire(import.meta.url)('../package.json') as { version: string }
@@ -46,6 +51,16 @@ describe('attributionHeaders', () => {
   it('maps a custom identity onto the User-Agent header only', () => {
     expect(attributionHeaders(forkIdentity)).toEqual({
       'user-agent': 'fork-agent/9.9.9 (+https://example.com/fork-agent)',
+    })
+  })
+})
+
+describe('openRouterAttributionHeaders', () => {
+  it('publishes the PHOENIX app URL and title only through the OpenRouter helper', () => {
+    expect(openRouterAttributionHeaders()).toEqual({
+      'user-agent': userAgent(),
+      'HTTP-Referer': 'https://github.com/arisnachy/phoenix-harnes',
+      'X-Title': 'PHOENIX',
     })
   })
 })
