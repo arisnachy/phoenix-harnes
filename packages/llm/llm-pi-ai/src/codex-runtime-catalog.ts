@@ -52,6 +52,12 @@ export class CodexRuntimeCatalog {
     private readonly now: () => number = Date.now,
   ) {}
 
+  /**
+   * Return the recent account-visible Codex catalog, refreshing after the TTL.
+   *
+   * @param signal - Optional cancellation signal forwarded to live discovery.
+   * @returns The current live catalog, or the last good catalog after a refresh failure.
+   */
   async list(signal?: AbortSignal): Promise<readonly CodexRuntimeDiscoveredModel[]> {
     const cached = this.cached
     if (cached !== undefined && this.now() - cached.checkedAt < this.ttlMs) return cached.models
@@ -95,6 +101,10 @@ function liveReasoning(
  * existing route model, while route fallbacks size fields Codex model/list does
  * not currently expose. The id/name and live reasoning capabilities remain the
  * account-scoped source of truth.
+ *
+ * @param profile - Resolved OpenAI Codex route used as the transport scaffold.
+ * @param candidate - One model returned by the account-scoped Codex catalog.
+ * @returns A pi-ai model descriptor that can be resolved and streamed immediately.
  */
 export function materializeCodexRuntimeModel(
   profile: ResolvedPiAiProviderProfile,
