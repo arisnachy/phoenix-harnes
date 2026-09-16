@@ -235,22 +235,26 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   let codexRefreshFailing = false
+  let codexRefreshGeneration = 0
   /**
    * Refresh only an already configured native Codex route. The live result is
    * an in-memory overlay: an empty/failing probe keeps the previous catalog,
    * while a changed non-empty answer invalidates the adapter snapshot by
-   * replacing the catalog array identity.
+   * replacing the catalog array identity. Concurrent refreshes use latest-wins
+   * ordering so a slower old app-server reply cannot replace newer metadata.
    */
   const refreshCodexCatalog = async (provider: string, signal?: AbortSignal): Promise<void> => {
     if (provider !== CODEX_PROVIDER || current().providers?.[CODEX_PROVIDER] === undefined) return
+    const generation = ++codexRefreshGeneration
     try {
       const discovered = await listCodexModels(signal)
+      if (generation !== codexRefreshGeneration) return
       if (discovered.length > 0 && !deepEqualJson(discovered, liveCodexModels)) {
         liveCodexModels = [...discovered]
       }
       codexRefreshFailing = false
     } catch (error: unknown) {
-      if (signal?.aborted) return
+      if (generation !== codexRefreshGeneration || signal?.aborted) return
       if (!codexRefreshFailing) {
         ctx.logger.warn('llm-pi-ai: live Codex model refresh failed; keeping the previous catalog')
         ctx.logger.warn(error)
