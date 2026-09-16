@@ -9,7 +9,7 @@ export const PHOENIX_LOCAL_PROXY_BASE_URL = `http://127.0.0.1:${String(PHOENIX_L
 
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024
 
-async function readBody(request: IncomingMessage): Promise<Buffer | undefined> {
+async function readBody(request: IncomingMessage): Promise<Uint8Array<ArrayBuffer> | undefined> {
   if (request.method === 'GET' || request.method === 'HEAD') return undefined
   const chunks: Buffer[] = []
   let size = 0
@@ -19,7 +19,10 @@ async function readBody(request: IncomingMessage): Promise<Buffer | undefined> {
     if (size > MAX_REQUEST_BYTES) throw new Error('Phoenix Local request is larger than 16 MiB.')
     chunks.push(buffer)
   }
-  return Buffer.concat(chunks)
+  const body = Buffer.concat(chunks)
+  const copy = new Uint8Array(new ArrayBuffer(body.length))
+  copy.set(body)
+  return copy
 }
 
 function requestHeaders(request: IncomingMessage): Headers {
@@ -89,7 +92,11 @@ async function forward(
   }
 }
 
-/** Lightweight loopback gateway that starts the heavy model only on its first request. */
+/**
+ * Start the lightweight loopback gateway that lazily wakes the heavy model.
+ * @param managerPromise - host-owned runtime manager promise.
+ * @returns the listening unreferenced HTTP server.
+ */
 export async function startPhoenixLocalProxy(
   managerPromise: Promise<LocalModelRuntimeManager>,
 ): Promise<Server> {
