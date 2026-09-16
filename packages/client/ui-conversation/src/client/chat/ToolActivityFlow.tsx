@@ -266,14 +266,28 @@ function TurnStatus({ startTime, progress, t }: {
     const id = setInterval(tick, 1000)
     return () => { clearInterval(id) }
   }, [anchor])
-  const statusKey = progress.phase === 'running-tools'
-    ? 'status.runningTools'
-    : progress.phase === 'verifying'
-      ? 'status.verifying'
-      : progress.phase === 'preparing'
-        ? 'status.preparing'
-        : 'status.thinking'
+  const statusKey = progress.activity === 'searching'
+    ? 'status.searching'
+    : progress.activity === 'browsing'
+      ? 'status.browsing'
+      : progress.activity === 'reading'
+        ? 'status.reading'
+        : progress.activity === 'writing'
+          ? 'status.writing'
+          : progress.activity === 'executing'
+            ? 'status.executing'
+            : progress.phase === 'running-tools'
+              ? 'status.runningTools'
+              : progress.phase === 'verifying'
+                ? 'status.verifying'
+                : progress.phase === 'preparing'
+                  ? 'status.preparing'
+                  : 'status.thinking'
+  const label = t(statusKey)
   const showClock = elapsedMs >= 15_000
+  const technicalTitle = progress.detail === undefined || progress.detail === ''
+    ? label
+    : `${label} · ${progress.detail}`
   return (
     <div
       className={chatCss.turnStatus}
@@ -281,16 +295,12 @@ function TurnStatus({ startTime, progress, t }: {
       data-activity={progress.activity}
       role="status"
       aria-live="polite"
+      title={technicalTitle}
     >
       <span className={chatCss.phoenixActivity} data-activity={progress.activity} aria-hidden="true">
         <PhoenixLogo size={28} />
       </span>
-      <span className={chatCss.turnStatusText}>{t(statusKey)}</span>
-      {progress.detail !== undefined && progress.detail !== '' && (
-        <span className={chatCss.turnStatusDetail} title={progress.detail} aria-hidden="true">
-          · {progress.detail}
-        </span>
-      )}
+      <span className={chatCss.turnStatusText}>{label}</span>
       {showClock && (
         <span className={chatCss.turnStatusClock} aria-hidden>
           {formatRunDuration(elapsedMs, t)}
