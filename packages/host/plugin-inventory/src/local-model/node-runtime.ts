@@ -30,6 +30,7 @@ async function pathExists(target: string): Promise<boolean> {
   }
 }
 
+/** Reserve an ephemeral TCP port reachable only through loopback. */
 async function allocateLoopbackPort(): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     const server = net.createServer()
@@ -69,7 +70,7 @@ function spawnLocalServer(executable: string, args: string[], onExit: (error?: E
     ))
   })
   return {
-    pid: child.pid,
+    ...(child.pid === undefined ? {} : { pid: child.pid }),
     async stop(): Promise<void> {
       if (child.exitCode !== null || child.killed) return
       child.kill('SIGTERM')
@@ -109,8 +110,8 @@ async function probeHealth(baseUrl: string, timeoutMs: number): Promise<void> {
 /**
  * Create the production Phoenix Local runtime manager for this Host process.
  * The heavy llama-server receives an ephemeral loopback port and stays hidden
- * behind Phoenix's stable 17842 proxy; no model is downloaded until Settings
- * explicitly asks to install one.
+ * behind Phoenix's stable proxy; no model is downloaded until Settings asks.
+ * @returns the initialized local-model runtime manager.
  */
 export async function createNodeLocalModelRuntimeManager(): Promise<LocalModelRuntimeManager> {
   const paths = createLocalModelPaths(path.join(phoenixHome(), 'local-models'), process.platform)
