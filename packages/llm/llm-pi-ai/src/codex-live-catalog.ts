@@ -10,10 +10,18 @@
  * @module dsh-llm-pi-ai/codex-live-catalog
  */
 
+import type { LlmDiscoveredModel } from '@phoenix-ai/dsh-llm'
 import type { Config, PiAiProviderProfile } from './config.ts'
 import type { PiAiModelProfile, PiAiReasoningEfforts } from './catalog.ts'
 import { THINKING_LEVELS } from './catalog.ts'
-import type { CodexDiscoveredModel } from './codex-discovery.ts'
+
+/** Codex-only metadata carried by its live model/list mapper. */
+interface CodexDiscoveredModel extends LlmDiscoveredModel {
+  reasoning?: {
+    efforts: Array<{ id: string; name: string; description?: string }>
+    defaultEffort?: string
+  }
+}
 
 /** Stable pi-ai provider id for ChatGPT-authenticated Codex. */
 export const CODEX_PROVIDER = 'openai-codex'
