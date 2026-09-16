@@ -29,9 +29,10 @@ export interface TurnProgress {
 
 const TOOL_ACTIVITY_MATCHERS: readonly (readonly [TurnActivity, RegExp])[] = [
   ['verifying', /\b(vitest|test|tests|verify|verification|validate|validation|lint|typecheck|check)\b/],
+  // Search wins before generic `web`, so web_search reports searching while browser_open stays browsing.
+  ['searching', /\b(glob|grep|find|search|lookup|list files|scan)\b/],
   ['browsing', /\b(web|browser|url|http|https)\b/],
   ['reading', /\b(read|reader|fetch file|get file|open file|cat)\b/],
-  ['searching', /\b(glob|grep|find|search|lookup|list files|scan)\b/],
   ['writing', /\b(write|edit|patch|apply patch|create file|update file|delete file|move file|rename file)\b/],
   ['executing', /\b(bash|shell|terminal|exec|execute|run|command|powershell|spawn|npm|pnpm|node)\b/],
 ]
