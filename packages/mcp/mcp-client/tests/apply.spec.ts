@@ -494,4 +494,38 @@ describe('apply (plugin lifecycle)', () => {
       toolNames: [],
     }])
   })
+
+  it('waits for authorization instead of spending the retry budget', async () => {
+    vi.useFakeTimers()
+    try {
+      const httpConfig: Config = {
+        transport: 'streamable-http',
+        serverName: 'web-auth-wait',
+        url: 'http://localhost:3000/mcp',
+        headers: {},
+        toolCallTimeoutMs: 30_000,
+        failOnStartupError: false,
+        reconnect: { enabled: true, initialDelayMs: 10, maxDelayMs: 20, maxAttempts: 3 },
+      }
+      mockConnect.mockRejectedValue({ code: 401 })
+
+      await apply(ctx, httpConfig)
+      const attemptsAfterFirst = mockConnect.mock.calls.length
+
+      // Retrying cannot satisfy an authorization demand, and losing the retry
+      // budget would replace this state with `retry-exhausted`.
+      await vi.advanceTimersByTimeAsync(1_000)
+
+      expect(mockConnect.mock.calls.length).toBe(attemptsAfterFirst)
+      expect(ctx.mcpConnectors.list()).toEqual([{
+        serverName: 'web-auth-wait',
+        transport: 'streamable-http',
+        status: 'auth-required',
+        reasonCode: 'authorization-required',
+        toolNames: [],
+      }])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

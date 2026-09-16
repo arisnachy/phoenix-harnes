@@ -228,6 +228,12 @@ export function startConnection(
     else publishStatus?.('failed', 'connection-failed')
     client = undefined
     clientClosed = undefined
+    // A server that demands authorization cannot be reached by retrying: the
+    // remaining step is a human action. Spending the retry budget would replace
+    // the actionable `auth-required` state with `retry-exhausted` and hide the
+    // reason the connector is down. Committing a grant calls reconnect(), which
+    // is the only transition that can succeed from here.
+    if (status?.status === 'auth-required') return
     scheduleReconnect()
   }
 
