@@ -3,29 +3,44 @@ import { createReadStream } from 'node:fs'
 import { access, mkdir, open, rename, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 
+/** Runtime/installation failure with a stable machine-readable code. */
 export class LocalModelRuntimeFault extends Error {
+  /** Stable error code consumed by UI and tests. */
   constructor(public readonly code: string, message: string, options?: ErrorOptions) {
     super(message, options)
     this.name = 'LocalModelRuntimeFault'
   }
 }
 
+/** Progress emitted while one managed artifact is downloading. */
 export interface ArtifactDownloadProgress {
+  /** Bytes already written to the partial file. */
   receivedBytes: number
+  /** Total bytes when the server discloses them. */
   totalBytes?: number
 }
 
+/** Input required to download and cryptographically activate one artifact. */
 export interface ArtifactDownloadRequest {
+  /** Trusted source URL from the pinned catalog. */
   sourceUrl: string
+  /** Final Phoenix-managed destination path. */
   destinationPath: string
+  /** Expected lowercase hexadecimal SHA-256. */
   expectedSha256: string
+  /** Expected exact size when pinned by the catalog. */
   expectedSizeBytes?: number
+  /** Injectable fetch implementation used by deterministic tests. */
   fetchImpl?: typeof fetch
+  /** Optional progress observer. */
   onProgress?: (progress: ArtifactDownloadProgress) => void
 }
 
+/** Verified artifact activation result. */
 export interface ArtifactDownloadResult {
+  /** Final activated path. */
   path: string
+  /** Verified file size. */
   bytes: number
 }
 
@@ -68,6 +83,12 @@ function responseTotal(response: Response, resumedAt: number): number | undefine
   return Number.isFinite(parsed) ? resumedAt + parsed : undefined
 }
 
+/**
+ * Download one Phoenix-managed artifact through a resumable partial file,
+ * verify exact size/SHA-256, then atomically activate it.
+ * @param request - pinned source, destination, integrity facts, and optional test seams.
+ * @returns the activated artifact path and verified byte size.
+ */
 export async function downloadVerifiedArtifact(request: ArtifactDownloadRequest): Promise<ArtifactDownloadResult> {
   const current = await verifiedExisting(
     request.destinationPath,
@@ -90,7 +111,7 @@ export async function downloadVerifiedArtifact(request: ArtifactDownloadRequest)
   const headers = resumedAt > 0 ? { Range: `bytes=${String(resumedAt)}-` } : undefined
   let response: Response
   try {
-    response = await fetchImpl(request.sourceUrl, { headers })
+    response = await fetchImpl(request.sourceUrl, headers === undefined ? {} : { headers })
   } catch (error) {
     throw new LocalModelRuntimeFault('download-failed', `No se pudo descargar ${request.sourceUrl}.`, { cause: error })
   }
