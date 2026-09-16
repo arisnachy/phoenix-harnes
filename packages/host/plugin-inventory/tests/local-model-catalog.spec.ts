@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getLocalModelCatalog, getRuntimeManifest } from '../src/catalog.js'
+import { getLocalModelCatalog, getRuntimeManifest } from '../src/local-model/catalog.js'
 
 describe('Phoenix Local catalog', () => {
   it('ships Qwen3.5-4B Q4_K_M as the recommended model', () => {

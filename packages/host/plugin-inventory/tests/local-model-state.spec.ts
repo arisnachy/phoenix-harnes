@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createLocalModelPaths, isManagedLocalModelPath } from '../src/paths.js'
-import { createLocalModelStateStore } from '../src/state.js'
+import { createLocalModelPaths, isManagedLocalModelPath } from '../src/local-model/paths.js'
+import { createLocalModelStateStore } from '../src/local-model/state.js'
 
 describe('Phoenix Local paths', () => {
   it('keeps managed artifacts inside the configured root', () => {
