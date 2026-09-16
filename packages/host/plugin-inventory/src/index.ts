@@ -1,4 +1,4 @@
-/** Read-only Loader inventory plus trusted PHOENIX update-control projection. */
+/** Read-only Loader inventory plus trusted PHOENIX update and local-model controls. */
 
 import type { Context, FiberState } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/cordis-plugin-loader'
@@ -10,7 +10,17 @@ import {
   requestPhoenixUpdateRefresh,
   requestPhoenixUpdateRestart,
 } from './update-state.ts'
+import {
+  createNodeLocalModelRuntimeManager,
+  getLocalModelCatalog,
+  type LocalModelRuntimeManager,
+  type LocalModelRuntimeSnapshot,
+} from './local-model/index.ts'
 import type {
+  PhoenixLocalEndpointReceipt,
+  PhoenixLocalModeRequest,
+  PhoenixLocalModelRequest,
+  PhoenixLocalModelSnapshot,
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
@@ -47,12 +57,36 @@ const FIBER_PHASE = {
   [FIBER_STATE.UNLOADING]: 'unloading',
 } as const satisfies Record<FiberState, PluginFiberPhase>
 
-/** Remote service exposing trusted Host diagnostics and updater controls. */
+/** Strip process/filesystem-only details before local runtime state crosses the Host boundary. */
+function publicLocalSnapshot(snapshot: LocalModelRuntimeSnapshot): PhoenixLocalModelSnapshot {
+  return {
+    mode: snapshot.mode,
+    selectedModelId: snapshot.selectedModelId,
+    installedModelIds: [...snapshot.installedModelIds],
+    phase: snapshot.phase,
+    ...snapshot.progress === undefined ? {} : { progress: { ...snapshot.progress } },
+    ...snapshot.error === undefined ? {} : { error: { ...snapshot.error } },
+    catalog: getLocalModelCatalog().map(model => ({
+      id: model.id,
+      displayName: model.displayName,
+      sizeBytes: model.sizeBytes,
+      estimatedRamBytes: model.estimatedRamBytes,
+      contextWindow: model.contextWindow,
+      maxTokens: model.maxTokens,
+      recommended: model.recommended,
+    })),
+  }
+}
+
+/** Remote service exposing trusted Host diagnostics, updater controls, and Phoenix Local lifecycle. */
 export class PluginInventoryGateway extends TypertRemoteService {
   static inject = ['loader']
 
+  private readonly localModel: Promise<LocalModelRuntimeManager>
+
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
+    this.localModel = createNodeLocalModelRuntimeManager()
   }
 
   /**
@@ -74,6 +108,57 @@ export class PluginInventoryGateway extends TypertRemoteService {
       })
     }
     return { entries }
+  }
+
+  /** Read Phoenix Local state and installable catalog without exposing machine paths. */
+  @Remote('localModelState')
+  async localModelState(): Promise<PhoenixLocalModelSnapshot> {
+    return publicLocalSnapshot((await this.localModel).snapshot())
+  }
+
+  /** Install the selected local model and pinned runtime after cryptographic verification. */
+  @Remote('installLocalModel')
+  async installLocalModel(request: PhoenixLocalModelRequest): Promise<PhoenixLocalModelSnapshot> {
+    return publicLocalSnapshot(await (await this.localModel).install(request.modelId))
+  }
+
+  /** Start Phoenix Local now, regardless of whether a chat has requested it yet. */
+  @Remote('startLocalModel')
+  async startLocalModel(): Promise<PhoenixLocalModelSnapshot> {
+    return publicLocalSnapshot(await (await this.localModel).start())
+  }
+
+  /** Stop local inference while leaving the Phoenix Host itself running. */
+  @Remote('stopLocalModel')
+  async stopLocalModel(): Promise<PhoenixLocalModelSnapshot> {
+    return publicLocalSnapshot(await (await this.localModel).stop())
+  }
+
+  /** Remove one managed local model, stopping it first when necessary. */
+  @Remote('uninstallLocalModel')
+  async uninstallLocalModel(request: PhoenixLocalModelRequest): Promise<PhoenixLocalModelSnapshot> {
+    return publicLocalSnapshot(await (await this.localModel).uninstall(request.modelId))
+  }
+
+  /** Persist Phoenix Local's off/on-demand/always-on policy. */
+  @Remote('setLocalModelMode')
+  async setLocalModelMode(request: PhoenixLocalModeRequest): Promise<PhoenixLocalModelSnapshot> {
+    return publicLocalSnapshot(await (await this.localModel).setMode(request.mode))
+  }
+
+  /** Choose which installed or installable local model the stable Phoenix route represents. */
+  @Remote('setDefaultLocalModel')
+  async setDefaultLocalModel(request: PhoenixLocalModelRequest): Promise<PhoenixLocalModelSnapshot> {
+    return publicLocalSnapshot(await (await this.localModel).setDefaultModel(request.modelId))
+  }
+
+  /**
+   * Ensure the on-demand runtime is healthy before the LLM adapter opens its
+   * OpenAI-compatible request. This is also a trusted remote for diagnostics.
+   */
+  @Remote('ensureLocalModelRunning')
+  async ensureLocalModelRunning(): Promise<PhoenixLocalEndpointReceipt> {
+    return { baseUrl: await (await this.localModel).ensureRunning() }
   }
 
   /**
