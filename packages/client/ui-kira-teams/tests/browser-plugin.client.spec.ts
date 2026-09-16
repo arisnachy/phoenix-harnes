@@ -188,6 +188,37 @@ describe('lineageMembers', () => {
     expect(rows.map(row => row.depth)).toEqual([1])
   })
 
+  it('uses running catalog children before their session summaries arrive', () => {
+    const root = summary({ id: sid('root'), displayTitle: 'Misión raíz', running: true })
+    const state = {
+      ids: [root.id],
+      byId: { [String(root.id)]: root },
+      current: root.id,
+      phase: 'ready',
+      jobsBySession: {},
+      currentAddress: undefined,
+      subagentsByParent: {
+        [String(root.id)]: {
+          entries: [{
+            kind: 'child',
+            id: sid('catalog-child'),
+            label: 'Juez independiente Hardness',
+            mode: 'continuable',
+            activity: 'running',
+            hasChildren: false,
+          }],
+          parentAvailable: true,
+          state: 'ready',
+          error: null,
+        },
+      },
+    } as unknown as SessionListState
+
+    const { rows } = lineageMembers(state)
+
+    expect(rows.map(row => row.summary.id)).toEqual([sid('catalog-child')])
+  })
+
   it('returns nothing without a current session', () => {
     const { root, rows } = lineageMembers(
       sessionsWith(FAMILY).list.getSnapshot(),
