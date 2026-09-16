@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { downloadVerifiedArtifact, LocalModelRuntimeFault } from '../src/local-model/download.js'
+import { downloadVerifiedArtifact } from '../src/local-model/download.js'
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
@@ -64,7 +64,7 @@ describe('downloadVerifiedArtifact', () => {
       fetchImpl,
     })
 
-    await expect(promise).rejects.toMatchObject<Partial<LocalModelRuntimeFault>>({ code: 'hash-mismatch' })
+    await expect(promise).rejects.toMatchObject({ code: 'hash-mismatch' })
     await expect(access(destinationPath)).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(access(`${destinationPath}.part`)).rejects.toMatchObject({ code: 'ENOENT' })
   })
