@@ -24,6 +24,7 @@ import type { Api, ApiKeyAuth, Model, Provider, ProviderStreams } from '@earendi
 import { anthropicMessagesApi } from '@earendil-works/pi-ai/api/anthropic-messages.lazy'
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy'
 import { openAIResponsesApi } from '@earendil-works/pi-ai/api/openai-responses.lazy'
+import { openRouterAttributionHeaders } from '@phoenix-ai/dsh-llm'
 import { catalogProvider } from './catalog.ts'
 
 /**
@@ -107,6 +108,40 @@ export interface ProviderSpec {
 }
 
 /**
+ * Provider-specific PHOENIX application headers. Only the OpenRouter route
+ * receives its marketplace attribution fields; every other route keeps the
+ * provider-neutral User-Agent supplied by the adapter.
+ */
+function providerHeaders(
+  spec: ProviderSpec,
+  headers: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  if (spec.provider !== 'openrouter') return { ...headers }
+  const attribution = openRouterAttributionHeaders()
+  const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
+  return {
+    ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
+    ...attribution,
+  }
+}
+
+/** Add provider-specific public app attribution without changing provider behavior. */
+function withProviderAttribution(provider: Provider, spec: ProviderSpec): Provider {
+  if (spec.provider !== 'openrouter') return provider
+  return {
+    ...provider,
+    stream: (model, context, options) => provider.stream(model, context, {
+      ...options,
+      headers: providerHeaders(spec, options.headers),
+    }),
+    streamSimple: (model, context, options) => provider.streamSimple(model, context, {
+      ...options,
+      headers: providerHeaders(spec, options.headers),
+    }),
+  }
+}
+
+/**
  * The auth one route resolves its credential through.
  *
  * A catalog route keeps the installed provider's own auth, which is what
@@ -145,7 +180,7 @@ function reuseCatalogProvider(base: Provider, spec: ProviderSpec): Provider {
   // Provider-level `baseUrl` is display metadata: pi-ai routes every request
   // through `Model.baseUrl`, which model resolution has already overridden.
   const baseUrl = spec.baseURL ?? base.baseUrl
-  return {
+  const provider: Provider = {
     id: spec.provider,
     name: spec.displayName,
     ...baseUrl === undefined ? {} : { baseUrl },
@@ -156,6 +191,7 @@ function reuseCatalogProvider(base: Provider, spec: ProviderSpec): Provider {
     stream: (model, context, options) => base.stream(model, context, options),
     streamSimple: (model, context, options) => base.streamSimple(model, context, options),
   }
+  return withProviderAttribution(provider, spec)
 }
 
 /**
@@ -181,7 +217,7 @@ export function buildProvider(spec: ProviderSpec): Provider {
       + ` supported protocols are ${supportedProtocols().join(', ')}`,
     )
   }
-  return createProvider({
+  const provider = createProvider({
     id: spec.provider,
     name: spec.displayName,
     ...spec.baseURL === undefined ? {} : { baseUrl: spec.baseURL },
@@ -189,4 +225,5 @@ export function buildProvider(spec: ProviderSpec): Provider {
     models: spec.models,
     api: factory(),
   })
+  return withProviderAttribution(provider, spec)
 }
