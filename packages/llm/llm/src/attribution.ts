@@ -23,7 +23,7 @@ const { version } = createRequire(import.meta.url)('../package.json') as { versi
  * and nothing per-request may influence the values.
  */
 export interface AppIdentity {
-  /** `User-Agent` product token (lowercase, hyphenated). */
+  /** `User-Agent` product token. */
   product: string
   /** Product version; sourced from package metadata, never hand-copied. */
   version: string
@@ -32,13 +32,13 @@ export interface AppIdentity {
 }
 
 /**
- * The harness's own identity: the default every adapter sends. Deployments
- * that need a white-label identity pass their own {@link AppIdentity} to
- * {@link attributionHeaders} — omission falls back to this default; nothing
- * can suppress attribution entirely.
+ * PHOENIX's own identity: the default every adapter sends. Deployments that
+ * need a white-label identity pass their own {@link AppIdentity} to the
+ * attribution helpers — omission falls back to this default; nothing can
+ * suppress attribution entirely.
  */
 export const APP_IDENTITY: AppIdentity = {
-  product: 'deepseek-harness',
+  product: 'PHOENIX',
   version,
   url: 'https://github.com/arisnachy/phoenix-harnes',
 }
@@ -55,14 +55,29 @@ export function userAgent(identity: AppIdentity = APP_IDENTITY): string {
 }
 
 /**
- * Build the attribution headers an adapter must send on every provider
- * request. Header names are lowercase (HTTP field names are case-insensitive
- * on the wire).
- * @param identity - the identity to send; defaults to {@link APP_IDENTITY} — omission cannot suppress attribution.
- * @returns headers to merge into the provider request (currently just `user-agent`).
+ * Build the provider-neutral attribution headers every adapter sends.
+ * @param identity - the identity to send; defaults to {@link APP_IDENTITY}.
+ * @returns the provider-neutral application identity headers.
  */
 export function attributionHeaders(
   identity: AppIdentity = APP_IDENTITY,
 ): Record<string, string> {
   return { 'user-agent': userAgent(identity) }
+}
+
+/**
+ * Build the OpenRouter app-attribution header set. OpenRouter uses the app URL
+ * and title to group traffic under the public application identity; keeping
+ * this provider-specific prevents those headers leaking to unrelated providers.
+ * @param identity - the identity to publish; defaults to PHOENIX.
+ * @returns PHOENIX `User-Agent`, app URL, and app title headers.
+ */
+export function openRouterAttributionHeaders(
+  identity: AppIdentity = APP_IDENTITY,
+): Record<string, string> {
+  return {
+    ...attributionHeaders(identity),
+    'HTTP-Referer': identity.url,
+    'X-Title': identity.product,
+  }
 }
