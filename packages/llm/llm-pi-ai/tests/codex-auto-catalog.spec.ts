@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { LlmDiscoveredModel } from '@phoenix-ai/dsh-llm'
+import { CodexAutoRefreshingPiAiAdapter } from '../src/codex-auto-adapter.ts'
 import type { Config } from '../src/config.ts'
+import { resolveProfiles } from '../src/config.ts'
 import { withCodexLiveCatalog } from '../src/codex-live-catalog.ts'
+import { memoryAuth } from './auth-double.ts'
 
 describe('automatic Codex model catalog', () => {
   it('adds newly discovered Codex models while preserving manual model tuning', () => {
@@ -47,5 +51,49 @@ describe('automatic Codex model catalog', () => {
     }
 
     expect(withCodexLiveCatalog(config, [])).toBe(config)
+  })
+
+  it('refreshes Codex before a selector lists models', async () => {
+    const config: Config = { providers: { 'openai-codex': {} } }
+    let live: readonly LlmDiscoveredModel[] = []
+    const refresh = vi.fn(async () => {
+      live = [{ id: 'future-codex-model', name: 'Future Codex Model' }]
+    })
+    const adapter = new CodexAutoRefreshingPiAiAdapter({
+      profiles: () => resolveProfiles(withCodexLiveCatalog(config, live).providers),
+      resolveApiKey: async () => undefined,
+      auth: memoryAuth(),
+    }, refresh)
+
+    const models = await adapter.listModels('openai-codex')
+
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(models).toContainEqual(expect.objectContaining({
+      provider: 'openai-codex',
+      id: 'future-codex-model',
+      name: 'Future Codex Model',
+    }))
+  })
+
+  it('refreshes and retries when a Codex model id is newer than the current snapshot', async () => {
+    const config: Config = { providers: { 'openai-codex': {} } }
+    let live: readonly LlmDiscoveredModel[] = []
+    const refresh = vi.fn(async () => {
+      live = [{ id: 'future-codex-model', name: 'Future Codex Model' }]
+    })
+    const adapter = new CodexAutoRefreshingPiAiAdapter({
+      profiles: () => resolveProfiles(withCodexLiveCatalog(config, live).providers),
+      resolveApiKey: async () => undefined,
+      auth: memoryAuth(),
+    }, refresh)
+
+    const model = await adapter.resolveModel('openai-codex', 'future-codex-model')
+
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(model).toMatchObject({
+      provider: 'openai-codex',
+      id: 'future-codex-model',
+      name: 'Future Codex Model',
+    })
   })
 })
