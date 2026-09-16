@@ -33,4 +33,27 @@ describe('PHOENIX provider attribution', () => {
     expect(server.headers[0]?.['http-referer']).toBe('https://github.com/arisnachy/phoenix-harnes')
     expect(server.headers[0]?.['x-title']).toBe('PHOENIX')
   })
+
+  it('keeps OpenRouter-only app headers off unrelated providers', async () => {
+    vi.stubEnv('PI_TEST_KEY', 'test-key')
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        acme: {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-completions',
+          baseURL: server.url,
+          models: [{ id: 'acme-model' }],
+        },
+      },
+    })
+
+    await assemble(ctx, { provider: 'acme', model: 'acme-model', messages: [] })
+
+    expect(server.headers[0]?.['user-agent']).toMatch(/^PHOENIX\//)
+    expect(server.headers[0]?.['http-referer']).toBeUndefined()
+    expect(server.headers[0]?.['x-title']).toBeUndefined()
+  })
 })
