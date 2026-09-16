@@ -250,8 +250,8 @@ function TurnStatus({ startTime, progress, t }: {
   /** The running turn's logged `turn/start` time; null falls back to mount
    *  time when that boundary is outside the window. */
   readonly startTime: number | null
-  /** Safe phase derived from the current chat projection. */
-  readonly progress: TurnProgress | null
+  /** Safe phase and activity derived from the current chat projection. */
+  readonly progress: TurnProgress
   /** The owning view's locale seat. */
   readonly t: ChatViewSlotProps['t']
 }) {
@@ -266,20 +266,41 @@ function TurnStatus({ startTime, progress, t }: {
     const id = setInterval(tick, 1000)
     return () => { clearInterval(id) }
   }, [anchor])
-  const statusKey = progress === 'running-tools'
-    ? 'status.runningTools'
-    : progress === 'verifying'
-      ? 'status.verifying'
-      : progress === 'preparing'
-        ? 'status.preparing'
-        : 'status.thinking'
+  const statusKey = progress.activity === 'searching'
+    ? 'status.searching'
+    : progress.activity === 'browsing'
+      ? 'status.browsing'
+      : progress.activity === 'reading'
+        ? 'status.reading'
+        : progress.activity === 'writing'
+          ? 'status.writing'
+          : progress.activity === 'executing'
+            ? 'status.executing'
+            : progress.phase === 'running-tools'
+              ? 'status.runningTools'
+              : progress.phase === 'verifying'
+                ? 'status.verifying'
+                : progress.phase === 'preparing'
+                  ? 'status.preparing'
+                  : 'status.thinking'
+  const label = t(statusKey)
   const showClock = elapsedMs >= 15_000
+  const technicalTitle = progress.detail === undefined || progress.detail === ''
+    ? label
+    : `${label} · ${progress.detail}`
   return (
-    <div className={chatCss.turnStatus} role="status" aria-live="polite">
-      <span className={chatCss.phoenixActivity} aria-hidden="true">
+    <div
+      className={chatCss.turnStatus}
+      data-phase={progress.phase}
+      data-activity={progress.activity}
+      role="status"
+      aria-live="polite"
+      title={technicalTitle}
+    >
+      <span className={chatCss.phoenixActivity} data-activity={progress.activity} aria-hidden="true">
         <PhoenixLogo size={28} />
       </span>
-      <span>{t(statusKey)}</span>
+      <span className={chatCss.turnStatusText}>{label}</span>
       {showClock && (
         <span className={chatCss.turnStatusClock} aria-hidden>
           {formatRunDuration(elapsedMs, t)}
@@ -305,7 +326,7 @@ export function ToolActivityFlow({ nodes, turnStatus, ...seatProps }: ToolActivi
     <>
       {flow.map((item, index) => (
         <Fragment key={item.key}>
-          {turnStatus !== undefined && index === statusBeforeIndex && (
+          {turnStatus !== undefined && turnStatus.progress !== null && index === statusBeforeIndex && (
             <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress} t={seatProps.t} />
           )}
           {item.kind === 'node'
@@ -325,7 +346,7 @@ export function ToolActivityFlow({ nodes, turnStatus, ...seatProps }: ToolActivi
               )}
         </Fragment>
       ))}
-      {turnStatus !== undefined && statusBeforeIndex === -1 && (
+      {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
         <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress} t={seatProps.t} />
       )}
     </>
