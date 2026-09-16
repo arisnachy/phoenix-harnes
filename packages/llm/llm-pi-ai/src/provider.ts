@@ -20,7 +20,7 @@
  */
 
 import { createProvider } from '@earendil-works/pi-ai'
-import type { Api, ApiKeyAuth, Model, Provider, ProviderStreams } from '@earendil-works/pi-ai'
+import type { Api, ApiKeyAuth, Model, Provider, ProviderHeaders, ProviderStreams } from '@earendil-works/pi-ai'
 import { anthropicMessagesApi } from '@earendil-works/pi-ai/api/anthropic-messages.lazy'
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy'
 import { openAIResponsesApi } from '@earendil-works/pi-ai/api/openai-responses.lazy'
@@ -110,34 +110,38 @@ export interface ProviderSpec {
 /**
  * Provider-specific PHOENIX application headers. Only the OpenRouter route
  * receives its marketplace attribution fields; every other route keeps the
- * provider-neutral User-Agent supplied by the adapter.
+ * provider-neutral User-Agent supplied by the adapter. Null-valued pi-ai
+ * headers are preserved so callers can still suppress provider defaults.
  */
 function providerHeaders(
   spec: ProviderSpec,
-  headers: Readonly<Record<string, string>> | undefined,
-): Record<string, string> {
-  if (spec.provider !== 'openrouter') return { ...headers }
-  const attribution = openRouterAttributionHeaders()
-  const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
-  return {
-    ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
-    ...attribution,
+  headers: Readonly<ProviderHeaders> | undefined,
+): ProviderHeaders {
+  const merged: ProviderHeaders = { ...headers }
+  if (spec.provider !== 'openrouter') return merged
+
+  for (const [name, value] of Object.entries(openRouterAttributionHeaders())) {
+    for (const existing of Object.keys(merged)) {
+      if (existing.toLowerCase() === name.toLowerCase()) delete merged[existing]
+    }
+    merged[name] = value
   }
+  return merged
 }
 
-/** Add provider-specific public app attribution without changing provider behavior. */
+/** Add OpenRouter's public PHOENIX app attribution without changing generic stream typing. */
 function withProviderAttribution(provider: Provider, spec: ProviderSpec): Provider {
   if (spec.provider !== 'openrouter') return provider
   return {
     ...provider,
-    stream: (model, context, options) => provider.stream(model, context, {
-      ...options,
-      headers: providerHeaders(spec, options.headers),
-    }),
-    streamSimple: (model, context, options) => provider.streamSimple(model, context, {
-      ...options,
-      headers: providerHeaders(spec, options.headers),
-    }),
+    streamSimple: (model, context, options) => {
+      const headers = providerHeaders(spec, options?.headers)
+      return provider.streamSimple(
+        model,
+        context,
+        options === undefined ? { headers } : { ...options, headers },
+      )
+    },
   }
 }
 
