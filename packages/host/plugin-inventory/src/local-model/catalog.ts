@@ -17,8 +17,8 @@ const WINDOWS_X64_LLAMA_CPP: LocalRuntimeManifest = Object.freeze({
   version: 'b10964',
   archiveName: 'llama-b10964-bin-win-cpu-x64.zip',
   sourceUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b10964/llama-b10964-bin-win-cpu-x64.zip',
-  sha256: '3245342858a293854962cc631185ef56ba4cea943564ba32fb2bb24398958ff8',
-  archiveSizeBytes: 64_672_927,
+  sha256: '917f39c076402c421224824607397af20f53625a60defc20e8dd22446bf4c5d7',
+  archiveSizeBytes: 18_427_629,
   executableRelativePath: 'llama-server.exe',
 })
 
@@ -26,16 +26,20 @@ const LOCAL_MODEL_CATALOG: readonly LocalModelCatalogEntry[] = Object.freeze([
   QWEN_35_4B_Q4_K_M,
 ])
 
+/** Stable id of the model Phoenix Local selects on first use. */
 export const DEFAULT_LOCAL_MODEL_ID = QWEN_35_4B_Q4_K_M.id
 
+/** Return Phoenix's immutable catalog of supported local models. */
 export function getLocalModelCatalog(): readonly LocalModelCatalogEntry[] {
   return LOCAL_MODEL_CATALOG
 }
 
+/** Resolve one local-model catalog entry by id. */
 export function getLocalModel(modelId: string): LocalModelCatalogEntry | undefined {
   return LOCAL_MODEL_CATALOG.find(entry => entry.id === modelId)
 }
 
+/** Return the pinned llama.cpp runtime manifest for a verified target. */
 export function getRuntimeManifest(platform: string, arch: string): LocalRuntimeManifest | undefined {
   if (platform === 'win32' && arch === 'x64') return WINDOWS_X64_LLAMA_CPP
   return undefined
