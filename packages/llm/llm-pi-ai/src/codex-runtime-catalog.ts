@@ -29,6 +29,8 @@ export interface CodexRuntimeDiscoveredModel extends LlmDiscoveredModel {
 const PI_REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 const PI_REASONING_LEVEL_SET = new Set<string>(PI_REASONING_LEVELS)
 
+type RuntimeReasoning = Pick<Model<Api>, 'reasoning'> & Partial<Pick<Model<Api>, 'thinkingLevelMap'>>
+
 /** One cached account-visible catalog. */
 interface CachedCatalog {
   checkedAt: number
@@ -68,20 +70,20 @@ export class CodexRuntimeCatalog {
 function liveReasoning(
   candidate: CodexRuntimeDiscoveredModel,
   fallback: Model<Api>,
-): Pick<Model<Api>, 'reasoning' | 'thinkingLevelMap'> {
+): RuntimeReasoning {
   const advertised = candidate.reasoning?.efforts
     .map(effort => effort.id)
     .filter((id): id is ModelThinkingLevel => PI_REASONING_LEVEL_SET.has(id))
   if (advertised === undefined || advertised.length === 0) {
     return {
       reasoning: fallback.reasoning,
-      thinkingLevelMap: fallback.thinkingLevelMap,
+      ...fallback.thinkingLevelMap === undefined ? {} : { thinkingLevelMap: fallback.thinkingLevelMap },
     }
   }
   const supported = new Set(advertised)
-  const thinkingLevelMap = Object.fromEntries(
+  const thinkingLevelMap: NonNullable<Model<Api>['thinkingLevelMap']> = Object.fromEntries(
     PI_REASONING_LEVELS.map(level => [level, supported.has(level) ? level : null]),
-  ) as Model<Api>['thinkingLevelMap']
+  )
   return { reasoning: true, thinkingLevelMap }
 }
 
