@@ -54,6 +54,30 @@ describe('HARDNESS cognitive workflow catalog', () => {
     expect(plan.qualityGates).toContain('outcome-compared')
   })
 
+  it('publishes numeric measurements and an explicit fast budget for trivial work', () => {
+    const plan = selectCognitiveWorkflow(mission())
+
+    expect(plan.measurements).toEqual({ complexityScore: 1, riskScore: 1, noveltyScore: 1, evidenceScore: 0 })
+    expect(plan.thresholds).toEqual({ fastMaxComplexity: 2, fastMaxRisk: 2, fastMaxEvidence: 4, deepMinComplexity: 3, deepMinRisk: 3, deepMinEvidence: 6 })
+    expect(plan.budget).toEqual({ maxAttempts: 1, maxRecoveryAttempts: 1, maxExternalSources: 0, maxParallelSubtasks: 0, maxReviewPasses: 0 })
+  })
+
+  it('raises the budget when external evidence is required', () => {
+    const plan = selectCognitiveWorkflow(mission({ requiresExternalEvidence: true }))
+
+    expect(plan.executionMode).toBe('standard')
+    expect(plan.measurements.evidenceScore).toBe(3)
+    expect(plan.budget).toEqual({ maxAttempts: 2, maxRecoveryAttempts: 2, maxExternalSources: 3, maxParallelSubtasks: 4, maxReviewPasses: 1 })
+  })
+
+  it('uses deep thresholds and budget for high-risk failed work', () => {
+    const plan = selectCognitiveWorkflow(mission({ kind: 'debug', complexity: 'high', risk: 'high', previousFailure: true }))
+
+    expect(plan.executionMode).toBe('deep')
+    expect(plan.measurements).toEqual({ complexityScore: 3, riskScore: 3, noveltyScore: 1, evidenceScore: 2 })
+    expect(plan.budget).toEqual({ maxAttempts: 3, maxRecoveryAttempts: 3, maxExternalSources: 8, maxParallelSubtasks: 8, maxReviewPasses: 2 })
+  })
+
   it('selects design, planning, proof, critique, and simulation for complex code builds', () => {
     const plan = selectCognitiveWorkflow(mission({
       kind: 'build',

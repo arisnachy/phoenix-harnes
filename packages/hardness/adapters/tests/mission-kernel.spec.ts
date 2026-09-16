@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MissionPersistenceKernel,
   replayMissionKernel,
+  resolveMissionAuthorityConflict,
   type MissionGoalLock,
   type MissionKernelEvent,
   type MissionRoute,
@@ -111,14 +112,34 @@ describe('MissionPersistenceKernel', () => {
     const value = kernel(events)
     value.start()
     value.dependencyMissing('mcp:calendar', 'authentication required')
+    value.dependencyMissing('mcp:calendar', 'authentication required')
+    expect(events.filter(event => event.kind === 'dependency-missing')).toHaveLength(1)
+    expect(events.filter(event => event.kind === 'wall-opened')).toHaveLength(1)
     const replayed = replayMissionKernel(events, 'mission-1', 1)
     expect(replayed.status).toBe('WAITING_EXTERNAL')
     value.resume()
+    value.resume()
     expect(value.snapshot()).toMatchObject({ status: 'ACTIVE' })
+    expect(events.filter(event => event.kind === 'resumed')).toHaveLength(1)
     expect(events.at(-1)?.kind).toBe('resumed')
   })
 
-  it('only explicit cancellation can terminate without verified delivery', () => {
+  it('reopens only when the expected dependency becomes available', () => {
+    const events: MissionKernelEvent[] = []
+    const value = kernel(events)
+    value.start()
+    value.dependencyMissing('mcp:calendar', 'authentication required')
+
+    expect(() => value.dependencyAvailable('mcp:drive')).toThrow('dependency is not waiting')
+    value.dependencyAvailable('mcp:calendar')
+    value.dependencyAvailable('mcp:calendar')
+
+    expect(value.snapshot()).toMatchObject({ status: 'ACTIVE', missingDependency: undefined })
+    expect(events.filter(event => event.kind === 'dependency-available')).toHaveLength(1)
+    expect(replayMissionKernel(events, 'mission-1', 1)).toMatchObject({ status: 'ACTIVE', missingDependency: undefined })
+  })
+
+   it('only explicit cancellation can terminate without verified delivery', () => {
     const events: MissionKernelEvent[] = []
     const value = kernel(events)
     value.start()
@@ -141,5 +162,32 @@ describe('MissionPersistenceKernel', () => {
 
     expect(value.snapshot().status).toBe('ACTIVE')
     expect(value.snapshot().criteria.find(item => item.id === 'artifact')).toMatchObject({ status: 'PENDING', evidence: [] })
+  })
+
+  it('resolves authority conflicts by fixed precedence and blocks ties', () => {
+    expect(resolveMissionAuthorityConflict('approval', 'judge', 'approval was not granted')).toMatchObject({
+      winningAuthority: 'approval', resolution: 'higher-authority-wins',
+    })
+    expect(resolveMissionAuthorityConflict('judge', 'router', 'route disagrees with review')).toMatchObject({
+      winningAuthority: 'judge', resolution: 'higher-authority-wins',
+    })
+    expect(resolveMissionAuthorityConflict('goal', 'goal', 'two goal revisions disagree')).toMatchObject({
+      winningAuthority: undefined, resolution: 'blocked-tie',
+    })
+  })
+
+  it('persists authority conflicts and replays an ambiguous conflict as WAITING_EXTERNAL', () => {
+    const events: MissionKernelEvent[] = []
+    const value = kernel(events)
+    value.start()
+    value.recordAuthorityConflict({ left: 'goal', right: 'goal', reason: 'two goal revisions disagree' })
+
+    expect(value.snapshot()).toMatchObject({ status: 'WAITING_EXTERNAL', authorityConflicts: [expect.objectContaining({ resolution: 'blocked-tie' })] })
+    expect(events.at(-1)).toMatchObject({
+      kind: 'authority-conflict',
+      status: 'WAITING_EXTERNAL',
+      conflict: { resolution: 'blocked-tie', winningAuthority: undefined },
+    })
+    expect(replayMissionKernel(events, 'mission-1', 1).status).toBe('WAITING_EXTERNAL')
   })
 })

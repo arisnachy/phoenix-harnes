@@ -26,6 +26,9 @@ function projectWorkflowPlan(plan: CognitiveWorkflowPlan) {
   return {
     profile: { ...plan.profile },
     executionMode: plan.executionMode,
+    measurements: { ...plan.measurements },
+    thresholds: { ...plan.thresholds },
+    budget: { ...plan.budget },
     selected: [...plan.selected],
     reasons: plan.reasons.map(reason => ({ ...reason })),
     skipped: plan.skipped.map(reason => ({ ...reason })),
@@ -69,6 +72,9 @@ export function createCognitiveWorkflowTool(): ToolDefinition {
         properties: {
           profile: { type: 'json', required: true },
           executionMode: { type: 'string', enum: EXECUTION_MODES, required: true },
+          measurements: { type: 'json', required: true },
+          thresholds: { type: 'json', required: true },
+          budget: { type: 'json', required: true },
           selected: { type: 'array', items: { type: 'string' }, required: true },
           reasons: { type: 'json', required: true },
           skipped: { type: 'json', required: true },

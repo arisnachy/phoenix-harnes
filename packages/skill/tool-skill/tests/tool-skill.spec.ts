@@ -1085,6 +1085,17 @@ describe('user-explicit invocation injection', () => {
       && (message.source as { name?: string }).name === 'shared-skill')).toBe(true)
   })
 
+  it('normalizes a shell-style ./name gesture before resolving the skill', async () => {
+    const { ctx, agent } = await invokeHarness()
+    const decision = await proposeStep(ctx, agent, [gesture('./hidden-demo what does this do')])
+    if (decision.kind !== 'enter') throw new Error('expected enter')
+    const injection = decision.messages.at(-1)!
+    expect(injection.source).toMatchObject({ kind: 'skill-invocation', name: 'hidden-demo', form: 'instructions' })
+    const block = injection.content[0]
+    if (block?.type !== 'text') throw new Error('expected text injection')
+    expect(block.text).toContain('Say the magic word: PINEAPPLE.')
+  })
+
   it('recognizes a mid-sentence gesture but not paths, fractions, or broken boundaries', async () => {
     const { ctx, agent } = await invokeHarness()
     const decision = await proposeStep(ctx, agent, [

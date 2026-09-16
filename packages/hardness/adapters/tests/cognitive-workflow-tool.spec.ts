@@ -92,6 +92,10 @@ describe('hardness_workflow tool adapter', () => {
 
     await expect(tool.execute({ profile: simpleProfile }, execution())).resolves.toMatchObject({
       profile: simpleProfile,
+      executionMode: 'fast',
+      measurements: { complexityScore: 1, riskScore: 1, noveltyScore: 1, evidenceScore: 0 },
+      thresholds: { fastMaxComplexity: 2, fastMaxRisk: 2, fastMaxEvidence: 4, deepMinComplexity: 3, deepMinRisk: 3, deepMinEvidence: 6 },
+      budget: { maxAttempts: 1, maxRecoveryAttempts: 1, maxExternalSources: 0, maxParallelSubtasks: 0, maxReviewPasses: 0 },
       selected: ['intent-framing', 'verification-gate', 'outcome-evaluation'],
       qualityGates: ['objective-locked', 'fresh-verification', 'outcome-compared'],
     })

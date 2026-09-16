@@ -16,7 +16,7 @@ import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellProcessRead, S
 import type { SubprocessCollect, SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@phoenix-ai/dsh-subprocess'
 import { installSettingsSection } from '@phoenix-ai/dsh-settings'
 import { clampTimeout, deadline, MAX_TIMER_DELAY_MS, timeoutOf } from '@phoenix-ai/dsh-timeout'
-import { resolveBashPath } from './resolve.ts'
+import { DEFAULT_BASH_HEALTH_CHECK_TIMEOUT_MS, resolveBashPath } from './resolve.ts'
 
 /**
  * Model-friendly environment overrides: disable colors, pagers, and
@@ -54,6 +54,8 @@ export interface Config {
   graceMs?: number
   /** Explicit bash executable; Windows otherwise prefers a native Git Bash installation. */
   bashPath?: string
+  /** Maximum duration of the Windows Git Bash startup health check. */
+  healthCheckTimeoutMs?: number
 }
 
 /** The shape after schemastery applied the defaults (cwd/bashPath have none). */
@@ -92,6 +94,7 @@ export function assertServiceableBashConfig(config: Config): void {
   assertPositiveFinite('maxOutputBytes', resolved.maxOutputBytes)
   assertPositiveFinite('maxSpillBytes', resolved.maxSpillBytes)
   assertPositiveFinite('graceMs', resolved.graceMs)
+  assertPositiveFinite('healthCheckTimeoutMs', resolved.healthCheckTimeoutMs)
   if (resolved.graceMs > MAX_TIMER_DELAY_MS) {
     throw new Error(`bash-local: graceMs must be no greater than ${MAX_TIMER_DELAY_MS}`)
   }
@@ -115,12 +118,14 @@ export class LocalBashExecutor extends ShellExecutor {
     maxSpillBytes: z.number().default(DEFAULT_MAX_SPILL_BYTES),
     graceMs: z.number().default(DEFAULT_GRACE_MS),
     bashPath: z.string(),
+    healthCheckTimeoutMs: z.number().default(DEFAULT_BASH_HEALTH_CHECK_TIMEOUT_MS),
   })
 
   /** The currently authoritative config: the settings section, or the composition entry. */
   private source: () => ResolvedConfig
 
   private declaredBashPath: string | undefined
+  private declaredHealthCheckTimeoutMs: number
   private resolvedBashPath: string
 
   /** Validated config (schemastery applied the defaults before construction). */
@@ -140,7 +145,8 @@ export class LocalBashExecutor extends ShellExecutor {
     assertServiceableBashConfig(entry)
     this.source = () => entry
     this.declaredBashPath = entry.bashPath
-    this.resolvedBashPath = resolveBashPath(entry.bashPath)
+    this.declaredHealthCheckTimeoutMs = entry.healthCheckTimeoutMs
+    this.resolvedBashPath = resolveBashPath(entry.bashPath, process.env, process.platform, undefined, entry.healthCheckTimeoutMs)
     installSettingsSection(ctx, SHELL_SETTINGS_NAMESPACE, LocalBashExecutor.Config, entry, {
       validate: assertServiceableBashConfig,
       setSource: (current) => {
@@ -148,9 +154,11 @@ export class LocalBashExecutor extends ShellExecutor {
       },
       onChange: () => {
         const declared = this.source().bashPath
-        if (declared === this.declaredBashPath) return
+        const healthCheckTimeoutMs = this.source().healthCheckTimeoutMs
+        if (declared === this.declaredBashPath && healthCheckTimeoutMs === this.declaredHealthCheckTimeoutMs) return
         this.declaredBashPath = declared
-        this.resolvedBashPath = resolveBashPath(declared)
+        this.declaredHealthCheckTimeoutMs = healthCheckTimeoutMs
+        this.resolvedBashPath = resolveBashPath(declared, process.env, process.platform, undefined, healthCheckTimeoutMs)
       },
     })
   }

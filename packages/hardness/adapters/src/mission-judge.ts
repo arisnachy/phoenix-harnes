@@ -74,6 +74,8 @@ function list(value: unknown): value is string[] {
 
 const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
 
+export { createDeterministicMissionJudge } from './mission-local-judge.ts'
+
 function unavailable(): MissionJudgeDecision {
   return { verdict: 'blocked', summary: WAITING_SUMMARY, evidence: [], requiredChanges: [], criteria: [],
     quality: { verdict: 'fail', summary: 'Verification pending', evidence: [], findings: [] } }
