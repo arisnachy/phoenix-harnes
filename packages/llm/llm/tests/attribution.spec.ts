@@ -17,9 +17,9 @@ describe('APP_IDENTITY', () => {
     expect(APP_IDENTITY.version).toBe(manifest.version)
   })
 
-  it('carries only static public product facts', () => {
+  it('identifies the product as PHOENIX, not the upstream harness', () => {
     expect(APP_IDENTITY).toEqual({
-      product: 'deepseek-harness',
+      product: 'PHOENIX',
       version: manifest.version,
       url: 'https://github.com/arisnachy/phoenix-harnes',
     })
@@ -27,9 +27,9 @@ describe('APP_IDENTITY', () => {
 })
 
 describe('userAgent', () => {
-  it('renders product/version with the +url comment', () => {
+  it('renders the PHOENIX product/version with the +url comment', () => {
     expect(userAgent()).toBe(
-      `deepseek-harness/${manifest.version} (+https://github.com/arisnachy/phoenix-harnes)`,
+      `PHOENIX/${manifest.version} (+https://github.com/arisnachy/phoenix-harnes)`,
     )
   })
 
