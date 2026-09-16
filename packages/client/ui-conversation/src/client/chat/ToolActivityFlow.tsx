@@ -250,8 +250,8 @@ function TurnStatus({ startTime, progress, t }: {
   /** The running turn's logged `turn/start` time; null falls back to mount
    *  time when that boundary is outside the window. */
   readonly startTime: number | null
-  /** Safe phase derived from the current chat projection. */
-  readonly progress: TurnProgress | null
+  /** Safe phase and activity derived from the current chat projection. */
+  readonly progress: TurnProgress
   /** The owning view's locale seat. */
   readonly t: ChatViewSlotProps['t']
 }) {
@@ -266,20 +266,31 @@ function TurnStatus({ startTime, progress, t }: {
     const id = setInterval(tick, 1000)
     return () => { clearInterval(id) }
   }, [anchor])
-  const statusKey = progress === 'running-tools'
+  const statusKey = progress.phase === 'running-tools'
     ? 'status.runningTools'
-    : progress === 'verifying'
+    : progress.phase === 'verifying'
       ? 'status.verifying'
-      : progress === 'preparing'
+      : progress.phase === 'preparing'
         ? 'status.preparing'
         : 'status.thinking'
   const showClock = elapsedMs >= 15_000
   return (
-    <div className={chatCss.turnStatus} role="status" aria-live="polite">
-      <span className={chatCss.phoenixActivity} aria-hidden="true">
+    <div
+      className={chatCss.turnStatus}
+      data-phase={progress.phase}
+      data-activity={progress.activity}
+      role="status"
+      aria-live="polite"
+    >
+      <span className={chatCss.phoenixActivity} data-activity={progress.activity} aria-hidden="true">
         <PhoenixLogo size={28} />
       </span>
-      <span>{t(statusKey)}</span>
+      <span className={chatCss.turnStatusText}>{t(statusKey)}</span>
+      {progress.detail !== undefined && progress.detail !== '' && (
+        <span className={chatCss.turnStatusDetail} title={progress.detail} aria-hidden="true">
+          · {progress.detail}
+        </span>
+      )}
       {showClock && (
         <span className={chatCss.turnStatusClock} aria-hidden>
           {formatRunDuration(elapsedMs, t)}
@@ -305,7 +316,7 @@ export function ToolActivityFlow({ nodes, turnStatus, ...seatProps }: ToolActivi
     <>
       {flow.map((item, index) => (
         <Fragment key={item.key}>
-          {turnStatus !== undefined && index === statusBeforeIndex && (
+          {turnStatus !== undefined && turnStatus.progress !== null && index === statusBeforeIndex && (
             <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress} t={seatProps.t} />
           )}
           {item.kind === 'node'
@@ -325,7 +336,7 @@ export function ToolActivityFlow({ nodes, turnStatus, ...seatProps }: ToolActivi
               )}
         </Fragment>
       ))}
-      {turnStatus !== undefined && statusBeforeIndex === -1 && (
+      {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
         <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress} t={seatProps.t} />
       )}
     </>

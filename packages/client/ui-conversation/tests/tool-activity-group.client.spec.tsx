@@ -235,6 +235,9 @@ describe('chat tool activity grouping', () => {
     renderChat([context(1, 'system')], [runningTool()])
 
     const status = screen.getByRole('status')
+    expect(status.dataset.phase).toBe('running-tools')
+    expect(status.dataset.activity).toBe('browsing')
+    expect(status.textContent).toContain('web_search')
     const live = screen.getByTestId('live-tool-activity')
     expectBefore(status, live)
     expect(live.querySelector('[data-testid="node-tool-call"]')).toBeTruthy()
