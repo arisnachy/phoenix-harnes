@@ -18,6 +18,11 @@ static void False(bool value, string name, List<string> failures)
     if (value) failures.Add($"{name}: expected false");
 }
 
+static void EqualInt(int expected, int actual, string name, List<string> failures)
+{
+    if (expected != actual) failures.Add($"{name}: expected '{expected}', got '{actual}'");
+}
+
 Equal("https://example.com/", BrowserNavigation.NormalizeAddress("example.com")?.ToString(), "hostname uses https", failures);
 Equal("http://localhost:3080/", BrowserNavigation.NormalizeAddress("localhost:3080")?.ToString(), "localhost uses http", failures);
 Equal("http://127.0.0.1:3080/", BrowserNavigation.NormalizeAddress("127.0.0.1:3080")?.ToString(), "loopback uses http", failures);
@@ -38,6 +43,11 @@ Equal(null, close.Url, "close command has no url", failures);
 False(BrowserCommand.TryParse("{not-json}", out _), "malformed json rejected", failures);
 False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"javascript:alert(1)\"}", out _), "unsafe open command rejected", failures);
 False(BrowserCommand.TryParse("{\"type\":\"unknown\"}", out _), "unknown command rejected", failures);
+
+True(BrowserLayout.StartCollapsed, "embedded browser starts collapsed", failures);
+EqualInt(360, BrowserLayout.PreferredBrowserWidth(1100), "small window keeps compact browser", failures);
+EqualInt(374, BrowserLayout.PreferredBrowserWidth(1440), "normal window gives chat about three quarters", failures);
+EqualInt(520, BrowserLayout.PreferredBrowserWidth(2400), "wide window caps browser width", failures);
 
 // Desktop startup must be visible before the managed runtime is ready. This is the regression
 // contract for the installed EXE appearing to do nothing on first launch.
