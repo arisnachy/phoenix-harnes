@@ -21,6 +21,7 @@ internal sealed class PhoenixDesktopWindow : Form
     private readonly Label startupStatus = new();
     private bool initialized;
     private bool runtimeReady;
+    private bool applyingBrowserLayout;
 
     internal PhoenixDesktopWindow(Uri phoenixUri, bool initializeWebViewsOnShow = true)
     {
@@ -50,9 +51,10 @@ internal sealed class PhoenixDesktopWindow : Form
         Controls.Add(split);
 
         // SplitContainer validates min sizes against its current Width. During construction the
-        // control has not been laid out yet, so assigning 520/320/820 here can throw before the
-        // form ever reaches Shown. Apply the intended geometry only after WinForms has a real size.
+        // control has not been laid out yet, so apply geometry only after WinForms has a real size.
+        // The chat owns the full window at startup; the compact browser appears only when invoked.
         Shown += (_, _) => ApplyInitialSplitLayout();
+        split.Resize += (_, _) => { if (!split.Panel2Collapsed) ApplyBrowserSplitLayout(); };
         if (initializeWebViewsOnShow)
             Shown += async (_, _) => await InitializeAsync();
         KeyDown += OnWindowKeyDown;
@@ -60,27 +62,46 @@ internal sealed class PhoenixDesktopWindow : Form
 
     private void ApplyInitialSplitLayout()
     {
+        split.Panel2Collapsed = BrowserLayout.StartCollapsed;
+        if (!split.Panel2Collapsed)
+            ApplyBrowserSplitLayout();
+    }
+
+    private void ApplyBrowserSplitLayout()
+    {
+        if (applyingBrowserLayout || split.Panel2Collapsed)
+            return;
+
         var width = split.ClientSize.Width;
         if (width <= split.SplitterWidth + 2)
             return;
 
-        const int desiredLeftMin = 520;
-        const int desiredRightMin = 320;
-        const int desiredDistance = 820;
+        applyingBrowserLayout = true;
+        try
+        {
+            const int desiredLeftMin = 520;
+            const int desiredRightMin = 320;
+            var desiredBrowserWidth = BrowserLayout.PreferredBrowserWidth(width);
 
-        // Reset constraints before moving the splitter, then restore as much of the desired
-        // geometry as the actual window width can safely accommodate.
-        split.Panel1MinSize = 0;
-        split.Panel2MinSize = 0;
+            // Reset constraints before moving the splitter, then restore as much of the desired
+            // geometry as the actual window width can safely accommodate.
+            split.Panel1MinSize = 0;
+            split.Panel2MinSize = 0;
 
-        var maxDistance = Math.Max(1, width - desiredRightMin - split.SplitterWidth);
-        var minDistance = Math.Min(desiredLeftMin, maxDistance);
-        var distance = Math.Clamp(desiredDistance, minDistance, maxDistance);
-        split.SplitterDistance = distance;
-        split.Panel1MinSize = Math.Min(desiredLeftMin, distance);
+            var maxDistance = Math.Max(1, width - desiredRightMin - split.SplitterWidth);
+            var minDistance = Math.Min(desiredLeftMin, maxDistance);
+            var desiredDistance = width - desiredBrowserWidth - split.SplitterWidth;
+            var distance = Math.Clamp(desiredDistance, minDistance, maxDistance);
+            split.SplitterDistance = distance;
+            split.Panel1MinSize = Math.Min(desiredLeftMin, distance);
 
-        var availableRight = Math.Max(0, width - distance - split.SplitterWidth);
-        split.Panel2MinSize = Math.Min(desiredRightMin, availableRight);
+            var availableRight = Math.Max(0, width - distance - split.SplitterWidth);
+            split.Panel2MinSize = Math.Min(desiredRightMin, availableRight);
+        }
+        finally
+        {
+            applyingBrowserLayout = false;
+        }
     }
 
     internal void ShowAndActivate()
@@ -169,7 +190,7 @@ internal sealed class PhoenixDesktopWindow : Form
         var close = new ToolStripButton("×") { Alignment = ToolStripItemAlignment.Right, ToolTipText = "Ocultar navegador (F9 para volver a abrir)" };
 
         address.AutoSize = false;
-        address.Width = 430;
+        address.Width = 260;
         address.ToolTipText = "Dirección o búsqueda";
 
         backButton.Click += (_, _) => { if (browserView.CanGoBack) browserView.GoBack(); };
@@ -336,6 +357,8 @@ internal sealed class PhoenixDesktopWindow : Form
     private void SetBrowserVisible(bool visible)
     {
         split.Panel2Collapsed = !visible;
+        if (visible)
+            ApplyBrowserSplitLayout();
         PublishBrowserState();
     }
 
