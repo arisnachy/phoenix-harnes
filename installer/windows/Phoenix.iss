@@ -24,8 +24,7 @@ UninstallDisplayIcon={app}\Phoenix.exe
 SetupIconFile={#SourceDir}\phoenix.ico
 
 [Files]
-Source: "{#SourceDir}\Phoenix.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\bootstrap-runtime.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Tasks]
 Name: "desktopicon"; Description: "Crear acceso directo en el escritorio"; GroupDescription: "Accesos directos:"; Flags: checkedonce
