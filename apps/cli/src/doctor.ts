@@ -19,7 +19,7 @@ const CLIENT_MODULE_PATTERN = /@[A-Za-z0-9._-]+\/dsh-client-modules\/client\.js/
 /** Validate the HTML bootstrap that registers the client module system. */
 export function inspectFrontendBootstrap(html: string): Pick<Check, 'ok' | 'detail'> {
   const hasLoader = html.includes('window.__ModuleLoader__')
-  const clientModules = html.match(CLIENT_MODULE_PATTERN) ?? []
+  const clientModules: readonly string[] = html.match(CLIENT_MODULE_PATTERN) ?? []
   const hasPhoenixModule = clientModules.includes(PHOENIX_CLIENT_MODULE)
   const hasForeignModule = clientModules.some(reference => reference !== PHOENIX_CLIENT_MODULE)
   return hasLoader && hasPhoenixModule && !hasForeignModule
