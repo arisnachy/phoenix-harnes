@@ -35,9 +35,6 @@ internal sealed class PhoenixDesktopWindow : Form
         split.Dock = DockStyle.Fill;
         split.Orientation = Orientation.Vertical;
         split.SplitterWidth = 6;
-        split.Panel1MinSize = 520;
-        split.Panel2MinSize = 320;
-        split.SplitterDistance = 820;
 
         phoenixView.Dock = DockStyle.Fill;
         browserView.Dock = DockStyle.Fill;
@@ -52,9 +49,38 @@ internal sealed class PhoenixDesktopWindow : Form
         split.Panel2.Controls.Add(browserToolbar);
         Controls.Add(split);
 
+        // SplitContainer validates min sizes against its current Width. During construction the
+        // control has not been laid out yet, so assigning 520/320/820 here can throw before the
+        // form ever reaches Shown. Apply the intended geometry only after WinForms has a real size.
+        Shown += (_, _) => ApplyInitialSplitLayout();
         if (initializeWebViewsOnShow)
             Shown += async (_, _) => await InitializeAsync();
         KeyDown += OnWindowKeyDown;
+    }
+
+    private void ApplyInitialSplitLayout()
+    {
+        var width = split.ClientSize.Width;
+        if (width <= split.SplitterWidth + 2)
+            return;
+
+        const int desiredLeftMin = 520;
+        const int desiredRightMin = 320;
+        const int desiredDistance = 820;
+
+        // Reset constraints before moving the splitter, then restore as much of the desired
+        // geometry as the actual window width can safely accommodate.
+        split.Panel1MinSize = 0;
+        split.Panel2MinSize = 0;
+
+        var maxDistance = Math.Max(1, width - desiredRightMin - split.SplitterWidth);
+        var minDistance = Math.Min(desiredLeftMin, maxDistance);
+        var distance = Math.Clamp(desiredDistance, minDistance, maxDistance);
+        split.SplitterDistance = distance;
+        split.Panel1MinSize = Math.Min(desiredLeftMin, distance);
+
+        var availableRight = Math.Max(0, width - distance - split.SplitterWidth);
+        split.Panel2MinSize = Math.Min(desiredRightMin, availableRight);
     }
 
     internal void ShowAndActivate()
