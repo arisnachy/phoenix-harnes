@@ -44,8 +44,6 @@
  *             name: Acme Think
  *             contextWindow: 262144
  *             maxTokens: 32768
- *             # key = selectable level, value = wire spelling; only off may
- *             # leave the value empty (supported, send nothing).
  *             reasoningEfforts:
  *               off:
  *               high: high
@@ -68,6 +66,12 @@ import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.
 import { discoverModels } from './discovery.ts'
 import { installCodexImageGeneration } from './image-generation.ts'
 import { registerPiAiFlows } from './login.ts'
+import {
+  OPENCODE_FREE_PROVIDER,
+  createOpenCodeFreeCatalog,
+  opencodeFreeProfile,
+  startOpenCodeFreeProxy,
+} from './opencode-free.ts'
 
 export { PiAiAdapter } from './adapter.ts'
 export type { PiAiAdapterOptions } from './adapter.ts'
@@ -91,6 +95,14 @@ export {
 } from './config.ts'
 export { recordKeyFor } from './auth.ts'
 export { supportedProtocols } from './provider.ts'
+export {
+  OPENCODE_FREE_BASE_URL,
+  OPENCODE_FREE_CATALOG_URL,
+  OPENCODE_FREE_PROVIDER,
+  OPENCODE_FREE_PROXY_BASE_URL,
+  isOpenCodeFreeCandidate,
+  parseOpenCodeFreeModels,
+} from './opencode-free.ts'
 export {
   classifyCodexImageFailure,
   codexDoctorSupportsImageGeneration,
@@ -140,9 +152,6 @@ function phoenixLocalProfile(): PiAiProviderProfile {
  */
 function registrationFacts(profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>): unknown {
   return [...profiles.entries()]
-    // `displayName` rides along because the registry hands it to every selector
-    // through `providerInfo()`: a rename that did not re-register would leave
-    // the old label showing until some unrelated fact happened to change.
     .map(([provider, profile]) => ({
       provider,
       displayName: profile.displayName,
@@ -152,12 +161,8 @@ function registrationFacts(profiles: ReadonlyMap<string, ResolvedPiAiProviderPro
 }
 
 /**
- * The configurable-provider directory: every installed catalog route, the
- * optional local ChatGPT Web bridge route, plus every user-configurable route
- * the current profiles declare. Phoenix Local is intentionally absent here:
- * its lifecycle has a dedicated Settings card rather than a fake API form.
- * @param profiles - the currently resolved provider profiles.
- * @returns the directory entries in catalog order, declared routes last.
+ * The configurable-provider directory: built-ins with their own lifecycle UI
+ * are intentionally omitted so Settings never asks for a fake API credential.
  */
 function directoryEntries(
   profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>,
@@ -177,7 +182,7 @@ function directoryEntries(
     declare(provider, provider === CHATGPT_WEB_PROVIDER ? chatgptWebDefaults().displayName : provider)
   }
   for (const [provider, profile] of profiles) {
-    if (provider === PHOENIX_LOCAL_PROVIDER) continue
+    if (provider === PHOENIX_LOCAL_PROVIDER || provider === OPENCODE_FREE_PROVIDER) continue
     declare(provider, profile.displayName)
   }
   return [...entries.values()]
@@ -185,33 +190,32 @@ function directoryEntries(
 
 /** Register one generic pi-ai adapter for all configured provider routes. */
 export function apply(ctx: Context, config: Config): void {
-  // The agent-plane image row reuses this package without creating a second
-  // provider adapter or settings surface in every mounted session.
   if (config.imageOnly === true) {
-    // Preset rows are mounted only after the host services exist. Registering
-    // against this exact agent context keeps the tool in the agent layer;
-    // ctx.inject would re-enter through the host service context and make the
-    // registration invisible to the mounting agent.
     installCodexImageGeneration(ctx)
     return
   }
 
+  const openCodeCatalog = createOpenCodeFreeCatalog()
+  let openCodeCatalogRevision = 0
   let current: () => Config = () => config
   let lastRaw: Config | undefined
+  let lastCatalogRevision = -1
   let memoized: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
+
   /**
-   * The resolved profiles for the current configuration, memoized by the raw
-   * snapshot's identity. The local route is injected last so a user settings
-   * document cannot redirect Phoenix Local away from its loopback-only proxy.
+   * Built-in local and free routes are injected last, so user settings cannot
+   * redirect their loopback seams or turn an anonymous route into a paid one.
    */
   const profiles = (): ReadonlyMap<string, ResolvedPiAiProviderProfile> => {
     const raw = current()
-    if (raw === lastRaw && memoized !== undefined) return memoized
+    if (raw === lastRaw && lastCatalogRevision === openCodeCatalogRevision && memoized !== undefined) return memoized
     const next = resolveProfiles({
       ...(raw.providers ?? {}),
       [PHOENIX_LOCAL_PROVIDER]: phoenixLocalProfile(),
+      [OPENCODE_FREE_PROVIDER]: opencodeFreeProfile(openCodeCatalog.models()),
     })
     lastRaw = raw
+    lastCatalogRevision = openCodeCatalogRevision
     memoized = next
     return next
   }
@@ -222,14 +226,10 @@ export function apply(ctx: Context, config: Config): void {
     profile: ResolvedPiAiProviderProfile,
   ): Promise<string | undefined> => {
     const ref = profile.apiKeyEnv
-    // Only a profile that names no credential at all defers to pi-ai's
-    // provider-native discovery. Phoenix Local deliberately names none and is
-    // therefore usable without cloud credentials, API keys, or tokens.
     if (ref === undefined) return undefined
     const credentials = ctx.get('credentials')
     const hit = credentials !== undefined
       ? (await credentials.resolve(ref))?.value
-      // Without the seam the environment is the whole credential plane.
       : launchEnvironmentOf(ctx).get(ref)?.value
     if (hit !== undefined && hit.length > 0) return assertUsableApiKey(hit, 'llm-pi-ai', ref)
     throw new LlmError(
@@ -240,9 +240,6 @@ export function apply(ctx: Context, config: Config): void {
     )
   }
 
-  // One store and one ambient context for the whole plugin instance: both read
-  // through `ctx` per call, so they stay correct across the collection rebuilds
-  // a configuration change causes, and a sign-in survives one.
   const auth = { credentials: credentialStoreFrom(ctx), authContext: authContextFrom(ctx) }
   const adapter = new PiAiAdapter({
     profiles,
@@ -256,29 +253,14 @@ export function apply(ctx: Context, config: Config): void {
       )
     },
   })
-  // Independent of the route set: signing in is what makes a route worth
-  // adding, so the flows are offered before any profile names their provider.
-  // Scoped to the authorization seam rather than injected outright, because a
-  // composition without it (headless, ACP) simply has no surface to sign in
-  // from, while everything else this plugin does still works.
+
   ctx.inject(['authorization'], (authorized) => { registerPiAiFlows(authorized, auth) })
-  // Image generation is registered by the agent-plane `imageOnly` row below.
-  // Keeping it out of this host adapter prevents a model-facing tool from
-  // leaking into the global layer (and into presets that did not opt in).
-  // The full installed catalog is configurable from the moment the plugin
-  // mounts — dormant or not — so configuration surfaces can offer every
-  // pi-ai provider before any route exists. Hand-declared routes join it as
-  // profiles appear, and leave with them.
+
   let directory: DirectoryRegistrationHandle | undefined
   let directoryFacts: unknown
   const ensureDirectory = (): void => {
     const entries = directoryEntries(profiles())
     if (deepEqualJson(entries, directoryFacts)) return
-    // Atomic replace, never dispose-then-register: a route another adapter
-    // family already declares (a profile keyed `deepseek-official`) would
-    // otherwise leave this plugin's whole directory withdrawn and the Models
-    // page empty. The candidate set is validated first, so a collision keeps
-    // the previous entries serving and only costs a diagnostic.
     if (directory === undefined) {
       directory = ctx.llm.registerConfigurableProviders(entries)
     } else {
@@ -287,41 +269,20 @@ export function apply(ctx: Context, config: Config): void {
     directoryFacts = entries
   }
   ensureDirectory()
-  /**
-   * The credential a named route already resolves, for an interrogation whose
-   * draft carries none. A route being declared for the first time names no
-   * profile yet, and a profile that names no credential defers to pi-ai's own
-   * discovery, so both answer `undefined` and the endpoint is asked
-   * unauthenticated — the same posture a request to that route would take.
-   */
+
   const storedApiKey = async (provider: string | undefined): Promise<string | undefined> => {
     if (provider === undefined) return undefined
     const profile = profiles().get(provider)
     if (profile === undefined) return undefined
     return resolveApiKey(provider, profile)
   }
-  // Interrogating an endpoint is a configuration-time action over a draft, so
-  // it is offered for the whole namespace rather than per route: the provider
-  // a surface is adding does not exist yet. The draft is the whole request
-  // except the credential: a configuration surface edits a redacted descriptor
-  // and never holds a stored secret, so an already-configured route supplies
-  // its own here rather than being interrogated unauthenticated.
   ctx.llm.registerModelDiscovery(NS, request => discoverModels(request, () => storedApiKey(request.provider)))
-  // Route effects bind to this apply fiber via the stable `ctx` reference,
-  // even when a swap runs inside the scoped settings callback below. Phoenix
-  // Local means this adapter always has at least one route even with no user
-  // settings or cloud provider configured.
+
   let registration: AdapterRegistrationHandle | undefined
   let registeredFacts: unknown
   const ensureRegistrationFacts = (): void => {
     const facts = registrationFacts(profiles())
     if (deepEqualJson(facts, registeredFacts)) return
-    // The registry captures the route set and each route's retry policy at
-    // registration, so a change to either must re-register. The swap is
-    // atomic (same adapter instance, validated before anything moves): a
-    // conflicting route leaves the previous routes serving requests, and
-    // `registeredFacts` only advances once the registry actually holds the
-    // new set — so returning to a working configuration always re-applies.
     const routes = [...profiles().keys()]
     if (registration === undefined) {
       registration = ctx.llm.registerAdapter(routes, adapter)
@@ -332,32 +293,61 @@ export function apply(ctx: Context, config: Config): void {
   }
   ensureRegistrationFacts()
 
+  // The bridge is loopback-only. It gives pi-ai the local Authorization marker
+  // it requires, then strips that marker before the request leaves Phoenix.
+  // The same Cordis effect owns catalog refresh and port cleanup across reloads.
+  void ctx.effect(async () => {
+    let server: Awaited<ReturnType<typeof startOpenCodeFreeProxy>> | undefined
+    try {
+      server = await startOpenCodeFreeProxy()
+    } catch (error: unknown) {
+      ctx.logger.error('opencode-free: loopback proxy could not start')
+      ctx.logger.error(error)
+    }
+
+    const refresh = async (force = false): Promise<void> => {
+      const changed = await openCodeCatalog.refresh(force)
+      if (!changed) return
+      openCodeCatalogRevision += 1
+      // Re-resolve immediately so existing adapter snapshots observe a new
+      // profile identity on the next list/resolve/call operation.
+      memoized = undefined
+      try {
+        ensureRegistrationFacts()
+      } catch (error) {
+        ctx.logger.error('opencode-free: refreshed catalog could not be registered; keeping previous routes')
+        ctx.logger.error(error)
+      }
+    }
+
+    await refresh(true)
+    const timer = setInterval(() => { void refresh() }, 60_000)
+    timer.unref()
+    return async () => {
+      clearInterval(timer)
+      if (server === undefined) return
+      server.closeAllConnections()
+      await new Promise<void>((resolve) => {
+        server!.close((error) => {
+          if (error !== undefined) ctx.logger.error(error)
+          resolve()
+        })
+      })
+    }
+  }, 'OpenCode free model bridge')
+
   installSettingsSection(ctx, NS, Config, config, {
-    // User-written provider profiles are validated independently. Phoenix
-    // Local itself is injected after that validation and cannot be redirected
-    // to a non-loopback endpoint by settings.
     validate: assertServiceable,
     setSource: (source) => {
       current = source
     },
     onChange: () => {
-      // Named here rather than left to the settings watcher: `assertServiceable`
-      // cannot see the llm registry, so a profile claiming a route another
-      // adapter family owns is stored successfully and only fails at this swap.
-      // Without its own diagnostic that refusal reaches the operator as a
-      // generic "settings: watcher failed", naming neither the route nor why it
-      // is not serving. The previous routes keep serving either way.
       try {
         ensureRegistrationFacts()
       } catch (error) {
         ctx.logger.error('llm-pi-ai: keeping the previously registered routes after a refused update')
         ctx.logger.error(error)
       }
-      // The directory follows the profiles the registry accepted, so a route
-      // that failed to register is not advertised as configurable. A refused
-      // directory swap is contained here for the same reason the registry's
-      // is: the previous entries keep serving, and `directoryFacts` stays put
-      // so returning to a working configuration re-applies.
       try {
         ensureDirectory()
       } catch (error) {
