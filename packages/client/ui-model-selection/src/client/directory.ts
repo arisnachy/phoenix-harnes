@@ -10,6 +10,11 @@ import type {
 } from '@phoenix-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
+import {
+  assertPhoenixLocalSelectable,
+  projectPhoenixLocalAvailability,
+  type PhoenixLocalInstallState,
+} from './phoenix-local-visibility.ts'
 
 /** Directory snapshot both entries render from. */
 export interface ModelDirectoryState {
@@ -48,11 +53,13 @@ export class ModelDirectory {
    * @param sessions - the session wire face (captured from the plugin's root connection).
    * @param sessionId - the owning session.
    * @param available - whether this session may use Agent-bound model RPCs.
+   * @param readLocalModelState - optional Host-owned install-state reader used to gate Phoenix Local.
    */
   constructor(
     private readonly sessions: Pick<IApiClient['sessions'], 'models' | 'selectModel'>,
     private readonly sessionId: SessionId,
     private readonly available: () => boolean,
+    private readonly readLocalModelState?: () => Promise<PhoenixLocalInstallState | undefined>,
   ) {}
 
   /**
@@ -65,15 +72,21 @@ export class ModelDirectory {
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'loading'; s.error = null })
     const { result } = await this.sessions.models({ sessionId: this.sessionId })
-    if (this.disposed || generation !== this.generation) {
-      if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-      return result.value
-    }
     if (!result.ok) {
-      this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
+      if (!this.disposed && generation === this.generation) {
+        this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
+      }
       throw new Error(`session.models failed: ${result.error.code}: ${result.error.message}`)
     }
-    const { current, routable, groups, failures } = result.value
+
+    const localState = await this.safeLocalModelState()
+    const projected = {
+      ...result.value,
+      ...projectPhoenixLocalAvailability(result.value, localState),
+    }
+    if (this.disposed || generation !== this.generation) return projected
+
+    const { current, routable, groups, failures } = projected
     this.store.update((s) => {
       s.current = current
       s.routable = routable
@@ -82,7 +95,7 @@ export class ModelDirectory {
       s.status = 'ready'
       s.error = null
     })
-    return result.value
+    return projected
   }
 
   /**
@@ -95,6 +108,17 @@ export class ModelDirectory {
     this.assertAvailable()
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'selecting'; s.error = null })
+
+    const localState = await this.safeLocalModelState()
+    if (this.disposed || generation !== this.generation) return
+    try {
+      assertPhoenixLocalSelectable(selection, localState)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.store.update((s) => { s.status = 'error'; s.error = message })
+      throw error
+    }
+
     const { result } = await this.sessions.selectModel({
       sessionId: this.sessionId,
       provider: selection.provider,
@@ -111,8 +135,8 @@ export class ModelDirectory {
       this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
       throw new Error(`session.selectModel failed: ${result.error.code}: ${result.error.message}`)
     }
-    // The Host validated the route before accepting it, so a selection that
-    // landed is by construction one it can serve.
+    // The Host validated the route before accepting it, and Phoenix Local has
+    // additionally passed the install-state gate immediately before submission.
     this.store.update((s) => {
       s.current = result.value.selected
       s.routable = true
@@ -144,6 +168,17 @@ export class ModelDirectory {
   /** Scope teardown: late settlements lose write access to the store. */
   dispose(): void {
     this.disposed = true
+  }
+
+  /** Read local state without letting an optional Host-Remote failure break cloud model selection. */
+  private async safeLocalModelState(): Promise<PhoenixLocalInstallState | undefined> {
+    if (this.readLocalModelState === undefined) return undefined
+    try {
+      return await this.readLocalModelState()
+    } catch {
+      // Phoenix Local is fail-closed; unrelated cloud providers remain usable.
+      return undefined
+    }
   }
 
   private assertAvailable(): void {

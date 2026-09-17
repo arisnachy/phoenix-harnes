@@ -17,6 +17,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import type { ConnectionHandle, SessionId } from '@phoenix-ai/dsh-api-remotes/client'
 import type { SessionRuntime } from '@phoenix-ai/dsh-client-runtime/client'
 import { ModelDirectory } from './directory.ts'
+import type { PhoenixLocalInstallState } from './phoenix-local-visibility.ts'
 
 declare module '@phoenix-ai/cordis' {
   interface Context {
@@ -28,6 +29,11 @@ declare module '@phoenix-ai/cordis' {
 interface LiveState {
   /** Per-session directories; entries are deleted by their scope disposer. */
   readonly directories: Map<SessionId, ModelDirectory>
+}
+
+/** Browser-safe shape of the Host Remote method used only for local-model availability. */
+interface PluginInventoryLocalRemote {
+  localModelState?: () => Promise<PhoenixLocalInstallState>
 }
 
 /** The `ctx.modelDirectories` session model-selection service. */
@@ -74,10 +80,15 @@ export class ModelDirectoryResolver extends Service {
     const actx = sessions.scope(sessionId)
     if (actx === undefined) throw new Error(`ui-model-selection: session "${String(sessionId)}" resolved no scope`)
     const connection = this.ctx.get('connection') as ConnectionHandle
+    const pluginInventory = (this.ctx.remote as unknown as { pluginInventory?: PluginInventoryLocalRemote }).pluginInventory
+    const readLocalModelState = pluginInventory?.localModelState === undefined
+      ? undefined
+      : () => pluginInventory.localModelState!()
     const directory = new ModelDirectory(
       connection.api.sessions,
       sessionId,
       () => sessions.subagentAddress(sessionId) === undefined,
+      readLocalModelState,
     )
     live.directories.set(sessionId, directory)
     // The composer cannot read this plugin (the dependency runs one way), so
