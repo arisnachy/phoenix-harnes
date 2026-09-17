@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { inspectChatGptWebHealth, inspectFrontendBootstrap } from '../src/doctor.ts'
 
 describe('PHOENIX doctor frontend bootstrap check', () => {
-  it('accepts the Phoenix client-modules bootstrap and rejects the legacy module', () => {
+  it('accepts the Phoenix client-modules bootstrap and rejects a foreign module', () => {
     expect(inspectFrontendBootstrap([
       '<script>window.__ModuleLoader__={}</script>',
       '<script src="/plugins/@phoenix-ai/dsh-client-modules/client.js?rev=abc"></script>',
@@ -13,17 +13,17 @@ describe('PHOENIX doctor frontend bootstrap check', () => {
 
     expect(inspectFrontendBootstrap([
       '<script>window.__ModuleLoader__={}</script>',
-      '<script src="/plugins/@deepseek-ai/dsh-client-modules/client.js"></script>',
+      '<script src="/plugins/@legacy-ai/dsh-client-modules/client.js"></script>',
     ].join(''))).toEqual({
       ok: false,
-      detail: 'Phoenix client module bootstrap is missing or still references the legacy module',
+      detail: 'Phoenix client module bootstrap is missing or still references a foreign module',
     })
   })
 
   it('rejects an HTML response without the module loader bootstrap', () => {
     expect(inspectFrontendBootstrap('<html><body>PHOENIX</body></html>')).toEqual({
       ok: false,
-      detail: 'Phoenix client module bootstrap is missing or still references the legacy module',
+      detail: 'Phoenix client module bootstrap is missing or still references a foreign module',
     })
   })
 })
