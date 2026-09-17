@@ -17,7 +17,10 @@ internal sealed class PhoenixDesktopWindow : Form
     private readonly ToolStripTextBox address = new();
     private readonly ToolStripButton backButton = new("←");
     private readonly ToolStripButton forwardButton = new("→");
+    private readonly Panel startupOverlay = new();
+    private readonly Label startupStatus = new();
     private bool initialized;
+    private bool runtimeReady;
 
     internal PhoenixDesktopWindow(Uri phoenixUri)
     {
@@ -40,6 +43,10 @@ internal sealed class PhoenixDesktopWindow : Form
         browserView.Dock = DockStyle.Fill;
         split.Panel1.Controls.Add(phoenixView);
 
+        BuildStartupOverlay();
+        split.Panel1.Controls.Add(startupOverlay);
+        startupOverlay.BringToFront();
+
         var browserToolbar = BuildBrowserToolbar();
         split.Panel2.Controls.Add(browserView);
         split.Panel2.Controls.Add(browserToolbar);
@@ -55,6 +62,67 @@ internal sealed class PhoenixDesktopWindow : Form
         if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
         Activate();
         BringToFront();
+    }
+
+    internal void SetStartupStatus(string text, bool isError = false)
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired)
+        {
+            try { BeginInvoke((Action)(() => SetStartupStatus(text, isError))); } catch { }
+            return;
+        }
+
+        startupStatus.Text = text;
+        startupStatus.ForeColor = isError ? Color.Firebrick : SystemColors.ControlText;
+        startupOverlay.Visible = true;
+        startupOverlay.BringToFront();
+    }
+
+    internal void MarkRuntimeReady()
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired)
+        {
+            try { BeginInvoke((Action)MarkRuntimeReady); } catch { }
+            return;
+        }
+
+        runtimeReady = true;
+        SetStartupStatus("Abriendo Phoenix…");
+        if (phoenixView.CoreWebView2 is not null)
+            phoenixView.CoreWebView2.Navigate(phoenixUri.ToString());
+    }
+
+    private void BuildStartupOverlay()
+    {
+        startupOverlay.Dock = DockStyle.Fill;
+        startupOverlay.BackColor = SystemColors.Window;
+
+        var title = new Label
+        {
+            AutoSize = true,
+            Text = "Phoenix",
+            Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 28, FontStyle.Bold),
+            ForeColor = SystemColors.ControlText,
+            Anchor = AnchorStyles.None,
+        };
+
+        startupStatus.AutoSize = false;
+        startupStatus.TextAlign = ContentAlignment.MiddleCenter;
+        startupStatus.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 12, FontStyle.Regular);
+        startupStatus.ForeColor = SystemColors.ControlText;
+        startupStatus.Dock = DockStyle.Fill;
+        startupStatus.Padding = new Padding(30, 90, 30, 30);
+        startupStatus.Text = DesktopStartupContract.InitialStatus;
+
+        startupOverlay.Controls.Add(startupStatus);
+        startupOverlay.Controls.Add(title);
+        startupOverlay.Resize += (_, _) =>
+        {
+            title.Left = Math.Max(16, (startupOverlay.ClientSize.Width - title.Width) / 2);
+            title.Top = Math.Max(32, (startupOverlay.ClientSize.Height / 2) - 90);
+        };
     }
 
     private ToolStrip BuildBrowserToolbar()
@@ -123,6 +191,19 @@ internal sealed class PhoenixDesktopWindow : Form
                 e.Cancel = true;
                 OpenBrowser(target.ToString());
             };
+            phoenixView.CoreWebView2.NavigationCompleted += (_, e) =>
+            {
+                if (!runtimeReady) return;
+                if (e.IsSuccess)
+                {
+                    startupOverlay.Visible = false;
+                }
+                else
+                {
+                    SetStartupStatus($"Phoenix está activo, pero la interfaz no pudo cargarse ({e.WebErrorStatus}).\n\nDiagnóstico: {Program.LogPath}", isError: true);
+                    DesktopLog.Write($"Phoenix WebView navigation failed: {e.WebErrorStatus}");
+                }
+            };
             await phoenixView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(BridgeScript);
 
             await browserView.EnsureCoreWebView2Async();
@@ -138,12 +219,15 @@ internal sealed class PhoenixDesktopWindow : Form
                 OpenBrowser(e.Uri);
             };
 
-            phoenixView.CoreWebView2.Navigate(phoenixUri.ToString());
             browserView.CoreWebView2.Navigate("about:blank");
+            if (runtimeReady)
+                phoenixView.CoreWebView2.Navigate(phoenixUri.ToString());
             PublishBrowserState();
         }
-        catch (WebView2RuntimeNotFoundException)
+        catch (WebView2RuntimeNotFoundException ex)
         {
+            DesktopLog.Write("WebView2 Runtime is not installed", ex);
+            SetStartupStatus("Phoenix necesita Microsoft Edge WebView2 Runtime. Instálalo y vuelve a abrir Phoenix.", isError: true);
             MessageBox.Show(
                 "Phoenix necesita Microsoft Edge WebView2 Runtime para mostrar el navegador embebido. Instala WebView2 Runtime y vuelve a abrir Phoenix.",
                 "Phoenix · navegador embebido",
@@ -152,8 +236,10 @@ internal sealed class PhoenixDesktopWindow : Form
         }
         catch (Exception ex)
         {
+            DesktopLog.Write("Embedded WebView initialization failed", ex);
+            SetStartupStatus($"Phoenix no pudo iniciar su interfaz.\n\n{ex.Message}\n\nDiagnóstico: {Program.LogPath}", isError: true);
             MessageBox.Show(
-                $"Phoenix no pudo iniciar el navegador embebido.\n\n{ex.Message}",
+                $"Phoenix no pudo iniciar el navegador embebido.\n\n{ex.Message}\n\nDiagnóstico: {Program.LogPath}",
                 "Phoenix · navegador embebido",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
