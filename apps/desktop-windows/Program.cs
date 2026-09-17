@@ -55,6 +55,11 @@ internal static class Program
             StartupRegistration.SetEnabled(false);
             return;
         }
+        if (args.Contains("--smoke-window", StringComparer.OrdinalIgnoreCase))
+        {
+            RunVisibleWindowSmokeTest();
+            return;
+        }
 
         using var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
         using var mutex = new Mutex(initiallyOwned: true, MutexName, out var ownsMutex);
@@ -67,6 +72,28 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
         Application.Run(new PhoenixApplicationContext(showEvent));
+    }
+
+    private static void RunVisibleWindowSmokeTest()
+    {
+        ApplicationConfiguration.Initialize();
+        using var window = new PhoenixDesktopWindow(PhoenixUri, initializeWebViewsOnShow: false);
+        using var timer = new System.Windows.Forms.Timer { Interval = 1200 };
+        var shown = false;
+        window.Shown += (_, _) =>
+        {
+            shown = true;
+            timer.Start();
+        };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            DesktopLog.Write("Visible desktop window smoke test passed.");
+            Application.Exit();
+        };
+        Application.Run(window);
+        if (!shown)
+            throw new InvalidOperationException("Phoenix desktop window never reached the Shown state.");
     }
 }
 
