@@ -36,6 +36,12 @@ function modelDisplayName(id: string): string {
     .join(' ')} · Gratis`
 }
 
+/** Clone a model without materializing absent optional fields as `undefined`. */
+function cloneModel(model: PiAiModelProfile): PiAiModelProfile {
+  const { input, ...rest } = model
+  return input === undefined ? rest : { ...rest, input: [...input] }
+}
+
 /** Convert OpenCode's OpenAI-style catalog payload into Phoenix model descriptors. */
 export function parseOpenCodeFreeModels(payload: unknown): PiAiModelProfile[] {
   if (typeof payload !== 'object' || payload === null || !('data' in payload)) return []
@@ -74,7 +80,7 @@ export function opencodeFreeProfile(models: readonly PiAiModelProfile[]): PiAiPr
     // pi-ai requires a local authorization marker for OpenAI-compatible routes.
     // The loopback proxy strips it, so OpenCode itself receives no credential.
     headers: { Authorization: LOCAL_AUTHORIZATION },
-    models: models.map(model => ({ ...model, input: model.input === undefined ? undefined : [...model.input] })),
+    models: models.map(cloneModel),
   }
 }
 
@@ -129,7 +135,7 @@ export function createOpenCodeFreeCatalog(options: OpenCodeFreeCatalogOptions = 
   }
 
   return {
-    models: () => current.map(model => ({ ...model, input: model.input === undefined ? undefined : [...model.input] })),
+    models: () => current.map(cloneModel),
     refresh,
   }
 }
@@ -143,7 +149,7 @@ export function openCodeUpstreamHeaders(
   for (const [rawName, rawValue] of Object.entries(headers)) {
     const name = rawName.toLowerCase()
     if (blocked.has(name) || rawValue === undefined) continue
-    output[name] = Array.isArray(rawValue) ? rawValue.join(', ') : rawValue
+    output[name] = typeof rawValue === 'string' ? rawValue : rawValue.join(', ')
   }
   if (output['content-type'] === undefined) output['content-type'] = 'application/json'
   return output
@@ -153,7 +159,7 @@ function incomingHeaders(headers: IncomingHttpHeaders): Record<string, string | 
   return Object.fromEntries(Object.entries(headers).map(([name, value]) => [name, value]))
 }
 
-async function readRequestBody(request: IncomingMessage): Promise<Uint8Array> {
+async function readRequestBody(request: IncomingMessage): Promise<ArrayBuffer> {
   const chunks: Uint8Array[] = []
   let bytes = 0
   for await (const chunk of request) {
@@ -162,10 +168,11 @@ async function readRequestBody(request: IncomingMessage): Promise<Uint8Array> {
     if (bytes > MAX_PROXY_REQUEST_BYTES) throw new Error('OpenCode free proxy request exceeded 16 MiB')
     chunks.push(value)
   }
-  const body = new Uint8Array(bytes)
+  const body = new ArrayBuffer(bytes)
+  const view = new Uint8Array(body)
   let offset = 0
   for (const chunk of chunks) {
-    body.set(chunk, offset)
+    view.set(chunk, offset)
     offset += chunk.byteLength
   }
   return body
