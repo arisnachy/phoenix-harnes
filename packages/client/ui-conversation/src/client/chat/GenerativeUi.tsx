@@ -203,12 +203,20 @@ function appendMarkdown(segments: GenerativeUiSegment[], text: string): void {
   else segments.push({ kind: 'markdown', text })
 }
 
+type SplitGenerativeUiOptions = {
+  streaming?: boolean
+}
+
 /**
  * Split assistant prose into ordinary Markdown and validated declarative UI.
  * Invalid or unsupported blocks remain literal Markdown, so malformed model
- * output never disappears and never gains executable authority.
+ * output never disappears and never gains executable authority. While a reply
+ * is streaming, an unfinished generative-ui fence stays hidden until complete.
  */
-export function splitGenerativeUiText(text: string): GenerativeUiSegment[] {
+export function splitGenerativeUiText(
+  text: string,
+  options: SplitGenerativeUiOptions = {},
+): GenerativeUiSegment[] {
   const segments: GenerativeUiSegment[] = []
   const fence = /```generative-ui[ \t]*\r?\n([\s\S]*?)```/g
   let cursor = 0
@@ -234,15 +242,31 @@ export function splitGenerativeUiText(text: string): GenerativeUiSegment[] {
     }
     cursor = index + raw.length
   }
-  appendMarkdown(segments, text.slice(cursor))
-  return segments.length > 0 ? segments : [{ kind: 'markdown', text }]
+
+  let tail = text.slice(cursor)
+  if (options.streaming === true) {
+    const unfinishedFence = tail.lastIndexOf('```generative-ui')
+    if (unfinishedFence >= 0) tail = tail.slice(0, unfinishedFence)
+  }
+  appendMarkdown(segments, tail)
+
+  if (segments.length > 0) return segments
+  return options.streaming === true && text.includes('```generative-ui')
+    ? []
+    : [{ kind: 'markdown', text }]
 }
 
 const Initial = ({ label, symbol }: EventSide) => (
   <span className={css.symbol} aria-hidden="true">{(symbol ?? label.slice(0, 2)).toUpperCase()}</span>
 )
 
-const Header = ({ title, subtitle, badge }: { title: string; subtitle?: string; badge?: string }) => (
+type HeaderProps = {
+  title: string
+  subtitle?: string | undefined
+  badge?: string | undefined
+}
+
+const Header = ({ title, subtitle, badge }: HeaderProps) => (
   <header className={css.header}>
     <div>
       <h3>{title}</h3>
@@ -252,7 +276,8 @@ const Header = ({ title, subtitle, badge }: { title: string; subtitle?: string; 
   </header>
 )
 
-const statusClass = (status: Status | undefined): string => status === undefined ? '' : css[status]
+const statusClass = (status: Status | undefined): string =>
+  status === undefined ? '' : (css[status] ?? '')
 
 export function GenerativeUi({ block }: { block: GenerativeUiBlock }): ReactNode {
   switch (block.component) {
