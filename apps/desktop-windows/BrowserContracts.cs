@@ -19,15 +19,17 @@ public static class BrowserNavigation
         if (string.Equals(value, "about:blank", StringComparison.OrdinalIgnoreCase))
             return new Uri("about:blank");
 
-        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
-            return AllowedSchemes.Contains(absolute.Scheme) ? absolute : null;
-
-        if (LooksLikeHost(value))
+        // Host-like values must be resolved before Uri.TryCreate(... Absolute): strings such as
+        // "localhost:3080" are otherwise interpreted as a custom URI scheme named "localhost".
+        if (!value.Contains("://", StringComparison.Ordinal) && LooksLikeHost(value))
         {
             var scheme = IsLocalHost(value) ? Uri.UriSchemeHttp : Uri.UriSchemeHttps;
             if (Uri.TryCreate($"{scheme}://{value}", UriKind.Absolute, out var hostUri))
                 return hostUri;
         }
+
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+            return AllowedSchemes.Contains(absolute.Scheme) ? absolute : null;
 
         var query = WebUtility.UrlEncode(value);
         return new Uri($"https://www.bing.com/search?q={query}");
