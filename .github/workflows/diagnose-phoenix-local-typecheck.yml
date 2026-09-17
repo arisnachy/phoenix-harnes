@@ -1,0 +1,51 @@
+name: Diagnose Phoenix Local typecheck
+
+on:
+  push:
+    branches:
+      - diagnostics/phoenix-local-typecheck-20260917
+    paths-ignore:
+      - .diagnostics/**
+
+permissions:
+  contents: write
+
+jobs:
+  capture-windows-typecheck:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Capture typecheck output
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .diagnostics | Out-Null
+          $ErrorActionPreference = 'Continue'
+          $output = (& pnpm run typecheck 2>&1 | Out-String)
+          $exitCode = $LASTEXITCODE
+          $body = "exit_code=$exitCode`r`n`r`n$output"
+          Set-Content -Path .diagnostics/windows-typecheck.txt -Value $body -Encoding UTF8
+          git config user.name "phoenix-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add .diagnostics/windows-typecheck.txt
+          git commit -m "chore(diagnostics): capture Windows typecheck [skip ci]"
+          git push origin HEAD
