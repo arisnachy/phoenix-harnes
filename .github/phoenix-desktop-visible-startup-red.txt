@@ -1,0 +1,1 @@
+Temporary red-phase marker: visible first-run startup contract is expected to fail until Program.cs shows the shell before StartAsync and the installer stops running hidden PowerShell bootstrap.
