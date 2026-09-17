@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IApiClient, RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
 import { AuthorizationPanel, ConnectorsSettingsSection } from '../src/client/AuthorizationPanel.tsx'
+import type { ConnectorsSettingsSectionProps } from '../src/client/AuthorizationPanel.tsx'
 import { en } from '../src/client/locales.ts'
 import { connectorEn } from '../src/client/connectors-locales.ts'
 
@@ -13,18 +14,49 @@ function ok<T>(value: T): RpcResponse<T> {
   return { rpcId: `connectors-${String(rpc++)}` as never, result: { ok: true, value } }
 }
 
-function renderHub(api: IApiClient['authorization']) {
+function renderHub(api: IApiClient['authorization'], extra: Partial<ConnectorsSettingsSectionProps> = {}) {
   return render(
     <ConnectorsSettingsSection
       api={api}
       t={key => en[key]}
       connectorT={key => connectorEn[key]}
       onAuthorized={vi.fn()}
+      {...extra}
     />,
   )
 }
 
 describe('connectors settings section', () => {
+  it('shows the ChatGPT Web switch and exposes its route only after bridge readiness', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const chatGptWeb = {
+      state: vi.fn(async () => ({
+        enabled: false, phase: 'off' as const,
+        baseUrl: 'http://127.0.0.1:17841/v1', detail: 'ChatGPT Web is off',
+      })),
+      enable: vi.fn(async () => ({
+        enabled: true, phase: 'ready' as const,
+        baseUrl: 'http://127.0.0.1:17841/v1', detail: '2 models available',
+      })),
+      disable: vi.fn(),
+    }
+    const settings = { mutate: vi.fn(async () => ok({})) } as unknown as IApiClient['settings']
+
+    renderHub(api, { chatGptWeb, settings })
+    const toggle = await screen.findByRole('switch', { name: 'Enable ChatGPT Web' })
+    expect(toggle).toHaveProperty('checked', false)
+    fireEvent.click(toggle)
+    await waitFor(() => { expect(chatGptWeb.enable).toHaveBeenCalledTimes(1) })
+    await waitFor(() => { expect(toggle).toHaveProperty('checked', true) })
+    expect(settings.mutate).toHaveBeenCalledWith({
+      ns: 'llm-pi-ai',
+      ops: [{ op: 'set', path: ['providers', 'chatgpt-web'], value: {} }],
+    })
+  })
+
   it('keeps the legacy Models authorization panel empty', () => {
     const { container } = render(<AuthorizationPanel t={key => en[key]} onAuthorized={vi.fn()} />)
     expect(container.childElementCount).toBe(0)
