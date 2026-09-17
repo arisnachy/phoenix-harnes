@@ -32,8 +32,12 @@ interface LiveState {
 }
 
 /** Browser-safe shape of the Host Remote method used only for local-model availability. */
+type PluginInventoryRemoteResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: { code: string; message: string } }
+
 interface PluginInventoryLocalRemote {
-  localModelState?: () => Promise<PhoenixLocalInstallState>
+  localModelState?: () => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
 }
 
 /** The `ctx.modelDirectories` session model-selection service. */
@@ -87,7 +91,13 @@ export class ModelDirectoryResolver extends Service {
     const pluginInventory = this.ctx.get('remote.pluginInventory') as PluginInventoryLocalRemote | undefined
     const readLocalModelState = pluginInventory?.localModelState === undefined
       ? undefined
-      : () => pluginInventory.localModelState!()
+      : async () => {
+          const result = await pluginInventory.localModelState!()
+          if (result.ok) return result.value
+          throw new Error(
+            `pluginInventory.localModelState failed: ${result.error.code}: ${result.error.message}`,
+          )
+        }
     const directory = new ModelDirectory(
       connection.api.sessions,
       sessionId,
