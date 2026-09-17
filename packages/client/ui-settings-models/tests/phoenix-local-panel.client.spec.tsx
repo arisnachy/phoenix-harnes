@@ -3,11 +3,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PhoenixLocalPanel } from '../src/client/PhoenixLocalPanel.tsx'
 import type { PhoenixLocalModelClient, PhoenixLocalModelSnapshot } from '../src/client/PhoenixLocalPanel.tsx'
-import { en } from '../src/client/locales.ts'
+import { localEn } from '../src/client/phoenix-local-locales.ts'
 
 afterEach(cleanup)
 
-const t = (key: keyof typeof en): string => en[key]
+const t = (key: keyof typeof localEn): string => localEn[key]
 
 function snapshot(overrides: Partial<PhoenixLocalModelSnapshot> = {}): PhoenixLocalModelSnapshot {
   return {
@@ -65,41 +65,41 @@ describe('PhoenixLocalPanel', () => {
     const local = client()
     render(<PhoenixLocalPanel client={local} t={t} />)
 
-    expect(await screen.findByText(en.localModelTitle)).toBeTruthy()
-    expect(screen.getByRole('option', { name: /Qwen3\.5-4B Q4_K_M/ }).getAttribute('selected')).not.toBeNull()
-    expect(screen.getByRole('button', { name: en.localModelInstall })).toBeTruthy()
-    expect(screen.getByText(en.localModelNoInstalled)).toBeTruthy()
+    expect(await screen.findByText(localEn.title)).toBeTruthy()
+    expect(screen.getByLabelText<HTMLSelectElement>(localEn.model).value).toBe('qwen3.5-4b-q4-k-m')
+    expect(screen.getByRole('button', { name: localEn.install })).toBeTruthy()
+    expect(screen.getByText(localEn.noInstalled)).toBeTruthy()
   })
 
   it('persists mode changes through the Host client', async () => {
     const local = client()
     render(<PhoenixLocalPanel client={local} t={t} />)
-    await screen.findByText(en.localModelTitle)
+    await screen.findByText(localEn.title)
 
-    fireEvent.change(screen.getByLabelText(en.localModelMode), { target: { value: 'always-on' } })
+    fireEvent.change(screen.getByLabelText(localEn.mode), { target: { value: 'always-on' } })
     await waitFor(() => expect(local.calls.setMode).toHaveBeenCalledWith('always-on'))
   })
 
   it('installs, starts, stops, and requires confirmation before uninstalling', async () => {
     const local = client()
     render(<PhoenixLocalPanel client={local} t={t} />)
-    await screen.findByText(en.localModelTitle)
+    await screen.findByText(localEn.title)
 
-    fireEvent.click(screen.getByRole('button', { name: en.localModelInstall }))
+    fireEvent.click(screen.getByRole('button', { name: localEn.install }))
     await waitFor(() => expect(local.calls.install).toHaveBeenCalledWith('qwen3.5-4b-q4-k-m'))
-    expect(await screen.findByRole('button', { name: en.localModelStart })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: localEn.start })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: en.localModelStart }))
+    fireEvent.click(screen.getByRole('button', { name: localEn.start }))
     await waitFor(() => expect(local.calls.start).toHaveBeenCalledTimes(1))
-    expect(await screen.findByRole('button', { name: en.localModelStop })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: localEn.stop })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: en.localModelStop }))
+    fireEvent.click(screen.getByRole('button', { name: localEn.stop }))
     await waitFor(() => expect(local.calls.stop).toHaveBeenCalledTimes(1))
 
-    fireEvent.click(await screen.findByRole('button', { name: en.localModelUninstall }))
+    fireEvent.click(await screen.findByRole('button', { name: localEn.uninstall }))
     expect(local.calls.uninstall).not.toHaveBeenCalled()
-    expect(screen.getByText(en.localModelUninstallQuestion)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en.localModelUninstallConfirm }))
+    expect(screen.getByText(localEn.uninstallQuestion)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: localEn.uninstallConfirm }))
     await waitFor(() => expect(local.calls.uninstall).toHaveBeenCalledWith('qwen3.5-4b-q4-k-m'))
   })
 })
