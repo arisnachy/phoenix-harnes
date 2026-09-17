@@ -1,11 +1,12 @@
 /**
  * Real-composition guard for the dormant pi-ai posture: LlmRuntime,
  * settings-file, credentials-local, and a bare `llm-pi-ai` row boot from a
- * test-only cordis.yml through the actual Loader + Include path, an external
- * edit of settings.yaml registers the route live, and the next request
- * carries the credential the credentials document supplies. A hand-mounted `ctx.plugin` cannot
- * catch Loader export-shape failures, which is why the twin adapter has the
- * same guard.
+ * test-only cordis.yml through the actual Loader + Include path, built-in
+ * Phoenix routes are present immediately, an external edit of settings.yaml
+ * registers a configured route live, and the next request carries the
+ * credential the credentials document supplies. A hand-mounted `ctx.plugin`
+ * cannot catch Loader export-shape failures, which is why the twin adapter has
+ * the same guard.
  */
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -22,6 +23,13 @@ import FileSettingsProvider from '@phoenix-ai/dsh-settings-file'
 import * as LlmPiAi from '@phoenix-ai/dsh-llm-pi-ai'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
+
+const BUILTIN_PROVIDER_IDS = ['opencode-free', 'phoenix-local'] as const
+const CONFIGURED_PROVIDER_IDS = ['deepseek', ...BUILTIN_PROVIDER_IDS].sort()
+
+function providerIds(ctx: Context): string[] {
+  return ctx.llm.listProviders().map(provider => provider.id).sort()
+}
 
 /** One text block, then a tool call truncated by the output-token ceiling. */
 const truncatedToolCallEvents = [
@@ -97,13 +105,12 @@ async function loadComposition(): Promise<{ ctx: Context; settingsPath: string }
 }
 
 describe('llm-pi-ai real dormant composition', () => {
-  it('boots with zero routes and registers one the moment settings supply a profile', async () => {
+  it('boots with built-in routes and registers configured profiles live', async () => {
     vi.stubEnv('PI_COMPOSITION_KEY', '')
     const server = await mockServer([{ events: textEvents }])
     const { ctx, settingsPath } = await loadComposition()
 
-    // The shipped posture: the adapter exists, no route does.
-    expect(ctx.llm.listProviders()).toEqual([])
+    expect(providerIds(ctx)).toEqual([...BUILTIN_PROVIDER_IDS])
 
     // Exactly what the web Models page leaves on disk.
     await writeFile(settingsPath, [
@@ -115,7 +122,7 @@ describe('llm-pi-ai real dormant composition', () => {
       '',
     ].join('\n'))
     await vi.waitFor(() => {
-      expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['deepseek'])
+      expect(providerIds(ctx)).toEqual(CONFIGURED_PROVIDER_IDS)
     }, { timeout: 5000 })
 
     const result = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-v4-flash', messages: [] })
@@ -139,7 +146,7 @@ describe('llm-pi-ai real dormant composition', () => {
       '',
     ].join('\n'))
     await vi.waitFor(() => {
-      expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['deepseek'])
+      expect(providerIds(ctx)).toEqual(CONFIGURED_PROVIDER_IDS)
     }, { timeout: 5000 })
 
     const truncated = await assemble(ctx, {
@@ -199,7 +206,7 @@ describe('llm-pi-ai real dormant composition', () => {
       '',
     ].join('\n'))
     await vi.waitFor(() => {
-      expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['deepseek'])
+      expect(providerIds(ctx)).toEqual(CONFIGURED_PROVIDER_IDS)
     }, { timeout: 5000 })
 
     // A pre-envelope session log entry: max-token assembly dropped the tool
