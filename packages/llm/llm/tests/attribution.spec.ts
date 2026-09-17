@@ -24,7 +24,7 @@ describe('APP_IDENTITY', () => {
 
   it('identifies the product as PHOENIX, not the upstream harness', () => {
     expect(APP_IDENTITY).toEqual({
-      product: 'PHOENIX',
+      product: 'phoenix-harness',
       version: manifest.version,
       url: 'https://github.com/arisnachy/phoenix-harnes',
     })
@@ -34,7 +34,7 @@ describe('APP_IDENTITY', () => {
 describe('userAgent', () => {
   it('renders the PHOENIX product/version with the +url comment', () => {
     expect(userAgent()).toBe(
-      `PHOENIX/${manifest.version} (+https://github.com/arisnachy/phoenix-harnes)`,
+      `phoenix-harness/${manifest.version} (+https://github.com/arisnachy/phoenix-harnes)`,
     )
   })
 
@@ -60,7 +60,7 @@ describe('openRouterAttributionHeaders', () => {
     expect(openRouterAttributionHeaders()).toEqual({
       'user-agent': userAgent(),
       'HTTP-Referer': 'https://github.com/arisnachy/phoenix-harnes',
-      'X-Title': 'PHOENIX',
+      'X-Title': 'phoenix-harness',
     })
   })
 })
