@@ -6,6 +6,7 @@ on:
       - main
       - stable
       - feat/windows-desktop-managed-install
+      - 'work/embedded-browser-*'
     paths:
       - 'apps/desktop-windows/**'
       - 'installer/windows/**'
@@ -80,12 +81,25 @@ jobs:
           if (-not $iss.Contains('recursesubdirs')) {
             throw 'Installer does not recursively include WebView2 runtime payload'
           }
+          if ($iss -match '(?m)^Filename:\s*"powershell\.exe".*bootstrap-runtime\.ps1') {
+            throw 'Installer must not hide first-run runtime bootstrap; Phoenix.exe owns visible bootstrap now'
+          }
 
-      - name: Launcher smoke test
+      - name: Launcher command smoke test
         shell: pwsh
         run: |
           $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--disable-autostart' -PassThru -Wait
-          if ($process.ExitCode -ne 0) { throw "Phoenix launcher smoke test failed: $($process.ExitCode)" }
+          if ($process.ExitCode -ne 0) { throw "Phoenix launcher command smoke test failed: $($process.ExitCode)" }
+
+      - name: Visible desktop window smoke test
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--smoke-window' -PassThru
+          if (-not $process.WaitForExit(15000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw 'Phoenix desktop window did not reach Shown state and exit within 15 seconds'
+          }
+          if ($process.ExitCode -ne 0) { throw "Phoenix visible-window smoke test failed: $($process.ExitCode)" }
 
       - name: Build installer
         shell: pwsh
