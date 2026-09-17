@@ -91,7 +91,15 @@ export function refreshIfLoaded(controller: ModelsSettingsStore): void {
 }
 
 /** Services required by the Models/Connectors settings plugin. */
-export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope', 'settingsSchema']
+export const inject = [
+  'slots',
+  'locale',
+  'connection',
+  'remote',
+  'remote.pluginInventory',
+  'settingsScope',
+  'settingsSchema',
+]
 
 /**
  * Register Models, Connectors, and onboarding surfaces.
