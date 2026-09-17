@@ -8,7 +8,7 @@
 [Setup]
 AppId={{B4E91D88-7B14-4DA0-A63D-4E61B648AE1F}
 AppName=Phoenix
-AppVersion=1.0.0
+AppVersion=1.0.1
 AppPublisher=Phoenix AI
 DefaultDirName={localappdata}\Programs\Phoenix
 DefaultGroupName=Phoenix
@@ -22,6 +22,8 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\Phoenix.exe
 SetupIconFile={#SourceDir}\phoenix.ico
+CloseApplications=yes
+RestartApplications=no
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -35,7 +37,8 @@ Name: "{group}\Phoenix"; Filename: "{app}\Phoenix.exe"
 Name: "{autodesktop}\Phoenix"; Filename: "{app}\Phoenix.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bootstrap-runtime.ps1"""; StatusMsg: "Preparando runtime administrado de Phoenix..."; Flags: runhidden waituntilterminated skipifsilent
+; Runtime preparation belongs to Phoenix.exe so first launch is visible, logged, repairable,
+; and can explain missing Git/Node/Corepack instead of blocking inside the installer.
 Filename: "{app}\Phoenix.exe"; Parameters: "--enable-autostart"; Flags: runhidden waituntilterminated skipifsilent; Tasks: autostart
 Filename: "{app}\Phoenix.exe"; Description: "Abrir Phoenix"; Flags: nowait postinstall skipifsilent
 

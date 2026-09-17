@@ -5,11 +5,22 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$marker = Join-Path $RuntimeRoot '.phoenix-managed-install'
+$readyMarker = Join-Path $RuntimeRoot '.phoenix-managed-install'
+$installingMarker = Join-Path $RuntimeRoot '.phoenix-managed-installing'
 
 function Require-Command([string]$Name, [string]$Hint) {
   if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
     throw "$Name is required. $Hint"
+  }
+}
+
+function Test-ReadyMarker {
+  if (-not (Test-Path $readyMarker)) { return $false }
+  try {
+    $content = Get-Content $readyMarker -Raw
+    return $content.Contains('schema=1') -and $content.Contains('state=ready') -and $content.Contains('installedAt=')
+  } catch {
+    return $false
   }
 }
 
@@ -25,11 +36,15 @@ if ($nodeMajor -lt 22 -or ($nodeMajor -eq 22 -and $nodeMinor -lt 19)) {
 }
 
 if (Test-Path $RuntimeRoot) {
-  if (-not (Test-Path $marker)) {
-    throw "Refusing to modify unmanaged directory: $RuntimeRoot"
-  }
   if (-not (Test-Path (Join-Path $RuntimeRoot '.git'))) {
-    throw "Managed marker exists but Git metadata is missing: $RuntimeRoot"
+    throw "Refusing to modify runtime without Git metadata: $RuntimeRoot"
+  }
+
+  # Older desktop builds created the ready marker before pnpm install/build finished.
+  # If the marker is incomplete, treat the directory as an interrupted managed install
+  # and resume instead of declaring it healthy or refusing to repair it.
+  if (-not (Test-ReadyMarker)) {
+    New-Item -ItemType File -Force -Path $installingMarker | Out-Null
   }
 } else {
   $parent = Split-Path -Parent $RuntimeRoot
@@ -39,7 +54,7 @@ if (Test-Path $RuntimeRoot) {
   try {
     & git clone --branch $Channel --single-branch $Repository $staging
     if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
-    New-Item -ItemType File -Force -Path (Join-Path $staging '.phoenix-managed-install') | Out-Null
+    New-Item -ItemType File -Force -Path (Join-Path $staging '.phoenix-managed-installing') | Out-Null
     Move-Item -Path $staging -Destination $RuntimeRoot
   } finally {
     Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
@@ -51,9 +66,14 @@ try {
   # Never overwrite local changes in an existing managed runtime. Phoenix's
   # own staged updater is responsible for validated stable-channel activation.
   $dirty = (& git status --porcelain=v1 --untracked-files=all) -join "`n"
+  $dirty = (($dirty -split "`n") | Where-Object {
+    $_ -and $_ -notmatch '\.phoenix-managed-install(ing)?$'
+  }) -join "`n"
   if ($dirty.Trim().Length -gt 0) {
     throw 'Managed runtime contains local changes; refusing bootstrap mutation.'
   }
+
+  New-Item -ItemType File -Force -Path $installingMarker | Out-Null
 
   & corepack pnpm install --frozen-lockfile
   if ($LASTEXITCODE -ne 0) { throw 'pnpm install failed' }
@@ -61,11 +81,13 @@ try {
   & corepack pnpm run build
   if ($LASTEXITCODE -ne 0) { throw 'Phoenix build failed' }
 
-  Set-Content -Path (Join-Path $RuntimeRoot '.phoenix-managed-install') -Value @(
+  Set-Content -Path $readyMarker -Value @(
     'schema=1'
+    'state=ready'
     "channel=$Channel"
     "installedAt=$([DateTimeOffset]::UtcNow.ToString('o'))"
   ) -Encoding UTF8
+  Remove-Item -Force $installingMarker -ErrorAction SilentlyContinue
 } finally {
   Pop-Location
 }

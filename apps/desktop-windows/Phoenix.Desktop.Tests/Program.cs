@@ -39,12 +39,24 @@ False(BrowserCommand.TryParse("{not-json}", out _), "malformed json rejected", f
 False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"javascript:alert(1)\"}", out _), "unsafe open command rejected", failures);
 False(BrowserCommand.TryParse("{\"type\":\"unknown\"}", out _), "unknown command rejected", failures);
 
+// Desktop startup must be visible before the managed runtime is ready. This is the regression
+// contract for the installed EXE appearing to do nothing on first launch.
+True(DesktopStartupContract.ShowWindowBeforeRuntimeReady, "desktop window is shown before runtime readiness", failures);
+True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch signals existing window", failures);
+Equal("Preparando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
+
+// A managed runtime is healthy only after install/build completed. Old desktop builds could leave
+// an empty marker behind before those steps completed; that state must never be accepted as ready.
+True(ManagedRuntimeMarker.IsReadyContent("schema=1\nstate=ready\ninstalledAt=2026-09-17T00:00:00Z"), "completed runtime marker accepted", failures);
+False(ManagedRuntimeMarker.IsReadyContent(""), "empty legacy marker rejected", failures);
+False(ManagedRuntimeMarker.IsReadyContent("schema=1\ninstalledAt=2026-09-17T00:00:00Z"), "marker without ready state rejected", failures);
+
 if (failures.Count == 0)
 {
-    Console.WriteLine("Embedded browser contract checks passed.");
+    Console.WriteLine("Embedded browser and desktop startup contract checks passed.");
     return 0;
 }
 
-Console.Error.WriteLine($"Embedded browser contract checks failed: {failures.Count}");
+Console.Error.WriteLine($"Embedded browser and desktop startup contract checks failed: {failures.Count}");
 foreach (var failure in failures) Console.Error.WriteLine($" - {failure}");
 return 1;
