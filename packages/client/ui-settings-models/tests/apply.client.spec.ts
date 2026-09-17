@@ -10,7 +10,7 @@ import { apply, inject, refreshIfLoaded } from '@phoenix-ai/dsh-client-ui-settin
 import {
   WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE, WELCOME_NOTICE_VERSION,
 } from '../src/onboarding-copy.ts'
-import { ModelsSection } from '../src/client/ModelsSection.tsx'
+import { ModelsWithLocalSection } from '../src/client/ModelsWithLocalSection.tsx'
 import { ConnectorsSettingsSection } from '../src/client/AuthorizationPanel.tsx'
 import { DeepSeekOnboardingDialog } from '../src/client/DeepSeekOnboardingDialog.tsx'
 import { WelcomeNotice } from '../src/client/WelcomeNotice.tsx'
@@ -79,7 +79,7 @@ describe('ui-settings-models apply', () => {
     expect(before.slots.entries('settings.section')).toHaveLength(2)
 
     const entry = section(before.slots, 'models')
-    expect(entry.component).toBe(ModelsSection)
+    expect(entry.component).toBe(ModelsWithLocalSection)
     expect(entry.options).toMatchObject({ id: 'models', order: 10 })
     // The nav label is a locale-following thunk; owners resolve at read time.
     expect(resolveSlotLabel(entry.options.label)).toBe('模型')
@@ -121,7 +121,7 @@ describe('ui-settings-models apply', () => {
     expect(after.slots.entries('settings.onboarding')).toHaveLength(0)
     declare(after.slots)
     await Promise.resolve()
-    expect(section(after.slots, 'models').component).toBe(ModelsSection)
+    expect(section(after.slots, 'models').component).toBe(ModelsWithLocalSection)
     expect(section(after.slots, 'connectors').component).toBe(ConnectorsSettingsSection)
     expect(after.slots.entries('settings.onboarding')).toHaveLength(2)
     // The self-inflicted ledger notifications hit the duplicate guard.
@@ -163,7 +163,7 @@ describe('ui-settings-models apply', () => {
     expect(b.slots.entries('settings.onboarding')).toHaveLength(0)
     declare(b.slots)
     await Promise.resolve()
-    expect(section(b.slots, 'models').component).toBe(ModelsSection)
+    expect(section(b.slots, 'models').component).toBe(ModelsWithLocalSection)
     expect(section(b.slots, 'connectors').component).toBe(ConnectorsSettingsSection)
     expect(b.slots.entries('settings.onboarding')).toHaveLength(2)
     // The locale path also recovers through the same ledger re-check.
