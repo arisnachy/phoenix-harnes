@@ -88,12 +88,27 @@ export class PluginInventoryGateway extends TypertRemoteService {
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
     this.localModel = createNodeLocalModelRuntimeManager()
-    // This proxy is intentionally tiny: it owns no model weights. A request to
-    // the normal `phoenix-local` LLM route wakes llama-server only when needed.
-    void startPhoenixLocalProxy(this.localModel).catch((error: unknown) => {
-      ctx.logger.error('phoenix-local: loopback proxy could not start')
-      ctx.logger.error(error)
-    })
+    // Cordis owns both loopback resources so reload/unload cannot leave port
+    // 17842 occupied or a llama-server child detached from the Host lifecycle.
+    void ctx.effect(async () => {
+      try {
+        const server = await startPhoenixLocalProxy(this.localModel)
+        return async () => {
+          server.closeAllConnections()
+          await new Promise<void>((resolve) => {
+            server.close((error) => {
+              if (error !== undefined) ctx.logger.error(error)
+              resolve()
+            })
+          })
+          await (await this.localModel).dispose()
+        }
+      } catch (error: unknown) {
+        ctx.logger.error('phoenix-local: loopback proxy could not start')
+        ctx.logger.error(error)
+        return async () => { await (await this.localModel).dispose() }
+      }
+    }, 'phoenix-local loopback proxy')
   }
 
   /**
