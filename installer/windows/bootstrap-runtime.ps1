@@ -13,6 +13,15 @@ function Require-Command([string]$Name, [string]$Hint) {
   }
 }
 
+function Write-ManagedMarker([string]$State) {
+  Set-Content -Path $marker -Value @(
+    'schema=1'
+    "channel=$Channel"
+    "state=$State"
+    "updatedAt=$([DateTimeOffset]::UtcNow.ToString('o'))"
+  ) -Encoding UTF8
+}
+
 Require-Command 'git' 'Install Git for Windows and retry.'
 Require-Command 'node' 'Install Node.js 22.19 or newer and retry.'
 Require-Command 'corepack' 'Use a Node.js installation that includes Corepack.'
@@ -39,12 +48,19 @@ if (Test-Path $RuntimeRoot) {
   try {
     & git clone --branch $Channel --single-branch $Repository $staging
     if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
-    New-Item -ItemType File -Force -Path (Join-Path $staging '.phoenix-managed-install') | Out-Null
+    Set-Content -Path (Join-Path $staging '.phoenix-managed-install') -Value @(
+      'schema=1'
+      "channel=$Channel"
+      'state=preparing'
+      "updatedAt=$([DateTimeOffset]::UtcNow.ToString('o'))"
+    ) -Encoding UTF8
     Move-Item -Path $staging -Destination $RuntimeRoot
   } finally {
     Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
   }
 }
+
+Write-ManagedMarker 'preparing'
 
 Push-Location $RuntimeRoot
 try {
@@ -61,9 +77,10 @@ try {
   & corepack pnpm run build
   if ($LASTEXITCODE -ne 0) { throw 'Phoenix build failed' }
 
-  Set-Content -Path (Join-Path $RuntimeRoot '.phoenix-managed-install') -Value @(
+  Set-Content -Path $marker -Value @(
     'schema=1'
     "channel=$Channel"
+    'state=ready'
     "installedAt=$([DateTimeOffset]::UtcNow.ToString('o'))"
   ) -Encoding UTF8
 } finally {
