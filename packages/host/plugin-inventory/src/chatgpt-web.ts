@@ -15,17 +15,17 @@ import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import type { ChatGptWebSnapshot } from './types.ts'
 
 /** Default endpoint exposed by the local `codex-chatgpt-web` bridge. */
-export const DEFAULT_CHATGPT_WEB_URL = 'http://127.0.0.1:17841/v1'
+const DEFAULT_CHATGPT_WEB_URL = 'http://127.0.0.1:17841/v1'
 
 /** The persisted ownership record format. */
-export interface ChatGptWebBridgeState {
+interface ChatGptWebBridgeState {
   readonly schema: 1
   readonly pid: number
   readonly baseUrl: string
 }
 
 /** Configuration needed to start one local bridge process. */
-export interface ChatGptWebBridgeConfig {
+interface ChatGptWebBridgeConfig {
   readonly baseUrl: string
   readonly command?: readonly [string, ...string[]]
   readonly cwd?: string
@@ -37,7 +37,7 @@ interface DiscoveredChatGptWebRuntime {
 }
 
 /** Public bridge status used by the CLI and future settings surfaces. */
-export type ChatGptWebBridgeStatus =
+type ChatGptWebBridgeStatus =
   | { readonly status: 'stopped' }
   | { readonly status: 'starting' | 'unavailable'; readonly pid?: number; readonly baseUrl: string; readonly detail: string }
   | { readonly status: 'ready'; readonly pid?: number; readonly baseUrl: string; readonly detail: string }
@@ -63,7 +63,11 @@ interface BridgeDependencies {
   readonly kill?: (pid: number) => void
 }
 
-/** Parse the only accepted command format: a JSON argv array, never a shell string. */
+/**
+ * Parse the only accepted bridge command format: a JSON argv array, never a shell string.
+ * @param value - Optional serialized argv array from PHOENIX_CHATGPT_WEB_COMMAND.
+ * @returns Parsed argv strings, or undefined when no command was configured.
+ */
 export function parseChatGptWebCommand(value: string | undefined): readonly [string, ...string[]] | undefined {
   if (value === undefined || value.trim() === '') return undefined
   let parsed: unknown
@@ -93,7 +97,12 @@ function hasChatGptWebSetup(env: NodeJS.ProcessEnv): boolean {
   return existsSync(join(home, 'config.json'))
 }
 
-/** Find the packaged Windows runtime only when its browser dependency is present. */
+/**
+ * Find the packaged Windows runtime only when its browser dependency is present.
+ * @param env - Environment used to locate installed runtime roots.
+ * @param platformName - Platform whose installation layout should be inspected.
+ * @returns Complete packaged runtime metadata, or undefined when none is usable.
+ */
 export function discoverChatGptWebRuntime(
   env: NodeJS.ProcessEnv = process.env,
   platformName: NodeJS.Platform = platform(),
@@ -113,7 +122,11 @@ function isLoopback(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
 }
 
-/** Resolve environment configuration and reject endpoints that could expose credentials. */
+/**
+ * Resolve bridge configuration while rejecting endpoints that could expose credentials.
+ * @param env - Environment containing optional bridge URL, command, and working directory.
+ * @returns Validated loopback bridge configuration.
+ */
 export function resolveChatGptWebConfig(env: NodeJS.ProcessEnv = process.env): ChatGptWebBridgeConfig {
   const baseUrl = (env.PHOENIX_CHATGPT_WEB_URL?.trim() || DEFAULT_CHATGPT_WEB_URL)
   let parsed: URL
@@ -156,7 +169,12 @@ function modelCount(body: string): number {
   }
 }
 
-/** Validate one sanitized bridge response for doctor and lifecycle callers. */
+/**
+ * Validate one sanitized bridge response for doctor and lifecycle callers.
+ * @param status - HTTP status returned by the bridge model endpoint.
+ * @param body - Response body used only to count valid model identifiers.
+ * @returns Sanitized health result without exposing model payload details.
+ */
 export function inspectChatGptWebHealth(status: number, body: string): { ok: boolean; detail: string } {
   if (status < 200 || status >= 300) return { ok: false, detail: `ChatGPT Web bridge returned HTTP ${String(status)}` }
   const count = modelCount(body)
@@ -176,7 +194,10 @@ export class ChatGptWebBridge {
     this.dependencies = dependencies
   }
 
-  /** Persist ownership after a process has been spawned successfully. */
+  /**
+   * Persist ownership after a process has been spawned successfully.
+   * @param pid - Positive process identifier returned by the spawned bridge.
+   */
   async writeOwnedState(pid: number): Promise<void> {
     if (!Number.isSafeInteger(pid) || pid <= 0) throw new Error('ChatGPT Web bridge returned an invalid process id')
     const state: ChatGptWebBridgeState = { schema: 1, pid, baseUrl: this.dependencies.config.baseUrl }
@@ -208,7 +229,10 @@ export class ChatGptWebBridge {
     }
   }
 
-  /** Start the configured argv without a shell and record only non-secret ownership data. */
+  /**
+   * Start the configured argv without a shell and record only non-secret ownership data.
+   * @returns Starting state for the owned bridge process.
+   */
   async start(): Promise<ChatGptWebBridgeStatus> {
     const command = this.dependencies.config.command
     if (command === undefined) {
@@ -234,7 +258,10 @@ export class ChatGptWebBridge {
     return { status: 'starting', pid, baseUrl: this.dependencies.config.baseUrl, detail: 'ChatGPT Web bridge is starting' }
   }
 
-  /** Query the loopback `/v1/models` endpoint without exposing the response body. */
+  /**
+   * Query the loopback `/v1/models` endpoint without exposing the response body.
+   * @returns Current sanitized bridge health and ownership state.
+   */
   async status(): Promise<ChatGptWebBridgeStatus> {
     const owned = await this.readOwnedState()
     const baseUrl = owned?.baseUrl ?? this.dependencies.config.baseUrl
@@ -257,7 +284,10 @@ export class ChatGptWebBridge {
     }
   }
 
-  /** Stop only the process recorded by this controller and remove its ownership record. */
+  /**
+   * Stop only the process recorded by this controller and remove its ownership record.
+   * @returns Stopped state after ownership cleanup.
+   */
   async stop(): Promise<{ readonly status: 'stopped' }> {
     const owned = await this.readOwnedState()
     if (owned !== undefined && this.processIsRunning(owned.pid)) {
@@ -280,7 +310,7 @@ function defaultKill(pid: number): void {
   process.kill(pid)
 }
 
-export function chatGptWebBridgeStatePath(): string {
+function chatGptWebBridgeStatePath(): string {
   return dshHomePath('integrations', 'chatgpt-web-bridge.json')
 }
 
@@ -310,14 +340,14 @@ async function writeEnabledPreference(path: string): Promise<void> {
 }
 
 /** Minimal lifecycle seam used by the persisted ON/OFF controller. */
-export interface ChatGptWebLifecycle {
+interface ChatGptWebLifecycle {
   start(): Promise<ChatGptWebBridgeStatus>
   status(): Promise<ChatGptWebBridgeStatus>
   stop(): Promise<{ readonly status: 'stopped' }>
 }
 
 /** Dependencies for the persisted ChatGPT Web integration controller. */
-export interface ChatGptWebIntegrationOptions {
+interface ChatGptWebIntegrationOptions {
   readonly bridge: ChatGptWebLifecycle
   readonly enabledPath: string
   readonly configured: boolean
@@ -359,7 +389,10 @@ export class ChatGptWebIntegration {
     return this.snapshot(enabled, 'unavailable', 'ChatGPT Web bridge did not become ready')
   }
 
-  /** @returns Persisted switch state reconciled with current loopback health. */
+  /**
+   * Read the persisted switch and reconcile it with current loopback health.
+   * @returns Persisted switch state reconciled with current loopback health.
+   */
   async state(): Promise<ChatGptWebSnapshot> {
     const enabled = await readEnabledPreference(this.options.enabledPath)
     if (!enabled) return this.snapshot(false, 'off', 'ChatGPT Web is off')
@@ -416,7 +449,11 @@ export class ChatGptWebIntegration {
   }
 }
 
-/** Build the Settings integration over the same controller used by the CLI. */
+/**
+ * Build the Settings integration over the same controller used by the CLI.
+ * @param env - Environment used to resolve installed runtime and loopback configuration.
+ * @returns Persisted ChatGPT Web integration controller.
+ */
 export function createChatGptWebIntegration(env: NodeJS.ProcessEnv = process.env): ChatGptWebIntegration {
   const config = resolveChatGptWebConfig(env)
   const bridge = new ChatGptWebBridge({ statePath: chatGptWebBridgeStatePath(), config })
@@ -428,7 +465,11 @@ export function createChatGptWebIntegration(env: NodeJS.ProcessEnv = process.env
   })
 }
 
-/** Run the `dsh chatgpt-web` lifecycle command. */
+/**
+ * Run the `dsh chatgpt-web` lifecycle command.
+ * @param args - Command arguments after the chatgpt-web verb.
+ * @returns Process-style exit code for the lifecycle operation.
+ */
 export async function runChatGptWebBridge(args: readonly string[]): Promise<number> {
   if (args.length > 1 || (args[0] !== undefined && !['start', 'status', 'stop', '--help', '-h'].includes(args[0]))) {
     process.stderr.write('error: chatgpt-web accepts only start, status, or stop\n')
