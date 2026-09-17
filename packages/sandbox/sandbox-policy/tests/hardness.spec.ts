@@ -41,10 +41,10 @@ async function mounted(defaultMode: 'read-only' | 'workspace-write' | 'danger-fu
   return ctx
 }
 
-async function promptMounted(): Promise<Context> {
+async function promptMounted(mode: 'read-only' | 'workspace-write' | 'danger-full-access' = 'workspace-write'): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
-  await ctx.plugin(SandboxPolicyService, { mode: 'danger-full-access' })
+  await ctx.plugin(SandboxPolicyService, { mode })
   return ctx
 }
 
@@ -104,13 +104,13 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
     }
   })
 
-  it('clamps danger-full-access to workspace-write for ordinary projects while HARDNESS is active', async () => {
+  it('keeps danger-full-access unconfined for ordinary projects while HARDNESS is active', async () => {
     const layout = createLayout()
     try {
       enableHardness(layout)
       const ctx = await mounted()
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('project', layout.project) })).toEqual({
-        mode: 'workspace-write',
+        mode: 'danger-full-access',
         workspaceRoot: resolve(layout.project),
         sessionId: 'project',
       })
@@ -138,7 +138,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
     const layout = createLayout()
     try {
       enableHardness(layout)
-      const ctx = await mounted()
+      const ctx = await mounted('workspace-write')
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('data-home', layout.data) })).toEqual({
         mode: 'workspace-write',
         workspaceRoot: resolve(layout.evolution),
@@ -149,11 +149,11 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
     }
   })
 
-  it('fails self-modification closed when no evolution worktree is available', async () => {
+  it('fails workspace-write self-modification closed when no evolution worktree is available', async () => {
     const layout = createLayout()
     try {
       enableHardness({ runtime: layout.runtime, data: layout.data })
-      const ctx = await mounted()
+      const ctx = await mounted('workspace-write')
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('no-evolution', layout.runtime) })).toEqual({
         mode: 'read-only',
         workspaceRoot: resolve(layout.runtime),
@@ -164,13 +164,13 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
     }
   })
 
-  it('rejects an evolution root that overlaps the live runtime', async () => {
+  it('rejects an evolution root that overlaps the live runtime for workspace-write', async () => {
     const layout = createLayout()
     const unsafeEvolution = join(layout.runtime, 'unsafe-evolution')
     mkdirSync(unsafeEvolution)
     try {
       enableHardness({ runtime: layout.runtime, data: layout.data, evolution: unsafeEvolution })
-      const ctx = await mounted()
+      const ctx = await mounted('workspace-write')
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('unsafe-evolution', layout.runtime) }).mode).toBe('read-only')
     } finally {
       rmSync(layout.root, { recursive: true, force: true })
@@ -187,6 +187,20 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
         workspaceRoot: resolve(layout.runtime),
         sessionId: 'readonly',
       })
+    } finally {
+      rmSync(layout.root, { recursive: true, force: true })
+    }
+  })
+
+  it('describes danger-full-access as truly unconfined even while HARDNESS is enabled', async () => {
+    const layout = createLayout()
+    try {
+      enableHardness(layout)
+      const ctx = await promptMounted('danger-full-access')
+      const assembly = await ctx.systemPrompt.assemble({ agent: agentFor(activeSession('prompt-full', layout.runtime)) })
+      const policy = assembly.contexts.find(context => context.name === 'sandbox:policy')?.text
+      expect(policy).toBe('Current PHOENIX file policy: danger-full-access. The PHOENIX file sandbox does not restrict file modifications by available operations.')
+      expect(policy).not.toContain('HARDNESS')
     } finally {
       rmSync(layout.root, { recursive: true, force: true })
     }
