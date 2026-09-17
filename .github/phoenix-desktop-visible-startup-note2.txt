@@ -1,0 +1,1 @@
+RED phase verification artifact for visible startup debugging.
