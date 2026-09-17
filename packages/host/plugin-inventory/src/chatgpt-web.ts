@@ -12,6 +12,7 @@ import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
 import { writeFileAtomic } from '@phoenix-ai/dsh-atomic-write'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
+import type { ChatGptWebSnapshot } from './types.ts'
 
 /** Default endpoint exposed by the local `codex-chatgpt-web` bridge. */
 export const DEFAULT_CHATGPT_WEB_URL = 'http://127.0.0.1:17841/v1'
@@ -281,6 +282,150 @@ function defaultKill(pid: number): void {
 
 export function chatGptWebBridgeStatePath(): string {
   return dshHomePath('integrations', 'chatgpt-web-bridge.json')
+}
+
+
+function chatGptWebEnabledPath(): string {
+  return dshHomePath('integrations', 'chatgpt-web-enabled.json')
+}
+
+async function readEnabledPreference(path: string): Promise<boolean> {
+  try {
+    const value: unknown = JSON.parse(await readFile(path, 'utf8'))
+    if (value === null || typeof value !== 'object'
+      || (value as { schema?: unknown }).schema !== 1
+      || (value as { enabled?: unknown }).enabled !== true) {
+      throw new Error('ChatGPT Web enabled state is invalid')
+    }
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
+}
+
+async function writeEnabledPreference(path: string): Promise<void> {
+  const value = JSON.stringify({ schema: 1, enabled: true }) + '\n'
+  await writeFileAtomic(path, value, { mode: 0o600, dirMode: 0o700 })
+}
+
+/** Minimal lifecycle seam used by the persisted ON/OFF controller. */
+export interface ChatGptWebLifecycle {
+  start(): Promise<ChatGptWebBridgeStatus>
+  status(): Promise<ChatGptWebBridgeStatus>
+  stop(): Promise<{ readonly status: 'stopped' }>
+}
+
+/** Dependencies for the persisted ChatGPT Web integration controller. */
+export interface ChatGptWebIntegrationOptions {
+  readonly bridge: ChatGptWebLifecycle
+  readonly enabledPath: string
+  readonly configured: boolean
+  readonly baseUrl: string
+  readonly wait?: (milliseconds: number) => Promise<void>
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds))
+}
+
+/** Persist and reconcile the user-facing ChatGPT Web ON/OFF switch. */
+export class ChatGptWebIntegration {
+  private readonly options: ChatGptWebIntegrationOptions
+
+  /** @param options - lifecycle, preference path, and resolved runtime facts. */
+  constructor(options: ChatGptWebIntegrationOptions) {
+    this.options = options
+  }
+
+  private snapshot(
+    enabled: boolean,
+    phase: ChatGptWebSnapshot['phase'],
+    detail: string,
+    baseUrl = this.options.baseUrl,
+  ): ChatGptWebSnapshot {
+    return { enabled, phase, baseUrl, detail }
+  }
+
+  private async waitForReady(enabled: boolean): Promise<ChatGptWebSnapshot> {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const status = await this.options.bridge.status()
+      if (status.status === 'ready') return this.snapshot(enabled, 'ready', status.detail, status.baseUrl)
+      if (status.status === 'stopped') {
+        return this.snapshot(enabled, 'unavailable', 'ChatGPT Web bridge stopped before becoming ready')
+      }
+      if (attempt < 7) await (this.options.wait ?? delay)(200)
+    }
+    return this.snapshot(enabled, 'unavailable', 'ChatGPT Web bridge did not become ready')
+  }
+
+  /** @returns Persisted switch state reconciled with current loopback health. */
+  async state(): Promise<ChatGptWebSnapshot> {
+    const enabled = await readEnabledPreference(this.options.enabledPath)
+    if (!enabled) return this.snapshot(false, 'off', 'ChatGPT Web is off')
+    if (!this.options.configured) {
+      return this.snapshot(true, 'needs-setup', 'Complete Codex Web GPT Setup > Browser-only first')
+    }
+    const status = await this.options.bridge.status()
+    if (status.status === 'ready') return this.snapshot(true, 'ready', status.detail, status.baseUrl)
+    if (status.status === 'starting') return this.snapshot(true, 'starting', status.detail, status.baseUrl)
+    if (status.status === 'unavailable') return this.snapshot(true, 'unavailable', status.detail, status.baseUrl)
+    return this.snapshot(true, 'unavailable', 'ChatGPT Web bridge is stopped')
+  }
+
+  /**
+   * Start and verify the bridge before persisting ON.
+   * @returns Ready state, setup guidance, or a sanitized availability failure.
+   */
+  async enable(): Promise<ChatGptWebSnapshot> {
+    if (!this.options.configured) {
+      return this.snapshot(false, 'needs-setup', 'Complete Codex Web GPT Setup > Browser-only first')
+    }
+    await this.options.bridge.start()
+    const ready = await this.waitForReady(true)
+    if (ready.phase !== 'ready') {
+      await this.options.bridge.stop()
+      return { ...ready, enabled: false }
+    }
+    await writeEnabledPreference(this.options.enabledPath)
+    return ready
+  }
+
+  /**
+   * Persist OFF before stopping the owned process.
+   * @returns Off state after lifecycle cleanup.
+   */
+  async disable(): Promise<ChatGptWebSnapshot> {
+    await rm(this.options.enabledPath, { force: true })
+    await this.options.bridge.stop()
+    return this.snapshot(false, 'off', 'ChatGPT Web is off')
+  }
+
+  /**
+   * Restore only a previously enabled bridge during Host startup.
+   * @returns Current restored state without changing the preference.
+   */
+  async restore(): Promise<ChatGptWebSnapshot> {
+    const enabled = await readEnabledPreference(this.options.enabledPath)
+    if (!enabled) return this.snapshot(false, 'off', 'ChatGPT Web is off')
+    if (!this.options.configured) {
+      return this.snapshot(true, 'needs-setup', 'Complete Codex Web GPT Setup > Browser-only first')
+    }
+    await this.options.bridge.start()
+    return this.waitForReady(true)
+  }
+}
+
+/** Build the Settings integration over the same controller used by the CLI. */
+export function createChatGptWebIntegration(env: NodeJS.ProcessEnv = process.env): ChatGptWebIntegration {
+  const config = resolveChatGptWebConfig(env)
+  const bridge = new ChatGptWebBridge({ statePath: chatGptWebBridgeStatePath(), config })
+  return new ChatGptWebIntegration({
+    bridge,
+    enabledPath: chatGptWebEnabledPath(),
+    configured: config.command !== undefined,
+    baseUrl: config.baseUrl,
+  })
 }
 
 /** Run the `dsh chatgpt-web` lifecycle command. */
