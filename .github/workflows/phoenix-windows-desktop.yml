@@ -93,6 +93,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not (Test-Path dist/installer/Phoenix-Windows-Setup.exe)) { throw 'Installer artifact missing' }
 
+      - name: Verify installed WebView2 payload
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP 'phoenix-installed-smoke'
+          if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
+          $setup = (Resolve-Path dist/installer/Phoenix-Windows-Setup.exe).Path
+          $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installDir",'/TASKS=')
+          $process = Start-Process -FilePath $setup -ArgumentList $args -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Phoenix installer smoke install failed: $($process.ExitCode)" }
+          $loader = Get-ChildItem $installDir -Recurse -Filter WebView2Loader.dll -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $loader) { throw 'Installed Phoenix is missing WebView2Loader.dll' }
+
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
