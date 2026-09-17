@@ -81,6 +81,9 @@ jobs:
           if (-not $iss.Contains('recursesubdirs')) {
             throw 'Installer does not recursively include WebView2 runtime payload'
           }
+          if (-not $iss.Contains('CloseApplications=force')) {
+            throw 'Installer must force-close a running Phoenix process before replacing locked desktop files'
+          }
           if ($iss -match '(?m)^Filename:\s*"powershell\.exe".*bootstrap-runtime\.ps1') {
             throw 'Installer must not hide first-run runtime bootstrap; Phoenix.exe owns visible bootstrap now'
           }
