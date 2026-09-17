@@ -65,17 +65,24 @@ type PluginInventoryLocalRemote = {
   setDefaultLocalModel(request: { modelId: string }): Promise<PhoenixLocalModelSnapshot>
 }
 
+/** Resolve the optional Phoenix Local Remote without making it a plugin load dependency. */
+function pluginInventoryLocalRemote(ctx: ClientContext): PluginInventoryLocalRemote {
+  const remote = ctx.get('remote.pluginInventory') as PluginInventoryLocalRemote | undefined
+  if (remote === undefined) throw new Error('Phoenix Local is unavailable on this host.')
+  return remote
+}
+
 /** Adapt the generated Host Remote to the tiny browser-safe card interface. */
 function localModelClient(ctx: ClientContext): PhoenixLocalModelClient {
-  const remote = ctx.remote.pluginInventory as unknown as PluginInventoryLocalRemote
+  const remote = (): PluginInventoryLocalRemote => pluginInventoryLocalRemote(ctx)
   return {
-    state: () => remote.localModelState(),
-    install: modelId => remote.installLocalModel({ modelId }),
-    start: () => remote.startLocalModel(),
-    stop: () => remote.stopLocalModel(),
-    uninstall: modelId => remote.uninstallLocalModel({ modelId }),
-    setMode: mode => remote.setLocalModelMode({ mode }),
-    setDefaultModel: modelId => remote.setDefaultLocalModel({ modelId }),
+    state: () => remote().localModelState(),
+    install: modelId => remote().installLocalModel({ modelId }),
+    start: () => remote().startLocalModel(),
+    stop: () => remote().stopLocalModel(),
+    uninstall: modelId => remote().uninstallLocalModel({ modelId }),
+    setMode: mode => remote().setLocalModelMode({ mode }),
+    setDefaultModel: modelId => remote().setDefaultLocalModel({ modelId }),
   }
 }
 
@@ -96,7 +103,6 @@ export const inject = [
   'locale',
   'connection',
   'remote',
-  'remote.pluginInventory',
   'settingsScope',
   'settingsSchema',
 ]
