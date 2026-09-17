@@ -12,6 +12,7 @@ import type { TypertClientRemote } from '@phoenix-ai/dsh-typert-protocol'
 
 export type { TypertClientRemote as ClientRemote } from '@phoenix-ai/dsh-typert-protocol'
 export type {
+  ChatGptWebSnapshot,
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateSnapshot,
   PluginInventorySnapshot,
