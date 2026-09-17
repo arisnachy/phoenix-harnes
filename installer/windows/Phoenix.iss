@@ -22,7 +22,7 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\Phoenix.exe
 SetupIconFile={#SourceDir}\phoenix.ico
-CloseApplications=yes
+CloseApplications=force
 RestartApplications=no
 
 [Files]
