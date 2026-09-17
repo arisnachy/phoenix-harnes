@@ -1,0 +1,60 @@
+name: Diagnose Phoenix Local typecheck summary
+
+on:
+  push:
+    branches:
+      - diagnostics/phoenix-local-typecheck-summary-20260917
+    paths-ignore:
+      - .diagnostics/**
+
+permissions:
+  contents: write
+
+jobs:
+  capture-windows-typecheck-summary:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Capture compact typecheck failure
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .diagnostics | Out-Null
+          $ErrorActionPreference = 'Continue'
+          $raw = (& pnpm run typecheck 2>&1 | Out-String)
+          $exitCode = $LASTEXITCODE
+          $lines = $raw -split "`r?`n"
+          $interesting = @($lines | Where-Object { $_ -match '(?i)(error|TS\d{4}|ELIFECYCLE|failed|failure|cannot|not assignable|expected|ERR_)' } | Select-Object -Last 250)
+          $tail = @($lines | Select-Object -Last 250)
+          $body = @(
+            "exit_code=$exitCode",
+            '--- interesting ---',
+            ($interesting -join "`r`n"),
+            '--- tail ---',
+            ($tail -join "`r`n")
+          ) -join "`r`n"
+          Set-Content -Path .diagnostics/windows-typecheck-summary.txt -Value $body -Encoding UTF8
+          git config user.name "phoenix-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add .diagnostics/windows-typecheck-summary.txt
+          git commit -m "chore(diagnostics): capture compact Windows typecheck [skip ci]"
+          git push origin HEAD
