@@ -14,16 +14,17 @@ interface Check {
 }
 
 const PHOENIX_CLIENT_MODULE = '@phoenix-ai/dsh-client-modules/client.js'
-const LEGACY_CLIENT_MODULE = '@deepseek-ai/dsh-client-modules/client.js'
+const CLIENT_MODULE_PATTERN = /@[A-Za-z0-9._-]+\/dsh-client-modules\/client\.js/gu
 
 /** Validate the HTML bootstrap that registers the client module system. */
 export function inspectFrontendBootstrap(html: string): Pick<Check, 'ok' | 'detail'> {
   const hasLoader = html.includes('window.__ModuleLoader__')
-  const hasPhoenixModule = html.includes(PHOENIX_CLIENT_MODULE)
-  const hasLegacyModule = html.includes(LEGACY_CLIENT_MODULE)
-  return hasLoader && hasPhoenixModule && !hasLegacyModule
+  const clientModules: readonly string[] = html.match(CLIENT_MODULE_PATTERN) ?? []
+  const hasPhoenixModule = clientModules.includes(PHOENIX_CLIENT_MODULE)
+  const hasForeignModule = clientModules.some(reference => reference !== PHOENIX_CLIENT_MODULE)
+  return hasLoader && hasPhoenixModule && !hasForeignModule
     ? { ok: true, detail: 'Phoenix client module bootstrap present' }
-    : { ok: false, detail: 'Phoenix client module bootstrap is missing or still references the legacy module' }
+    : { ok: false, detail: 'Phoenix client module bootstrap is missing or still references a foreign module' }
 }
 
 function commandVersion(command: string, args: readonly string[]): string | undefined {
