@@ -94,12 +94,21 @@ jobs:
       - name: Visible desktop window smoke test
         shell: pwsh
         run: |
+          $log = Join-Path $env:LOCALAPPDATA 'Phoenix\logs\desktop.log'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
           $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--smoke-window' -PassThru
           if (-not $process.WaitForExit(15000)) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Write-Host '--- Phoenix desktop.log ---'
+            if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } } else { Write-Host '(desktop.log missing)' }
             throw 'Phoenix desktop window did not reach Shown state and exit within 15 seconds'
           }
+          Write-Host '--- Phoenix desktop.log ---'
+          if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } }
           if ($process.ExitCode -ne 0) { throw "Phoenix visible-window smoke test failed: $($process.ExitCode)" }
+          $smokeLog = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+          if (-not $smokeLog.Contains('Visible smoke: Shown.')) { throw 'Phoenix process exited but native window never reached Shown state' }
+          if (-not $smokeLog.Contains('Visible desktop window smoke test passed')) { throw 'Phoenix native window did not complete its visible smoke lifecycle' }
 
       - name: Build installer
         shell: pwsh
