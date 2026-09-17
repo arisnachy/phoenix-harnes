@@ -58,7 +58,15 @@ function section(slots: SlotRegistry, id: string) {
 
 describe('ui-settings-models apply', () => {
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'settingsScope', 'settingsSchema'])
+    expect(inject).toEqual([
+      'slots',
+      'locale',
+      'connection',
+      'remote',
+      'remote.pluginInventory',
+      'settingsScope',
+      'settingsSchema',
+    ])
   })
 
   it('registers Models and Connectors for declarations before or after apply', async () => {
