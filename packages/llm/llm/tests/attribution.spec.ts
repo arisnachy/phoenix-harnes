@@ -1,6 +1,11 @@
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
-import { APP_IDENTITY, attributionHeaders, userAgent } from '@phoenix-ai/dsh-llm'
+import {
+  APP_IDENTITY,
+  attributionHeaders,
+  openRouterAttributionHeaders,
+  userAgent,
+} from '@phoenix-ai/dsh-llm'
 import type { AppIdentity } from '@phoenix-ai/dsh-llm'
 
 const manifest = createRequire(import.meta.url)('../package.json') as { version: string }
@@ -17,9 +22,9 @@ describe('APP_IDENTITY', () => {
     expect(APP_IDENTITY.version).toBe(manifest.version)
   })
 
-  it('carries only static public product facts', () => {
+  it('identifies the product as PHOENIX, not the upstream harness', () => {
     expect(APP_IDENTITY).toEqual({
-      product: 'deepseek-harness',
+      product: 'phoenix-harness',
       version: manifest.version,
       url: 'https://github.com/arisnachy/phoenix-harnes',
     })
@@ -27,9 +32,9 @@ describe('APP_IDENTITY', () => {
 })
 
 describe('userAgent', () => {
-  it('renders product/version with the +url comment', () => {
+  it('renders the PHOENIX product/version with the +url comment', () => {
     expect(userAgent()).toBe(
-      `deepseek-harness/${manifest.version} (+https://github.com/arisnachy/phoenix-harnes)`,
+      `phoenix-harness/${manifest.version} (+https://github.com/arisnachy/phoenix-harnes)`,
     )
   })
 
@@ -46,6 +51,16 @@ describe('attributionHeaders', () => {
   it('maps a custom identity onto the User-Agent header only', () => {
     expect(attributionHeaders(forkIdentity)).toEqual({
       'user-agent': 'fork-agent/9.9.9 (+https://example.com/fork-agent)',
+    })
+  })
+})
+
+describe('openRouterAttributionHeaders', () => {
+  it('publishes the PHOENIX app URL and title only through the OpenRouter helper', () => {
+    expect(openRouterAttributionHeaders()).toEqual({
+      'user-agent': userAgent(),
+      'HTTP-Referer': 'https://github.com/arisnachy/phoenix-harnes',
+      'X-Title': 'phoenix-harness',
     })
   })
 })
