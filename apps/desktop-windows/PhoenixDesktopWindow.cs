@@ -22,7 +22,7 @@ internal sealed class PhoenixDesktopWindow : Form
     private bool initialized;
     private bool runtimeReady;
 
-    internal PhoenixDesktopWindow(Uri phoenixUri)
+    internal PhoenixDesktopWindow(Uri phoenixUri, bool initializeWebViewsOnShow = true)
     {
         this.phoenixUri = phoenixUri;
         Text = "Phoenix";
@@ -52,7 +52,8 @@ internal sealed class PhoenixDesktopWindow : Form
         split.Panel2.Controls.Add(browserToolbar);
         Controls.Add(split);
 
-        Shown += async (_, _) => await InitializeAsync();
+        if (initializeWebViewsOnShow)
+            Shown += async (_, _) => await InitializeAsync();
         KeyDown += OnWindowKeyDown;
     }
 
