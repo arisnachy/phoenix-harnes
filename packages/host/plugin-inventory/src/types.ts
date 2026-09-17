@@ -130,3 +130,14 @@ export interface PhoenixLocalModeRequest {
 export interface PhoenixLocalEndpointReceipt {
   readonly baseUrl: string
 }
+
+/** User-facing lifecycle phases for the optional local ChatGPT Web bridge. */
+export type ChatGptWebPhase = 'off' | 'needs-setup' | 'starting' | 'ready' | 'unavailable'
+
+/** Sanitized ChatGPT Web state exposed to trusted Settings clients. */
+export interface ChatGptWebSnapshot {
+  readonly enabled: boolean
+  readonly phase: ChatGptWebPhase
+  readonly baseUrl: string
+  readonly detail: string
+}
