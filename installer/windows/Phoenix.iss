@@ -22,7 +22,10 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\Phoenix.exe
 SetupIconFile={#SourceDir}\phoenix.ico
-CloseApplications=yes
+; Phoenix is a tray application and intentionally cancels normal user closes by hiding.
+; During an upgrade that graceful close leaves Phoenix.exe/WebView2Loader.dll locked,
+; so Restart Manager must force-close the process before replacing the desktop payload.
+CloseApplications=force
 RestartApplications=no
 
 [Files]
