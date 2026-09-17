@@ -21,4 +21,4 @@ jobs:
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
       - name: Run model surface suites
-        run: pnpm exec vitest run packages/client/ui-settings-models/tests/apply.client.spec.ts packages/client/ui-settings-models/tests/optional-plugin-inventory.client.spec.ts packages/client/ui-model-selection/tests/browser-plugin.client.spec.ts
+        run: pnpm exec vitest run packages/client/ui-settings-models/tests/apply.client.spec.ts packages/client/ui-settings-models/tests/optional-plugin-inventory.client.spec.ts packages/client/ui-model-selection/tests/browser-plugin.client.spec.ts packages/client/ui-model-selection/tests/optional-plugin-inventory.client.spec.ts
