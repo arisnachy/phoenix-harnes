@@ -64,7 +64,7 @@ import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
-import type { ResolvedPiAiProviderProfile } from './config.ts'
+import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
 import { installCodexImageGeneration } from './image-generation.ts'
 import { registerPiAiFlows } from './login.ts'
@@ -107,6 +107,32 @@ export const inject = ['llm', 'tools', 'subprocess', 'attachments']
 
 const NS = settingsNamespace('llm-pi-ai')
 
+/** Stable provider id of the built-in offline Phoenix route. */
+export const PHOENIX_LOCAL_PROVIDER = 'phoenix-local'
+/** Stable model id selected through the same picker as cloud models. */
+export const PHOENIX_LOCAL_MODEL = 'phoenix-local'
+/** Stable lightweight Host proxy; the heavy llama-server stays behind it. */
+export const PHOENIX_LOCAL_BASE_URL = 'http://127.0.0.1:17842/v1'
+
+/** Built-in route injected independently of user settings or cloud credentials. */
+function phoenixLocalProfile(): PiAiProviderProfile {
+  return {
+    displayName: '🔥 Phoenix Local · Offline',
+    api: 'openai-completions',
+    baseURL: PHOENIX_LOCAL_BASE_URL,
+    defaultContextWindow: 8192,
+    defaultMaxTokens: 4096,
+    defaultInput: ['text'],
+    models: [{
+      id: PHOENIX_LOCAL_MODEL,
+      name: 'Phoenix Local · Qwen3.5-4B',
+      contextWindow: 8192,
+      maxTokens: 4096,
+      input: ['text'],
+    }],
+  }
+}
+
 /**
  * The registry captures these per route; a change here must re-register.
  * Sorted by provider so a settings document that merely reorders its keys is
@@ -127,19 +153,15 @@ function registrationFacts(profiles: ReadonlyMap<string, ResolvedPiAiProviderPro
 
 /**
  * The configurable-provider directory: every installed catalog route, the
- * optional local ChatGPT Web bridge route, plus every route the current
- * profiles declare. A hand-declared route has no catalog entry, so without
- * this union it would have no settings address and configuration surfaces
- * could neither show nor edit it.
+ * optional local ChatGPT Web bridge route, plus every user-configurable route
+ * the current profiles declare. Phoenix Local is intentionally absent here:
+ * its lifecycle has a dedicated Settings card rather than a fake API form.
  * @param profiles - the currently resolved provider profiles.
  * @returns the directory entries in catalog order, declared routes last.
  */
 function directoryEntries(
   profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>,
 ): LlmConfigurableProvider[] {
-  // This route is a Phoenix-native adapter for the optional loopback
-  // codex-chatgpt-web bridge. It is exposed as a declared route so the Models
-  // page can configure it, but it remains dormant until a profile is stored.
   const knownRoutes = new Set([...catalogProviderIds(), CHATGPT_WEB_PROVIDER])
   const entries = new Map<string, LlmConfigurableProvider>()
   const declare = (provider: string, displayName: string): void => {
@@ -148,17 +170,16 @@ function directoryEntries(
       displayName,
       settingsNs: NS,
       settingsPath: ['providers', provider],
-      // The local bridge is a Phoenix route even though pi-ai does not ship a
-      // provider object for it; like a hand-declared route, it needs explicit
-      // profile fields in the settings surface. Other installed catalog routes
-      // remain non-declared even after a profile narrows their models.
       declared: provider === CHATGPT_WEB_PROVIDER || !knownRoutes.has(provider),
     })
   }
   for (const provider of knownRoutes) {
     declare(provider, provider === CHATGPT_WEB_PROVIDER ? chatgptWebDefaults().displayName : provider)
   }
-  for (const [provider, profile] of profiles) declare(provider, profile.displayName)
+  for (const [provider, profile] of profiles) {
+    if (provider === PHOENIX_LOCAL_PROVIDER) continue
+    declare(provider, profile.displayName)
+  }
   return [...entries.values()]
 }
 
@@ -180,19 +201,16 @@ export function apply(ctx: Context, config: Config): void {
   let memoized: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
   /**
    * The resolved profiles for the current configuration, memoized by the raw
-   * snapshot's identity — which is also what makes the adapter's own snapshot
-   * stable across operations that observe no change.
-   *
-   * No fallback for an unserviceable snapshot lives here: the section schema
-   * resolves the whole profile set, so a write that could not be served is
-   * refused where it is written, and the settings seam keeps a namespace's
-   * last good value for a stored section that fails. Anything reaching this
-   * point has already resolved once.
+   * snapshot's identity. The local route is injected last so a user settings
+   * document cannot redirect Phoenix Local away from its loopback-only proxy.
    */
   const profiles = (): ReadonlyMap<string, ResolvedPiAiProviderProfile> => {
     const raw = current()
     if (raw === lastRaw && memoized !== undefined) return memoized
-    const next = resolveProfiles(raw.providers)
+    const next = resolveProfiles({
+      ...(raw.providers ?? {}),
+      [PHOENIX_LOCAL_PROVIDER]: phoenixLocalProfile(),
+    })
     lastRaw = raw
     memoized = next
     return next
@@ -205,10 +223,8 @@ export function apply(ctx: Context, config: Config): void {
   ): Promise<string | undefined> => {
     const ref = profile.apiKeyEnv
     // Only a profile that names no credential at all defers to pi-ai's
-    // provider-native discovery. Once one is named, a miss must fail loud:
-    // handing pi-ai `undefined` would let it pick up an unrelated ambient key
-    // (OPENAI_API_KEY and friends), billing another tenant for a request the
-    // deployment meant to authenticate differently.
+    // provider-native discovery. Phoenix Local deliberately names none and is
+    // therefore usable without cloud credentials, API keys, or tokens.
     if (ref === undefined) return undefined
     const credentials = ctx.get('credentials')
     const hit = credentials !== undefined
@@ -292,9 +308,9 @@ export function apply(ctx: Context, config: Config): void {
   // its own here rather than being interrogated unauthenticated.
   ctx.llm.registerModelDiscovery(NS, request => discoverModels(request, () => storedApiKey(request.provider)))
   // Route effects bind to this apply fiber via the stable `ctx` reference,
-  // even when a swap runs inside the scoped settings callback below. A bare
-  // mount (zero routes) is the dormant posture: nothing registers until a
-  // settings section supplies profiles, and routes drop when it empties.
+  // even when a swap runs inside the scoped settings callback below. Phoenix
+  // Local means this adapter always has at least one route even with no user
+  // settings or cloud provider configured.
   let registration: AdapterRegistrationHandle | undefined
   let registeredFacts: unknown
   const ensureRegistrationFacts = (): void => {
@@ -308,12 +324,6 @@ export function apply(ctx: Context, config: Config): void {
     // new set — so returning to a working configuration always re-applies.
     const routes = [...profiles().keys()]
     if (registration === undefined) {
-      // Dormant bare mount: nothing is registered until a section supplies
-      // profiles, and an empty section keeps it that way.
-      if (routes.length === 0) {
-        registeredFacts = facts
-        return
-      }
       registration = ctx.llm.registerAdapter(routes, adapter)
     } else {
       registration.replace(routes)
@@ -323,9 +333,9 @@ export function apply(ctx: Context, config: Config): void {
   ensureRegistrationFacts()
 
   installSettingsSection(ctx, NS, Config, config, {
-    // Refuse an unserviceable section where it is written: without this a
-    // schema-valid profile the adapter cannot serve would be stored and then
-    // silently disable every route in this namespace.
+    // User-written provider profiles are validated independently. Phoenix
+    // Local itself is injected after that validation and cannot be redirected
+    // to a non-loopback endpoint by settings.
     validate: assertServiceable,
     setSource: (source) => {
       current = source
