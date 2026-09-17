@@ -238,7 +238,9 @@ class RuntimeManager implements LocalModelRuntimeManager {
           'runtime-exited',
           processError?.message ?? 'El proceso de Phoenix Local terminó inesperadamente.',
         )
-        this.publishError(exitFault)
+        const publicError: LocalModelRuntimeError = { code: exitFault.code, message: exitFault.message }
+        const { pid: _pid, port: _port, baseUrl: _baseUrl, progress: _progress, ...rest } = this.current
+        this.publish({ ...rest, phase: 'error', error: publicError })
       })
       this.server = handle
       await this.dependencies.probeHealth(base, HEALTH_TIMEOUT_MS)
