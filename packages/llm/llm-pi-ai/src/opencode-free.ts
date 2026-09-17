@@ -62,6 +62,12 @@ function fallbackModels(): PiAiModelProfile[] {
   return parseOpenCodeFreeModels({ data: FALLBACK_FREE_IDS.map(id => ({ id })) })
 }
 
+function cloneModelProfiles(models: readonly PiAiModelProfile[]): PiAiModelProfile[] {
+  return models.map(model => model.input === undefined
+    ? { ...model }
+    : { ...model, input: [...model.input] })
+}
+
 /** Built-in Phoenix provider profile shown in the normal model selector. */
 export function opencodeFreeProfile(models: readonly PiAiModelProfile[]): PiAiProviderProfile {
   return {
@@ -74,7 +80,7 @@ export function opencodeFreeProfile(models: readonly PiAiModelProfile[]): PiAiPr
     // pi-ai requires a local authorization marker for OpenAI-compatible routes.
     // The loopback proxy strips it, so OpenCode itself receives no credential.
     headers: { Authorization: LOCAL_AUTHORIZATION },
-    models: models.map(model => ({ ...model, input: model.input === undefined ? undefined : [...model.input] })),
+    models: cloneModelProfiles(models),
   }
 }
 
@@ -129,7 +135,7 @@ export function createOpenCodeFreeCatalog(options: OpenCodeFreeCatalogOptions = 
   }
 
   return {
-    models: () => current.map(model => ({ ...model, input: model.input === undefined ? undefined : [...model.input] })),
+    models: () => cloneModelProfiles(current),
     refresh,
   }
 }
@@ -143,7 +149,7 @@ export function openCodeUpstreamHeaders(
   for (const [rawName, rawValue] of Object.entries(headers)) {
     const name = rawName.toLowerCase()
     if (blocked.has(name) || rawValue === undefined) continue
-    output[name] = Array.isArray(rawValue) ? rawValue.join(', ') : rawValue
+    output[name] = typeof rawValue === 'string' ? rawValue : rawValue.join(', ')
   }
   if (output['content-type'] === undefined) output['content-type'] = 'application/json'
   return output
@@ -210,7 +216,7 @@ async function handleProxyRequest(
   const upstream = await fetchImpl(`${OPENCODE_FREE_BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: openCodeUpstreamHeaders(incomingHeaders(request.headers)),
-    body,
+    body: Buffer.from(body).toString('utf8'),
   })
   await pipeResponse(upstream, response)
 }
