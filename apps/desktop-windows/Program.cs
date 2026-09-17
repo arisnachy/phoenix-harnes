@@ -76,22 +76,35 @@ internal static class Program
 
     private static void RunVisibleWindowSmokeTest()
     {
+        DesktopLog.Write("Visible smoke: initializing WinForms.");
         ApplicationConfiguration.Initialize();
-        using var window = new PhoenixDesktopWindow(PhoenixUri, initializeWebViewsOnShow: false);
+        using var window = new PhoenixDesktopWindow(PhoenixUri, initializeWebViewsOnShow: false)
+        {
+            WindowState = FormWindowState.Normal,
+            Size = new Size(1100, 760),
+        };
         using var timer = new System.Windows.Forms.Timer { Interval = 1200 };
         var shown = false;
+
+        window.HandleCreated += (_, _) => DesktopLog.Write("Visible smoke: HandleCreated.");
+        window.Load += (_, _) => DesktopLog.Write("Visible smoke: Load.");
         window.Shown += (_, _) =>
         {
             shown = true;
+            DesktopLog.Write("Visible smoke: Shown.");
             timer.Start();
         };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
-            DesktopLog.Write("Visible desktop window smoke test passed.");
-            Application.Exit();
+            DesktopLog.Write("Visible desktop window smoke test passed; disposing form.");
+            window.Dispose();
+            Application.ExitThread();
         };
+
+        DesktopLog.Write("Visible smoke: entering Application.Run.");
         Application.Run(window);
+        DesktopLog.Write($"Visible smoke: Application.Run returned; shown={shown}.");
         if (!shown)
             throw new InvalidOperationException("Phoenix desktop window never reached the Shown state.");
     }
