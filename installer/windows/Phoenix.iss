@@ -35,8 +35,8 @@ Name: "{group}\Phoenix"; Filename: "{app}\Phoenix.exe"
 Name: "{autodesktop}\Phoenix"; Filename: "{app}\Phoenix.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bootstrap-runtime.ps1"""; StatusMsg: "Preparando runtime administrado de Phoenix..."; Flags: runhidden waituntilterminated
-Filename: "{app}\Phoenix.exe"; Parameters: "--enable-autostart"; Flags: runhidden waituntilterminated; Tasks: autostart
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bootstrap-runtime.ps1"""; StatusMsg: "Preparando runtime administrado de Phoenix..."; Flags: runhidden waituntilterminated skipifsilent
+Filename: "{app}\Phoenix.exe"; Parameters: "--enable-autostart"; Flags: runhidden waituntilterminated skipifsilent; Tasks: autostart
 Filename: "{app}\Phoenix.exe"; Description: "Abrir Phoenix"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
