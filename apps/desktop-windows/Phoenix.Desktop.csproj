@@ -14,4 +14,9 @@
     <DebugType>none</DebugType>
     <ApplicationIcon Condition="Exists('phoenix.ico')">phoenix.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Phoenix.Desktop.Tests\**\*.cs" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
 </Project>
