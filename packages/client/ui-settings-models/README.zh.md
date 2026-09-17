@@ -4,7 +4,7 @@
 
 已配置的提供方卡片带有紧凑的上移和下移控件。选择的顺序保存在 `user-profile.modelProviderOrder` 中；宿主将其应用于每个建议性的 `session.models` 响应，因此设置列表和对话选择器显示相同顺序，同时新发现的路由仍然可见。
 
-`chatgpt-web` 路由是 API 密钥字段的例外：其卡片会标明本地 `codex-chatgpt-web` 网桥，显示实际桥接地址，并在不需要付费模型凭据的情况下保留该路由可选。浏览器认证仍由网桥负责；PHOENIX 只发送 Responses 协议所需的非秘密本地授权标记。需要自动管理生命周期时，配置 `PHOENIX_CHATGPT_WEB_COMMAND` 后使用 `dsh chatgpt-web start`／`dsh chatgpt-web status` 启动或检查网桥。
+`chatgpt-web` 路由是 API 密钥字段的例外。Settings → Connectors 持有其 ON/OFF 开关：ON 会先启动并健康检查本地 `codex-chatgpt-web` 网桥，成功后才写入 provider profile；OFF 会先移除路由，再停止 Phoenix 拥有的网桥进程。只有用户明确保留为 ON 的状态会跨重启恢复。浏览器认证仍由网桥负责；PHOENIX 只发送 Responses 协议所需的非秘密本地授权标记。`dsh chatgpt-web start|status|stop` 仍是同一生命周期控制器的诊断／手动入口。
 
 模型设置与产品引导插件。同一个 client Cordis 插件会注册 Models 页面和两个有序的首次使用弹窗：版本化内测声明，以及按条件显示的 DeepSeek 官方凭据步骤。两个步骤共用同一套弹窗组件，并继续由 `settings.onboarding` 排序。Models 平面把三个协议领域汇聚为一个共享快照：`llm.providers`（可配置提供方目录，含每条路由的存活／休眠状态）、`settings.describe`（序列化 schema、分层脱敏值、secret slot）与 `credentials.describe`（不含值的 configured/source/writable 徽标）；页面据此渲染提供方行，一次只展开一张编辑卡片，且不把路由存活状态呈现为提供方状态。
 
