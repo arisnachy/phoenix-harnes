@@ -29,6 +29,8 @@ internal static class Program
         using var mutex = new Mutex(initiallyOwned: true, "Local\\PhoenixDesktop.SingleInstance", out var ownsMutex);
         if (!ownsMutex)
         {
+            // The first process owns the managed runtime and embedded WebView shell. A second launch
+            // stays side-effect free and only exposes the already-running local UI as a fallback.
             DesktopBrowser.Open(PhoenixUri);
             return;
         }
@@ -44,14 +46,20 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem restartItem;
     private readonly ToolStripMenuItem autostartItem;
     private readonly HttpClient http = new() { Timeout = TimeSpan.FromSeconds(1.5) };
+    private readonly PhoenixDesktopWindow window;
     private Process? ownedRuntime;
     private bool externallyManaged;
     private bool shuttingDown;
 
     internal PhoenixApplicationContext()
     {
+        // Construct the window on the WinForms UI thread and force a handle now. StartAsync may
+        // continue on a pool thread, so the handle gives ShowWindow a reliable BeginInvoke target.
+        window = new PhoenixDesktopWindow(Program.PhoenixUri);
+        _ = window.Handle;
+
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Abrir Phoenix", null, (_, _) => DesktopBrowser.Open(Program.PhoenixUri));
+        menu.Items.Add("Abrir Phoenix", null, (_, _) => ShowWindow());
         restartItem = new ToolStripMenuItem("Reiniciar runtime administrado", null, async (_, _) => await RestartOwnedRuntimeAsync());
         menu.Items.Add(restartItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -72,9 +80,20 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             Visible = true,
             ContextMenuStrip = menu,
         };
-        tray.DoubleClick += (_, _) => DesktopBrowser.Open(Program.PhoenixUri);
+        tray.DoubleClick += (_, _) => ShowWindow();
 
         _ = StartAsync();
+    }
+
+    private void ShowWindow()
+    {
+        if (window.IsDisposed || shuttingDown) return;
+        if (window.InvokeRequired)
+        {
+            window.BeginInvoke((Action)ShowWindow);
+            return;
+        }
+        window.ShowAndActivate();
     }
 
     private async Task StartAsync()
@@ -84,7 +103,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             externallyManaged = true;
             restartItem.Enabled = false;
             tray.Text = "Phoenix · runtime existente";
-            DesktopBrowser.Open(Program.PhoenixUri);
+            ShowWindow();
             return;
         }
 
@@ -171,7 +190,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             {
                 tray.Text = "Phoenix · activo";
                 if (openWhenReady)
-                    DesktopBrowser.Open(Program.PhoenixUri);
+                    ShowWindow();
                 return;
             }
             if (ownedRuntime.HasExited)
@@ -242,6 +261,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     {
         shuttingDown = true;
         StopOwnedRuntime();
+        if (!window.IsDisposed) window.Dispose();
         tray.Visible = false;
         tray.Dispose();
         http.Dispose();
@@ -271,6 +291,7 @@ internal static class StartupRegistration
     }
 }
 
+/// <summary>Fallback used only when a second Phoenix process is started while the desktop owner already runs.</summary>
 internal static class DesktopBrowser
 {
     internal static void Open(Uri uri)
@@ -293,7 +314,7 @@ internal static class DesktopBrowser
         }
         catch
         {
-            // Opening the UI is convenience only; the tray/runtime stay alive.
+            // Opening the duplicate-process fallback is convenience only; the owner stays alive.
         }
     }
 
