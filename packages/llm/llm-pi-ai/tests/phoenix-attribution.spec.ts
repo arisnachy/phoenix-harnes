@@ -29,9 +29,9 @@ describe('PHOENIX provider attribution', () => {
 
     await assemble(ctx, { provider: 'openrouter', model: 'openrouter/free', messages: [] })
 
-    expect(server.headers[0]?.['user-agent']).toMatch(/^PHOENIX\//)
+    expect(server.headers[0]?.['user-agent']).toMatch(/^phoenix-harness\//)
     expect(server.headers[0]?.['http-referer']).toBe('https://github.com/arisnachy/phoenix-harnes')
-    expect(server.headers[0]?.['x-title']).toBe('PHOENIX')
+    expect(server.headers[0]?.['x-title']).toBe('phoenix-harness')
   })
 
   it('keeps OpenRouter-only app headers off unrelated providers', async () => {
@@ -52,7 +52,7 @@ describe('PHOENIX provider attribution', () => {
 
     await assemble(ctx, { provider: 'acme', model: 'acme-model', messages: [] })
 
-    expect(server.headers[0]?.['user-agent']).toMatch(/^PHOENIX\//)
+    expect(server.headers[0]?.['user-agent']).toMatch(/^phoenix-harness\//)
     expect(server.headers[0]?.['http-referer']).toBeUndefined()
     expect(server.headers[0]?.['x-title']).toBeUndefined()
   })
