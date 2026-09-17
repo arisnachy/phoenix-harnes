@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
-import SandboxPolicyService from '@phoenix-ai/dsh-sandbox-policy'
+import SandboxPolicyService, { setSandboxMode } from '@phoenix-ai/dsh-sandbox-policy'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 
 const previousRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT
@@ -81,6 +81,23 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
         mode: 'danger-full-access',
         workspaceRoot: resolve(layout.project),
         sessionId: 'normal',
+      })
+    } finally {
+      rmSync(layout.root, { recursive: true, force: true })
+    }
+  })
+
+  it('honors a session Full Access switch even while HARDNESS is active', async () => {
+    const layout = createLayout()
+    try {
+      enableHardness(layout)
+      const ctx = await mounted('read-only')
+      const active = activeSession('full-access-live-runtime', layout.runtime)
+      setSandboxMode(active, 'danger-full-access')
+      expect(ctx.sandboxPolicy.resolve({ session: active })).toEqual({
+        mode: 'danger-full-access',
+        workspaceRoot: resolve(layout.runtime),
+        sessionId: 'full-access-live-runtime',
       })
     } finally {
       rmSync(layout.root, { recursive: true, force: true })
