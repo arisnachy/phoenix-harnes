@@ -43,17 +43,24 @@ describe('OpenCode free provider', () => {
     expect(profile.headers?.Authorization).toBeTruthy()
   })
 
+  it('keeps absent optional model fields absent when cloning selector entries', () => {
+    const profile = opencodeFreeProfile([{ id: 'big-pickle' }])
+    expect('input' in profile.models![0]!).toBe(false)
+  })
+
   it('never forwards Phoenix local authorization to OpenCode', () => {
     const headers = openCodeUpstreamHeaders({
       authorization: 'Bearer phoenix-opencode-free',
       'content-type': 'application/json',
       accept: 'text/event-stream',
       'x-phoenix-client': 'Phoenix',
+      'x-multi': ['one', 'two'] as const,
     })
     expect(headers.authorization).toBeUndefined()
     expect(headers['content-type']).toBe('application/json')
     expect(headers.accept).toBe('text/event-stream')
     expect(headers['x-phoenix-client']).toBe('Phoenix')
+    expect(headers['x-multi']).toBe('one, two')
   })
 
   it('refreshes from the public catalog and retains the last good list on failures', async () => {
