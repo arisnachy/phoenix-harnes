@@ -1,0 +1,22 @@
+name: Model surfaces runtime regression
+
+on:
+  pull_request:
+    paths:
+      - 'packages/client/ui-settings-models/**'
+      - 'packages/client/ui-model-selection/**'
+      - '.github/workflows/models-runtime-regression.yml'
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run packages/client/ui-settings-models/tests/runtime-render.client.spec.tsx packages/client/ui-model-selection/tests/optional-plugin-inventory.client.spec.ts
