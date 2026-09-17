@@ -14,6 +14,7 @@ function harness(initial?: Partial<LocalModelPersistentState>) {
     installedModelIds: [],
     ...initial,
   }
+  let onServerExit: ((error?: Error) => void) | undefined
   const server: LocalServerHandle = { pid: 4242, stop: vi.fn(async () => undefined) }
   const dependencies: LocalModelRuntimeManagerDependencies = {
     platform: 'win32',
@@ -29,11 +30,19 @@ function harness(initial?: Partial<LocalModelPersistentState>) {
     mkdir: vi.fn(async () => undefined),
     remove: vi.fn(async () => undefined),
     allocatePort: vi.fn(async () => 17842),
-    spawnServer: vi.fn(() => server),
+    spawnServer: vi.fn((_executable, _args, onExit) => {
+      onServerExit = onExit
+      return server
+    }),
     probeHealth: vi.fn(async () => undefined),
     freeMemoryBytes: vi.fn(() => 16_000_000_000),
   }
-  return { dependencies, server, readState: () => persisted }
+  return {
+    dependencies,
+    server,
+    readState: () => persisted,
+    exitServer: (error?: Error) => onServerExit?.(error),
+  }
 }
 
 describe('LocalModelRuntimeManager', () => {
@@ -86,6 +95,22 @@ describe('LocalModelRuntimeManager', () => {
       'http://127.0.0.1:17842/v1',
     ])
     expect(dependencies.spawnServer).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears stale endpoint metadata when llama-server exits unexpectedly', async () => {
+    const { dependencies, exitServer } = harness({ installedModelIds: ['qwen3.5-4b-q4-k-m'] })
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await manager.ensureRunning()
+
+    exitServer(new Error('llama-server crashed'))
+
+    expect(manager.snapshot()).toMatchObject({
+      phase: 'error',
+      error: { code: 'runtime-exited', message: 'llama-server crashed' },
+    })
+    expect(manager.snapshot().pid).toBeUndefined()
+    expect(manager.snapshot().port).toBeUndefined()
+    expect(manager.snapshot().baseUrl).toBeUndefined()
   })
 
   it('does not start while local inference is switched off', async () => {
