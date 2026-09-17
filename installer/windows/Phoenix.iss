@@ -24,8 +24,7 @@ UninstallDisplayIcon={app}\Phoenix.exe
 SetupIconFile={#SourceDir}\phoenix.ico
 
 [Files]
-Source: "{#SourceDir}\Phoenix.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\bootstrap-runtime.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Tasks]
 Name: "desktopicon"; Description: "Crear acceso directo en el escritorio"; GroupDescription: "Accesos directos:"; Flags: checkedonce
@@ -36,8 +35,8 @@ Name: "{group}\Phoenix"; Filename: "{app}\Phoenix.exe"
 Name: "{autodesktop}\Phoenix"; Filename: "{app}\Phoenix.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bootstrap-runtime.ps1"""; StatusMsg: "Preparando runtime administrado de Phoenix..."; Flags: runhidden waituntilterminated
-Filename: "{app}\Phoenix.exe"; Parameters: "--enable-autostart"; Flags: runhidden waituntilterminated; Tasks: autostart
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bootstrap-runtime.ps1"""; StatusMsg: "Preparando runtime administrado de Phoenix..."; Flags: runhidden waituntilterminated skipifsilent
+Filename: "{app}\Phoenix.exe"; Parameters: "--enable-autostart"; Flags: runhidden waituntilterminated skipifsilent; Tasks: autostart
 Filename: "{app}\Phoenix.exe"; Description: "Abrir Phoenix"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
