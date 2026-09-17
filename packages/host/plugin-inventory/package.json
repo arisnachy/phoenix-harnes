@@ -1,6 +1,6 @@
 {
   "name": "@phoenix-ai/dsh-host-plugin-inventory",
-  "description": "Read-only Remote projection of current Cordis Loader plugin state",
+  "description": "Trusted Host projection of plugin state, local runtimes, and optional ChatGPT Web lifecycle",
   "version": "0.1.1-rc.2",
   "publishConfig": {
     "access": "public"
@@ -35,7 +35,11 @@
       "default": "./lib/typert.remote-client.js"
     },
     "./src/*": "./src/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./chatgpt-web": {
+      "types": "./lib/types/chatgpt-web.d.ts",
+      "default": "./lib/types/chatgpt-web.js"
+    }
   },
   "files": [
     "lib/index.js",
@@ -49,7 +53,9 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@phoenix-ai/dsh-atomic-write": "workspace:^",
+    "@phoenix-ai/dsh-home-paths": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/cordis-plugin-loader": "workspace:^",
