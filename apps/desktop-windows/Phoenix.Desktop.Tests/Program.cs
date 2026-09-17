@@ -45,6 +45,12 @@ True(DesktopStartupContract.ShowWindowBeforeRuntimeReady, "desktop window is sho
 True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch signals existing window", failures);
 Equal("Preparando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
 
+// A managed runtime is healthy only after install/build completed. Old desktop builds could leave
+// an empty marker behind before those steps completed; that state must never be accepted as ready.
+True(ManagedRuntimeMarker.IsReadyContent("schema=1\nstate=ready\ninstalledAt=2026-09-17T00:00:00Z"), "completed runtime marker accepted", failures);
+False(ManagedRuntimeMarker.IsReadyContent(""), "empty legacy marker rejected", failures);
+False(ManagedRuntimeMarker.IsReadyContent("schema=1\ninstalledAt=2026-09-17T00:00:00Z"), "marker without ready state rejected", failures);
+
 if (failures.Count == 0)
 {
     Console.WriteLine("Embedded browser and desktop startup contract checks passed.");
