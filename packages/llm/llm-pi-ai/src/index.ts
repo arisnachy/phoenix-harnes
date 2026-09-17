@@ -112,10 +112,9 @@ export {
 } from './image-generation.ts'
 
 export const name = 'llm-pi-ai'
-// The host adapter and the agent-plane image-only variant both need the same
-// runtime seams. Declaring them here makes direct image registration resolve on
-// the mounting agent instead of falling through an unscoped property access.
-export const inject = ['llm', 'tools', 'subprocess', 'attachments']
+// The normal model catalog must not wait for image-generation-only services.
+// The image-only variant injects its narrower runtime seams inside apply().
+export const inject = ['llm']
 
 const NS = settingsNamespace('llm-pi-ai')
 
@@ -191,7 +190,9 @@ function directoryEntries(
 /** Register one generic pi-ai adapter for all configured provider routes. */
 export function apply(ctx: Context, config: Config): void {
   if (config.imageOnly === true) {
-    installCodexImageGeneration(ctx)
+    ctx.inject(['tools', 'subprocess', 'attachments'], (imageCtx) => {
+      installCodexImageGeneration(imageCtx)
+    })
     return
   }
 
