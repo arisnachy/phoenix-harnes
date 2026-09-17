@@ -80,7 +80,11 @@ export class ModelDirectoryResolver extends Service {
     const actx = sessions.scope(sessionId)
     if (actx === undefined) throw new Error(`ui-model-selection: session "${String(sessionId)}" resolved no scope`)
     const connection = this.ctx.get('connection') as ConnectionHandle
-    const pluginInventory = (this.ctx.remote as unknown as { pluginInventory?: PluginInventoryLocalRemote }).pluginInventory
+    // Phoenix Local is optional. Resolve its nested Remote directly from the
+    // service store instead of walking the injected root Remote proxy, which
+    // would require `remote.pluginInventory` to be injected and can prevent
+    // the cloud model selector from mounting when the Host lacks that Remote.
+    const pluginInventory = this.ctx.get('remote.pluginInventory') as PluginInventoryLocalRemote | undefined
     const readLocalModelState = pluginInventory?.localModelState === undefined
       ? undefined
       : () => pluginInventory.localModelState!()
