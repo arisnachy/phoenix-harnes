@@ -28,9 +28,6 @@ async function bench(isLoopback = true, settings?: object, services: object = {}
   // The plugins inject `remote`; forwarded events reach them through the
   // same `$dispatch` handoff the connection sink makes.
   new TestRemote(ctx)
-  // ui-settings-models reads the pluginInventory Remote while applying, so
-  // the fixture must provide the same nested service contract as production.
-  ctx.provide('remote.pluginInventory', {})
   // Without a settings face the mirror's reads fail and stay contained; the
   // Models join itself never fetches until a section actually loads. The real
   // ui-settings apply also provides the settingsSchema service.
@@ -66,7 +63,6 @@ describe('ui-settings-models apply', () => {
       'locale',
       'connection',
       'remote',
-      'remote.pluginInventory',
       'settingsScope',
       'settingsSchema',
     ])
