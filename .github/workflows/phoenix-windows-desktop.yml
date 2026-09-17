@@ -81,6 +81,33 @@ jobs:
             throw 'Installer does not recursively include WebView2 runtime payload'
           }
 
+      - name: Verify visible recoverable first-run startup
+        shell: pwsh
+        run: |
+          $program = Get-Content apps/desktop-windows/Program.cs -Raw
+          $ctorStart = $program.IndexOf('internal PhoenixApplicationContext()')
+          $startAsync = $program.IndexOf('_ = StartAsync();', $ctorStart)
+          $showWindow = $program.IndexOf('ShowWindow();', $ctorStart)
+          if ($ctorStart -lt 0 -or $startAsync -lt 0 -or $showWindow -lt 0 -or $showWindow -gt $startAsync) {
+            throw 'Phoenix must show its desktop shell before asynchronous runtime preparation starts'
+          }
+
+          $iss = Get-Content installer/windows/Phoenix.iss -Raw
+          if ($iss -match 'Filename:\s*"powershell\.exe"') {
+            throw 'Installer must not hide first-run runtime bootstrap; Phoenix.exe owns visible bootstrap progress'
+          }
+
+          $bootstrap = Get-Content installer/windows/bootstrap-runtime.ps1 -Raw
+          if (-not $bootstrap.Contains("'state=preparing'")) {
+            throw 'Managed runtime bootstrap must mark incomplete installs as preparing'
+          }
+          if (-not $bootstrap.Contains("'state=ready'")) {
+            throw 'Managed runtime bootstrap must mark successful installs as ready'
+          }
+          if (-not $program.Contains('Managed runtime marker is incomplete; resuming bootstrap')) {
+            throw 'Desktop must resume an incomplete managed runtime instead of treating it as ready'
+          }
+
       - name: Launcher smoke test
         shell: pwsh
         run: |
