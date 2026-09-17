@@ -30,6 +30,7 @@ export type ComputerAction =
   | 'screenshot'
   | 'windows'
   | 'focus'
+  | 'browser_open'
   | 'move'
   | 'click'
   | 'double_click'
@@ -49,6 +50,8 @@ export interface ComputerToolArgs {
    * substring, pid:1234, and hwnd:0x123ABC. focus requires this field.
    */
   target?: string
+  /** URL or search text opened inside the Phoenix embedded browser. */
+  url?: string
   x?: number
   y?: number
   x2?: number
@@ -142,6 +145,17 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
     case 'windows':
     case 'focus':
       return
+    case 'browser_open':
+      if (args.url === undefined || args.url.trim().length === 0) {
+        throw new TypeError('computer browser_open requires a non-empty url')
+      }
+      if (args.url.length > 4096) {
+        throw new RangeError('computer browser_open url exceeds 4096 UTF-16 code units')
+      }
+      if (args.url.includes('\0')) {
+        throw new TypeError('computer browser_open url contains an unsupported NUL character')
+      }
+      return
     case 'move':
     case 'click':
     case 'double_click':
@@ -190,6 +204,7 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
  */
 export function shouldCaptureAfterAction(action: ComputerAction): boolean {
   return action === 'focus'
+    || action === 'browser_open'
     || action === 'click'
     || action === 'double_click'
     || action === 'drag'
@@ -621,6 +636,15 @@ switch ($action) {
   }
   'windows' { [PhoenixDesktop]::ListWindows() }
   'focus' { [PhoenixDesktop]::FocusWindow($target, $true) }
+  'browser_open' {
+    $browserTarget = if ([String]::IsNullOrWhiteSpace($target)) { 'Phoenix' } else { $target }
+    [PhoenixDesktop]::FocusWindow($browserTarget, $true)
+    [PhoenixDesktop]::KeyCombo('CTRL+L')
+    Start-Sleep -Milliseconds 80
+    [PhoenixDesktop]::TypeText($env:PHX_URL)
+    [PhoenixDesktop]::KeyCombo('ENTER')
+    [PhoenixDesktop]::ForegroundSummary()
+  }
   'move' {
     [PhoenixDesktop]::Guard($target)
     [PhoenixDesktop]::Move([int]$env:PHX_X, [int]$env:PHX_Y)
@@ -680,6 +704,7 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   putNumber(env, 'PHX_Y2', args.y2)
   putNumber(env, 'PHX_DELTA', args.delta)
   if (args.target !== undefined) env.PHX_TARGET = args.target
+  if (args.url !== undefined) env.PHX_URL = args.url
   if (args.button !== undefined) env.PHX_BUTTON = args.button
   if (args.text !== undefined) env.PHX_TEXT = args.text
   if (args.keys !== undefined) env.PHX_KEYS = args.keys
@@ -739,6 +764,7 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
 
 function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; reversible: boolean } {
   if (action === 'move' || action === 'scroll' || action === 'focus') return { risk: 'low', reversible: true }
+  if (action === 'browser_open') return { risk: 'medium', reversible: true }
   if (action === 'click' || action === 'double_click' || action === 'drag') return { risk: 'medium', reversible: false }
   return { risk: 'high', reversible: false }
 }
@@ -822,17 +848,24 @@ export function registerComputerTool(ctx: Context): void {
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
   const deploymentDefault = ctx.shell.sandboxMode
 
+  ctx.systemPrompt.section({
+    name: 'tool:computer:embedded-browser',
+    order: 106,
+    text: 'On Windows Phoenix Desktop, use the computer browser_open action for interactive web navigation. It opens the URL inside Phoenix\'s embedded browser pane instead of intentionally launching an external browser. After browser_open, use the normal screenshot, click, type, key, and scroll actions against the Phoenix window to control the page; F9 toggles the pane and Ctrl+L focuses its address bar.',
+  })
+
   ctx.tools.register(defineTool({
     name: 'computer',
-    description: 'Control the Windows desktop with window-aware actions. Before controlling an external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
+    description: 'Control the Windows desktop with window-aware actions. For interactive web work in Phoenix Desktop, prefer browser_open: it focuses Phoenix, reveals the embedded browser pane, enters the URL, and keeps the web surface inside Phoenix instead of intentionally launching an external browser. Then use screenshot/click/type/key/scroll against the Phoenix window for full visual control. Before controlling any other external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
     parameters: {
       action: {
         type: 'string',
         required: true,
-        enum: ['screenshot', 'windows', 'focus', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
-        description: 'Desktop operation. windows lists visible top-level windows; focus activates a target and verifies foreground identity.',
+        enum: ['screenshot', 'windows', 'focus', 'browser_open', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
+        description: 'Desktop operation. browser_open navigates Phoenix\'s embedded browser; windows lists visible top-level windows; focus activates a target and verifies foreground identity.',
       },
-      target: { type: 'string', description: 'Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus and strongly recommended for external-app input.' },
+      target: { type: 'string', description: 'Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus; browser_open defaults to the Phoenix window.' },
+      url: { type: 'string', description: 'URL or search text for browser_open. Phoenix validates/navigates it through the embedded browser address surface.' },
       x: { type: 'integer', description: 'Screen X coordinate. Required for move/click/double_click/drag; optional with scroll.' },
       y: { type: 'integer', description: 'Screen Y coordinate. Required for move/click/double_click/drag; optional with scroll.' },
       x2: { type: 'integer', description: 'Drag destination X coordinate.' },
@@ -859,9 +892,11 @@ export function registerComputerTool(ctx: Context): void {
           ? `Visible top-level windows:\n${value.details ?? '<none>'}`
           : value.action === 'screenshot'
             ? 'Desktop screenshot captured and attached for the next model step.'
-            : value.postScreenshot
-              ? `Desktop ${value.action} input sent and a fresh post-action screenshot was attached. Verify the visible result before proceeding.`
-              : `Desktop ${value.action} input sent.`,
+            : value.action === 'browser_open'
+              ? 'Opened the destination in Phoenix\'s embedded browser and attached a fresh desktop screenshot. Continue controlling the page inside the Phoenix window.'
+              : value.postScreenshot
+                ? `Desktop ${value.action} input sent and a fresh post-action screenshot was attached. Verify the visible result before proceeding.`
+                : `Desktop ${value.action} input sent.`,
       }],
     },
     async execute(args: ComputerToolArgs, exec) {
