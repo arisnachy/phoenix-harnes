@@ -23,7 +23,7 @@ const { version } = createRequire(import.meta.url)('../package.json') as { versi
  * and nothing per-request may influence the values.
  */
 export interface AppIdentity {
-  /** `User-Agent` product token. */
+  /** `User-Agent` product token (lowercase, hyphenated). */
   product: string
   /** Product version; sourced from package metadata, never hand-copied. */
   version: string
@@ -38,7 +38,7 @@ export interface AppIdentity {
  * suppress attribution entirely.
  */
 export const APP_IDENTITY: AppIdentity = {
-  product: 'PHOENIX',
+  product: 'phoenix-harness',
   version,
   url: 'https://github.com/arisnachy/phoenix-harnes',
 }
