@@ -1,0 +1,105 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PhoenixLocalPanel } from '../src/client/PhoenixLocalPanel.tsx'
+import type { PhoenixLocalModelClient, PhoenixLocalModelSnapshot } from '../src/client/PhoenixLocalPanel.tsx'
+import { en } from '../src/client/locales.ts'
+
+afterEach(cleanup)
+
+const t = (key: keyof typeof en): string => en[key]
+
+function snapshot(overrides: Partial<PhoenixLocalModelSnapshot> = {}): PhoenixLocalModelSnapshot {
+  return {
+    mode: 'on-demand',
+    selectedModelId: 'qwen3.5-4b-q4-k-m',
+    installedModelIds: [],
+    phase: 'not-installed',
+    catalog: [{
+      id: 'qwen3.5-4b-q4-k-m',
+      displayName: 'Qwen3.5-4B Q4_K_M',
+      sizeBytes: 2_600_000_000,
+      estimatedRamBytes: 4_300_000_000,
+      contextWindow: 8192,
+      maxTokens: 4096,
+      recommended: true,
+    }],
+    ...overrides,
+  }
+}
+
+function client(initial = snapshot()): PhoenixLocalModelClient & { calls: Record<string, ReturnType<typeof vi.fn>> } {
+  let current = initial
+  const calls = {
+    state: vi.fn(async () => current),
+    install: vi.fn(async (modelId: string) => {
+      current = snapshot({ selectedModelId: modelId, installedModelIds: [modelId], phase: 'ready' })
+      return current
+    }),
+    start: vi.fn(async () => {
+      current = snapshot({ installedModelIds: [current.selectedModelId], phase: 'running' })
+      return current
+    }),
+    stop: vi.fn(async () => {
+      current = snapshot({ installedModelIds: [current.selectedModelId], phase: 'ready' })
+      return current
+    }),
+    uninstall: vi.fn(async (modelId: string) => {
+      current = snapshot({ selectedModelId: modelId, installedModelIds: [], phase: 'not-installed' })
+      return current
+    }),
+    setMode: vi.fn(async (mode: PhoenixLocalModelSnapshot['mode']) => {
+      current = snapshot({ ...current, mode })
+      return current
+    }),
+    setDefaultModel: vi.fn(async (modelId: string) => {
+      current = snapshot({ ...current, selectedModelId: modelId })
+      return current
+    }),
+  }
+  return { ...calls, calls }
+}
+
+describe('PhoenixLocalPanel', () => {
+  it('loads the recommended local model and exposes lifecycle controls without a cloud key', async () => {
+    const local = client()
+    render(<PhoenixLocalPanel client={local} t={t} />)
+
+    expect(await screen.findByText(en.localModelTitle)).toBeTruthy()
+    expect(screen.getByRole('option', { name: /Qwen3\.5-4B Q4_K_M/ }).getAttribute('selected')).not.toBeNull()
+    expect(screen.getByRole('button', { name: en.localModelInstall })).toBeTruthy()
+    expect(screen.getByText(en.localModelNoInstalled)).toBeTruthy()
+  })
+
+  it('persists mode changes through the Host client', async () => {
+    const local = client()
+    render(<PhoenixLocalPanel client={local} t={t} />)
+    await screen.findByText(en.localModelTitle)
+
+    fireEvent.change(screen.getByLabelText(en.localModelMode), { target: { value: 'always-on' } })
+    await waitFor(() => expect(local.calls.setMode).toHaveBeenCalledWith('always-on'))
+  })
+
+  it('installs, starts, stops, and requires confirmation before uninstalling', async () => {
+    const local = client()
+    render(<PhoenixLocalPanel client={local} t={t} />)
+    await screen.findByText(en.localModelTitle)
+
+    fireEvent.click(screen.getByRole('button', { name: en.localModelInstall }))
+    await waitFor(() => expect(local.calls.install).toHaveBeenCalledWith('qwen3.5-4b-q4-k-m'))
+    expect(await screen.findByRole('button', { name: en.localModelStart })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: en.localModelStart }))
+    await waitFor(() => expect(local.calls.start).toHaveBeenCalledTimes(1))
+    expect(await screen.findByRole('button', { name: en.localModelStop })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: en.localModelStop }))
+    await waitFor(() => expect(local.calls.stop).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(await screen.findByRole('button', { name: en.localModelUninstall }))
+    expect(local.calls.uninstall).not.toHaveBeenCalled()
+    expect(screen.getByText(en.localModelUninstallQuestion)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.localModelUninstallConfirm }))
+    await waitFor(() => expect(local.calls.uninstall).toHaveBeenCalledWith('qwen3.5-4b-q4-k-m'))
+  })
+})
