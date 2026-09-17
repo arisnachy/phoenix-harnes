@@ -6,6 +6,7 @@ on:
       - main
       - stable
       - feat/windows-desktop-managed-install
+      - work/fix-desktop-installer-webview2
     paths:
       - 'apps/desktop-windows/**'
       - 'installer/windows/**'
@@ -63,6 +64,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item apps/desktop-windows/phoenix.ico dist/phoenix-desktop/phoenix.ico
           Copy-Item installer/windows/bootstrap-runtime.ps1 dist/phoenix-desktop/bootstrap-runtime.ps1
+
+      - name: Verify WebView2 deployment payload
+        shell: pwsh
+        run: |
+          $loader = Get-ChildItem dist/phoenix-desktop -Recurse -Filter WebView2Loader.dll -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $loader) { throw 'WebView2Loader.dll is missing from the desktop publish payload' }
 
       - name: Launcher smoke test
         shell: pwsh
