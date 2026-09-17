@@ -195,6 +195,9 @@ importers:
       '@phoenix-ai/dsh-home-paths':
         specifier: workspace:^
         version: link:../../packages/util/home-paths
+      '@phoenix-ai/dsh-host-plugin-inventory':
+        specifier: workspace:^
+        version: link:../../packages/host/plugin-inventory
       '@phoenix-ai/dsh-jobs-local':
         specifier: workspace:^
         version: link:../../packages/jobs/jobs-local
@@ -5534,6 +5537,12 @@ importers:
 
   packages/host/plugin-inventory:
     dependencies:
+      '@phoenix-ai/dsh-atomic-write':
+        specifier: workspace:^
+        version: link:../../util/atomic-write
+      '@phoenix-ai/dsh-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
       zod:
         specifier: ^4.4.3
         version: 4.4.3
