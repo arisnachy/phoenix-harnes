@@ -64,6 +64,23 @@ jobs:
           Copy-Item apps/desktop-windows/phoenix.ico dist/phoenix-desktop/phoenix.ico
           Copy-Item installer/windows/bootstrap-runtime.ps1 dist/phoenix-desktop/bootstrap-runtime.ps1
 
+      - name: Verify WebView2 deployment payload
+        shell: pwsh
+        run: |
+          $loader = Get-ChildItem dist/phoenix-desktop -Recurse -Filter WebView2Loader.dll -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $loader) { throw 'WebView2Loader.dll is missing from the desktop publish payload' }
+
+      - name: Verify installer packages full desktop payload
+        shell: pwsh
+        run: |
+          $iss = Get-Content installer/windows/Phoenix.iss -Raw
+          if (-not $iss.Contains('Source: "{#SourceDir}\*"')) {
+            throw 'Installer does not package the complete desktop publish directory'
+          }
+          if (-not $iss.Contains('recursesubdirs')) {
+            throw 'Installer does not recursively include WebView2 runtime payload'
+          }
+
       - name: Launcher smoke test
         shell: pwsh
         run: |
