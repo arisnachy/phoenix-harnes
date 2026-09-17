@@ -1,0 +1,1 @@
+Visible startup remediation branch. The Windows desktop workflow contains a contract that must fail until the desktop shell is shown before runtime bootstrap and the installer no longer hides bootstrap in PowerShell.
