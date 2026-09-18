@@ -115,7 +115,14 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:recent-learning-memory',
     order: 118,
-    text: () => formatRecentMemoryContext(ctx.learningMemory.recall(8)),
+    text: () => {
+      const projectId = ctx.learningMemory.currentProjectId()
+      return formatRecentMemoryContext(ctx.learningMemory.recallCognitive({
+        layers: ['semantic'],
+        limit: 4,
+        ...projectId === undefined ? {} : { projectId },
+      }))
+    },
     interpolateVariables: false,
   })
   ctx.systemPrompt.context({
@@ -123,9 +130,11 @@ export function apply(ctx: Context, config: Config): void {
     order: 119,
     text: () => {
       const projectId = ctx.learningMemory.currentProjectId()
-      const hits = ctx.learningMemory.searchCognitive('', 24, {
+      const taskContext = tasks.currentTask()
+      const hits = ctx.learningMemory.recallCognitive({
+        query: taskContext ?? '',
+        limit: 24,
         ...projectId === undefined ? {} : { projectId },
-        includeHistory: false,
       })
       const usable = filterProceduralSearchHits(filterAdaptiveSearchHits(hits))
         .filter(hit => hit.record.confidence >= 0.8 && hit.record.importance >= 0.7)
