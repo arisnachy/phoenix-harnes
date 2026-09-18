@@ -99,7 +99,7 @@ describe('HARDNESS inline artifact renderer', () => {
   it('renders JSON-encoded chart specs instead of dumping the JSON text', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'json-chart-1',
-      mime: 'application/json',
+      mime: 'text/plain',
       title: 'chart.json',
       data: JSON.stringify({
         chartType: 'bar',
