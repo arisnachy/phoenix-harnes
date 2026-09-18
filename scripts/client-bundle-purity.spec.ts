@@ -6,12 +6,21 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { clientBundle, requestedExternals } from '../packages/client/tsdown.client.ts'
 
-type ResolveId = (source: string) => null | { id: string; external: boolean }
+type ResolveResult = null | string | { id: string; external: boolean }
+type ResolveHandler = (source: string, importer?: string) => ResolveResult
+type ResolveId = (source: string) => ResolveResult
 
-interface CssModulePlugin {
+interface ClientRoutingPlugin {
   name: string
-  resolveId?: (source: string, importer: string | undefined) => null | string
-  load?: (this: { addWatchFile: (id: string) => void }, id: string) => Promise<unknown>
+  resolveId?: ResolveHandler | { order?: string; handler: ResolveHandler }
+  load?: (this: { addWatchFile: (id: string) => void }, id: string) => unknown | Promise<unknown>
+}
+
+function resolveWith(plugin: ClientRoutingPlugin, source: string, importer?: string): ResolveResult {
+  if (plugin.resolveId === undefined) return null
+  return typeof plugin.resolveId === 'function'
+    ? plugin.resolveId(source, importer)
+    : plugin.resolveId.handler(source, importer)
 }
 
 /** A representative dynamic bundle using the shared client baseline. */
@@ -35,6 +44,17 @@ describe('client bundle build faces', () => {
   })
 })
 
+describe('client bundle routing cost', () => {
+  it('uses one pre-routing plugin for purity, externals, and all CSS modes', () => {
+    const plugins = (clientConfigs()[0] as { plugins: ClientRoutingPlugin[] }).plugins
+    expect(plugins.map(plugin => plugin.name)).toEqual(['dsh-client-bundle-routing'])
+    const routing = plugins[0]
+    expect(typeof routing?.resolveId).toBe('object')
+    if (typeof routing?.resolveId !== 'object') throw new Error('pre-routing hook missing')
+    expect(routing.resolveId.order).toBe('pre')
+  })
+})
+
 function clientSourceMapPath(packagePath: string): string {
   return fileURLToPath(new URL(`../packages/${packagePath}/lib/client.js.map`, import.meta.url))
 }
@@ -43,18 +63,18 @@ function purityResolveId(id = REQUESTING_PACKAGE): ResolveId {
   // libEntry is spelled at every call site (no default) so the
   // package-invariants text check can see the invariant entry per package.
   const configs = clientConfigs(id)
-  const plugins = (configs[0] as { plugins: { name: string; resolveId?: unknown }[] }).plugins
-  const gate = plugins.find(p => p.name === 'dsh-client-bundle-purity')
-  if (gate?.resolveId === undefined) throw new Error('purity plugin missing from client config')
-  return gate.resolveId as ResolveId
+  const plugins = (configs[0] as { plugins: ClientRoutingPlugin[] }).plugins
+  const gate = plugins.find(p => p.name === 'dsh-client-bundle-routing')
+  if (gate?.resolveId === undefined) throw new Error('client bundle routing plugin missing from client config')
+  return source => resolveWith(gate, source)
 }
 
-function cssModulePlugin(): CssModulePlugin {
+function cssModulePlugin(): ClientRoutingPlugin {
   const configs = clientConfigs()
-  const plugins = (configs[0] as { plugins: CssModulePlugin[] }).plugins
-  const plugin = plugins.find(candidate => candidate.name === 'dsh-css-modules-inline')
+  const plugins = (configs[0] as { plugins: ClientRoutingPlugin[] }).plugins
+  const plugin = plugins.find(candidate => candidate.name === 'dsh-client-bundle-routing')
   if (plugin?.resolveId === undefined || plugin.load === undefined) {
-    throw new Error('CSS Modules plugin missing from client config')
+    throw new Error('client bundle routing plugin missing from client config')
   }
   return plugin
 }
@@ -62,11 +82,15 @@ function cssModulePlugin(): CssModulePlugin {
 describe('client bundle purity gate', () => {
   const resolveId = purityResolveId()
 
-  it('leaves default externals and non-scoped specifiers alone', () => {
-    expect(resolveId('@phoenix-ai/dsh-client-ui-slots')).toBeNull()
-    expect(resolveId('@phoenix-ai/dsh-client-ui-primitives')).toBeNull()
-    expect(resolveId('@phoenix-ai/dsh-client-runtime/client')).toBeNull()
-    expect(resolveId('react')).toBeNull()
+  it('externalizes requested module-table rows before tsdown:deps and leaves bundled packages alone', () => {
+    for (const source of [
+      '@phoenix-ai/dsh-client-ui-slots',
+      '@phoenix-ai/dsh-client-ui-primitives',
+      '@phoenix-ai/dsh-client-runtime/client',
+      'react',
+    ]) {
+      expect(resolveId(source)).toEqual({ id: source, external: true })
+    }
     expect(resolveId('zod')).toBeNull()
   })
 
@@ -104,9 +128,15 @@ describe('client bundle purity gate', () => {
   })
 
   it('admits the parser-preloaded runtime for every dynamic bundle', () => {
-    expect(resolveId('@phoenix-ai/dsh-client-runtime/client')).toBeNull()
+    expect(resolveId('@phoenix-ai/dsh-client-runtime/client')).toEqual({
+      id: '@phoenix-ai/dsh-client-runtime/client',
+      external: true,
+    })
     const withoutRequest = purityResolveId('@phoenix-ai/dsh-client-ui-goal')
-    expect(withoutRequest('@phoenix-ai/dsh-client-runtime/client')).toBeNull()
+    expect(withoutRequest('@phoenix-ai/dsh-client-runtime/client')).toEqual({
+      id: '@phoenix-ai/dsh-client-runtime/client',
+      external: true,
+    })
   })
 
   it('externalizes the baseline independently of each package manifest', () => {
@@ -202,8 +232,8 @@ describe('client bundle CSS Modules watch graph', () => {
       '../packages/client/ui-conversation/src/client/queue/QueueDock.module.css',
       import.meta.url,
     ))
-    const virtualId = plugin.resolveId?.('./QueueDock.module.css', importer)
-    if (virtualId === null || virtualId === undefined) throw new Error('CSS Modules import was not resolved')
+    const virtualId = resolveWith(plugin, './QueueDock.module.css', importer)
+    if (typeof virtualId !== 'string') throw new Error('CSS Modules import was not resolved')
     const addWatchFile = vi.fn()
 
     await plugin.load?.call({ addWatchFile }, virtualId)

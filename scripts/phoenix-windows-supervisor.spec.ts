@@ -1,9 +1,11 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
 const cliSource = readFileSync(resolve('apps/cli/src/bin.ts'), 'utf8')
+const acpPackage = JSON.parse(readFileSync(resolve('packages/examples/acp-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
+const jsonrpcPackage = JSON.parse(readFileSync(resolve('packages/examples/jsonrpc-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
 
 describe('PHOENIX Windows updater supervisor resilience', () => {
   it('restarts the updater watcher when it exits while the host is still alive', () => {
@@ -58,6 +60,19 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('!isManagedReleaseBranch(liveBranch, STABLE_SOURCE_BRANCH)')
     expect(source).toContain('development branch')
     expect(source).toContain('activatePreparedRuntime(requestedTarget)')
+  })
+
+  it('keeps workspace bin targets present before the isolated runtime build', () => {
+    const bins = [
+      ['packages/examples/acp-demo', acpPackage.bin['dsh-acp-demo']],
+      ['packages/examples/jsonrpc-demo', jsonrpcPackage.bin['dsh-jsonrpc-agent']],
+    ] as const
+
+    for (const [packageRoot, bin] of bins) {
+      expect(bin).toBeDefined()
+      expect(bin?.startsWith('lib/')).toBe(false)
+      expect(existsSync(resolve(packageRoot, bin ?? ''))).toBe(true)
+    }
   })
 
   it('passes the active runtime root to the stable watcher so isolated updates do not loop forever', () => {
