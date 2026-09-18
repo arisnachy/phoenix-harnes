@@ -68,7 +68,7 @@ import {
 } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
-import { toPiContext } from './context.ts'
+import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 
 /** One resolution's frozen view: the profiles and the collection built from them. */
@@ -394,8 +394,11 @@ export class PiAiAdapter extends LlmAdapter {
     using watchdog = idleWatchdog(upstream, streamIdleTimeoutMs, 'LLM_STREAM_IDLE_TIMEOUT')
 
     try {
-      const containsImage = options.messages.some(message => contentHasImage(message.content))
-      const containsFile = options.messages.some(message => contentHasFile(message.content))
+      const desiredMaxOutput = options.maxTokens ?? model.maxTokens
+      const fitted = fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
+      const requestOptions = fitted.options
+      const containsImage = requestOptions.messages.some(message => contentHasImage(message.content))
+      const containsFile = requestOptions.messages.some(message => contentHasFile(message.content))
       if (containsImage && !model.input.includes('image')) {
         throw new LlmError(`pi-ai model "${model.id}" does not support image input`, 'UNSUPPORTED_CONTENT')
       }
@@ -407,8 +410,8 @@ export class PiAiAdapter extends LlmAdapter {
         this.config.onReplayDegrade?.({ provider: options.provider, model: options.model, reason })
       }
       const context = attachments === undefined
-        ? toPiContext(options, undefined, onReplayDegrade)
-        : await toPiContext({ ...options, signal: watchdog.signal }, attachments, onReplayDegrade, profile.maxRequestImageBytes, {
+        ? toPiContext(requestOptions, undefined, onReplayDegrade)
+        : await toPiContext({ ...requestOptions, signal: watchdog.signal }, attachments, onReplayDegrade, profile.maxRequestImageBytes, {
           maxPixels: profile.requestImagePixelBudget,
           maxBytes: profile.requestImageMaxBytes,
         }, profile.maxInlineFileBytes)
@@ -431,7 +434,7 @@ export class PiAiAdapter extends LlmAdapter {
       const iterator = toStreamChunks(
         events,
         model.contextWindow,
-        options.maxTokens ?? model.maxTokens,
+        desiredMaxOutput,
       )[Symbol.asyncIterator]()
       let exhausted = false
       try {
