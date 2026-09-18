@@ -181,6 +181,67 @@ describe('reference submission', () => {
 })
 
 describe('submit transaction hardening', () => {
+  it('publishes an ordinary prompt optimistically before Host admission settles', async () => {
+    let settle!: (outcome: SubmitOutcome) => void
+    const sink = vi.fn(() => new Promise<SubmitOutcome>((resolve) => { settle = resolve }))
+    const shell = new SessionInputShell({
+      actx: {} as ClientContext,
+      defaultSink: sink,
+      commandImages,
+    })
+
+    shell.setDraft('mensaje inmediato')
+    shell.submit('queue')
+
+    expect(shell.snapshot.phase).toBe('submitting')
+    expect(shell.snapshot.pendingSubmit).toMatchObject({ text: 'mensaje inmediato' })
+    expect(shell.snapshot.pendingSubmit?.startedAt).toBeTypeOf('number')
+    expect(sink).toHaveBeenCalledTimes(1)
+
+    settle({ kind: 'error', text: 'host refused' })
+    await vi.waitFor(() => { expect(shell.snapshot.phase).toBe('plain') })
+    expect(shell.snapshot.pendingSubmit).toBeUndefined()
+    expect(shell.snapshot.draft).toBe('mensaje inmediato')
+  })
+
+  it('aborts a stalled busy-turn text admission and unlocks Enter with the draft intact', async () => {
+    vi.useFakeTimers()
+    try {
+      let signal: AbortSignal | undefined
+      const sink = vi.fn((_text, _imageIds, mode: 'queue' | 'steer', received: AbortSignal) => {
+        expect(mode).toBe('steer')
+        signal = received
+        return new Promise<SubmitOutcome>(() => {})
+      })
+      const shell = new SessionInputShell({
+        actx: {} as ClientContext,
+        defaultSink: sink,
+        commandImages,
+      })
+
+      shell.setDraft('interrumpe esto')
+      shell.submit('steer')
+      expect(shell.snapshot).toMatchObject({
+        phase: 'submitting',
+        pendingSubmit: { text: 'interrumpe esto' },
+      })
+      expect(signal?.aborted).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(8_000)
+
+      expect(signal?.aborted).toBe(true)
+      expect(shell.snapshot.phase).toBe('plain')
+      expect(shell.snapshot.pendingSubmit).toBeUndefined()
+      expect(shell.snapshot.draft).toBe('interrumpe esto')
+      expect(shell.notices.getSnapshot()).toMatchObject({
+        level: 'error',
+        text: expect.stringContaining('draft was kept'),
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('sends one image-only prompt per settlement, ignoring Enter during the round-trip', async () => {
     let settle!: (outcome: SubmitOutcome) => void
     const sink = vi.fn(() => new Promise<SubmitOutcome>((resolve) => { settle = resolve }))
