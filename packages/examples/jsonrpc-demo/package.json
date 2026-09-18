@@ -14,7 +14,7 @@
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
   "bin": {
-    "dsh-jsonrpc-agent": "lib/bin.js"
+    "dsh-jsonrpc-agent": "bin/dsh-jsonrpc-agent.js"
   },
   "exports": {
     ".": {
@@ -41,6 +41,7 @@
     "lib/invariant.js",
     "lib/bin.js",
     "lib/packaged-bin.js",
+    "bin/dsh-jsonrpc-agent.js",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
