@@ -321,11 +321,6 @@ function staticLinkedConfig(id: string, entry: string, outputName = basename(ent
   }
 }
 
-/** Whether a specifier names a package rather than a file next to its importer. */
-function isBareSpecifier(specifier: string): boolean {
-  return !specifier.startsWith('.') && !specifier.startsWith('\0') && !isAbsolute(specifier)
-}
-
 /**
  * Locate a stylesheet import against the package sources and name its emitted position.
  * @param source - relative import specifier as written in the source.
@@ -478,11 +473,11 @@ function clientRoutingPattern(externals: ReadonlySet<string>): RegExp {
 const CLIENT_CSS_VIRTUAL_PATTERN = new RegExp('^\\0dsh-(?:css|global-css|inline-css):')
 
 /** Native Rolldown external matcher for bare module ids, excluding virtual ids. */
-const BARE_MODULE_ID = /^[^./\\0](?!:[/\\\\])/
+const BARE_MODULE_ID = /^[^./\0](?!:[/\\])/
 /** Native load filter for JavaScript emitted by tsc under lib/types. */
-const TSC_EMITTED_JS = /\/lib\/types\/.*\\.js$/
+const TSC_EMITTED_JS = /\/lib\/types\/.*\.js$/
 /** Native resolve filter for stylesheet imports owned by the static channel. */
-const CSS_IMPORT = /\\.css$/
+const CSS_IMPORT = /\.css$/
 /** Whether an import specifier is the package a pattern names, or one of its subpaths. */
 function matchesSpecifier(patterns: readonly RegExp[], specifier: string): boolean {
   return patterns.some(pattern => pattern.test(specifier))
