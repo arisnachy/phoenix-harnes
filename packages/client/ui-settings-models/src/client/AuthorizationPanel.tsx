@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ChatGptWebSnapshot, IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
 import type { ConnectorKey } from './connectors-locales.ts'
 import { CONNECTOR_CATALOG, CONNECTOR_PRESETS } from './connector-catalog.ts'
@@ -9,6 +9,8 @@ import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authori
 import connectorStyles from './CodexConnectors.module.css'
 import hubStyles from './ConnectorsSection.module.css'
 import styles from './ModelsSection.module.css'
+import { setChatGptWebEnabled } from './chatgpt-web-toggle.ts'
+import type { ChatGptWebBridgeClient, ChatGptWebSettingsClient } from './chatgpt-web-toggle.ts'
 
 type AuthorizationClient = IApiClient['authorization']
 
@@ -71,6 +73,8 @@ export interface AuthorizationPanelProps {
 
 export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps {
   connectorT: (key: ConnectorKey) => string
+  chatGptWeb?: ChatGptWebBridgeClient
+  settings?: ChatGptWebSettingsClient
 }
 
 function integer(value: number): string {
@@ -254,17 +258,30 @@ export function AuthorizationPanel(_props: AuthorizationPanelProps): ReactNode {
 }
 
 /** Dedicated account, MCP/app connector, and capability-preset settings page. */
-export function ConnectorsSettingsSection({ api, t, connectorT, onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
+export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, settings, onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
   const [disconnectingKey, setDisconnectingKey] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ConnectorFilter>('connected')
+  const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
+  const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
+  const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
   const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } = useAuthorizationAttempt(api, () => {
     setRefresh(current => current + 1)
     onAuthorized()
   })
+
+  useEffect(() => {
+    if (chatGptWeb === undefined) return
+    let stale = false
+    void chatGptWeb.state().then(
+      snapshot => { if (!stale) setChatGptWebState(snapshot) },
+      error => { if (!stale) setChatGptWebFailure(String(error)) },
+    )
+    return () => { stale = true }
+  }, [chatGptWeb])
 
   useEffect(() => {
     if (api === undefined) return
@@ -301,6 +318,19 @@ export function ConnectorsSettingsSection({ api, t, connectorT, onAuthorized }: 
     return `${definition.name} ${definition.category} ${definition.description} ${definition.capabilities.join(' ')}`.toLowerCase().includes(needle)
   })
 
+  const toggleChatGptWeb = (enabled: boolean): void => {
+    if (chatGptWeb === undefined || settings === undefined || chatGptWebBusy) return
+    setChatGptWebBusy(true)
+    setChatGptWebFailure(undefined)
+    void setChatGptWebEnabled({ bridge: chatGptWeb, settings }, enabled)
+      .then((snapshot) => {
+        setChatGptWebState(snapshot)
+        onAuthorized()
+      })
+      .catch((error: unknown) => { setChatGptWebFailure(String(error)) })
+      .finally(() => { setChatGptWebBusy(false) })
+  }
+
   const disconnect = (key: string): void => {
     if (api === undefined) return
     setCatalogFailure(undefined)
@@ -321,6 +351,51 @@ export function ConnectorsSettingsSection({ api, t, connectorT, onAuthorized }: 
       <h2 className={styles['title']}>{connectorT('title')}</h2>
       <p className={styles['intro']}>{connectorT('intro')}</p>
       <p className={hubStyles['safetyNote']}>{connectorT('setupHint')}</p>
+
+      {chatGptWeb === undefined || settings === undefined ? null : (
+        <section className={hubStyles['block']} aria-label={connectorT('chatgptWebTitle')}>
+          <div className={hubStyles['heading']}>
+            <h3>{connectorT('chatgptWebTitle')}</h3>
+            <p>{connectorT('chatgptWebDescription')}</p>
+          </div>
+          <div className={styles['rowCard']}>
+            <div className={styles['rowHead']}>
+              <div className={styles['rowIdentity']}>
+                <strong className={styles['rowName']}>{connectorT('chatgptWebTitle')}</strong>
+                <span className={chatGptWebState?.phase === 'ready' ? styles['connectedChip'] : styles['advancedHint']}>
+                  {chatGptWebState?.phase === 'ready'
+                    ? connectorT('chatgptWebReady')
+                    : chatGptWebState?.phase === 'needs-setup'
+                      ? connectorT('chatgptWebNeedsSetup')
+                      : chatGptWebState?.phase === 'starting'
+                        ? connectorT('chatgptWebStarting')
+                        : chatGptWebState?.phase === 'unavailable'
+                          ? connectorT('chatgptWebUnavailable')
+                          : connectorT('chatgptWebOff')}
+                </span>
+              </div>
+              <label className={styles['rowActions']}>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label={connectorT('chatgptWebToggle')}
+                  checked={chatGptWebState?.enabled === true}
+                  disabled={chatGptWebBusy}
+                  onChange={event => { toggleChatGptWeb(event.target.checked) }}
+                />
+                <span>{chatGptWebBusy
+                  ? connectorT('chatgptWebBusy')
+                  : chatGptWebState?.enabled === true ? connectorT('chatgptWebOn') : connectorT('chatgptWebOff')}</span>
+              </label>
+            </div>
+            {chatGptWebState === undefined ? null : <p className={styles['advancedHint']}>{chatGptWebState.detail}</p>}
+            {chatGptWebState?.phase === 'needs-setup'
+              ? <p className={styles['advancedHint']}>{connectorT('chatgptWebSetupHint')}</p>
+              : null}
+            {chatGptWebFailure === undefined ? null : <p className={styles['error']}>{chatGptWebFailure}</p>}
+          </div>
+        </section>
+      )}
 
       <section className={hubStyles['block']} aria-label={connectorT('superpowers')}>
         <div className={hubStyles['heading']}>

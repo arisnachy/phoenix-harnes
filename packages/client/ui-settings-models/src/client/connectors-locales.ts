@@ -31,6 +31,17 @@ export const connectorEn = {
   presetStatus: 'Native capability preset',
   noResults: 'No connectors match this search.',
   setupHint: 'Phoenix exposes a connector to the model only after its adapter is installed and healthy.',
+  chatgptWebTitle: 'ChatGPT Web',
+  chatgptWebDescription: 'Use the local Browser-only bridge as an optional ChatGPT model route. Browser credentials stay outside Phoenix.',
+  chatgptWebToggle: 'Enable ChatGPT Web',
+  chatgptWebOn: 'On',
+  chatgptWebOff: 'Off',
+  chatgptWebReady: 'Ready',
+  chatgptWebStarting: 'Starting',
+  chatgptWebUnavailable: 'Unavailable',
+  chatgptWebNeedsSetup: 'Setup required',
+  chatgptWebBusy: 'Applying…',
+  chatgptWebSetupHint: 'Open Codex Web GPT once and complete Setup > Browser-only, then turn this switch on again.',
 } as const
 
 /** Translation-key union shared by every Settings → Connectors locale dictionary. */
@@ -69,6 +80,17 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
   presetStatus: 'Preset de capacidad nativa',
   noResults: 'Ningún conector coincide con la búsqueda.',
   setupHint: 'Phoenix solo expone un conector al modelo después de que su adapter esté instalado y saludable.',
+  chatgptWebTitle: 'ChatGPT Web',
+  chatgptWebDescription: 'Usa el bridge local Browser-only como una ruta opcional de modelos de ChatGPT. Las credenciales del navegador permanecen fuera de Phoenix.',
+  chatgptWebToggle: 'Activar ChatGPT Web',
+  chatgptWebOn: 'Encendido',
+  chatgptWebOff: 'Apagado',
+  chatgptWebReady: 'Listo',
+  chatgptWebStarting: 'Iniciando',
+  chatgptWebUnavailable: 'No disponible',
+  chatgptWebNeedsSetup: 'Requiere configuración',
+  chatgptWebBusy: 'Aplicando…',
+  chatgptWebSetupHint: 'Abre Codex Web GPT una vez y completa Setup > Browser-only; luego vuelve a activar este switch.',
 }
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
@@ -84,4 +106,15 @@ export const connectorZh: { [Key in ConnectorKey]: string } = {
   mcpReadyStatus: 'MCP 就绪', apiKeyStatus: '需要 API Key / 适配器', permissionStatus: '需要权限', unavailableStatus: '不可用',
   disabledStatus: '已禁用', presetStatus: '原生能力预设', noResults: '没有匹配的连接器。',
   setupHint: '只有适配器安装并处于健康状态后，Phoenix 才会把连接器暴露给模型。',
+  chatgptWebTitle: 'ChatGPT Web',
+  chatgptWebDescription: '将本地 Browser-only 桥接器作为可选的 ChatGPT 模型路由。浏览器凭据始终保留在 Phoenix 之外。',
+  chatgptWebToggle: '启用 ChatGPT Web',
+  chatgptWebOn: '开启',
+  chatgptWebOff: '关闭',
+  chatgptWebReady: '就绪',
+  chatgptWebStarting: '正在启动',
+  chatgptWebUnavailable: '不可用',
+  chatgptWebNeedsSetup: '需要设置',
+  chatgptWebBusy: '正在应用…',
+  chatgptWebSetupHint: '先打开一次 Codex Web GPT 并完成 Setup > Browser-only，然后再次开启此开关。',
 }

@@ -6,7 +6,7 @@
  * existing Remote APIs.
  */
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
-import type { ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ChatGptWebSnapshot, ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
 import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import type {} from '@phoenix-ai/dsh-api-remotes/client'
@@ -19,6 +19,7 @@ import type {
   PhoenixLocalModelSnapshot,
 } from './PhoenixLocalPanel.tsx'
 import { ConnectorsSettingsSection } from './AuthorizationPanel.tsx'
+import type { ChatGptWebBridgeClient } from './chatgpt-web-toggle.ts'
 import type { ConnectorsSettingsSectionProps } from './AuthorizationPanel.tsx'
 import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
 import type { DeepSeekOnboardingInjected } from './DeepSeekOnboardingDialog.tsx'
@@ -59,6 +60,12 @@ type PluginInventoryRemoteResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string } }
 
+type PluginInventoryChatGptWebRemote = {
+  chatGptWebState(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
+  enableChatGptWeb(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
+  disableChatGptWeb(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
+}
+
 type PluginInventoryLocalRemote = {
   localModelState(): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   installLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
@@ -79,6 +86,20 @@ function pluginInventoryLocalRemote(ctx: ClientContext): PluginInventoryLocalRem
   const remote = ctx.get('remote.pluginInventory') as PluginInventoryLocalRemote | undefined
   if (remote === undefined) throw new Error('Phoenix Local is unavailable on this host.')
   return remote
+}
+
+/** Adapt the optional Host Remote to the ChatGPT Web Settings switch. */
+function chatGptWebClient(ctx: ClientContext): ChatGptWebBridgeClient {
+  const remote = (): PluginInventoryChatGptWebRemote => {
+    const value = ctx.get('remote.pluginInventory') as PluginInventoryChatGptWebRemote | undefined
+    if (value === undefined) throw new Error('ChatGPT Web is unavailable on this host.')
+    return value
+  }
+  return {
+    state: async () => unwrapPluginInventory('chatGptWebState', await remote().chatGptWebState()),
+    enable: async () => unwrapPluginInventory('enableChatGptWeb', await remote().enableChatGptWeb()),
+    disable: async () => unwrapPluginInventory('disableChatGptWeb', await remote().disableChatGptWeb()),
+  }
 }
 
 /** Adapt the generated Host Remote to the tiny browser-safe card interface. */
@@ -156,6 +177,8 @@ export function apply(ctx: ClientContext): void {
     api: connection.api.authorization,
     t,
     connectorT,
+    chatGptWeb: chatGptWebClient(ctx),
+    settings: connection.api.settings,
     onAuthorized: () => { refreshIfLoaded(controller) },
   })
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({

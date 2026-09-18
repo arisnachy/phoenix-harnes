@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-The `chatgpt-web` route is the exception to the API-key field: its card identifies the local `codex-chatgpt-web` tunnel, shows the effective bridge URL, and keeps the route selectable with no paid model credential. Browser authentication remains owned by the bridge; PHOENIX only sends the non-secret local authorization marker required by the Responses protocol. Start or inspect the bridge with `dsh chatgpt-web start` / `dsh chatgpt-web status` after configuring `PHOENIX_CHATGPT_WEB_COMMAND` when automatic lifecycle management is needed.
+The `chatgpt-web` route is the exception to the API-key field. Settings → Connectors owns its ON/OFF switch: ON starts and health-checks the local `codex-chatgpt-web` tunnel before writing the provider profile, while OFF removes the route before stopping the owned bridge process. The preference survives restart only when explicitly ON. Browser authentication remains owned by the bridge; PHOENIX sends only the non-secret local authorization marker required by the Responses protocol. `dsh chatgpt-web start|status|stop` remains the diagnostic/manual facade over the same lifecycle controller.
 
 Configured provider cards include compact up and down controls. The selected order is persisted as `user-profile.modelProviderOrder`; the Host applies it to every advisory `session.models` response, so both the Settings list and the conversation selector show the same order while newly available routes remain visible.
 
