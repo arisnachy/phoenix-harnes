@@ -104,8 +104,10 @@ function boundedToolDescription(value: string): string {
   return value.slice(0, PRESSURE_TOOL_DESCRIPTION_MAX_CHARS - 1).trimEnd() + '…'
 }
 
-function compactToolsForPressure(options: GenerateOptions): GenerateOptions['tools'] {
-  return options.tools?.map(tool => ({
+function compactToolsForPressure(
+  tools: NonNullable<GenerateOptions['tools']>,
+): NonNullable<GenerateOptions['tools']> {
+  return tools.map(tool => ({
     name: tool.name,
     description: boundedToolDescription(tool.description),
     parameters: compactSchemaForPressure(tool.parameters) as Record<string, unknown>,
@@ -148,7 +150,7 @@ function compactAuxiliaryContextForPressure(options: GenerateOptions): GenerateO
   return {
     ...options,
     messages: options.messages.map(compactSkillCatalogMessage),
-    ...options.tools === undefined ? {} : { tools: compactToolsForPressure(options) },
+    ...(options.tools === undefined ? {} : { tools: compactToolsForPressure(options.tools) }),
   }
 }
 
