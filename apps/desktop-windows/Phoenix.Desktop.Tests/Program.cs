@@ -45,9 +45,9 @@ False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"java
 False(BrowserCommand.TryParse("{\"type\":\"unknown\"}", out _), "unknown command rejected", failures);
 
 True(BrowserLayout.StartCollapsed, "embedded browser starts collapsed", failures);
-EqualInt(360, BrowserLayout.PreferredBrowserWidth(1100), "small window keeps compact browser", failures);
-EqualInt(374, BrowserLayout.PreferredBrowserWidth(1440), "normal window gives chat about three quarters", failures);
-EqualInt(520, BrowserLayout.PreferredBrowserWidth(2400), "wide window caps browser width", failures);
+EqualInt(320, BrowserLayout.PreferredBrowserWidth(1100), "small window keeps browser narrow", failures);
+EqualInt(320, BrowserLayout.PreferredBrowserWidth(1440), "normal window prioritizes chat", failures);
+EqualInt(440, BrowserLayout.PreferredBrowserWidth(2400), "wide window caps compact browser width", failures);
 
 // Desktop startup must be visible before the managed runtime is ready. This is the regression
 // contract for the installed EXE appearing to do nothing on first launch.
