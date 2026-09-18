@@ -117,11 +117,15 @@ export function apply(ctx: Context, config: Config): void {
     order: 118,
     text: () => {
       const projectId = ctx.learningMemory.currentProjectId()
-      return formatRecentMemoryContext(ctx.learningMemory.recallCognitive({
+      const durable = ctx.learningMemory.recallCognitive({
         layers: ['semantic'],
         limit: 4,
         ...projectId === undefined ? {} : { projectId },
-      }))
+      })
+      return formatRecentMemoryContext([
+        ...ctx.learningMemory.recall(4),
+        ...durable,
+      ])
     },
     interpolateVariables: false,
   })
