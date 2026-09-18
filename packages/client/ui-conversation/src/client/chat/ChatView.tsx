@@ -427,6 +427,13 @@ export function ChatView({
               </button>
             </div>
           )}
+          {pendingSubmit !== undefined && !pendingSubmitDurable && pendingSubmit.text !== '' && (
+            <PendingSteeringBubble
+              content={[{ type: 'text', text: pendingSubmit.text }]}
+              renderMessageImages={renderMessageImages}
+              t={t}
+            />
+          )}
           <ToolActivityFlow
             nodes={chatNodes}
             turnStatus={running ? { startTime: runningTurnStart, progress } : undefined}
@@ -444,13 +451,6 @@ export function ChatView({
             renderSlot={renderSlot}
             t={t}
           />
-          {pendingSubmit !== undefined && !pendingSubmitDurable && pendingSubmit.text !== '' && (
-            <PendingSteeringBubble
-              content={[{ type: 'text', text: pendingSubmit.text }]}
-              renderMessageImages={renderMessageImages}
-              t={t}
-            />
-          )}
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}
