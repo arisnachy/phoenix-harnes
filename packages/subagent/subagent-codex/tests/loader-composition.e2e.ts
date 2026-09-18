@@ -76,17 +76,17 @@ describe('Codex provider public Loader composition', () => {
       tools: [
         {
           name: 'subagent_codex',
-          parameterNames: ['description', 'prompt', 'run_in_background'],
+          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'],
           required: ['description', 'prompt'],
         },
         {
           name: 'subagent_codex_primary',
-          parameterNames: ['description', 'prompt', 'run_in_background'],
+          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'],
           required: ['description', 'prompt'],
         },
         {
           name: 'subagent_codex_secondary',
-          parameterNames: ['description', 'prompt', 'run_in_background'],
+          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'],
           required: ['description', 'prompt'],
         },
       ],
