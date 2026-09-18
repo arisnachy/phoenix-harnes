@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ManagedMcpController,
@@ -176,9 +176,7 @@ describe('ManagedMcpController', () => {
 
   it('rejects a corrupted managed overlay instead of executing altered configuration', async () => {
     const patchPath = tempPatch()
-    const root = patchPath.slice(0, patchPath.lastIndexOf('/'))
-    const { mkdirSync } = await import('node:fs')
-    mkdirSync(root, { recursive: true })
+    mkdirSync(dirname(patchPath), { recursive: true })
 
     for (const value of [
       {},
