@@ -124,6 +124,8 @@ export const PHOENIX_LOCAL_PROVIDER = 'phoenix-local'
 export const PHOENIX_LOCAL_MODEL = 'phoenix-local'
 /** Stable lightweight Host proxy; the heavy llama-server stays behind it. */
 export const PHOENIX_LOCAL_BASE_URL = 'http://127.0.0.1:17842/v1'
+/** Non-secret marker that satisfies pi-ai's OpenAI-compatible auth preflight for the loopback-only route. */
+export const PHOENIX_LOCAL_AUTHORIZATION = 'Bearer phoenix-local'
 
 /** Built-in route injected independently of user settings or cloud credentials. */
 function phoenixLocalProfile(): PiAiProviderProfile {
@@ -134,6 +136,7 @@ function phoenixLocalProfile(): PiAiProviderProfile {
     defaultContextWindow: 8192,
     defaultMaxTokens: 4096,
     defaultInput: ['text'],
+    headers: { Authorization: PHOENIX_LOCAL_AUTHORIZATION },
     models: [{
       id: PHOENIX_LOCAL_MODEL,
       name: 'Phoenix Local · Qwen3.5-4B',
