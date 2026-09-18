@@ -7,8 +7,7 @@ import {
   livingControlForManifest, livingLevelRank, parseLivingControlResource,
 } from '@phoenix-ai/dsh-living'
 import type {
-  LivingControlDescriptor, LivingCreationId as LivingCreationIdType, LivingCreationSnapshot,
-  LivingIntegrationLevel, LivingJson,
+  LivingCreationId as LivingCreationIdType, LivingCreationSnapshot, LivingIntegrationLevel, LivingJson,
 } from '@phoenix-ai/dsh-living'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { GenericCallView } from '@phoenix-ai/dsh-tools'
@@ -42,17 +41,6 @@ function summary(snapshot: LivingCreationSnapshot): Summary {
   }
 }
 
-
-function controlFromResources(resources: readonly string[]): LivingControlDescriptor | undefined {
-  let found: LivingControlDescriptor | undefined
-  for (const resource of resources) {
-    const parsed = parseLivingControlResource(resource)
-    if (parsed === undefined) continue
-    if (found !== undefined) throw new TypeError('a living creation may carry only one Phoenix control link')
-    found = parsed
-  }
-  return found
-}
 
 function provisionResources(
   ctx: Context,
