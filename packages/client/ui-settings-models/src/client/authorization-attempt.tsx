@@ -52,6 +52,12 @@ export function useAuthorizationAttempt(
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
 
+  const closeReservedPopup = (): void => {
+    const popup = popupRef.current
+    popupRef.current = null
+    if (popup !== null && !popup.closed) popup.close()
+  }
+
   useEffect(() => {
     if (api === undefined || attempt?.status !== 'pending') return
     let stale = false
@@ -59,6 +65,7 @@ export function useAuthorizationAttempt(
       void api.status({ attemptId: attempt.id, after: attempt.nextSeq }).then((response) => {
         if (stale) return
         if (!response.result.ok) {
+          closeReservedPopup()
           setAttempt(undefined)
           setFailure(response.result.error.message)
           return
@@ -86,9 +93,15 @@ export function useAuthorizationAttempt(
           ...view.prompt === undefined ? {} : { prompt: view.prompt },
           ...view.error === undefined ? {} : { error: view.error },
         })
-        if (view.status === 'authorized') onAuthorized()
+        if (view.status === 'authorized') {
+          closeReservedPopup()
+          onAuthorized()
+        } else if (view.status === 'cancelled' || view.status === 'failed') {
+          closeReservedPopup()
+        }
       }, (error: unknown) => {
         if (stale) return
+        closeReservedPopup()
         setAttempt(undefined)
         setFailure(String(error))
       })
@@ -100,18 +113,23 @@ export function useAuthorizationAttempt(
     if (api === undefined) return
     setFailure(undefined)
     setAttempt(undefined)
-    // Open a blank same-origin window synchronously inside the click gesture
-    // so popup blockers allow it; the poll navigates that window once the
-    // backend supplies the consent URL. When the blocker still refuses, the
-    // progress surface falls back to a plain link.
-    popupRef.current = window.open('', '_blank')
+    // OAuth needs a window reserved synchronously inside the click gesture so
+    // popup blockers allow the later consent navigation. Other methods never
+    // reserve a tab. Any failed/cancelled attempt closes an unused reservation
+    // immediately so broken connectors cannot strand a blank window.
+    if (method === 'oauth') popupRef.current = window.open('', '_blank')
+    else closeReservedPopup()
     void api.begin({ key, method }).then((response) => {
       if (!response.result.ok) {
+        closeReservedPopup()
         setFailure(response.result.error.message)
         return
       }
       setAttempt({ id: response.result.value.attemptId, status: 'pending', nextSeq: 0 })
-    }, (error: unknown) => { setFailure(String(error)) })
+    }, (error: unknown) => {
+      closeReservedPopup()
+      setFailure(String(error))
+    })
   }
 
   const submitAnswer = (): void => {
@@ -132,7 +150,7 @@ export function useAuthorizationAttempt(
 
   const cancel = (): void => {
     if (api === undefined || attempt === undefined) return
-    popupRef.current?.close()
+    closeReservedPopup()
     void api.cancel({ attemptId: attempt.id }).finally(() => {
       setAttempt((current) => {
         if (current === undefined) return current
