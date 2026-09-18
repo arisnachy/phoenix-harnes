@@ -6,6 +6,11 @@
   color: #1d2a3a;
 }
 
+.htmlRoot {
+  gap: 8px;
+  min-height: 0;
+}
+
 .header {
   display: flex;
   align-items: center;
