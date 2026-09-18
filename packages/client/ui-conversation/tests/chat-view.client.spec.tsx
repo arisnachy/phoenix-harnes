@@ -22,6 +22,7 @@ import type {
 import { makeTranslate } from '@phoenix-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
 import { createChatStore } from '../src/client/stores.ts'
+import type { InputState } from '../src/client/input/contract.ts'
 import { ChatView } from '../src/client/chat/ChatView.tsx'
 import { zh } from '../src/client/locales.ts'
 import { AssistantNodeView } from '../src/client/chat/AssistantNodeView.tsx'
@@ -53,6 +54,17 @@ function snapshotBase(): ConversationSnapshot {
     turnTimings: new Map(), turnEnds: new Map(), partial: null, runningCalls: [],
     pending: [], queue: [], running: false, composerPhase: 'active', removed: false, openState: 'open', openError: null,
     hasMore: false, loadingOlder: false, promptError: null, blank: false, subagent: null, lastAgentError: null,
+  }
+}
+
+function inputBase(): InputState {
+  return {
+    draft: '',
+    imageIds: [],
+    draftRev: 0,
+    phase: 'plain',
+    occurrences: [],
+    queue: [],
   }
 }
 
@@ -149,8 +161,9 @@ function emptyWorkspaces() {
   return bindSnapshotSelector(store)
 }
 
-function makeHarness(init?: Partial<ConversationSnapshot>) {
+function makeHarness(init?: Partial<ConversationSnapshot>, inputInit?: Partial<InputState>) {
   const { set, source } = makeSource(init)
+  const input = createSnapshotStore<InputState>({ ...inputBase(), ...inputInit })
   const openDetails = vi.fn<(t: SelectionTarget) => void>()
   const openFile = vi.fn<(path: string) => Promise<void>>().mockResolvedValue(undefined)
   const loadOlder = vi.fn()
@@ -268,7 +281,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     useSessions: emptySessions(),
     useWorkspaces: emptyWorkspaces(),
     useProjection: (() => undefined),
-    useInput: (() => { throw new Error('unused') }),
+    useInput: bindSnapshotSelector(input),
     inputActions: {
       setDraft: () => {},
       addImages: () => true,
@@ -293,8 +306,11 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     t,
   }
   const setSelection = (next: SelectionTarget | null): void => { chat.actions.select(next) }
+  const setInput = (next: Partial<InputState>): void => {
+    input.set({ ...input.getSnapshot(), ...next })
+  }
   return {
-    set, ChatView, props, openDetails, openFile, loadOlder, inspectCall,
+    set, setInput, ChatView, props, openDetails, openFile, loadOlder, inspectCall,
     chatScroll, forkAt, setSelection, toolOwners,
   }
 }
@@ -400,6 +416,27 @@ describe('Chat node rendering', () => {
 })
 
 describe('ChatView', () => {
+  it('shows an ordinary sent message immediately before the durable Host event arrives', () => {
+    const startedAt = Date.now()
+    const h = makeHarness(
+      { nodes: [] },
+      { pendingSubmit: { text: 'mensaje inmediato', startedAt } },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+
+    const optimistic = view.getByText('mensaje inmediato').closest('[data-pending-steering]')
+    expect(optimistic).not.toBeNull()
+
+    const durable = {
+      ...user(1, 'mensaje inmediato'),
+      time: startedAt + 1,
+    }
+    act(() => { h.set({ nodes: [durable] }) })
+
+    expect(view.getAllByText('mensaje inmediato')).toHaveLength(1)
+    expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+  })
+
   it('hands a windowless tool result to the Tool seat with an empty tool name', () => {
     const h = makeHarness({
       nodes: [{ ...toolResult(3, 'w1'), call: null }],
