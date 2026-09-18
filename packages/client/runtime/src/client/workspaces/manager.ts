@@ -275,12 +275,12 @@ export class WorkspaceManager {
    */
   private async hydrateInitialList(generation: number): Promise<void> {
     await this.refresh()
-    if (generation !== this.connectionHydrationGeneration || this.phase === 'ready') return
+    if (generation !== this.connectionHydrationGeneration || this.getSnapshot().phase === 'ready') return
     for (const delayMs of INITIAL_BASELINE_RETRY_DELAYS_MS) {
       await waitForBaselineRetry(delayMs)
-      if (generation !== this.connectionHydrationGeneration || this.phase === 'ready') return
+      if (generation !== this.connectionHydrationGeneration || this.getSnapshot().phase === 'ready') return
       await this.refresh()
-      if (generation !== this.connectionHydrationGeneration || this.phase === 'ready') return
+      if (generation !== this.connectionHydrationGeneration || this.getSnapshot().phase === 'ready') return
     }
   }
 
