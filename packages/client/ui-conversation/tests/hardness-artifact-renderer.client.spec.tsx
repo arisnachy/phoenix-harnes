@@ -131,7 +131,7 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.queryByText(/"labels"/)).toBeNull()
   })
 
-  it('keeps arbitrary mini-app scripts disabled until the user explicitly enables the sandbox', () => {
+  it('keeps static HTML scripts disabled without exposing sandbox controls', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'app-1',
       mime: 'text/html',
@@ -140,13 +140,12 @@ describe('HARDNESS inline artifact renderer', () => {
     })} />)
 
     const frame = screen.getByTitle('Mini calculator')
-    expect(frame.getAttribute('sandbox')).toBe('')
-    fireEvent.click(screen.getByRole('button', { name: 'Enable sandboxed interaction' }))
-    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
-    expect(screen.getByText(/network, forms, popups and parent access blocked/i)).toBeTruthy()
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin')
+    expect(screen.queryByRole('button', { name: /sandboxed interaction/i })).toBeNull()
+    expect(screen.queryByText(/Mini-app scripts run only/i)).toBeNull()
   })
 
-  it('keeps preview controls without duplicate artifact chrome', () => {
+  it('renders HTML with only the filename and content, without preview chrome', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'app-2',
       mime: 'text/html',
@@ -154,17 +153,16 @@ describe('HARDNESS inline artifact renderer', () => {
       data: '<h1>Ready</h1>',
     })} />)
 
-    expect(document.querySelector('header')).toBeNull()
-    expect(document.querySelector('img[src="/phoenix-emblem.png"]')).toBeNull()
-    const frame = screen.getByTitle('Canvas demo')
-    expect(screen.getAllByText('Loading preview').length).toBeGreaterThan(0)
-    fireEvent.load(frame)
-    expect(screen.getAllByText('Preview ready').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getAllByRole('button', { name: 'Reload preview' }).at(-1)!)
-    expect(screen.getAllByText('Loading preview').length).toBeGreaterThan(0)
+    expect(screen.getByText('Canvas demo')).toBeTruthy()
+    expect(screen.queryByText(/^HTML$/i)).toBeNull()
+    expect(screen.queryByText(/Preview ready|Loading preview/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Reload preview/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Copy/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Download/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Expand|Collapse/i })).toBeNull()
   })
 
-  it('lets an HTML preview grow beyond the old compact height cap', () => {
+  it('lets an HTML preview size itself to reported content height without a compact cap', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'app-tall',
       mime: 'text/html',
