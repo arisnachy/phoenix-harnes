@@ -37,7 +37,7 @@ export type SessionListPhase = 'pending' | 'ready'
 const INITIAL_BASELINE_RETRY_DELAYS_MS = [250, 750, 1500, 3000] as const
 
 function waitForBaselineRetry(delayMs: number): Promise<void> {
-  return new Promise(resolve => { setTimeout(resolve, delayMs) })
+  return new Promise<void>(resolve => { setTimeout(resolve, delayMs) })
 }
 
 /** Request-local content hit returned to sidebar search consumers. */
