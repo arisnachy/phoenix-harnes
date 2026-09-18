@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertComputerActionAllowed,
+  browserCommandForAction,
+  computerActionNeedsApproval,
   computerModeForSandbox,
+  parseDesktopBrowserControlDescriptor,
   runWindowsComputerAction,
   shouldCaptureAfterAction,
   validateComputerArgs,
@@ -24,6 +27,15 @@ describe('Computer Use permissions', () => {
     expect(() => assertComputerActionAllowed('observe', 'windows')).not.toThrow()
     expect(() => assertComputerActionAllowed('interact', 'type')).not.toThrow()
   })
+
+  it('makes Full access true no-prompt desktop authority', () => {
+    expect(computerActionNeedsApproval('danger-full-access', 'click')).toBe(false)
+    expect(computerActionNeedsApproval('danger-full-access', 'browser_open')).toBe(false)
+    expect(computerActionNeedsApproval('danger-full-access', 'browser_reload')).toBe(false)
+    expect(computerActionNeedsApproval('workspace-write', 'click')).toBe(true)
+    expect(computerActionNeedsApproval('workspace-write', 'browser_open')).toBe(true)
+    expect(computerActionNeedsApproval('read-only', 'click')).toBe(false)
+  })
 })
 
 describe('Computer Use argument contract', () => {
@@ -36,6 +48,13 @@ describe('Computer Use argument contract', () => {
     expect(() => validateComputerArgs({ action: 'windows' })).not.toThrow()
     expect(() => validateComputerArgs({ action: 'focus' })).toThrow(/target/i)
     expect(() => validateComputerArgs({ action: 'focus', target: '7-Zip' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_open', url: 'https://example.com' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_open', url: '' })).toThrow(/url/i)
+    expect(() => validateComputerArgs({ action: 'browser_back' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_forward' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_reload' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_close' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_focus' })).not.toThrow()
   })
 
   it('keeps model text and window selectors out of the PowerShell command line', () => {
@@ -75,8 +94,35 @@ describe('Computer Use argument contract', () => {
     expect(shouldCaptureAfterAction('key')).toBe(true)
     expect(shouldCaptureAfterAction('scroll')).toBe(true)
     expect(shouldCaptureAfterAction('focus')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_open')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_back')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_forward')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_reload')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_close')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_focus')).toBe(true)
     expect(shouldCaptureAfterAction('move')).toBe(false)
     expect(shouldCaptureAfterAction('windows')).toBe(false)
+  })
+
+  it('routes browser actions to the native embedded-browser protocol, never the keyboard driver', () => {
+    expect(browserCommandForAction({ action: 'browser_open', url: 'https://example.com/path?q=phoenix' }))
+      .toEqual({ type: 'phoenix.browser.open', url: 'https://example.com/path?q=phoenix' })
+    expect(browserCommandForAction({ action: 'browser_back' })).toEqual({ type: 'phoenix.browser.back' })
+    expect(browserCommandForAction({ action: 'browser_forward' })).toEqual({ type: 'phoenix.browser.forward' })
+    expect(browserCommandForAction({ action: 'browser_reload' })).toEqual({ type: 'phoenix.browser.reload' })
+    expect(browserCommandForAction({ action: 'browser_close' })).toEqual({ type: 'phoenix.browser.close' })
+    expect(browserCommandForAction({ action: 'browser_focus' })).toEqual({ type: 'phoenix.browser.focus' })
+    expect(() => windowsComputerInvocation({ action: 'browser_open', url: 'https://example.com' }))
+      .toThrow(/desktop control channel/i)
+  })
+
+  it('validates the current-user desktop control descriptor before connecting', () => {
+    expect(parseDesktopBrowserControlDescriptor('{"schema":1,"pipeName":"PhoenixDesktop.Browser.abc-123"}'))
+      .toEqual({ schema: 1, pipeName: 'PhoenixDesktop.Browser.abc-123' })
+    expect(() => parseDesktopBrowserControlDescriptor('{"schema":2,"pipeName":"PhoenixDesktop.Browser.abc"}'))
+      .toThrow(/schema/i)
+    expect(() => parseDesktopBrowserControlDescriptor('{"schema":1,"pipeName":"..\\\\evil"}'))
+      .toThrow(/pipe/i)
   })
 
   it('rejects key strings outside the closed combo grammar', () => {
@@ -90,5 +136,5 @@ describe('Computer Use native Windows driver', () => {
   windowsIt('compiles the embedded driver and enumerates the interactive desktop', async () => {
     const output = await runWindowsComputerAction({ action: 'windows' })
     expect(typeof output).toBe('string')
-  })
+  }, 20_000)
 })
