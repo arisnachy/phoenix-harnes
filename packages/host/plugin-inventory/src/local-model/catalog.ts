@@ -7,9 +7,9 @@ const QWEN_35_4B_Q4_K_M: LocalModelCatalogEntry = Object.freeze({
   sourceUrl: 'https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/ba06320255db2dbec194dad738d066be90dabf29/Qwen_Qwen3.5-4B-Q4_K_M.gguf?download=true',
   sha256: '13c16f426047e2de38cd075bdade4a7bcbc8c774384876f677740cda65f8a983',
   sizeBytes: 3_013_027_808,
-  estimatedRamBytes: 4_500_000_000,
-  contextWindow: 8192,
-  maxTokens: 4096,
+  estimatedRamBytes: 8_500_000_000,
+  contextWindow: 262_144,
+  maxTokens: 2_048,
   recommended: true,
 })
 
