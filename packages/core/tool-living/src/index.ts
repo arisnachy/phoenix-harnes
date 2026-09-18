@@ -218,7 +218,7 @@ const REGISTER_OUTPUT = {
     },
   },
   render: (_args: unknown, value: Summary & { connector_json: string }) => [{ type: 'text' as const, text: JSON.stringify(value) }],
-}
+} as const
 
 function present(title: string, rawInput?: unknown): GenericCallView {
   return { card: 'generic', title, kind: 'other', ...rawInput === undefined ? {} : { rawInput } }
