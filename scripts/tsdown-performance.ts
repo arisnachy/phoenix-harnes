@@ -58,9 +58,12 @@ function productionExternalPattern(cwd: string): RegExp | undefined {
     ...Object.keys(manifest.peerDependencies ?? {}),
     ...Object.keys(manifest.optionalDependencies ?? {}),
   ])
-  for (const name of forced ?? []) names.delete(name)
   if (names.size === 0) return undefined
-  return new RegExp('^(?:' + [...names].sort().map(escapeSpecifier).join('|') + ')(?:/|$)')
+  const dependencyBody = [...names].sort().map(escapeSpecifier).join('|')
+  const forcedExact = forced === undefined || forced.size === 0
+    ? ''
+    : '(?!(?:' + [...forced].sort().map(escapeSpecifier).join('|') + ')$)'
+  return new RegExp('^' + forcedExact + '(?:' + dependencyBody + ')(?:/|$)')
 }
 
 function flattenExternal(value: unknown): unknown[] {
