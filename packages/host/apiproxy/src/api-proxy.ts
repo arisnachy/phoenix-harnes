@@ -127,8 +127,12 @@ const DEFAULT_MAX_MESSAGES = 50
 /** Provider work budget: at most 100 calls and 2,000 inspected hits. */
 const SESSION_SEARCH_PROVIDER_CALL_LIMIT = 100
 
-/** Bound cold-log stat fan-out and settle each started batch before cancellation returns. */
-const COLD_SUMMARY_BATCH_SIZE = 16
+/**
+ * Bound cold-log stat/read fan-out and settle each started batch before
+ * cancellation returns. Session lists commonly contain hundreds of cold rows;
+ * 64 keeps Windows/OneDrive latency bounded without unbounded filesystem fan-out.
+ */
+const COLD_SUMMARY_BATCH_SIZE = 64
 /** Default maximum artifact size eligible for one cold blankness read. */
 export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
 
