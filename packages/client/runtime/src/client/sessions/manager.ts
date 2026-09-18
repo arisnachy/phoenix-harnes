@@ -33,6 +33,13 @@ import type { SessionRemotes } from './remotes.ts'
  */
 export type SessionListPhase = 'pending' | 'ready'
 
+/** Backoff used only until the first successful session baseline of a connection. */
+const INITIAL_BASELINE_RETRY_DELAYS_MS = [250, 750, 1500, 3000] as const
+
+function waitForBaselineRetry(delayMs: number): Promise<void> {
+  return new Promise(resolve => { setTimeout(resolve, delayMs) })
+}
+
 /** Request-local content hit returned to sidebar search consumers. */
 export interface SessionSearchResultItem {
   sessionId: SessionId
@@ -133,6 +140,8 @@ export class SessionManager {
   private listPhase: SessionListPhase = 'pending'
   private listError: RpcError | null = null
   private listInflight: Promise<void> | null = null
+  /** Cancels stale first-baseline retry loops across connection generations. */
+  private connectionHydrationGeneration = 0
   /** Mutations arriving after a list request starts are replayed over its response. */
   private listMutations: SessionListMutation[] | null = null
   private readonly addresses = new Map<SessionId, SubagentAddress>()
@@ -909,6 +918,8 @@ export class SessionManager {
    * request with its live rpcId.
   */
   handleDisconnected(): void {
+    // Stop any pending first-baseline retry before the next generation begins.
+    this.connectionHydrationGeneration++
     if (this.pendingInteractions.size > 0) {
       this.pendingInteractions.clear()
       this.notifier.markDirty()
@@ -924,12 +935,29 @@ export class SessionManager {
 
   /** After each connection generation: refresh the session baseline and rebuild opened windows. */
   handleConnected(): void {
-    void this.refreshList()
+    const generation = ++this.connectionHydrationGeneration
+    void this.hydrateInitialList(generation)
     const selectedAddress = this.selected === undefined ? undefined : this.addresses.get(this.selected)
     if (selectedAddress !== undefined) void this.refreshSubagents(selectedAddress.parentSessionId)
     if (this.selected !== undefined) void this.refreshSubagents(this.selected)
     for (const parentSessionId of this.openCatalogs) void this.refreshSubagents(parentSessionId)
     for (const session of this.sessions.values()) void session.resync()
+  }
+
+  /**
+   * Recover a new page from a transient first session.list failure. Once any
+   * baseline has succeeded, later reconnect refreshes remain one-shot because
+   * the already-rendered list is usable and an error should stay observable.
+   */
+  private async hydrateInitialList(generation: number): Promise<void> {
+    await this.refreshList()
+    if (generation !== this.connectionHydrationGeneration || this.listPhase === 'ready') return
+    for (const delayMs of INITIAL_BASELINE_RETRY_DELAYS_MS) {
+      await waitForBaselineRetry(delayMs)
+      if (generation !== this.connectionHydrationGeneration || this.listPhase === 'ready') return
+      await this.refreshList()
+      if (generation !== this.connectionHydrationGeneration || this.listPhase === 'ready') return
+    }
   }
 
   /** Debounce membership refetches while one parent catalog is selected or open. */
