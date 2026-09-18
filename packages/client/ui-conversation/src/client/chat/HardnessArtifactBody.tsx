@@ -36,6 +36,71 @@ function display(value: unknown): string {
   }
 }
 
+function parseJsonArtifact(value: string): unknown {
+  const source = value.charCodeAt(0) === 0xFEFF ? value.slice(1) : value
+  try {
+    return JSON.parse(source) as unknown
+  } catch {
+    return undefined
+  }
+}
+
+function isJsonArtifact(mime: string, title: string): boolean {
+  return mime.toLowerCase().includes('json') || title.trim().toLowerCase().endsWith('.json')
+}
+
+function embeddedVisual(record: JsonRecord): JsonRecord | undefined {
+  if (supportsPhoenixVisual(record)) return record
+  for (const key of ['visual', 'spec', 'chart'] as const) {
+    const nested = record[key]
+    if (isRecord(nested) && supportsPhoenixVisual(nested)) return nested
+  }
+
+  const chartJsData = isRecord(record.data) ? record.data : undefined
+  if (chartJsData !== undefined && Array.isArray(chartJsData.labels) && Array.isArray(chartJsData.datasets)) {
+    const datasets = chartJsData.datasets.filter(isRecord)
+    const series = datasets.flatMap((dataset, index) => {
+      if (!Array.isArray(dataset.data) || !dataset.data.some(item => typeof item === 'number' && Number.isFinite(item))) return []
+      return [{ dataKey: `series${index + 1}`, label: text(dataset.label) ?? `Series ${index + 1}` }]
+    })
+    if (series.length > 0) {
+      const rows = chartJsData.labels.map((label, rowIndex) => {
+        const row: Record<string, unknown> = { label: display(label) }
+        for (let index = 0; index < datasets.length; index += 1) {
+          const dataset = datasets[index]
+          if (!Array.isArray(dataset?.data)) continue
+          const value = dataset.data[rowIndex]
+          if (typeof value === 'number' && Number.isFinite(value)) row[`series${index + 1}`] = value
+        }
+        return row
+      })
+      const rawType = text(record.type)?.toLowerCase()
+      const chartType = rawType === 'line' || rawType === 'pie' || rawType === 'doughnut' || rawType === 'donut'
+        ? (rawType === 'doughnut' ? 'donut' : rawType)
+        : 'bar'
+      return { visualType: 'chart', chartType, xKey: 'label', series, data: rows }
+    }
+  }
+
+  if (Array.isArray(record.labels) && Array.isArray(record.values)) {
+    const values = record.values
+    if (values.some(item => typeof item === 'number' && Number.isFinite(item))) {
+      const rows = record.labels.map((label, index) => ({
+        label: display(label),
+        value: typeof values[index] === 'number' && Number.isFinite(values[index]) ? values[index] : 0,
+      }))
+      return {
+        visualType: 'chart',
+        chartType: text(record.chartType) ?? 'bar',
+        xKey: 'label',
+        series: [{ dataKey: 'value', label: text(record.seriesName) ?? text(record.label) ?? 'Value' }],
+        data: rows,
+      }
+    }
+  }
+  return undefined
+}
+
 function safeHref(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const candidate = value.trim()
@@ -140,10 +205,19 @@ function DeclarativeUi({ record }: { readonly record: JsonRecord }) {
 
 function sandboxDocument(html: string): string {
   const csp = [
-    "default-src 'none';", 'img-src data: blob;', 'media-src data: blob;', 'font-src data:',
-    "style-src 'unsafe-inline';", "script-src 'unsafe-inline';", "connect-src 'none';",
-    "frame-src 'none';", "child-src 'none';", "object-src 'none';", "base-uri 'none';", "form-action 'none'",
-  ].join(' ')
+    "default-src 'none'",
+    'img-src data: blob:',
+    'media-src data: blob:',
+    'font-src data:',
+    "style-src 'unsafe-inline'",
+    "script-src 'unsafe-inline'",
+    "connect-src 'none'",
+    "frame-src 'none'",
+    "child-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join('; ') + ';'
   const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
   const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
   const heightReporter = '<script>(function(){function report(){var root=document.documentElement;parent.postMessage({type:\'phoenix-artifact-height\',height:Math.max(root.scrollHeight,root.offsetHeight)},\'*\')}if(window.ResizeObserver){new ResizeObserver(report).observe(document.documentElement)}new MutationObserver(report).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});window.addEventListener(\'load\',report);report()})()<\/script>'
@@ -290,10 +364,11 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
     )
   }
   if (mime === 'application/vnd.hardness.ui+json' || isRecord(record.root)) return <DeclarativeUi record={record} />
+  const visual = embeddedVisual(record)
   if (mime === 'application/vnd.phoenix.visual+json'
     || mime === 'application/vnd.hardness.visual+json'
     || mime === 'application/vnd.hardness.chart+json'
-    || supportsPhoenixVisual(record)) return <PhoenixVisualizer spec={record} />
+    || visual !== undefined) return <PhoenixVisualizer spec={visual ?? record} />
   if (typeof record.entry === 'string' && isRecord(record.files)) {
     const html = typeof record.files[record.entry] === 'string' ? record.files[record.entry] as string : undefined
     if (html !== undefined) return <MiniApp html={html} expanded={expanded} title={title} />
@@ -315,7 +390,20 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
       const url = safeHref(data)
       return <DocumentPreview mime={mime} {...url === undefined ? {} : { url }} expanded={expanded} title={title} />
     }
-    return <pre className={mime.includes('json') ? styles.code : styles.text}>{data}</pre>
+    if (isJsonArtifact(mime, title)) {
+      const parsed = parseJsonArtifact(data)
+      if (isRecord(parsed)) {
+        return <RecordPreview
+          record={parsed}
+          mime={mime}
+          expanded={expanded}
+          title={title}
+          {...renderMessageImages === undefined ? {} : { renderMessageImages }}
+        />
+      }
+      if (parsed !== undefined) return <pre className={styles.code}>{JSON.stringify(parsed, null, 2)}</pre>
+    }
+    return <pre className={isJsonArtifact(mime, title) ? styles.code : styles.text}>{data}</pre>
   }
   return <RecordPreview
     record={data}
