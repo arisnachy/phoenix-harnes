@@ -503,6 +503,7 @@ export class ChatGptWebIntegration {
     const ready = await this.waitForReady(true, current)
     if (ready.phase !== 'ready') {
       await current.bridge.stop()
+      await rm(this.options.enabledPath, { force: true })
       return { ...ready, enabled: false }
     }
     await writeEnabledPreference(this.options.enabledPath)
