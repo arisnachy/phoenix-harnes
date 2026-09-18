@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ChatGptWebSnapshot, IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
@@ -318,7 +318,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     return `${definition.name} ${definition.category} ${definition.description} ${definition.capabilities.join(' ')}`.toLowerCase().includes(needle)
   })
 
-  const toggleChatGptWeb = (enabled: boolean): void => {
+  const toggleChatGptWeb = useCallback((enabled: boolean): void => {
     if (chatGptWeb === undefined || settings === undefined || chatGptWebBusy) return
     setChatGptWebBusy(true)
     setChatGptWebFailure(undefined)
@@ -329,7 +329,13 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       })
       .catch((error: unknown) => { setChatGptWebFailure(String(error)) })
       .finally(() => { setChatGptWebBusy(false) })
-  }
+  }, [chatGptWeb, settings, chatGptWebBusy, onAuthorized])
+
+  useEffect(() => {
+    if (chatGptWebState?.enabled !== true || chatGptWebState.phase !== 'needs-setup' || chatGptWebBusy) return
+    const timer = setTimeout(() => { toggleChatGptWeb(true) }, 1500)
+    return () => { clearTimeout(timer) }
+  }, [chatGptWebBusy, chatGptWebState?.enabled, chatGptWebState?.phase, toggleChatGptWeb])
 
   const disconnect = (key: string): void => {
     if (api === undefined) return
