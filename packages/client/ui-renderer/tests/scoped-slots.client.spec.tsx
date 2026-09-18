@@ -10,7 +10,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render } from '@testing-library/react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { Component, useEffect, useState, type ReactNode } from 'react'
 import {
   SlotOwnershipError, StaleAuthorizationError,
   type ActionsDecl, type SlotEntryDef, type SlotSpec, type StoreHandle, type StoredEntry,
@@ -26,6 +26,16 @@ type AnyProps = Record<string, unknown>
 type RenderSlotFn = (key: string, owner: object, opts?: RenderOpts) => ReactNode
 type RenderSlotChainFn = (key: string, owner: object, opts?: { fallback?: ReactNode; overlay?: boolean }) => ReactNode
 type DeclaredSpec = SlotSpec<SlotEntryDef>
+
+class SurfaceSupervisorProbe extends Component<{ children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false }
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true }
+  }
+  override render(): ReactNode {
+    return this.state.failed ? <b data-surface-supervisor-recovery>recovered</b> : this.props.children
+  }
+}
 /** Entry literal helper: fake entries default the mandatory options bag. */
 const entryOf = (partial: Omit<StoredEntry, 'options'> & { options?: StoredEntry['options'] }): StoredEntry =>
   ({ options: {}, ...partial })
@@ -341,6 +351,27 @@ describe('child outlets and the renderSlot binding', () => {
     spy.mockRestore()
     expect(view.container.textContent).toBe('alive')
     expect(view.container.querySelector('[data-slot-error]')).not.toBeNull()
+  })
+
+  it('escalates a crashing conversation entry to the shell surface supervisor instead of a blank dead cell', async () => {
+    const h = makeHost()
+    h.declare('conversation', SINGLE_ROOT)
+    h.add('conversation', { component: () => { throw new Error('conversation boom') } })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { view } = mountRoot(h, { conversation: SINGLE_ROOT },
+        renderSlot => (
+          <SurfaceSupervisorProbe>
+            {renderSlot('conversation', {})}
+          </SurfaceSupervisorProbe>
+        ))
+      await vi.waitFor(() => {
+        expect(view.container.querySelector('[data-surface-supervisor-recovery]')).not.toBeNull()
+      })
+      expect(view.container.querySelector('[data-slot-error="conversation"]')).toBeNull()
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 
