@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
-  ConversationTimelineSnapshot,
+  ConversationTimelineSnapshot, UserMessageNode,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
@@ -118,13 +118,14 @@ function runningTurnStartTime(timeline: ConversationTimelineSnapshot): number | 
  * ordered business Node crosses the keyed renderer seat.
  */
 export function ChatView({
-  useSession, useSessions, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
+  useSession, useSessions, useInput, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
   fileMentions, workspaceFileMentions, runArtifact, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
   const timeline = useSession(s => s.chat.timeline)
   const inbox = useSession(s => s.queue)
+  const pendingSubmit = useInput(s => s.pendingSubmit)
   // Workspace root off the session list row: path summaries display relative to it.
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
   const running = useSession(s => s.running)
@@ -187,6 +188,19 @@ export function ChatView({
     [nodeStore, order],
   )
   const progress = useMemo(() => turnProgress(timeline, chatNodes), [chatNodes, timeline])
+  // The optimistic bubble exists only until the matching durable user message
+  // reaches the transcript. Host and browser share the same local wall clock
+  // in Phoenix; a small tolerance covers scheduling jitter without hiding an
+  // older identical prompt.
+  const pendingSubmitDurable = useMemo(() => {
+    if (pendingSubmit === undefined) return false
+    const floor = pendingSubmit.startedAt - 1_000
+    return chatNodes.some((node) => {
+      if (node.kind !== 'user') return false
+      const user = node.data as UserMessageNode
+      return user.time >= floor && user.source.kind === 'user'
+    })
+  }, [chatNodes, pendingSubmit])
 
   useEffect(() => {
     const finished = previousRunning.current && !running
@@ -430,6 +444,13 @@ export function ChatView({
             renderSlot={renderSlot}
             t={t}
           />
+          {pendingSubmit !== undefined && !pendingSubmitDurable && pendingSubmit.text !== '' && (
+            <PendingSteeringBubble
+              content={[{ type: 'text', text: pendingSubmit.text }]}
+              renderMessageImages={renderMessageImages}
+              t={t}
+            />
+          )}
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}
