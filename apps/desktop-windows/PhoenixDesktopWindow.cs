@@ -22,6 +22,8 @@ internal sealed class PhoenixDesktopWindow : Form
     private bool initialized;
     private bool runtimeReady;
     private bool applyingBrowserLayout;
+    private int? browserWidthOverride;
+    private Task? browserInitializationTask;
 
     // Exposed to the native smoke test so CI verifies the real SplitContainer state,
     // not only the pure layout contract.
@@ -40,6 +42,10 @@ internal sealed class PhoenixDesktopWindow : Form
         split.Dock = DockStyle.Fill;
         split.Orientation = Orientation.Vertical;
         split.SplitterWidth = 6;
+        // Collapse immediately, before the first paint. Waiting for Shown caused a visible
+        // half-chat/half-browser flash on startup and made Phoenix look as if the browser owned
+        // half the application even when no page had been requested.
+        split.Panel2Collapsed = BrowserLayout.StartCollapsed;
 
         phoenixView.Dock = DockStyle.Fill;
         browserView.Dock = DockStyle.Fill;
@@ -59,6 +65,12 @@ internal sealed class PhoenixDesktopWindow : Form
         // The chat owns the full window at startup; the compact browser appears only when invoked.
         Shown += (_, _) => ApplyInitialSplitLayout();
         split.Resize += (_, _) => { if (!split.Panel2Collapsed) ApplyBrowserSplitLayout(); };
+        split.SplitterMoved += (_, _) =>
+        {
+            if (applyingBrowserLayout || split.Panel2Collapsed) return;
+            var width = Math.Max(0, split.ClientSize.Width - split.SplitterDistance - split.SplitterWidth);
+            if (width > 0) browserWidthOverride = width;
+        };
         if (initializeWebViewsOnShow)
             Shown += async (_, _) => await InitializeAsync();
         KeyDown += OnWindowKeyDown;
@@ -83,9 +95,9 @@ internal sealed class PhoenixDesktopWindow : Form
         applyingBrowserLayout = true;
         try
         {
-            const int desiredLeftMin = 520;
-            const int desiredRightMin = 320;
-            var desiredBrowserWidth = BrowserLayout.PreferredBrowserWidth(width);
+            const int desiredLeftMin = BrowserLayout.MinimumChatWidth;
+            const int desiredRightMin = BrowserLayout.MinimumBrowserWidth;
+            var desiredBrowserWidth = browserWidthOverride ?? BrowserLayout.PreferredBrowserWidth(width);
 
             // Reset constraints before moving the splitter, then restore as much of the desired
             // geometry as the actual window width can safely accommodate.
@@ -199,7 +211,11 @@ internal sealed class PhoenixDesktopWindow : Form
 
         backButton.Click += (_, _) => { if (browserView.CanGoBack) browserView.GoBack(); };
         forwardButton.Click += (_, _) => { if (browserView.CanGoForward) browserView.GoForward(); };
-        reload.Click += (_, _) => browserView.Reload();
+        reload.Click += (_, _) =>
+        {
+            if (browserView.CoreWebView2 is not null)
+                browserView.Reload();
+        };
         home.Click += (_, _) => NavigateBrowser("about:blank");
         go.Click += (_, _) => NavigateBrowser(address.Text);
         close.Click += (_, _) => SetBrowserVisible(false);
@@ -258,23 +274,11 @@ internal sealed class PhoenixDesktopWindow : Form
             };
             await phoenixView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(BridgeScript);
 
-            await browserView.EnsureCoreWebView2Async();
-            ConfigureWebView(browserView.CoreWebView2, isPhoenixSurface: false);
-            browserView.CoreWebView2.NavigationStarting += (_, e) => address.Text = e.Uri;
-            browserView.CoreWebView2.NavigationCompleted += (_, _) => PublishBrowserState();
-            browserView.CoreWebView2.SourceChanged += (_, _) => PublishBrowserState();
-            browserView.CoreWebView2.DocumentTitleChanged += (_, _) => PublishBrowserState();
-            browserView.CoreWebView2.HistoryChanged += (_, _) => PublishBrowserState();
-            browserView.CoreWebView2.NewWindowRequested += (_, e) =>
-            {
-                e.Handled = true;
-                OpenBrowser(e.Uri);
-            };
-
-            browserView.CoreWebView2.Navigate("about:blank");
+            // Chat-first startup: do not initialize the second Chromium surface here.
+            // The browser pane is created lazily on the first page request so it cannot delay
+            // conversation hydration or steal half of the first rendered frame.
             if (runtimeReady)
                 phoenixView.CoreWebView2.Navigate(phoenixUri.ToString());
-            PublishBrowserState();
         }
         catch (WebView2RuntimeNotFoundException ex)
         {
@@ -371,13 +375,15 @@ internal sealed class PhoenixDesktopWindow : Form
                 if (browserView.CanGoForward) browserView.GoForward();
                 break;
             case "phoenix.browser.reload":
-                browserView.Reload();
+                if (browserView.CoreWebView2 is not null)
+                    browserView.Reload();
                 break;
             case "phoenix.browser.home":
                 OpenBrowser("about:blank");
                 break;
             case "phoenix.browser.focus":
                 SetBrowserVisible(true);
+                _ = EnsureBrowserInitializedAsync();
                 browserView.Focus();
                 break;
             default:
@@ -388,6 +394,7 @@ internal sealed class PhoenixDesktopWindow : Form
     private void OpenBrowser(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return;
+        ShowAndActivate();
         SetBrowserVisible(true);
         NavigateBrowser(value);
     }
@@ -397,17 +404,57 @@ internal sealed class PhoenixDesktopWindow : Form
         var uri = BrowserNavigation.NormalizeAddress(value);
         if (uri is null) return;
         address.Text = uri.ToString();
-        if (browserView.CoreWebView2 is not null)
-            browserView.CoreWebView2.Navigate(uri.ToString());
-        else
-            browserView.Source = uri;
+        _ = NavigateBrowserAsync(uri);
+    }
+
+    private async Task NavigateBrowserAsync(Uri uri)
+    {
+        try
+        {
+            await EnsureBrowserInitializedAsync();
+            if (browserView.CoreWebView2 is not null)
+                browserView.CoreWebView2.Navigate(uri.ToString());
+            else
+                browserView.Source = uri;
+        }
+        catch (Exception ex)
+        {
+            DesktopLog.Write("Embedded browser navigation initialization failed", ex);
+        }
+    }
+
+    private Task EnsureBrowserInitializedAsync()
+    {
+        browserInitializationTask ??= InitializeBrowserAsync();
+        return browserInitializationTask;
+    }
+
+    private async Task InitializeBrowserAsync()
+    {
+        await browserView.EnsureCoreWebView2Async();
+        ConfigureWebView(browserView.CoreWebView2, isPhoenixSurface: false);
+        browserView.CoreWebView2.NavigationStarting += (_, e) => address.Text = e.Uri;
+        browserView.CoreWebView2.NavigationCompleted += (_, _) => PublishBrowserState();
+        browserView.CoreWebView2.SourceChanged += (_, _) => PublishBrowserState();
+        browserView.CoreWebView2.DocumentTitleChanged += (_, _) => PublishBrowserState();
+        browserView.CoreWebView2.HistoryChanged += (_, _) => PublishBrowserState();
+        browserView.CoreWebView2.NewWindowRequested += (_, e) =>
+        {
+            e.Handled = true;
+            OpenBrowser(e.Uri);
+        };
+        browserView.CoreWebView2.Navigate("about:blank");
+        PublishBrowserState();
     }
 
     private void SetBrowserVisible(bool visible)
     {
         split.Panel2Collapsed = !visible;
         if (visible)
+        {
             ApplyBrowserSplitLayout();
+            _ = EnsureBrowserInitializedAsync();
+        }
         PublishBrowserState();
     }
 
