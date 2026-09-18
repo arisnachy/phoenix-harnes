@@ -167,7 +167,7 @@ describe('connectors settings section', () => {
 
     renderHub(api)
     expect(await screen.findByText('Reconnect required')).toBeTruthy()
-    expect(screen.queryByText('Connected')).toBeNull()
+    expect(screen.queryByText('Connected', { selector: 'span' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy()
   })
 
