@@ -1,5 +1,6 @@
 import { defineConfig } from 'tsdown'
 import { decoratorLoweringPlugin } from './packages/typert/generator/lib/types/tsdown-plugin.js'
+import { optimizePhoenixTsdownInput } from './scripts/tsdown-performance.ts'
 
 function isBuildFaceClient(value: unknown): boolean {
   if (value === undefined || value === 'host') return false
@@ -26,6 +27,13 @@ export default defineConfig(({ env }) => {
     fixedExtension: false,
     dts: false,
     clean: false,
+    // Size/gzip reporting is expensive across hundreds of tiny workspace
+    // bundles and adds no artifact correctness signal.
+    report: false,
+    // Normal builds do not pay Rolldown's per-hook timing instrumentation.
+    // Opt back in explicitly while profiling with PHOENIX_BUILD_TIMINGS=1.
+    checks: { pluginTimings: process.env.PHOENIX_BUILD_TIMINGS === '1' },
+    inputOptions: options => optimizePhoenixTsdownInput(options),
     plugins: client ? [] : [decoratorLoweringPlugin()],
   }
 })
