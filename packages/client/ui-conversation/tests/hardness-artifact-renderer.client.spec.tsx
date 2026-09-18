@@ -180,6 +180,8 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(srcDoc).not.toMatch(/<body>\s*<!doctype/i)
     expect(srcDoc).toContain('<h1>Ready</h1>')
     expect(srcDoc).toContain('body{color:red}')
+    expect(srcDoc).toContain("font-src data:; style-src 'unsafe-inline';")
+    expect(srcDoc).not.toContain("font-src data: style-src")
     expect(srcDoc).toContain('min-height:0')
   })
 })
