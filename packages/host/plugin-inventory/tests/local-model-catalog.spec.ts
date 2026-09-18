@@ -2,19 +2,29 @@ import { describe, expect, it } from 'vitest'
 import { getLocalModelCatalog, getRuntimeManifest } from '../src/local-model/catalog.js'
 
 describe('Phoenix Local catalog', () => {
-  it('ships a revision-pinned Qwen3.5-4B Q4_K_M as the recommended model', () => {
-    const model = getLocalModelCatalog().find(entry => entry.recommended)
+  it('ships revision-pinned Gemma 4 E2B as the recommended default and keeps Qwen selectable', () => {
+    const catalog = getLocalModelCatalog()
+    const model = catalog.find(entry => entry.recommended)
     expect(model).toMatchObject({
-      id: 'qwen3.5-4b-q4-k-m',
-      displayName: 'Qwen3.5-4B Q4_K_M',
-      modelFileName: 'Qwen_Qwen3.5-4B-Q4_K_M.gguf',
-      sourceUrl: 'https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/ba06320255db2dbec194dad738d066be90dabf29/Qwen_Qwen3.5-4B-Q4_K_M.gguf?download=true',
-      sha256: '13c16f426047e2de38cd075bdade4a7bcbc8c774384876f677740cda65f8a983',
-      sizeBytes: 3013027808,
-      contextWindow: 262144,
+      id: 'gemma-4-e2b-it-q4-0',
+      displayName: 'Gemma 4 E2B-it Q4_0',
+      modelFileName: 'gemma-4-E2B-it-Q4_0.gguf',
+      sourceUrl: 'https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/64ef033dc9f85a88f88e70cceb0a7457366bea64/gemma-4-E2B-it-Q4_0.gguf?download=true',
+      sha256: '8e30dff3ac4c8434c49a7036fa15564bdbb6044e42bf04550bf1a096ad7e6a52',
+      sizeBytes: 2841481184,
+      contextWindow: 131072,
       maxTokens: 2048,
       recommended: true,
     })
+    expect(catalog).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'qwen3.5-4b-q4-k-m',
+        displayName: 'Qwen3.5-4B Q4_K_M',
+        contextWindow: 262144,
+        maxTokens: 2048,
+        recommended: false,
+      }),
+    ]))
   })
 
   it('pins the verified Windows x64 llama.cpp runtime', () => {
