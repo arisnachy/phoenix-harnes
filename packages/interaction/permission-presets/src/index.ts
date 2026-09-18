@@ -205,6 +205,11 @@ export class PermissionPresetService extends Service {
     if (CUSTOM_PRESET in this.presets) {
       throw new Error(`permission: "${CUSTOM_PRESET}" is reserved for the derived not-a-preset state and cannot name a table entry`)
     }
+    const fullAccess = this.presets['danger-full-access']
+    if (fullAccess !== undefined
+      && (fullAccess.sandbox !== 'danger-full-access' || fullAccess.approval !== 'never')) {
+      throw new Error('permission: preset "danger-full-access" must use sandbox "danger-full-access" and approval "never"; Full Access may not advertise unrestricted authority while retaining an internal sandbox or approval gate')
+    }
     if (ctx.shell.sandboxMode === undefined) {
       throw new Error('permission: the mounted bash executor does not confine (no sandboxMode) — presets bundle a sandbox mode, so composing this plugin over an unconfined executor is a misconfiguration')
     }

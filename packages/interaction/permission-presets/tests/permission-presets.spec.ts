@@ -116,13 +116,13 @@ describe('PermissionPresetService', () => {
     const ctx = await mounted({ config: { presets: {
       'workspace-write': { sandbox: 'workspace-write', approval: 'ask' },
       agentish: { sandbox: 'workspace-write', approval: 'ask' },
-      'danger-full-access': { sandbox: 'danger-full-access', approval: 'ask' },
+      'danger-ask': { sandbox: 'danger-full-access', approval: 'ask' },
     } } })
     const session = freshSession('sess-tie')
     ctx.permissionPresets.set(session, 'agentish')
     expect(ctx.permissionPresets.current(session.events)).toBe('agentish')
     session.append('sandbox/mode', { mode: 'danger-full-access' })
-    expect(ctx.permissionPresets.current(session.events)).toBe('danger-full-access')
+    expect(ctx.permissionPresets.current(session.events)).toBe('danger-ask')
   })
 
   it('set() writes the preset and only the knob that differs from the safe defaults', async () => {
@@ -175,6 +175,13 @@ describe('PermissionPresetService', () => {
   it('rejects a table entry named custom (reserved for the derived state)', async () => {
     await expect(mounted({ config: { presets: { custom: { sandbox: 'read-only', approval: 'ask' } } } }))
       .rejects.toThrow(/reserved for the derived not-a-preset state/)
+  })
+
+  it('refuses a misleading danger-full-access preset that is not truly unrestricted', async () => {
+    await expect(mounted({ config: { presets: {
+      'workspace-write': { sandbox: 'workspace-write', approval: 'ask' },
+      'danger-full-access': { sandbox: 'workspace-write', approval: 'ask' },
+    } } })).rejects.toThrow(/danger-full-access.*sandbox.*never/i)
   })
 
   it('requires an explicit default when composition defaults match no preset', async () => {

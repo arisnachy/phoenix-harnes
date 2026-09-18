@@ -8,6 +8,16 @@ const surface = {
 } as const satisfies CapabilitySurface
 
 describe('HARDNESS user approval broker', () => {
+  it('auto-approves a local capability that declares no additional permissions', async () => {
+    const approval = { request: vi.fn(async () => 'rejected' as const) }
+    const agent = {} as Agent
+    const signal = new AbortController().signal
+    const broker = createUserApprovalBroker(approval)
+    const localSurface = { ...surface, requiredPermissions: [] }
+    await expect(broker.request(localSurface, { agent, signal })).resolves.toEqual({ kind: 'approved', grants: [] })
+    expect(approval.request).not.toHaveBeenCalled()
+  })
+
   it('passes explicit agent, signal and reason to the real approval seam', async () => {
     const approval = { request: vi.fn(async () => 'allowed-once' as const) }
     const agent = {} as Agent

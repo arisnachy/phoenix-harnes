@@ -1,8 +1,8 @@
 /** PHOENIX HARDNESS self-protection tests for the shared sandbox policy. */
 
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
@@ -52,6 +52,10 @@ function agentFor(session: Session): Agent {
   return { session } as unknown as Agent
 }
 
+function canonicalPath(path: string): string {
+  return realpathSync.native(path)
+}
+
 function createLayout(): { root: string; runtime: string; data: string; evolution: string; project: string } {
   const root = mkdtempSync(join(tmpdir(), 'phoenix-hardness-'))
   const runtime = join(root, 'runtime')
@@ -79,7 +83,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted()
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('normal', layout.project) })).toEqual({
         mode: 'danger-full-access',
-        workspaceRoot: resolve(layout.project),
+        workspaceRoot: canonicalPath(layout.project),
         sessionId: 'normal',
       })
     } finally {
@@ -94,7 +98,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted()
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('project', layout.project) })).toEqual({
         mode: 'workspace-write',
-        workspaceRoot: resolve(layout.project),
+        workspaceRoot: canonicalPath(layout.project),
         sessionId: 'project',
       })
     } finally {
@@ -109,7 +113,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted('workspace-write')
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('self-edit', layout.runtime) })).toEqual({
         mode: 'workspace-write',
-        workspaceRoot: resolve(layout.evolution),
+        workspaceRoot: canonicalPath(layout.evolution),
         sessionId: 'self-edit',
       })
     } finally {
@@ -124,7 +128,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted()
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('data-home', layout.data) })).toEqual({
         mode: 'workspace-write',
-        workspaceRoot: resolve(layout.evolution),
+        workspaceRoot: canonicalPath(layout.evolution),
         sessionId: 'data-home',
       })
     } finally {
@@ -139,7 +143,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted()
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('no-evolution', layout.runtime) })).toEqual({
         mode: 'read-only',
-        workspaceRoot: resolve(layout.runtime),
+        workspaceRoot: canonicalPath(layout.runtime),
         sessionId: 'no-evolution',
       })
     } finally {
@@ -167,7 +171,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted('read-only')
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('readonly', layout.runtime) })).toEqual({
         mode: 'read-only',
-        workspaceRoot: resolve(layout.runtime),
+        workspaceRoot: canonicalPath(layout.runtime),
         sessionId: 'readonly',
       })
     } finally {
@@ -183,7 +187,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const assembly = await ctx.systemPrompt.assemble({ agent: agentFor(activeSession('prompt', layout.runtime)) })
       const policy = assembly.contexts.find(context => context.name === 'sandbox:policy')?.text
       expect(policy).toContain('PHOENIX HARDNESS runtime protection is active')
-      expect(policy).toContain(resolve(layout.evolution))
+      expect(policy).toContain(canonicalPath(layout.evolution))
       expect(policy).toContain('isolated evolution worktree')
     } finally {
       rmSync(layout.root, { recursive: true, force: true })
