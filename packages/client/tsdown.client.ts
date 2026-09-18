@@ -254,9 +254,10 @@ interface AssetEmitter {
 
 function staticLinkedConfig(id: string, entry: string, outputName = basename(entry, '.js')): UserConfig {
   const emitted = new Set<string>()
+  const internalEntry = entry.startsWith('.') || isAbsolute(entry) ? entry : `./${entry}`
   return {
     name: id,
-    entry: { [outputName]: entry },
+    entry: { [outputName]: internalEntry },
     outDir: 'lib',
     format: ['esm'],
     platform: 'browser',
@@ -267,47 +268,54 @@ function staticLinkedConfig(id: string, entry: string, outputName = basename(ent
     // The shell compiles this artifact, so its map is the only path from a
     // browser stack frame back to the TSX (tsc emits the lib/types half).
     sourcemap: true,
+    inputOptions: {
+      // Contract 1. Keep every bare import external before plugin dispatch or
+      // normal resolution. Rolldown evaluates this RegExp in native code, so
+      // static-linked builds no longer cross Rust -> JavaScript once per import.
+      // The extra NUL exclusion keeps plugin-created virtual ids internal.
+      external: BARE_MODULE_ID,
+    },
     plugins: [{
-      // Contract 1. `pre` because tsdown's own deps plugin would otherwise
-      // resolve and inline every specifier missing from the npm production
-      // sections, which is the coupling this preset exists to remove. The name
-      // is also the roster marker {@link isStaticLinkedConfig} reads.
+      // Marker only: the native external option above owns the actual routing.
+      // Keeping the name preserves the static-channel roster contract used by
+      // isStaticLinkedConfig without paying for a resolveId hook.
       name: STATIC_LINKED_PLUGIN,
-      resolveId: {
-        order: 'pre' as const,
-        handler(source: string, importer: string | undefined) {
-          // An entry arrives without an importer and must stay internal.
-          if (importer === undefined) return null
-          return isBareSpecifier(source) ? { id: source, external: true } : null
-        },
-      },
     }, {
       // Contract 3. Rolldown does not read the `//# sourceMappingURL` of its
       // inputs, so each tsc map is handed over as that module's map and
       // composed into the bundle map; without it frames stop at the emitted
       // lib/types JavaScript instead of reaching the TSX.
       name: 'dsh-tsc-sourcemap',
-      async load(id: string) {
-        if (!id.includes(TYPES_MARKER) || !id.endsWith('.js') || !existsSync(`${id}.map`)) return null
-        const code = await readFile(id, 'utf8')
-        return { code: code.replace(SOURCEMAP_COMMENT, ''), map: await readFile(`${id}.map`, 'utf8') }
+      load: {
+        filter: { id: TSC_EMITTED_JS },
+        async handler(id: string) {
+          if (!id.includes(TYPES_MARKER) || !id.endsWith('.js') || !existsSync(`${id}.map`)) return null
+          const [code, map] = await Promise.all([
+            readFile(id, 'utf8'),
+            readFile(`${id}.map`, 'utf8'),
+          ])
+          return { code: code.replace(SOURCEMAP_COMMENT, ''), map }
+        },
       },
     }, {
       // Contract 4. The import survives verbatim and the sheet lands beside the
       // JavaScript, so the shell's CSS Modules pipeline sees a real stylesheet.
       name: 'dsh-css-asset',
-      async resolveId(this: AssetEmitter, source: string, importer: string | undefined) {
-        if (!source.endsWith('.css') || importer === undefined) return null
-        const { file, fileName } = stylesheetAsset(source, importer)
-        if (!emitted.has(fileName)) {
-          emitted.add(fileName)
-          // originalFileName also puts the physical sheet in the watch graph.
-          this.emitFile({ type: 'asset', fileName, source: await readFile(file), originalFileName: file })
-        }
-        // Every emitted chunk sits at the lib/ root, so the src-relative name
-        // is what resolves from there. Rolldown keeps relative externals as
-        // written instead of re-normalizing them.
-        return { id: `./${fileName}`, external: true }
+      resolveId: {
+        filter: { id: CSS_IMPORT },
+        async handler(this: AssetEmitter, source: string, importer: string | undefined) {
+          if (!source.endsWith('.css') || importer === undefined) return null
+          const { file, fileName } = stylesheetAsset(source, importer)
+          if (!emitted.has(fileName)) {
+            emitted.add(fileName)
+            // originalFileName also puts the physical sheet in the watch graph.
+            this.emitFile({ type: 'asset', fileName, source: await readFile(file), originalFileName: file })
+          }
+          // Every emitted chunk sits at the lib/ root, so the src-relative name
+          // is what resolves from there. Rolldown keeps relative externals as
+          // written instead of re-normalizing them.
+          return { id: `./${fileName}`, external: true }
+        },
       },
     }],
   }
@@ -468,6 +476,13 @@ function clientRoutingPattern(externals: ReadonlySet<string>): RegExp {
 
 /** Virtual CSS modules are the only ids the load hook owns. */
 const CLIENT_CSS_VIRTUAL_PATTERN = new RegExp('^\\0dsh-(?:css|global-css|inline-css):')
+
+/** Native Rolldown external matcher for bare module ids, excluding virtual ids. */
+const BARE_MODULE_ID = /^[^./\\0](?!:[/\\\\])/
+/** Native load filter for JavaScript emitted by tsc under lib/types. */
+const TSC_EMITTED_JS = /\/lib\/types\/.*\\.js$/
+/** Native resolve filter for stylesheet imports owned by the static channel. */
+const CSS_IMPORT = /\\.css$/
 /** Whether an import specifier is the package a pattern names, or one of its subpaths. */
 function matchesSpecifier(patterns: readonly RegExp[], specifier: string): boolean {
   return patterns.some(pattern => pattern.test(specifier))
