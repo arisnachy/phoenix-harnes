@@ -126,9 +126,9 @@ export const PHOENIX_LOCAL_MODEL = 'phoenix-local'
 export const PHOENIX_LOCAL_BASE_URL = 'http://127.0.0.1:17842/v1'
 /** Non-secret marker that satisfies pi-ai's OpenAI-compatible auth preflight for the loopback-only route. */
 export const PHOENIX_LOCAL_AUTHORIZATION = 'Bearer phoenix-local'
-/** Qwen3.5-4B native context window used by the local llama.cpp runtime. */
-export const PHOENIX_LOCAL_CONTEXT_WINDOW = 262_144
-/** Default output budget leaves room for ~259k-token prompts inside the native window. */
+/** Conservative shared context advertised by the selectable Phoenix Local route. */
+export const PHOENIX_LOCAL_CONTEXT_WINDOW = 131_072
+/** Default output budget shared by supported local models. */
 export const PHOENIX_LOCAL_MAX_TOKENS = 2_048
 
 /** Built-in route injected independently of user settings or cloud credentials. */
@@ -143,7 +143,7 @@ function phoenixLocalProfile(): PiAiProviderProfile {
     headers: { Authorization: PHOENIX_LOCAL_AUTHORIZATION },
     models: [{
       id: PHOENIX_LOCAL_MODEL,
-      name: 'Phoenix Local · Qwen3.5-4B',
+      name: 'Phoenix Local · Device model',
       contextWindow: PHOENIX_LOCAL_CONTEXT_WINDOW,
       maxTokens: PHOENIX_LOCAL_MAX_TOKENS,
       input: ['text'],
