@@ -475,6 +475,7 @@ function preflightBootConfiguration() {
     env: {
       ...hydratePhoenixEnvironment(process.env),
       PHOENIX_RUNTIME_ROOT: runtimeRoot,
+      PHOENIX_UPDATE_SOURCE_ROOT: root,
       PHOENIX_UPDATE_SUPERVISED: '1',
       PHOENIX_CONFIG_PREFLIGHT: '1',
       PHOENIX_AUTO_UPDATE: '0',
@@ -557,6 +558,7 @@ function startWatcher() {
   const watcherEnv = {
     ...process.env,
     PHOENIX_RUNTIME_ROOT: runtimeRoot,
+    PHOENIX_UPDATE_SOURCE_ROOT: root,
     PHOENIX_UPDATE_SUPERVISED: '1',
     ...(updateTemp === undefined || updateTemp.length === 0
       ? {}
