@@ -344,6 +344,20 @@ describe('ConversationRoot resident composer', () => {
     expect(b.view.queryByText('Root')).toBeNull()
   })
 
+  it('keeps composer keystrokes out of the heavy session render lane', () => {
+    const b = mount(conversationSnapshot())
+    const box = b.view.getByRole('textbox')
+    b.slotCalls.length = 0
+
+    fireEvent.change(box, { target: { value: 'fast typing path' } })
+
+    expect(b.chat.store.getSnapshot().draft).toBe('fast typing path')
+    expect(b.slotCalls).toContain('conversation.composer.bar')
+    expect(b.slotCalls).not.toContain('conversation.session')
+    expect(b.slotCalls).not.toContain('conversation.session.header')
+    expect(b.slotCalls).not.toContain('conversation.view')
+  })
+
   it('shows hierarchy only for subagents and opens their ordinary owner', () => {
     const b = mount(conversationSnapshot(), undefined, undefined, { summaryOrigin: 'subagent' })
     const root = b.view.getByRole('button', { name: 'Root' })
