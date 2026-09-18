@@ -122,6 +122,45 @@ describe('createSnapshotStore', () => {
     const revived = createSnapshotStore(init(), { persist: { name: 'spec-store' } })
     expect(revived.getSnapshot().a.n).toBe(42)
   })
+
+  it('keeps an existing tab selection across refresh when another tab changes the global recent selection', () => {
+    const sharedLocal = new Map<string, string>()
+    const tabA = new Map<string, string>()
+    const tabB = new Map<string, string>()
+    const storage = (backing: Map<string, string>) => ({
+      getItem: (k: string) => backing.get(k) ?? null,
+      setItem: (k: string, v: string) => { backing.set(k, v) },
+      removeItem: (k: string) => { backing.delete(k) },
+    })
+    const persist = {
+      name: 'spec-current',
+      storage: 'session' as const,
+      fallbackStorage: 'local' as const,
+      mirrorFallback: true,
+    }
+
+    vi.stubGlobal('localStorage', storage(sharedLocal))
+    vi.stubGlobal('sessionStorage', storage(tabA))
+    const firstTab = createSnapshotStore('', { persist })
+    firstTab.set('conversation-a')
+    expect(JSON.parse(tabA.get('spec-current')!)).toBe('conversation-a')
+    expect(JSON.parse(sharedLocal.get('spec-current')!)).toBe('conversation-a')
+
+    // A newly opened tab has no tab-local value, so it inherits the global
+    // latest selection and then becomes independent.
+    vi.stubGlobal('sessionStorage', storage(tabB))
+    const secondTab = createSnapshotStore('', { persist })
+    expect(secondTab.getSnapshot()).toBe('conversation-a')
+    secondTab.set('conversation-b')
+    expect(JSON.parse(tabB.get('spec-current')!)).toBe('conversation-b')
+    expect(JSON.parse(sharedLocal.get('spec-current')!)).toBe('conversation-b')
+
+    // Refresh tab A: its sessionStorage wins over the global value written by
+    // tab B, so it stays on the conversation the user was actually viewing.
+    vi.stubGlobal('sessionStorage', storage(tabA))
+    const refreshedFirstTab = createSnapshotStore('', { persist })
+    expect(refreshedFirstTab.getSnapshot()).toBe('conversation-a')
+  })
 })
 
 describe('defineStore', () => {
