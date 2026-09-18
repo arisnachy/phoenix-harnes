@@ -73,6 +73,14 @@ function guardOf(phase: InputState['phase']): 'plain' | 'claimed' | 'frozen' {
 
 const EMPTY_QUEUE: readonly QueuedMessage[] = []
 
+/**
+ * A text prompt admission should only enqueue/steer a message, not perform the
+ * model turn. If that acknowledgement takes this long, the transport is
+ * unhealthy; abort the attempt so the controlled textarea cannot stay locked
+ * behind the carrier's broader 30s unary timeout.
+ */
+const TEXT_ADMISSION_WATCHDOG_MS = 8_000
+
 /** No-pipeline lexicon: zero text-ref decorations. */
 const EMPTY_LEXICON: ReadonlyMap<'/' | '@', readonly string[]> = new Map()
 
@@ -102,6 +110,10 @@ export class SessionInputShell implements SessionInput {
   private imageIds: readonly DraftAttachmentId[] = []
   /** One image-only send at a time: Enter during the Host round-trip is a no-op. */
   private imageSendInFlight = false
+  /** Ordinary prompt currently crossing the Host admission boundary. */
+  private pendingSubmit: { readonly seq: number; readonly text: string; readonly startedAt: number } | undefined
+  /** Text-only admission watchdog; images retain the carrier's longer timeout. */
+  private admissionWatchdog: { readonly seq: number; readonly timer: ReturnType<typeof setTimeout> } | undefined
   private disposed = false
   /** Draft persistence mirror (chat store write; receives the clipboard projection, never display-only ranges). */
   private mirrorFn: ((text: string) => void) | undefined
@@ -392,6 +404,8 @@ export class SessionInputShell implements SessionInput {
   /** Teardown: abort any in-flight attempt and stop accepting async settlements. */
   dispose(): void {
     this.disposed = true
+    this.clearAdmissionWatchdog()
+    this.pendingSubmit = undefined
     this.run(this.core.dispatch({ type: 'release' }))
   }
 
@@ -455,6 +469,14 @@ export class SessionInputShell implements SessionInput {
    */
   private sinkSerialized(attempt: SubmitAttempt, draft: string, mode: InputSubmitMode): void {
     const imageIds = [...this.imageIds]
+    // Publish before any serializer/Host await: Enter must be visibly accepted
+    // on the same browser frame even while the agent is already working.
+    this.pendingSubmit = {
+      seq: attempt.seq,
+      text: draft.trim(),
+      startedAt: Date.now(),
+    }
+    if (imageIds.length === 0) this.armAdmissionWatchdog(attempt)
     const occurrences = this.core.state.occurrences
     if (occurrences.length === 0) {
       this.settleSubmit(attempt, this.deps.defaultSink(draft.trim(), imageIds, mode, attempt.signal), imageIds)
@@ -485,7 +507,9 @@ export class SessionInputShell implements SessionInput {
       },
       (error: unknown) => {
         controller.abort()
+        this.clearAdmissionWatchdog(attempt.seq)
         if (this.dead(attempt)) return
+        if (this.pendingSubmit?.seq === attempt.seq) this.pendingSubmit = undefined
         const message = error instanceof Error ? error.message : String(error)
         this.run(this.core.dispatch({ type: 'submit-settled', attempt, ok: false, message }))
       },
@@ -500,7 +524,11 @@ export class SessionInputShell implements SessionInput {
   ): void {
     pending.then(
       (outcome) => {
+        this.clearAdmissionWatchdog(attempt.seq)
         if (this.dead(attempt)) return
+        if (outcome.kind !== 'success' && this.pendingSubmit?.seq === attempt.seq) {
+          this.pendingSubmit = undefined
+        }
         if (outcome.kind === 'success' && imageIds.length > 0) {
           const submitted = new Set(imageIds)
           this.imageIds = this.imageIds.filter(id => !submitted.has(id))
@@ -513,7 +541,9 @@ export class SessionInputShell implements SessionInput {
         }))
       },
       (error: unknown) => {
+        this.clearAdmissionWatchdog(attempt.seq)
         if (this.dead(attempt)) return
+        if (this.pendingSubmit?.seq === attempt.seq) this.pendingSubmit = undefined
         this.run(this.core.dispatch({
           type: 'submit-settled',
           attempt,
@@ -522,6 +552,28 @@ export class SessionInputShell implements SessionInput {
         }))
       },
     )
+  }
+
+  /** Arm a bounded text-admission wait so a dead Host cannot freeze the controlled composer. */
+  private armAdmissionWatchdog(attempt: SubmitAttempt): void {
+    this.clearAdmissionWatchdog()
+    const timer = setTimeout(() => {
+      if (this.disposed || attempt.signal.aborted || this.pendingSubmit?.seq !== attempt.seq) return
+      this.admissionWatchdog = undefined
+      this.pendingSubmit = undefined
+      // release aborts the exact SubmitAttempt controller and restores phase
+      // to plain; late Host settlements are dropped by dead(attempt).
+      this.run(this.core.dispatch({ type: 'release' }))
+      this.notify('error', 'Message send timed out; your draft was kept. Try again.')
+    }, TEXT_ADMISSION_WATCHDOG_MS)
+    this.admissionWatchdog = { seq: attempt.seq, timer }
+  }
+
+  private clearAdmissionWatchdog(seq?: number): void {
+    const watchdog = this.admissionWatchdog
+    if (watchdog === undefined || (seq !== undefined && watchdog.seq !== seq)) return
+    clearTimeout(watchdog.timer)
+    this.admissionWatchdog = undefined
   }
 
   /** Enter adjudication: poll the session controller; failure = notice + draft retained (never a silent downgrade). */
@@ -590,7 +642,15 @@ export class SessionInputShell implements SessionInput {
 
   private compose(): InputState {
     const core = this.core.state
-    return { ...core, imageIds: this.imageIds, queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE }
+    const pending = this.pendingSubmit
+    return {
+      ...core,
+      imageIds: this.imageIds,
+      ...(pending === undefined ? {} : {
+        pendingSubmit: { text: pending.text, startedAt: pending.startedAt },
+      }),
+      queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE,
+    }
   }
 
   private publish(): void {
