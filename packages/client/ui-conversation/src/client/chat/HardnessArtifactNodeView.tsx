@@ -28,7 +28,7 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
       data-hardness-artifact={artifact.artifactId}
       data-artifact-mime={artifact.mime}
     >
-      <div className={styles.body}>
+      <div className={`${styles.body} ${universal.kind === 'html' ? styles.bodyHtml : ''}`}>
         <span className={styles.visuallyHidden}>{artifact.mime}</span>
         <UniversalArtifactSurface
           artifact={{ ...universal, executable: artifact.executable, ...result === undefined ? {} : { result } }}
