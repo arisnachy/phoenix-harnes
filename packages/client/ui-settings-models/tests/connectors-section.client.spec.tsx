@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IApiClient, RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
-import { AuthorizationPanel, ConnectorsSettingsSection } from '../src/client/AuthorizationPanel.tsx'
+import { AuthorizationPanel, ConnectorsSettingsSection, safeExternalHref } from '../src/client/AuthorizationPanel.tsx'
 import type { ConnectorsSettingsSectionProps } from '../src/client/AuthorizationPanel.tsx'
 import { en } from '../src/client/locales.ts'
 import { connectorEn } from '../src/client/connectors-locales.ts'
@@ -150,6 +150,67 @@ describe('connectors settings section', () => {
     expect(screen.getByText('Gmail')).toBeTruthy()
     expect(screen.queryByText('Firebase')).toBeNull()
     expect(screen.queryByText('BigQuery')).toBeNull()
+  })
+
+  it('marks a stored OAuth grant without live telemetry as reconnect-required', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/example',
+        label: 'MCP example',
+        methods: [{ id: 'oauth', label: 'Authorize example' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+        disconnectable: true as const,
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    renderHub(api)
+    expect(await screen.findByText('Reconnect required')).toBeTruthy()
+    expect(screen.queryByText('Connected')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy()
+  })
+
+  it('searches the Official MCP Registry only after the user asks for an unconnected connector', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'calendar',
+        fetchedAt: '2026-09-18T12:00:00.000Z',
+        stale: false,
+        candidates: [{
+          name: 'io.example/calendar',
+          title: 'Example Calendar MCP',
+          description: 'Calendar tools.',
+          version: '1.0.0',
+          status: 'active' as const,
+          trust: 'registry-listed' as const,
+          transports: ['streamable-http' as const],
+          packages: [],
+          repositoryUrl: 'https://github.com/example/calendar-mcp',
+        }],
+      })),
+    }
+
+    renderHub(api, { mcpRegistry })
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'calendar' } })
+
+    expect(await screen.findByText('Example Calendar MCP')).toBeTruthy()
+    expect(mcpRegistry.search).toHaveBeenCalledWith({ query: 'calendar', limit: 12 })
+    expect(screen.getByText('Registry-listed · approval required')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'View source' }).getAttribute('href'))
+      .toBe('https://github.com/example/calendar-mcp')
+  })
+
+  it('rejects unsafe connector links instead of opening a blank or custom-scheme window', () => {
+    expect(safeExternalHref('javascript:alert(1)')).toBeUndefined()
+    expect(safeExternalHref('http://example.com/setup')).toBeUndefined()
+    expect(safeExternalHref('https://example.com/setup')).toBe('https://example.com/setup')
   })
 
   it('filters catalog results by search text', async () => {
