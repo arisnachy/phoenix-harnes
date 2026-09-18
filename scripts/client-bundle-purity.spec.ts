@@ -9,11 +9,13 @@ import { clientBundle, requestedExternals } from '../packages/client/tsdown.clie
 type ResolveResult = null | string | { id: string; external: boolean }
 type ResolveHandler = (source: string, importer?: string) => ResolveResult
 type ResolveId = (source: string) => ResolveResult
+type LoadHandler = (this: { addWatchFile: (id: string) => void }, id: string) => unknown | Promise<unknown>
+type FilteredHook<T> = T | { order?: string; filter?: { id?: RegExp }; handler: T }
 
 interface ClientRoutingPlugin {
   name: string
-  resolveId?: ResolveHandler | { order?: string; handler: ResolveHandler }
-  load?: (this: { addWatchFile: (id: string) => void }, id: string) => unknown | Promise<unknown>
+  resolveId?: FilteredHook<ResolveHandler>
+  load?: FilteredHook<LoadHandler>
 }
 
 function resolveWith(plugin: ClientRoutingPlugin, source: string, importer?: string): ResolveResult {
@@ -21,6 +23,21 @@ function resolveWith(plugin: ClientRoutingPlugin, source: string, importer?: str
   return typeof plugin.resolveId === 'function'
     ? plugin.resolveId(source, importer)
     : plugin.resolveId.handler(source, importer)
+}
+
+async function loadWith(
+  plugin: ClientRoutingPlugin,
+  context: { addWatchFile: (id: string) => void },
+  id: string,
+): Promise<unknown> {
+  if (plugin.load === undefined) return null
+  return typeof plugin.load === 'function'
+    ? plugin.load.call(context, id)
+    : plugin.load.handler.call(context, id)
+}
+
+function matchesRule(rules: readonly (string | RegExp)[], specifier: string): boolean {
+  return rules.some(rule => typeof rule === 'string' ? rule === specifier : rule.test(specifier))
 }
 
 /** A representative dynamic bundle using the shared client baseline. */
@@ -52,6 +69,19 @@ describe('client bundle routing cost', () => {
     expect(typeof routing?.resolveId).toBe('object')
     if (typeof routing?.resolveId !== 'object') throw new Error('pre-routing hook missing')
     expect(routing.resolveId.order).toBe('pre')
+    expect(routing.resolveId.filter?.id).toBeInstanceOf(RegExp)
+    const filter = routing.resolveId.filter?.id
+    if (filter === undefined) throw new Error('native resolveId filter missing')
+    expect(filter.test('./QueueDock.module.css')).toBe(true)
+    expect(filter.test('@phoenix-ai/dsh-agent')).toBe(true)
+    expect(filter.test('react')).toBe(true)
+    expect(filter.test('zod')).toBe(false)
+
+    expect(typeof routing.load).toBe('object')
+    if (typeof routing.load !== 'object') throw new Error('filtered load hook missing')
+    expect(routing.load.filter?.id).toBeInstanceOf(RegExp)
+    expect(routing.load.filter?.id?.test('\0dsh-css:/tmp/a.css.mjs')).toBe(true)
+    expect(routing.load.filter?.id?.test('/tmp/client.js')).toBe(false)
   })
 })
 
@@ -139,16 +169,22 @@ describe('client bundle purity gate', () => {
     })
   })
 
-  it('externalizes the baseline independently of each package manifest', () => {
-    const requesting = clientConfigs()[0]?.deps as { neverBundle: (specifier: string) => boolean }
+  it('externalizes the baseline with static dependency matchers', () => {
+    const requesting = clientConfigs()[0]?.deps as {
+      neverBundle: (string | RegExp)[]
+      alwaysBundle: (string | RegExp)[]
+    }
     const plain = clientConfigs('@phoenix-ai/dsh-client-connection')[0]?.deps as {
-      neverBundle: (specifier: string) => boolean
+      neverBundle: (string | RegExp)[]
+      alwaysBundle: (string | RegExp)[]
     }
 
-    expect(requesting.neverBundle('react')).toBe(true)
-    expect(requesting.neverBundle('zod')).toBe(false)
-    expect(plain.neverBundle('react')).toBe(true)
-    expect(plain.neverBundle('@phoenix-ai/dsh-client-runtime/client')).toBe(true)
+    expect(matchesRule(requesting.neverBundle, 'react')).toBe(true)
+    expect(matchesRule(requesting.neverBundle, 'zod')).toBe(false)
+    expect(matchesRule(requesting.alwaysBundle, 'react')).toBe(false)
+    expect(matchesRule(requesting.alwaysBundle, 'zod')).toBe(true)
+    expect(matchesRule(plain.neverBundle, 'react')).toBe(true)
+    expect(matchesRule(plain.neverBundle, '@phoenix-ai/dsh-client-runtime/client')).toBe(true)
   })
 })
 
@@ -236,7 +272,7 @@ describe('client bundle CSS Modules watch graph', () => {
     if (typeof virtualId !== 'string') throw new Error('CSS Modules import was not resolved')
     const addWatchFile = vi.fn()
 
-    await plugin.load?.call({ addWatchFile }, virtualId)
+    await loadWith(plugin, { addWatchFile }, virtualId)
 
     expect(addWatchFile).toHaveBeenCalledExactlyOnceWith(stylesheet)
   })
