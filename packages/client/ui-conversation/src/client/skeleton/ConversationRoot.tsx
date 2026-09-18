@@ -2,15 +2,41 @@
 // chain, AND the composer bar (session-maybe slot) stay mounted across
 // no-session/session transitions — the bar renders inert via owner props.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
-import type { WorkspaceId } from '@phoenix-ai/dsh-client-runtime/client'
+import type { SessionId, WorkspaceId } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
 import { HeroGlow, HeroShell, WorkspaceChip, workspaceLabel } from './EmptyHero.tsx'
 import css from './ConversationRoot.module.css'
 
 /** Full props composed from the slot contract. */
 export type ConversationRootProps = ConversationSlotProps
+
+interface ScopedConversationOutletProps {
+  readonly sessionId: SessionId | undefined
+  readonly renderSlot: ConversationRootProps['renderSlot']
+}
+
+/**
+ * Keep the heavy session surface outside the composer's render lane. The root
+ * intentionally follows every input-machine update so input-region owner props
+ * stay current; without this memo boundary, every keystroke also rebuilt the
+ * whole transcript and header even though those seats already own their own
+ * reactive session subscriptions.
+ */
+const SessionHeaderOutlet = memo(function SessionHeaderOutlet({
+  sessionId, renderSlot,
+}: ScopedConversationOutletProps) {
+  void sessionId
+  return renderSlot('conversation.session.header', {})
+})
+
+const SessionBodyOutlet = memo(function SessionBodyOutlet({
+  sessionId, renderSlot,
+}: ScopedConversationOutletProps) {
+  void sessionId
+  return renderSlot('conversation.session', {})
+})
 
 export function ConversationRoot({
   sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock,
@@ -185,9 +211,9 @@ export function ConversationRoot({
 
   return (
     <div className={css.root} data-phase={phase}>
-      {renderSlot('conversation.session.header', {})}
+      <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
       <div className={css.scrollBody} data-conversation-scroll="">
-        {renderSlot('conversation.session', {})}
+        <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
         {composerSeat}
       </div>
     </div>
