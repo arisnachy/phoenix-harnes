@@ -141,6 +141,40 @@ describe('pi-ai request context conversion', () => {
     })
   })
 
+
+  it('budgets an oversized tool catalog and keeps tools relevant to the latest user request', () => {
+    const userMessage = createUserMessage({
+      content: [{ type: 'text', text: 'search the customer records for ana' }],
+      source: { kind: 'user' },
+    })
+    const tools = Array.from({ length: 160 }, (_, index) => ({
+      name: index === 159 ? 'search_customer_records' : `utility_${index}`,
+      description: index === 159 ? 'Search customer records.' : 'Generic utility.',
+      parameters: {
+        type: 'object',
+        properties: Object.fromEntries(Array.from({ length: 18 }, (_, property) => [
+          `field_${property}`,
+          { type: 'string', enum: ['a', 'b', 'c'] },
+        ])),
+      },
+    }))
+    const options: GenerateOptions = {
+      provider: 'openrouter',
+      model: 'openrouter/free',
+      messages: [userMessage],
+      tools,
+      maxTokens: 4096,
+    }
+
+    const fitted = fitGenerateOptionsToContext(options, 12_000, 4096)
+
+    expect(fitted.compacted).toBe(true)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.tools?.length).toBeLessThan(tools.length)
+    expect(fitted.options.tools?.some(tool => tool.name === 'search_customer_records')).toBe(true)
+    expect(fitted.options.messages).toEqual([userMessage])
+  })
+
   it('leaves requests untouched when they already preserve reply room', () => {
     const options = request([user([{ type: 'text', text: 'small request' }])])
     const fitted = fitGenerateOptionsToContext(options, 200_000, 4096)
