@@ -44,6 +44,7 @@ describe('CognitiveMemoryLedger', () => {
     const first = await ledger()
     const preference = await first.remember(input())
     await first.remember(input({
+      sessionId: 'session-2',
       eventSeq: 2,
       kind: 'event',
       layers: ['autobiographical', 'episodic', 'temporal'],
@@ -59,7 +60,7 @@ describe('CognitiveMemoryLedger', () => {
     expect(restored.allRecords()).toHaveLength(2)
     expect(restored.allRecords().map(record => record.provenance.sourceUri)).toEqual([
       `session:${preference.sessionId}#event:1`,
-      'session:session-1#event:2',
+      'session:session-2#event:2',
     ])
     expect(restored.search({ query: 'short answers', projectId: 'phoenix' })[0]?.record.id).toBe(preference.id)
     expect(restored.search({ query: 'sandbox', projectId: 'other' })).toEqual([])
