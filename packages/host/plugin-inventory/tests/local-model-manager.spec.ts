@@ -64,7 +64,9 @@ describe('LocalModelRuntimeManager', () => {
     expect(args).toEqual(expect.arrayContaining([
       '--host', '127.0.0.1',
       '--port', '17842',
-      '--ctx-size', '8192',
+      '--ctx-size', '262144',
+      '--cache-type-k', 'q8_0',
+      '--cache-type-v', 'q8_0',
       '--model', expect.stringContaining('Qwen_Qwen3.5-4B-Q4_K_M.gguf'),
     ]))
     expect(manager.snapshot()).toMatchObject({ phase: 'running', pid: 4242, port: 17842 })
