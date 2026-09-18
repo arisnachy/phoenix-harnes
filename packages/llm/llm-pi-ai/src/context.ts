@@ -73,7 +73,12 @@ function estimateToolsChars(tools: NonNullable<GenerateOptions['tools']>): numbe
   return chars
 }
 
+const CONTENT_BLOCKS_CHAR_CACHE = new WeakMap<object, number>()
+
 function estimateContentBlocksChars(blocks: readonly ContentBlock[]): number {
+  const cached = CONTENT_BLOCKS_CHAR_CACHE.get(blocks)
+  if (cached !== undefined) return cached
+
   let chars = 0
   for (const block of blocks) {
     switch (block.type) {
@@ -97,6 +102,7 @@ function estimateContentBlocksChars(blocks: readonly ContentBlock[]): number {
         break
     }
   }
+  CONTENT_BLOCKS_CHAR_CACHE.set(blocks, chars)
   return chars
 }
 
@@ -142,14 +148,40 @@ function boundedToolDescription(value: string): string {
   return value.slice(0, PRESSURE_TOOL_DESCRIPTION_MAX_CHARS - 1).trimEnd() + '…'
 }
 
-function compactToolsForPressure(
-  tools: NonNullable<GenerateOptions['tools']>,
-): NonNullable<GenerateOptions['tools']> {
-  return tools.map(tool => ({
+type GenerateTool = NonNullable<GenerateOptions['tools']>[number]
+
+interface CachedPressureTool {
+  readonly description: string
+  readonly parameters: unknown
+  readonly compacted: GenerateTool
+}
+
+const COMPACT_TOOL_CACHE = new WeakMap<object, CachedPressureTool>()
+
+function compactToolForPressure(tool: GenerateTool): GenerateTool {
+  const cached = COMPACT_TOOL_CACHE.get(tool)
+  if (cached !== undefined
+    && cached.description === tool.description
+    && cached.parameters === tool.parameters) {
+    return cached.compacted
+  }
+  const compacted: GenerateTool = {
     name: tool.name,
     description: boundedToolDescription(tool.description),
     parameters: compactSchemaForPressure(tool.parameters) as Record<string, unknown>,
-  }))
+  }
+  COMPACT_TOOL_CACHE.set(tool, {
+    description: tool.description,
+    parameters: tool.parameters,
+    compacted,
+  })
+  return compacted
+}
+
+function compactToolsForPressure(
+  tools: NonNullable<GenerateOptions['tools']>,
+): NonNullable<GenerateOptions['tools']> {
+  return tools.map(compactToolForPressure)
 }
 
 function compactSkillCatalogMessage(message: Message): Message {
