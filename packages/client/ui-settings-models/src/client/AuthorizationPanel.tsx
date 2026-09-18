@@ -74,9 +74,16 @@ export interface McpRegistryClient {
    * @returns Sanitized registry metadata for display only.
    */
   search(request: { query: string; limit?: number }): Promise<McpRegistrySearchSnapshot>
-  /** Read secret-free MCP lifecycle and managed-install state. */
+  /**
+   * Read secret-free MCP lifecycle and managed-install state.
+   * @returns Runtime and persistent managed connector state.
+   */
   state(): Promise<McpConnectorHubSnapshot>
-  /** Install an exact registry identity after Host-side endpoint revalidation. */
+  /**
+   * Install an exact registry identity after Host-side endpoint revalidation.
+   * @param request - Registry name and optional version selected by the user.
+   * @returns Idempotent managed-install receipt.
+   */
   install(request: { name: string; version?: string }): Promise<{
     status: 'installed' | 'already-installed'
     connector: { entryId: string; serverName: string; url: string }
