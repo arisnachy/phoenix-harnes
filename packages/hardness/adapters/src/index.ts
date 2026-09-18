@@ -22,6 +22,8 @@ import { createProactivityTools } from './proactivity-tools.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
+import { createConnectorDiscoverTool } from './connector-discover-tool.ts'
+import type { McpRegistryDiscoveryService } from './connector-discover-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 
 export { indexTools } from './tool-adapter.ts'
@@ -93,6 +95,7 @@ export type { HardnessMissionRpcPayload, HardnessMissionRunner, HardnessMissionR
 export { createHardnessTool } from './hardness-tool.ts'
 export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 export { createConnectorListTool } from './connector-list-tool.ts'
+export { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
 
@@ -147,11 +150,12 @@ function requiredServices(ctx: Context) {
   const systemPrompt = ctx.get('systemPrompt') as HardnessPromptRegistrar | undefined
   const authorization = ctx.get('authorization')
   const mcpConnectors = ctx.get('mcpConnectors')
+  const pluginInventory = (ctx.get as (name: string) => unknown)('pluginInventory') as McpRegistryDiscoveryService | undefined
   if (hardness === undefined || tools === undefined || skills === undefined
     || agents === undefined || approval === undefined || systemPrompt === undefined) {
     throw new Error('hardness-adapters requires hardness, tools, skills, agents, approval, and systemPrompt services')
   }
-  return { hardness, tools, skills, agents, approval, systemPrompt, authorization, mcpConnectors }
+  return { hardness, tools, skills, agents, approval, systemPrompt, authorization, mcpConnectors, pluginInventory }
 }
 
 function configuredIdentity(value: string | undefined): string | undefined {
@@ -172,7 +176,9 @@ function taskLedgerPath(config: Config): string {
  * @returns Idempotent disposer for every projection installed by this adapter.
  */
 export async function apply(ctx: Context, config: Config): Promise<() => void> {
-  const { hardness, tools, skills, agents, approval, systemPrompt, authorization, mcpConnectors } = requiredServices(ctx)
+  const {
+    hardness, tools, skills, agents, approval, systemPrompt, authorization, mcpConnectors, pluginInventory,
+  } = requiredServices(ctx)
   const modelTools = config.modelTools ?? true
   const disposers: Disposer[] = []
   const proactivity = acquireProactivityEngine(taskLedgerPath(config))
@@ -189,9 +195,10 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
-      // A preset contributes only its scoped connector inventory tool; the
-      // host remains the sole owner of the HARDNESS capability index.
+      // A preset contributes only its scoped connector inventory/discovery
+      // tools; the host remains the sole owner of the HARDNESS capability index.
       disposers.push(ctx.tools.register(createConnectorListTool(authorization, mcpConnectors)))
+      disposers.push(ctx.tools.register(createConnectorDiscoverTool(mcpConnectors, pluginInventory)))
     }
 
     const acquisition = createHardnessAcquisition(hardness)

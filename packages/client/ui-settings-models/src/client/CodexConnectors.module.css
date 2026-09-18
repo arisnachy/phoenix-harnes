@@ -42,6 +42,17 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.connectorCard:hover {
+  transform: translateY(-1px);
+  border-color: var(--dsw-alias-border-l3);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 7%);
+}
+
+.registryCard {
+  min-height: 182px;
 }
 
 .connectorTop {
@@ -99,6 +110,25 @@
   font-size: 11px;
   line-height: 16px;
   color: var(--dsw-alias-label-tertiary);
+}
+
+.connectorBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.connectorBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-base);
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .connectorDescription {

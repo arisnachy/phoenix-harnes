@@ -233,9 +233,17 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       key: controller.key,
       label: `MCP ${config.serverName}`,
       methods: [{ id: 'oauth', label: `Authorize ${config.serverName}` }],
-      inspect: async () => (await controller.isAuthorized())
-        ? { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'oauth' }
-        : undefined,
+      inspect: async () => {
+        // Credential presence is not connector health. A server can reject an
+        // expired/revoked token while the record still exists; surface that as
+        // reconnect-required so Settings and connector_list do not claim the
+        // MCP is connected merely because stale credentials are stored.
+        const lifecycle = mcpConnectors?.list().find(entry => entry.serverName === config.serverName)
+        if (lifecycle?.status === 'auth-required') return undefined
+        return (await controller.isAuthorized())
+          ? { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'oauth' }
+          : undefined
+      },
       disconnect: async () => {
         await controller.disconnect()
         connection.reconnect()

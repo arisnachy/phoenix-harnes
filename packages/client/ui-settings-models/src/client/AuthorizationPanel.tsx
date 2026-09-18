@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import type { ChatGptWebSnapshot, IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
 import type { ConnectorKey } from './connectors-locales.ts'
-import { CONNECTOR_CATALOG, CONNECTOR_PRESETS } from './connector-catalog.ts'
+import { CONNECTOR_CATALOG } from './connector-catalog.ts'
 import type { ConnectorDefinition } from './connector-catalog.ts'
 import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
 import connectorStyles from './CodexConnectors.module.css'
@@ -15,6 +15,51 @@ import type { ChatGptWebBridgeClient, ChatGptWebSettingsClient } from './chatgpt
 type AuthorizationClient = IApiClient['authorization']
 
 type ConnectorFilter = 'all' | 'connected' | 'available'
+
+/** Sanitized Official MCP Registry candidate rendered by the Connectors page. */
+export interface McpRegistryCandidateView {
+  name: string
+  title: string
+  description: string
+  version: string
+  status: 'active' | 'deprecated' | 'deleted' | 'unknown'
+  trust: 'registry-listed'
+  icons: Array<{
+    src: string
+    mimeType?: 'image/png' | 'image/jpeg' | 'image/jpg' | 'image/svg+xml' | 'image/webp'
+    sizes?: string[]
+  }>
+  transports: Array<'stdio' | 'streamable-http' | 'sse'>
+  packages: Array<{
+    registryType: string
+    identifier: string
+    transport: 'stdio' | 'streamable-http' | 'sse'
+    version?: string
+    runtimeHint?: string
+  }>
+  repositoryUrl?: string
+  websiteUrl?: string
+  remoteUrl?: string
+}
+
+/** One Host-proxied Official MCP Registry search result safe for the browser. */
+export interface McpRegistrySearchSnapshot {
+  source: 'official-mcp-registry'
+  query: string
+  fetchedAt: string
+  stale: boolean
+  candidates: McpRegistryCandidateView[]
+}
+
+/** Browser-safe client for the Host-owned Official MCP Registry proxy. */
+export interface McpRegistryClient {
+  /**
+   * Search the Official MCP Registry through the Phoenix Host.
+   * @param request - User-entered query and optional result limit.
+   * @returns Sanitized registry metadata for display only.
+   */
+  search(request: { query: string; limit?: number }): Promise<McpRegistrySearchSnapshot>
+}
 
 interface RateLimitWindow {
   usedPercent: number
@@ -75,6 +120,7 @@ export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps 
   connectorT: (key: ConnectorKey) => string
   chatGptWeb?: ChatGptWebBridgeClient
   settings?: ChatGptWebSettingsClient
+  mcpRegistry?: McpRegistryClient
 }
 
 function integer(value: number): string {
@@ -123,6 +169,21 @@ function normalize(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 }
 
+/**
+ * Keep only HTTPS external links before exposing them to clickable connector UI.
+ * @param value - Candidate external URL from connector or registry metadata.
+ * @returns A normalized HTTPS URL, or undefined when the value is unsafe/invalid.
+ */
+export function safeExternalHref(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' ? url.toString() : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function connectorStatus(
   connector: ConnectorTelemetry,
   t: ConnectorsSettingsSectionProps['connectorT'],
@@ -144,6 +205,7 @@ function LiveConnectorCard({ connector, t }: {
   t: ConnectorsSettingsSectionProps['connectorT']
 }): ReactNode {
   const status = connectorStatus(connector, t)
+  const installUrl = safeExternalHref(connector.installUrl)
   return (
     <article className={connectorStyles['connectorCard']}>
       <div className={connectorStyles['connectorTop']}>
@@ -163,8 +225,8 @@ function LiveConnectorCard({ connector, t }: {
       {connector.description === undefined ? null : <p className={connectorStyles['connectorDescription']}>{connector.description}</p>}
       <div className={connectorStyles['connectorFooter']}>
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
-        {connector.installUrl === undefined ? null : (
-          <a className={connectorStyles['connectorLink']} href={connector.installUrl} target="_blank" rel="noreferrer" aria-label={`${connector.installed === true ? 'Manage' : 'Connect'} ${connector.name}`}>
+        {installUrl === undefined ? null : (
+          <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer" aria-label={`${connector.installed === true ? 'Manage' : 'Connect'} ${connector.name}`}>
             {connector.installed === true ? t('configure') : t('authorize')}
           </a>
         )}
@@ -201,6 +263,7 @@ function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
   pending: boolean
 }): ReactNode {
   const connectedByAccount = accountGrantConnectsCatalogEntry(account)
+  const installUrl = safeExternalHref(live?.installUrl)
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
   const status = liveStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
@@ -236,12 +299,81 @@ function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
       <div className={connectorStyles['connectorFooter']}>
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
-        {live?.installUrl !== undefined ? (
-          <a className={connectorStyles['connectorLink']} href={live.installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
+        {installUrl !== undefined ? (
+          <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
         ) : oauthAccount === undefined || connectedByAccount ? null : (
           <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
             {t('authorize')}
           </button>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function registryCandidateLogo(candidate: McpRegistryCandidateView): string | undefined {
+  const registryIcon = candidate.icons
+    .map(icon => safeExternalHref(icon.src))
+    .find((src): src is string => src !== undefined)
+  if (registryIcon !== undefined) return registryIcon
+
+  const haystack = normalize(`${candidate.name} ${candidate.title}`)
+  const catalogMatch = CONNECTOR_CATALOG.find((definition) => {
+    const aliases = [definition.id, definition.name, ...(definition.aliases ?? [])]
+    return aliases.some(alias => {
+      const needle = normalize(alias)
+      return needle.length >= 3 && haystack.includes(needle)
+    })
+  })
+  return safeExternalHref(catalogMatch?.logoUrl)
+}
+
+function OfficialMcpCard({ candidate, stale, t }: {
+  candidate: McpRegistryCandidateView
+  stale: boolean
+  t: ConnectorsSettingsSectionProps['connectorT']
+}): ReactNode {
+  const source = safeExternalHref(candidate.repositoryUrl) ?? safeExternalHref(candidate.websiteUrl)
+  const logoUrl = registryCandidateLogo(candidate)
+  const status = candidate.status === 'deprecated' || candidate.status === 'deleted'
+    ? t('registryDeprecatedStatus')
+    : t('registryListedStatus')
+  return (
+    <article className={`${connectorStyles['connectorCard'] ?? ''} ${connectorStyles['registryCard'] ?? ''}`.trim()} data-registry-server={candidate.name}>
+      <div className={connectorStyles['connectorTop']}>
+        <div className={hubStyles['logoShell']}>
+          <span className={connectorStyles['connectorFallback']} aria-hidden="true">{candidate.title.slice(0, 1).toUpperCase()}</span>
+          {logoUrl === undefined ? null : (
+            <img
+              className={`${connectorStyles['connectorIcon'] ?? ''} ${hubStyles['logoImage'] ?? ''}`.trim()}
+              src={logoUrl}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={(event) => { event.currentTarget.hidden = true }}
+            />
+          )}
+        </div>
+        <div className={connectorStyles['connectorIdentity']}>
+          <span className={connectorStyles['connectorName']}>{candidate.title}</span>
+          <span className={connectorStyles['connectorCategory']}>{candidate.name}</span>
+        </div>
+      </div>
+      <div className={connectorStyles['connectorBadges']}>
+        <span className={connectorStyles['connectorBadge']}>MCP</span>
+        <span className={connectorStyles['connectorBadge']}>{`v${candidate.version}`}</span>
+        {candidate.transports.slice(0, 2).map(transport => (
+          <span key={transport} className={connectorStyles['connectorBadge']}>{transport}</span>
+        ))}
+      </div>
+      <p className={connectorStyles['connectorDescription']}>{candidate.description}</p>
+      <div className={connectorStyles['connectorFooter']}>
+        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${candidate.status === 'active' ? connectorStyles['connectorStatusReady'] ?? '' : ''}`.trim()}>
+          {status}{stale ? ` · ${t('registryCachedStatus')}` : ''}
+        </span>
+        {source === undefined ? null : (
+          <a className={connectorStyles['connectorLink']} href={source} target="_blank" rel="noreferrer">{t('viewSource')}</a>
         )}
       </div>
     </article>
@@ -257,14 +389,17 @@ export function AuthorizationPanel(_props: AuthorizationPanelProps): ReactNode {
   return null
 }
 
-/** Dedicated account, MCP/app connector, and capability-preset settings page. */
-export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, settings, onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
+/** Dedicated account and MCP/app connector settings page. */
+export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, settings, mcpRegistry, onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
   const [disconnectingKey, setDisconnectingKey] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ConnectorFilter>('connected')
+  const [registrySnapshot, setRegistrySnapshot] = useState<McpRegistrySearchSnapshot | undefined>()
+  const [registryBusy, setRegistryBusy] = useState(false)
+  const [registryFailure, setRegistryFailure] = useState(false)
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
   const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
@@ -297,6 +432,38 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     }, (error: unknown) => { if (!stale) setCatalogFailure(String(error)) })
     return () => { stale = true }
   }, [api, refresh])
+
+  useEffect(() => {
+    const search = query.trim()
+    if (mcpRegistry === undefined || filter === 'connected' || search.length < 2) {
+      setRegistrySnapshot(undefined)
+      setRegistryFailure(false)
+      setRegistryBusy(false)
+      return
+    }
+    let stale = false
+    const timer = window.setTimeout(() => {
+      setRegistryBusy(true)
+      setRegistryFailure(false)
+      void mcpRegistry.search({ query: search, limit: 12 }).then(
+        snapshot => {
+          if (!stale) setRegistrySnapshot(snapshot)
+        },
+        () => {
+          if (!stale) {
+            setRegistrySnapshot(undefined)
+            setRegistryFailure(true)
+          }
+        },
+      ).finally(() => {
+        if (!stale) setRegistryBusy(false)
+      })
+    }, 250)
+    return () => {
+      stale = true
+      window.clearTimeout(timer)
+    }
+  }, [filter, mcpRegistry, query])
 
   const liveConnectors = useMemo(
     () => entries.flatMap(entry => entry.telemetry?.connectors ?? []),
@@ -397,23 +564,6 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
         </section>
       )}
 
-      <section className={hubStyles['block']} aria-label={connectorT('superpowers')}>
-        <div className={hubStyles['heading']}>
-          <h3>{connectorT('superpowers')}</h3>
-          <p>{connectorT('superpowersHint')}</p>
-        </div>
-        <div className={hubStyles['presetGrid']}>
-          {CONNECTOR_PRESETS.map(preset => (
-            <article key={preset.id} className={hubStyles['presetCard']}>
-              <div className={hubStyles['presetName']}>{preset.name}</div>
-              <p>{preset.description}</p>
-              <div className={hubStyles['chips']}>{preset.capabilities.slice(0, 5).map(capability => <span key={capability}>{capability}</span>)}</div>
-              <small>{connectorT('presetStatus')}</small>
-            </article>
-          ))}
-        </div>
-      </section>
-
       {entries.length === 0 ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('accounts')}>
           <div className={hubStyles['heading']}>
@@ -428,7 +578,11 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                   <div className={styles['rowHead']}>
                     <div className={styles['rowIdentity']}>
                       <strong className={styles['rowName']}>{entry.label}</strong>
-                      {entry.stored === undefined ? null : <span className={styles['connectedChip']}>{connectorT('connectedStatus')}</span>}
+                      {entry.telemetry !== undefined
+                        ? <span className={styles['connectedChip']}>{connectorT('connectedStatus')}</span>
+                        : entry.stored === undefined
+                          ? null
+                          : <span className={styles['advancedHint']}>{connectorT('reconnectRequiredStatus')}</span>}
                     </div>
                     <div className={styles['rowActions']}>
                       <button type="button" className={styles['secondaryButton']} disabled={attempt?.status === 'pending' || entry.inFlight} onClick={() => { begin(entry.key, 'oauth') }}>
@@ -489,6 +643,32 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
           </div>
         )}
       </section>
+
+      {mcpRegistry === undefined || filter === 'connected' || query.trim().length < 2 ? null : (
+        <section className={hubStyles['block']} aria-label={connectorT('officialRegistry')}>
+          <div className={hubStyles['heading']}>
+            <h3>{connectorT('officialRegistry')}</h3>
+            <p>{connectorT('officialRegistryHint')}</p>
+          </div>
+          {registryBusy ? <p className={styles['advancedHint']}>{connectorT('registrySearching')}</p> : null}
+          {registryFailure ? <p className={styles['error']}>{connectorT('registryUnavailable')}</p> : null}
+          {!registryBusy && !registryFailure && registrySnapshot !== undefined && registrySnapshot.candidates.length === 0
+            ? <p className={styles['advancedHint']}>{connectorT('registryNoMatches')}</p>
+            : null}
+          {registrySnapshot === undefined || registrySnapshot.candidates.length === 0 ? null : (
+            <div className={connectorStyles['connectorGrid']}>
+              {registrySnapshot.candidates.map(candidate => (
+                <OfficialMcpCard
+                  key={`${candidate.name}@${candidate.version}`}
+                  candidate={candidate}
+                  stale={registrySnapshot.stale}
+                  t={connectorT}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }

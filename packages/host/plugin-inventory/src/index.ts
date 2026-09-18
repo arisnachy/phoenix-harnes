@@ -18,8 +18,11 @@ import {
   type LocalModelRuntimeManager,
   type LocalModelRuntimeSnapshot,
 } from './local-model/index.ts'
+import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import type {
   ChatGptWebSnapshot,
+  McpRegistrySearchRequest,
+  McpRegistrySearchSnapshot,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
   PhoenixLocalModelRequest,
@@ -152,6 +155,17 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('localModelState')
   async localModelState(): Promise<PhoenixLocalModelSnapshot> {
     return publicLocalSnapshot((await this.localModel).snapshot())
+  }
+
+
+  /**
+   * Search the public Official MCP Registry from the Host. The browser never
+   * calls the registry directly, avoiding cross-origin failures and centralizing
+   * timeout, cache, and provenance policy.
+   */
+  @Remote('searchMcpRegistry')
+  async searchMcpRegistry(request: McpRegistrySearchRequest): Promise<McpRegistrySearchSnapshot> {
+    return searchOfficialMcpRegistry(request)
   }
 
   /**
