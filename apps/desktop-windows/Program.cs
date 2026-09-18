@@ -314,21 +314,23 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return;
 
         window.SetStartupStatus("Iniciando Phoenix…");
-        var psi = new ProcessStartInfo
+        var launcher = Path.Combine(Program.RuntimeRoot, "phoenix-windows.cmd");
+        if (!File.Exists(launcher))
         {
-            FileName = "cmd.exe",
-            Arguments = "/d /s /c \"corepack pnpm phoenix -- --no-open\"",
-            WorkingDirectory = Program.RuntimeRoot,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            Environment =
-            {
-                ["PHOENIX_DESKTOP_MANAGED"] = "1",
-                ["PHOENIX_DESKTOP_CONTROL_DESCRIPTOR"] = browserControl.DescriptorPath,
-            },
-        };
+            window.SetStartupStatus("Phoenix no encontró su supervisor de Windows.", isError: true);
+            DesktopLog.Write($"Managed runtime launcher is missing: {launcher}");
+            MessageBox.Show(
+                $"Falta el supervisor de Windows de Phoenix.\n\n{launcher}\n\nDiagnóstico: {Program.LogPath}",
+                "Phoenix · error de inicio",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
+        }
+
+        var psi = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
+            Program.RuntimeRoot,
+            browserControl.DescriptorPath);
+        DesktopLog.Write($"Launching managed runtime through PowerShell supervisor: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
 
         ownedRuntime = Process.Start(psi);
         if (ownedRuntime is null)
