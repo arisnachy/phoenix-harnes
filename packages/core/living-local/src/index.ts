@@ -92,7 +92,7 @@ export class LocalLivingRegistry extends LivingRegistry {
     if (config.path.length === 0 || config.path !== config.path.trim()) throw new TypeError('living-local path must be a non-empty normalized string')
     this.manifests = readDocument(config.path)
     this.bridge = new LivingHttpBridge(this, {
-      host: config.bridgeHost ?? process.env.PHOENIX_LIVING_CONTROL_HOST?.trim() || DEFAULT_LIVING_CONTROL_HOST,
+      host: config.bridgeHost ?? (process.env.PHOENIX_LIVING_CONTROL_HOST?.trim() || DEFAULT_LIVING_CONTROL_HOST),
       port: config.bridgePort ?? envPort() ?? DEFAULT_LIVING_CONTROL_PORT,
       actionTimeoutMs: config.bridgeActionTimeoutMs,
       heartbeatTimeoutMs: config.bridgeHeartbeatTimeoutMs,
