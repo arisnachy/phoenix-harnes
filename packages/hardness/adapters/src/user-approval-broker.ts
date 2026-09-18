@@ -31,6 +31,10 @@ function reason(surface: CapabilitySurface): string {
 export function createUserApprovalBroker(approval: Pick<ApprovalService, 'request'>): UserApprovalBroker {
   return {
     request: async (surface, context) => {
+      // A native/local surface with no declared permission has nothing to ask for.
+      // This matters under Full Access, where approval policy "never" means no prompts:
+      // asking anyway would turn an already-authorized local tool into a false denial.
+      if (surface.requiredPermissions.length === 0) return { kind: 'approved', grants: [] }
       const request = {
         agent: context.agent,
         toolName: surface.capabilityId,
