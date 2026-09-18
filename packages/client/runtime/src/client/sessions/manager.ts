@@ -951,12 +951,12 @@ export class SessionManager {
    */
   private async hydrateInitialList(generation: number): Promise<void> {
     await this.refreshList()
-    if (generation !== this.connectionHydrationGeneration || this.listPhase === 'ready') return
+    if (generation !== this.connectionHydrationGeneration || this.getListSnapshot().phase === 'ready') return
     for (const delayMs of INITIAL_BASELINE_RETRY_DELAYS_MS) {
       await waitForBaselineRetry(delayMs)
-      if (generation !== this.connectionHydrationGeneration || this.listPhase === 'ready') return
+      if (generation !== this.connectionHydrationGeneration || this.getListSnapshot().phase === 'ready') return
       await this.refreshList()
-      if (generation !== this.connectionHydrationGeneration || this.listPhase === 'ready') return
+      if (generation !== this.connectionHydrationGeneration || this.getListSnapshot().phase === 'ready') return
     }
   }
 
