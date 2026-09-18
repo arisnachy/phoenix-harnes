@@ -78,7 +78,7 @@ describe('universal living creations', () => {
 
   it('connects an external generated runtime through the authenticated universal control bridge', async () => {
     const { root } = await runtime({ bridgeActionTimeoutMs: 2_000, bridgeHeartbeatTimeoutMs: 5_000 })
-    const endpoint = await (root.living as unknown as { controlBridgeEndpoint(): Promise<string> }).controlBridgeEndpoint()
+    const endpoint = await root.living.controlEndpoint()
     const id = LivingCreationId('external-app-1')
     const token = 'test-control-token-0123456789abcdef'
     const manifest = {
@@ -139,7 +139,7 @@ describe('universal living creations', () => {
 
   it('rejects forged credentials and runtime capability drift', async () => {
     const { root } = await runtime()
-    const endpoint = await (root.living as unknown as { controlBridgeEndpoint(): Promise<string> }).controlBridgeEndpoint()
+    const endpoint = await root.living.controlEndpoint()
     const id = LivingCreationId('secure-app-1')
     const token = 'test-control-token-fedcba9876543210'
     await root.living.remember({
