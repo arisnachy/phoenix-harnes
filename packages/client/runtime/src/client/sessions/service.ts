@@ -427,6 +427,10 @@ export class SessionRuntime implements ISessions {
    * per the masked-gap contract until the next open() moves the stage.
    */
   clear(): void {
+    // Explicit user/runtime clears are the only empty-state transition that
+    // destroys durable navigation intent. Transient list gaps must never erase
+    // the selection while a page is still hydrating.
+    this.selection.set({})
     this.manager.clearSelection()
   }
 
@@ -540,7 +544,11 @@ export class SessionRuntime implements ISessions {
 
   /** Physically delete a cold session through the host and update selection. */
   async delete(sessionId: SessionId): Promise<RpcResult<{ deleted: true }>> {
-    return this.manager.delete(sessionId)
+    const result = await this.manager.delete(sessionId)
+    if (result.ok && this.selection.getSnapshot().sessionId === sessionId) {
+      this.selection.set({})
+    }
+    return result
   }
 
   /**
@@ -727,11 +735,12 @@ export class SessionRuntime implements ISessions {
       }
     }
     const persisted = this.selection.getSnapshot().sessionId
-    // No current (cleared, or masked gap) wipes the persisted cell — a reload
-    // stays on empty; the in-memory selection still resurfaces a masked id.
-    if (current === undefined) {
-      if (persisted !== undefined) this.selection.set({})
-    } else if (byId[current] !== undefined
+    // A masked current is not a clear. During first-page hydration and
+    // reconnects the selected session can be temporarily absent from the list;
+    // preserve durable navigation intent until an explicit clear/delete says
+    // otherwise. This prevents a second Phoenix page from erasing the session
+    // it is still in the process of restoring.
+    if (current !== undefined && byId[current] !== undefined
       && (persisted !== current
         || this.selection.getSnapshot().subagentAddress?.childSessionId !== currentAddress?.childSessionId
         || this.selection.getSnapshot().subagentAddress?.parentSessionId !== currentAddress?.parentSessionId
