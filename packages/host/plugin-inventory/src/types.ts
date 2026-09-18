@@ -82,6 +82,41 @@ export interface McpRegistrySearchSnapshot {
   readonly candidates: readonly McpRegistryCandidate[]
 }
 
+
+/** Secret-free runtime lifecycle for one configured MCP server. */
+export interface McpConnectorRuntimeEntry {
+  readonly serverName: string
+  readonly transport: 'stdio' | 'streamable-http'
+  readonly status: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
+  readonly toolNames: readonly string[]
+  readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+}
+
+/** One PHOENIX-managed remote MCP persisted in the managed overlay. */
+export interface ManagedMcpConnector {
+  readonly entryId: string
+  readonly serverName: string
+  readonly url: string
+}
+
+/** Combined MCP state used by Settings without exposing credentials or headers. */
+export interface McpConnectorHubSnapshot {
+  readonly runtime: readonly McpConnectorRuntimeEntry[]
+  readonly managed: readonly ManagedMcpConnector[]
+}
+
+/** Explicit install request for a registry-listed MCP candidate. */
+export interface McpRegistryInstallRequest {
+  readonly name: string
+  readonly version?: string
+}
+
+/** Result of installing a safe registry-listed Streamable HTTP MCP. */
+export interface McpRegistryInstallReceipt {
+  readonly status: 'installed' | 'already-installed'
+  readonly connector: ManagedMcpConnector
+}
+
 /** Stable updater lifecycle states projected to trusted Web clients. */
 export type PhoenixUpdateStatus =
   | 'idle'

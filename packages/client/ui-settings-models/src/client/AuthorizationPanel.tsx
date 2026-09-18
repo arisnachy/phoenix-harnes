@@ -51,7 +51,22 @@ export interface McpRegistrySearchSnapshot {
   candidates: McpRegistryCandidateView[]
 }
 
-/** Browser-safe client for the Host-owned Official MCP Registry proxy. */
+/** Secret-free runtime state for one MCP server. */
+export interface McpConnectorRuntimeView {
+  serverName: string
+  transport: 'stdio' | 'streamable-http'
+  status: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
+  toolNames: string[]
+  reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+}
+
+/** Combined runtime + managed MCP state returned by the Host. */
+export interface McpConnectorHubSnapshot {
+  runtime: McpConnectorRuntimeView[]
+  managed: Array<{ entryId: string; serverName: string; url: string }>
+}
+
+/** Browser-safe client for the Host-owned Official MCP Registry proxy and installer. */
 export interface McpRegistryClient {
   /**
    * Search the Official MCP Registry through the Phoenix Host.
@@ -59,6 +74,20 @@ export interface McpRegistryClient {
    * @returns Sanitized registry metadata for display only.
    */
   search(request: { query: string; limit?: number }): Promise<McpRegistrySearchSnapshot>
+  /**
+   * Read secret-free MCP lifecycle and managed-install state.
+   * @returns Runtime and persistent managed connector state.
+   */
+  state(): Promise<McpConnectorHubSnapshot>
+  /**
+   * Install an exact registry identity after Host-side endpoint revalidation.
+   * @param request - Registry name and optional version selected by the user.
+   * @returns Idempotent managed-install receipt.
+   */
+  install(request: { name: string; version?: string }): Promise<{
+    status: 'installed' | 'already-installed'
+    connector: { entryId: string; serverName: string; url: string }
+  }>
 }
 
 interface RateLimitWindow {
@@ -200,41 +229,6 @@ function connectorStatus(
   return { text: t('availableStatus'), className: '' }
 }
 
-function LiveConnectorCard({ connector, t }: {
-  connector: ConnectorTelemetry
-  t: ConnectorsSettingsSectionProps['connectorT']
-}): ReactNode {
-  const status = connectorStatus(connector, t)
-  const installUrl = safeExternalHref(connector.installUrl)
-  return (
-    <article className={connectorStyles['connectorCard']}>
-      <div className={connectorStyles['connectorTop']}>
-        {connector.iconUrl === undefined ? (
-          <div className={connectorStyles['connectorFallback']} aria-hidden="true">{connector.name.slice(0, 1).toUpperCase()}</div>
-        ) : (
-          <picture>
-            {connector.iconUrlDark === undefined ? null : <source media="(prefers-color-scheme: dark)" srcSet={connector.iconUrlDark} />}
-            <img className={connectorStyles['connectorIcon']} src={connector.iconUrl} alt={connector.name} />
-          </picture>
-        )}
-        <div className={connectorStyles['connectorIdentity']}>
-          <span className={connectorStyles['connectorName']}>{connector.name}</span>
-          {connector.category === undefined ? null : <span className={connectorStyles['connectorCategory']}>{connector.category}</span>}
-        </div>
-      </div>
-      {connector.description === undefined ? null : <p className={connectorStyles['connectorDescription']}>{connector.description}</p>}
-      <div className={connectorStyles['connectorFooter']}>
-        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
-        {installUrl === undefined ? null : (
-          <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer" aria-label={`${connector.installed === true ? 'Manage' : 'Connect'} ${connector.name}`}>
-            {connector.installed === true ? t('configure') : t('authorize')}
-          </a>
-        )}
-      </div>
-    </article>
-  )
-}
-
 function entryMatchesFamily(entry: Entry, family: string | undefined): boolean {
   if (family === undefined) return false
   const needle = normalize(family)
@@ -246,6 +240,93 @@ function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDe
   const liveId = normalize(live.id)
   const liveName = normalize(live.name)
   return ids.includes(liveId) || ids.includes(liveName) || normalize(definition.name) === liveName
+}
+
+
+function catalogDefinitionForText(value: string): ConnectorDefinition | undefined {
+  const haystack = normalize(value)
+  return CONNECTOR_CATALOG.find((definition) => {
+    const aliases = [definition.id, definition.name, ...(definition.aliases ?? [])]
+    return aliases.some(alias => {
+      const needle = normalize(alias)
+      return needle.length >= 3 && (haystack === needle || haystack.includes(needle))
+    })
+  })
+}
+
+function collapsedTechnicalName(value: string): string {
+  const raw = value.replace(/^MCP\s+/i, '').trim()
+  const parts = raw.split('-').filter(Boolean)
+  if (parts.length > 1 && parts.length % 2 === 0) {
+    const middle = parts.length / 2
+    if (parts.slice(0, middle).join('-') === parts.slice(middle).join('-')) {
+      return parts.slice(0, middle).join('-')
+    }
+  }
+  return raw
+}
+
+function accountPresentation(entry: Entry): {
+  name: string
+  description?: string
+  logoUrl?: string
+  technical?: string
+} {
+  const definition = catalogDefinitionForText(
+    `${entry.label} ${entry.key} ${entry.telemetry?.provider ?? ''}`,
+  )
+  const technical = collapsedTechnicalName(entry.telemetry?.provider ?? entry.label)
+  if (definition !== undefined) {
+    return {
+      name: definition.name,
+      description: definition.description,
+      ...(definition.logoUrl === undefined ? {} : { logoUrl: definition.logoUrl }),
+      ...(normalize(definition.name) === normalize(technical) ? {} : { technical }),
+    }
+  }
+  const name = technical
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map(part => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(' ') || entry.label
+  return { name, technical }
+}
+
+function runtimeForEntry(
+  entry: Entry,
+  runtime: readonly McpConnectorRuntimeView[],
+): McpConnectorRuntimeView | undefined {
+  const haystack = normalize(`${entry.label} ${entry.key} ${entry.telemetry?.provider ?? ''}`)
+  return runtime.find(candidate => haystack.includes(normalize(candidate.serverName)))
+}
+
+function accountStatus(
+  entry: Entry,
+  runtime: McpConnectorRuntimeView | undefined,
+  t: ConnectorsSettingsSectionProps['connectorT'],
+): { text: string; className: string } {
+  if (runtime?.status === 'ready' || entry.telemetry !== undefined) {
+    return { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+  }
+  if (runtime?.status === 'starting') {
+    return { text: t('connectingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
+  }
+  if (runtime?.status === 'auth-required') {
+    return {
+      text: entry.stored === undefined ? t('authorizationRequiredStatus') : t('tokenExpiredStatus'),
+      className: connectorStyles['connectorStatusWarn'] ?? '',
+    }
+  }
+  if (runtime?.status === 'failed') {
+    return { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
+  }
+  if (runtime?.status === 'disconnected') {
+    return { text: t('disconnectedStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
+  }
+  if (entry.stored !== undefined) {
+    return { text: t('reconnectRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
+  }
+  return { text: t('authorizationRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
 }
 
 function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
@@ -328,21 +409,30 @@ function registryCandidateLogo(candidate: McpRegistryCandidateView): string | un
   return safeExternalHref(catalogMatch?.logoUrl)
 }
 
-function OfficialMcpCard({ candidate, stale, t }: {
+function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall }: {
   candidate: McpRegistryCandidateView
   stale: boolean
+  installed: boolean
+  installing: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
+  onInstall: (candidate: McpRegistryCandidateView) => void
 }): ReactNode {
   const source = safeExternalHref(candidate.repositoryUrl) ?? safeExternalHref(candidate.websiteUrl)
   const logoUrl = registryCandidateLogo(candidate)
-  const status = candidate.status === 'deprecated' || candidate.status === 'deleted'
-    ? t('registryDeprecatedStatus')
-    : t('registryListedStatus')
+  const definition = catalogDefinitionForText(`${candidate.name} ${candidate.title}`)
+  const displayName = definition?.name ?? candidate.title
+  const technicalName = normalize(displayName) === normalize(candidate.name) ? undefined : candidate.name
+  const installable = candidate.status === 'active' && candidate.remoteUrl !== undefined
+  const status = installed
+    ? t('installedStatus')
+    : candidate.status === 'deprecated' || candidate.status === 'deleted'
+      ? t('registryDeprecatedStatus')
+      : t('registryListedStatus')
   return (
     <article className={`${connectorStyles['connectorCard'] ?? ''} ${connectorStyles['registryCard'] ?? ''}`.trim()} data-registry-server={candidate.name}>
       <div className={connectorStyles['connectorTop']}>
         <div className={hubStyles['logoShell']}>
-          <span className={connectorStyles['connectorFallback']} aria-hidden="true">{candidate.title.slice(0, 1).toUpperCase()}</span>
+          <span className={connectorStyles['connectorFallback']} aria-hidden="true">{displayName.slice(0, 1).toUpperCase()}</span>
           {logoUrl === undefined ? null : (
             <img
               className={`${connectorStyles['connectorIcon'] ?? ''} ${hubStyles['logoImage'] ?? ''}`.trim()}
@@ -356,8 +446,8 @@ function OfficialMcpCard({ candidate, stale, t }: {
           )}
         </div>
         <div className={connectorStyles['connectorIdentity']}>
-          <span className={connectorStyles['connectorName']}>{candidate.title}</span>
-          <span className={connectorStyles['connectorCategory']}>{candidate.name}</span>
+          <span className={connectorStyles['connectorName']}>{displayName}</span>
+          {technicalName === undefined ? null : <span className={connectorStyles['connectorCategory']}>{technicalName}</span>}
         </div>
       </div>
       <div className={connectorStyles['connectorBadges']}>
@@ -369,12 +459,24 @@ function OfficialMcpCard({ candidate, stale, t }: {
       </div>
       <p className={connectorStyles['connectorDescription']}>{candidate.description}</p>
       <div className={connectorStyles['connectorFooter']}>
-        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${candidate.status === 'active' ? connectorStyles['connectorStatusReady'] ?? '' : ''}`.trim()}>
+        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${installed ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
           {status}{stale ? ` · ${t('registryCachedStatus')}` : ''}
         </span>
-        {source === undefined ? null : (
-          <a className={connectorStyles['connectorLink']} href={source} target="_blank" rel="noreferrer">{t('viewSource')}</a>
-        )}
+        <div className={connectorStyles['connectorActions']}>
+          {source === undefined ? null : (
+            <a className={connectorStyles['connectorLink']} href={source} target="_blank" rel="noreferrer">{t('viewSource')}</a>
+          )}
+          {installed || !installable ? null : (
+            <button
+              type="button"
+              className={connectorStyles['connectorPrimaryButton']}
+              disabled={installing}
+              onClick={() => { onInstall(candidate) }}
+            >
+              {installing ? t('installing') : t('install')}
+            </button>
+          )}
+        </div>
       </div>
     </article>
   )
@@ -400,6 +502,8 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   const [registrySnapshot, setRegistrySnapshot] = useState<McpRegistrySearchSnapshot | undefined>()
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryFailure, setRegistryFailure] = useState(false)
+  const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
+  const [installingRegistryName, setInstallingRegistryName] = useState<string | undefined>()
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
   const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
@@ -434,8 +538,18 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   }, [api, refresh])
 
   useEffect(() => {
+    if (mcpRegistry === undefined) return
+    let stale = false
+    void mcpRegistry.state().then(
+      snapshot => { if (!stale) setMcpHub(snapshot) },
+      error => { if (!stale) setCatalogFailure(String(error)) },
+    )
+    return () => { stale = true }
+  }, [mcpRegistry, refresh])
+
+  useEffect(() => {
     const search = query.trim()
-    if (mcpRegistry === undefined || filter === 'connected' || search.length < 2) {
+    if (mcpRegistry === undefined || search.length < 2) {
       setRegistrySnapshot(undefined)
       setRegistryFailure(false)
       setRegistryBusy(false)
@@ -463,7 +577,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       stale = true
       window.clearTimeout(timer)
     }
-  }, [filter, mcpRegistry, query])
+  }, [mcpRegistry, query])
 
   const liveConnectors = useMemo(
     () => entries.flatMap(entry => entry.telemetry?.connectors ?? []),
@@ -498,6 +612,19 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       .finally(() => { setChatGptWebBusy(false) })
   }
 
+  const installRegistryCandidate = (candidate: McpRegistryCandidateView): void => {
+    if (mcpRegistry === undefined || installingRegistryName !== undefined) return
+    setCatalogFailure(undefined)
+    setInstallingRegistryName(candidate.name)
+    void mcpRegistry.install({ name: candidate.name, version: candidate.version }).then(
+      () => {
+        setRefresh(current => current + 1)
+        onAuthorized()
+      },
+      (error: unknown) => { setCatalogFailure(String(error)) },
+    ).finally(() => { setInstallingRegistryName(undefined) })
+  }
+
   const disconnect = (key: string): void => {
     if (api === undefined) return
     setCatalogFailure(undefined)
@@ -517,6 +644,17 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
       <p className={styles['intro']}>{connectorT('intro')}</p>
+      <div className={hubStyles['intelligenceBanner']}>
+        <div className={hubStyles['intelligenceIcon']} aria-hidden="true">✦</div>
+        <div className={hubStyles['intelligenceCopy']}>
+          <strong>{connectorT('intelligenceTitle')}</strong>
+          <span>{connectorT('intelligenceHint')}</span>
+        </div>
+        <div className={hubStyles['intelligenceChecks']}>
+          <span>✓ {connectorT('intelligenceAuth')}</span>
+          <span>✓ {connectorT('intelligenceOfficial')}</span>
+        </div>
+      </div>
       <p className={hubStyles['safetyNote']}>{connectorT('setupHint')}</p>
 
       {chatGptWeb === undefined || settings === undefined ? null : (
@@ -570,38 +708,63 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
             <h3>{connectorT('accounts')}</h3>
             <p>{connectorT('accountsHint')}</p>
           </div>
-          <div className={hubStyles['accounts']}>
+          <div className={connectorStyles['connectorGrid']}>
             {entries.map((entry) => {
               const lines = telemetryLines(entry.telemetry)
+              const presentation = accountPresentation(entry)
+              const runtime = runtimeForEntry(entry, mcpHub.runtime)
+              const status = accountStatus(entry, runtime, connectorT)
+              const actionLabel = runtime?.status === 'auth-required' && entry.stored !== undefined
+                ? connectorT('reauthorize')
+                : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
               return (
-                <div key={entry.key} className={styles['rowCard']}>
-                  <div className={styles['rowHead']}>
-                    <div className={styles['rowIdentity']}>
-                      <strong className={styles['rowName']}>{entry.label}</strong>
-                      {entry.telemetry !== undefined
-                        ? <span className={styles['connectedChip']}>{connectorT('connectedStatus')}</span>
-                        : entry.stored === undefined
-                          ? null
-                          : <span className={styles['advancedHint']}>{connectorT('reconnectRequiredStatus')}</span>}
+                <article key={entry.key} className={connectorStyles['connectorCard']} data-authorization-key={entry.key}>
+                  <div className={connectorStyles['connectorTop']}>
+                    <div className={hubStyles['logoShell']}>
+                      <span className={connectorStyles['connectorFallback']} aria-hidden="true">{presentation.name.slice(0, 1).toUpperCase()}</span>
+                      {presentation.logoUrl === undefined ? null : (
+                        <img
+                          className={`${connectorStyles['connectorIcon'] ?? ''} ${hubStyles['logoImage'] ?? ''}`.trim()}
+                          src={presentation.logoUrl}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          onError={(event) => { event.currentTarget.hidden = true }}
+                        />
+                      )}
                     </div>
-                    <div className={styles['rowActions']}>
-                      <button type="button" className={styles['secondaryButton']} disabled={attempt?.status === 'pending' || entry.inFlight} onClick={() => { begin(entry.key, 'oauth') }}>
-                        {attempt?.status === 'pending' ? t('signingIn') : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')}
+                    <div className={connectorStyles['connectorIdentity']}>
+                      <span className={connectorStyles['connectorName']}>{presentation.name}</span>
+                      {presentation.technical === undefined ? null : <span className={connectorStyles['connectorCategory']}>{presentation.technical}</span>}
+                    </div>
+                  </div>
+                  {presentation.description === undefined ? null : (
+                    <p className={connectorStyles['connectorDescription']}>{presentation.description}</p>
+                  )}
+                  {lines.slice(0, 2).map(line => <p key={line} className={styles['advancedHint']}>{line}</p>)}
+                  <div className={connectorStyles['connectorFooter']}>
+                    <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
+                    <div className={connectorStyles['connectorActions']}>
+                      <button
+                        type="button"
+                        className={connectorStyles['connectorPrimaryButton']}
+                        disabled={attempt?.status === 'pending' || entry.inFlight}
+                        onClick={() => { begin(entry.key, 'oauth') }}
+                      >
+                        {attempt?.status === 'pending' ? t('signingIn') : actionLabel}
                       </button>
                       {entry.stored === undefined || entry.disconnectable !== true ? null : (
-                        <button type="button" className={styles['secondaryButton']} disabled={entry.inFlight || disconnectingKey === entry.key} onClick={() => { disconnect(entry.key) }}>
+                        <button
+                          type="button"
+                          className={connectorStyles['connectorSecondaryButton']}
+                          disabled={entry.inFlight || disconnectingKey === entry.key}
+                          onClick={() => { disconnect(entry.key) }}
+                        >
                           {disconnectingKey === entry.key ? connectorT('disconnecting') : connectorT('disconnect')}
                         </button>
                       )}
                     </div>
                   </div>
-                  {lines.map(line => <p key={line} className={styles['advancedHint']}>{line}</p>)}
-                  {entry.telemetry?.connectors === undefined ? null : (
-                    <div className={connectorStyles['connectorGrid']}>
-                      {entry.telemetry.connectors.map(connector => <LiveConnectorCard key={connector.id} connector={connector} t={connectorT} />)}
-                    </div>
-                  )}
-                </div>
+                </article>
               )
             })}
           </div>
@@ -618,7 +781,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
           <p>{connectorT('catalogHint')}</p>
         </div>
         <div className={hubStyles['toolbar']}>
-          <input className={hubStyles['search']} type="search" aria-label={connectorT('search')} placeholder={connectorT('search')} value={query} onChange={event => { setQuery(event.target.value) }} />
+          <input className={hubStyles['search']} type="search" aria-label={connectorT('search')} placeholder={connectorT('searchRegistry')} value={query} onChange={event => { setQuery(event.target.value) }} />
           <div className={hubStyles['filters']}>
             {(['all', 'connected', 'available'] as const).map(value => (
               <button key={value} type="button" aria-pressed={filter === value} className={filter === value ? hubStyles['filterActive'] : undefined} onClick={() => { setFilter(value) }}>
@@ -644,7 +807,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
         )}
       </section>
 
-      {mcpRegistry === undefined || filter === 'connected' || query.trim().length < 2 ? null : (
+      {mcpRegistry === undefined || query.trim().length < 2 ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('officialRegistry')}>
           <div className={hubStyles['heading']}>
             <h3>{connectorT('officialRegistry')}</h3>
@@ -662,7 +825,10 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                   key={`${candidate.name}@${candidate.version}`}
                   candidate={candidate}
                   stale={registrySnapshot.stale}
+                  installed={candidate.remoteUrl !== undefined && mcpHub.managed.some(connector => connector.url === candidate.remoteUrl)}
+                  installing={installingRegistryName === candidate.name}
                   t={connectorT}
+                  onInstall={installRegistryCandidate}
                 />
               ))}
             </div>

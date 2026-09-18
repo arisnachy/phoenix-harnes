@@ -7,7 +7,7 @@ import {
 } from '@phoenix-ai/dsh-tools'
 
 type McpConnectorListService = Pick<McpConnectorRegistry, 'list'>
-type CandidateAction = 'use' | 'authorize' | 'repair' | 'install-with-user-approval' | 'do-not-install'
+type CandidateAction = 'use' | 'authorize' | 'repair' | 'install-with-user-approval' | 'review-source' | 'do-not-install'
 
 /** Secret-free Official MCP Registry package metadata supplied by the Host. */
 export interface McpRegistryPackageView {
@@ -62,6 +62,7 @@ function actionFor(candidate: McpRegistryCandidateView, entry: McpConnectorEntry
   if (entry?.status === 'auth-required') return 'authorize'
   if (entry !== undefined) return 'repair'
   if (candidate.status === 'deprecated' || candidate.status === 'deleted') return 'do-not-install'
+  if (candidate.remoteUrl === undefined || candidate.status !== 'active') return 'review-source'
   return 'install-with-user-approval'
 }
 
@@ -115,7 +116,7 @@ export function createConnectorDiscoverTool(
 ): ToolDefinition {
   return defineTool({
     name: 'connector_discover',
-    description: 'Search the Official MCP Registry for a missing connector. Use connector_list first. A registry listing is discovery metadata, not proof of vendor authorship. Present the source and ask for explicit user approval before installing executable MCP code. If an installed connector is auth-required, present its authorization/reconnect flow instead of installing another copy.',
+    description: 'Search the Official MCP Registry for a missing connector. Use connector_list first. A registry listing is discovery metadata, not proof of vendor authorship. Only action=install-with-user-approval is eligible for connector_install; package/stdio-only results return review-source and must not be auto-executed. If an installed connector is auth-required, present its authorization/reconnect flow instead of installing another copy.',
     parameters: {
       query: { type: 'string', required: true },
       limit: { type: 'number' },

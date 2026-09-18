@@ -22,6 +22,7 @@ import { ConnectorsSettingsSection } from './AuthorizationPanel.tsx'
 import type { ChatGptWebBridgeClient } from './chatgpt-web-toggle.ts'
 import type {
   ConnectorsSettingsSectionProps,
+  McpConnectorHubSnapshot,
   McpRegistryClient,
   McpRegistrySearchSnapshot,
 } from './AuthorizationPanel.tsx'
@@ -73,6 +74,11 @@ type PluginInventoryChatGptWebRemote = {
 
 type PluginInventoryMcpRegistryRemote = {
   searchMcpRegistry(request: { query: string; limit?: number }): Promise<PluginInventoryRemoteResult<McpRegistrySearchSnapshot>>
+  mcpConnectorHubState(): Promise<PluginInventoryRemoteResult<McpConnectorHubSnapshot>>
+  installMcpRegistryServer(request: { name: string; version?: string }): Promise<PluginInventoryRemoteResult<{
+    status: 'installed' | 'already-installed'
+    connector: { entryId: string; serverName: string; url: string }
+  }>>
 }
 
 type PluginInventoryLocalRemote = {
@@ -108,6 +114,14 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     search: async request => unwrapPluginInventory(
       'searchMcpRegistry',
       await remote().searchMcpRegistry(request),
+    ),
+    state: async () => unwrapPluginInventory(
+      'mcpConnectorHubState',
+      await remote().mcpConnectorHubState(),
+    ),
+    install: async request => unwrapPluginInventory(
+      'installMcpRegistryServer',
+      await remote().installMcpRegistryServer(request),
     ),
   }
 }
