@@ -227,9 +227,8 @@ class RuntimeManager implements LocalModelRuntimeManager {
       '--host', '127.0.0.1',
       '--port', String(port),
       '--ctx-size', String(model.contextWindow),
-      // A 262k native window is useful only if its KV cache is affordable on
-      // the CPU-first machines Phoenix Local targets. q8 halves the default
-      // f16 cache footprint while keeping the full model-native context.
+      // Keep long local contexts affordable on CPU-first machines by halving
+      // the default f16 KV-cache footprint without changing model weights.
       '--cache-type-k', 'q8_0',
       '--cache-type-v', 'q8_0',
     ]

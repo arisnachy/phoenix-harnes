@@ -12,17 +12,25 @@ const t = (key: keyof typeof localEn): string => localEn[key]
 function snapshot(overrides: Partial<PhoenixLocalModelSnapshot> = {}): PhoenixLocalModelSnapshot {
   return {
     mode: 'on-demand',
-    selectedModelId: 'qwen3.5-4b-q4-k-m',
+    selectedModelId: 'gemma-4-e2b-it-q4-0',
     installedModelIds: [],
     phase: 'not-installed',
     catalog: [{
+      id: 'gemma-4-e2b-it-q4-0',
+      displayName: 'Gemma 4 E2B-it Q4_0',
+      sizeBytes: 2_841_481_184,
+      estimatedRamBytes: 6_000_000_000,
+      contextWindow: 131072,
+      maxTokens: 2048,
+      recommended: true,
+    }, {
       id: 'qwen3.5-4b-q4-k-m',
       displayName: 'Qwen3.5-4B Q4_K_M',
-      sizeBytes: 2_600_000_000,
-      estimatedRamBytes: 4_300_000_000,
-      contextWindow: 8192,
-      maxTokens: 4096,
-      recommended: true,
+      sizeBytes: 3_013_027_808,
+      estimatedRamBytes: 8_500_000_000,
+      contextWindow: 262144,
+      maxTokens: 2048,
+      recommended: false,
     }],
     ...overrides,
   }
@@ -66,7 +74,8 @@ describe('PhoenixLocalPanel', () => {
     render(<PhoenixLocalPanel client={local} t={t} />)
 
     expect(await screen.findByText(localEn.title)).toBeTruthy()
-    expect(screen.getByLabelText<HTMLSelectElement>(localEn.model).value).toBe('qwen3.5-4b-q4-k-m')
+    expect(screen.getByLabelText<HTMLSelectElement>(localEn.model).value).toBe('gemma-4-e2b-it-q4-0')
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toContain('Qwen3.5-4B Q4_K_M')
     expect(screen.getByRole('button', { name: localEn.install })).toBeTruthy()
     expect(screen.getByText(localEn.noInstalled)).toBeTruthy()
   })
@@ -86,7 +95,7 @@ describe('PhoenixLocalPanel', () => {
     await screen.findByText(localEn.title)
 
     fireEvent.click(screen.getByRole('button', { name: localEn.install }))
-    await waitFor(() => expect(local.calls.install).toHaveBeenCalledWith('qwen3.5-4b-q4-k-m'))
+    await waitFor(() => expect(local.calls.install).toHaveBeenCalledWith('gemma-4-e2b-it-q4-0'))
     expect(await screen.findByRole('button', { name: localEn.start })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: localEn.start }))
@@ -100,6 +109,6 @@ describe('PhoenixLocalPanel', () => {
     expect(local.calls.uninstall).not.toHaveBeenCalled()
     expect(screen.getByText(localEn.uninstallQuestion)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: localEn.uninstallConfirm }))
-    await waitFor(() => expect(local.calls.uninstall).toHaveBeenCalledWith('qwen3.5-4b-q4-k-m'))
+    await waitFor(() => expect(local.calls.uninstall).toHaveBeenCalledWith('gemma-4-e2b-it-q4-0'))
   })
 })
