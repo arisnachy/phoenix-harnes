@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IApiClient, RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
-import { AuthorizationPanel, ConnectorsSettingsSection } from '../src/client/AuthorizationPanel.tsx'
+import { AuthorizationPanel, ConnectorsSettingsSection, safeExternalHref } from '../src/client/AuthorizationPanel.tsx'
 import type { ConnectorsSettingsSectionProps } from '../src/client/AuthorizationPanel.tsx'
 import { en } from '../src/client/locales.ts'
 import { connectorEn } from '../src/client/connectors-locales.ts'
@@ -70,12 +70,9 @@ describe('connectors settings section', () => {
 
     renderHub(api)
     expect(screen.getByRole('heading', { name: 'Connectors' })).toBeTruthy()
-    expect(screen.getByText('Default')).toBeTruthy()
-    expect(screen.getByText('Security / Codex Security')).toBeTruthy()
-    expect(screen.getByText('Data Analytics')).toBeTruthy()
-    expect(screen.getByText('Cloud & Data')).toBeTruthy()
-    expect(screen.getByText('Presentations')).toBeTruthy()
-    expect(screen.getByText('AI & Media')).toBeTruthy()
+    expect(screen.queryByText('Capability presets')).toBeNull()
+    expect(screen.queryByText('Default')).toBeNull()
+    expect(screen.queryByText('Security / Codex Security')).toBeNull()
     // The catalog defaults to the connected filter: non-operational adapters
     // stay out of the default view instead of flooding it with "not installed".
     expect(screen.queryByText('Adapter not installed')).toBeNull()
@@ -150,6 +147,76 @@ describe('connectors settings section', () => {
     expect(screen.getByText('Gmail')).toBeTruthy()
     expect(screen.queryByText('Firebase')).toBeNull()
     expect(screen.queryByText('BigQuery')).toBeNull()
+  })
+
+  it('marks a stored OAuth grant without live telemetry as reconnect-required', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/example',
+        label: 'MCP example',
+        methods: [{ id: 'oauth', label: 'Authorize example' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+        disconnectable: true as const,
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    renderHub(api)
+    expect(await screen.findByText('Reconnect required')).toBeTruthy()
+    expect(screen.queryByText('Connected', { selector: 'span' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy()
+  })
+
+  it('searches the Official MCP Registry only after the user asks for an unconnected connector', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'calendar',
+        fetchedAt: '2026-09-18T12:00:00.000Z',
+        stale: false,
+        candidates: [{
+          name: 'io.example/calendar',
+          title: 'Example Calendar MCP',
+          description: 'Calendar tools.',
+          version: '1.0.0',
+          status: 'active' as const,
+          trust: 'registry-listed' as const,
+          icons: [{
+            src: 'https://cdn.example.com/calendar.png',
+            mimeType: 'image/png' as const,
+            sizes: ['48x48'],
+          }],
+          transports: ['streamable-http' as const],
+          packages: [],
+          repositoryUrl: 'https://github.com/example/calendar-mcp',
+        }],
+      })),
+    }
+
+    renderHub(api, { mcpRegistry })
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'calendar' } })
+
+    expect(await screen.findByText('Example Calendar MCP')).toBeTruthy()
+    expect(mcpRegistry.search).toHaveBeenCalledWith({ query: 'calendar', limit: 12 })
+    expect(screen.getByText('Registry-listed · approval required')).toBeTruthy()
+    expect(screen.getByText('streamable-http')).toBeTruthy()
+    const logo = document.querySelector('article[data-registry-server="io.example/calendar"] img')
+    expect(logo?.getAttribute('src')).toBe('https://cdn.example.com/calendar.png')
+    expect(logo?.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(screen.getByRole('link', { name: 'View source' }).getAttribute('href'))
+      .toBe('https://github.com/example/calendar-mcp')
+  })
+
+  it('rejects unsafe connector links instead of opening a blank or custom-scheme window', () => {
+    expect(safeExternalHref('javascript:alert(1)')).toBeUndefined()
+    expect(safeExternalHref('http://example.com/setup')).toBeUndefined()
+    expect(safeExternalHref('https://example.com/setup')).toBe('https://example.com/setup')
   })
 
   it('filters catalog results by search text', async () => {
