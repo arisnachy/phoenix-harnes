@@ -19,6 +19,7 @@ function candidate(
     trust: 'registry-listed',
     transports: ['streamable-http'],
     packages: [],
+    remoteUrl: `https://mcp.example.com/${name.replaceAll('/', '-')}`,
     repositoryUrl: `https://github.com/example/${name.replaceAll('/', '-')}`,
   }
 }
@@ -105,7 +106,7 @@ describe('connector_discover', () => {
     })
     expect(rows.map(row => row.action)).toEqual([
       'install-with-user-approval',
-      'install-with-user-approval',
+      'review-source',
       'do-not-install',
       'do-not-install',
     ])
@@ -172,6 +173,15 @@ describe('connector_discover', () => {
       installedConnectorId: 'mcp:calendar',
       installedStatus: 'disconnected',
     })
+  })
+
+  it('keeps package-only missing servers in source-review mode', async () => {
+    const packageOnly = candidate('io.example/package-only')
+    delete (packageOnly as { remoteUrl?: string }).remoteUrl
+    const result = await execute(createConnectorDiscoverTool(undefined, registry([packageOnly])), { query: 'package' })
+    expect(result.candidates).toEqual([
+      expect.objectContaining({ action: 'review-source' }),
+    ])
   })
 
   it('keeps unrelated installed connectors from matching registry candidates', async () => {
