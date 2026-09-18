@@ -105,7 +105,7 @@ describe('dsh-tool-subagent', () => {
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')
     expect(schema).toBeDefined()
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
-    expect(Object.keys(props).sort()).toEqual(['description', 'prompt', 'run_in_background'])
+    expect(Object.keys(props).sort()).toEqual(['critical_parallelism', 'description', 'prompt', 'run_in_background'])
     expect(schema!.description).toContain('job_output')
   })
 
@@ -113,7 +113,7 @@ describe('dsh-tool-subagent', () => {
     const ctx = await setup({ provider: 'mock', enableRunInBackground: false })
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
-    expect(Object.keys(props).sort()).toEqual(['description', 'prompt'])
+    expect(Object.keys(props).sort()).toEqual(['critical_parallelism', 'description', 'prompt'])
     expect(schema!.description).not.toContain('job_output')
   })
 
@@ -178,6 +178,68 @@ describe('dsh-tool-subagent', () => {
     ])
     expect(started.sort()).toEqual(['first', 'second'])
     for (const result of results) expect(result.isError).toBe(false)
+  })
+
+  it('caps ordinary active siblings at two and releases the budget after they settle', async () => {
+    const gate = Promise.withResolvers<void>()
+    const started: string[] = []
+    const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
+      onStart: (request: SubagentStartRequest) => {
+        started.push(request.label ?? '(unlabeled)')
+        return gate.promise
+      },
+    })
+
+    const first = callSubagent(ctx, { description: 'first', prompt: 'p1' })
+    const second = callSubagent(ctx, { description: 'second', prompt: 'p2' })
+    await vi.waitFor(() => { expect(started).toHaveLength(2) })
+
+    const third = await callSubagent(ctx, { description: 'third', prompt: 'p3' })
+    expect(third.isError).toBe(true)
+    expect(text(third)).toContain('ya hay 2 subagentes activos')
+    expect(started).toHaveLength(2)
+
+    gate.resolve()
+    const firstWave = await Promise.all([first, second])
+    expect(firstWave.every(result => !result.isError)).toBe(true)
+
+    const retry = await callSubagent(ctx, { description: 'third later', prompt: 'p3' })
+    expect(retry.isError).toBe(false)
+  })
+
+  it('allows one explicit critical third child but hard-blocks a fourth', async () => {
+    const gate = Promise.withResolvers<void>()
+    const started: string[] = []
+    const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
+      onStart: (request: SubagentStartRequest) => {
+        started.push(request.label ?? '(unlabeled)')
+        return gate.promise
+      },
+    })
+
+    const first = callSubagent(ctx, { description: 'first', prompt: 'p1' })
+    const second = callSubagent(ctx, { description: 'second', prompt: 'p2' })
+    await vi.waitFor(() => { expect(started).toHaveLength(2) })
+
+    const third = callSubagent(ctx, {
+      description: 'critical verification',
+      prompt: 'p3',
+      critical_parallelism: true,
+    })
+    await vi.waitFor(() => { expect(started).toHaveLength(3) })
+
+    const fourth = await callSubagent(ctx, {
+      description: 'fourth',
+      prompt: 'p4',
+      critical_parallelism: true,
+    })
+    expect(fourth.isError).toBe(true)
+    expect(text(fourth)).toContain('ya hay 3 subagentes activos')
+    expect(started).toHaveLength(3)
+
+    gate.resolve()
+    const accepted = await Promise.all([first, second, third])
+    expect(accepted.every(result => !result.isError)).toBe(true)
   })
 
   it.each([
@@ -1180,6 +1242,9 @@ describe('dsh-tool-subagent continuable background mode', () => {
     const guidance = assembly.sections.find(section => section.name === 'tool:subagent')
     expect(guidance?.text).toContain('Usa subagent para orquestar')
     expect(guidance?.text).toContain('integra el resultado con evidencia')
+    expect(guidance?.text).toContain('máximo 2 subagentes activos')
+    expect(guidance?.text).toContain('critical_parallelism=true')
+    expect(guidance?.text).toContain('Nunca intentes un cuarto')
 
     const started = await callSubagent(
       ctx,

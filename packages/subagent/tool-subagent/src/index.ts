@@ -8,12 +8,13 @@
  * @module @phoenix-ai/dsh-tool-subagent
  */
 
+import { randomUUID } from 'node:crypto'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
-import type { AgentOptions } from '@phoenix-ai/dsh-agent'
+import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
 import { ReasoningEffortId, type ContentBlock } from '@phoenix-ai/dsh-llm'
-import type { JsonValue } from '@phoenix-ai/dsh-session'
+import { SessionId, type JsonValue } from '@phoenix-ai/dsh-session'
 import { assertSubagentMaxDepth, settleRun } from '@phoenix-ai/dsh-subagent'
 import type { SubagentProvider, SubagentResult, SubagentRun } from '@phoenix-ai/dsh-subagent'
 import type { JobOutcome } from '@phoenix-ai/dsh-jobs'
@@ -24,6 +25,65 @@ export const inject = ['tools', 'subagents', 'systemPrompt']
 
 /** Prompt order after bounded delegation policy and before child reporting. */
 const SUBAGENT_SECTION_ORDER = 116.5
+
+/** Phoenix keeps ordinary fan-out small so delegation improves latency instead of multiplying token spend. */
+const STANDARD_ACTIVE_SUBAGENTS = 2
+/** One exceptional third child is available only when the model marks the work as genuinely critical. */
+const MAX_ACTIVE_SUBAGENTS = 3
+
+const ACTIVE_SUBAGENT_GUIDANCE =
+  ' Presupuesto Phoenix: mantén como máximo 2 subagentes activos. ' +
+  'Usa un tercero únicamente cuando dos no basten para trabajo independiente realmente crítico, ' +
+  'marcando critical_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente, ' +
+  'no dupliques investigación y conserva el contexto y la memoria cognitiva en el agente principal.'
+
+interface ActiveSubagentBudget {
+  readonly activeByParent: Map<string, number>
+  readonly continuableReleases: Map<string, () => void>
+}
+
+/** Shared across every tool-subagent instance mounted on one runtime, so provider aliases cannot bypass the cap. */
+const ACTIVE_BUDGETS = new WeakMap<object, ActiveSubagentBudget>()
+
+function activeBudgetFor(runtime: object): ActiveSubagentBudget {
+  let state = ACTIVE_BUDGETS.get(runtime)
+  if (state !== undefined) return state
+  state = { activeByParent: new Map(), continuableReleases: new Map() }
+  ACTIVE_BUDGETS.set(runtime, state)
+  return state
+}
+
+/** Reserve one active child synchronously, before any provider await can race a sibling start. */
+function reserveActiveSubagent(
+  state: ActiveSubagentBudget,
+  parent: Agent,
+  criticalParallelism: boolean,
+): () => void {
+  const parentId = String(parent.id)
+  const active = state.activeByParent.get(parentId) ?? 0
+  if (active >= MAX_ACTIVE_SUBAGENTS) {
+    throw new Error(
+      'Presupuesto Phoenix agotado: ya hay 3 subagentes activos. Nunca lances un cuarto; ' +
+      'espera o reutiliza uno de los existentes.',
+    )
+  }
+  if (active >= STANDARD_ACTIVE_SUBAGENTS && !criticalParallelism) {
+    throw new Error(
+      'Presupuesto Phoenix: ya hay 2 subagentes activos. Espera o reutiliza uno; ' +
+      'solo una tercera tarea realmente crítica puede usar critical_parallelism=true.',
+    )
+  }
+
+  state.activeByParent.set(parentId, active + 1)
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    const current = state.activeByParent.get(parentId) ?? 0
+    if (current <= 1) state.activeByParent.delete(parentId)
+    else state.activeByParent.set(parentId, current - 1)
+  }
+}
 
 /** Loader-facing child options before branded runtime identifiers are materialized. */
 type ConfiguredAgentOptions = Omit<AgentOptions, 'reasoningEffort'> & {
@@ -302,6 +362,16 @@ function resolveDelegationRun(
 }
 
 export function apply(ctx: Context, config: Config): void {
+  const activeBudget = activeBudgetFor(ctx.subagents)
+  // Continuable calls return at inbox acceptance, so their reservation is held
+  // until that child's residency epoch actually ends.
+  ctx.on('subagent/end', (info) => {
+    const key = String(info.id)
+    const release = activeBudget.continuableReleases.get(key)
+    if (release === undefined) return
+    activeBudget.continuableReleases.delete(key)
+    release()
+  })
   // Direct apply() bypasses Schemastery's numeric constraints. A direct-apply
   // omission stays capless (the schema default only runs through the loader).
   if (config.maxDepth !== 'provider-managed') assertSubagentMaxDepth(config.maxDepth)
@@ -340,7 +410,7 @@ export function apply(ctx: Context, config: Config): void {
         ? continuable
           ? ' This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result.'
           : ' This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.'
-        : ' This call waits for the subagent and returns its result.'),
+        : ' This call waits for the subagent and returns its result.') + ACTIVE_SUBAGENT_GUIDANCE,
       parameters: {
         description: {
           type: 'string',
@@ -351,6 +421,11 @@ export function apply(ctx: Context, config: Config): void {
           type: 'string',
           required: true,
           description: wording.promptDescription,
+        },
+        critical_parallelism: {
+          type: 'boolean',
+          description:
+            'Exceptional third active slot only. Set true ONLY when two active subagents cannot cover genuinely independent critical work. It never permits a fourth child.',
         },
         ...backgroundEnabled ? {
           run_in_background: {
@@ -443,48 +518,73 @@ export function apply(ctx: Context, config: Config): void {
         }
 
         const runSpec = resolveDelegationRun(args, { backgroundEnabled, continuable })
+        const releaseBudgetSlot = reserveActiveSubagent(
+          activeBudget,
+          parent,
+          args.critical_parallelism === true,
+        )
+
         if (runSpec.runInBackground) {
           if (continuable) {
-            // Resolves at inbox acceptance: the child owns its own turns from
-            // there, so this call neither waits for nor collects a result.
-            const started = await ctx.subagents.startContinuable({
-              provider: config.provider,
-              label: args.description,
-              request,
-              signal: exec.signal,
-            })
-            return { kind: 'continuable' as const, subagentId: started.childId }
+            // Reserve the identity before materialization so an extremely fast
+            // child cannot emit its terminal edge before the budget owns it.
+            const childId = SessionId(randomUUID())
+            activeBudget.continuableReleases.set(String(childId), releaseBudgetSlot)
+            try {
+              const started = await ctx.subagents.startContinuable({
+                provider: config.provider,
+                label: args.description,
+                childId,
+                request,
+                signal: exec.signal,
+              })
+              return { kind: 'continuable' as const, subagentId: started.childId }
+            } catch (error: unknown) {
+              activeBudget.continuableReleases.delete(String(childId))
+              releaseBudgetSlot()
+              throw error
+            }
           }
+
           const jobs = ctx.get('jobs')
           if (jobs === undefined) {
+            releaseBudgetSlot()
             throw new Error('background jobs unavailable: load @phoenix-ai/dsh-jobs and @phoenix-ai/dsh-tool-jobs')
           }
-          // One-shot background child: job preflight finishes before the
-          // starter can spawn, and the task-owned signal covers startup.
-          const id = jobs.start({
-            kind: 'subagent',
-            label: args.description,
-            owner: parent,
-            run: () => {
-              const controller = new AbortController()
-              const start = ctx.subagents.start(config.provider, { ...request, signal: controller.signal })
-              return {
-                cancel: (reason?: string) => {
-                  controller.abort(reason ?? 'background subagent task killed')
-                },
-                done: settleStart(start, controller.signal),
-                // No readOutput: the child session owns intermediate detail.
-              }
-            },
-          })
-          return { kind: 'background' as const, jobId: id }
+          // One-shot background child holds its slot until the task settles.
+          try {
+            const id = jobs.start({
+              kind: 'subagent',
+              label: args.description,
+              owner: parent,
+              run: () => {
+                const controller = new AbortController()
+                const start = ctx.subagents.start(config.provider, { ...request, signal: controller.signal })
+                return {
+                  cancel: (reason?: string) => {
+                    controller.abort(reason ?? 'background subagent task killed')
+                  },
+                  done: settleStart(start, controller.signal).finally(releaseBudgetSlot),
+                  // No readOutput: the child session owns intermediate detail.
+                }
+              },
+            })
+            return { kind: 'background' as const, jobId: id }
+          } catch (error: unknown) {
+            releaseBudgetSlot()
+            throw error
+          }
         }
 
-        const run: SubagentRun = await ctx.subagents.start(config.provider, {
-          ...request,
-          signal: exec.signal,
-        })
-        return settleForegroundRun(run)
+        try {
+          const run: SubagentRun = await ctx.subagents.start(config.provider, {
+            ...request,
+            signal: exec.signal,
+          })
+          return await settleForegroundRun(run)
+        } finally {
+          releaseBudgetSlot()
+        }
       },
     }))
   }
@@ -519,7 +619,7 @@ export function apply(ctx: Context, config: Config): void {
       order: SUBAGENT_SECTION_ORDER,
       text: context => disposeTool === undefined || ctx.tools.get(toolName, context.scope) === undefined
         ? ''
-        : `Usa ${toolName} para orquestar tareas independientes. No delegues recursivamente ni dupliques exploraciones. Mantén el alcance y responde en español; al finalizar, integra el resultado con evidencia.`,
+        : `Usa ${toolName} para orquestar tareas independientes. No delegues recursivamente ni dupliques exploraciones. Mantén el alcance y responde en español; al finalizar, integra el resultado con evidencia.${ACTIVE_SUBAGENT_GUIDANCE}`,
     })
   }
 }
