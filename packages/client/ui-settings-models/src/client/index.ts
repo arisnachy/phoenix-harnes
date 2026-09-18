@@ -56,20 +56,29 @@ const LOCAL_NS = 'settings.models.local'
 const CONNECTORS_NS = 'settings.connectors'
 export type { ModelsSettingsState, ProviderRow } from './store.ts'
 
+type PluginInventoryRemoteResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: { code: string; message: string } }
+
 type PluginInventoryChatGptWebRemote = {
-  chatGptWebState(): Promise<ChatGptWebSnapshot>
-  enableChatGptWeb(): Promise<ChatGptWebSnapshot>
-  disableChatGptWeb(): Promise<ChatGptWebSnapshot>
+  chatGptWebState(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
+  enableChatGptWeb(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
+  disableChatGptWeb(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
 }
 
 type PluginInventoryLocalRemote = {
-  localModelState(): Promise<PhoenixLocalModelSnapshot>
-  installLocalModel(request: { modelId: string }): Promise<PhoenixLocalModelSnapshot>
-  startLocalModel(): Promise<PhoenixLocalModelSnapshot>
-  stopLocalModel(): Promise<PhoenixLocalModelSnapshot>
-  uninstallLocalModel(request: { modelId: string }): Promise<PhoenixLocalModelSnapshot>
-  setLocalModelMode(request: { mode: PhoenixLocalModelMode }): Promise<PhoenixLocalModelSnapshot>
-  setDefaultLocalModel(request: { modelId: string }): Promise<PhoenixLocalModelSnapshot>
+  localModelState(): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
+  installLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
+  startLocalModel(): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
+  stopLocalModel(): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
+  uninstallLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
+  setLocalModelMode(request: { mode: PhoenixLocalModelMode }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
+  setDefaultLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
+}
+
+function unwrapPluginInventory<T>(operation: string, result: PluginInventoryRemoteResult<T>): T {
+  if (result.ok) return result.value
+  throw new Error(`pluginInventory.${operation} failed: ${result.error.code}: ${result.error.message}`)
 }
 
 /** Resolve the optional Phoenix Local Remote without making it a plugin load dependency. */
@@ -79,7 +88,7 @@ function pluginInventoryLocalRemote(ctx: ClientContext): PluginInventoryLocalRem
   return remote
 }
 
-/** Adapt the generated Host Remote to the ChatGPT Web Settings switch. */
+/** Adapt the optional Host Remote to the ChatGPT Web Settings switch. */
 function chatGptWebClient(ctx: ClientContext): ChatGptWebBridgeClient {
   const remote = (): PluginInventoryChatGptWebRemote => {
     const value = ctx.get('remote.pluginInventory') as PluginInventoryChatGptWebRemote | undefined
@@ -87,9 +96,9 @@ function chatGptWebClient(ctx: ClientContext): ChatGptWebBridgeClient {
     return value
   }
   return {
-    state: () => remote().chatGptWebState(),
-    enable: () => remote().enableChatGptWeb(),
-    disable: () => remote().disableChatGptWeb(),
+    state: async () => unwrapPluginInventory('chatGptWebState', await remote().chatGptWebState()),
+    enable: async () => unwrapPluginInventory('enableChatGptWeb', await remote().enableChatGptWeb()),
+    disable: async () => unwrapPluginInventory('disableChatGptWeb', await remote().disableChatGptWeb()),
   }
 }
 
@@ -97,13 +106,16 @@ function chatGptWebClient(ctx: ClientContext): ChatGptWebBridgeClient {
 function localModelClient(ctx: ClientContext): PhoenixLocalModelClient {
   const remote = (): PluginInventoryLocalRemote => pluginInventoryLocalRemote(ctx)
   return {
-    state: () => remote().localModelState(),
-    install: modelId => remote().installLocalModel({ modelId }),
-    start: () => remote().startLocalModel(),
-    stop: () => remote().stopLocalModel(),
-    uninstall: modelId => remote().uninstallLocalModel({ modelId }),
-    setMode: mode => remote().setLocalModelMode({ mode }),
-    setDefaultModel: modelId => remote().setDefaultLocalModel({ modelId }),
+    state: async () => unwrapPluginInventory('localModelState', await remote().localModelState()),
+    install: async modelId => unwrapPluginInventory('installLocalModel', await remote().installLocalModel({ modelId })),
+    start: async () => unwrapPluginInventory('startLocalModel', await remote().startLocalModel()),
+    stop: async () => unwrapPluginInventory('stopLocalModel', await remote().stopLocalModel()),
+    uninstall: async modelId => unwrapPluginInventory('uninstallLocalModel', await remote().uninstallLocalModel({ modelId })),
+    setMode: async mode => unwrapPluginInventory('setLocalModelMode', await remote().setLocalModelMode({ mode })),
+    setDefaultModel: async modelId => unwrapPluginInventory(
+      'setDefaultLocalModel',
+      await remote().setDefaultLocalModel({ modelId }),
+    ),
   }
 }
 

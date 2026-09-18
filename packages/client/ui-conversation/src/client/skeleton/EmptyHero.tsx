@@ -1,8 +1,9 @@
-// Hero chrome for the blank-draft phase of ConversationRoot: fish headline,
-// glow backdrop, and the workspace row. Pure presentation — the resident
-// composer is NOT rendered here (it keeps its own stable tree position in
-// ConversationRoot so the textarea survives the hero → composer flip); CSS
-// positions it over this shell's glow area during the hero phase.
+// Hero chrome for the blank-draft phase of ConversationRoot: intelligent
+// greeting, Phoenix brand mark, glow backdrop, and the workspace row. Pure
+// presentation — the resident composer is NOT rendered here (it keeps its own
+// stable tree position in ConversationRoot so the textarea survives the hero
+// → composer flip); CSS positions it over this shell's glow area during the
+// hero phase.
 
 import { useId } from 'react'
 import type { ReactNode, RefObject } from 'react'
@@ -15,6 +16,17 @@ import css from './HeroShell.module.css'
 
 /** The owner's locale seat type, passed to hero chrome as a plain prop. */
 type HeroTranslate = ConversationSlotProps['t']
+
+/**
+ * Resolve Phoenix's Spanish time-of-day greeting.
+ * @param hour - local hour in 24-hour form.
+ * @returns the greeting shown above the new-session composer.
+ */
+export function greetingForHour(hour: number): 'Buenos días' | 'Buenas tardes' | 'Buenas noches' {
+  if (hour < 12) return 'Buenos días'
+  if (hour < 19) return 'Buenas tardes'
+  return 'Buenas noches'
+}
 
 /**
  * Basename label for the workspace chip (the shared derivation);
@@ -65,9 +77,9 @@ export function WorkspaceChip({ buttonRef, label, menuOpen = false, onClick, t }
 }
 
 /**
- * The soft blue backdrop ellipse (figma 313:14109). Rendered by the hero
- * owner (ConversationRoot), not HeroShell, so it can center on the input
- * card; the owner's className supplies all positioning.
+ * The soft blue backdrop ellipse. Rendered by the hero owner
+ * (ConversationRoot), not HeroShell, so it can center on the input card; the
+ * owner's className supplies all positioning.
  * @param props.className - positioning class from the owner.
  * @returns the blurred-ellipse svg element.
  */
@@ -100,7 +112,7 @@ export function HeroGlow({ className }: { className?: string | undefined }) {
 
 /** Hero chrome props. The workspace row rides the InputBar accessory hole, not here. */
 export interface HeroShellProps {
-  /** The owner's locale seat, passed down as a plain prop. */
+  /** The owner's locale seat, retained for the workspace chip contract. */
   t: HeroTranslate
   /** Authorized renderer for the hero brand-mark slot. */
   renderSlot: ConversationSlotProps['renderSlot']
@@ -109,31 +121,28 @@ export interface HeroShellProps {
 }
 
 /**
- * Render the hero chrome (headline only; no glow, no composer, no workspace
- * row — the glow is the owner's {@link HeroGlow}).
+ * Render Phoenix's new-session welcome without moving the workspace row or
+ * composer. Only the brand/greeting block changes; the folders and input keep
+ * their existing tree positions.
  * @param props - see {@link HeroShellProps}.
  * @returns the centered hero element tree.
  */
-export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
+export function HeroShell({ renderSlot, children }: HeroShellProps) {
+  const greeting = greetingForHour(new Date().getHours())
+
   return (
     <div className={css.root}>
       <div className={css.stack}>
-        <div className={css.headline}>
-          {/* figma 34:10412: fish 34×25 leading the headline, gap 10. */}
-          <span className={css.fishHitbox}>
-            {renderSlot('conversation.hero.brand.mark', { size: 34, className: css.fish }, {
-              fallback: <PhoenixLogo size={34} {...(css.fish === undefined ? {} : { className: css.fish })} />,
-            })}
-          </span>
-          <span className={css.headlineText}>{t('hero.headline')}</span>
-          <span className={css.previewBadge}>{t('hero.preview')}</span>
-        </div>
-        <div className={css.body}>
-          {/* The resident composer (ConversationRoot's root-owned scrollport;
-              the workspace row rides the stack above the card) is CSS-centered
-              in that scroll body during hero — see
-              ConversationRoot.module.css [data-phase='hero']. */}
-        </div>
+        <span className={css.fishHitbox} aria-hidden="true">
+          {renderSlot('conversation.hero.brand.mark', { size: 48, className: css.fish }, {
+            fallback: <PhoenixLogo size={48} {...(css.fish === undefined ? {} : { className: css.fish })} />,
+          })}
+        </span>
+        <h1 className={css.headline}>
+          <span>{greeting}, </span>
+          <span className={css.preferredName}>Arisnachy</span>
+        </h1>
+        <p className={css.subtitle}>¿Qué quieres construir hoy en Phoenix?</p>
       </div>
       {children}
     </div>
