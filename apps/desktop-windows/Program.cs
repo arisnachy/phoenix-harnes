@@ -92,6 +92,9 @@ internal static class Program
         {
             shown = true;
             DesktopLog.Write("Visible smoke: Shown.");
+            DesktopLog.Write($"Visible smoke: BrowserCollapsed={!window.IsBrowserPaneVisible}.");
+            if (window.IsBrowserPaneVisible)
+                throw new InvalidOperationException("Phoenix embedded browser must start collapsed so chat owns the full window.");
             timer.Start();
         };
         timer.Tick += (_, _) =>
