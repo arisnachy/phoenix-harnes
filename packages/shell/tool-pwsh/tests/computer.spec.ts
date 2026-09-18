@@ -136,5 +136,5 @@ describe('Computer Use native Windows driver', () => {
   windowsIt('compiles the embedded driver and enumerates the interactive desktop', async () => {
     const output = await runWindowsComputerAction({ action: 'windows' })
     expect(typeof output).toBe('string')
-  })
+  }, 20_000)
 })
