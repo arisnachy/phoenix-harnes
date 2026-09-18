@@ -275,7 +275,6 @@ function staticLinkedConfig(id: string, entry: string, outputName = basename(ent
       name: STATIC_LINKED_PLUGIN,
       resolveId: {
         order: 'pre' as const,
-        filter: { id: routingPattern },
         handler(source: string, importer: string | undefined) {
           // An entry arrives without an importer and must stay internal.
           if (importer === undefined) return null
@@ -459,7 +458,7 @@ function clientRoutingPattern(externals: ReadonlySet<string>): RegExp {
 }
 
 /** Virtual CSS modules are the only ids the load hook owns. */
-const CLIENT_CSS_VIRTUAL_PATTERN = /^\\0dsh-(?:css|global-css|inline-css):/
+const CLIENT_CSS_VIRTUAL_PATTERN = new RegExp('^\\0dsh-(?:css|global-css|inline-css):')
 /** Whether an import specifier is the package a pattern names, or one of its subpaths. */
 function matchesSpecifier(patterns: readonly RegExp[], specifier: string): boolean {
   return patterns.some(pattern => pattern.test(specifier))
@@ -560,6 +559,7 @@ function clientConfig(id: string, entry: string): UserConfig {
       name: 'dsh-client-bundle-routing',
       resolveId: {
         order: 'pre' as const,
+        filter: { id: routingPattern },
         handler(source: string, importer: string | undefined) {
           if (source.endsWith('.module.css')) {
             const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
@@ -594,18 +594,18 @@ function clientConfig(id: string, entry: string): UserConfig {
         handler(virtualId: string) {
           let fileId: string
           let kind: 'module' | 'text' | 'global'
-        if (virtualId.startsWith(CSS_VIRTUAL_PREFIX)) {
-          fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
-          kind = 'module'
-        } else if (virtualId.startsWith(INLINE_CSS_VIRTUAL_PREFIX)) {
-          fileId = virtualId.slice(INLINE_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
-          kind = 'text'
-        } else if (virtualId.startsWith(GLOBAL_CSS_VIRTUAL_PREFIX)) {
-          fileId = virtualId.slice(GLOBAL_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
-          kind = 'global'
-        } else {
-          return null
-        }
+          if (virtualId.startsWith(CSS_VIRTUAL_PREFIX)) {
+            fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+            kind = 'module'
+          } else if (virtualId.startsWith(INLINE_CSS_VIRTUAL_PREFIX)) {
+            fileId = virtualId.slice(INLINE_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+            kind = 'text'
+          } else if (virtualId.startsWith(GLOBAL_CSS_VIRTUAL_PREFIX)) {
+            fileId = virtualId.slice(GLOBAL_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+            kind = 'global'
+          } else {
+            return null
+          }
 
           this.addWatchFile(fileId)
           const compiled = compileClientCss(fileId, kind === 'module')
