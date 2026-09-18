@@ -198,6 +198,46 @@ function normalize(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 }
 
+const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
+
+function isTransientConnectorRemoteFailure(error: unknown): boolean {
+  const message = String(error).toLowerCase()
+  return [
+    'failed to fetch',
+    'fetch failed',
+    'networkerror',
+    'network request failed',
+    'load failed',
+    'econnrefused',
+    'connection refused',
+    'connection reset',
+    'err_connection',
+  ].some(fragment => message.includes(fragment))
+}
+
+async function readConnectorRemoteWithRetry<T>(
+  read: () => Promise<T>,
+  cancelled: () => boolean,
+): Promise<T> {
+  let lastError: unknown
+  for (const delayMs of TRANSIENT_CONNECTOR_REMOTE_RETRY_MS) {
+    if (cancelled()) throw new Error('Connector state read cancelled')
+    if (delayMs > 0) {
+      await new Promise<void>(resolve => { globalThis.setTimeout(resolve, delayMs) })
+    }
+    if (cancelled()) throw new Error('Connector state read cancelled')
+    try {
+      return await read()
+    } catch (error: unknown) {
+      lastError = error
+      if (!isTransientConnectorRemoteFailure(error)) throw error
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(String(lastError ?? 'Connector remote unavailable'))
+}
+
 /**
  * Keep only HTTPS external links before exposing them to clickable connector UI.
  * @param value - Candidate external URL from connector or registry metadata.
@@ -515,9 +555,14 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   useEffect(() => {
     if (chatGptWeb === undefined) return
     let stale = false
-    void chatGptWeb.state().then(
+    setChatGptWebFailure(undefined)
+    void readConnectorRemoteWithRetry(() => chatGptWeb.state(), () => stale).then(
       snapshot => { if (!stale) setChatGptWebState(snapshot) },
-      error => { if (!stale) setChatGptWebFailure(String(error)) },
+      error => {
+        if (!stale && !isTransientConnectorRemoteFailure(error)) {
+          setChatGptWebFailure(String(error))
+        }
+      },
     )
     return () => { stale = true }
   }, [chatGptWeb])
@@ -540,9 +585,13 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   useEffect(() => {
     if (mcpRegistry === undefined) return
     let stale = false
-    void mcpRegistry.state().then(
+    void readConnectorRemoteWithRetry(() => mcpRegistry.state(), () => stale).then(
       snapshot => { if (!stale) setMcpHub(snapshot) },
-      error => { if (!stale) setCatalogFailure(String(error)) },
+      error => {
+        if (!stale && !isTransientConnectorRemoteFailure(error)) {
+          setCatalogFailure(String(error))
+        }
+      },
     )
     return () => { stale = true }
   }, [mcpRegistry, refresh])
