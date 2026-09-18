@@ -177,6 +177,13 @@ describe('PermissionPresetService', () => {
       .rejects.toThrow(/reserved for the derived not-a-preset state/)
   })
 
+  it('refuses a misleading danger-full-access preset that is not truly unrestricted', async () => {
+    await expect(mounted({ config: { presets: {
+      'workspace-write': { sandbox: 'workspace-write', approval: 'ask' },
+      'danger-full-access': { sandbox: 'workspace-write', approval: 'ask' },
+    } } })).rejects.toThrow(/danger-full-access.*sandbox.*never/i)
+  })
+
   it('requires an explicit default when composition defaults match no preset', async () => {
     await expect(mounted({ approvalDefault: 'never' }))
       .rejects.toThrow(/configure defaultPreset explicitly/)
