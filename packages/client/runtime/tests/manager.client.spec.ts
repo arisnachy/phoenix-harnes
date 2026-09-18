@@ -163,6 +163,29 @@ describe('list lifecycle', () => {
     expect(manager.getListSnapshot().phase).toBe('pending')
   })
 
+  it('recovers a new page when the first connection baseline fails transiently', async () => {
+    vi.useFakeTimers()
+    try {
+      const api = new FakeApiClient()
+      let attempts = 0
+      api.onList = () => Promise.resolve(
+        attempts++ < 2
+          ? err({ code: 'internal', message: 'boot race', details: {} })
+          : ok({ items: [summary(S1)] as never[] }),
+      )
+      const manager = new SessionManager(api, fakeRemote())
+
+      manager.handleConnected()
+      await vi.runAllTimersAsync()
+
+      expect(api.callsOf('session.list')).toHaveLength(3)
+      expect(manager.getListSnapshot()).toMatchObject({ phase: 'ready', state: 'idle' })
+      expect(manager.getListSnapshot().items.map(item => item.sessionId)).toContain(S1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('phase steps pending → ready on the first successful pull and never returns', async () => {
     const api = new FakeApiClient()
     const manager = new SessionManager(api, fakeRemote())
