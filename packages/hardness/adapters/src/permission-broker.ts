@@ -25,6 +25,7 @@ export class PermissionBroker {
    * @returns explicit grants when allowed once, otherwise a typed denial.
    */
   async request(surface: CapabilitySurface): Promise<PermissionBrokerResult> {
+    if (surface.requiredPermissions.length === 0) return { kind: 'approved', grants: [] }
     const outcome = await this.requestApproval(surface)
     if (outcome !== 'allowed-once') return { kind: 'denied', reason: outcome }
     return { kind: 'approved', grants: surface.requiredPermissions.map(key) }
