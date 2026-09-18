@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** AppFrame shell geometry while Cordis/KIRA occupy the in-flow visual rail. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { AppFrame } from '@phoenix-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
 import type { AppFrameProps } from '@phoenix-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
@@ -56,6 +56,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -81,5 +82,44 @@ describe('AppFrame visual workspace', () => {
     const kira = frame.querySelector('[data-kira-teams]')
     expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
     expect(workspace?.contains(kira)).toBe(true)
+  })
+
+  it('contains a repeatedly crashing workspace surface without blanking the conversation or shell', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const instance = createLayoutStore().create()
+    const useSessions = ((selector: (state: SessionListState) => unknown) => selector({
+      ids: ['s-live'],
+      byId: { 's-live': { blank: false } },
+      current: 's-live',
+      phase: 'ready',
+      subagentsByParent: {},
+      jobsBySession: {},
+      currentAddress: undefined,
+    } as unknown as SessionListState)) as never
+    let workspaceRenders = 0
+    const renderSlot = ((key: string, _owner: object) => {
+      if (key === 'shell.workspace') {
+        workspaceRenders += 1
+        throw new Error('workspace renderer exploded')
+      }
+      if (key === 'conversation') return <div data-conversation-alive />
+      return <div data-test-slot={key} />
+    }) as AppFrameProps['renderSlot']
+    const props = {
+      useStore: hookOf(instance),
+      actions: instance.actions,
+      useSessions,
+      renderSlot,
+    } as unknown as AppFrameProps
+
+    const view = render(<AppFrame {...props} />)
+
+    await waitFor(() => {
+      expect(view.container.querySelector('[data-surface-recovery="workspace"]')).not.toBeNull()
+    })
+    expect(workspaceRenders).toBeGreaterThanOrEqual(2)
+    expect(view.container.querySelector('[data-conversation-alive]')).not.toBeNull()
+    expect(view.container.firstElementChild).not.toBeNull()
+    expect(errorSpy).toHaveBeenCalled()
   })
 })

@@ -10,8 +10,8 @@
  * through the three framework shares — zero cordis or framework imports,
  * zero self-made hooks.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { ErrorInfo, ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@phoenix-ai/dsh-client-ui-slots'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import type { createLayoutStore } from './stores.ts'
@@ -22,6 +22,67 @@ export type AppFrameProps =
   & PropsRuntime<'root'>
   & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay' | 'shell.workspace'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
+
+interface SurfaceBoundaryProps {
+  readonly name: 'conversation' | 'workspace' | 'details'
+  readonly resetKey: string
+  readonly children: ReactNode
+}
+
+interface SurfaceBoundaryState {
+  readonly failed: boolean
+  readonly autoRetried: boolean
+}
+
+/**
+ * Keep one faulty optional surface from taking down the entire Phoenix shell.
+ * The first render failure gets one automatic clean remount; a persistent
+ * failure stays contained behind a small retry control instead of leaving a
+ * white screen that requires restarting the Host.
+ */
+class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundaryState> {
+  state: SurfaceBoundaryState = { failed: false, autoRetried: false }
+
+  static getDerivedStateFromError(): Partial<SurfaceBoundaryState> {
+    return { failed: true }
+  }
+
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error(`PHOENIX ${this.props.name} surface render failed:`, error, info.componentStack)
+    this.setState(state => state.autoRetried
+      ? null
+      : { failed: false, autoRetried: true })
+  }
+
+  override componentDidUpdate(previous: SurfaceBoundaryProps): void {
+    if (previous.resetKey !== this.props.resetKey && (this.state.failed || this.state.autoRetried)) {
+      this.setState({ failed: false, autoRetried: false })
+    }
+  }
+
+  private readonly retry = (): void => {
+    this.setState({ failed: false, autoRetried: true })
+  }
+
+  override render(): ReactNode {
+    if (!this.state.failed) return this.props.children
+    return (
+      <div className={css.surfaceRecovery} role="alert" data-surface-recovery={this.props.name}>
+        <span>PHOENIX isolated a rendering error in this view.</span>
+        <button type="button" onClick={this.retry}>Retry view</button>
+      </div>
+    )
+  }
+}
+
+/**
+ * Evaluate a slot render call inside the error boundary rather than in
+ * AppFrame's own render expression. This also contains failures thrown by the
+ * slot engine itself before it returns a React element.
+ */
+function SurfaceRender(props: { readonly render: () => ReactNode }): ReactNode {
+  return <>{props.render()}</>
+}
 
 /** Center column grid item (session-body building block). */
 function CenterColumn(props: { children?: ReactNode }) {
@@ -91,6 +152,7 @@ export function AppFrame({
   renderSlot,
 }: AppFrameProps) {
   const panels = useStore(s => s)
+  const currentSession = useSessions(s => s.current)
   const detailsSession = useSessions((s) => {
     const current = s.current
     return current !== undefined && s.byId[current]?.blank === false ? current : undefined
@@ -179,10 +241,20 @@ export function AppFrame({
       <>
         <CenterColumn>
           <div data-shell-overlay>{renderSlot('shell.overlay', {})}</div>
-          {renderSlot('conversation', {})}
-          <div data-shell-workspace>{renderSlot('shell.workspace', {})}</div>
+          <SurfaceBoundary name="conversation" resetKey={currentSession ?? 'none'}>
+            <SurfaceRender render={() => renderSlot('conversation', {})} />
+          </SurfaceBoundary>
+          <div data-shell-workspace>
+            <SurfaceBoundary name="workspace" resetKey={currentSession ?? 'none'}>
+              <SurfaceRender render={() => renderSlot('shell.workspace', {})} />
+            </SurfaceBoundary>
+          </div>
         </CenterColumn>
-        <DetailsColumn>{renderSlot('details', {})}</DetailsColumn>
+        <DetailsColumn>
+          <SurfaceBoundary name="details" resetKey={detailsSession ?? 'none'}>
+            <SurfaceRender render={() => renderSlot('details', {})} />
+          </SurfaceBoundary>
+        </DetailsColumn>
       </>
       {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
