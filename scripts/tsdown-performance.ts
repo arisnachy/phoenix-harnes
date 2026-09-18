@@ -118,5 +118,5 @@ export function optimizePhoenixTsdownInput<T extends InputOptionsLike>(
     ...options,
     ...(external === undefined ? {} : { external }),
     plugins: stripTsdownHotPlugins(options.plugins),
-  }
+  } as T
 }
