@@ -13,7 +13,6 @@ import type {
 } from './types.ts'
 
 const MCP_CLIENT_PACKAGE = '@phoenix-ai/dsh-mcp-client'
-const MANAGED_PATCH_FILE = dshHomePath('mcp', 'managed.patch.yml')
 const SERVER_NAME_MAX = 32
 
 interface ManagedMcpConfig {
@@ -157,7 +156,7 @@ export class ManagedMcpController {
     private readonly loader: ManagedMcpLoader,
     options: ManagedMcpControllerOptions = {},
   ) {
-    this.path = options.patchPath ?? MANAGED_PATCH_FILE
+    this.path = options.patchPath ?? managedMcpPatchPath()
     this.registrySearch = options.registrySearch ?? searchOfficialMcpRegistry
   }
 
@@ -220,5 +219,5 @@ export class ManagedMcpController {
  * @returns Absolute managed overlay path under DSH_HOME.
  */
 export function managedMcpPatchPath(): string {
-  return MANAGED_PATCH_FILE
+  return dshHomePath('mcp', 'managed.patch.yml')
 }
