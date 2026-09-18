@@ -53,12 +53,14 @@
 }
 
 .centerCol:has(> [data-shell-workspace] [data-kira-teams]),
-.centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) {
+.centerCol:has(> [data-shell-workspace] [data-cordis-workspace]),
+.centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) {
   flex-direction: row;
 }
 
 .centerCol:has(> [data-shell-workspace] [data-kira-teams]) > [data-shell-workspace],
-.centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace] {
+.centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace],
+.centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) > [data-shell-workspace] {
   order: 2;
   flex: 0 0 min(360px, calc(100% - 56px));
   width: min(360px, calc(100% - 56px));
@@ -101,17 +103,49 @@
 
 @media (max-width: 760px) {
   .centerCol:has(> [data-shell-workspace] [data-kira-teams]),
-  .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) {
+  .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]),
+  .centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) {
     flex-direction: column;
   }
 
   .centerCol:has(> [data-shell-workspace] [data-kira-teams]) > [data-shell-workspace],
-  .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace] {
+  .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace],
+  .centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) > [data-shell-workspace] {
     order: 2;
     flex: 0 0 min(42vh, 360px);
     width: 100%;
     height: min(42vh, 360px);
   }
+}
+
+.surfaceRecovery {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 96px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  color: inherit;
+  background: var(--dsw-alias-bg-base);
+  text-align: center;
+}
+
+.surfaceRecovery button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  color: inherit;
+  background: var(--dsw-alias-button-floating-fill);
+  cursor: pointer;
+}
+
+.surfaceRecovery button:hover {
+  background: var(--dsw-alias-button-floating-hover);
 }
 
 .detailsCol {
