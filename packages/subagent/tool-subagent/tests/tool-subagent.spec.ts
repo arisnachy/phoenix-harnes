@@ -238,6 +238,56 @@ describe('dsh-tool-subagent', () => {
     expect(retry.isError).toBe(false)
   })
 
+  it('shares the 1 -> 2 -> 3 escalation budget across different parent sessions', async () => {
+    const gate = Promise.withResolvers<void>()
+    const started: string[] = []
+    const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
+      onStart: (request: SubagentStartRequest) => {
+        const label = request.label ?? '(unlabeled)'
+        started.push(label)
+        // Calls labelled blocked would only reach the provider if the global
+        // guard regressed; let them settle immediately so the test fails fast.
+        return label.includes('blocked') ? Promise.resolve() : gate.promise
+      },
+    })
+
+    const first = callSubagent(
+      ctx,
+      { description: 'first parent', prompt: 'p1' },
+      { agent: fakeAgent('parent-a') },
+    )
+    await vi.waitFor(() => { expect(started).toEqual(['first parent']) })
+
+    const secondBlocked = await callSubagent(
+      ctx,
+      { description: 'second blocked', prompt: 'p2' },
+      { agent: fakeAgent('parent-b') },
+    )
+    expect(secondBlocked.isError).toBe(true)
+    expect(text(secondBlocked)).toContain('1 subagente es la norma')
+    expect(started).toEqual(['first parent'])
+
+    const second = callSubagent(
+      ctx,
+      { description: 'second hard', prompt: 'p2', hard_parallelism: true },
+      { agent: fakeAgent('parent-b') },
+    )
+    await vi.waitFor(() => { expect(started).toEqual(['first parent', 'second hard']) })
+
+    const thirdBlocked = await callSubagent(
+      ctx,
+      { description: 'third blocked', prompt: 'p3', hard_parallelism: true },
+      { agent: fakeAgent('parent-c') },
+    )
+    expect(thirdBlocked.isError).toBe(true)
+    expect(text(thirdBlocked)).toContain('Un tercero solo se admite en casos extremos')
+    expect(started).toEqual(['first parent', 'second hard'])
+
+    gate.resolve()
+    const accepted = await Promise.all([first, second])
+    expect(accepted.every(result => !result.isError)).toBe(true)
+  })
+
   it.each([
     { stopReason: 'aborted' as const, fragment: 'cancelled' },
     { stopReason: 'error' as const, fragment: 'failed' },
