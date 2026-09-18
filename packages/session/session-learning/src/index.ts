@@ -163,11 +163,32 @@ export class LearningMemoryService extends Service {
    */
   recallCognitive(query: Omit<CognitiveMemoryQuery, 'limit'> & { limit?: number } = {}): CognitiveMemoryHit[] {
     const project = query.projectId ?? this.currentProject
-    return this.cognitive.search({
+    const limit = query.limit ?? 20
+    const scoped = {
       ...query,
       ...project === undefined ? {} : { projectId: project },
-      limit: query.limit ?? 20,
+      limit,
+    }
+    const relevant = this.cognitive.recall(scoped)
+    const text = query.query?.trim() ?? ''
+    if (text === '' || query.layers !== undefined) return relevant
+
+    // Automatic task recall must not erase stable identity/preferences simply
+    // because the current wording shares no lexical token with them. Merge a
+    // small durable semantic/procedural continuity set, still subject to the
+    // ledger's intelligent-forgetting policy.
+    const durable = this.cognitive.recall({
+      ...project === undefined ? {} : { projectId: project },
+      layers: ['semantic', 'procedural'],
+      limit,
     })
+    const unique = new Map<string, CognitiveMemoryHit>()
+    for (const hit of [...relevant, ...durable]) {
+      if (!unique.has(String(hit.record.id))) unique.set(String(hit.record.id), hit)
+    }
+    return [...unique.values()]
+      .sort((left, right) => right.score - left.score || right.record.lastObservedAt - left.record.lastObservedAt)
+      .slice(0, limit)
   }
 
   /**
