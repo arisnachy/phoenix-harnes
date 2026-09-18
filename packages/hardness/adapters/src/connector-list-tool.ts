@@ -123,7 +123,7 @@ export function createConnectorListTool(
 ): ToolDefinition {
   return defineTool({
     name: 'connector_list',
-    description: 'List authorized connectors and their callable services without changing access.',
+    description: 'List installed/authorized connectors and callable services without changing access. Use status auth-required or not-connected to present authorization/reconnect to the user instead of retrying blindly. If the needed connector is absent, call connector_discover.',
     parameters: {},
     output: {
       schema: {
