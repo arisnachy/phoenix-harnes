@@ -485,7 +485,10 @@ export class SessionInputShell implements SessionInput {
       }
     })).then(
       (parts) => {
-        if (this.disposed) return
+        if (this.dead(attempt)) {
+          controller.abort()
+          return
+        }
         // Splice model forms over their display ranges (offsets are draft-time;
         // parts arrive offset-sorted since the table is).
         let out = ''
