@@ -48,6 +48,31 @@ function safeJsonStringify(value: unknown): string {
   }
 }
 
+/**
+ * Tool definitions are immutable catalog values during a request lifecycle.
+ * Cache their serialized size by identity so every turn does not stringify the
+ * same large JSON Schemas several times before the provider can even start.
+ */
+const JSON_CHAR_LENGTH_CACHE = new WeakMap<object, number>()
+
+function safeJsonCharLength(value: unknown): number {
+  if (typeof value !== 'object' || value === null) return safeJsonStringify(value).length
+  const cached = JSON_CHAR_LENGTH_CACHE.get(value)
+  if (cached !== undefined) return cached
+  const length = safeJsonStringify(value).length
+  JSON_CHAR_LENGTH_CACHE.set(value, length)
+  return length
+}
+
+function estimateToolsChars(tools: NonNullable<GenerateOptions['tools']>): number {
+  // Brackets + one conservative separator character per entry. The single
+  // trailing extra char is intentional: the budget estimator must never
+  // undercount merely to save a byte of arithmetic.
+  let chars = 2
+  for (const tool of tools) chars += safeJsonCharLength(tool) + 1
+  return chars
+}
+
 function estimateContentBlocksChars(blocks: readonly ContentBlock[]): number {
   let chars = 0
   for (const block of blocks) {
@@ -85,19 +110,30 @@ export function estimateGenerateOptionsTokens(options: GenerateOptions): number 
   let chars = options.system?.length ?? 0
   for (const message of options.messages) chars += estimateContentBlocksChars(message.content)
   if (options.tools !== undefined && options.tools.length > 0) {
-    chars += safeJsonStringify(options.tools).length
+    chars += estimateToolsChars(options.tools)
   }
   return Math.ceil(chars / ESTIMATED_CHARS_PER_TOKEN)
 }
 
+const COMPACT_SCHEMA_CACHE = new WeakMap<object, unknown>()
+
 function compactSchemaForPressure(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(compactSchemaForPressure)
   if (typeof value !== 'object' || value === null) return value
+  const cached = COMPACT_SCHEMA_CACHE.get(value)
+  if (cached !== undefined) return cached
+
+  if (Array.isArray(value)) {
+    const compacted = value.map(compactSchemaForPressure)
+    COMPACT_SCHEMA_CACHE.set(value, compacted)
+    return compacted
+  }
+
   const compacted: Record<string, unknown> = {}
   for (const [key, child] of Object.entries(value)) {
     if (SCHEMA_DECORATION_KEYS.has(key)) continue
     compacted[key] = compactSchemaForPressure(child)
   }
+  COMPACT_SCHEMA_CACHE.set(value, compacted)
   return compacted
 }
 
@@ -205,7 +241,7 @@ function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetToken
       if (name.includes(word)) score += 200
       else if (description.includes(word)) score += 20
     }
-    return { tool, index, score, chars: safeJsonStringify(tool).length + 1 }
+    return { tool, index, score, chars: safeJsonCharLength(tool) + 1 }
   }).sort((left, right) => right.score - left.score || left.index - right.index)
 
   const selected: { tool: NonNullable<GenerateOptions['tools']>[number]; index: number }[] = []
