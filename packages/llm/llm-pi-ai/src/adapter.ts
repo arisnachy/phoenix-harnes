@@ -23,6 +23,12 @@
  * so a configuration change rebuilds the collection without forgetting who is
  * signed in.
  *
+ * The OpenAI Codex route additionally overlays the account-visible app-server
+ * `model/list` catalog at runtime. A short cache avoids subprocess churn while
+ * selectors re-render, and a live-only model is materialized on demand so a
+ * newly shipped Codex id can be selected and called without first writing it
+ * into Phoenix settings.
+ *
  * @module dsh-llm-pi-ai/adapter
  */
 
@@ -52,6 +58,7 @@ import {
 } from '@phoenix-ai/dsh-llm'
 import type {
   GenerateOptions,
+  LlmDiscoveredModel,
   LlmModelInfo,
   LlmProviderInfo,
   LlmResolvedModelInfo,
@@ -67,9 +74,13 @@ import {
   CHATGPT_WEB_PROVIDER,
 } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
+import { codexModelListTransport } from './codex-discovery.ts'
+import { CodexRuntimeCatalog, materializeCodexRuntimeModel } from './codex-runtime-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
+
+const OPENAI_CODEX_PROVIDER = 'openai-codex'
 
 /** One resolution's frozen view: the profiles and the collection built from them. */
 interface PiAiSnapshot {
@@ -103,6 +114,11 @@ export interface PiAiAdapterOptions {
   auth: PiAiAuthInjection
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
+  /**
+   * Test/provider injection for runtime discovery. Production uses Codex
+   * app-server `model/list`; callers should normally omit this.
+   */
+  discoverModels?: (provider: string, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>
   /**
    * Observe one assistant history message degrading to provider-neutral
    * conversion because its stored replay state is unusable by this build.
@@ -236,9 +252,14 @@ function requestHeaders(
  */
 export class PiAiAdapter extends LlmAdapter {
   private snapshot: PiAiSnapshot | undefined
+  private readonly codexRuntimeCatalog: CodexRuntimeCatalog
 
   constructor(private readonly config: PiAiAdapterOptions) {
     super()
+    this.codexRuntimeCatalog = new CodexRuntimeCatalog(signal => (
+      this.config.discoverModels?.(OPENAI_CODEX_PROVIDER, signal)
+      ?? codexModelListTransport.list(signal)
+    ))
   }
 
   /**
@@ -275,6 +296,26 @@ export class PiAiAdapter extends LlmAdapter {
     return resolved
   }
 
+  /**
+   * Resolve an exact model, consulting Codex's live catalog only when the
+   * immutable profile snapshot does not already know the id.
+   */
+  private async runtimeModelOf(
+    snapshot: PiAiSnapshot,
+    provider: string,
+    model: string,
+    signal?: AbortSignal,
+  ): Promise<Model<Api>> {
+    const profile = this.profileOf(snapshot, provider)
+    const configured = snapshot.models.getModel(provider, model)
+    if (configured !== undefined) return configured
+    if (provider === OPENAI_CODEX_PROVIDER) {
+      const candidate = (await this.codexRuntimeCatalog.list(signal)).find(entry => entry.id === model)
+      if (candidate !== undefined) return materializeCodexRuntimeModel(profile, candidate)
+    }
+    throw new LlmError(`pi-ai provider "${provider}" has no configured model "${model}"`, 'UNKNOWN_MODEL')
+  }
+
   override providerInfo(provider: string): LlmProviderInfo {
     // The configured name, not the route key: `displayName` exists so a
     // deployment can label a route, and a label only the configuration surface
@@ -286,33 +327,52 @@ export class PiAiAdapter extends LlmAdapter {
     return this.current().profiles.get(provider)?.retryPolicy
   }
 
-  override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
-    return Promise.resolve().then(() => {
-      const snapshot = this.current()
-      this.profileOf(snapshot, provider)
-      return snapshot.models.getModels(provider).map(model => ({
-        provider,
-        id: model.id,
-        name: model.name,
-        inputModalities: [...model.input],
-      }))
-    })
+  override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    const snapshot = this.current()
+    const profile = this.profileOf(snapshot, provider)
+    if (provider === OPENAI_CODEX_PROVIDER) {
+      try {
+        const live = await this.codexRuntimeCatalog.list()
+        return live.map((candidate) => {
+          const model = materializeCodexRuntimeModel(profile, candidate)
+          return {
+            provider,
+            id: model.id,
+            name: model.name,
+            inputModalities: [...model.input],
+          }
+        })
+      } catch (_liveDiscoveryUnavailable) {
+        // Runtime discovery is additive resilience. If Codex is temporarily
+        // unavailable before the first successful refresh, keep the installed
+        // catalog usable instead of emptying the picker.
+      }
+    }
+    return snapshot.models.getModels(provider).map(model => ({
+      provider,
+      id: model.id,
+      name: model.name,
+      inputModalities: [...model.input],
+    }))
   }
 
-  override resolveModel(
+  override async resolveModel(
     provider: string,
     model: string,
-    _signal?: AbortSignal,
+    signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
-    return Promise.resolve().then(() => {
-      const snapshot = this.current()
-      return this.modelInfo(snapshot, provider, model)
-    })
+    const snapshot = this.current()
+    const resolvedModel = await this.runtimeModelOf(snapshot, provider, model, signal)
+    return this.modelInfo(snapshot, provider, model, resolvedModel)
   }
 
-  private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
+  private modelInfo(
+    snapshot: PiAiSnapshot,
+    provider: string,
+    model: string,
+    resolvedModel: Model<Api> = this.modelOf(snapshot, provider, model),
+  ): LlmResolvedModelInfo {
     const profile = this.profileOf(snapshot, provider)
-    const resolvedModel = this.modelOf(snapshot, provider, model)
     const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
     // Only a cap the deployment configured is a request default; the
     // catalog's `maxTokens` sizes the model and stops there.
@@ -328,21 +388,29 @@ export class PiAiAdapter extends LlmAdapter {
     }
   }
 
-  override prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
+  override async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
     const snapshot = this.current()
-    return Promise.resolve({
-      model: this.modelInfo(snapshot, provider, model),
-      stream: options => this.streamWithSnapshot(options, snapshot),
-    })
+    const resolvedModel = await this.runtimeModelOf(snapshot, provider, model, signal)
+    return {
+      model: this.modelInfo(snapshot, provider, model, resolvedModel),
+      stream: options => this.streamWithSnapshot(options, snapshot, resolvedModel),
+    }
   }
 
   stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-    return this.streamWithSnapshot(options, this.current())
+    return this.streamWithRuntimeDiscovery(options)
+  }
+
+  private async * streamWithRuntimeDiscovery(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    const snapshot = this.current()
+    const model = await this.runtimeModelOf(snapshot, options.provider, options.model, options.signal)
+    yield* this.streamWithSnapshot(options, snapshot, model)
   }
 
   private async * streamWithSnapshot(
     options: GenerateOptions,
     snapshot: PiAiSnapshot,
+    resolvedModel?: Model<Api>,
   ): AsyncIterable<StreamChunk> {
     if (options.stop !== undefined) {
       throw new LlmError('llm-pi-ai does not support GenerateOptions.stop', 'UNSUPPORTED_OPTION')
@@ -353,7 +421,7 @@ export class PiAiAdapter extends LlmAdapter {
     // mid-request builds a separate snapshot, so this request finishes under
     // the one it started with and the next call picks up the new one.
     const profile = this.profileOf(snapshot, options.provider)
-    const model = this.modelOf(snapshot, options.provider, options.model)
+    const model = resolvedModel ?? this.modelOf(snapshot, options.provider, options.model)
     const reasoning = resolveReasoningLevel(
       model,
       options.reasoningEffort ?? profile.reasoning,
