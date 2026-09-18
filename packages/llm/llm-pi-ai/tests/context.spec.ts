@@ -183,6 +183,35 @@ describe('pi-ai request context conversion', () => {
     expect(fitted.options).toBe(options)
   })
 
+  it('does not repeatedly stringify an unchanged tool schema on later estimates', () => {
+    let serializations = 0
+    const tool = {
+      name: 'large_lookup',
+      description: 'lookup',
+      parameters: { type: 'object', properties: { query: { type: 'string' } } },
+      toJSON: () => {
+        serializations += 1
+        return {
+          name: 'large_lookup',
+          description: 'lookup',
+          parameters: { type: 'object', properties: { query: { type: 'string' } } },
+        }
+      },
+    } as unknown as NonNullable<GenerateOptions['tools']>[number]
+    const options: GenerateOptions = {
+      provider: 'openrouter',
+      model: 'free',
+      messages: [user([{ type: 'text', text: 'hello' }])],
+      tools: [tool],
+    }
+
+    const first = estimateGenerateOptionsTokens(options)
+    const second = estimateGenerateOptionsTokens(options)
+
+    expect(first).toBe(second)
+    expect(serializations).toBe(1)
+  })
+
   it('omits absent and empty request-level optional fields', () => {
     const base = { provider: 'openai', model: 'gpt-4.1', messages: [] }
     expect(toPiContext(base)).toEqual({ messages: [] })
