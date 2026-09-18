@@ -90,3 +90,54 @@ it('unwraps the pluginInventory Remote result before exposing Phoenix Local stat
   await expect(injected.localModel.state()).resolves.toEqual(snapshot)
   expect(localModelState).toHaveBeenCalledTimes(1)
 })
+
+
+it('unwraps the pluginInventory Remote result before exposing ChatGPT Web state', async () => {
+  const snapshot = {
+    enabled: true,
+    phase: 'ready' as const,
+    baseUrl: 'http://127.0.0.1:17841/v1',
+    detail: '1 model available',
+  }
+  const chatGptWebState = vi.fn(() => Promise.resolve({
+    ok: true as const,
+    value: snapshot,
+  }))
+
+  const ctx = new Context()
+  await ctx.plugin(SlotRegistry).await()
+  ctx.provide('locale', new LocaleRuntime(ctx))
+  new TestRemote(ctx)
+  ctx.provide('remote.pluginInventory', {
+    chatGptWebState,
+    enableChatGptWeb: vi.fn(() => Promise.resolve({ ok: true as const, value: snapshot })),
+    disableChatGptWeb: vi.fn(() => Promise.resolve({
+      ok: true as const,
+      value: { ...snapshot, enabled: false, phase: 'off' as const, detail: 'ChatGPT Web is off' },
+    })),
+  } as never)
+  ctx.provide('connection', {
+    api: { authorization: {}, settings: { mutate: vi.fn() } },
+    isLoopback: true,
+  } as never)
+  await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
+
+  const slots = ctx.get('slots') as SlotRegistry
+  slots.register({
+    name: 'root',
+    children: {
+      'settings.section': { kind: 'list', scope: 'root' },
+      'settings.onboarding': { kind: 'list', scope: 'root' },
+    },
+  } as never, () => null)
+
+  await ctx.plugin({ inject: [...inject], apply }).await()
+  const entry = slots.entries('settings.section').find(candidate => candidate.options.id === 'connectors')!
+  const injected = (
+    entry.inject as unknown as
+    () => import('../src/client/AuthorizationPanel.tsx').ConnectorsSettingsSectionProps
+  )()
+
+  await expect(injected.chatGptWeb?.state()).resolves.toEqual(snapshot)
+  expect(chatGptWebState).toHaveBeenCalledTimes(1)
+})

@@ -83,7 +83,8 @@
     "commander": "^15.0.0",
     "@phoenix-ai/cordis": "workspace:^",
     "js-yaml": "^4.2.0",
-    "node-addon-require-builtin": "^0.1.4"
+    "node-addon-require-builtin": "^0.1.4",
+    "@phoenix-ai/dsh-host-plugin-inventory": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
