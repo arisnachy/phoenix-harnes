@@ -22,6 +22,7 @@ import { createProactivityTools } from './proactivity-tools.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
+import { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 
 export { indexTools } from './tool-adapter.ts'
@@ -93,6 +94,7 @@ export type { HardnessMissionRpcPayload, HardnessMissionRunner, HardnessMissionR
 export { createHardnessTool } from './hardness-tool.ts'
 export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 export { createConnectorListTool } from './connector-list-tool.ts'
+export { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
 
@@ -189,9 +191,10 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
-      // A preset contributes only its scoped connector inventory tool; the
-      // host remains the sole owner of the HARDNESS capability index.
+      // A preset contributes only its scoped connector inventory/discovery
+      // tools; the host remains the sole owner of the HARDNESS capability index.
       disposers.push(ctx.tools.register(createConnectorListTool(authorization, mcpConnectors)))
+      disposers.push(ctx.tools.register(createConnectorDiscoverTool(mcpConnectors)))
     }
 
     const acquisition = createHardnessAcquisition(hardness)
