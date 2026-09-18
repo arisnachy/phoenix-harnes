@@ -70,12 +70,9 @@ describe('connectors settings section', () => {
 
     renderHub(api)
     expect(screen.getByRole('heading', { name: 'Connectors' })).toBeTruthy()
-    expect(screen.getByText('Default')).toBeTruthy()
-    expect(screen.getByText('Security / Codex Security')).toBeTruthy()
-    expect(screen.getByText('Data Analytics')).toBeTruthy()
-    expect(screen.getByText('Cloud & Data')).toBeTruthy()
-    expect(screen.getByText('Presentations')).toBeTruthy()
-    expect(screen.getByText('AI & Media')).toBeTruthy()
+    expect(screen.queryByText('Capability presets')).toBeNull()
+    expect(screen.queryByText('Default')).toBeNull()
+    expect(screen.queryByText('Security / Codex Security')).toBeNull()
     // The catalog defaults to the connected filter: non-operational adapters
     // stay out of the default view instead of flooding it with "not installed".
     expect(screen.queryByText('Adapter not installed')).toBeNull()
