@@ -54,6 +54,7 @@ interface RemoteConnection {
   disposeProvider: () => void
 }
 
+/** Binding and liveness limits for the built-in owner-local living HTTP bridge. */
 export interface LivingHttpBridgeConfig {
   readonly host: string
   readonly port: number
@@ -214,16 +215,28 @@ export class LivingHttpBridge {
     this.sweep.unref?.()
   }
 
+  /**
+   * Resolve the actual endpoint after the HTTP server has bound.
+   * @returns Fully qualified base endpoint for generated runtimes.
+   */
   endpoint(): Promise<string> {
     return this.readyPromise
   }
 
+  /**
+   * Reject a manifest mutation that no longer matches an attached runtime.
+   * @param manifest - Candidate manifest about to become durable.
+   */
   assertManifestCompatible(manifest: LivingCreationManifest): void {
     const connection = this.connections.get(manifest.id)
     if (connection === undefined) return
     assertCapabilities(manifest, connection.capabilities)
   }
 
+  /**
+   * Disconnect a runtime when its persisted control link changed.
+   * @param manifest - Newly committed manifest for the creation.
+   */
   reconcile(manifest: LivingCreationManifest): void {
     const connection = this.connections.get(manifest.id)
     if (connection === undefined) return
@@ -233,6 +246,11 @@ export class LivingHttpBridge {
     }
   }
 
+  /**
+   * Detach one remote runtime and reject all actions still waiting on it.
+   * @param id - Creation whose runtime should be detached.
+   * @param reason - Error propagated to pending action callers.
+   */
   disconnect(id: LivingCreationIdType, reason = 'living runtime disconnected'): void {
     const connection = this.connections.get(id)
     if (connection === undefined) return
@@ -246,6 +264,7 @@ export class LivingHttpBridge {
     try { connection.disposeProvider() } catch { /* provider cleanup is isolated */ }
   }
 
+  /** Stop the control bridge and detach every connected generated runtime. */
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
