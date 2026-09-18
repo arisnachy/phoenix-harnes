@@ -330,7 +330,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         var psi = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
             Program.RuntimeRoot,
             browserControl.DescriptorPath);
-        DesktopLog.Write($"Launching managed runtime through PowerShell supervisor: {psi.FileName} {string.Join(' ', psi.ArgumentList)}");
+        DesktopLog.Write($"Launching managed runtime through PowerShell supervisor: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
 
         ownedRuntime = Process.Start(psi);
         if (ownedRuntime is null)
