@@ -120,6 +120,9 @@
 # resolves `goals` on the host and an entry-local realm here would hide it. The
 # registry is keyed by session anyway, so one host instance serves every
 # session. What a preset chooses is whether its agent can call the goal tool.
+- id: tool-quality
+  name: '@phoenix-ai/dsh-tool-quality'
+
 - id: tool-goal
   name: '@phoenix-ai/dsh-tool-goal'
   config:
