@@ -21,7 +21,8 @@ root="${RUNNER_TEMP}/dsh-bubblewrap"
 
 sudo apt-get update -qq
 expected_sha="$(
-  apt-cache show "bubblewrap=${BUBBLEWRAP_VERSION}"     | awk '$1 == "SHA256:" { print $2; exit }'
+  apt-cache show "bubblewrap=${BUBBLEWRAP_VERSION}" \
+    | awk '$1 == "SHA256:" { sha = $2 } END { if (sha != "") print sha }'
 )"
 if [[ ! "${expected_sha}" =~ ^[0-9a-f]{64}$ ]]; then
   echo "could not resolve SHA256 for bubblewrap ${BUBBLEWRAP_VERSION} from signed APT metadata" >&2
