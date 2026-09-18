@@ -50,7 +50,7 @@ interface RemoteConnection {
   readonly pending: Map<string, PendingCommand>
   state: LivingState
   lastSeen: number
-  emit?: (name: string, data: LivingJson) => void
+  emit: ((name: string, data: LivingJson) => void) | undefined
   disposeProvider: () => void
 }
 
@@ -179,7 +179,7 @@ export class LivingHttpBridge {
 
   constructor(
     private readonly registry: BridgeRegistry,
-    private readonly config: LivingHttpBridgeConfig,
+    config: LivingHttpBridgeConfig,
     private readonly warn: (message: string) => void = () => undefined,
   ) {
     if (!loopbackHost(config.host)) {
@@ -347,6 +347,7 @@ export class LivingHttpBridge {
       pending: new Map(),
       state,
       lastSeen: Date.now(),
+      emit: undefined,
       disposeProvider: () => undefined,
     }
 
