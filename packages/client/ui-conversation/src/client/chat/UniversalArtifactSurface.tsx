@@ -28,6 +28,7 @@ function imageAttachment(value: unknown): ImageAttachmentRef | undefined {
 
 /** Render any supported artifact in one adaptive, execution-aware surface. */
 export function UniversalArtifactSurface({ artifact, renderMessageImages, loadImage, onRun, onStop }: UniversalArtifactSurfaceProps) {
+  const isHtml = artifact.kind === 'html'
   const [expanded, setExpanded] = useState(false)
   const [running, setRunning] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -68,37 +69,39 @@ export function UniversalArtifactSurface({ artifact, renderMessageImages, loadIm
   }
   return (
     <section
-      className={css.root}
+      className={`${css.root} ${isHtml ? css.htmlRoot : ''}`}
       data-universal-artifact={artifact.id}
       data-artifact-kind={artifact.kind}
-      data-artifact-height={expanded ? 'expanded' : 'auto'}
-      style={{ minHeight: artifact.size.minHeight }}
+      data-artifact-height={isHtml ? 'auto' : expanded ? 'expanded' : 'auto'}
+      style={isHtml ? undefined : { minHeight: artifact.size.minHeight }}
     >
       <div className={css.header}>
         <div className={css.heading}>
           <strong>{artifact.title}</strong>
-          <span>{artifact.language ?? artifact.kind}</span>
+          {!isHtml && <span>{artifact.language ?? artifact.kind}</span>}
         </div>
-        <div className={css.controls}>
-          <Button variant="outline" onClick={copy} disabled={!canCopy}>{copied ? 'Copied' : 'Copy'}</Button>
-          <Button variant="outline" onClick={() => { void download() }}>Download</Button>
-          {artifact.executable && onRun !== undefined && <Button variant="outline" onClick={execute} disabled={running}>{running ? 'Running…' : 'Run'}</Button>}
-          {artifact.executable && onRun !== undefined && <Button variant="outline" onClick={stop} disabled={!running}>Stop</Button>}
-          <Button
-            variant="outline"
-            aria-label={expanded ? 'Collapse' : 'Expand'}
-            aria-expanded={expanded}
-            onClick={() => { setExpanded(value => !value) }}
-          >
-            {expanded ? 'Collapse' : 'Expand'}
-          </Button>
-        </div>
+        {!isHtml && (
+          <div className={css.controls}>
+            <Button variant="outline" onClick={copy} disabled={!canCopy}>{copied ? 'Copied' : 'Copy'}</Button>
+            <Button variant="outline" onClick={() => { void download() }}>Download</Button>
+            {artifact.executable && onRun !== undefined && <Button variant="outline" onClick={execute} disabled={running}>{running ? 'Running…' : 'Run'}</Button>}
+            {artifact.executable && onRun !== undefined && <Button variant="outline" onClick={stop} disabled={!running}>Stop</Button>}
+            <Button
+              variant="outline"
+              aria-label={expanded ? 'Collapse' : 'Expand'}
+              aria-expanded={expanded}
+              onClick={() => { setExpanded(value => !value) }}
+            >
+              {expanded ? 'Collapse' : 'Expand'}
+            </Button>
+          </div>
+        )}
       </div>
       <div className={css.content}>
         <HardnessArtifactBody
           mime={artifact.mime}
           data={artifact.data}
-          expanded={expanded}
+          expanded={isHtml ? false : expanded}
           title={artifact.title}
           executable={artifact.executable}
           {...renderMessageImages === undefined ? {} : { renderMessageImages }}
