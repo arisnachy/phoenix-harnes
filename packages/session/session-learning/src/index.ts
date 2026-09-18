@@ -179,9 +179,9 @@ export class LearningMemoryService extends Service {
     // ledger's intelligent-forgetting policy.
     const durable = this.cognitive.recall({
       ...project === undefined ? {} : { projectId: project },
-      layers: ['semantic', 'procedural'],
-      limit,
-    })
+      layers: ['semantic'],
+      limit: Math.min(64, limit * 2),
+    }).filter(hit => /^(?:user\.(?:identity|preference)\.|phoenix\.identity\.|assistant\.identity\.)/u.test(hit.record.subject ?? ''))
     const unique = new Map<string, CognitiveMemoryHit>()
     for (const hit of [...relevant, ...durable]) {
       if (!unique.has(String(hit.record.id))) unique.set(String(hit.record.id), hit)
