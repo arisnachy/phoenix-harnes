@@ -186,6 +186,11 @@ describe('connectors settings section', () => {
           version: '1.0.0',
           status: 'active' as const,
           trust: 'registry-listed' as const,
+          icons: [{
+            src: 'https://cdn.example.com/calendar.png',
+            mimeType: 'image/png' as const,
+            sizes: ['48x48'],
+          }],
           transports: ['streamable-http' as const],
           packages: [],
           repositoryUrl: 'https://github.com/example/calendar-mcp',
@@ -200,6 +205,10 @@ describe('connectors settings section', () => {
     expect(await screen.findByText('Example Calendar MCP')).toBeTruthy()
     expect(mcpRegistry.search).toHaveBeenCalledWith({ query: 'calendar', limit: 12 })
     expect(screen.getByText('Registry-listed · approval required')).toBeTruthy()
+    expect(screen.getByText('streamable-http')).toBeTruthy()
+    const logo = document.querySelector('article[data-registry-server="io.example/calendar"] img')
+    expect(logo?.getAttribute('src')).toBe('https://cdn.example.com/calendar.png')
+    expect(logo?.getAttribute('referrerpolicy')).toBe('no-referrer')
     expect(screen.getByRole('link', { name: 'View source' }).getAttribute('href'))
       .toBe('https://github.com/example/calendar-mcp')
   })
