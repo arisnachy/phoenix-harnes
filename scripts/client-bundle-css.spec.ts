@@ -9,11 +9,13 @@ import { describe, expect, it } from 'vitest'
 import { clientBundle } from '../packages/client/tsdown.client.ts'
 
 type ResolveCss = (source: string, importer?: string) => string | { id: string; external: boolean } | null
+type LoadCss = (this: { addWatchFile(id: string): void }, id: string) => string | null | Promise<string | null>
+type FilteredHook<T> = T | { order?: string; filter?: { id?: RegExp }; handler: T }
 
 interface CssPlugin {
   name: string
-  resolveId?: ResolveCss | { order?: string; handler: ResolveCss }
-  load?: (this: { addWatchFile(id: string): void }, id: string) => string | null | Promise<string | null>
+  resolveId?: FilteredHook<ResolveCss>
+  load?: FilteredHook<LoadCss>
 }
 
 function resolveCss(plugin: CssPlugin, source: string, importer?: string) {
@@ -21,6 +23,17 @@ function resolveCss(plugin: CssPlugin, source: string, importer?: string) {
   return typeof plugin.resolveId === 'function'
     ? plugin.resolveId(source, importer)
     : plugin.resolveId.handler(source, importer)
+}
+
+function loadCss(
+  plugin: CssPlugin,
+  context: { addWatchFile(id: string): void },
+  id: string,
+) {
+  if (plugin.load === undefined) return null
+  return typeof plugin.load === 'function'
+    ? plugin.load.call(context, id)
+    : plugin.load.handler.call(context, id)
 }
 
 function cssPlugin(): CssPlugin {
@@ -50,7 +63,7 @@ describe('client bundle CSS Modules', () => {
       }
       const watched: string[] = []
 
-      const output = await plugin.load.call({ addWatchFile: id => watched.push(id) }, virtualId)
+      const output = await loadCss(plugin, { addWatchFile: id => watched.push(id) }, virtualId)
 
       expect(watched).toEqual([stylesheet])
       expect(output).toContain('data-plugin-css')
@@ -74,7 +87,7 @@ describe('client bundle global CSS', () => {
       }
       const watched: string[] = []
 
-      const output = await plugin.load.call({ addWatchFile: id => watched.push(id) }, virtualId)
+      const output = await loadCss(plugin, { addWatchFile: id => watched.push(id) }, virtualId)
 
       expect(watched).toEqual([stylesheet])
       expect(output).toContain('data-plugin-css')
@@ -97,7 +110,7 @@ describe('client bundle global CSS', () => {
       }
       const watched: string[] = []
 
-      const output = await plugin.load.call({ addWatchFile: id => watched.push(id) }, virtualId)
+      const output = await loadCss(plugin, { addWatchFile: id => watched.push(id) }, virtualId)
 
       expect(watched).toEqual([stylesheet])
       expect(output).toContain('export default "body{color:red}"')
