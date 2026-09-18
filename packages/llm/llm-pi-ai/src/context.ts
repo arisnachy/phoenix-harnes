@@ -48,7 +48,34 @@ function safeJsonStringify(value: unknown): string {
   }
 }
 
+/**
+ * Tool definitions are immutable catalog values throughout a request
+ * lifecycle. Cache serialized size by identity so every busy-turn admission
+ * does not stringify the same large schemas repeatedly on the browser/host
+ * critical path.
+ */
+const JSON_CHAR_LENGTH_CACHE = new WeakMap<object, number>()
+
+function safeJsonCharLength(value: unknown): number {
+  if (typeof value !== 'object' || value === null) return safeJsonStringify(value).length
+  const cached = JSON_CHAR_LENGTH_CACHE.get(value)
+  if (cached !== undefined) return cached
+  const length = safeJsonStringify(value).length
+  JSON_CHAR_LENGTH_CACHE.set(value, length)
+  return length
+}
+
+function estimateToolsChars(tools: NonNullable<GenerateOptions['tools']>): number {
+  let chars = 2
+  for (const tool of tools) chars += safeJsonCharLength(tool) + 1
+  return chars
+}
+
+const CONTENT_BLOCKS_CHAR_CACHE = new WeakMap<object, number>()
+
 function estimateContentBlocksChars(blocks: readonly ContentBlock[]): number {
+  const cached = CONTENT_BLOCKS_CHAR_CACHE.get(blocks)
+  if (cached !== undefined) return cached
   let chars = 0
   for (const block of blocks) {
     switch (block.type) {
@@ -72,6 +99,7 @@ function estimateContentBlocksChars(blocks: readonly ContentBlock[]): number {
         break
     }
   }
+  CONTENT_BLOCKS_CHAR_CACHE.set(blocks, chars)
   return chars
 }
 
@@ -85,19 +113,30 @@ export function estimateGenerateOptionsTokens(options: GenerateOptions): number 
   let chars = options.system?.length ?? 0
   for (const message of options.messages) chars += estimateContentBlocksChars(message.content)
   if (options.tools !== undefined && options.tools.length > 0) {
-    chars += safeJsonStringify(options.tools).length
+    chars += estimateToolsChars(options.tools)
   }
   return Math.ceil(chars / ESTIMATED_CHARS_PER_TOKEN)
 }
 
+const COMPACT_SCHEMA_CACHE = new WeakMap<object, unknown>()
+
 function compactSchemaForPressure(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(compactSchemaForPressure)
   if (typeof value !== 'object' || value === null) return value
+  const cached = COMPACT_SCHEMA_CACHE.get(value)
+  if (cached !== undefined) return cached
+
+  if (Array.isArray(value)) {
+    const compacted = value.map(compactSchemaForPressure)
+    COMPACT_SCHEMA_CACHE.set(value, compacted)
+    return compacted
+  }
+
   const compacted: Record<string, unknown> = {}
   for (const [key, child] of Object.entries(value)) {
     if (SCHEMA_DECORATION_KEYS.has(key)) continue
     compacted[key] = compactSchemaForPressure(child)
   }
+  COMPACT_SCHEMA_CACHE.set(value, compacted)
   return compacted
 }
 
@@ -106,14 +145,40 @@ function boundedToolDescription(value: string): string {
   return value.slice(0, PRESSURE_TOOL_DESCRIPTION_MAX_CHARS - 1).trimEnd() + '…'
 }
 
-function compactToolsForPressure(
-  tools: NonNullable<GenerateOptions['tools']>,
-): NonNullable<GenerateOptions['tools']> {
-  return tools.map(tool => ({
+type GenerateTool = NonNullable<GenerateOptions['tools']>[number]
+
+interface CachedPressureTool {
+  readonly description: string
+  readonly parameters: unknown
+  readonly compacted: GenerateTool
+}
+
+const COMPACT_TOOL_CACHE = new WeakMap<object, CachedPressureTool>()
+
+function compactToolForPressure(tool: GenerateTool): GenerateTool {
+  const cached = COMPACT_TOOL_CACHE.get(tool)
+  if (cached !== undefined
+    && cached.description === tool.description
+    && cached.parameters === tool.parameters) {
+    return cached.compacted
+  }
+  const compacted: GenerateTool = {
     name: tool.name,
     description: boundedToolDescription(tool.description),
     parameters: compactSchemaForPressure(tool.parameters) as Record<string, unknown>,
-  }))
+  }
+  COMPACT_TOOL_CACHE.set(tool, {
+    description: tool.description,
+    parameters: tool.parameters,
+    compacted,
+  })
+  return compacted
+}
+
+function compactToolsForPressure(
+  tools: NonNullable<GenerateOptions['tools']>,
+): NonNullable<GenerateOptions['tools']> {
+  return tools.map(compactToolForPressure)
 }
 
 function compactSkillCatalogMessage(message: Message): Message {
@@ -205,7 +270,7 @@ function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetToken
       if (name.includes(word)) score += 200
       else if (description.includes(word)) score += 20
     }
-    return { tool, index, score, chars: safeJsonStringify(tool).length + 1 }
+    return { tool, index, score, chars: safeJsonCharLength(tool) + 1 }
   }).sort((left, right) => right.score - left.score || left.index - right.index)
 
   const selected: { tool: NonNullable<GenerateOptions['tools']>[number]; index: number }[] = []
