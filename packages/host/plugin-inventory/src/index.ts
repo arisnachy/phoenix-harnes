@@ -18,8 +18,16 @@ import {
   type LocalModelRuntimeManager,
   type LocalModelRuntimeSnapshot,
 } from './local-model/index.ts'
+import { searchOfficialMcpRegistry } from './mcp-registry.ts'
+import { ManagedMcpController } from './mcp-managed.ts'
 import type {
   ChatGptWebSnapshot,
+  McpConnectorHubSnapshot,
+  McpConnectorRuntimeEntry,
+  McpRegistryInstallReceipt,
+  McpRegistryInstallRequest,
+  McpRegistrySearchRequest,
+  McpRegistrySearchSnapshot,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
   PhoenixLocalModelRequest,
@@ -87,11 +95,13 @@ export class PluginInventoryGateway extends TypertRemoteService {
 
   private readonly localModel: Promise<LocalModelRuntimeManager>
   private readonly chatGptWeb: ChatGptWebIntegration
+  private readonly managedMcp: ManagedMcpController
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
     this.localModel = createNodeLocalModelRuntimeManager()
     this.chatGptWeb = createChatGptWebIntegration()
+    this.managedMcp = new ManagedMcpController(ctx.loader)
     void ctx.effect(async () => {
       try {
         await this.chatGptWeb.restore()
@@ -152,6 +162,51 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('localModelState')
   async localModelState(): Promise<PhoenixLocalModelSnapshot> {
     return publicLocalSnapshot((await this.localModel).snapshot())
+  }
+
+
+  /**
+   * Search the public Official MCP Registry from the Host. The browser never
+   * calls the registry directly, avoiding cross-origin failures and centralizing
+   * timeout, cache, and provenance policy.
+   */
+  @Remote('searchMcpRegistry')
+  async searchMcpRegistry(request: McpRegistrySearchRequest): Promise<McpRegistrySearchSnapshot> {
+    return searchOfficialMcpRegistry(request)
+  }
+
+
+  /**
+   * Return the current MCP lifecycle plus PHOENIX-managed remote connectors.
+   * The projection excludes credentials, headers, provider errors, and local paths.
+   * @returns Secret-free connector hub state for Settings.
+   */
+  @Remote('mcpConnectorHubState')
+  async mcpConnectorHubState(): Promise<McpConnectorHubSnapshot> {
+    const service = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { list(): readonly McpConnectorRuntimeEntry[] }
+      | undefined
+    return {
+      runtime: service === undefined ? [] : service.list().map(entry => ({
+        serverName: entry.serverName,
+        transport: entry.transport,
+        status: entry.status,
+        toolNames: [...entry.toolNames],
+        ...(entry.reasonCode === undefined ? {} : { reasonCode: entry.reasonCode }),
+      })),
+      managed: [...await this.managedMcp.snapshot()],
+    }
+  }
+
+  /**
+   * Install one registry-listed Streamable HTTP MCP after Host-side revalidation.
+   * Browser arguments cannot supply a URL, executable, environment, or headers.
+   * @param request - Exact registry identity selected from a search result.
+   * @returns Idempotent managed connector installation receipt.
+   */
+  @Remote('installMcpRegistryServer')
+  async installMcpRegistryServer(request: McpRegistryInstallRequest): Promise<McpRegistryInstallReceipt> {
+    return this.managedMcp.install(request)
   }
 
   /**
