@@ -25,6 +25,7 @@ import { createConnectorListTool } from './connector-list-tool.ts'
 import { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 import type { McpRegistryDiscoveryService } from './connector-discover-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
+import { installResponseHygiene } from './response-hygiene.ts'
 
 export { indexTools } from './tool-adapter.ts'
 export type { ToolAtlasIndexOptions, ToolChangeSource } from './tool-adapter.ts'
@@ -191,6 +192,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     if (!modelTools) {
       // Capability projections and the mission/proactivity runtimes are host-owned.
       // Do not repeat them when several sessions mount full presets in one process.
+      disposers.push(installResponseHygiene(ctx))
       disposers.push(indexOpenClawExtensions(hardness))
       disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow'] }))
       disposers.push(await indexSkills(skills, hardness))
