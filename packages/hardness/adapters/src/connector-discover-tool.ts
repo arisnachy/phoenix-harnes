@@ -2,6 +2,7 @@ import type { McpConnectorEntry, McpConnectorRegistry } from '@phoenix-ai/dsh-mc
 import {
   defineTool,
   ToolArgsError,
+  type JsonValue,
   type ToolDefinition,
 } from '@phoenix-ai/dsh-tools'
 
@@ -67,10 +68,26 @@ function actionFor(candidate: McpRegistryCandidateView, entry: McpConnectorEntry
 function withInstalledState(
   candidate: McpRegistryCandidateView,
   installed: readonly McpConnectorEntry[],
-): Record<string, unknown> {
+): JsonValue {
   const entry = matchInstalled(candidate, installed)
   return {
-    ...candidate,
+    name: candidate.name,
+    title: candidate.title,
+    description: candidate.description,
+    version: candidate.version,
+    status: candidate.status,
+    trust: candidate.trust,
+    transports: [...candidate.transports],
+    packages: candidate.packages.map(pkg => ({
+      registryType: pkg.registryType,
+      identifier: pkg.identifier,
+      transport: pkg.transport,
+      ...(pkg.version === undefined ? {} : { version: pkg.version }),
+      ...(pkg.runtimeHint === undefined ? {} : { runtimeHint: pkg.runtimeHint }),
+    })),
+    ...(candidate.repositoryUrl === undefined ? {} : { repositoryUrl: candidate.repositoryUrl }),
+    ...(candidate.websiteUrl === undefined ? {} : { websiteUrl: candidate.websiteUrl }),
+    ...(candidate.remoteUrl === undefined ? {} : { remoteUrl: candidate.remoteUrl }),
     action: actionFor(candidate, entry),
     ...(entry === undefined ? {} : {
       installedConnectorId: `mcp:${entry.serverName}`,
@@ -88,6 +105,9 @@ function withInstalledState(
  * Registry metadata remains untrusted external data: a registry listing is
  * provenance, not authorization to execute code and not proof that the named
  * product vendor authored the server.
+ * @param mcpConnectors - Secret-free inventory of currently configured MCP connectors.
+ * @param registry - Host-owned Official MCP Registry search service, when available.
+ * @returns A model-facing discovery tool that never installs code by itself.
  */
 export function createConnectorDiscoverTool(
   mcpConnectors?: McpConnectorListService,
@@ -125,10 +145,10 @@ export function createConnectorDiscoverTool(
       const limit = Math.min(12, Math.trunc(rawLimit))
       if (registry === undefined) {
         return {
-          kind: 'connector_discovery',
-          source: 'official-mcp-registry',
+          kind: 'connector_discovery' as const,
+          source: 'official-mcp-registry' as const,
           query,
-          registry_status: 'unavailable',
+          registry_status: 'unavailable' as const,
           message: 'Official MCP Registry search is unavailable in this Phoenix host. Do not substitute arbitrary GitHub MCP code automatically.',
           candidates: [],
         }
@@ -137,20 +157,20 @@ export function createConnectorDiscoverTool(
         const result = await registry.searchMcpRegistry({ query, limit })
         const installed = mcpConnectors?.list() ?? []
         return {
-          kind: 'connector_discovery',
+          kind: 'connector_discovery' as const,
           source: result.source,
           query,
-          registry_status: 'ok',
+          registry_status: 'ok' as const,
           fetched_at: result.fetchedAt,
           stale: result.stale,
           candidates: result.candidates.map(candidate => withInstalledState(candidate, installed)),
         }
       } catch {
         return {
-          kind: 'connector_discovery',
-          source: 'official-mcp-registry',
+          kind: 'connector_discovery' as const,
+          source: 'official-mcp-registry' as const,
           query,
-          registry_status: 'unavailable',
+          registry_status: 'unavailable' as const,
           message: 'The Official MCP Registry could not be reached. Do not substitute arbitrary GitHub MCP code automatically.',
           candidates: [],
         }
