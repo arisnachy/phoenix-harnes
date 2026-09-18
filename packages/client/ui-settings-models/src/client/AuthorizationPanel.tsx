@@ -229,41 +229,6 @@ function connectorStatus(
   return { text: t('availableStatus'), className: '' }
 }
 
-function LiveConnectorCard({ connector, t }: {
-  connector: ConnectorTelemetry
-  t: ConnectorsSettingsSectionProps['connectorT']
-}): ReactNode {
-  const status = connectorStatus(connector, t)
-  const installUrl = safeExternalHref(connector.installUrl)
-  return (
-    <article className={connectorStyles['connectorCard']}>
-      <div className={connectorStyles['connectorTop']}>
-        {connector.iconUrl === undefined ? (
-          <div className={connectorStyles['connectorFallback']} aria-hidden="true">{connector.name.slice(0, 1).toUpperCase()}</div>
-        ) : (
-          <picture>
-            {connector.iconUrlDark === undefined ? null : <source media="(prefers-color-scheme: dark)" srcSet={connector.iconUrlDark} />}
-            <img className={connectorStyles['connectorIcon']} src={connector.iconUrl} alt={connector.name} />
-          </picture>
-        )}
-        <div className={connectorStyles['connectorIdentity']}>
-          <span className={connectorStyles['connectorName']}>{connector.name}</span>
-          {connector.category === undefined ? null : <span className={connectorStyles['connectorCategory']}>{connector.category}</span>}
-        </div>
-      </div>
-      {connector.description === undefined ? null : <p className={connectorStyles['connectorDescription']}>{connector.description}</p>}
-      <div className={connectorStyles['connectorFooter']}>
-        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
-        {installUrl === undefined ? null : (
-          <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer" aria-label={`${connector.installed === true ? 'Manage' : 'Connect'} ${connector.name}`}>
-            {connector.installed === true ? t('configure') : t('authorize')}
-          </a>
-        )}
-      </div>
-    </article>
-  )
-}
-
 function entryMatchesFamily(entry: Entry, family: string | undefined): boolean {
   if (family === undefined) return false
   const needle = normalize(family)
