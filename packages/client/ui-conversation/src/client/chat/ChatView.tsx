@@ -198,7 +198,7 @@ export function ChatView({
     return chatNodes.some((node) => {
       if (node.kind !== 'user') return false
       const user = node.data as UserMessageNode
-      return user.time >= floor && user.source.kind === 'user'
+      return user.time >= floor
     })
   }, [chatNodes, pendingSubmit])
 
