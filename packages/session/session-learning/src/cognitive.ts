@@ -125,7 +125,7 @@ export interface CognitiveMemoryHit {
  * explicit search: weak stale memories remain auditable/searchable but stop
  * consuming the model-facing working context.
  */
-export function automaticRecallStrength(record: CognitiveMemoryRecord, referenceTime: number): number {
+function automaticRecallStrength(record: CognitiveMemoryRecord, referenceTime: number): number {
   if (record.status !== 'active') return 0
   const ageMillis = Math.max(0, referenceTime - record.lastObservedAt)
   const ageDays = ageMillis / 86_400_000
@@ -147,7 +147,7 @@ export function automaticRecallStrength(record: CognitiveMemoryRecord, reference
  * policy. Identity, strong durable preferences, missions, errors and pending
  * work are protected from ordinary decay.
  */
-export function isAutomaticallyRecallable(record: CognitiveMemoryRecord, referenceTime: number): boolean {
+function isAutomaticallyRecallable(record: CognitiveMemoryRecord, referenceTime: number): boolean {
   if (record.status !== 'active') return false
   if (record.kind === 'pending' || record.kind === 'mission' || record.kind === 'error' || record.layers.includes('prospective')) return true
   const subject = record.subject ?? ''
