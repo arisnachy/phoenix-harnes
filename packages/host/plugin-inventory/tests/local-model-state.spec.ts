@@ -24,8 +24,48 @@ describe('Phoenix Local state', () => {
 
     await expect(store.load()).resolves.toEqual({
       mode: 'on-demand',
-      selectedModelId: 'qwen3.5-4b-q4-k-m',
+      selectedModelId: 'gemma-4-e2b-it-q4-0',
       installedModelIds: [],
+    })
+  })
+
+  it('migrates the unused legacy Qwen default to Gemma 4', async () => {
+    const store = createLocalModelStateStore({
+      statePath: '/phoenix/local-models/state.json',
+      readFile: vi.fn().mockResolvedValue(JSON.stringify({
+        mode: 'on-demand',
+        selectedModelId: 'qwen3.5-4b-q4-k-m',
+        installedModelIds: [],
+      })),
+      writeFile: vi.fn(),
+      rename: vi.fn(),
+      mkdir: vi.fn(),
+    })
+
+    await expect(store.load()).resolves.toEqual({
+      mode: 'on-demand',
+      selectedModelId: 'gemma-4-e2b-it-q4-0',
+      installedModelIds: [],
+    })
+  })
+
+  it('preserves Qwen when it is already installed', async () => {
+    const store = createLocalModelStateStore({
+      statePath: '/phoenix/local-models/state.json',
+      readFile: vi.fn().mockResolvedValue(JSON.stringify({
+        mode: 'on-demand',
+        selectedModelId: 'qwen3.5-4b-q4-k-m',
+        installedModelIds: ['qwen3.5-4b-q4-k-m'],
+      })),
+      writeFile: vi.fn(),
+      rename: vi.fn(),
+      mkdir: vi.fn(),
+    })
+
+    await expect(store.load()).resolves.toEqual({
+      mode: 'on-demand',
+      selectedModelId: 'qwen3.5-4b-q4-k-m',
+      installedModelIds: ['qwen3.5-4b-q4-k-m'],
     })
   })
 
@@ -43,7 +83,7 @@ describe('Phoenix Local state', () => {
 
     await store.save({
       mode: 'off',
-      selectedModelId: 'qwen3.5-4b-q4-k-m',
+      selectedModelId: 'gemma-4-e2b-it-q4-0',
       installedModelIds: [],
     })
 
