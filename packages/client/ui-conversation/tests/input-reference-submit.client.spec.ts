@@ -181,6 +181,29 @@ describe('reference submission', () => {
 })
 
 describe('submit transaction hardening', () => {
+  it('publishes an ordinary prompt optimistically before Host admission settles', async () => {
+    let settle!: (outcome: SubmitOutcome) => void
+    const sink = vi.fn(() => new Promise<SubmitOutcome>((resolve) => { settle = resolve }))
+    const shell = new SessionInputShell({
+      actx: {} as ClientContext,
+      defaultSink: sink,
+      commandImages,
+    })
+
+    shell.setDraft('mensaje inmediato')
+    shell.submit('queue')
+
+    expect(shell.snapshot.phase).toBe('submitting')
+    expect(shell.snapshot.pendingSubmit).toMatchObject({ text: 'mensaje inmediato' })
+    expect(shell.snapshot.pendingSubmit?.startedAt).toBeTypeOf('number')
+    expect(sink).toHaveBeenCalledTimes(1)
+
+    settle({ kind: 'error', text: 'host refused' })
+    await vi.waitFor(() => { expect(shell.snapshot.phase).toBe('plain') })
+    expect(shell.snapshot.pendingSubmit).toBeUndefined()
+    expect(shell.snapshot.draft).toBe('mensaje inmediato')
+  })
+
   it('sends one image-only prompt per settlement, ignoring Enter during the round-trip', async () => {
     let settle!: (outcome: SubmitOutcome) => void
     const sink = vi.fn(() => new Promise<SubmitOutcome>((resolve) => { settle = resolve }))
