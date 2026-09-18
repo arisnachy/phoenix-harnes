@@ -63,6 +63,7 @@ describe('Phoenix tsdown performance policy', () => {
       const optimized = optimizePhoenixTsdownInput({ cwd, plugins: [{ name: 'tsdown:deps' }] })
       expect(matchesExternal(optimized.external, '@phoenix-ai/cordis-plugin-loader')).toBe(true)
       expect(matchesExternal(optimized.external, '@phoenix-ai/cordis-plugin-include')).toBe(false)
+      expect(matchesExternal(optimized.external, '@phoenix-ai/cordis-plugin-include/subpath')).toBe(true)
       expect(JSON.stringify(optimized.plugins)).not.toContain('tsdown:deps')
     } finally {
       await rm(cwd, { recursive: true, force: true })
