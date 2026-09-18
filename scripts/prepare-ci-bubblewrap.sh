@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ubuntu's package transaction scans the hosted image's full dpkg database and
-# runs post-install hooks. CI needs only the signed-archive payload, so pin and
-# verify that payload before extracting it into the ephemeral runner directory.
-readonly BUBBLEWRAP_VERSION='0.9.0-1ubuntu0.1'
-readonly BUBBLEWRAP_SHA256='1b506492bd9c7fd0cdb4f02ac822f1d3e336b0aead5113c1239baf8db5db562a'
-readonly BUBBLEWRAP_URL="https://security.ubuntu.com/ubuntu/pool/main/b/bubblewrap/bubblewrap_${BUBBLEWRAP_VERSION}_amd64.deb"
+# CI needs only bubblewrap's payload, not a system install. Pin the Noble
+# security-update version, resolve it through APT's signed repository metadata,
+# verify the downloaded archive against that metadata, then extract it into the
+# ephemeral runner directory. This survives Ubuntu rotating superseded .deb
+# files out of the pool without weakening integrity checks.
+readonly BUBBLEWRAP_VERSION='0.9.0-1ubuntu0.3'
 
 : "${RUNNER_TEMP:?prepare-ci-bubblewrap requires RUNNER_TEMP}"
 : "${GITHUB_PATH:?prepare-ci-bubblewrap requires GITHUB_PATH}"
@@ -19,8 +19,27 @@ fi
 archive="${RUNNER_TEMP}/bubblewrap_${BUBBLEWRAP_VERSION}_amd64.deb"
 root="${RUNNER_TEMP}/dsh-bubblewrap"
 
-curl --fail --silent --show-error --location --retry 3 --retry-all-errors --output "$archive" "$BUBBLEWRAP_URL"
-printf '%s  %s\n' "$BUBBLEWRAP_SHA256" "$archive" | sha256sum --check --status
+sudo apt-get update -qq
+expected_sha="$(
+  apt-cache show "bubblewrap=${BUBBLEWRAP_VERSION}"     | awk '$1 == "SHA256:" { print $2; exit }'
+)"
+if [[ ! "${expected_sha}" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "could not resolve SHA256 for bubblewrap ${BUBBLEWRAP_VERSION} from signed APT metadata" >&2
+  exit 1
+fi
+
+rm -f "$archive"
+(
+  cd "$RUNNER_TEMP"
+  apt-get download "bubblewrap=${BUBBLEWRAP_VERSION}" >/dev/null
+)
+if [[ ! -f "$archive" ]]; then
+  echo "APT did not produce expected bubblewrap archive: $archive" >&2
+  exit 1
+fi
+printf '%s  %s\n' "$expected_sha" "$archive" | sha256sum --check --status
+
+rm -rf "$root"
 mkdir -p "$root"
 dpkg-deb --extract "$archive" "$root"
 printf '%s\n' "$root/usr/bin" >> "$GITHUB_PATH"
