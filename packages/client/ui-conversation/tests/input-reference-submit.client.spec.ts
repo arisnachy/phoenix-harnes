@@ -181,6 +181,61 @@ describe('reference submission', () => {
 })
 
 describe('submit transaction hardening', () => {
+  it('publishes an ordinary prompt immediately before Host admission settles', async () => {
+    let settle!: (outcome: SubmitOutcome) => void
+    const sink = vi.fn(() => new Promise<SubmitOutcome>((resolve) => { settle = resolve }))
+    const shell = new SessionInputShell({
+      actx: {} as ClientContext,
+      defaultSink: sink,
+      commandImages,
+    })
+
+    shell.setDraft('mensaje inmediato')
+    shell.submit('queue')
+
+    expect(shell.snapshot.phase).toBe('submitting')
+    expect(shell.snapshot.pendingSubmit).toMatchObject({ text: 'mensaje inmediato' })
+    expect(shell.snapshot.pendingSubmit?.startedAt).toBeTypeOf('number')
+    expect(sink).toHaveBeenCalledTimes(1)
+
+    settle({ kind: 'success' })
+    await vi.waitFor(() => { expect(shell.snapshot.phase).toBe('plain') })
+  })
+
+  it('releases a stuck Host admission and keeps the draft retryable', async () => {
+    vi.useFakeTimers()
+    try {
+      let signal: AbortSignal | undefined
+      const sink = vi.fn((
+        _text: string,
+        _imageIds: readonly DraftAttachmentId[],
+        _mode: 'queue' | 'steer',
+        requestSignal: AbortSignal,
+      ) => {
+        signal = requestSignal
+        return new Promise<SubmitOutcome>(() => {})
+      })
+      const shell = new SessionInputShell({
+        actx: {} as ClientContext,
+        defaultSink: sink,
+        commandImages,
+      })
+      shell.setDraft('no me congeles')
+      shell.submit('steer')
+
+      expect(shell.snapshot.phase).toBe('submitting')
+      await vi.advanceTimersByTimeAsync(8_000)
+
+      expect(shell.snapshot.phase).toBe('plain')
+      expect(shell.snapshot.draft).toBe('no me congeles')
+      expect(shell.snapshot.pendingSubmit).toBeUndefined()
+      expect(signal?.aborted).toBe(true)
+      expect(shell.notices.getSnapshot()?.text).toContain('timed out')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('sends one image-only prompt per settlement, ignoring Enter during the round-trip', async () => {
     let settle!: (outcome: SubmitOutcome) => void
     const sink = vi.fn(() => new Promise<SubmitOutcome>((resolve) => { settle = resolve }))
