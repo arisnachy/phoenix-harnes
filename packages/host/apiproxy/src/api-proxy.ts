@@ -1824,17 +1824,33 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }),
         )
         const summaries: SessionSummary[] = []
-        let rejected = false
-        let failure: unknown
-        for (const result of settled) {
+        for (let index = 0; index < settled.length; index++) {
+          const result = settled[index]!
           if (result.status === 'fulfilled') {
             summaries.push(result.value)
-          } else if (!rejected) {
-            rejected = true
-            failure = result.reason
+            continue
           }
+          // Cancellation belongs to the whole request; an ordinary corrupt or
+          // temporarily unreadable cold row does not. A single persisted
+          // conversation must never blank the entire sidebar on a fresh page.
+          signal?.throwIfAborted()
+          const meta = batch[index]!
+          ctx.logger.warn(
+            `session.list: cold summary for "${meta.id}" failed (serving header fallback): ${String(result.reason)}`,
+          )
+          const attachedSession = ctx.sessions.get(meta.id)
+          if (attachedSession !== undefined) {
+            summaries.push(summarizeAttached(attachedSession))
+            continue
+          }
+          summaries.push({
+            sessionId: meta.id,
+            updatedAt: meta.createdAt,
+            running: false,
+            blank: false,
+            ...sessionListFields(meta),
+          })
         }
-        if (rejected) throw failure
         signal?.throwIfAborted()
         items.push(...summaries)
       }
