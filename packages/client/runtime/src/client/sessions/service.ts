@@ -281,14 +281,17 @@ export class SessionRuntime implements ISessions {
     remote: SessionRemotes,
     conversationRuntime?: ConversationRuntime,
   ) {
+    // Current-session navigation is deliberately tab-local. sessionStorage
+    // survives refreshes in this tab, but a brand-new window must not inherit
+    // another tab's active (possibly large or still-running) conversation and
+    // immediately start replaying it. Cross-tab seeding here was able to park
+    // a fresh Phoenix window in the history-loading/settling state forever.
     this.selection = createSnapshotStore<SessionSelection>(
       {},
       {
         persist: {
           name: 'dsh.sessions.current',
           storage: 'session',
-          fallbackStorage: 'local',
-          mirrorFallback: true,
         },
       })
     const restored = this.selection.getSnapshot()
