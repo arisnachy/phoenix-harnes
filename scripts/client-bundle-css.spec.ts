@@ -8,13 +8,22 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { clientBundle } from '../packages/client/tsdown.client.ts'
 
+type ResolveCss = (source: string, importer?: string) => string | { id: string; external: boolean } | null
+
 interface CssPlugin {
   name: string
-  resolveId?: (source: string, importer?: string) => string | null
-  load?: (this: { addWatchFile(id: string): void }, id: string) => Promise<string | null>
+  resolveId?: ResolveCss | { order?: string; handler: ResolveCss }
+  load?: (this: { addWatchFile(id: string): void }, id: string) => string | null | Promise<string | null>
 }
 
-function cssPlugin(name: 'dsh-css-modules-inline' | 'dsh-css-global-inline' | 'dsh-css-text-inline'): CssPlugin {
+function resolveCss(plugin: CssPlugin, source: string, importer?: string) {
+  if (plugin.resolveId === undefined) return null
+  return typeof plugin.resolveId === 'function'
+    ? plugin.resolveId(source, importer)
+    : plugin.resolveId.handler(source, importer)
+}
+
+function cssPlugin(): CssPlugin {
   const configs = clientBundle(
     '@phoenix-ai/dsh-client-test',
     ['lib/types/index.js', 'lib/types/invariant.js'],
@@ -22,8 +31,8 @@ function cssPlugin(name: 'dsh-css-modules-inline' | 'dsh-css-global-inline' | 'd
   const client = configs.find(config => config.platform === 'browser')
   if (client === undefined) throw new Error('client config missing')
   const plugins = (client as { plugins: CssPlugin[] }).plugins
-  const plugin = plugins.find(candidate => candidate.name === name)
-  if (plugin === undefined) throw new Error(`${name} missing from client config`)
+  const plugin = plugins.find(candidate => candidate.name === 'dsh-client-bundle-routing')
+  if (plugin === undefined) throw new Error('client bundle routing plugin missing from client config')
   return plugin
 }
 
@@ -34,8 +43,8 @@ describe('client bundle CSS Modules', () => {
       const stylesheet = join(root, 'Fixture.module.css')
       const importer = join(root, 'index.ts')
       await writeFile(stylesheet, '.root { color: red; }\n')
-      const plugin = cssPlugin('dsh-css-modules-inline')
-      const virtualId = plugin.resolveId?.('./Fixture.module.css', importer)
+      const plugin = cssPlugin()
+      const virtualId = resolveCss(plugin, './Fixture.module.css', importer)
       if (typeof virtualId !== 'string' || plugin.load === undefined) {
         throw new Error('CSS Modules plugin hooks are incomplete')
       }
@@ -58,8 +67,8 @@ describe('client bundle global CSS', () => {
       const stylesheet = join(root, 'base.css')
       const importer = join(root, 'index.ts')
       await writeFile(stylesheet, 'body { color: red; }\n')
-      const plugin = cssPlugin('dsh-css-global-inline')
-      const virtualId = plugin.resolveId?.('./base.css', importer)
+      const plugin = cssPlugin()
+      const virtualId = resolveCss(plugin, './base.css', importer)
       if (typeof virtualId !== 'string' || plugin.load === undefined) {
         throw new Error('global CSS plugin hooks are incomplete')
       }
@@ -81,8 +90,8 @@ describe('client bundle global CSS', () => {
       const stylesheet = join(root, 'base.css')
       const importer = join(root, 'index.ts')
       await writeFile(stylesheet, 'body { color: red; }\n')
-      const plugin = cssPlugin('dsh-css-text-inline')
-      const virtualId = plugin.resolveId?.('./base.css?inline', importer)
+      const plugin = cssPlugin()
+      const virtualId = resolveCss(plugin, './base.css?inline', importer)
       if (typeof virtualId !== 'string' || plugin.load === undefined) {
         throw new Error('inline CSS plugin hooks are incomplete')
       }
