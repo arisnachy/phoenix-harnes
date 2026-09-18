@@ -111,7 +111,7 @@ function stripTsdownHotPlugins(value: unknown): unknown {
 export function optimizePhoenixTsdownInput<T extends InputOptionsLike>(
   options: T,
   optimization: PhoenixTsdownOptimization = {},
-): T {
+): T & InputOptionsLike {
   const externalizeProductionDeps = optimization.externalizeProductionDeps ?? true
   const production = externalizeProductionDeps && options.cwd !== undefined
     ? productionExternalPattern(options.cwd)
@@ -121,5 +121,5 @@ export function optimizePhoenixTsdownInput<T extends InputOptionsLike>(
     ...options,
     ...(external === undefined ? {} : { external }),
     plugins: stripTsdownHotPlugins(options.plugins),
-  } as T
+  } as T & InputOptionsLike
 }
