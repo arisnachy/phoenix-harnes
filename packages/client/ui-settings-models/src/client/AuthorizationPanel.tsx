@@ -16,6 +16,7 @@ type AuthorizationClient = IApiClient['authorization']
 
 type ConnectorFilter = 'all' | 'connected' | 'available'
 
+/** Sanitized Official MCP Registry candidate rendered by the Connectors page. */
 export interface McpRegistryCandidateView {
   name: string
   title: string
@@ -36,6 +37,7 @@ export interface McpRegistryCandidateView {
   remoteUrl?: string
 }
 
+/** One Host-proxied Official MCP Registry search result safe for the browser. */
 export interface McpRegistrySearchSnapshot {
   source: 'official-mcp-registry'
   query: string
@@ -44,7 +46,13 @@ export interface McpRegistrySearchSnapshot {
   candidates: McpRegistryCandidateView[]
 }
 
+/** Browser-safe client for the Host-owned Official MCP Registry proxy. */
 export interface McpRegistryClient {
+  /**
+   * Search the Official MCP Registry through the Phoenix Host.
+   * @param request - User-entered query and optional result limit.
+   * @returns Sanitized registry metadata for display only.
+   */
   search(request: { query: string; limit?: number }): Promise<McpRegistrySearchSnapshot>
 }
 
@@ -156,6 +164,11 @@ function normalize(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 }
 
+/**
+ * Keep only HTTPS external links before exposing them to clickable connector UI.
+ * @param value - Candidate external URL from connector or registry metadata.
+ * @returns A normalized HTTPS URL, or undefined when the value is unsafe/invalid.
+ */
 export function safeExternalHref(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
   try {
