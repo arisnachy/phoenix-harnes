@@ -212,6 +212,17 @@ export interface InputMachineOptions {
 /** Published input state (the currency; per-session). */
 export interface InputState {
   readonly draft: string
+  /**
+   * Optimistic copy of the ordinary message currently crossing the Host
+   * admission boundary. This exists only for presentation: durable transcript
+   * truth still comes from the session log. Publishing it synchronously lets
+   * Chat show the user's bubble on the same frame as Enter instead of waiting
+   * for the Host/WebSocket round-trip.
+   */
+  readonly pendingSubmit?: {
+    readonly text: string
+    readonly startedAt: number
+  }
   /** Ordered runtime-only image ids; bytes and URLs stay in ConversationController. */
   readonly imageIds: readonly DraftAttachmentId[]
   /** Monotonic draft revision (span CAS compares against this). */
