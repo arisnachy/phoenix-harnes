@@ -10,6 +10,7 @@ import {
   requestPhoenixUpdateRefresh,
   requestPhoenixUpdateRestart,
 } from './update-state.ts'
+import { createChatGptWebIntegration, type ChatGptWebIntegration } from './chatgpt-web.ts'
 import {
   createNodeLocalModelRuntimeManager,
   getLocalModelCatalog,
@@ -18,6 +19,7 @@ import {
   type LocalModelRuntimeSnapshot,
 } from './local-model/index.ts'
 import type {
+  ChatGptWebSnapshot,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
   PhoenixLocalModelRequest,
@@ -84,10 +86,21 @@ export class PluginInventoryGateway extends TypertRemoteService {
   static inject = ['loader']
 
   private readonly localModel: Promise<LocalModelRuntimeManager>
+  private readonly chatGptWeb: ChatGptWebIntegration
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
     this.localModel = createNodeLocalModelRuntimeManager()
+    this.chatGptWeb = createChatGptWebIntegration()
+    void ctx.effect(async () => {
+      try {
+        await this.chatGptWeb.restore()
+      } catch (error: unknown) {
+        ctx.logger.error('chatgpt-web: persisted bridge could not be restored')
+        ctx.logger.error(error)
+      }
+      return () => undefined
+    }, 'chatgpt-web persisted integration')
     // Cordis owns both loopback resources so reload/unload cannot leave port
     // 17842 occupied or a llama-server child detached from the Host lifecycle.
     void ctx.effect(async () => {
@@ -207,6 +220,33 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('ensureLocalModelRunning')
   async ensureLocalModelRunning(): Promise<PhoenixLocalEndpointReceipt> {
     return { baseUrl: await (await this.localModel).ensureRunning() }
+  }
+
+  /**
+   * Read the persisted ChatGPT Web switch and current loopback health.
+   * @returns Sanitized integration state with no browser credentials.
+   */
+  @Remote('chatGptWebState')
+  async chatGptWebState(): Promise<ChatGptWebSnapshot> {
+    return this.chatGptWeb.state()
+  }
+
+  /**
+   * Start and health-check ChatGPT Web before Settings exposes its route.
+   * @returns Ready state or setup/availability guidance.
+   */
+  @Remote('enableChatGptWeb')
+  async enableChatGptWeb(): Promise<ChatGptWebSnapshot> {
+    return this.chatGptWeb.enable()
+  }
+
+  /**
+   * Persist ChatGPT Web OFF and stop only the bridge process Phoenix owns.
+   * @returns Off state after cleanup.
+   */
+  @Remote('disableChatGptWeb')
+  async disableChatGptWeb(): Promise<ChatGptWebSnapshot> {
+    return this.chatGptWeb.disable()
   }
 
   /**
