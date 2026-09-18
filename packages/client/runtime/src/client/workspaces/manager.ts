@@ -14,7 +14,7 @@ export type WorkspaceListPhase = 'pending' | 'ready'
 const INITIAL_BASELINE_RETRY_DELAYS_MS = [250, 750, 1500, 3000] as const
 
 function waitForBaselineRetry(delayMs: number): Promise<void> {
-  return new Promise(resolve => { setTimeout(resolve, delayMs) })
+  return new Promise<void>(resolve => { setTimeout(resolve, delayMs) })
 }
 
 /** Immutable workspace-list snapshot. */
