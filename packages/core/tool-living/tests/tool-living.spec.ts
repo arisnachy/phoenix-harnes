@@ -17,7 +17,7 @@ async function bench() {
   const dir = await mkdtemp(join(tmpdir(), 'phoenix-tool-living-'))
   const promptFiber = await root.plugin(SystemPrompt, { includeHarnessIdentity: false, includeRuntimeContext: false, persona: '' })
   const toolsFiber = await root.plugin(ToolRuntime, {})
-  const livingFiber = await root.plugin(LocalLivingRegistry, { path: join(dir, 'living.json') })
+  const livingFiber = await root.plugin(LocalLivingRegistry, { path: join(dir, 'living.json'), bridgePort: 0 })
   const toolFiber = await root.plugin(ToolLiving)
   disposers.push(
     () => promptFiber.dispose(),
@@ -36,7 +36,9 @@ describe('tool-living', () => {
     expect(section?.text).toBe(ToolLiving.LIVING_CREATION_POLICY)
     expect(ToolLiving.LIVING_CREATION_POLICY).toContain('regardless of its domain, format')
     expect(ToolLiving.LIVING_CREATION_POLICY).toContain('never special-case it to a fixed list')
-    expect(ToolLiving.LIVING_CREATION_POLICY).not.toMatch(/chess|hospital|dashboard/i)
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('automatically provisions a per-creation Phoenix control link')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('living_get_connector_kit')
+    expect(ToolLiving.LIVING_CREATION_POLICY).not.toMatch(/chess|spreadsheet|warehouse/i)
   })
 
   it('registers an unknown static creation kind through the model-facing tool', async () => {
@@ -48,6 +50,64 @@ describe('tool-living', () => {
       state: [], actions: [], events: [], resources: ['artifact'], actors: [],
     }, {} as never)
     expect(value).toMatchObject({ id: 'strange-1', kind: 'future-kind-xyz', achieved_level: 'static', connected: false })
+  })
+
+  it('auto-provisions one stable control link and emits secret-safe connector modules', async () => {
+    const root = await bench()
+    const register = root.tools.get('living_register_creation')!
+    const first = await register.execute({
+      id: 'app-1',
+      title: 'Managed app',
+      kind: 'future-app',
+      target_level: 'controllable',
+      state: ['status'],
+      actions: ['refresh'],
+      events: ['changed'],
+      resources: ['source:C:/workspace/app-1'],
+      actors: [],
+    }, {} as never) as { connector_json: string }
+
+    const firstConnector = JSON.parse(first.connector_json) as {
+      protocol: string
+      creation_id: string
+      endpoint: string
+      token: string
+    }
+    expect(firstConnector).toMatchObject({
+      protocol: 'phoenix-living-http-v1',
+      creation_id: 'app-1',
+    })
+    expect(firstConnector.endpoint).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1\/living$/)
+    expect(firstConnector.token.length).toBeGreaterThanOrEqual(32)
+
+    const second = await register.execute({
+      id: 'app-1',
+      title: 'Managed app',
+      kind: 'future-app',
+      target_level: 'controllable',
+      state: ['status'],
+      actions: ['refresh'],
+      events: ['changed'],
+      resources: ['source:C:/workspace/app-1', 'deployment:local'],
+      actors: [],
+    }, {} as never) as { connector_json: string }
+    const secondConnector = JSON.parse(second.connector_json) as { token: string }
+    expect(secondConnector.token).toBe(firstConnector.token)
+
+    const snapshot = root.living.inspect(LivingCreationId('app-1'))
+    expect(snapshot.manifest.resources.filter(resource => resource.startsWith('phoenix-control://'))).toHaveLength(1)
+    expect(snapshot.manifest.resources).toContain('deployment:local')
+
+    const kit = await root.tools.get('living_get_connector_kit')!.execute({ id: 'app-1' }, {} as never) as {
+      javascript_module: string
+      python_module: string
+      security_note: string
+    }
+    expect(kit.javascript_module).toContain('PHOENIX_CONTROL_TOKEN')
+    expect(kit.python_module).toContain('PHOENIX_CONTROL_TOKEN')
+    expect(kit.javascript_module).not.toContain(firstConnector.token)
+    expect(kit.python_module).not.toContain(firstConnector.token)
+    expect(kit.security_note).toMatch(/never expose.*bearer token/i)
   })
 
   it('refuses completion verification until the declared live level is really attached', async () => {
