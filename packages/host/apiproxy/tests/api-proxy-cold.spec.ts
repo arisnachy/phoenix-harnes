@@ -132,6 +132,37 @@ describe('sessions.list cold merge', () => {
     ]))
   })
 
+  it('keeps the rest of the sidebar loadable when one cold Session summary throws', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(UserQuestionService)
+    const root = mkdtempSync(join(tmpdir(), 'dsh-cold-isolation-'))
+    const goodPath = join(root, 'good.log')
+    writeFileSync(goodPath, 'x')
+    const bad = header('bad-row', 100)
+    const good = header('good-row', 200)
+    ctx.provide('sessionPersistence', {
+      list: () => Promise.resolve([bad, good]),
+      locate: (meta: SessionHeader) => {
+        if (meta.id === bad.id) throw new Error('corrupt location metadata')
+        return { kind: 'jsonl', path: goodPath }
+      },
+      readFrom: (id: SessionId) => Promise.resolve({
+        meta: id === good.id ? good : bad,
+        events: [{ type: 'turn/start', seq: 0, time: 250, data: { turn: 1 } }] as SessionEvent[],
+      }),
+    } as never)
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
+
+    const response = await api.sessions.list(request({}))
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) throw new Error('unreachable')
+    expect(response.result.value.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sessionId: bad.id, blank: false, updatedAt: bad.createdAt }),
+      expect.objectContaining({ sessionId: good.id, blank: false, updatedAt: 200 }),
+    ]))
+  })
+
   it('can disable bounded blank probes without hiding cold Sessions', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
