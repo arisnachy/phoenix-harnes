@@ -119,7 +119,11 @@ export function discoverChatGptWebLauncher(
   return installedLauncherExecutables(env, platformName).find(executable => existsSync(executable))
 }
 
-function defaultSetupSpawn(program: string): BridgeProcess {
+interface SetupProcess {
+  unref(): void
+}
+
+function defaultSetupSpawn(program: string): SetupProcess {
   return nodeSpawn(program, [], {
     detached: true,
     stdio: 'ignore',
@@ -137,7 +141,7 @@ function defaultSetupSpawn(program: string): BridgeProcess {
 export function openChatGptWebSetup(
   env: NodeJS.ProcessEnv = process.env,
   platformName: NodeJS.Platform = platform(),
-  spawn: (program: string) => BridgeProcess = defaultSetupSpawn,
+  spawn: (program: string) => SetupProcess = defaultSetupSpawn,
 ): boolean {
   const executable = discoverChatGptWebLauncher(env, platformName)
   if (executable === undefined) return false
