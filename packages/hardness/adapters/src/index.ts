@@ -24,6 +24,8 @@ import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 import type { McpRegistryDiscoveryService } from './connector-discover-tool.ts'
+import { createConnectorInstallTool } from './connector-install-tool.ts'
+import type { McpRegistryInstallerService } from './connector-install-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 
 export { indexTools } from './tool-adapter.ts'
@@ -96,6 +98,8 @@ export { createHardnessTool } from './hardness-tool.ts'
 export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 export { createConnectorListTool } from './connector-list-tool.ts'
 export { createConnectorDiscoverTool } from './connector-discover-tool.ts'
+export { createConnectorInstallTool } from './connector-install-tool.ts'
+export type { McpRegistryInstallerService } from './connector-install-tool.ts'
 export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
 
@@ -150,7 +154,9 @@ function requiredServices(ctx: Context) {
   const systemPrompt = ctx.get('systemPrompt') as HardnessPromptRegistrar | undefined
   const authorization = ctx.get('authorization')
   const mcpConnectors = ctx.get('mcpConnectors')
-  const pluginInventory = (ctx.get as (name: string) => unknown)('pluginInventory') as McpRegistryDiscoveryService | undefined
+  const pluginInventory = (ctx.get as (name: string) => unknown)('pluginInventory') as
+    | (McpRegistryDiscoveryService & Partial<McpRegistryInstallerService>)
+    | undefined
   if (hardness === undefined || tools === undefined || skills === undefined
     || agents === undefined || approval === undefined || systemPrompt === undefined) {
     throw new Error('hardness-adapters requires hardness, tools, skills, agents, approval, and systemPrompt services')
@@ -199,6 +205,9 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // tools; the host remains the sole owner of the HARDNESS capability index.
       disposers.push(ctx.tools.register(createConnectorListTool(authorization, mcpConnectors)))
       disposers.push(ctx.tools.register(createConnectorDiscoverTool(mcpConnectors, pluginInventory)))
+      if (pluginInventory?.installMcpRegistryServer !== undefined) {
+        disposers.push(ctx.tools.register(createConnectorInstallTool(approval, pluginInventory as McpRegistryInstallerService)))
+      }
     }
 
     const acquisition = createHardnessAcquisition(hardness)
