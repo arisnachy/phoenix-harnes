@@ -120,9 +120,10 @@ describe('ManagedMcpController', () => {
     }).install({ name: 'io.example/calendar' }))
       .rejects.toThrow('is not active')
 
+    const { remoteUrl: _remoteUrl, ...withoutRemote } = candidate()
     await expect(new ManagedMcpController(live, {
       patchPath,
-      registrySearch: registry([candidate({ remoteUrl: undefined })]),
+      registrySearch: registry([withoutRemote]),
     }).install({ name: 'io.example/calendar' }))
       .rejects.toThrow('Streamable HTTP')
 
