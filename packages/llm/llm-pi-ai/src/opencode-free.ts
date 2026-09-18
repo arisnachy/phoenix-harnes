@@ -36,6 +36,12 @@ function modelDisplayName(id: string): string {
     .join(' ')} · Gratis`
 }
 
+/** Clone a model without materializing absent optional fields as `undefined`. */
+function cloneModel(model: PiAiModelProfile): PiAiModelProfile {
+  const { input, ...rest } = model
+  return input === undefined ? rest : { ...rest, input: [...input] }
+}
+
 /** Convert OpenCode's OpenAI-style catalog payload into Phoenix model descriptors. */
 export function parseOpenCodeFreeModels(payload: unknown): PiAiModelProfile[] {
   if (typeof payload !== 'object' || payload === null || !('data' in payload)) return []
