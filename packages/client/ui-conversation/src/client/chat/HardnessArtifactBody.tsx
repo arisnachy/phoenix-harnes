@@ -140,10 +140,19 @@ function DeclarativeUi({ record }: { readonly record: JsonRecord }) {
 
 function sandboxDocument(html: string): string {
   const csp = [
-    "default-src 'none';", 'img-src data: blob;', 'media-src data: blob;', 'font-src data:',
-    "style-src 'unsafe-inline';", "script-src 'unsafe-inline';", "connect-src 'none';",
-    "frame-src 'none';", "child-src 'none';", "object-src 'none';", "base-uri 'none';", "form-action 'none'",
-  ].join(' ')
+    "default-src 'none'",
+    'img-src data: blob:',
+    'media-src data: blob:',
+    'font-src data:',
+    "style-src 'unsafe-inline'",
+    "script-src 'unsafe-inline'",
+    "connect-src 'none'",
+    "frame-src 'none'",
+    "child-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join('; ') + ';'
   const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
   const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
   const heightReporter = '<script>(function(){function report(){var root=document.documentElement;parent.postMessage({type:\'phoenix-artifact-height\',height:Math.max(root.scrollHeight,root.offsetHeight)},\'*\')}if(window.ResizeObserver){new ResizeObserver(report).observe(document.documentElement)}new MutationObserver(report).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});window.addEventListener(\'load\',report);report()})()<\/script>'
