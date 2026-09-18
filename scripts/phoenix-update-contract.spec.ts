@@ -31,6 +31,15 @@ describe('prepared client self-update contract', () => {
     expect(activator).toContain('requires a managed installation')
   })
 
+  it('reanchors a stale prepared base inside the activator after all target checks pass', () => {
+    const activator = source('scripts/phoenix-activate-prepared.mjs')
+
+    expect(activator).toContain('prepared base ${previousBase.slice(0, 12)} became stale before activation')
+    expect(activator).toContain("mode: 'full'")
+    expect(activator).toContain('reanchoredFromBase: previousBase')
+    expect(activator).toContain("writeFileSync(preparedPath, JSON.stringify(prepared, undefined, 2) + '\\n', 'utf8')")
+  })
+
   it('allows verify-only to inspect a stage using the helper from that same stage', () => {
     const promoter = source('scripts/promote-client-artifacts.ts')
 
