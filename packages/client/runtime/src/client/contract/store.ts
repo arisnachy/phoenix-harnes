@@ -80,16 +80,29 @@ function rafBatch(notify: () => void): () => void {
  * frame-level skew, same nature as the object layer's microtask batching.
  *
  * @param init - initial state.
- * @param opts - flush mode and opt-in persistence (localStorage, keyed by name).
+ * @param opts - flush mode and opt-in browser persistence.
  * @returns the store.
  */
 export function createSnapshotStore<T>(
-  init: T, opts?: { flush?: 'raf' | 'sync'; persist?: { name: string } }): SnapshotStore<T> {
+  init: T,
+  opts?: {
+    flush?: 'raf' | 'sync'
+    persist?: {
+      name: string
+      /** Primary storage. Session storage keeps navigation isolated per browser tab. */
+      storage?: 'local' | 'session'
+      /** Optional secondary storage used only when the primary has no value. */
+      fallbackStorage?: 'local' | 'session'
+      /** Mirror future writes into fallback storage so new tabs inherit the latest global choice. */
+      mirrorFallback?: boolean
+    }
+  },
+): SnapshotStore<T> {
   // Immer enters through produce() in update() below (identical semantics to
   // the immer middleware without its setState-signature mutator generics).
   const withSelector = subscribeWithSelector(() => init)
   const api: StoreApi<T> = createStore<T>()(withSelector)
-  if (opts?.persist) attachPersistence(api, opts.persist.name)
+  if (opts?.persist) attachPersistence(api, opts.persist)
 
   let subscribe = (fn: () => void) => api.subscribe(fn)
   if (opts?.flush === 'raf') {
@@ -116,34 +129,94 @@ export function createSnapshotStore<T>(
   }
 }
 
+type BrowserStorageKind = 'local' | 'session'
+
+interface SnapshotPersistenceOptions {
+  name: string
+  storage?: BrowserStorageKind
+  fallbackStorage?: BrowserStorageKind
+  mirrorFallback?: boolean
+}
+
 /**
- * Whole-value JSON persistence to localStorage. Hand-rolled instead of the
- * zustand persist middleware: its write path spreads state into an object
+ * Whole-value JSON browser persistence. Hand-rolled instead of the zustand
+ * persist middleware: its write path spreads state into an object
  * (`partialize({ ...get() })`), exploding primitive state (a persisted string
  * draft becomes {0:'h',1:'e',...}) — not fixable via merge/deserialize options
  * because the corruption happens before serialization. Storage failures
- * (quota, private mode) only disable persistence, never break the store.
+ * (quota, private mode) only disable the affected backend, never break the store.
  */
-function attachPersistence<T>(api: StoreApi<T>, name: string): void {
-  // Non-browser runs (node e2e booting the client tree) have no localStorage:
-  // persistence silently disables — same contract as a storage failure, minus
-  // the per-store console noise a ReferenceError would produce.
-  if (typeof localStorage === 'undefined') return
-  try {
-    const raw = localStorage.getItem(name)
-    if (raw !== null) {
-      api.setState(devFreeze(JSON.parse(raw) as T), true)
-    }
-  } catch (error) {
-    console.error(`snapshot store '${name}' rehydration failed:`, error)
-  }
-  api.subscribe((state) => {
+function attachPersistence<T>(api: StoreApi<T>, opts: SnapshotPersistenceOptions): void {
+  const primaryKind = opts.storage ?? 'local'
+  const fallbackKind = opts.fallbackStorage
+  const primary = browserStorage(primaryKind)
+  const fallback = fallbackKind === undefined || fallbackKind === primaryKind
+    ? undefined
+    : browserStorage(fallbackKind)
+
+  // Non-browser runs (node e2e booting the client tree) may expose neither
+  // storage object. Persistence silently disables — same contract as a
+  // storage failure, minus ReferenceError noise.
+  if (primary === undefined && fallback === undefined) return
+
+  const primaryRaw = readPersisted(primary, opts.name, primaryKind)
+  const fallbackRaw = primaryRaw === null && fallback !== undefined && fallbackKind !== undefined
+    ? readPersisted(fallback, opts.name, fallbackKind)
+    : null
+  const raw = primaryRaw ?? fallbackRaw
+
+  if (raw !== null) {
     try {
-      localStorage.setItem(name, JSON.stringify(state))
+      api.setState(devFreeze(JSON.parse(raw) as T), true)
+      // Seed the tab-local primary from a global fallback exactly once. From
+      // here on, an existing tab keeps its own navigation even when another
+      // tab updates the mirrored global "most recent" selection.
+      if (primaryRaw === null && primary !== undefined) {
+        writePersisted(primary, opts.name, raw, primaryKind)
+      }
     } catch (error) {
-      console.error(`snapshot store '${name}' persistence failed:`, error)
+      console.error(`snapshot store '${opts.name}' rehydration failed:`, error)
+    }
+  }
+
+  api.subscribe((state) => {
+    let serialized: string
+    try {
+      serialized = JSON.stringify(state)
+    } catch (error) {
+      console.error(`snapshot store '${opts.name}' persistence serialization failed:`, error)
+      return
+    }
+    if (primary !== undefined) writePersisted(primary, opts.name, serialized, primaryKind)
+    if (opts.mirrorFallback && fallback !== undefined && fallbackKind !== undefined) {
+      writePersisted(fallback, opts.name, serialized, fallbackKind)
     }
   })
+}
+
+function browserStorage(kind: BrowserStorageKind): Storage | undefined {
+  if (kind === 'session') {
+    return typeof sessionStorage === 'undefined' ? undefined : sessionStorage
+  }
+  return typeof localStorage === 'undefined' ? undefined : localStorage
+}
+
+function readPersisted(storage: Storage | undefined, name: string, kind: BrowserStorageKind): string | null {
+  if (storage === undefined) return null
+  try {
+    return storage.getItem(name)
+  } catch (error) {
+    console.error(`snapshot store '${name}' ${kind}Storage read failed:`, error)
+    return null
+  }
+}
+
+function writePersisted(storage: Storage, name: string, value: string, kind: BrowserStorageKind): void {
+  try {
+    storage.setItem(name, value)
+  } catch (error) {
+    console.error(`snapshot store '${name}' ${kind}Storage persistence failed:`, error)
+  }
 }
 
 /** Deep-freeze wholesale-set state outside production: set() bypasses immer's freeze. */
