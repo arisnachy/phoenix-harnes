@@ -117,6 +117,68 @@ describe('PluginInventoryGateway', () => {
     expect(inventory.list().entries.some(entry => entry.entryId === pendingId)).toBe(false)
   })
 
+  it('projects MCP lifecycle and managed installs without credentials', async () => {
+    const { ctx, inventory } = await harness()
+    ;(ctx as unknown as { provide(name: string, value: unknown): void }).provide('mcpConnectors', {
+      list: () => [{
+        serverName: 'figma',
+        transport: 'streamable-http',
+        status: 'auth-required',
+        reasonCode: 'authorization-required',
+        toolNames: [],
+      }],
+    })
+    const managed = (inventory as unknown as {
+      managedMcp: { snapshot(): Promise<Array<{ entryId: string; serverName: string; url: string }>> }
+    }).managedMcp
+    vi.spyOn(managed, 'snapshot').mockResolvedValue([{
+      entryId: 'managed-1',
+      serverName: 'figma',
+      url: 'https://mcp.example.com/figma',
+    }])
+
+    await expect(inventory.mcpConnectorHubState()).resolves.toEqual({
+      runtime: [{
+        serverName: 'figma',
+        transport: 'streamable-http',
+        status: 'auth-required',
+        reasonCode: 'authorization-required',
+        toolNames: [],
+      }],
+      managed: [{
+        entryId: 'managed-1',
+        serverName: 'figma',
+        url: 'https://mcp.example.com/figma',
+      }],
+    })
+  })
+
+  it('delegates exact registry identities to the managed MCP installer', async () => {
+    const { inventory } = await harness()
+    const managed = (inventory as unknown as {
+      managedMcp: { install(request: { name: string; version?: string }): Promise<unknown> }
+    }).managedMcp
+    const install = vi.spyOn(managed, 'install').mockResolvedValue({
+      status: 'installed',
+      connector: {
+        entryId: 'managed-1',
+        serverName: 'calendar-a1b2c3d',
+        url: 'https://mcp.example.com/calendar',
+      },
+    })
+    await expect(inventory.installMcpRegistryServer({
+      name: 'io.example/calendar',
+      version: '1.0.0',
+    })).resolves.toMatchObject({
+      status: 'installed',
+      connector: { serverName: 'calendar-a1b2c3d' },
+    })
+    expect(install).toHaveBeenCalledWith({
+      name: 'io.example/calendar',
+      version: '1.0.0',
+    })
+  })
+
   it('reads idle updater state and refuses an unprepared restart without scheduling exit', async () => {
     const { root } = updateRepository()
     process.env.PHOENIX_RUNTIME_ROOT = root
