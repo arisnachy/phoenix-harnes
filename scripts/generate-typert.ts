@@ -64,7 +64,13 @@ function addExisting(matches: Set<string>, root: string, patterns: readonly stri
 
 function fingerprintFiles(root: string, contributors: readonly ContributorManifest[]): string[] {
   const files = new Set<string>()
-  for (const path of ['package.json', 'pnpm-lock.yaml', 'tsconfig.base.json', 'tsconfig.host.json']) {
+  for (const path of [
+    'package.json',
+    'pnpm-lock.yaml',
+    'tsconfig.base.json',
+    'tsconfig.host.json',
+    'scripts/generate-typert.ts',
+  ]) {
     if (existsSync(resolve(root, path))) files.add(path)
   }
 
