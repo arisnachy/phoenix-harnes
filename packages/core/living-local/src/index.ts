@@ -94,8 +94,8 @@ export class LocalLivingRegistry extends LivingRegistry {
     this.bridge = new LivingHttpBridge(this, {
       host: config.bridgeHost ?? (process.env.PHOENIX_LIVING_CONTROL_HOST?.trim() || DEFAULT_LIVING_CONTROL_HOST),
       port: config.bridgePort ?? envPort() ?? DEFAULT_LIVING_CONTROL_PORT,
-      actionTimeoutMs: config.bridgeActionTimeoutMs,
-      heartbeatTimeoutMs: config.bridgeHeartbeatTimeoutMs,
+      ...(config.bridgeActionTimeoutMs === undefined ? {} : { actionTimeoutMs: config.bridgeActionTimeoutMs }),
+      ...(config.bridgeHeartbeatTimeoutMs === undefined ? {} : { heartbeatTimeoutMs: config.bridgeHeartbeatTimeoutMs }),
     }, message => ctx.logger.warn(message))
     ctx.effect(() => () => this.disposeProviders(), 'living provider teardown')
   }
