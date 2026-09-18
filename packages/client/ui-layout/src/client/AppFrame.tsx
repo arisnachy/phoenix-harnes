@@ -41,7 +41,7 @@ interface SurfaceBoundaryState {
  * white screen that requires restarting the Host.
  */
 class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundaryState> {
-  state: SurfaceBoundaryState = { failed: false, autoRetried: false }
+  override state: SurfaceBoundaryState = { failed: false, autoRetried: false }
 
   static getDerivedStateFromError(): Partial<SurfaceBoundaryState> {
     return { failed: true }
