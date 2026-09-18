@@ -67,6 +67,14 @@ describe('Official MCP Registry proxy', () => {
             version: '2.0.0',
             repository: { url: 'https://github.com/example/full-mcp' },
             websiteUrl: 'not a url',
+            icons: [
+              null,
+              {},
+              { src: 'http://insecure.example.com/icon.png', mimeType: 'image/png' },
+              { src: 'javascript:alert(1)', mimeType: 'image/png' },
+              { src: 'https://cdn.example.com/logo.png', mimeType: 'image/png', sizes: ['48x48', 'bogus', 'any'] },
+              { src: 'https://cdn.example.com/logo.svg', mimeType: 'image/svg+xml' },
+            ],
             packages: [
               null,
               {},
@@ -146,6 +154,7 @@ describe('Official MCP Registry proxy', () => {
       version: '0.1.0',
       status: 'unknown',
       trust: 'registry-listed',
+      icons: [],
       transports: [],
       packages: [],
     })
@@ -156,6 +165,17 @@ describe('Official MCP Registry proxy', () => {
       version: '2.0.0',
       status: 'deprecated',
       trust: 'registry-listed',
+      icons: [
+        {
+          src: 'https://cdn.example.com/logo.png',
+          mimeType: 'image/png',
+          sizes: ['48x48', 'any'],
+        },
+        {
+          src: 'https://cdn.example.com/logo.svg',
+          mimeType: 'image/svg+xml',
+        },
+      ],
       transports: ['sse', 'streamable-http', 'stdio'],
       packages: [
         {
