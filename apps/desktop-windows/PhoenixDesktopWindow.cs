@@ -375,7 +375,8 @@ internal sealed class PhoenixDesktopWindow : Form
                 if (browserView.CanGoForward) browserView.GoForward();
                 break;
             case "phoenix.browser.reload":
-                browserView.Reload();
+                if (browserView.CoreWebView2 is not null)
+                    browserView.Reload();
                 break;
             case "phoenix.browser.home":
                 OpenBrowser("about:blank");
