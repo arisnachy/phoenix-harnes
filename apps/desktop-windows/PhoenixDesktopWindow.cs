@@ -23,6 +23,10 @@ internal sealed class PhoenixDesktopWindow : Form
     private bool runtimeReady;
     private bool applyingBrowserLayout;
 
+    // Exposed to the native smoke test so CI verifies the real SplitContainer state,
+    // not only the pure layout contract.
+    internal bool IsBrowserPaneVisible => !split.Panel2Collapsed;
+
     internal PhoenixDesktopWindow(Uri phoenixUri, bool initializeWebViewsOnShow = true)
     {
         this.phoenixUri = phoenixUri;
