@@ -126,6 +126,10 @@ export const PHOENIX_LOCAL_MODEL = 'phoenix-local'
 export const PHOENIX_LOCAL_BASE_URL = 'http://127.0.0.1:17842/v1'
 /** Non-secret marker that satisfies pi-ai's OpenAI-compatible auth preflight for the loopback-only route. */
 export const PHOENIX_LOCAL_AUTHORIZATION = 'Bearer phoenix-local'
+/** Conservative shared context advertised by the selectable Phoenix Local route. */
+export const PHOENIX_LOCAL_CONTEXT_WINDOW = 131_072
+/** Default output budget shared by supported local models. */
+export const PHOENIX_LOCAL_MAX_TOKENS = 2_048
 
 /** Built-in route injected independently of user settings or cloud credentials. */
 function phoenixLocalProfile(): PiAiProviderProfile {
@@ -133,15 +137,15 @@ function phoenixLocalProfile(): PiAiProviderProfile {
     displayName: '🔥 Phoenix Local · Offline',
     api: 'openai-completions',
     baseURL: PHOENIX_LOCAL_BASE_URL,
-    defaultContextWindow: 8192,
-    defaultMaxTokens: 4096,
+    defaultContextWindow: PHOENIX_LOCAL_CONTEXT_WINDOW,
+    defaultMaxTokens: PHOENIX_LOCAL_MAX_TOKENS,
     defaultInput: ['text'],
     headers: { Authorization: PHOENIX_LOCAL_AUTHORIZATION },
     models: [{
       id: PHOENIX_LOCAL_MODEL,
-      name: 'Phoenix Local · Qwen3.5-4B',
-      contextWindow: 8192,
-      maxTokens: 4096,
+      name: 'Phoenix Local · Device model',
+      contextWindow: PHOENIX_LOCAL_CONTEXT_WINDOW,
+      maxTokens: PHOENIX_LOCAL_MAX_TOKENS,
       input: ['text'],
     }],
   }
