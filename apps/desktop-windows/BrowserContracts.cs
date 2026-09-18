@@ -61,15 +61,18 @@ public static class BrowserNavigation
 public static class BrowserLayout
 {
     public const bool StartCollapsed = true;
+    public const int MinimumChatWidth = 640;
+    public const int MinimumBrowserWidth = 360;
 
     /// <summary>
-    /// Keep the browser useful without letting it dominate the conversation:
-    /// roughly 26% of the window, clamped to a compact desktop-friendly range.
+    /// Codex-like split: keep the browser large enough to render real sites while preserving
+    /// the conversation as the primary surface. Wide displays cap the browser instead of
+    /// allowing it to swallow the chat.
     /// </summary>
     public static int PreferredBrowserWidth(int clientWidth)
     {
-        var proportional = (int)Math.Round(Math.Max(0, clientWidth) * 0.26d);
-        return Math.Clamp(proportional, 360, 520);
+        var proportional = (int)Math.Round(Math.Max(0, clientWidth) * 0.36d);
+        return Math.Clamp(proportional, 400, 640);
     }
 }
 
