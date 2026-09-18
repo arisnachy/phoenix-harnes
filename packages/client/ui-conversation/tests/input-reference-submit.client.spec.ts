@@ -208,7 +208,7 @@ describe('submit transaction hardening', () => {
     vi.useFakeTimers()
     try {
       let signal: AbortSignal | undefined
-      const sink = vi.fn((_text, _imageIds, mode: 'queue' | 'steer', received: AbortSignal) => {
+      const sink = vi.fn((_text: string, _imageIds: readonly DraftAttachmentId[], mode: 'queue' | 'steer', received: AbortSignal) => {
         expect(mode).toBe('steer')
         signal = received
         return new Promise<SubmitOutcome>(() => {})
