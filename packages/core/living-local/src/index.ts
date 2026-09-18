@@ -60,7 +60,6 @@ function readDocument(path: string): Map<LivingCreationId, LivingCreationManifes
   return store
 }
 
-/** Process-local registry with durable manifest identity and ephemeral live providers. */
 function envPort(): number | undefined {
   const raw = process.env.PHOENIX_LIVING_CONTROL_PORT?.trim()
   if (raw === undefined || raw.length === 0) return undefined
@@ -71,6 +70,7 @@ function envPort(): number | undefined {
   return value
 }
 
+/** Process-local registry with durable manifest identity and ephemeral live providers. */
 export class LocalLivingRegistry extends LivingRegistry {
   static Config: z<Config> = z.object({
     path: z.string().required(),
