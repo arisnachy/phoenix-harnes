@@ -207,6 +207,34 @@ describe('dsh-tool-subagent', () => {
     expect(retry.isError).toBe(false)
   })
 
+  it('shares the ordinary two-child budget across different parent sessions', async () => {
+    const gate = Promise.withResolvers<void>()
+    const started: string[] = []
+    const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
+      onStart: (request: SubagentStartRequest) => {
+        started.push(request.label ?? '(unlabeled)')
+        return started.length <= 2 ? gate.promise : Promise.resolve()
+      },
+    })
+
+    const first = callSubagent(ctx, { description: 'first parent', prompt: 'p1' }, { agent: fakeAgent('parent-a') })
+    const second = callSubagent(ctx, { description: 'second parent', prompt: 'p2' }, { agent: fakeAgent('parent-b') })
+    await vi.waitFor(() => { expect(started).toHaveLength(2) })
+
+    const third = await callSubagent(
+      ctx,
+      { description: 'third parent', prompt: 'p3' },
+      { agent: fakeAgent('parent-c') },
+    )
+    expect(third.isError).toBe(true)
+    expect(text(third)).toContain('ya hay 2 subagentes activos')
+    expect(started).toHaveLength(2)
+
+    gate.resolve()
+    const accepted = await Promise.all([first, second])
+    expect(accepted.every(result => !result.isError)).toBe(true)
+  })
+
   it('allows one explicit critical third child but hard-blocks a fourth', async () => {
     const gate = Promise.withResolvers<void>()
     const started: string[] = []
