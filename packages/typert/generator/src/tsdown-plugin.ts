@@ -22,6 +22,11 @@ interface TypertPlugin {
 
 const DECORATOR_SYNTAX = /^\s*@[A-Za-z_$][\w$]*/m
 
+// This plugin consumes tsc-emitted `lib/types` output, so every project it
+// would re-diagnose has already passed the workspace tsc build in the same
+// orchestration; the generator skips its per-package diagnostic pass here.
+const TSC_VERIFIED_INPUT = { checkDiagnostics: false } as const
+
 /** Generation scope selected by a tsdown build phase. */
 export interface TypertPluginOptions {
   /** Package mode emits only the package being bundled; workspace mode emits every explicit contributor once. */
