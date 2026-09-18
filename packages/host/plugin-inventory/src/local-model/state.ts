@@ -18,6 +18,8 @@ export interface LocalModelStateStore {
   save(state: LocalModelPersistentState): Promise<void>
 }
 
+const LEGACY_DEFAULT_LOCAL_MODEL_ID = 'qwen3.5-4b-q4-k-m'
+
 const DEFAULT_STATE: Readonly<LocalModelPersistentState> = Object.freeze({
   mode: 'on-demand',
   selectedModelId: DEFAULT_LOCAL_MODEL_ID,
@@ -32,12 +34,18 @@ function normalizeState(value: unknown): LocalModelPersistentState {
   if (typeof value !== 'object' || value === null) return { ...DEFAULT_STATE, installedModelIds: [] }
   const record = value as Record<string, unknown>
   const mode = isMode(record['mode']) ? record['mode'] : DEFAULT_STATE.mode
-  const selectedModelId = typeof record['selectedModelId'] === 'string' && record['selectedModelId'].length > 0
+  const selectedModelIdRaw = typeof record['selectedModelId'] === 'string' && record['selectedModelId'].length > 0
     ? record['selectedModelId']
     : DEFAULT_STATE.selectedModelId
   const installedModelIds = Array.isArray(record['installedModelIds'])
     ? [...new Set(record['installedModelIds'].filter((entry): entry is string => typeof entry === 'string' && entry.length > 0))]
     : []
+  // Older Phoenix builds preselected Qwen even before any local artifact existed.
+  // Migrate only that empty legacy default; a Qwen model already installed or
+  // explicitly in use remains selected and can be switched/uninstalled by the user.
+  const selectedModelId = selectedModelIdRaw === LEGACY_DEFAULT_LOCAL_MODEL_ID && installedModelIds.length === 0
+    ? DEFAULT_STATE.selectedModelId
+    : selectedModelIdRaw
   return { mode, selectedModelId, installedModelIds }
 }
 
