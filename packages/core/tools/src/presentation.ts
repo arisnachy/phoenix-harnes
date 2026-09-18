@@ -137,12 +137,48 @@ export interface ReadFileLine {
  * `ToolDefinition.presentResult`; omitting the method keeps the pending
  * title and renders the raw result content.
  */
-export type ToolResultView = GenericResultView | TerminalResultView | DiffResultView | SearchResultView | ReadResultView | WebResultView
+export type ToolResultView = GenericResultView | TerminalResultView | DiffResultView | SearchResultView | ReadResultView | WebResultView | McpAppResultView
 
 /**
  * The default completed card: an optional replacement title and reformatted
  * content. Omit a field to keep the pending title / render the raw result content.
  */
+/**
+ * A completed MCP Apps tool rendered as an interactive View. The MCP bridge
+ * fetches the referenced `ui://` resource on the host, keeps the HTML out of
+ * the durable Session log, and supplies it only in this host-computed wire
+ * projection. The browser must execute `html` only inside the dedicated MCP
+ * App sandbox and pass `toolInput` / `toolResult` over the Apps JSON-RPC
+ * postMessage channel.
+ */
+export interface McpAppResultView {
+  card: 'mcp-app'
+  /** Replacement title for the completed call. */
+  title?: string
+  /** Stable MCP Apps resource identity declared by the server tool metadata. */
+  resourceUri: string
+  /** Validated text/html;profile=mcp-app document, never durable Session data. */
+  html: string
+  /** Original tool arguments delivered to the View after it initializes. */
+  toolInput: Record<string, unknown>
+  /** Exact JSON MCP tools/call success payload delivered to the View. */
+  toolResult: Record<string, unknown>
+  /** Resource-declared network policy; browser sandbox may only tighten it. */
+  csp?: {
+    connectDomains?: string[]
+    resourceDomains?: string[]
+    frameDomains?: string[]
+    baseUriDomains?: string[]
+  }
+  /** Resource-requested browser permissions; the host may deny any of them. */
+  permissions?: {
+    camera?: boolean
+    microphone?: boolean
+    geolocation?: boolean
+    clipboardWrite?: boolean
+  }
+}
+
 export interface GenericResultView {
   card: 'generic'
   /** Replacement title for the completed call. Omit to keep the pending-state title. */
