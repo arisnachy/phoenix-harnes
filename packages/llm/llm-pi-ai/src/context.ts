@@ -24,6 +24,187 @@ import {
   DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET,
 } from './config.ts'
 
+const ESTIMATED_CHARS_PER_TOKEN = 4
+const ESTIMATED_IMAGE_CHARS = 4800
+const PI_CONTEXT_SAFETY_TOKENS = 4096
+const MAX_RESPONSE_RESERVE_TOKENS = 4096
+const PRESSURE_TOOL_DESCRIPTION_MAX_CHARS = 160
+const PRESSURE_SKILL_CATALOG_MAX_CHARS = 12_000
+const SCHEMA_DECORATION_KEYS = new Set([
+  'description',
+  'title',
+  '$comment',
+  'examples',
+  'example',
+  'default',
+])
+
+/** JSON stringify that cannot fail request budgeting on an exotic schema value. */
+function safeJsonStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function estimateContentBlocksChars(blocks: readonly ContentBlock[]): number {
+  let chars = 0
+  for (const block of blocks) {
+    switch (block.type) {
+      case 'text':
+      case 'reasoning':
+        chars += block.text.length
+        break
+      case 'image':
+        chars += ESTIMATED_IMAGE_CHARS
+        break
+      case 'file':
+        chars += Math.min(block.attachment.bytes, DEFAULT_MAX_INLINE_FILE_BYTES)
+        break
+      case 'tool-call':
+        chars += block.name.length + block.arguments.length
+        break
+      case 'tool-result':
+        chars += estimateContentBlocksChars(block.content)
+        break
+      default:
+        break
+    }
+  }
+  return chars
+}
+
+/**
+ * Conservative request-size estimate using the same 4-chars/token convention
+ * pi-ai 0.82.x uses before it clamps maxTokens to remaining context.
+ */
+export function estimateGenerateOptionsTokens(options: GenerateOptions): number {
+  let chars = options.system?.length ?? 0
+  for (const message of options.messages) chars += estimateContentBlocksChars(message.content)
+  if (options.tools !== undefined && options.tools.length > 0) {
+    chars += safeJsonStringify(options.tools).length
+  }
+  return Math.ceil(chars / ESTIMATED_CHARS_PER_TOKEN)
+}
+
+function compactSchemaForPressure(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(compactSchemaForPressure)
+  if (typeof value !== 'object' || value === null) return value
+  const compacted: Record<string, unknown> = {}
+  for (const [key, child] of Object.entries(value)) {
+    if (SCHEMA_DECORATION_KEYS.has(key)) continue
+    compacted[key] = compactSchemaForPressure(child)
+  }
+  return compacted
+}
+
+function boundedToolDescription(value: string): string {
+  if (value.length <= PRESSURE_TOOL_DESCRIPTION_MAX_CHARS) return value
+  return value.slice(0, PRESSURE_TOOL_DESCRIPTION_MAX_CHARS - 1).trimEnd() + '…'
+}
+
+function compactToolsForPressure(options: GenerateOptions): GenerateOptions['tools'] {
+  return options.tools?.map(tool => ({
+    name: tool.name,
+    description: boundedToolDescription(tool.description),
+    parameters: compactSchemaForPressure(tool.parameters) as Record<string, unknown>,
+  }))
+}
+
+function compactSkillCatalogMessage(message: Message): Message {
+  const source = message.source as unknown as { kind?: unknown; entries?: unknown }
+  if (source.kind !== 'skill-catalog' || !Array.isArray(source.entries)) return message
+  const names = source.entries.flatMap((entry): string[] => {
+    if (typeof entry !== 'object' || entry === null) return []
+    const name = (entry as { name?: unknown }).name
+    return typeof name === 'string' && name.length > 0 ? [name] : []
+  })
+  if (names.length === 0) return message
+
+  const lines: string[] = []
+  let chars = 0
+  for (const name of names) {
+    const line = '- `' + name + '`'
+    if (chars + line.length + 1 > PRESSURE_SKILL_CATALOG_MAX_CHARS) break
+    lines.push(line)
+    chars += line.length + 1
+  }
+  const omitted = names.length - lines.length
+  const text = [
+    '<system-reminder>',
+    'Available skills (compact index used because this model has limited request context):',
+    '<available_skills>',
+    ...lines,
+    '</available_skills>',
+    ...(omitted > 0 ? [String(omitted) + ' additional skills are omitted from this compact index.'] : []),
+    'Call the `skill` tool with an exact listed name when one clearly applies. Full skill instructions are loaded only on demand.',
+    '</system-reminder>',
+  ].join('\n')
+  return { ...message, content: [{ type: 'text', text }] }
+}
+
+function compactAuxiliaryContextForPressure(options: GenerateOptions): GenerateOptions {
+  return {
+    ...options,
+    messages: options.messages.map(compactSkillCatalogMessage),
+    ...options.tools === undefined ? {} : { tools: compactToolsForPressure(options) },
+  }
+}
+
+export interface ContextBudgetFit {
+  /** Request representation to convert and send. */
+  options: GenerateOptions
+  /** Estimated input tokens after any request-only compaction. */
+  estimatedTokens: number
+  /** Maximum estimated input that still preserves pi-ai safety plus reply room. */
+  inputBudgetTokens: number
+  /** Whether request-only compaction was applied. */
+  compacted: boolean
+}
+
+/**
+ * Reserve useful answer room before pi-ai applies its own context clamp.
+ *
+ * This does not mutate durable conversation state. Under pressure it only
+ * compacts model-facing skill-catalog prose and schema documentation; tool
+ * names, argument structure, user messages, system instructions and history
+ * remain intact.
+ */
+export function fitGenerateOptionsToContext(
+  options: GenerateOptions,
+  contextWindow: number,
+  desiredMaxOutput: number,
+): ContextBudgetFit {
+  if (!Number.isFinite(contextWindow) || contextWindow <= 0) {
+    return {
+      options,
+      estimatedTokens: estimateGenerateOptionsTokens(options),
+      inputBudgetTokens: Number.POSITIVE_INFINITY,
+      compacted: false,
+    }
+  }
+  const responseReserve = Math.min(
+    Math.max(0, Math.floor(desiredMaxOutput)),
+    MAX_RESPONSE_RESERVE_TOKENS,
+  )
+  const inputBudgetTokens = Math.max(
+    1,
+    Math.floor(contextWindow) - PI_CONTEXT_SAFETY_TOKENS - responseReserve,
+  )
+  const estimatedTokens = estimateGenerateOptionsTokens(options)
+  if (estimatedTokens <= inputBudgetTokens) {
+    return { options, estimatedTokens, inputBudgetTokens, compacted: false }
+  }
+
+  const compactedOptions = compactAuxiliaryContextForPressure(options)
+  return {
+    options: compactedOptions,
+    estimatedTokens: estimateGenerateOptionsTokens(compactedOptions),
+    inputBudgetTokens,
+    compacted: true,
+  }
+}
 /** Join the text blocks of a harness message. */
 function flattenText(message: Message): string {
   return message.content
