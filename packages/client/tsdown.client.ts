@@ -275,6 +275,7 @@ function staticLinkedConfig(id: string, entry: string, outputName = basename(ent
       name: STATIC_LINKED_PLUGIN,
       resolveId: {
         order: 'pre' as const,
+        filter: { id: routingPattern },
         handler(source: string, importer: string | undefined) {
           // An entry arrives without an importer and must stay internal.
           if (importer === undefined) return null
@@ -429,6 +430,36 @@ function escapeSpecifier(name: string): string {
   return name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+/** Build one exact-match RegExp from a finite set of import specifiers. */
+function exactSpecifierPattern(specifiers: ReadonlySet<string>): RegExp {
+  if (specifiers.size === 0) return /$a/
+  return new RegExp(`^(?:${[...specifiers].map(escapeSpecifier).join('|')})$`)
+}
+
+/**
+ * Match every dependency specifier except the loader module-table rows that
+ * must stay external. Using one static RegExp avoids per-import JS callbacks in
+ * tsdown:deps while preserving the existing "bundle everything else" policy.
+ */
+function bundledDependencyPattern(externals: ReadonlySet<string>): RegExp {
+  if (externals.size === 0) return /.*/
+  return new RegExp(`^(?!(?:${[...externals].map(escapeSpecifier).join('|')})$).+`)
+}
+
+/**
+ * Native Rolldown resolveId filter. Rust rejects the overwhelming majority of
+ * imports before crossing into the JS plugin: only CSS, Phoenix workspace
+ * imports, and exact loader-module requests can reach the routing handler.
+ */
+function clientRoutingPattern(externals: ReadonlySet<string>): RegExp {
+  const exact = externals.size === 0
+    ? ''
+    : `|^(?:${[...externals].map(escapeSpecifier).join('|')})$`
+  return new RegExp(`(?:\\.css(?:\\?inline)?$|^@phoenix-ai/${exact})`)
+}
+
+/** Virtual CSS modules are the only ids the load hook owns. */
+const CLIENT_CSS_VIRTUAL_PATTERN = /^\\0dsh-(?:css|global-css|inline-css):/
 /** Whether an import specifier is the package a pattern names, or one of its subpaths. */
 function matchesSpecifier(patterns: readonly RegExp[], specifier: string): boolean {
   return patterns.some(pattern => pattern.test(specifier))
@@ -477,7 +508,9 @@ function compileClientCss(fileId: string, modules: boolean): CachedCssCompilatio
 
 function clientConfig(id: string, entry: string): UserConfig {
   const requested = clientExternals(id)
-  const isRequested = (specifier: string): boolean => requested.has(specifier)
+  const requestedPattern = exactSpecifierPattern(requested)
+  const bundlePattern = bundledDependencyPattern(requested)
+  const routingPattern = clientRoutingPattern(requested)
   return {
     name: `${id}/client`,
     entry: { client: entry },
@@ -494,13 +527,14 @@ function clientConfig(id: string, entry: string): UserConfig {
     sourcemap: true,
     clean: false,
     deps: {
-      neverBundle: isRequested,
+      // Static matchers keep tsdown:deps on its fast path. The pre-routing
+      // plugin externalizes these exact rows first; this remains the declarative
+      // dependency policy/fallback consumed by tsdown itself.
+      neverBundle: [requestedPattern],
       // Anything NOT requested from the loader module table must inline
       // (wire/type layers, zod, clsx — every non-shared dep). A require() the
-      // table cannot answer is a guaranteed runtime throw, so the rule is the
-      // package's own request list: requested specifiers stay imports,
-      // everything else is bundled.
-      alwaysBundle: (specifier: string) => !isRequested(specifier),
+      // table cannot answer is a guaranteed runtime throw.
+      alwaysBundle: [bundlePattern],
     },
     // Browser bundles inline node-idiom deps (zustand/immer read
     // process.env.NODE_ENV; zustand's esm build also probes
@@ -543,7 +577,7 @@ function clientConfig(id: string, entry: string): UserConfig {
 
           // These are guaranteed loader module-table rows. Resolve them here
           // instead of paying tsdown:deps to rediscover the same decision.
-          if (isRequested(source)) return { id: source, external: true }
+          if (requested.has(source)) return { id: source, external: true }
 
           if (!source.startsWith('@phoenix-ai/')) return null
           if (VENDORED_LIBRARY.test(source)) return null
@@ -555,9 +589,11 @@ function clientConfig(id: string, entry: string): UserConfig {
           )
         },
       },
-      load(virtualId: string) {
-        let fileId: string
-        let kind: 'module' | 'text' | 'global'
+      load: {
+        filter: { id: CLIENT_CSS_VIRTUAL_PATTERN },
+        handler(virtualId: string) {
+          let fileId: string
+          let kind: 'module' | 'text' | 'global'
         if (virtualId.startsWith(CSS_VIRTUAL_PREFIX)) {
           fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
           kind = 'module'
@@ -571,10 +607,11 @@ function clientConfig(id: string, entry: string): UserConfig {
           return null
         }
 
-        this.addWatchFile(fileId)
-        const compiled = compileClientCss(fileId, kind === 'module')
-        if (kind === 'text') return `export default ${JSON.stringify(compiled.code)};`
-        return styleInjectionModule(id, fileId, compiled.code, compiled.classMap)
+          this.addWatchFile(fileId)
+          const compiled = compileClientCss(fileId, kind === 'module')
+          if (kind === 'text') return `export default ${JSON.stringify(compiled.code)};`
+          return styleInjectionModule(id, fileId, compiled.code, compiled.classMap)
+        },
       },
     }],
     outputOptions: {
