@@ -55,13 +55,24 @@ vi.mock('../src/workspace.ts', () => ({
   },
 }))
 
-const { typertPlugin } = await import('../src/tsdown-plugin.ts')
+const { decoratorLoweringPlugin, typertPlugin } = await import('../src/tsdown-plugin.ts')
 const roots: string[] = []
 
 afterEach(() => {
   discovered.mockClear()
   generated.mockClear()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+})
+
+describe('decoratorLoweringPlugin', () => {
+  it('keeps Typert workspace analysis out of the ordinary Rolldown plugin', () => {
+    const plugin = decoratorLoweringPlugin()
+    expect(plugin.name).toBe('dsh-decorator-lowering')
+    expect('writeBundle' in plugin).toBe(false)
+    expect(plugin.transform('export const value = 1\n', '/workspace/src/plain.ts')).toBeUndefined()
+    expect(plugin.transform('@sealed\nexport class Example {}\n', '/workspace/src/example.ts')?.code)
+      .not.toContain('@sealed')
+  })
 })
 
 describe('typertPlugin', () => {
