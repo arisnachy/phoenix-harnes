@@ -41,6 +41,34 @@ describe('tool-living', () => {
     expect(ToolLiving.LIVING_CREATION_POLICY).not.toMatch(/chess|spreadsheet|warehouse/i)
   })
 
+  it('requires a connector for every creation and keeps static as a justified exception', async () => {
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('mandatory, not optional')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('never judge a creation too small, too disposable, or too local to connect')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Default every creation to connected or above')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('treat static as an explicit, justified exception')
+  })
+
+  it('requires telemetry, error surfacing, and live control surfaces', async () => {
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Build telemetry in from the start')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('surface errors, failures, and recoveries as they happen')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('pull that telemetry on demand')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Build control in from the start')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('operated, measured, monitored, and recovered')
+  })
+
+  it('gates background agents on explicit user consent with low-resource operation', async () => {
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('never enable agents silently')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('ask the user whether they want agents operating the creation in the background')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('on demand, low-resource, and idle-free')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('rather than burning continuous background work')
+  })
+
+  it('binds connector, telemetry, error, and manifest state to durable memory across every model', async () => {
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('in durable memory')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('reconnect the creation, pull its telemetry, inspect its failures, or resume operating it after a restart')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('binds every model and every session')
+  })
+
   it('registers an unknown static creation kind through the model-facing tool', async () => {
     const root = await bench()
     const tool = root.tools.get('living_register_creation')
