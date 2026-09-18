@@ -10,7 +10,6 @@
  */
 import { readFile } from 'node:fs/promises'
 import { existsSync, globSync, readFileSync } from 'node:fs'
-import { isBuiltin } from 'node:module'
 import { basename, dirname, isAbsolute, relative, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { UserConfig } from 'tsdown'
@@ -18,6 +17,7 @@ import { transform } from 'lightningcss'
 import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
+import { optimizePhoenixTsdownInput } from '../../scripts/tsdown-performance.ts'
 
 /**
  * Virtual-id wrapper keeping module CSS away from tsdown's own css pipeline
@@ -217,8 +217,6 @@ function clientLibraryConfig(
   libEntry: readonly string[],
   overrides: UserConfig = {},
 ): UserConfig {
-  const isProductionDependency = (specifier: string): boolean =>
-    matchesSpecifier(productionExternals(id), specifier)
   return {
     name: id,
     entry: [...libEntry],
@@ -229,15 +227,7 @@ function clientLibraryConfig(
     fixedExtension: false,
     dts: false,
     clean: false,
-    deps: {
-      // The Node half runs from a real install: a production dependency is on
-      // disk there and stays an import, everything else inlines. Stating both
-      // halves takes the artifact off tsdown's getProductionDeps fallback, where
-      // moving a dependency between npm sections silently re-bundles it.
-      // Builtins keep tsdown's own handling (neither side claims them).
-      neverBundle: isProductionDependency,
-      alwaysBundle: (specifier: string) => !isBuiltin(specifier) && !isProductionDependency(specifier),
-    },
+    inputOptions: options => optimizePhoenixTsdownInput(options),
     ...overrides,
   }
 }
@@ -268,13 +258,12 @@ function staticLinkedConfig(id: string, entry: string, outputName = basename(ent
     // The shell compiles this artifact, so its map is the only path from a
     // browser stack frame back to the TSX (tsc emits the lib/types half).
     sourcemap: true,
-    inputOptions: {
+    inputOptions: options => optimizePhoenixTsdownInput(options, {
       // Contract 1. Keep every bare import external before plugin dispatch or
-      // normal resolution. Rolldown evaluates this RegExp in native code, so
-      // static-linked builds no longer cross Rust -> JavaScript once per import.
-      // The extra NUL exclusion keeps plugin-created virtual ids internal.
+      // normal resolution. Rolldown evaluates this RegExp in native code.
       external: BARE_MODULE_ID,
-    },
+      externalizeProductionDeps: false,
+    }),
     plugins: [{
       // Marker only: the native external option above owns the actual routing.
       // Keeping the name preserves the static-channel roster contract used by
@@ -345,7 +334,6 @@ interface WorkspaceManifest {
 }
 
 const manifestCache = new Map<string, WorkspaceManifest>()
-const productionExternalCache = new Map<string, readonly RegExp[]>()
 const clientExternalCache = new Map<string, ReadonlySet<string>>()
 
 /**
@@ -370,26 +358,6 @@ function workspaceManifest(id: string): WorkspaceManifest {
     return manifest
   }
   throw new Error(`tsdown: no packages/*/*/package.json declares the name ${id}`)
-}
-
-/**
- * External patterns for one package's Node half: its own production sections,
- * subpaths included.
- * @param id - package name, as spelled at the preset call site.
- * @returns one `^name(/|$)` pattern per production dependency, name-sorted.
- */
-function productionExternals(id: string): readonly RegExp[] {
-  const cached = productionExternalCache.get(id)
-  if (cached !== undefined) return cached
-  const manifest = workspaceManifest(id)
-  const names = new Set([
-    ...Object.keys(manifest.dependencies ?? {}),
-    ...Object.keys(manifest.peerDependencies ?? {}),
-    ...Object.keys(manifest.optionalDependencies ?? {}),
-  ])
-  const patterns = [...names].sort().map(name => new RegExp(`^${escapeSpecifier(name)}(/|$)`))
-  productionExternalCache.set(id, patterns)
-  return patterns
 }
 
 /**
@@ -439,24 +407,11 @@ function exactSpecifierPattern(specifiers: ReadonlySet<string>): RegExp {
 }
 
 /**
- * Match every dependency specifier except the loader module-table rows that
- * must stay external. Using one static RegExp avoids per-import JS callbacks in
- * tsdown:deps while preserving the existing "bundle everything else" policy.
+ * Native Rolldown resolveId filter for the only imports that still need custom
+ * Phoenix logic: CSS virtual modules and forbidden cross-plugin value edges.
+ * Loader module-table externals are handled earlier by inputOptions.external.
  */
-function bundledDependencyPattern(externals: ReadonlySet<string>): RegExp {
-  if (externals.size === 0) return /.*/
-  return new RegExp(`^(?!(?:${[...externals].map(escapeSpecifier).join('|')})$).+`)
-}
-
-/**
- * Native Rolldown resolveId filter. Rust rejects the overwhelming majority of
- * imports before crossing into the JS plugin: only CSS, Phoenix workspace
- * imports, and exact loader-module requests can reach the routing handler.
- */
-function clientRoutingPattern(externals: ReadonlySet<string>): RegExp {
-  const exact = externals.size === 0
-    ? ''
-    : `|^(?:${[...externals].map(escapeSpecifier).join('|')})$`
+function clientRoutingPattern(): RegExp {
   const withoutStart = (pattern: RegExp): string =>
     pattern.source.startsWith('^') ? pattern.source.slice(1) : pattern.source
   const unsafePhoenix = [
@@ -466,7 +421,7 @@ function clientRoutingPattern(externals: ReadonlySet<string>): RegExp {
     `(?!${withoutStart(GENERATED_REMOTE)})`,
     '@phoenix-ai/',
   ].join('')
-  return new RegExp(`(?:\\.css(?:\\?inline)?$|${unsafePhoenix}${exact})`)
+  return new RegExp(`(?:\\.css(?:\\?inline)?$|${unsafePhoenix})`)
 }
 
 /** Virtual CSS modules are the only ids the load hook owns. */
@@ -478,11 +433,6 @@ const BARE_MODULE_ID = /^[^./\0](?!:[/\\])/
 const TSC_EMITTED_JS = /\/lib\/types\/.*\.js$/
 /** Native resolve filter for stylesheet imports owned by the static channel. */
 const CSS_IMPORT = /\.css$/
-/** Whether an import specifier is the package a pattern names, or one of its subpaths. */
-function matchesSpecifier(patterns: readonly RegExp[], specifier: string): boolean {
-  return patterns.some(pattern => pattern.test(specifier))
-}
-
 interface CachedCssCompilation {
   readonly source: Buffer
   readonly code: string
@@ -527,8 +477,7 @@ function compileClientCss(fileId: string, modules: boolean): CachedCssCompilatio
 function clientConfig(id: string, entry: string): UserConfig {
   const requested = clientExternals(id)
   const requestedPattern = exactSpecifierPattern(requested)
-  const bundlePattern = bundledDependencyPattern(requested)
-  const routingPattern = clientRoutingPattern(requested)
+  const routingPattern = clientRoutingPattern()
   return {
     name: `${id}/client`,
     entry: { client: entry },
@@ -544,16 +493,12 @@ function clientConfig(id: string, entry: string): UserConfig {
     // must carry the TS/TSX mapping consumed by browser profiling tools.
     sourcemap: true,
     clean: false,
-    deps: {
-      // Static matchers keep tsdown:deps on its fast path. The pre-routing
-      // plugin externalizes these exact rows first; this remains the declarative
-      // dependency policy/fallback consumed by tsdown itself.
-      neverBundle: [requestedPattern],
-      // Anything NOT requested from the loader module table must inline
-      // (wire/type layers, zod, clsx — every non-shared dep). A require() the
-      // table cannot answer is a guaranteed runtime throw.
-      alwaysBundle: [bundlePattern],
-    },
+    inputOptions: options => optimizePhoenixTsdownInput(options, {
+      // Module-table rows are exact external ids. Everything else belongs
+      // inside the self-contained browser plugin bundle.
+      external: requestedPattern,
+      externalizeProductionDeps: false,
+    }),
     // Browser bundles inline node-idiom deps (zustand/immer read
     // process.env.NODE_ENV; zustand's esm build also probes
     // import.meta.env.MODE, which a CJS output cannot carry — rolldown flags
@@ -571,10 +516,9 @@ function clientConfig(id: string, entry: string): UserConfig {
       'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
     },
     plugins: [{
-      // One pre-routing hook owns the decisions Phoenix already knows. This
-      // avoids making Rolldown dispatch the same import through four separate
-      // JavaScript resolveId hooks and bypasses tsdown:deps for requested
-      // module-table rows that are unconditionally external.
+      // One filtered hook owns only CSS virtualization and the Phoenix purity
+      // gate. Module-table rows are already externalized natively above, so
+      // common framework imports never cross into this JavaScript hook.
       name: 'dsh-client-bundle-routing',
       resolveId: {
         order: 'pre' as const,
@@ -593,10 +537,6 @@ function clientConfig(id: string, entry: string): UserConfig {
             const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
             return GLOBAL_CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
           }
-
-          // These are guaranteed loader module-table rows. Resolve them here
-          // instead of paying tsdown:deps to rediscover the same decision.
-          if (requested.has(source)) return { id: source, external: true }
 
           if (!source.startsWith('@phoenix-ai/')) return null
           if (VENDORED_LIBRARY.test(source)) return null
