@@ -26,16 +26,16 @@ export const inject = ['tools', 'subagents', 'systemPrompt']
 /** Prompt order after bounded delegation policy and before child reporting. */
 const SUBAGENT_SECTION_ORDER = 116.5
 
-/** Phoenix keeps ordinary fan-out small so delegation improves latency instead of multiplying token spend. */
-const STANDARD_ACTIVE_SUBAGENTS = 2
-/** One exceptional third child is available only when the model marks the work as genuinely critical. */
+/** Phoenix normally delegates to one child; escalation requires explicit task-complexity evidence. */
 const MAX_ACTIVE_SUBAGENTS = 3
 
 const ACTIVE_SUBAGENT_GUIDANCE =
-  ' Presupuesto Phoenix: mantén como máximo 2 subagentes activos. ' +
-  'Usa un tercero únicamente cuando dos no basten para trabajo independiente realmente crítico, ' +
-  'marcando critical_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente, ' +
-  'no dupliques investigación y conserva el contexto y la memoria cognitiva en el agente principal.'
+  ' Presupuesto Phoenix de subagentes: usa 1 como norma. ' +
+  'Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, ' +
+  'marcando hard_parallelism=true. Abre un tercero solo en un caso extremo donde tres frentes independientes ' +
+  'sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. ' +
+  'Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, ' +
+  'el contexto, la identidad y la síntesis final en el agente principal.'
 
 interface ActiveSubagentBudget {
   readonly activeByParent: Map<string, number>
@@ -57,7 +57,7 @@ function activeBudgetFor(runtime: object): ActiveSubagentBudget {
 function reserveActiveSubagent(
   state: ActiveSubagentBudget,
   parent: Agent,
-  criticalParallelism: boolean,
+  escalation: { readonly hard: boolean; readonly extreme: boolean },
 ): () => void {
   const parentId = String(parent.id)
   const active = state.activeByParent.get(parentId) ?? 0
@@ -67,10 +67,16 @@ function reserveActiveSubagent(
       'espera o reutiliza uno de los existentes.',
     )
   }
-  if (active >= STANDARD_ACTIVE_SUBAGENTS && !criticalParallelism) {
+  if (active >= 2 && !escalation.extreme) {
     throw new Error(
-      'Presupuesto Phoenix: ya hay 2 subagentes activos. Espera o reutiliza uno; ' +
-      'solo una tercera tarea realmente crítica puede usar critical_parallelism=true.',
+      'Presupuesto Phoenix: ya hay 2 subagentes activos. Un tercero solo se admite en casos extremos ' +
+      'con tres frentes independientes y extreme_parallelism=true.',
+    )
+  }
+  if (active >= 1 && !(escalation.hard || escalation.extreme)) {
+    throw new Error(
+      'Presupuesto Phoenix: 1 subagente es la norma. Un segundo solo se admite cuando la tarea es realmente ' +
+      'difícil y requiere dos frentes independientes; usa hard_parallelism=true.',
     )
   }
 
@@ -422,10 +428,15 @@ export function apply(ctx: Context, config: Config): void {
           required: true,
           description: wording.promptDescription,
         },
-        critical_parallelism: {
+        hard_parallelism: {
           type: 'boolean',
           description:
-            'Exceptional third active slot only. Set true ONLY when two active subagents cannot cover genuinely independent critical work. It never permits a fourth child.',
+            'Second active slot only. Set true ONLY when one subagent is insufficient and the task has two genuinely independent difficult workstreams.',
+        },
+        extreme_parallelism: {
+          type: 'boolean',
+          description:
+            'Third active slot only. Set true ONLY in an extreme case that truly requires three independent workstreams. It never permits a fourth child.',
         },
         ...backgroundEnabled ? {
           run_in_background: {
@@ -521,7 +532,10 @@ export function apply(ctx: Context, config: Config): void {
         const releaseBudgetSlot = reserveActiveSubagent(
           activeBudget,
           parent,
-          args.critical_parallelism === true,
+          {
+            hard: args.hard_parallelism === true,
+            extreme: args.extreme_parallelism === true,
+          },
         )
 
         if (runSpec.runInBackground) {
