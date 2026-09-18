@@ -62,6 +62,44 @@ describe('connectors settings section', () => {
     expect(container.childElementCount).toBe(0)
   })
 
+  it('recovers transient plugin inventory fetch failures without breaking Connectors', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const chatGptWeb = {
+      state: vi.fn()
+        .mockRejectedValueOnce(new Error(
+          'pluginInventory.chatGptWebState failed: internal: client api: pluginInventory/chatGptWebState failed: Failed to fetch',
+        ))
+        .mockResolvedValue({
+          enabled: false,
+          phase: 'off' as const,
+          baseUrl: 'http://127.0.0.1:17841/v1',
+          detail: 'ChatGPT Web is off',
+        }),
+      enable: vi.fn(),
+      disable: vi.fn(),
+    }
+    const mcpRegistry = {
+      state: vi.fn()
+        .mockRejectedValueOnce(new Error(
+          'pluginInventory.mcpConnectorHubState failed: internal: client api: pluginInventory/mcpConnectorHubState failed: Failed to fetch',
+        ))
+        .mockResolvedValue({ runtime: [], managed: [] }),
+      install: vi.fn(),
+      search: vi.fn(),
+    }
+    const settings = { mutate: vi.fn(async () => ok({})) } as unknown as IApiClient['settings']
+
+    renderHub(api, { chatGptWeb, settings, mcpRegistry })
+
+    await waitFor(() => { expect(chatGptWeb.state).toHaveBeenCalledTimes(2) })
+    await waitFor(() => { expect(mcpRegistry.state).toHaveBeenCalledTimes(2) })
+    expect(screen.queryByText(/Failed to fetch/i)).toBeNull()
+    expect(screen.getByRole('heading', { name: 'MCP connectors' })).toBeTruthy()
+  })
+
   it('defaults the connector catalog to connected and reveals the broad catalog on demand', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
