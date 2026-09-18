@@ -41,6 +41,7 @@ import type {
 } from '@earendil-works/pi-ai'
 import {
   attributionHeaders,
+  CONTEXT_WINDOW_EXCEEDED_CODE,
   contentHasFile,
   contentHasImage,
   CONTEXT_WINDOW_EXCEEDED_CODE,
@@ -396,6 +397,13 @@ export class PiAiAdapter extends LlmAdapter {
     try {
       const desiredMaxOutput = options.maxTokens ?? model.maxTokens
       const fitted = fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
+      if (fitted.estimatedTokens > fitted.inputBudgetTokens) {
+        throw new LlmError(
+          `pi-ai request for "${model.id}" still needs ~${fitted.estimatedTokens} input tokens after context fitting; `
+          + `the safe input budget is ${fitted.inputBudgetTokens} tokens`,
+          CONTEXT_WINDOW_EXCEEDED_CODE,
+        )
+      }
       const requestOptions = fitted.options
       const containsImage = requestOptions.messages.some(message => contentHasImage(message.content))
       const containsFile = requestOptions.messages.some(message => contentHasFile(message.content))
