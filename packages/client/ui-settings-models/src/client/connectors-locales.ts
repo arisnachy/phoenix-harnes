@@ -41,7 +41,7 @@ export const connectorEn = {
   chatgptWebUnavailable: 'Unavailable',
   chatgptWebNeedsSetup: 'Setup required',
   chatgptWebBusy: 'Applying…',
-  chatgptWebSetupHint: 'Open Codex Web GPT once and complete Setup > Browser-only, then turn this switch on again.',
+  chatgptWebSetupHint: 'Codex Web GPT opens automatically. Complete Setup > Browser-only once; Phoenix will continue when setup is ready.',
 } as const
 
 /** Translation-key union shared by every Settings → Connectors locale dictionary. */
@@ -90,7 +90,7 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
   chatgptWebUnavailable: 'No disponible',
   chatgptWebNeedsSetup: 'Requiere configuración',
   chatgptWebBusy: 'Aplicando…',
-  chatgptWebSetupHint: 'Abre Codex Web GPT una vez y completa Setup > Browser-only; luego vuelve a activar este switch.',
+  chatgptWebSetupHint: 'Codex Web GPT se abre automáticamente. Completa Setup > Browser-only una sola vez; Phoenix continuará cuando esté listo.',
 }
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
@@ -116,5 +116,5 @@ export const connectorZh: { [Key in ConnectorKey]: string } = {
   chatgptWebUnavailable: '不可用',
   chatgptWebNeedsSetup: '需要设置',
   chatgptWebBusy: '正在应用…',
-  chatgptWebSetupHint: '先打开一次 Codex Web GPT 并完成 Setup > Browser-only，然后再次开启此开关。',
+  chatgptWebSetupHint: 'Codex Web GPT 会自动打开。只需完成一次 Setup > Browser-only；设置就绪后 Phoenix 会自动继续。',
 }
