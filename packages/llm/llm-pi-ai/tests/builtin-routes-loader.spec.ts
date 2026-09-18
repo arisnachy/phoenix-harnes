@@ -1,4 +1,7 @@
+import { once } from 'node:events'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import type { Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -8,13 +11,22 @@ import Loader from '@phoenix-ai/cordis-plugin-loader'
 import Include from '@phoenix-ai/cordis-plugin-include'
 import LlmRuntime from '@phoenix-ai/dsh-llm'
 import * as LlmPiAi from '@phoenix-ai/dsh-llm-pi-ai'
+import { assemble } from './assemble.ts'
+import { textEvents } from './mock-server.ts'
 
 let root: string | undefined
 let context: Context | undefined
+let localServer: Server | undefined
 
 afterEach(async () => {
   await context?.fiber.dispose()
   context = undefined
+  if (localServer !== undefined) {
+    await new Promise<void>((resolve, reject) => {
+      localServer!.close(error => error === undefined ? resolve() : reject(error))
+    })
+    localServer = undefined
+  }
   if (root !== undefined) await rm(root, { recursive: true, force: true })
   root = undefined
 })
@@ -55,6 +67,29 @@ async function loadBareModelRuntime(): Promise<Context> {
 }
 
 describe('llm-pi-ai built-in route lifecycle', () => {
+  it('streams Phoenix Local without requiring an API key', async () => {
+    let authorization: string | undefined
+    localServer = createServer((request, response) => {
+      authorization = request.headers.authorization
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      for (const event of textEvents) response.write(`data: ${event}\n\n`)
+      response.end()
+    })
+    localServer.listen(17_842, '127.0.0.1')
+    await once(localServer, 'listening')
+
+    const ctx = await loadBareModelRuntime()
+    const result = await assemble(ctx, {
+      provider: LlmPiAi.PHOENIX_LOCAL_PROVIDER,
+      model: LlmPiAi.PHOENIX_LOCAL_MODEL,
+      messages: [],
+    })
+
+    expect(result.finish).toEqual({ kind: 'stop' })
+    expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
+    expect(authorization).toBe(LlmPiAi.PHOENIX_LOCAL_AUTHORIZATION)
+  })
+
   it('registers Phoenix Local and OpenCode Free without image-only runtime services', async () => {
     const ctx = await loadBareModelRuntime()
 
