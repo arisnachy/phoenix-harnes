@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertComputerActionAllowed,
+  computerActionNeedsApproval,
   computerModeForSandbox,
   runWindowsComputerAction,
   shouldCaptureAfterAction,
@@ -23,6 +24,14 @@ describe('Computer Use permissions', () => {
     expect(() => assertComputerActionAllowed('observe', 'screenshot')).not.toThrow()
     expect(() => assertComputerActionAllowed('observe', 'windows')).not.toThrow()
     expect(() => assertComputerActionAllowed('interact', 'type')).not.toThrow()
+  })
+
+  it('treats Full Access as no-prompt desktop authority', () => {
+    expect(computerActionNeedsApproval('danger-full-access', 'browser_open')).toBe(false)
+    expect(computerActionNeedsApproval('danger-full-access', 'click')).toBe(false)
+    expect(computerActionNeedsApproval('danger-full-access', 'type')).toBe(false)
+    expect(computerActionNeedsApproval('workspace-write', 'click')).toBe(true)
+    expect(computerActionNeedsApproval('read-only', 'screenshot')).toBe(false)
   })
 })
 
@@ -86,8 +95,10 @@ describe('Computer Use argument contract', () => {
     const invocation = windowsComputerInvocation({ action: 'browser_open', url: 'https://example.com/path?q=phoenix' })
     expect(invocation.argv.join(' ')).not.toContain('https://example.com')
     expect(invocation.env.PHX_URL).toBe('https://example.com/path?q=phoenix')
-    expect(invocation.stdin).toContain("KeyCombo('CTRL+L')")
-    expect(invocation.stdin).toContain("TypeText($env:PHX_URL)")
+    expect(invocation.stdin).toContain('WM_COPYDATA')
+    expect(invocation.stdin).toContain('OpenPhoenixBrowser')
+    expect(invocation.stdin).toContain('$env:PHX_URL')
+    expect(invocation.stdin).not.toContain("KeyCombo('CTRL+L')")
   })
 
   it('rejects key strings outside the closed combo grammar', () => {
