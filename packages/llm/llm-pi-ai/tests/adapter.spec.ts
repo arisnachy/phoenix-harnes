@@ -417,6 +417,30 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.paths).toEqual([])
   })
 
+  it('normalizes provider context overflow so automatic compaction can recover', async () => {
+    const server = await mockServer([{
+      status: 400,
+      body: JSON.stringify({
+        error: {
+          message: 'request (259065 tokens) exceeds the available context size (8192 tokens), try increasing it',
+          type: 'exceed_context_size_error',
+          code: 400,
+          n_prompt_tokens: 259065,
+          n_ctx: 8192,
+        },
+      }),
+    }])
+    const ctx = await harness(server.url)
+
+    const result = await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: { code: CONTEXT_WINDOW_EXCEEDED_CODE },
+    })
+    expect(server.paths).toEqual(['/chat/completions'])
+  })
+
   it.each([
     [401, 'AUTH'],
     [400, 'INVALID_REQUEST'],
