@@ -267,47 +267,50 @@ function staticLinkedConfig(id: string, entry: string, outputName = basename(ent
     // The shell compiles this artifact, so its map is the only path from a
     // browser stack frame back to the TSX (tsc emits the lib/types half).
     sourcemap: true,
+    deps: {
+      // Contract 1. Put the bare-import rule on Rolldown's external option
+      // instead of a JavaScript resolveId plugin. This preserves the importer
+      // guard for entries while skipping tsdown:deps resolution for runtime
+      // dependencies entirely.
+      neverBundle: staticLinkedExternal,
+    },
     plugins: [{
-      // Contract 1. `pre` because tsdown's own deps plugin would otherwise
-      // resolve and inline every specifier missing from the npm production
-      // sections, which is the coupling this preset exists to remove. The name
-      // is also the roster marker {@link isStaticLinkedConfig} reads.
+      // Roster marker only. Static assembly gates read this name; keeping it
+      // hook-free means it can never appear in PLUGIN_TIMINGS.
       name: STATIC_LINKED_PLUGIN,
-      resolveId: {
-        order: 'pre' as const,
-        handler(source: string, importer: string | undefined) {
-          // An entry arrives without an importer and must stay internal.
-          if (importer === undefined) return null
-          return isBareSpecifier(source) ? { id: source, external: true } : null
-        },
-      },
     }, {
       // Contract 3. Rolldown does not read the `//# sourceMappingURL` of its
       // inputs, so each tsc map is handed over as that module's map and
       // composed into the bundle map; without it frames stop at the emitted
       // lib/types JavaScript instead of reaching the TSX.
       name: 'dsh-tsc-sourcemap',
-      async load(id: string) {
-        if (!id.includes(TYPES_MARKER) || !id.endsWith('.js') || !existsSync(`${id}.map`)) return null
-        const code = await readFile(id, 'utf8')
-        return { code: code.replace(SOURCEMAP_COMMENT, ''), map: await readFile(`${id}.map`, 'utf8') }
+      load: {
+        filter: { id: STATIC_LINKED_TSC_JS },
+        async handler(id: string) {
+          if (!existsSync(`${id}.map`)) return null
+          const code = await readFile(id, 'utf8')
+          return { code: code.replace(SOURCEMAP_COMMENT, ''), map: await readFile(`${id}.map`, 'utf8') }
+        },
       },
     }, {
       // Contract 4. The import survives verbatim and the sheet lands beside the
       // JavaScript, so the shell's CSS Modules pipeline sees a real stylesheet.
       name: 'dsh-css-asset',
-      async resolveId(this: AssetEmitter, source: string, importer: string | undefined) {
-        if (!source.endsWith('.css') || importer === undefined) return null
-        const { file, fileName } = stylesheetAsset(source, importer)
-        if (!emitted.has(fileName)) {
-          emitted.add(fileName)
-          // originalFileName also puts the physical sheet in the watch graph.
-          this.emitFile({ type: 'asset', fileName, source: await readFile(file), originalFileName: file })
-        }
-        // Every emitted chunk sits at the lib/ root, so the src-relative name
-        // is what resolves from there. Rolldown keeps relative externals as
-        // written instead of re-normalizing them.
-        return { id: `./${fileName}`, external: true }
+      resolveId: {
+        filter: { id: STATIC_LINKED_CSS },
+        async handler(this: AssetEmitter, source: string, importer: string | undefined) {
+          if (importer === undefined) return null
+          const { file, fileName } = stylesheetAsset(source, importer)
+          if (!emitted.has(fileName)) {
+            emitted.add(fileName)
+            // originalFileName also puts the physical sheet in the watch graph.
+            this.emitFile({ type: 'asset', fileName, source: await readFile(file), originalFileName: file })
+          }
+          // Every emitted chunk sits at the lib/ root, so the src-relative name
+          // is what resolves from there. Rolldown keeps relative externals as
+          // written instead of re-normalizing them.
+          return { id: `./${fileName}`, external: true }
+        },
       },
     }],
   }
@@ -642,6 +645,23 @@ const TYPES_MARKER = `${sep}lib${sep}types${sep}`
 
 /** Plugin name carrying contract 1, and the marker that identifies a statically linked config. */
 const STATIC_LINKED_PLUGIN = 'dsh-static-linked-external'
+
+/**
+ * Static-linked artifacts preserve every bare runtime import. The importer
+ * guard keeps workspace entries such as lib/types/index.js internal while
+ * moving dependency externalization into Rolldown's native external option,
+ * ahead of tsdown:deps.
+ */
+function staticLinkedExternal(source: string, importer: string | undefined): boolean {
+  return importer !== undefined && isBareSpecifier(source)
+}
+
+/**
+ * Rolldown normalizes id path separators before testing hook filters, so this
+ * single pattern is portable across Windows and POSIX runners.
+ */
+const STATIC_LINKED_TSC_JS = /\/lib\/types\/.*\.js$/
+const STATIC_LINKED_CSS = /\.css$/
 
 /** Path segment a package's sources hang under, and the root emitted assets mirror. */
 const SOURCE_MARKER = `${sep}src${sep}`

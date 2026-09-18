@@ -4,7 +4,12 @@
  */
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
-import { clientBundle, requestedExternals } from '../packages/client/tsdown.client.ts'
+import {
+  clientBundle,
+  isStaticLinkedConfig,
+  requestedExternals,
+  staticLinked,
+} from '../packages/client/tsdown.client.ts'
 
 type ResolveResult = null | string | { id: string; external: boolean }
 type ResolveHandler = (source: string, importer?: string) => ResolveResult
@@ -49,6 +54,14 @@ function clientConfigs(id = REQUESTING_PACKAGE) {
   ).filter(config => config.platform === 'browser')
 }
 
+function staticLinkedConfigs() {
+  return staticLinked(
+    '@phoenix-ai/dsh-client-ui-primitives',
+    ['lib/types/index.js', 'lib/types/invariant.js'],
+  )({ env: { DSH_BUILD_FACE: 'client' } })
+}
+
+
 describe('client bundle build faces', () => {
   it('watches source in development and consumes emitted JavaScript in the Client build', () => {
     const bundle = clientBundle('@phoenix-ai/dsh-client-test', ['lib/types/index.js'])
@@ -58,6 +71,47 @@ describe('client bundle build faces', () => {
 
     expect(development?.entry).toEqual({ client: 'src/client/index.ts' })
     expect(artifact?.entry).toEqual({ client: 'lib/types/client/index.js' })
+  })
+})
+
+describe('static-linked bundle routing cost', () => {
+  it('keeps the roster marker hook-free and externalizes only imported bare specifiers', () => {
+    const configs = staticLinkedConfigs()
+    expect(isStaticLinkedConfig(configs)).toBe(true)
+    const config = configs[0]
+    if (config === undefined) throw new Error('static-linked config missing')
+
+    const plugins = config.plugins as ClientRoutingPlugin[]
+    const marker = plugins.find(plugin => plugin.name === 'dsh-static-linked-external')
+    expect(marker).toBeDefined()
+    expect(marker?.resolveId).toBeUndefined()
+    expect(marker?.load).toBeUndefined()
+
+    const neverBundle = config.deps?.neverBundle
+    expect(typeof neverBundle).toBe('function')
+    if (typeof neverBundle !== 'function') throw new Error('static-linked external rule missing')
+    expect(neverBundle('react', '/workspace/lib/types/index.js', false)).toBe(true)
+    expect(neverBundle('@phoenix-ai/cosmokit', '/workspace/lib/types/index.js', false)).toBe(true)
+    expect(neverBundle('./styles.css', '/workspace/lib/types/index.js', false)).toBe(false)
+    expect(neverBundle('lib/types/index.js', undefined, false)).toBe(false)
+  })
+
+  it('filters sourcemap loads and stylesheet resolution before JavaScript hooks run', () => {
+    const config = staticLinkedConfigs()[0]
+    if (config === undefined) throw new Error('static-linked config missing')
+    const plugins = config.plugins as ClientRoutingPlugin[]
+
+    const sourcemap = plugins.find(plugin => plugin.name === 'dsh-tsc-sourcemap')
+    expect(typeof sourcemap?.load).toBe('object')
+    if (typeof sourcemap?.load !== 'object') throw new Error('filtered sourcemap hook missing')
+    expect(sourcemap.load.filter?.id?.test('/workspace/lib/types/index.js')).toBe(true)
+    expect(sourcemap.load.filter?.id?.test('/workspace/src/index.ts')).toBe(false)
+
+    const css = plugins.find(plugin => plugin.name === 'dsh-css-asset')
+    expect(typeof css?.resolveId).toBe('object')
+    if (typeof css?.resolveId !== 'object') throw new Error('filtered CSS asset hook missing')
+    expect(css.resolveId.filter?.id?.test('./theme.css')).toBe(true)
+    expect(css.resolveId.filter?.id?.test('./index.js')).toBe(false)
   })
 })
 
