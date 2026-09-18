@@ -105,7 +105,7 @@ describe('dsh-tool-subagent', () => {
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')
     expect(schema).toBeDefined()
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
-    expect(Object.keys(props).sort()).toEqual(['critical_parallelism', 'description', 'prompt', 'run_in_background'])
+    expect(Object.keys(props).sort()).toEqual(['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'])
     expect(schema!.description).toContain('job_output')
   })
 
@@ -113,7 +113,7 @@ describe('dsh-tool-subagent', () => {
     const ctx = await setup({ provider: 'mock', enableRunInBackground: false })
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
-    expect(Object.keys(props).sort()).toEqual(['critical_parallelism', 'description', 'prompt'])
+    expect(Object.keys(props).sort()).toEqual(['description', 'extreme_parallelism', 'hard_parallelism', 'prompt'])
     expect(schema!.description).not.toContain('job_output')
   })
 
@@ -174,13 +174,13 @@ describe('dsh-tool-subagent', () => {
     })
     const results = await Promise.all([
       callSubagent(ctx, { description: 'first', prompt: 'p1' }),
-      callSubagent(ctx, { description: 'second', prompt: 'p2' }),
+      callSubagent(ctx, { description: 'second', prompt: 'p2', hard_parallelism: true }),
     ])
     expect(started.sort()).toEqual(['first', 'second'])
     for (const result of results) expect(result.isError).toBe(false)
   })
 
-  it('caps ordinary active siblings at two and releases the budget after they settle', async () => {
+  it('enforces the Phoenix 1 -> 2 hard -> 3 extreme escalation ladder and releases slots', async () => {
     const gate = Promise.withResolvers<void>()
     const started: string[] = []
     const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
@@ -191,47 +191,40 @@ describe('dsh-tool-subagent', () => {
     })
 
     const first = callSubagent(ctx, { description: 'first', prompt: 'p1' })
-    const second = callSubagent(ctx, { description: 'second', prompt: 'p2' })
-    await vi.waitFor(() => { expect(started).toHaveLength(2) })
+    await vi.waitFor(() => { expect(started).toEqual(['first']) })
 
-    const third = await callSubagent(ctx, { description: 'third', prompt: 'p3' })
-    expect(third.isError).toBe(true)
-    expect(text(third)).toContain('ya hay 2 subagentes activos')
+    const secondWithoutEscalation = await callSubagent(ctx, { description: 'second blocked', prompt: 'p2' })
+    expect(secondWithoutEscalation.isError).toBe(true)
+    expect(text(secondWithoutEscalation)).toContain('1 subagente es la norma')
+    expect(started).toEqual(['first'])
+
+    const second = callSubagent(ctx, {
+      description: 'second hard',
+      prompt: 'p2',
+      hard_parallelism: true,
+    })
+    await vi.waitFor(() => { expect(started).toEqual(['first', 'second hard']) })
+
+    const thirdWithoutExtreme = await callSubagent(ctx, {
+      description: 'third blocked',
+      prompt: 'p3',
+      hard_parallelism: true,
+    })
+    expect(thirdWithoutExtreme.isError).toBe(true)
+    expect(text(thirdWithoutExtreme)).toContain('Un tercero solo se admite en casos extremos')
     expect(started).toHaveLength(2)
 
-    gate.resolve()
-    const firstWave = await Promise.all([first, second])
-    expect(firstWave.every(result => !result.isError)).toBe(true)
-
-    const retry = await callSubagent(ctx, { description: 'third later', prompt: 'p3' })
-    expect(retry.isError).toBe(false)
-  })
-
-  it('allows one explicit critical third child but hard-blocks a fourth', async () => {
-    const gate = Promise.withResolvers<void>()
-    const started: string[] = []
-    const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
-      onStart: (request: SubagentStartRequest) => {
-        started.push(request.label ?? '(unlabeled)')
-        return gate.promise
-      },
-    })
-
-    const first = callSubagent(ctx, { description: 'first', prompt: 'p1' })
-    const second = callSubagent(ctx, { description: 'second', prompt: 'p2' })
-    await vi.waitFor(() => { expect(started).toHaveLength(2) })
-
     const third = callSubagent(ctx, {
-      description: 'critical verification',
+      description: 'third extreme',
       prompt: 'p3',
-      critical_parallelism: true,
+      extreme_parallelism: true,
     })
     await vi.waitFor(() => { expect(started).toHaveLength(3) })
 
     const fourth = await callSubagent(ctx, {
-      description: 'fourth',
+      description: 'fourth forbidden',
       prompt: 'p4',
-      critical_parallelism: true,
+      extreme_parallelism: true,
     })
     expect(fourth.isError).toBe(true)
     expect(text(fourth)).toContain('ya hay 3 subagentes activos')
@@ -240,6 +233,9 @@ describe('dsh-tool-subagent', () => {
     gate.resolve()
     const accepted = await Promise.all([first, second, third])
     expect(accepted.every(result => !result.isError)).toBe(true)
+
+    const retry = await callSubagent(ctx, { description: 'fresh single', prompt: 'p5' })
+    expect(retry.isError).toBe(false)
   })
 
   it.each([
@@ -1172,7 +1168,7 @@ describe('dsh-tool-subagent background mode', () => {
     tool.apply(ctx, { provider: 'hanging', toolName: 'subagent_hang' })
 
     const startOne = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h1'), name: 'subagent_hang', arguments: { description: 'one', prompt: 'p', run_in_background: true }, agent: parent })
-    const startTwo = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h2'), name: 'subagent_hang', arguments: { description: 'two', prompt: 'p', run_in_background: true }, agent: parent })
+    const startTwo = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h2'), name: 'subagent_hang', arguments: { description: 'two', prompt: 'p', run_in_background: true, hard_parallelism: true }, agent: parent })
     expect(text(startOne)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-1)')
     expect(text(startTwo)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-2)')
 
@@ -1242,8 +1238,9 @@ describe('dsh-tool-subagent continuable background mode', () => {
     const guidance = assembly.sections.find(section => section.name === 'tool:subagent')
     expect(guidance?.text).toContain('Usa subagent para orquestar')
     expect(guidance?.text).toContain('integra el resultado con evidencia')
-    expect(guidance?.text).toContain('máximo 2 subagentes activos')
-    expect(guidance?.text).toContain('critical_parallelism=true')
+    expect(guidance?.text).toContain('usa 1 como norma')
+    expect(guidance?.text).toContain('hard_parallelism=true')
+    expect(guidance?.text).toContain('extreme_parallelism=true')
     expect(guidance?.text).toContain('Nunca intentes un cuarto')
 
     const started = await callSubagent(
@@ -1319,15 +1316,25 @@ describe('dsh-tool-subagent continuable background mode', () => {
       maxDepth: 3,
     })
 
-    const execute = (callId: string, description: string, signal: AbortSignal) => ctx.tools.execute({
+    const execute = (
+      callId: string,
+      description: string,
+      signal: AbortSignal,
+      hardParallelism = false,
+    ) => ctx.tools.execute({
       signal,
       callId: CallId(callId),
       name: 'subagent_gated',
-      arguments: { description, prompt: 'work', run_in_background: true },
+      arguments: {
+        description,
+        prompt: 'work',
+        run_in_background: true,
+        ...(hardParallelism ? { hard_parallelism: true } : {}),
+      },
       agent: parent,
     })
     const cancelledResult = execute('continuable-cancelled', 'cancelled sibling', cancelled.signal)
-    const survivingResult = execute('continuable-surviving', 'surviving sibling', testToolSignal)
+    const survivingResult = execute('continuable-surviving', 'surviving sibling', testToolSignal, true)
     await bothPreparing.promise
     cancelled.abort()
     releasePreparations.resolve(undefined)
