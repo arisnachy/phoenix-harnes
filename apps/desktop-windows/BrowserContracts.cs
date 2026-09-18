@@ -57,6 +57,22 @@ public static class BrowserNavigation
     }
 }
 
+/// <summary>Pure chat-first sizing policy for the optional embedded browser pane.</summary>
+public static class BrowserLayout
+{
+    public const bool StartCollapsed = true;
+
+    /// <summary>
+    /// Keep the browser useful without letting it dominate the conversation:
+    /// roughly 26% of the window, clamped to a compact desktop-friendly range.
+    /// </summary>
+    public static int PreferredBrowserWidth(int clientWidth)
+    {
+        var proportional = (int)Math.Round(Math.Max(0, clientWidth) * 0.26d);
+        return Math.Clamp(proportional, 360, 520);
+    }
+}
+
 /// <summary>Typed command accepted from the Phoenix WebView through window.chrome.webview.postMessage.</summary>
 public sealed record BrowserCommand(string Type, string? Url)
 {

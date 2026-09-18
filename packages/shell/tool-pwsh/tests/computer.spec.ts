@@ -36,6 +36,8 @@ describe('Computer Use argument contract', () => {
     expect(() => validateComputerArgs({ action: 'windows' })).not.toThrow()
     expect(() => validateComputerArgs({ action: 'focus' })).toThrow(/target/i)
     expect(() => validateComputerArgs({ action: 'focus', target: '7-Zip' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_open', url: 'https://example.com' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_open', url: '' })).toThrow(/url/i)
   })
 
   it('keeps model text and window selectors out of the PowerShell command line', () => {
@@ -75,8 +77,17 @@ describe('Computer Use argument contract', () => {
     expect(shouldCaptureAfterAction('key')).toBe(true)
     expect(shouldCaptureAfterAction('scroll')).toBe(true)
     expect(shouldCaptureAfterAction('focus')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_open')).toBe(true)
     expect(shouldCaptureAfterAction('move')).toBe(false)
     expect(shouldCaptureAfterAction('windows')).toBe(false)
+  })
+
+  it('keeps embedded-browser URLs out of argv and routes them through the fixed driver', () => {
+    const invocation = windowsComputerInvocation({ action: 'browser_open', url: 'https://example.com/path?q=phoenix' })
+    expect(invocation.argv.join(' ')).not.toContain('https://example.com')
+    expect(invocation.env.PHX_URL).toBe('https://example.com/path?q=phoenix')
+    expect(invocation.stdin).toContain("KeyCombo('CTRL+L')")
+    expect(invocation.stdin).toContain("TypeText($env:PHX_URL)")
   })
 
   it('rejects key strings outside the closed combo grammar', () => {

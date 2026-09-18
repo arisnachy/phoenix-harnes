@@ -201,17 +201,11 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     {
         try
         {
-            window.SetStartupStatus("Comprobando runtime local…");
-            if (await IsReadyAsync())
-            {
-                externallyManaged = true;
-                restartItem.Enabled = false;
-                tray.Text = "Phoenix · runtime existente";
-                window.MarkRuntimeReady();
-                DesktopLog.Write("Existing runtime at 127.0.0.1:3080 is ready.");
-                return;
-            }
-
+            // Never adopt an arbitrary listener on 3080. The bootstrap owns migration of any
+            // previous PHOENIX host, synchronizes the managed checkout with stable, and only
+            // then do we launch the supervised runtime. This prevents an old desktop process
+            // from pinning the visible UI and permission policy to a stale checkout.
+            window.SetStartupStatus("Sincronizando Phoenix estable…");
             if (!await EnsureManagedRuntimeAsync())
                 return;
 
@@ -235,9 +229,6 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         var state = ManagedRuntimeMarker.Inspect(Program.RuntimeRoot);
         DesktopLog.Write($"Managed runtime state: {state}");
 
-        if (state == ManagedRuntimeState.Ready)
-            return true;
-
         if (state == ManagedRuntimeState.Unmanaged)
         {
             window.SetStartupStatus("Phoenix encontró un runtime local no administrado.", isError: true);
@@ -256,10 +247,18 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return false;
         }
 
-        window.SetStartupStatus(state == ManagedRuntimeState.Recoverable
-            ? "Reparando una instalación incompleta de Phoenix…"
-            : "Preparando Phoenix por primera vez…");
-        tray.Text = state == ManagedRuntimeState.Recoverable ? "Phoenix · reparando" : "Phoenix · instalando";
+        window.SetStartupStatus(state switch
+        {
+            ManagedRuntimeState.Ready => "Buscando actualizaciones de Phoenix…",
+            ManagedRuntimeState.Recoverable => "Reparando una instalación incompleta de Phoenix…",
+            _ => "Preparando Phoenix por primera vez…",
+        });
+        tray.Text = state switch
+        {
+            ManagedRuntimeState.Ready => "Phoenix · actualizando",
+            ManagedRuntimeState.Recoverable => "Phoenix · reparando",
+            _ => "Phoenix · instalando",
+        };
 
         var psi = new ProcessStartInfo
         {
@@ -305,10 +304,18 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return;
 
         window.SetStartupStatus("Iniciando Phoenix…");
+        var supervisor = Path.Combine(Program.RuntimeRoot, "scripts", "phoenix-windows-supervisor.mjs");
+        if (!File.Exists(supervisor))
+        {
+            window.SetStartupStatus("El runtime de Phoenix no contiene el supervisor de Windows.", isError: true);
+            DesktopLog.Write($"Missing Windows supervisor: {supervisor}");
+            return;
+        }
+
         var psi = new ProcessStartInfo
         {
-            FileName = "cmd.exe",
-            Arguments = "/d /s /c \"corepack pnpm phoenix -- --no-open\"",
+            FileName = "node.exe",
+            Arguments = $"\"{supervisor}\" --no-open",
             WorkingDirectory = Program.RuntimeRoot,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -317,6 +324,9 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             Environment =
             {
                 ["PHOENIX_DESKTOP_MANAGED"] = "1",
+                ["PHOENIX_UPDATE_MODE"] = "auto",
+                ["PHOENIX_AUTO_UPDATE"] = "1",
+                ["PHOENIX_RUNTIME_ROOT"] = Program.RuntimeRoot,
             },
         };
 
