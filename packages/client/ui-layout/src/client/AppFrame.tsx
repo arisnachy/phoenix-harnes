@@ -47,14 +47,14 @@ class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundarySta
     return { failed: true }
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error(`PHOENIX ${this.props.name} surface render failed:`, error, info.componentStack)
     this.setState(state => state.autoRetried
       ? null
       : { failed: false, autoRetried: true })
   }
 
-  componentDidUpdate(previous: SurfaceBoundaryProps): void {
+  override componentDidUpdate(previous: SurfaceBoundaryProps): void {
     if (previous.resetKey !== this.props.resetKey && (this.state.failed || this.state.autoRetried)) {
       this.setState({ failed: false, autoRetried: false })
     }
