@@ -211,7 +211,11 @@ internal sealed class PhoenixDesktopWindow : Form
 
         backButton.Click += (_, _) => { if (browserView.CanGoBack) browserView.GoBack(); };
         forwardButton.Click += (_, _) => { if (browserView.CanGoForward) browserView.GoForward(); };
-        reload.Click += (_, _) => browserView.Reload();
+        reload.Click += (_, _) =>
+        {
+            if (browserView.CoreWebView2 is not null)
+                browserView.Reload();
+        };
         home.Click += (_, _) => NavigateBrowser("about:blank");
         go.Click += (_, _) => NavigateBrowser(address.Text);
         close.Click += (_, _) => SetBrowserVisible(false);
@@ -446,7 +450,10 @@ internal sealed class PhoenixDesktopWindow : Form
     {
         split.Panel2Collapsed = !visible;
         if (visible)
+        {
             ApplyBrowserSplitLayout();
+            _ = EnsureBrowserInitializedAsync();
+        }
         PublishBrowserState();
     }
 
