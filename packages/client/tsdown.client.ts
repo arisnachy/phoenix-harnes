@@ -454,7 +454,16 @@ function clientRoutingPattern(externals: ReadonlySet<string>): RegExp {
   const exact = externals.size === 0
     ? ''
     : `|^(?:${[...externals].map(escapeSpecifier).join('|')})$`
-  return new RegExp(`(?:\\.css(?:\\?inline)?$|^@phoenix-ai/${exact})`)
+  const withoutStart = (pattern: RegExp): string =>
+    pattern.source.startsWith('^') ? pattern.source.slice(1) : pattern.source
+  const unsafePhoenix = [
+    '^',
+    `(?!${withoutStart(VENDORED_LIBRARY)})`,
+    `(?!${withoutStart(INLINE_SAFE)})`,
+    `(?!${withoutStart(GENERATED_REMOTE)})`,
+    '@phoenix-ai/',
+  ].join('')
+  return new RegExp(`(?:\\.css(?:\\?inline)?$|${unsafePhoenix}${exact})`)
 }
 
 /** Virtual CSS modules are the only ids the load hook owns. */
