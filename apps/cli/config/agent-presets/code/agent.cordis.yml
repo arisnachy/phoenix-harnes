@@ -108,6 +108,9 @@
 - id: tool-skill
   name: '@phoenix-ai/dsh-tool-skill'
 
+- id: tool-session-learning
+  name: '@phoenix-ai/dsh-tool-session-learning'
+
 # ── goals ───────────────────────────────────────────────────────────────────
 
 # Only the model-facing tool. The goal SERVICE, its session driver, and the
