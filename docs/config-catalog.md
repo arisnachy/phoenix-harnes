@@ -1021,13 +1021,22 @@ Source: [`packages/jobs/jobs-local/src/index.ts:31`](../packages/jobs/jobs-local
 ## `@phoenix-ai/dsh-living-local`
 
 ```ts config-catalog
+/** Configuration for durable living manifests and the owner-local control bridge. */
 export interface Config {
   /** Owner-private JSON document containing remembered creation manifests. */
   path: string
+  /** Loopback host for generated-runtime control. Defaults to PHOENIX_LIVING_CONTROL_HOST or 127.0.0.1. */
+  bridgeHost?: string
+  /** Loopback TCP port for generated-runtime control. Defaults to PHOENIX_LIVING_CONTROL_PORT or 32145. */
+  bridgePort?: number
+  /** Maximum time a queued Phoenix action may wait for the connected runtime. */
+  bridgeActionTimeoutMs?: number
+  /** Disconnect a runtime whose authenticated heartbeat/poll traffic goes stale beyond this bound. */
+  bridgeHeartbeatTimeoutMs?: number
 }
 ```
 
-Source: [`packages/core/living-local/src/index.ts:25`](../packages/core/living-local/src/index.ts)
+Source: [`packages/core/living-local/src/index.ts:27`](../packages/core/living-local/src/index.ts)
 
 <a id="phoenix-aidsh-llm-deepseek"></a>
 

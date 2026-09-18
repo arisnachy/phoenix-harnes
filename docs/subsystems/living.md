@@ -32,6 +32,13 @@ Service Definition for every creation Phoenix keeps operationally connected. Imp
 
 ```ts cordis-catalog
 /**
+ * Resolve the endpoint generated runtimes should use for the universal control transport.
+ * Providers with dynamic binding may override this; the default follows Phoenix's host/port environment.
+ * @returns Fully qualified base endpoint for living runtime control.
+ */
+controlEndpoint(): Promise<string>
+
+/**
  * Persist or replace one self-describing creation manifest.
  * @param manifest - Durable identity and declared capabilities to remember.
  * @returns Snapshot after the manifest has been committed.

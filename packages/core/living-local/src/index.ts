@@ -5,12 +5,14 @@ import { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { writeFileAtomic } from '@phoenix-ai/dsh-atomic-write'
 import {
-  LivingRegistry, livingLevelRank, livingProviderLevel, validateLivingManifest,
+  DEFAULT_LIVING_CONTROL_HOST, DEFAULT_LIVING_CONTROL_PORT, LivingRegistry,
+  livingLevelRank, livingProviderLevel, validateLivingManifest,
 } from '@phoenix-ai/dsh-living'
 import type {
   LivingChangedListener, LivingCreationEventListener, LivingCreationId, LivingCreationManifest,
   LivingCreationProvider, LivingCreationSnapshot, LivingJson, LivingState,
 } from '@phoenix-ai/dsh-living'
+import { LivingHttpBridge } from './bridge.ts'
 
 interface PersistedDocument {
   readonly version: 1
@@ -22,9 +24,18 @@ interface AttachedProvider {
   readonly disposeSubscription: () => void
 }
 
+/** Configuration for durable living manifests and the owner-local control bridge. */
 export interface Config {
   /** Owner-private JSON document containing remembered creation manifests. */
   path: string
+  /** Loopback host for generated-runtime control. Defaults to PHOENIX_LIVING_CONTROL_HOST or 127.0.0.1. */
+  bridgeHost?: string
+  /** Loopback TCP port for generated-runtime control. Defaults to PHOENIX_LIVING_CONTROL_PORT or 32145. */
+  bridgePort?: number
+  /** Maximum time a queued Phoenix action may wait for the connected runtime. */
+  bridgeActionTimeoutMs?: number
+  /** Disconnect a runtime whose authenticated heartbeat/poll traffic goes stale beyond this bound. */
+  bridgeHeartbeatTimeoutMs?: number
 }
 
 function clone<T>(value: T): T {
@@ -50,20 +61,43 @@ function readDocument(path: string): Map<LivingCreationId, LivingCreationManifes
   return store
 }
 
+function envPort(): number | undefined {
+  const raw = process.env.PHOENIX_LIVING_CONTROL_PORT?.trim()
+  if (raw === undefined || raw.length === 0) return undefined
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+    throw new Error(`PHOENIX_LIVING_CONTROL_PORT must be an integer from 1 to 65535, got ${JSON.stringify(raw)}`)
+  }
+  return value
+}
+
 /** Process-local registry with durable manifest identity and ephemeral live providers. */
 export class LocalLivingRegistry extends LivingRegistry {
-  static Config: z<Config> = z.object({ path: z.string().required() })
+  static Config: z<Config> = z.object({
+    path: z.string().required(),
+    bridgeHost: z.string(),
+    bridgePort: z.number().step(1).min(0).max(65535),
+    bridgeActionTimeoutMs: z.number().step(1).min(1),
+    bridgeHeartbeatTimeoutMs: z.number().step(1).min(1),
+  })
 
   private manifests: Map<LivingCreationId, LivingCreationManifest>
   private readonly providers = new Map<LivingCreationId, AttachedProvider>()
   private readonly changed = new Set<LivingChangedListener>()
   private readonly eventListeners = new Set<LivingCreationEventListener>()
   private mutationChain: Promise<void> = Promise.resolve()
+  private readonly bridge: LivingHttpBridge
 
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx)
     if (config.path.length === 0 || config.path !== config.path.trim()) throw new TypeError('living-local path must be a non-empty normalized string')
     this.manifests = readDocument(config.path)
+    this.bridge = new LivingHttpBridge(this, {
+      host: config.bridgeHost ?? (process.env.PHOENIX_LIVING_CONTROL_HOST?.trim() || DEFAULT_LIVING_CONTROL_HOST),
+      port: config.bridgePort ?? envPort() ?? DEFAULT_LIVING_CONTROL_PORT,
+      ...(config.bridgeActionTimeoutMs === undefined ? {} : { actionTimeoutMs: config.bridgeActionTimeoutMs }),
+      ...(config.bridgeHeartbeatTimeoutMs === undefined ? {} : { heartbeatTimeoutMs: config.bridgeHeartbeatTimeoutMs }),
+    }, message => ctx.logger.warn(message))
     ctx.effect(() => () => this.disposeProviders(), 'living provider teardown')
   }
 
@@ -73,11 +107,14 @@ export class LocalLivingRegistry extends LivingRegistry {
     return this.enqueueMutation(async () => {
       const attachedBefore = this.providers.get(candidate.id)
       if (attachedBefore !== undefined) this.assertProviderSupports(candidate, attachedBefore.provider)
+      this.bridge.assertManifestCompatible(candidate)
 
       const next = new Map(this.manifests)
       next.set(candidate.id, candidate)
       await this.persist(next)
       this.manifests = next
+
+      this.bridge.reconcile(candidate)
 
       // A provider may have detached/re-attached while the durable write was in flight.
       // Never retain a provider whose runtime contract no longer satisfies the committed manifest.
@@ -100,6 +137,7 @@ export class LocalLivingRegistry extends LivingRegistry {
       await this.persist(next)
 
       this.manifests = next
+      this.bridge.disconnect(id, 'living creation forgotten')
       const attached = this.providers.get(id)
       this.providers.delete(id)
       try { attached?.disposeSubscription() } catch { /* cleanup failures cannot roll back a committed forget */ }
@@ -180,6 +218,11 @@ export class LocalLivingRegistry extends LivingRegistry {
     return clone(await provider.act(action, clone(input)))
   }
 
+  /** Actual loopback endpoint after the built-in control bridge has bound its port. */
+  override controlEndpoint(): Promise<string> {
+    return this.bridge.endpoint()
+  }
+
   onChanged(listener: LivingChangedListener): () => void {
     this.changed.add(listener)
     return () => { this.changed.delete(listener) }
@@ -243,6 +286,7 @@ export class LocalLivingRegistry extends LivingRegistry {
   }
 
   private disposeProviders(): void {
+    this.bridge.dispose()
     for (const attached of this.providers.values()) {
       try { attached.disposeSubscription() } catch { /* teardown isolates provider cleanup */ }
     }
