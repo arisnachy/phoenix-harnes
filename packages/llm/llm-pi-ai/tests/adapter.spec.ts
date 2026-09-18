@@ -138,6 +138,47 @@ describe('PiAiAdapter provider routing', () => {
     })
   })
 
+  it('treats a length stop below the intended output budget as recoverable context pressure', async () => {
+    const events = [
+      '{"choices":[{"delta":{"role":"assistant","content":""},"index":0,"finish_reason":null}]}',
+      '{"choices":[{"delta":{"content":"hi"},"index":0,"finish_reason":null}]}',
+      '{"choices":[{"delta":{},"index":0,"finish_reason":"length"}],"usage":{"prompt_tokens":1000,"completion_tokens":2}}',
+      '[DONE]',
+    ]
+    const server = await mockServer([{ events }])
+    const ctx = await harness(server.url)
+
+    const result = await assemble(ctx, {
+      model: 'deepseek-v4-flash',
+      messages: [],
+      maxTokens: 77,
+    })
+
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: { code: CONTEXT_WINDOW_EXCEEDED_CODE },
+    })
+  })
+
+  it('keeps a length stop at the intended output budget as a true max-token finish', async () => {
+    const events = [
+      '{"choices":[{"delta":{"role":"assistant","content":""},"index":0,"finish_reason":null}]}',
+      '{"choices":[{"delta":{"content":"hi"},"index":0,"finish_reason":null}]}',
+      '{"choices":[{"delta":{},"index":0,"finish_reason":"length"}],"usage":{"prompt_tokens":1000,"completion_tokens":2}}',
+      '[DONE]',
+    ]
+    const server = await mockServer([{ events }])
+    const ctx = await harness(server.url)
+
+    const result = await assemble(ctx, {
+      model: 'deepseek-v4-flash',
+      messages: [],
+      maxTokens: 2,
+    })
+
+    expect(result.finish).toEqual({ kind: 'max-tokens' })
+  })
+
   it('uses a dynamic request effort and reports unsupported efforts before network I/O', async () => {
     const server = await mockServer([{ events: textEvents }, { events: textEvents }])
     const ctx = await harness(server.url, { reasoning: 'max' })
