@@ -78,6 +78,8 @@ function estimateContentBlocksChars(blocks: readonly ContentBlock[]): number {
 /**
  * Conservative request-size estimate using the same 4-chars/token convention
  * pi-ai 0.82.x uses before it clamps maxTokens to remaining context.
+ * @param options - fully assembled harness request before adapter conversion.
+ * @returns estimated request-context tokens including system, messages, and tool schemas.
  */
 export function estimateGenerateOptionsTokens(options: GenerateOptions): number {
   let chars = options.system?.length ?? 0
@@ -217,6 +219,7 @@ function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetToken
   return { ...options, tools: selected.map(entry => entry.tool) }
 }
 
+/** Result of fitting one request to a model's safe input budget. */
 export interface ContextBudgetFit {
   /** Request representation to convert and send. */
   options: GenerateOptions
@@ -235,6 +238,10 @@ export interface ContextBudgetFit {
  * compacts model-facing skill-catalog prose and schema documentation; tool
  * names, argument structure, user messages, system instructions and history
  * remain intact.
+ * @param options - fully assembled request before provider conversion.
+ * @param contextWindow - model context capacity used by pi-ai for request clamping.
+ * @param desiredMaxOutput - caller/model output budget before context-based clamping.
+ * @returns the request representation to send plus its estimated safe-budget facts.
  */
 export function fitGenerateOptionsToContext(
   options: GenerateOptions,
