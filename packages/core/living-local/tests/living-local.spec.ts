@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
-import { LivingCreationId } from '@phoenix-ai/dsh-living'
+import { LivingCreationId, createLivingControlResource } from '@phoenix-ai/dsh-living'
 import LivingLocal from '@phoenix-ai/dsh-living-local'
 
 const disposers: Array<() => Promise<void>> = []
@@ -12,11 +12,15 @@ afterEach(async () => {
   await Promise.all(disposers.splice(0).map(dispose => dispose()))
 })
 
-async function runtime() {
+async function runtime(extra: {
+  bridgePort?: number
+  bridgeActionTimeoutMs?: number
+  bridgeHeartbeatTimeoutMs?: number
+} = {}) {
   const root = new Context()
   const dir = await mkdtemp(join(tmpdir(), 'phoenix-living-'))
   const path = join(dir, 'living-creations.json')
-  const fiber = await root.plugin(LivingLocal, { path })
+  const fiber = await root.plugin(LivingLocal, { path, bridgePort: 0, ...extra })
   disposers.push(() => fiber.dispose())
   return { root, path }
 }
@@ -70,6 +74,101 @@ describe('universal living creations', () => {
     expect(root.living.inspect(ecosystem.id)).toMatchObject({ connected: false, achievedLevel: 'static' })
     await expect(root.living.act(ecosystem.id, 'advanceTime', {})).rejects.toThrow(/offline/i)
     disposeEvent()
+  })
+
+  it('connects an external generated runtime through the authenticated universal control bridge', async () => {
+    const { root } = await runtime({ bridgeActionTimeoutMs: 2_000, bridgeHeartbeatTimeoutMs: 5_000 })
+    const endpoint = await root.living.controlEndpoint()
+    const id = LivingCreationId('external-app-1')
+    const token = 'test-control-token-0123456789abcdef'
+    const manifest = {
+      id,
+      title: 'External medical app',
+      kind: 'medical-app',
+      targetLevel: 'controllable' as const,
+      state: ['status', 'patients'],
+      actions: ['refresh'],
+      events: ['telemetry'],
+      resources: [createLivingControlResource(endpoint, token)],
+      actors: [],
+    }
+    await root.living.remember(manifest)
+
+    async function post(pathname: string, body: Record<string, unknown>, auth = token) {
+      const response = await fetch(`${endpoint}${pathname}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${auth}` },
+        body: JSON.stringify({ creationId: id, ...body }),
+      })
+      const value = await response.json() as Record<string, unknown>
+      return { response, value }
+    }
+
+    const connected = await post('/connect', {
+      capabilities: {
+        state: manifest.state,
+        actions: manifest.actions,
+        events: manifest.events,
+        actors: manifest.actors,
+      },
+      state: { status: 'ready', patients: 3 },
+    })
+    expect(connected.response.status).toBe(200)
+    const sessionId = String(connected.value.sessionId)
+    expect(root.living.inspect(id)).toMatchObject({ connected: true, achievedLevel: 'controllable' })
+
+    await post('/state', { sessionId, state: { status: 'syncing', patients: 4 } })
+    await expect(root.living.readState(id)).resolves.toEqual({ status: 'syncing', patients: 4 })
+
+    const events: unknown[] = []
+    const disposeEvents = root.living.onCreationEvent(event => events.push(event))
+    await post('/event', { sessionId, name: 'telemetry', data: { latencyMs: 12 } })
+    expect(events).toEqual([{ creationId: id, name: 'telemetry', data: { latencyMs: 12 } }])
+
+    const action = root.living.act(id, 'refresh', { scope: 'all' })
+    const polled = await post('/poll', { sessionId })
+    const command = polled.value.command as { id: string; action: string; input: unknown }
+    expect(command).toMatchObject({ action: 'refresh', input: { scope: 'all' } })
+    await post('/result', { sessionId, commandId: command.id, ok: true, result: { refreshed: 4 } })
+    await expect(action).resolves.toEqual({ refreshed: 4 })
+
+    await post('/disconnect', { sessionId })
+    expect(root.living.inspect(id)).toMatchObject({ connected: false, achievedLevel: 'static' })
+    disposeEvents()
+  })
+
+  it('rejects forged credentials and runtime capability drift', async () => {
+    const { root } = await runtime()
+    const endpoint = await root.living.controlEndpoint()
+    const id = LivingCreationId('secure-app-1')
+    const token = 'test-control-token-fedcba9876543210'
+    await root.living.remember({
+      id,
+      title: 'Secure app',
+      kind: 'service',
+      targetLevel: 'controllable',
+      state: ['status'],
+      actions: ['update'],
+      events: ['changed'],
+      resources: [createLivingControlResource(endpoint, token)],
+      actors: [],
+    })
+
+    const request = (auth: string, actions: string[]) => fetch(`${endpoint}/connect`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${auth}` },
+      body: JSON.stringify({
+        creationId: id,
+        capabilities: { state: ['status'], actions, events: ['changed'], actors: [] },
+        state: { status: 'ready' },
+      }),
+    })
+
+    await expect(request('wrong-control-token-0123456789abcdef', ['update']).then(response => response.status))
+      .resolves.toBe(400)
+    await expect(request(token, ['update', 'undeclared']).then(response => response.status))
+      .resolves.toBe(400)
+    expect(root.living.inspect(id)).toMatchObject({ connected: false, achievedLevel: 'static' })
   })
 
   it('serializes concurrent durable mutations without losing either creation', async () => {

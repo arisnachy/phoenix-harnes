@@ -11,6 +11,7 @@ export type {
   LivingCreationProvider, LivingCreationSnapshot, LivingIntegrationLevel, LivingJson, LivingState,
 } from './types.ts'
 
+/** Stable branded identity of one Phoenix living creation. */
 export type LivingCreationId = LivingCreationIdType
 
 /**
@@ -23,6 +24,103 @@ export function LivingCreationId(value: string): LivingCreationId {
 }
 
 const LEVELS: readonly LivingIntegrationLevel[] = ['static', 'connected', 'reactive', 'controllable', 'inhabited']
+
+
+/** Wire protocol identifier for Phoenix's built-in living runtime bridge. */
+export const LIVING_CONTROL_PROTOCOL = 'phoenix-living-http-v1' as const
+/** Default loopback host for the built-in living runtime bridge. */
+export const DEFAULT_LIVING_CONTROL_HOST = '127.0.0.1'
+/** Default TCP port for the built-in living runtime bridge. */
+export const DEFAULT_LIVING_CONTROL_PORT = 32145
+
+/** Authenticated transport descriptor persisted with a non-static living creation. */
+export interface LivingControlDescriptor {
+  readonly protocol: typeof LIVING_CONTROL_PROTOCOL
+  readonly endpoint: string
+  readonly token: string
+}
+
+function livingControlPort(): number {
+  const raw = process.env.PHOENIX_LIVING_CONTROL_PORT?.trim()
+  if (raw === undefined || raw.length === 0) return DEFAULT_LIVING_CONTROL_PORT
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+    throw new Error(`PHOENIX_LIVING_CONTROL_PORT must be an integer from 1 to 65535, got ${JSON.stringify(raw)}`)
+  }
+  return value
+}
+
+/**
+ * Default owner-local endpoint used by the built-in living control bridge.
+ * Deployments can override host/port through PHOENIX_LIVING_CONTROL_HOST/PORT.
+ * @returns Fully qualified base endpoint for living runtime control.
+ */
+export function defaultLivingControlEndpoint(): string {
+  const host = process.env.PHOENIX_LIVING_CONTROL_HOST?.trim() || DEFAULT_LIVING_CONTROL_HOST
+  return `http://${host}:${livingControlPort()}/v1/living`
+}
+
+/**
+ * Encode one scoped connector descriptor into the manifest's domain-neutral resources list.
+ * @param endpoint - HTTP(S) base endpoint exposed by the owning living registry.
+ * @param token - Per-creation bearer secret used to authenticate a generated runtime.
+ * @returns Canonical phoenix-control resource URI suitable for the manifest resources list.
+ */
+export function createLivingControlResource(endpoint: string, token: string): string {
+  const target = new URL(endpoint)
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    throw new TypeError(`living control endpoint must be http(s), got ${target.protocol}`)
+  }
+  if (token.length < 24 || token !== token.trim()) {
+    throw new TypeError('living control token must be a normalized high-entropy secret')
+  }
+  const resource = new URL('phoenix-control://v1')
+  resource.searchParams.set('endpoint', target.toString().replace(/\/$/, ''))
+  resource.searchParams.set('token', token)
+  return resource.toString()
+}
+
+/**
+ * Parse one Phoenix control resource; unrelated resources return undefined.
+ * @param resource - Manifest resource candidate to inspect.
+ * @returns Parsed control descriptor, or undefined when the resource belongs to another scheme.
+ */
+export function parseLivingControlResource(resource: string): LivingControlDescriptor | undefined {
+  let parsed: URL
+  try {
+    parsed = new URL(resource)
+  } catch {
+    return undefined
+  }
+  if (parsed.protocol !== 'phoenix-control:' || parsed.hostname !== 'v1') return undefined
+  const endpoint = parsed.searchParams.get('endpoint')
+  const token = parsed.searchParams.get('token')
+  if (endpoint === null || token === null) throw new TypeError('invalid phoenix-control resource: endpoint and token are required')
+  const target = new URL(endpoint)
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    throw new TypeError(`living control endpoint must be http(s), got ${target.protocol}`)
+  }
+  if (token.length < 24 || token !== token.trim()) {
+    throw new TypeError('living control token must be a normalized high-entropy secret')
+  }
+  return { protocol: LIVING_CONTROL_PROTOCOL, endpoint: target.toString().replace(/\/$/, ''), token }
+}
+
+/**
+ * Return the single scoped control link carried by a creation manifest, if any.
+ * @param manifest - Creation manifest whose resources may contain a Phoenix control link.
+ * @returns The unique control descriptor, or undefined for a creation without one.
+ */
+export function livingControlForManifest(manifest: LivingCreationManifest): LivingControlDescriptor | undefined {
+  let found: LivingControlDescriptor | undefined
+  for (const resource of manifest.resources) {
+    const parsed = parseLivingControlResource(resource)
+    if (parsed === undefined) continue
+    if (found !== undefined) throw new TypeError(`living creation ${manifest.id} declares more than one phoenix-control resource`)
+    found = parsed
+  }
+  return found
+}
 
 /**
  * Numeric ordering used to compare achieved and requested integration levels.
@@ -90,6 +188,15 @@ export abstract class LivingRegistry extends Service {
   constructor(ctx: Context) {
     if (new.target === LivingRegistry) throw new Error('@phoenix-ai/dsh-living is a Service Definition; load a provider such as @phoenix-ai/dsh-living-local')
     super(ctx, 'living')
+  }
+
+  /**
+   * Resolve the endpoint generated runtimes should use for the universal control transport.
+   * Providers with dynamic binding may override this; the default follows Phoenix's host/port environment.
+   * @returns Fully qualified base endpoint for living runtime control.
+   */
+  controlEndpoint(): Promise<string> {
+    return Promise.resolve(defaultLivingControlEndpoint())
   }
 
   /**
