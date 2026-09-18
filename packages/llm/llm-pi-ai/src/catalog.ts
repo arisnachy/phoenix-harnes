@@ -754,6 +754,36 @@ function resolveModelCompat(
   return { compat: { ...inherited, ...configured } as ModelCompat }
 }
 
+const OPENAI_GPT56_LEGACY_CONTEXT_WINDOW = 272_000
+const OPENAI_GPT56_CONTEXT_WINDOW = 1_050_000
+const OPENAI_GPT56_MODEL_IDS = new Set([
+  'gpt-5.6',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+])
+
+/**
+ * Repair the legacy 272k GPT-5.6 API capacity that predates OpenAI's
+ * published 1.05M context window. `contextWindow` describes model capability,
+ * not a desired request cap: leaving the stale value makes pi-ai clamp a
+ * large but valid prompt down to its one-token floor (16 tokens on Responses).
+ * Custom OpenAI-compatible gateways keep their explicitly configured value,
+ * and the separate openai-codex route is intentionally untouched.
+ */
+function normalizeOfficialOpenAiContextWindow(
+  provider: string,
+  baseUrl: string,
+  modelId: string,
+  contextWindow: number,
+): number {
+  const officialOpenAi = provider === 'openai'
+    && /^https:\/\/api\.openai\.com\/v1\/?$/u.test(baseUrl)
+  if (!officialOpenAi
+    || contextWindow !== OPENAI_GPT56_LEGACY_CONTEXT_WINDOW
+    || !OPENAI_GPT56_MODEL_IDS.has(modelId)) return contextWindow
+  return OPENAI_GPT56_CONTEXT_WINDOW
+}
 /** One route's materialized catalog, plus the request caps its profile chose. */
 export interface RouteCatalog {
   /** The materialized models in configuration order. */
@@ -848,7 +878,13 @@ export function resolveRouteModels(request: RouteCatalogRequest): RouteCatalog {
     // discloses nothing but ids still yields a serviceable route. The fallback
     // is a guess by construction, which is why it is a configurable route field
     // rather than a constant buried here.
-    const contextWindow = entry.contextWindow ?? base?.contextWindow ?? request.defaultContextWindow
+    const configuredContextWindow = entry.contextWindow ?? base?.contextWindow ?? request.defaultContextWindow
+    const contextWindow = normalizeOfficialOpenAiContextWindow(
+      provider,
+      baseUrl,
+      entry.id,
+      configuredContextWindow,
+    )
     if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
       invalid(provider, `model "${entry.id}" contextWindow must be a positive integer`)
     }
