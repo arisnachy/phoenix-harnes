@@ -71,6 +71,19 @@ function classifyPiAiError(message: string): string {
 }
 
 /**
+ * Detect a provider length stop that ended before the caller/model output budget.
+ * pi-ai 0.82.x only classifies zero-output near-full-window length stops as
+ * context overflow; newer pi-ai releases broaden this to short length stops so
+ * callers can make one bounded compact-and-retry attempt.
+ */
+function isRecoverableLength(message: AssistantMessage, desiredMaxOutput?: number): boolean {
+  return message.stopReason === 'length'
+    && desiredMaxOutput !== undefined
+    && desiredMaxOutput > 0
+    && message.usage.output < desiredMaxOutput
+}
+
+/**
  * Map a terminal pi-ai event to the harness finish reason.
  * @param message - the assistant message carried by the `done` or `error` event.
  * @param contextWindow - resolved catalog capacity for usage-based overflow detection.
@@ -79,16 +92,24 @@ function classifyPiAiError(message: string): string {
  *   to `CONTEXT_WINDOW_EXCEEDED`; a `stop` with no content blocks maps to an
  *   `EMPTY_RESPONSE` error.
  */
-export function mapStopReason(message: AssistantMessage, contextWindow?: number): FinishReason {
+export function mapStopReason(
+  message: AssistantMessage,
+  contextWindow?: number,
+  desiredMaxOutput?: number,
+): FinishReason {
   const piAiOverflow = isContextOverflow(message, contextWindow)
   const harnessOverflow = message.stopReason === 'error'
     && message.errorMessage !== undefined
     && isContextWindowExceededError(message.errorMessage)
-  if (piAiOverflow || harnessOverflow) {
+  const recoverableLength = isRecoverableLength(message, desiredMaxOutput)
+  if (piAiOverflow || harnessOverflow || recoverableLength) {
     return {
       kind: 'error',
       failure: {
-        message: message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`,
+        message: message.errorMessage
+          ?? (recoverableLength
+            ? `pi-ai returned an early length stop for model "${message.model}" after ${message.usage.output} of ${desiredMaxOutput} intended output tokens`
+            : `pi-ai detected context overflow for model "${message.model}"`),
         code: CONTEXT_WINDOW_EXCEEDED_CODE,
       },
     }
@@ -133,6 +154,7 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
 export async function* toStreamChunks(
   events: AsyncIterable<AssistantMessageEvent>,
   contextWindow?: number,
+  desiredMaxOutput?: number,
 ): AsyncGenerator<StreamChunk> {
   // pi-ai contentIndex ↔ our block index map 1:1 (both count blocks from 0
   // in stream order), but we track ids per index for tool calls.
@@ -198,7 +220,7 @@ export async function* toStreamChunks(
         yield { type: 'usage', usage: mapUsage(event.message.usage) }
         yield {
           type: 'finish',
-          reason: mapStopReason(event.message, contextWindow),
+          reason: mapStopReason(event.message, contextWindow, desiredMaxOutput),
           replayState: toPiReplayState(event.message),
         }
         return
@@ -206,7 +228,7 @@ export async function* toStreamChunks(
         // In-stream error delivery (pi-ai's style) → error finish chunk
         // (the harness's other sanctioned error path besides throwing).
         yield { type: 'usage', usage: mapUsage(event.error.usage) }
-        yield { type: 'finish', reason: mapStopReason(event.error, contextWindow) }
+        yield { type: 'finish', reason: mapStopReason(event.error, contextWindow, desiredMaxOutput) }
         return
       // no default: AssistantMessageEvent is pi-ai's closed union; a new
       // event type should fail compilation here via tsc's exhaustiveness
