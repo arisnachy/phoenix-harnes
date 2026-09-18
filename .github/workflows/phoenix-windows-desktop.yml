@@ -43,6 +43,12 @@ jobs:
           $source = Get-Content installer/windows/bootstrap-runtime.ps1 -Raw
           [void][scriptblock]::Create($source)
 
+      - name: Desktop contract tests
+        shell: pwsh
+        run: |
+          dotnet run --project apps/desktop-windows/Phoenix.Desktop.Tests/Phoenix.Desktop.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Prepare Phoenix icon
         shell: pwsh
         run: |
@@ -111,6 +117,7 @@ jobs:
           if ($process.ExitCode -ne 0) { throw "Phoenix visible-window smoke test failed: $($process.ExitCode)" }
           $smokeLog = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
           if (-not $smokeLog.Contains('Visible smoke: Shown.')) { throw 'Phoenix process exited but native window never reached Shown state' }
+          if (-not $smokeLog.Contains('Visible smoke: BrowserCollapsed=True.')) { throw 'Phoenix EXE opened with the embedded browser pane visible instead of chat-first' }
           if (-not $smokeLog.Contains('Visible desktop window smoke test passed')) { throw 'Phoenix native window did not complete its visible smoke lifecycle' }
 
       - name: Build installer
