@@ -27,6 +27,53 @@ export interface PluginInventorySnapshot {
   readonly entries: readonly PluginInventoryEntry[]
 }
 
+
+/** Supported transport labels projected from Official MCP Registry metadata. */
+export type McpRegistryTransport = 'stdio' | 'streamable-http' | 'sse'
+
+/** Sanitized package locator from one registry-listed MCP server. */
+export interface McpRegistryPackage {
+  readonly registryType: string
+  readonly identifier: string
+  readonly transport: McpRegistryTransport
+  readonly version?: string
+  readonly runtimeHint?: string
+}
+
+/**
+ * Registry discovery candidate. `trust` intentionally says only that the
+ * server is listed in the Official MCP Registry; it does not imply the named
+ * product vendor authored the server.
+ */
+export interface McpRegistryCandidate {
+  readonly name: string
+  readonly title: string
+  readonly description: string
+  readonly version: string
+  readonly status: 'active' | 'deprecated' | 'deleted' | 'unknown'
+  readonly trust: 'registry-listed'
+  readonly transports: readonly McpRegistryTransport[]
+  readonly packages: readonly McpRegistryPackage[]
+  readonly repositoryUrl?: string
+  readonly websiteUrl?: string
+  readonly remoteUrl?: string
+}
+
+/** Browser/model request for an Official MCP Registry name search. */
+export interface McpRegistrySearchRequest {
+  readonly query: string
+  readonly limit?: number
+}
+
+/** Secret-free result from the Host-owned registry proxy. */
+export interface McpRegistrySearchSnapshot {
+  readonly source: 'official-mcp-registry'
+  readonly query: string
+  readonly fetchedAt: string
+  readonly stale: boolean
+  readonly candidates: readonly McpRegistryCandidate[]
+}
+
 /** Stable updater lifecycle states projected to trusted Web clients. */
 export type PhoenixUpdateStatus =
   | 'idle'
