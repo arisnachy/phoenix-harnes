@@ -87,6 +87,7 @@ function isRecoverableLength(message: AssistantMessage, desiredMaxOutput?: numbe
  * Map a terminal pi-ai event to the harness finish reason.
  * @param message - the assistant message carried by the `done` or `error` event.
  * @param contextWindow - resolved catalog capacity for usage-based overflow detection.
+ * @param desiredMaxOutput - original intended output budget before provider/context clamping.
  * @returns the mapped harness reason. Recognized error text, `stop` usage above
  *   `contextWindow`, and zero-output `length` usage that fills the window map
  *   to `CONTEXT_WINDOW_EXCEEDED`; a `stop` with no content blocks maps to an
@@ -148,6 +149,7 @@ export function mapStopReason(
  * `finish` chunks (the harness protocol's other error-delivery style).
  * @param events - one assistant turn's pi-ai event stream.
  * @param contextWindow - resolved catalog capacity for usage-based overflow detection.
+ * @param desiredMaxOutput - original intended output budget used to classify early length stops.
  * @returns the harness chunks, ending with `usage` then `finish`; throws
  *   `LlmError` (`STREAM_CLOSED`) if the source ends without a terminal event.
  */
