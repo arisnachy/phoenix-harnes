@@ -24,6 +24,11 @@ export interface McpRegistryCandidateView {
   version: string
   status: 'active' | 'deprecated' | 'deleted' | 'unknown'
   trust: 'registry-listed'
+  icons: Array<{
+    src: string
+    mimeType?: 'image/png' | 'image/jpeg' | 'image/jpg' | 'image/svg+xml' | 'image/webp'
+    sizes?: string[]
+  }>
   transports: Array<'stdio' | 'streamable-http' | 'sse'>
   packages: Array<{
     registryType: string
@@ -306,28 +311,65 @@ function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
   )
 }
 
+function registryCandidateLogo(candidate: McpRegistryCandidateView): string | undefined {
+  const registryIcon = candidate.icons
+    .map(icon => safeExternalHref(icon.src))
+    .find((src): src is string => src !== undefined)
+  if (registryIcon !== undefined) return registryIcon
+
+  const haystack = normalize(`${candidate.name} ${candidate.title}`)
+  const catalogMatch = CONNECTOR_CATALOG.find((definition) => {
+    const aliases = [definition.id, definition.name, ...(definition.aliases ?? [])]
+    return aliases.some(alias => {
+      const needle = normalize(alias)
+      return needle.length >= 3 && haystack.includes(needle)
+    })
+  })
+  return safeExternalHref(catalogMatch?.logoUrl)
+}
+
 function OfficialMcpCard({ candidate, stale, t }: {
   candidate: McpRegistryCandidateView
   stale: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
 }): ReactNode {
   const source = safeExternalHref(candidate.repositoryUrl) ?? safeExternalHref(candidate.websiteUrl)
-  const transport = candidate.transports.length === 0 ? 'MCP' : candidate.transports.join(' · ')
+  const logoUrl = registryCandidateLogo(candidate)
   const status = candidate.status === 'deprecated' || candidate.status === 'deleted'
     ? t('registryDeprecatedStatus')
     : t('registryListedStatus')
   return (
-    <article className={connectorStyles['connectorCard']} data-registry-server={candidate.name}>
+    <article className={`${connectorStyles['connectorCard'] ?? ''} ${connectorStyles['registryCard'] ?? ''}`.trim()} data-registry-server={candidate.name}>
       <div className={connectorStyles['connectorTop']}>
-        <div className={connectorStyles['connectorFallback']} aria-hidden="true">{candidate.title.slice(0, 1).toUpperCase()}</div>
+        <div className={hubStyles['logoShell']}>
+          <span className={connectorStyles['connectorFallback']} aria-hidden="true">{candidate.title.slice(0, 1).toUpperCase()}</span>
+          {logoUrl === undefined ? null : (
+            <img
+              className={`${connectorStyles['connectorIcon'] ?? ''} ${hubStyles['logoImage'] ?? ''}`.trim()}
+              src={logoUrl}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={(event) => { event.currentTarget.hidden = true }}
+            />
+          )}
+        </div>
         <div className={connectorStyles['connectorIdentity']}>
           <span className={connectorStyles['connectorName']}>{candidate.title}</span>
-          <span className={connectorStyles['connectorCategory']}>{`MCP · ${transport} · v${candidate.version}`}</span>
+          <span className={connectorStyles['connectorCategory']}>{candidate.name}</span>
         </div>
+      </div>
+      <div className={connectorStyles['connectorBadges']}>
+        <span className={connectorStyles['connectorBadge']}>MCP</span>
+        <span className={connectorStyles['connectorBadge']}>{`v${candidate.version}`}</span>
+        {candidate.transports.slice(0, 2).map(transport => (
+          <span key={transport} className={connectorStyles['connectorBadge']}>{transport}</span>
+        ))}
       </div>
       <p className={connectorStyles['connectorDescription']}>{candidate.description}</p>
       <div className={connectorStyles['connectorFooter']}>
-        <span className={connectorStyles['connectorStatus'] ?? ''}>
+        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${candidate.status === 'active' ? connectorStyles['connectorStatusReady'] ?? '' : ''}`.trim()}>
           {status}{stale ? ` · ${t('registryCachedStatus')}` : ''}
         </span>
         {source === undefined ? null : (
