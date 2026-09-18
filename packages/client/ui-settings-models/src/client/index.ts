@@ -20,7 +20,11 @@ import type {
 } from './PhoenixLocalPanel.tsx'
 import { ConnectorsSettingsSection } from './AuthorizationPanel.tsx'
 import type { ChatGptWebBridgeClient } from './chatgpt-web-toggle.ts'
-import type { ConnectorsSettingsSectionProps } from './AuthorizationPanel.tsx'
+import type {
+  ConnectorsSettingsSectionProps,
+  McpRegistryClient,
+  McpRegistrySearchSnapshot,
+} from './AuthorizationPanel.tsx'
 import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
 import type { DeepSeekOnboardingInjected } from './DeepSeekOnboardingDialog.tsx'
 import { WelcomeNotice } from './WelcomeNotice.tsx'
@@ -66,6 +70,11 @@ type PluginInventoryChatGptWebRemote = {
   disableChatGptWeb(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
 }
 
+
+type PluginInventoryMcpRegistryRemote = {
+  searchMcpRegistry(request: { query: string; limit?: number }): Promise<PluginInventoryRemoteResult<McpRegistrySearchSnapshot>>
+}
+
 type PluginInventoryLocalRemote = {
   localModelState(): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   installLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
@@ -86,6 +95,21 @@ function pluginInventoryLocalRemote(ctx: ClientContext): PluginInventoryLocalRem
   const remote = ctx.get('remote.pluginInventory') as PluginInventoryLocalRemote | undefined
   if (remote === undefined) throw new Error('Phoenix Local is unavailable on this host.')
   return remote
+}
+
+/** Adapt the Host-owned Official MCP Registry proxy to the Connectors search surface. */
+function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
+  const remote = (): PluginInventoryMcpRegistryRemote => {
+    const value = ctx.get('remote.pluginInventory') as PluginInventoryMcpRegistryRemote | undefined
+    if (value === undefined) throw new Error('Official MCP Registry search is unavailable on this host.')
+    return value
+  }
+  return {
+    search: async request => unwrapPluginInventory(
+      'searchMcpRegistry',
+      await remote().searchMcpRegistry(request),
+    ),
+  }
 }
 
 /** Adapt the optional Host Remote to the ChatGPT Web Settings switch. */
@@ -164,6 +188,7 @@ export function apply(ctx: ClientContext): void {
   const localT = ctx.locale.bind(LOCAL_NS) as ModelsWithLocalSectionInjected['localT']
   const connectorT = ctx.locale.bind(CONNECTORS_NS) as ConnectorsSettingsSectionProps['connectorT']
   const localModel = localModelClient(ctx)
+  const mcpRegistry = mcpRegistryClient(ctx)
   const injected = (): ModelsWithLocalSectionInjected => ({
     controller,
     hooks: { snapshot: controller.store },
@@ -179,6 +204,7 @@ export function apply(ctx: ClientContext): void {
     connectorT,
     chatGptWeb: chatGptWebClient(ctx),
     settings: connection.api.settings,
+    mcpRegistry,
     onAuthorized: () => { refreshIfLoaded(controller) },
   })
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
