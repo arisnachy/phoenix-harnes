@@ -126,7 +126,11 @@ function isEmbeddedBrowserAction(action: ComputerAction): action is EmbeddedBrow
     || action === 'browser_focus'
 }
 
-/** Parse and validate the current-user desktop-control descriptor before connecting. */
+/**
+ * Parse and validate the current-user desktop-control descriptor before connecting.
+ * @param raw - JSON descriptor written by Phoenix Desktop.
+ * @returns Validated schema-1 desktop-control descriptor.
+ */
 export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowserControlDescriptor {
   let value: unknown
   try {
@@ -152,7 +156,11 @@ export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowse
   return { schema: 1, pipeName }
 }
 
-/** Map model-facing browser actions onto the native WebView command vocabulary. */
+/**
+ * Map model-facing browser actions onto the native WebView command vocabulary.
+ * @param args - Validated computer-tool browser action.
+ * @returns Native Phoenix Desktop browser command.
+ */
 export function browserCommandForAction(args: ComputerToolArgs): DesktopBrowserCommand {
   validateComputerArgs(args)
   switch (args.action) {
@@ -949,6 +957,9 @@ function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; r
 /**
  * Whether a permitted desktop interaction still needs an approval prompt.
  * Full access is deliberately no-prompt authority; read-only cannot interact at all.
+ * @param sandboxMode - Effective sandbox mode for the current session or deployment.
+ * @param action - Computer action being authorized.
+ * @returns True only when the action must go through the approval service.
  */
 export function computerActionNeedsApproval(
   sandboxMode: SandboxMode | undefined,
