@@ -10,7 +10,7 @@ import type { LocalModelPersistentState } from '../src/local-model/types.js'
 function harness(initial?: Partial<LocalModelPersistentState>) {
   let persisted: LocalModelPersistentState = {
     mode: 'on-demand',
-    selectedModelId: 'qwen3.5-4b-q4-k-m',
+    selectedModelId: 'gemma-4-e2b-it-q4-0',
     installedModelIds: [],
     ...initial,
   }
@@ -43,17 +43,17 @@ describe('LocalModelRuntimeManager', () => {
     const phases: string[] = []
     manager.subscribe(snapshot => phases.push(snapshot.phase))
 
-    await manager.install('qwen3.5-4b-q4-k-m')
+    await manager.install('gemma-4-e2b-it-q4-0')
 
     expect(phases).toContain('installing')
     expect(manager.snapshot().phase).toBe('ready')
-    expect(readState().installedModelIds).toEqual(['qwen3.5-4b-q4-k-m'])
+    expect(readState().installedModelIds).toEqual(['gemma-4-e2b-it-q4-0'])
     expect(dependencies.downloadArtifact).toHaveBeenCalledTimes(2)
     expect(dependencies.extractArchive).toHaveBeenCalledTimes(1)
   })
 
   it('starts llama-server on loopback and returns the OpenAI-compatible v1 endpoint', async () => {
-    const { dependencies } = harness({ installedModelIds: ['qwen3.5-4b-q4-k-m'] })
+    const { dependencies } = harness({ installedModelIds: ['gemma-4-e2b-it-q4-0'] })
     const manager = await createLocalModelRuntimeManager(dependencies)
 
     await expect(manager.ensureRunning()).resolves.toBe('http://127.0.0.1:17842/v1')
@@ -64,14 +64,33 @@ describe('LocalModelRuntimeManager', () => {
     expect(args).toEqual(expect.arrayContaining([
       '--host', '127.0.0.1',
       '--port', '17842',
-      '--ctx-size', '8192',
-      '--model', expect.stringContaining('Qwen_Qwen3.5-4B-Q4_K_M.gguf'),
+      '--ctx-size', '131072',
+      '--cache-type-k', 'q8_0',
+      '--cache-type-v', 'q8_0',
+      '--model', expect.stringContaining('gemma-4-E2B-it-Q4_0.gguf'),
     ]))
     expect(manager.snapshot()).toMatchObject({ phase: 'running', pid: 4242, port: 17842 })
   })
 
+  it('keeps Qwen3.5-4B as an installable and selectable alternative', async () => {
+    const qwen = 'qwen3.5-4b-q4-k-m'
+    const gemma = 'gemma-4-e2b-it-q4-0'
+    const { dependencies } = harness({ installedModelIds: [gemma, qwen] })
+    const manager = await createLocalModelRuntimeManager(dependencies)
+
+    await manager.setDefaultModel(qwen)
+    await manager.ensureRunning()
+
+    const [, args] = vi.mocked(dependencies.spawnServer).mock.calls[0]!
+    expect(args).toEqual(expect.arrayContaining([
+      '--ctx-size', '262144',
+      '--model', expect.stringContaining('Qwen_Qwen3.5-4B-Q4_K_M.gguf'),
+    ]))
+    expect(manager.snapshot().selectedModelId).toBe(qwen)
+  })
+
   it('coalesces concurrent on-demand starts into one supervised llama-server', async () => {
-    const { dependencies } = harness({ installedModelIds: ['qwen3.5-4b-q4-k-m'] })
+    const { dependencies } = harness({ installedModelIds: ['gemma-4-e2b-it-q4-0'] })
     let releaseHealth: (() => void) | undefined
     dependencies.probeHealth = vi.fn(() => new Promise<void>((resolve) => { releaseHealth = resolve }))
     const manager = await createLocalModelRuntimeManager(dependencies)
@@ -89,7 +108,7 @@ describe('LocalModelRuntimeManager', () => {
   })
 
   it('does not start while local inference is switched off', async () => {
-    const { dependencies } = harness({ mode: 'off', installedModelIds: ['qwen3.5-4b-q4-k-m'] })
+    const { dependencies } = harness({ mode: 'off', installedModelIds: ['gemma-4-e2b-it-q4-0'] })
     const manager = await createLocalModelRuntimeManager(dependencies)
     const promise = manager.ensureRunning()
     await expect(promise).rejects.toMatchObject({ code: 'local-model-disabled' })
@@ -103,7 +122,7 @@ describe('LocalModelRuntimeManager', () => {
   })
 
   it('stops the supervised child without stopping the Phoenix host', async () => {
-    const { dependencies, server } = harness({ installedModelIds: ['qwen3.5-4b-q4-k-m'] })
+    const { dependencies, server } = harness({ installedModelIds: ['gemma-4-e2b-it-q4-0'] })
     const manager = await createLocalModelRuntimeManager(dependencies)
     await manager.ensureRunning()
     await manager.stop()
@@ -112,10 +131,10 @@ describe('LocalModelRuntimeManager', () => {
   })
 
   it('stops first and removes only Phoenix-managed artifacts when uninstalling the last model', async () => {
-    const { dependencies, server } = harness({ installedModelIds: ['qwen3.5-4b-q4-k-m'] })
+    const { dependencies, server } = harness({ installedModelIds: ['gemma-4-e2b-it-q4-0'] })
     const manager = await createLocalModelRuntimeManager(dependencies)
     await manager.ensureRunning()
-    await manager.uninstall('qwen3.5-4b-q4-k-m')
+    await manager.uninstall('gemma-4-e2b-it-q4-0')
 
     expect(server.stop).toHaveBeenCalledTimes(1)
     for (const [target] of vi.mocked(dependencies.remove).mock.calls) {

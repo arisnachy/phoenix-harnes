@@ -227,6 +227,10 @@ class RuntimeManager implements LocalModelRuntimeManager {
       '--host', '127.0.0.1',
       '--port', String(port),
       '--ctx-size', String(model.contextWindow),
+      // Keep long local contexts affordable on CPU-first machines by halving
+      // the default f16 KV-cache footprint without changing model weights.
+      '--cache-type-k', 'q8_0',
+      '--cache-type-v', 'q8_0',
     ]
     let handle: LocalServerHandle | undefined
     try {
