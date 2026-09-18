@@ -314,21 +314,42 @@ function entryKeyOf(entry: StoredEntry): number {
  * only shows until that re-render lands (permanently once the cell is dry —
  * the outlet then owns the crash face).
  */
+interface SlotErrorBoundaryState {
+  readonly failed: boolean
+  readonly error: unknown
+  readonly escalate: boolean
+}
+
+/**
+ * Shell-owned primary surfaces already have a user-visible recovery boundary
+ * in AppFrame. Their slot boundary still records the failure locally first,
+ * then rethrows on the next render so the shell can perform its clean remount
+ * instead of collapsing the single-slot cell into an invisible dead div.
+ */
+function shellSupervisesSlot(slotKey: string): boolean {
+  return slotKey === 'conversation' || slotKey === 'details'
+}
+
 class SlotErrorBoundary extends Component<
-  { slotKey: string; onEntryError: (error: unknown) => void; children: ReactNode }, { failed: boolean }
+  { slotKey: string; onEntryError: (error: unknown) => void; children: ReactNode }, SlotErrorBoundaryState
 > {
-  override state = { failed: false }
-  static getDerivedStateFromError(error: unknown): { failed: boolean } {
+  override state: SlotErrorBoundaryState = { failed: false, error: null, escalate: false }
+  static getDerivedStateFromError(error: unknown): Partial<SlotErrorBoundaryState> {
     if (error instanceof SlotAssemblyError) throw error
-    return { failed: true }
+    return { failed: true, error }
   }
   override componentDidCatch(error: unknown): void {
     console.error(`slot entry crashed in '${this.props.slotKey}':`, error)
     this.props.onEntryError(error)
+    // componentDidCatch must run before escalation so supervision/telemetry is
+    // preserved. The state flip schedules the rethrow into AppFrame's surface
+    // boundary without swallowing the original failure into a blank cell.
+    if (shellSupervisesSlot(this.props.slotKey)) this.setState({ escalate: true })
   }
   override render(): ReactNode {
-    if (this.state.failed) return <div data-slot-error={this.props.slotKey} />
-    return this.props.children
+    if (!this.state.failed) return this.props.children
+    if (this.state.escalate) throw this.state.error
+    return <div data-slot-error={this.props.slotKey} />
   }
 }
 
@@ -712,7 +733,12 @@ function renderOutletContent(
     // resolve at select time, and retiring a crashed elected entry would
     // change the static crash face.
     const onEntryError = (error: unknown) => {
-      host.reportEntryError(slotKey, entry, error, { abdicate: spec.kind !== 'chain' })
+      // Primary shell surfaces stay registered while AppFrame retries them.
+      // Abdication here would retire the only entry before the outer recovery
+      // boundary can remount it, reproducing the all-white/empty conversation.
+      host.reportEntryError(slotKey, entry, error, {
+        abdicate: spec.kind !== 'chain' && !shellSupervisesSlot(slotKey),
+      })
     }
     return spec.scope === 'session'
       ? (
