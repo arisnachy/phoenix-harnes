@@ -3,6 +3,7 @@ import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { HardnessArtifactValue } from '../conversation-nodes/hardness-artifact.ts'
 import type { RenderMessageImages } from '../contract/slots.ts'
 import styles from './HardnessArtifactNodeView.module.css'
+import { PhoenixVisualizer, supportsPhoenixVisual } from './PhoenixVisualizer.tsx'
 
 interface ArtifactBodyProps {
   readonly mime: string
@@ -67,116 +68,6 @@ function ImageAttachmentPreview({ attachment, renderMessageImages }: {
     return <p className={styles.note}>Image attachment is available, but no image renderer is configured.</p>
   }
   return renderMessageImages({ images: [{ attachment }], align: 'start' })
-}
-
-function TablePreview({ record }: { readonly record: JsonRecord }) {
-  const columns = Array.isArray(record.columns) && record.columns.every(item => typeof item === 'string')
-    ? record.columns as readonly string[]
-    : undefined
-  const rows = Array.isArray(record.rows) && record.rows.every(Array.isArray)
-    ? record.rows as readonly (readonly unknown[])[]
-    : undefined
-  if (columns === undefined || rows === undefined) return null
-  return (
-    <div className={styles.tableWrap}>
-      <table className={styles.table}>
-        <thead><tr>{columns.map(column => <th key={column}>{column}</th>)}</tr></thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={index}>
-              {columns.map((column, cell) => <td key={`${column}-${cell}`}>{display(row[cell])}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-interface ChartPoint {
-  readonly label: string
-  readonly value: number
-}
-
-function firstSeries(record: JsonRecord): { readonly dataKey: string; readonly label: string } | undefined {
-  if (!Array.isArray(record.series)) return undefined
-  const candidate = record.series.find(isRecord)
-  if (candidate === undefined || typeof candidate.dataKey !== 'string') return undefined
-  return {
-    dataKey: candidate.dataKey,
-    label: typeof candidate.label === 'string' ? candidate.label : candidate.dataKey,
-  }
-}
-
-function chartPoints(record: JsonRecord): { readonly points: readonly ChartPoint[]; readonly seriesLabel: string } | undefined {
-  const series = firstSeries(record)
-  if (series === undefined || !Array.isArray(record.data)) return undefined
-  const xKey = typeof record.xKey === 'string' ? record.xKey : 'label'
-  const points: ChartPoint[] = []
-  for (const item of record.data) {
-    if (!isRecord(item)) continue
-    const raw = item[series.dataKey]
-    if (typeof raw !== 'number' || !Number.isFinite(raw)) continue
-    points.push({ label: display(item[xKey]) || String(points.length + 1), value: raw })
-  }
-  return points.length === 0 ? undefined : { points, seriesLabel: series.label }
-}
-
-function BarChart({ points }: { readonly points: readonly ChartPoint[] }) {
-  const max = Math.max(...points.map(point => Math.abs(point.value)), 1)
-  return (
-    <div className={styles.barRows} role="img" aria-label="Bar chart">
-      {points.slice(0, 40).map((point, index) => (
-        <div className={styles.barRow} key={`${point.label}-${index}`}>
-          <span title={point.label}>{point.label}</span>
-          <span className={styles.barTrack} aria-hidden="true">
-            <span className={styles.barFill} style={{ width: `${Math.max(1, Math.abs(point.value) / max * 100)}%` }} />
-          </span>
-          <span>{point.value.toLocaleString()}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function LineChart({ points }: { readonly points: readonly ChartPoint[] }) {
-  const width = 640
-  const height = 220
-  const pad = 24
-  const values = points.map(point => point.value)
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const span = max - min || 1
-  const plot = points.map((point, index) => {
-    const x = points.length === 1 ? width / 2 : pad + index * (width - pad * 2) / (points.length - 1)
-    const y = height - pad - (point.value - min) / span * (height - pad * 2)
-    return `${x},${y}`
-  }).join(' ')
-  return (
-    <svg className={styles.chartSvg} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Line chart">
-      <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="currentColor" opacity="0.18" />
-      <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="currentColor" opacity="0.18" />
-      <polyline points={plot} fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" opacity="0.72" />
-      {plot.split(' ').map((pair, index) => {
-        const [x, y] = pair.split(',').map(Number)
-        return <circle key={index} cx={x} cy={y} r="3.5" fill="currentColor"><title>{`${points[index]?.label}: ${points[index]?.value}`}</title></circle>
-      })}
-      <text x={pad} y={height - 6} fontSize="10" fill="currentColor" opacity="0.62">{points[0]?.label}</text>
-      <text x={width - pad} y={height - 6} textAnchor="end" fontSize="10" fill="currentColor" opacity="0.62">{points.at(-1)?.label}</text>
-    </svg>
-  )
-}
-
-function ChartPreview({ record }: { readonly record: JsonRecord }) {
-  const parsed = chartPoints(record)
-  if (parsed === undefined) return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
-  const kind = typeof record.chartType === 'string' ? record.chartType : 'bar'
-  return (
-    <div className={styles.stack}>
-      <strong>{parsed.seriesLabel}</strong>
-      {kind === 'line' ? <LineChart points={parsed.points} /> : <BarChart points={parsed.points} />}
-    </div>
-  )
 }
 
 interface UiNode {
@@ -337,8 +228,9 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
   const type = text(block.type) ?? 'unknown'
   if (type === 'markdown' || type === 'text') return <p className={styles.text} key={index}>{display(block.text)}</p>
   if (type === 'code') return <pre className={styles.code} key={index}>{display(block.text)}</pre>
-  if (type === 'table') return <TablePreview key={index} record={block} />
-  if (type === 'chart') return <ChartPreview key={index} record={isRecord(block.spec) ? block.spec : block} />
+  if (type === 'table' || type === 'chart' || type === 'metrics' || type === 'timeline' || type === 'cards' || type === 'progress' || type === 'visual') {
+    return <PhoenixVisualizer key={index} spec={isRecord(block.spec) ? block.spec : block} />
+  }
   if (type === 'ui' || type === 'form') return <DeclarativeUi key={index} record={isRecord(block.schema) ? block.schema : block} />
   if (type === 'image') {
     const src = safeHref(block.src)
@@ -398,8 +290,10 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
     )
   }
   if (mime === 'application/vnd.hardness.ui+json' || isRecord(record.root)) return <DeclarativeUi record={record} />
-  if (mime === 'application/vnd.hardness.chart+json' || typeof record.chartType === 'string') return <ChartPreview record={record} />
-  if (Array.isArray(record.columns) && Array.isArray(record.rows)) return <TablePreview record={record} />
+  if (mime === 'application/vnd.phoenix.visual+json'
+    || mime === 'application/vnd.hardness.visual+json'
+    || mime === 'application/vnd.hardness.chart+json'
+    || supportsPhoenixVisual(record)) return <PhoenixVisualizer spec={record} />
   if (typeof record.entry === 'string' && isRecord(record.files)) {
     const html = typeof record.files[record.entry] === 'string' ? record.files[record.entry] as string : undefined
     if (html !== undefined) return <MiniApp html={html} expanded={expanded} title={title} />
