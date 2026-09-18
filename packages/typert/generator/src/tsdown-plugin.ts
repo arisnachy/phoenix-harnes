@@ -78,7 +78,7 @@ export function typertPlugin(pluginOptions: TypertPluginOptions = {}): TypertPlu
       if (manifest.name === undefined || !hasTypertExport(manifest.exports)) return
       let artifacts = artifactsByRoot.get(root)
       if (artifacts === undefined) {
-        const generator = new WorkspaceTypertGenerator(root)
+        const generator = new WorkspaceTypertGenerator(root, TSC_VERIFIED_INPUT)
         artifacts = pluginOptions.faces === undefined
           ? generator.generate()
           : generator.generate(undefined, pluginOptions.faces)
@@ -89,7 +89,7 @@ export function typertPlugin(pluginOptions: TypertPluginOptions = {}): TypertPlu
   }
 
   function emitWorkspace(root: string, faces: readonly TypertFace[] | undefined): void {
-    const generator = new WorkspaceTypertGenerator(root)
+    const generator = new WorkspaceTypertGenerator(root, TSC_VERIFIED_INPUT)
     const packages = generator.discover(faces)
       .filter(candidate => hasTypertExport(readManifest(join(root, candidate.root)).exports))
       .map(candidate => candidate.package)
