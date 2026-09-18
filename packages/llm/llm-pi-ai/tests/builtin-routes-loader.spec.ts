@@ -97,5 +97,12 @@ describe('llm-pi-ai built-in route lifecycle', () => {
       'opencode-free',
       'phoenix-local',
     ])
+    await expect(ctx.llm.resolveModelInfo(
+      LlmPiAi.PHOENIX_LOCAL_PROVIDER,
+      LlmPiAi.PHOENIX_LOCAL_MODEL,
+    )).resolves.toMatchObject({
+      context: { contextWindow: 262_144 },
+      defaultMaxTokens: 2_048,
+    })
   })
 })
