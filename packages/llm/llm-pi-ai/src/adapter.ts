@@ -44,6 +44,8 @@ import {
   CONTEXT_WINDOW_EXCEEDED_CODE,
   contentHasFile,
   contentHasImage,
+  errorChain,
+  isContextWindowExceededError,
   LlmAdapter,
   LlmError,
   ReasoningEffortId,
@@ -470,11 +472,18 @@ export class PiAiAdapter extends LlmAdapter {
       if (options.signal?.aborted) {
         throw new LlmError('pi-ai request aborted by caller', 'ABORTED', { cause: error })
       }
+      const detail = errorChain(error)
+      // pi-ai transports several OpenAI-compatible providers (including the
+      // Phoenix Local loopback). Normalize their provider-specific context
+      // overflow wording so compaction-basic can repair the durable surface
+      // and retry instead of exposing a raw HTTP 400 to the user.
+      if (isContextWindowExceededError(detail)) {
+        throw new LlmError(detail, CONTEXT_WINDOW_EXCEEDED_CODE, { cause: error })
+      }
       // Defensive twin of the pre-flight above: a credential that reaches
       // pi-ai's own resolution and still lacks the account claim dies there
       // with an opaque wire error; translate it once, at the seam.
-      const message = error instanceof Error ? error.message : String(error)
-      if (message.includes('Failed to extract accountId from token')) {
+      if (detail.includes('Failed to extract accountId from token')) {
         throw new LlmError(
           `pi-ai: provider "${options.provider}" needs a ChatGPT Codex sign-in — its backend could not`
           + ' find a ChatGPT account in the credential that reached it. Sign in on the OpenAI Codex'
