@@ -14,9 +14,20 @@ import type { WorkspaceEmitResult } from './workspace.ts'
 import type { TypertFace } from './model.ts'
 
 /** The subset of the rolldown plugin contract used here (structural; avoids a rolldown type dependency). */
+interface DecoratorTransformHook {
+  readonly filter: {
+    readonly id: RegExp
+    readonly code: RegExp
+  }
+  readonly handler: (
+    code: string,
+    id: string,
+  ) => { code: string; map: string | undefined } | undefined
+}
+
 interface DecoratorLoweringPlugin {
   name: string
-  transform: (code: string, id: string) => { code: string; map: string | undefined } | undefined
+  transform: DecoratorTransformHook
 }
 
 interface TypertPlugin extends DecoratorLoweringPlugin {
@@ -24,6 +35,7 @@ interface TypertPlugin extends DecoratorLoweringPlugin {
 }
 
 const DECORATOR_SYNTAX = /^\s*@[A-Za-z_$][\w$]*/m
+const TYPESCRIPT_MODULE = /\.[cm]?tsx?(?:\?.*)?$/
 
 // This plugin consumes tsc-emitted `lib/types` output, so every project it
 // would re-diagnose has already passed the workspace tsc build in the same
@@ -57,10 +69,22 @@ function lowerDecoratorSyntax(
  * contract generation runs in scripts/generate-typert.ts before Rolldown, so
  * this plugin only lowers decorator syntax and cannot trigger workspace analysis.
  */
+function decoratorTransformHook(): DecoratorTransformHook {
+  return {
+    filter: {
+      id: TYPESCRIPT_MODULE,
+      code: DECORATOR_SYNTAX,
+    },
+    // Keep the handler's existing checks as a correctness fallback for plugin
+    // hosts that ignore hook filters. Rolldown handles both checks natively.
+    handler: lowerDecoratorSyntax,
+  }
+}
+
 export function decoratorLoweringPlugin(): DecoratorLoweringPlugin {
   return {
     name: 'dsh-decorator-lowering',
-    transform: lowerDecoratorSyntax,
+    transform: decoratorTransformHook(),
   }
 }
 
@@ -82,7 +106,7 @@ export function typertPlugin(pluginOptions: TypertPluginOptions = {}): TypertPlu
   const emittedWorkspaces = new Set<string>()
   return {
     name: 'dsh-typert-generator',
-    transform: lowerDecoratorSyntax,
+    transform: decoratorTransformHook(),
     writeBundle(bundleOptions) {
       // options.dir is the package's absolute outDir (<package>/lib); its
       // nearest package.json owns the bundle even when a custom config writes

@@ -58,6 +58,18 @@ vi.mock('../src/workspace.ts', () => ({
 const { decoratorLoweringPlugin, typertPlugin } = await import('../src/tsdown-plugin.ts')
 const roots: string[] = []
 
+function runDecoratorTransform(
+  transform: {
+    filter: { id: RegExp; code: RegExp }
+    handler: (code: string, id: string) => { code: string; map: string | undefined } | undefined
+  },
+  code: string,
+  id: string,
+) {
+  return transform.handler(code, id)
+}
+
+
 afterEach(() => {
   discovered.mockClear()
   generated.mockClear()
@@ -69,18 +81,38 @@ describe('decoratorLoweringPlugin', () => {
     const plugin = decoratorLoweringPlugin()
     expect(plugin.name).toBe('dsh-decorator-lowering')
     expect('writeBundle' in plugin).toBe(false)
-    expect(plugin.transform('export const value = 1\n', '/workspace/src/plain.ts')).toBeUndefined()
-    expect(plugin.transform('@sealed\nexport class Example {}\n', '/workspace/src/example.ts')?.code)
-      .not.toContain('@sealed')
+    expect(plugin.transform.filter.id.test('/workspace/src/plain.js')).toBe(false)
+    expect(plugin.transform.filter.id.test('/workspace/src/plain.ts')).toBe(true)
+    expect(plugin.transform.filter.code.test('export const value = 1\n')).toBe(false)
+    expect(plugin.transform.filter.code.test('@sealed\nexport class Example {}\n')).toBe(true)
+    expect(runDecoratorTransform(
+      plugin.transform,
+      'export const value = 1\n',
+      '/workspace/src/plain.ts',
+    )).toBeUndefined()
+    expect(runDecoratorTransform(
+      plugin.transform,
+      '@sealed\nexport class Example {}\n',
+      '/workspace/src/example.ts',
+    )?.code).not.toContain('@sealed')
   })
 })
 
 describe('typertPlugin', () => {
   it('lowers standard decorators in TypeScript source dependencies', () => {
     const plugin = typertPlugin()
-    expect(plugin.transform('export const value = 1\n', '/workspace/src/plain.ts')).toBeUndefined()
-    expect(plugin.transform('@sealed\nexport class Example {}\n', '/workspace/src/example.ts')?.code)
-      .not.toContain('@sealed')
+    expect(plugin.transform.filter.id.test('/workspace/src/plain.js')).toBe(false)
+    expect(plugin.transform.filter.code.test('export const value = 1\n')).toBe(false)
+    expect(runDecoratorTransform(
+      plugin.transform,
+      'export const value = 1\n',
+      '/workspace/src/plain.ts',
+    )).toBeUndefined()
+    expect(runDecoratorTransform(
+      plugin.transform,
+      '@sealed\nexport class Example {}\n',
+      '/workspace/src/example.ts',
+    )?.code).not.toContain('@sealed')
   })
 
   it('skips outputs that do not identify a Typert contributor', async () => {
