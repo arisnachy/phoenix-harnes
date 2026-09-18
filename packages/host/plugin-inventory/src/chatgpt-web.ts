@@ -85,11 +85,69 @@ export function parseChatGptWebCommand(value: string | undefined): readonly [str
 function installedRuntimeRoots(env: NodeJS.ProcessEnv, platformName: NodeJS.Platform): readonly string[] {
   if (platformName !== 'win32') return []
   const roots = [
+    env.LOCALAPPDATA === undefined ? undefined : join(env.LOCALAPPDATA, 'Programs', 'codex-web-gpt-launcher', 'resources', 'runtime'),
     env.LOCALAPPDATA === undefined ? undefined : join(env.LOCALAPPDATA, 'Programs', 'Codex Web GPT', 'resources', 'runtime'),
+    env.ProgramFiles === undefined ? undefined : join(env.ProgramFiles, 'codex-web-gpt-launcher', 'resources', 'runtime'),
     env.ProgramFiles === undefined ? undefined : join(env.ProgramFiles, 'Codex Web GPT', 'resources', 'runtime'),
     join(homedir(), '.codex-chatgpt-web', 'active'),
   ]
   return roots.filter((root): root is string => root !== undefined)
+}
+
+function installedLauncherExecutables(env: NodeJS.ProcessEnv, platformName: NodeJS.Platform): readonly string[] {
+  if (platformName !== 'win32') return []
+  const executables = [
+    env.CODEX_CHATGPT_WEB_LAUNCHER?.trim(),
+    env.LOCALAPPDATA === undefined ? undefined : join(env.LOCALAPPDATA, 'Programs', 'codex-web-gpt-launcher', 'Codex Web GPT.exe'),
+    env.LOCALAPPDATA === undefined ? undefined : join(env.LOCALAPPDATA, 'Programs', 'Codex Web GPT', 'Codex Web GPT.exe'),
+    env.ProgramFiles === undefined ? undefined : join(env.ProgramFiles, 'codex-web-gpt-launcher', 'Codex Web GPT.exe'),
+    env.ProgramFiles === undefined ? undefined : join(env.ProgramFiles, 'Codex Web GPT', 'Codex Web GPT.exe'),
+  ]
+  return executables.filter((executable): executable is string => executable !== undefined && executable !== '')
+}
+
+/**
+ * Find the installed Windows launcher used for first-time Browser-only setup.
+ * @param env - Environment used to locate the per-user or machine installation.
+ * @param platformName - Platform whose launcher layout should be inspected.
+ * @returns Launcher executable path, or undefined when no supported install exists.
+ */
+export function discoverChatGptWebLauncher(
+  env: NodeJS.ProcessEnv = process.env,
+  platformName: NodeJS.Platform = platform(),
+): string | undefined {
+  return installedLauncherExecutables(env, platformName).find(executable => existsSync(executable))
+}
+
+interface SetupProcess {
+  unref(): void
+}
+
+function defaultSetupSpawn(program: string): SetupProcess {
+  return nodeSpawn(program, [], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false,
+  })
+}
+
+/**
+ * Open the installed setup launcher without passing browser credentials through Phoenix.
+ * @param env - Environment used to discover the launcher.
+ * @param platformName - Platform whose launcher layout should be inspected.
+ * @param spawn - Process seam used by tests.
+ * @returns Whether an installed launcher was found and started.
+ */
+export function openChatGptWebSetup(
+  env: NodeJS.ProcessEnv = process.env,
+  platformName: NodeJS.Platform = platform(),
+  spawn: (program: string) => SetupProcess = defaultSetupSpawn,
+): boolean {
+  const executable = discoverChatGptWebLauncher(env, platformName)
+  if (executable === undefined) return false
+  const child = spawn(executable)
+  child.unref()
+  return true
 }
 
 function hasChatGptWebSetup(env: NodeJS.ProcessEnv): boolean {
@@ -347,11 +405,19 @@ interface ChatGptWebLifecycle {
 }
 
 /** Dependencies for the persisted ChatGPT Web integration controller. */
+interface ResolvedChatGptWebIntegration {
+  readonly bridge: ChatGptWebLifecycle
+  readonly configured: boolean
+  readonly baseUrl: string
+}
+
 interface ChatGptWebIntegrationOptions {
   readonly bridge: ChatGptWebLifecycle
   readonly enabledPath: string
   readonly configured: boolean
   readonly baseUrl: string
+  readonly resolve?: () => ResolvedChatGptWebIntegration
+  readonly openSetup?: () => boolean
   readonly wait?: (milliseconds: number) => Promise<void>
 }
 
@@ -368,25 +434,33 @@ export class ChatGptWebIntegration {
     this.options = options
   }
 
+  private current(): ResolvedChatGptWebIntegration {
+    return this.options.resolve?.() ?? {
+      bridge: this.options.bridge,
+      configured: this.options.configured,
+      baseUrl: this.options.baseUrl,
+    }
+  }
+
   private snapshot(
     enabled: boolean,
     phase: ChatGptWebSnapshot['phase'],
     detail: string,
-    baseUrl = this.options.baseUrl,
+    baseUrl: string,
   ): ChatGptWebSnapshot {
     return { enabled, phase, baseUrl, detail }
   }
 
-  private async waitForReady(enabled: boolean): Promise<ChatGptWebSnapshot> {
+  private async waitForReady(enabled: boolean, current: ResolvedChatGptWebIntegration): Promise<ChatGptWebSnapshot> {
     for (let attempt = 0; attempt < 8; attempt += 1) {
-      const status = await this.options.bridge.status()
+      const status = await current.bridge.status()
       if (status.status === 'ready') return this.snapshot(enabled, 'ready', status.detail, status.baseUrl)
       if (status.status === 'stopped') {
-        return this.snapshot(enabled, 'unavailable', 'ChatGPT Web bridge stopped before becoming ready')
+        return this.snapshot(enabled, 'unavailable', 'ChatGPT Web bridge stopped before becoming ready', current.baseUrl)
       }
       if (attempt < 7) await (this.options.wait ?? delay)(200)
     }
-    return this.snapshot(enabled, 'unavailable', 'ChatGPT Web bridge did not become ready')
+    return this.snapshot(enabled, 'unavailable', 'ChatGPT Web bridge did not become ready', current.baseUrl)
   }
 
   /**
@@ -395,15 +469,16 @@ export class ChatGptWebIntegration {
    */
   async state(): Promise<ChatGptWebSnapshot> {
     const enabled = await readEnabledPreference(this.options.enabledPath)
-    if (!enabled) return this.snapshot(false, 'off', 'ChatGPT Web is off')
-    if (!this.options.configured) {
-      return this.snapshot(true, 'needs-setup', 'Complete Codex Web GPT Setup > Browser-only first')
+    const current = this.current()
+    if (!enabled) return this.snapshot(false, 'off', 'ChatGPT Web is off', current.baseUrl)
+    if (!current.configured) {
+      return this.snapshot(true, 'needs-setup', 'Complete Codex Web GPT Setup > Browser-only first', current.baseUrl)
     }
-    const status = await this.options.bridge.status()
+    const status = await current.bridge.status()
     if (status.status === 'ready') return this.snapshot(true, 'ready', status.detail, status.baseUrl)
     if (status.status === 'starting') return this.snapshot(true, 'starting', status.detail, status.baseUrl)
     if (status.status === 'unavailable') return this.snapshot(true, 'unavailable', status.detail, status.baseUrl)
-    return this.snapshot(true, 'unavailable', 'ChatGPT Web bridge is stopped')
+    return this.snapshot(true, 'unavailable', 'ChatGPT Web bridge is stopped', current.baseUrl)
   }
 
   /**
@@ -411,13 +486,24 @@ export class ChatGptWebIntegration {
    * @returns Ready state, setup guidance, or a sanitized availability failure.
    */
   async enable(): Promise<ChatGptWebSnapshot> {
-    if (!this.options.configured) {
-      return this.snapshot(false, 'needs-setup', 'Complete Codex Web GPT Setup > Browser-only first')
+    const current = this.current()
+    if (!current.configured) {
+      const alreadyEnabled = await readEnabledPreference(this.options.enabledPath)
+      if (alreadyEnabled) {
+        return this.snapshot(true, 'needs-setup', 'Complete Codex Web GPT Setup > Browser-only first', current.baseUrl)
+      }
+      const opened = this.options.openSetup?.() ?? false
+      if (!opened) {
+        return this.snapshot(false, 'needs-setup', 'Install or open Codex Web GPT to complete Setup > Browser-only', current.baseUrl)
+      }
+      await writeEnabledPreference(this.options.enabledPath)
+      return this.snapshot(true, 'needs-setup', 'Codex Web GPT opened; complete Setup > Browser-only', current.baseUrl)
     }
-    await this.options.bridge.start()
-    const ready = await this.waitForReady(true)
+    await current.bridge.start()
+    const ready = await this.waitForReady(true, current)
     if (ready.phase !== 'ready') {
-      await this.options.bridge.stop()
+      await current.bridge.stop()
+      await rm(this.options.enabledPath, { force: true })
       return { ...ready, enabled: false }
     }
     await writeEnabledPreference(this.options.enabledPath)
@@ -429,9 +515,10 @@ export class ChatGptWebIntegration {
    * @returns Off state after lifecycle cleanup.
    */
   async disable(): Promise<ChatGptWebSnapshot> {
+    const current = this.current()
     await rm(this.options.enabledPath, { force: true })
-    await this.options.bridge.stop()
-    return this.snapshot(false, 'off', 'ChatGPT Web is off')
+    await current.bridge.stop()
+    return this.snapshot(false, 'off', 'ChatGPT Web is off', current.baseUrl)
   }
 
   /**
@@ -440,12 +527,13 @@ export class ChatGptWebIntegration {
    */
   async restore(): Promise<ChatGptWebSnapshot> {
     const enabled = await readEnabledPreference(this.options.enabledPath)
-    if (!enabled) return this.snapshot(false, 'off', 'ChatGPT Web is off')
-    if (!this.options.configured) {
-      return this.snapshot(true, 'needs-setup', 'Complete Codex Web GPT Setup > Browser-only first')
+    const current = this.current()
+    if (!enabled) return this.snapshot(false, 'off', 'ChatGPT Web is off', current.baseUrl)
+    if (!current.configured) {
+      return this.snapshot(true, 'needs-setup', 'Complete Codex Web GPT Setup > Browser-only first', current.baseUrl)
     }
-    await this.options.bridge.start()
-    return this.waitForReady(true)
+    await current.bridge.start()
+    return this.waitForReady(true, current)
   }
 }
 
@@ -455,13 +543,21 @@ export class ChatGptWebIntegration {
  * @returns Persisted ChatGPT Web integration controller.
  */
 export function createChatGptWebIntegration(env: NodeJS.ProcessEnv = process.env): ChatGptWebIntegration {
-  const config = resolveChatGptWebConfig(env)
-  const bridge = new ChatGptWebBridge({ statePath: chatGptWebBridgeStatePath(), config })
+  const statePath = chatGptWebBridgeStatePath()
+  const resolve = (): ResolvedChatGptWebIntegration => {
+    const config = resolveChatGptWebConfig(env)
+    return {
+      bridge: new ChatGptWebBridge({ statePath, config }),
+      configured: config.command !== undefined,
+      baseUrl: config.baseUrl,
+    }
+  }
+  const initial = resolve()
   return new ChatGptWebIntegration({
-    bridge,
+    ...initial,
     enabledPath: chatGptWebEnabledPath(),
-    configured: config.command !== undefined,
-    baseUrl: config.baseUrl,
+    resolve,
+    openSetup: () => openChatGptWebSetup(env),
   })
 }
 
