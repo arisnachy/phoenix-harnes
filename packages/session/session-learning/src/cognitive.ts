@@ -120,6 +120,42 @@ export interface CognitiveMemoryHit {
   readonly reasons: readonly string[]
 }
 
+/**
+ * Deterministic automatic-recall strength. This is intentionally separate from
+ * explicit search: weak stale memories remain auditable/searchable but stop
+ * consuming the model-facing working context.
+ */
+function automaticRecallStrength(record: CognitiveMemoryRecord, referenceTime: number): number {
+  if (record.status !== 'active') return 0
+  const ageMillis = Math.max(0, referenceTime - record.lastObservedAt)
+  const ageDays = ageMillis / 86_400_000
+  const durable = record.layers.includes('semantic') || record.layers.includes('procedural')
+  const workingOnly = record.layers.includes('working') && !durable
+  const halfLifeDays = durable ? 365 : workingOnly ? 2 : 30
+  const decay = Math.pow(0.5, ageDays / halfLifeDays)
+  const reinforcement = Math.min(1, Math.log2(Math.max(1, record.frequency) + 1) / 4)
+  const base = record.importance * 0.45
+    + record.confidence * 0.25
+    + reinforcement * 0.15
+    + (durable ? 0.15 : 0)
+  return Math.min(1, Math.max(0, base * (0.35 + decay * 0.65)))
+}
+
+/**
+ * Decide whether one active memory should enter automatic context. Explicit
+ * memory_search and timeline remain complete and are never hidden by this
+ * policy. Identity, strong durable preferences, missions, errors and pending
+ * work are protected from ordinary decay.
+ */
+function isAutomaticallyRecallable(record: CognitiveMemoryRecord, referenceTime: number): boolean {
+  if (record.status !== 'active') return false
+  if (record.kind === 'pending' || record.kind === 'mission' || record.kind === 'error' || record.layers.includes('prospective')) return true
+  const subject = record.subject ?? ''
+  if (/^(?:user\.(?:identity|preference)\.|phoenix\.identity\.|assistant\.identity\.)/u.test(subject)) return true
+  if (record.importance >= 0.9 && record.confidence >= 0.8) return true
+  return automaticRecallStrength(record, referenceTime) >= 0.32
+}
+
 type CognitiveLedgerRow =
   | { readonly op: 'event'; readonly record: CognitiveMemoryRecord }
   | { readonly op: 'reinforce'; readonly id: MemoryId; readonly frequency: number; readonly lastObservedAt: number }
@@ -292,6 +328,25 @@ export class CognitiveMemoryLedger {
       .slice(0, limit)
   }
 
+  /**
+   * Automatic recall with deterministic, non-destructive forgetting.
+   * Old low-value episodic/working memories decay out of model context while
+   * explicit search/history can still retrieve their canonical records.
+   * @param query - Same filters as search; limit is applied after retention.
+   * @returns Ranked active hits that remain strong enough for automatic context.
+   */
+  recall(query: CognitiveMemoryQuery = {}): CognitiveMemoryHit[] {
+    const limit = query.limit ?? DEFAULT_LIMIT
+    if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError('cognitive memory recall limit must be a positive safe integer')
+    const overscan = Math.min(512, Math.max(limit, limit * 8))
+    const ranked = this.search({ ...query, limit: overscan })
+    if (ranked.length === 0) return []
+    const referenceTime = this.latestActiveObservation(query.projectId)
+    return ranked
+      .filter(hit => isAutomaticallyRecallable(hit.record, referenceTime))
+      .slice(0, limit)
+  }
+
   /** Return all non-forgotten records for a subject, including superseded values.
    * @param subject - exact normalized subject to inspect.
    * @param projectId - optional project isolation key.
@@ -362,6 +417,16 @@ export class CognitiveMemoryLedger {
       .filter(record => record.status === 'active' && record.layers.includes('semantic'))
       .filter(record => record.subject === subject && record.projectId === projectId)
       .sort((left, right) => right.lastObservedAt - left.lastObservedAt)[0]
+  }
+
+  private latestActiveObservation(projectId?: string): number {
+    let latest = 0
+    for (const record of this.records.values()) {
+      if (record.status !== 'active') continue
+      if (projectId !== undefined && record.projectId !== projectId) continue
+      if (record.lastObservedAt > latest) latest = record.lastObservedAt
+    }
+    return latest
   }
 
   private async appendRows(rows: readonly CognitiveLedgerRow[]): Promise<void> {
