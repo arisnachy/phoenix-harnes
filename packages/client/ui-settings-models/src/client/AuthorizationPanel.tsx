@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import type { ChatGptWebSnapshot, IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
 import type { ConnectorKey } from './connectors-locales.ts'
-import { CONNECTOR_CATALOG, CONNECTOR_PRESETS } from './connector-catalog.ts'
+import { CONNECTOR_CATALOG } from './connector-catalog.ts'
 import type { ConnectorDefinition } from './connector-catalog.ts'
 import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
 import connectorStyles from './CodexConnectors.module.css'
@@ -347,7 +347,7 @@ export function AuthorizationPanel(_props: AuthorizationPanelProps): ReactNode {
   return null
 }
 
-/** Dedicated account, MCP/app connector, and capability-preset settings page. */
+/** Dedicated account and MCP/app connector settings page. */
 export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, settings, mcpRegistry, onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
@@ -521,23 +521,6 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
           </div>
         </section>
       )}
-
-      <section className={hubStyles['block']} aria-label={connectorT('superpowers')}>
-        <div className={hubStyles['heading']}>
-          <h3>{connectorT('superpowers')}</h3>
-          <p>{connectorT('superpowersHint')}</p>
-        </div>
-        <div className={hubStyles['presetGrid']}>
-          {CONNECTOR_PRESETS.map(preset => (
-            <article key={preset.id} className={hubStyles['presetCard']}>
-              <div className={hubStyles['presetName']}>{preset.name}</div>
-              <p>{preset.description}</p>
-              <div className={hubStyles['chips']}>{preset.capabilities.slice(0, 5).map(capability => <span key={capability}>{capability}</span>)}</div>
-              <small>{connectorT('presetStatus')}</small>
-            </article>
-          ))}
-        </div>
-      </section>
 
       {entries.length === 0 ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('accounts')}>
