@@ -1,5 +1,5 @@
 import { defineConfig } from 'tsdown'
-import { typertPlugin } from './packages/typert/generator/lib/types/tsdown-plugin.js'
+import { decoratorLoweringPlugin } from './packages/typert/generator/lib/types/tsdown-plugin.js'
 
 function isBuildFaceClient(value: unknown): boolean {
   if (value === undefined || value === 'host') return false
@@ -9,7 +9,8 @@ function isBuildFaceClient(value: unknown): boolean {
 
 /**
  * The ordinary workspace build consumes JavaScript emitted by the Host
- * TypeScript project and runs Typert. The Client pass selects packages that
+ * TypeScript project. Host Typert contracts are generated beforehand by the
+ * explicit incremental build:typert phase, outside Rolldown. The Client pass selects packages that
  * declare a browser bundle and lets their package-local configs emit both
  * their Node loader entry and browser artifact.
  */
@@ -25,6 +26,6 @@ export default defineConfig(({ env }) => {
     fixedExtension: false,
     dts: false,
     clean: false,
-    plugins: client ? [] : [typertPlugin({ mode: 'workspace', faces: ['host'] })],
+    plugins: client ? [] : [decoratorLoweringPlugin()],
   }
 })
