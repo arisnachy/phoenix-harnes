@@ -86,15 +86,29 @@ using (var control = new DesktopBrowserControlServer(
 False(File.Exists(controlDescriptorPath), "desktop control descriptor removed on dispose", failures);
 
 True(BrowserLayout.StartCollapsed, "embedded browser starts collapsed", failures);
-EqualInt(360, BrowserLayout.PreferredBrowserWidth(1100), "small window keeps compact browser", failures);
-EqualInt(374, BrowserLayout.PreferredBrowserWidth(1440), "normal window gives chat about three quarters", failures);
-EqualInt(520, BrowserLayout.PreferredBrowserWidth(2400), "wide window caps browser width", failures);
+EqualInt(400, BrowserLayout.PreferredBrowserWidth(1100), "small window keeps useful browser without crowding chat", failures);
+EqualInt(518, BrowserLayout.PreferredBrowserWidth(1440), "normal window uses a Codex-like side pane", failures);
+EqualInt(640, BrowserLayout.PreferredBrowserWidth(2400), "wide window caps browser width", failures);
 
 // Desktop startup must be visible before the managed runtime is ready. This is the regression
 // contract for the installed EXE appearing to do nothing on first launch.
 True(DesktopStartupContract.ShowWindowBeforeRuntimeReady, "desktop window is shown before runtime readiness", failures);
 True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch signals existing window", failures);
+True(DesktopStartupContract.EmbeddedBrowserStartsLazy, "embedded browser does not delay chat startup", failures);
 Equal("Preparando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
+
+var runtimeLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
+    @"C:\Phoenix Runtime",
+    @"C:\Phoenix\desktop-control.json");
+Equal("powershell.exe", runtimeLaunch.FileName, "desktop runtime uses PowerShell", failures);
+True(runtimeLaunch.CreateNoWindow, "PowerShell backend stays out of the chat surface", failures);
+False(runtimeLaunch.UseShellExecute, "PowerShell runtime is directly supervised", failures);
+True(runtimeLaunch.ArgumentList.Contains("-NoProfile"), "PowerShell disables user profile side effects", failures);
+True(runtimeLaunch.ArgumentList.Contains("-NonInteractive"), "PowerShell runtime is non-interactive", failures);
+True(runtimeLaunch.ArgumentList.Any(value => value.Contains("phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)), "PowerShell invokes Windows supervisor launcher", failures);
+True(runtimeLaunch.ArgumentList.Any(value => value.Contains("--no-open", StringComparison.Ordinal)), "desktop runtime never opens an external browser", failures);
+Equal("1", runtimeLaunch.Environment["PHOENIX_DESKTOP_MANAGED"], "desktop managed environment is preserved", failures);
+Equal(@"C:\Phoenix\desktop-control.json", runtimeLaunch.Environment["PHOENIX_DESKTOP_CONTROL_DESCRIPTOR"], "desktop control descriptor reaches supervisor", failures);
 
 // A managed runtime is healthy only after install/build completed. Old desktop builds could leave
 // an empty marker behind before those steps completed; that state must never be accepted as ready.
