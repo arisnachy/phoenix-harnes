@@ -82,7 +82,7 @@ export function createConnectorInstallTool(
       return {
         card: 'generic',
         title: `Install MCP: ${args.name}`,
-        kind: 'write',
+        kind: 'edit',
         rawInput: args.name,
       }
     },
