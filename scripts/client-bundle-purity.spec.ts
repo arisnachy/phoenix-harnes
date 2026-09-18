@@ -90,10 +90,10 @@ describe('static-linked bundle routing cost', () => {
     const neverBundle = config.deps?.neverBundle
     expect(typeof neverBundle).toBe('function')
     if (typeof neverBundle !== 'function') throw new Error('static-linked external rule missing')
-    expect(neverBundle('react', '/workspace/lib/types/index.js')).toBe(true)
-    expect(neverBundle('@phoenix-ai/cosmokit', '/workspace/lib/types/index.js')).toBe(true)
-    expect(neverBundle('./styles.css', '/workspace/lib/types/index.js')).toBe(false)
-    expect(neverBundle('lib/types/index.js', undefined)).toBe(false)
+    expect(neverBundle('react', '/workspace/lib/types/index.js', false)).toBe(true)
+    expect(neverBundle('@phoenix-ai/cosmokit', '/workspace/lib/types/index.js', false)).toBe(true)
+    expect(neverBundle('./styles.css', '/workspace/lib/types/index.js', false)).toBe(false)
+    expect(neverBundle('lib/types/index.js', undefined, false)).toBe(false)
   })
 
   it('filters sourcemap loads and stylesheet resolution before JavaScript hooks run', () => {
