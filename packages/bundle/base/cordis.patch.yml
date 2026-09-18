@@ -347,7 +347,7 @@
       config:
         # Keep hundreds of discovered skills useful without allowing the
         # first request catalog to consume a large fraction of model context.
-        catalogDescriptionMaxLength: 64
+        catalogDescriptionMaxLength: 160
 
     - id: commands
       name: '@phoenix-ai/dsh-commands'
