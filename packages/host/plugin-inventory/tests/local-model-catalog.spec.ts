@@ -11,8 +11,8 @@ describe('Phoenix Local catalog', () => {
       sourceUrl: 'https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/ba06320255db2dbec194dad738d066be90dabf29/Qwen_Qwen3.5-4B-Q4_K_M.gguf?download=true',
       sha256: '13c16f426047e2de38cd075bdade4a7bcbc8c774384876f677740cda65f8a983',
       sizeBytes: 3013027808,
-      contextWindow: 8192,
-      maxTokens: 4096,
+      contextWindow: 262144,
+      maxTokens: 2048,
       recommended: true,
     })
   })
