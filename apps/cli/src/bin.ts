@@ -129,6 +129,17 @@ switch (invocation.mode) {
       patches.push(codexPatch)
     }
 
+
+    // Connectors installed from Settings / connector_install are persisted as
+    // a generated owner-local overlay. Loading the overlay on every profile
+    // keeps installed MCPs available after PHOENIX restarts without baking
+    // user-specific endpoints into the repository.
+    const managedMcpPatch = dshHomePath('mcp', 'managed.patch.yml')
+    if ((process.env.PHOENIX_MANAGED_MCP ?? 'on').trim().toLowerCase() !== 'off'
+      && existsSync(managedMcpPatch) && !patches.includes(managedMcpPatch)) {
+      patches.push(managedMcpPatch)
+    }
+
     await runProfile({
       environment: loadLayeredEnv('dsh'),
       profile: invocation.profile,
