@@ -3,8 +3,8 @@
 import { randomBytes } from 'node:crypto'
 import type { Context } from '@phoenix-ai/cordis'
 import {
-  LivingCreationId, createLivingControlResource, defaultLivingControlEndpoint,
-  livingControlForManifest, livingLevelRank, parseLivingControlResource,
+  LivingCreationId, createLivingControlResource, livingControlForManifest,
+  livingLevelRank, parseLivingControlResource,
 } from '@phoenix-ai/dsh-living'
 import type {
   LivingCreationId as LivingCreationIdType, LivingCreationSnapshot, LivingIntegrationLevel, LivingJson,
@@ -42,18 +42,18 @@ function summary(snapshot: LivingCreationSnapshot): Summary {
 }
 
 
-function provisionResources(
+async function provisionResources(
   ctx: Context,
   id: LivingCreationIdType,
   target: LivingIntegrationLevel,
   resources: readonly string[],
-): string[] {
+): Promise<string[]> {
   const ordinary = resources.filter(resource => parseLivingControlResource(resource) === undefined)
   if (target === 'static') return ordinary
 
   const existing = ctx.living.list().find(item => item.manifest.id === id)
   const control = existing === undefined ? undefined : livingControlForManifest(existing.manifest)
-  const endpoint = control?.endpoint ?? defaultLivingControlEndpoint()
+  const endpoint = control?.endpoint ?? await ctx.living.controlEndpoint()
   const token = control?.token ?? randomBytes(32).toString('base64url')
   return [...ordinary, createLivingControlResource(endpoint, token)]
 }
@@ -263,7 +263,7 @@ export function apply(ctx: Context): void {
         id, title: args.title, kind: args.kind,
         targetLevel: args.target_level,
         state: args.state, actions: args.actions, events: args.events,
-        resources: provisionResources(ctx, id, args.target_level, args.resources),
+        resources: await provisionResources(ctx, id, args.target_level, args.resources),
         actors: args.actors,
       })
       return { ...summary(snapshot), connector_json: connectorPayload(snapshot) }
