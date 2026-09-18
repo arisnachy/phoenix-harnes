@@ -24,6 +24,270 @@ import {
   DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET,
 } from './config.ts'
 
+const ESTIMATED_CHARS_PER_TOKEN = 4
+const ESTIMATED_IMAGE_CHARS = 4800
+const PI_CONTEXT_SAFETY_TOKENS = 4096
+const MAX_RESPONSE_RESERVE_TOKENS = 4096
+const PRESSURE_TOOL_DESCRIPTION_MAX_CHARS = 160
+const PRESSURE_SKILL_CATALOG_MAX_CHARS = 12_000
+const SCHEMA_DECORATION_KEYS = new Set([
+  'description',
+  'title',
+  '$comment',
+  'examples',
+  'example',
+  'default',
+])
+
+/** JSON stringify that cannot fail request budgeting on an exotic schema value. */
+function safeJsonStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function estimateContentBlocksChars(blocks: readonly ContentBlock[]): number {
+  let chars = 0
+  for (const block of blocks) {
+    switch (block.type) {
+      case 'text':
+      case 'reasoning':
+        chars += block.text.length
+        break
+      case 'image':
+        chars += ESTIMATED_IMAGE_CHARS
+        break
+      case 'file':
+        chars += Math.min(block.attachment.bytes, DEFAULT_MAX_INLINE_FILE_BYTES)
+        break
+      case 'tool-call':
+        chars += block.name.length + block.arguments.length
+        break
+      case 'tool-result':
+        chars += estimateContentBlocksChars(block.content)
+        break
+      default:
+        break
+    }
+  }
+  return chars
+}
+
+/**
+ * Conservative request-size estimate using the same 4-chars/token convention
+ * pi-ai 0.82.x uses before it clamps maxTokens to remaining context.
+ * @param options - fully assembled harness request before adapter conversion.
+ * @returns estimated request-context tokens including system, messages, and tool schemas.
+ */
+export function estimateGenerateOptionsTokens(options: GenerateOptions): number {
+  let chars = options.system?.length ?? 0
+  for (const message of options.messages) chars += estimateContentBlocksChars(message.content)
+  if (options.tools !== undefined && options.tools.length > 0) {
+    chars += safeJsonStringify(options.tools).length
+  }
+  return Math.ceil(chars / ESTIMATED_CHARS_PER_TOKEN)
+}
+
+function compactSchemaForPressure(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(compactSchemaForPressure)
+  if (typeof value !== 'object' || value === null) return value
+  const compacted: Record<string, unknown> = {}
+  for (const [key, child] of Object.entries(value)) {
+    if (SCHEMA_DECORATION_KEYS.has(key)) continue
+    compacted[key] = compactSchemaForPressure(child)
+  }
+  return compacted
+}
+
+function boundedToolDescription(value: string): string {
+  if (value.length <= PRESSURE_TOOL_DESCRIPTION_MAX_CHARS) return value
+  return value.slice(0, PRESSURE_TOOL_DESCRIPTION_MAX_CHARS - 1).trimEnd() + '…'
+}
+
+function compactToolsForPressure(
+  tools: NonNullable<GenerateOptions['tools']>,
+): NonNullable<GenerateOptions['tools']> {
+  return tools.map(tool => ({
+    name: tool.name,
+    description: boundedToolDescription(tool.description),
+    parameters: compactSchemaForPressure(tool.parameters) as Record<string, unknown>,
+  }))
+}
+
+function compactSkillCatalogMessage(message: Message): Message {
+  const source = message.source as unknown as { kind?: unknown; entries?: unknown }
+  if (source.kind !== 'skill-catalog' || !Array.isArray(source.entries)) return message
+  const names = source.entries.flatMap((entry): string[] => {
+    if (typeof entry !== 'object' || entry === null) return []
+    const name = (entry as { name?: unknown }).name
+    return typeof name === 'string' && name.length > 0 ? [name] : []
+  })
+  if (names.length === 0) return message
+
+  const lines: string[] = []
+  let chars = 0
+  for (const name of names) {
+    const line = '- `' + name + '`'
+    if (chars + line.length + 1 > PRESSURE_SKILL_CATALOG_MAX_CHARS) break
+    lines.push(line)
+    chars += line.length + 1
+  }
+  const omitted = names.length - lines.length
+  const text = [
+    '<system-reminder>',
+    'Available skills (compact index used because this model has limited request context):',
+    '<available_skills>',
+    ...lines,
+    '</available_skills>',
+    ...(omitted > 0 ? [String(omitted) + ' additional skills are omitted from this compact index.'] : []),
+    'Call the `skill` tool with an exact listed name when one clearly applies. Full skill instructions are loaded only on demand.',
+    '</system-reminder>',
+  ].join('\n')
+  return { ...message, content: [{ type: 'text', text }] }
+}
+
+function compactAuxiliaryContextForPressure(options: GenerateOptions): GenerateOptions {
+  return {
+    ...options,
+    messages: options.messages.map(compactSkillCatalogMessage),
+    ...(options.tools === undefined ? {} : { tools: compactToolsForPressure(options.tools) }),
+  }
+}
+
+
+const CORE_PRESSURE_TOOL = /(?:skill|read|write|edit|search|grep|bash|pwsh|shell|computer|browser|web|todo|subagent)/iu
+
+function toolNamesUsedInMessages(messages: readonly Message[]): Set<string> {
+  const names = new Set<string>()
+  const visit = (blocks: readonly ContentBlock[]): void => {
+    for (const block of blocks) {
+      if (block.type === 'tool-call') names.add(block.name)
+      else if (block.type === 'tool-result') visit(block.content)
+    }
+  }
+  for (const message of messages) visit(message.content)
+  return names
+}
+
+function latestUserText(messages: readonly Message[]): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message?.role !== 'user' || message.source.kind === 'tool') continue
+    return message.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join(' ')
+      .toLowerCase()
+  }
+  return ''
+}
+
+function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetTokens: number): GenerateOptions {
+  const tools = options.tools ?? []
+  if (tools.length === 0) return options
+  const withoutTools: GenerateOptions = { ...options, tools: [] }
+  const baseTokens = estimateGenerateOptionsTokens(withoutTools)
+  const availableChars = Math.max(0, (inputBudgetTokens - baseTokens) * ESTIMATED_CHARS_PER_TOKEN)
+  if (availableChars <= 2) return withoutTools
+
+  const query = latestUserText(options.messages)
+  const used = toolNamesUsedInMessages(options.messages)
+  const words = new Set(query.match(/[\p{L}\p{N}_-]{3,}/gu) ?? [])
+  const ranked = tools.map((tool, index) => {
+    const name = tool.name.toLowerCase()
+    const description = tool.description.toLowerCase()
+    let score = used.has(tool.name) ? 10_000 : 0
+    if (query.includes(name)) score += 2_000
+    if (CORE_PRESSURE_TOOL.test(tool.name)) score += 500
+    for (const word of words) {
+      if (name.includes(word)) score += 200
+      else if (description.includes(word)) score += 20
+    }
+    return { tool, index, score, chars: safeJsonStringify(tool).length + 1 }
+  }).sort((left, right) => right.score - left.score || left.index - right.index)
+
+  const selected: { tool: NonNullable<GenerateOptions['tools']>[number]; index: number }[] = []
+  let chars = 2
+  for (const candidate of ranked) {
+    if (chars + candidate.chars > availableChars) continue
+    selected.push({ tool: candidate.tool, index: candidate.index })
+    chars += candidate.chars
+  }
+  selected.sort((left, right) => left.index - right.index)
+  return { ...options, tools: selected.map(entry => entry.tool) }
+}
+
+/** Result of fitting one request to a model's safe input budget. */
+export interface ContextBudgetFit {
+  /** Request representation to convert and send. */
+  options: GenerateOptions
+  /** Estimated input tokens after any request-only compaction. */
+  estimatedTokens: number
+  /** Maximum estimated input that still preserves pi-ai safety plus reply room. */
+  inputBudgetTokens: number
+  /** Whether request-only compaction was applied. */
+  compacted: boolean
+}
+
+/**
+ * Reserve useful answer room before pi-ai applies its own context clamp.
+ *
+ * This does not mutate durable conversation state. Under pressure it only
+ * compacts model-facing skill-catalog prose and schema documentation; tool
+ * names, argument structure, user messages, system instructions and history
+ * remain intact.
+ * @param options - fully assembled request before provider conversion.
+ * @param contextWindow - model context capacity used by pi-ai for request clamping.
+ * @param desiredMaxOutput - caller/model output budget before context-based clamping.
+ * @returns the request representation to send plus its estimated safe-budget facts.
+ */
+export function fitGenerateOptionsToContext(
+  options: GenerateOptions,
+  contextWindow: number,
+  desiredMaxOutput: number,
+): ContextBudgetFit {
+  if (!Number.isFinite(contextWindow) || contextWindow <= 0) {
+    return {
+      options,
+      estimatedTokens: estimateGenerateOptionsTokens(options),
+      inputBudgetTokens: Number.POSITIVE_INFINITY,
+      compacted: false,
+    }
+  }
+  const responseReserve = Math.min(
+    Math.max(0, Math.floor(desiredMaxOutput)),
+    MAX_RESPONSE_RESERVE_TOKENS,
+  )
+  const inputBudgetTokens = Math.max(
+    1,
+    Math.floor(contextWindow) - PI_CONTEXT_SAFETY_TOKENS - responseReserve,
+  )
+  const estimatedTokens = estimateGenerateOptionsTokens(options)
+  if (estimatedTokens <= inputBudgetTokens) {
+    return { options, estimatedTokens, inputBudgetTokens, compacted: false }
+  }
+
+  const compactedOptions = compactAuxiliaryContextForPressure(options)
+  const compactedTokens = estimateGenerateOptionsTokens(compactedOptions)
+  if (compactedTokens <= inputBudgetTokens) {
+    return {
+      options: compactedOptions,
+      estimatedTokens: compactedTokens,
+      inputBudgetTokens,
+      compacted: true,
+    }
+  }
+
+  const budgetedOptions = selectToolsForPressureBudget(compactedOptions, inputBudgetTokens)
+  return {
+    options: budgetedOptions,
+    estimatedTokens: estimateGenerateOptionsTokens(budgetedOptions),
+    inputBudgetTokens,
+    compacted: true,
+  }
+}
 /** Join the text blocks of a harness message. */
 function flattenText(message: Message): string {
   return message.content
