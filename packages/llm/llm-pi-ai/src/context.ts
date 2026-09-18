@@ -152,6 +152,69 @@ function compactAuxiliaryContextForPressure(options: GenerateOptions): GenerateO
   }
 }
 
+
+const CORE_PRESSURE_TOOL = /(?:skill|read|write|edit|search|grep|bash|pwsh|shell|computer|browser|web|todo|subagent)/iu
+
+function toolNamesUsedInMessages(messages: readonly Message[]): Set<string> {
+  const names = new Set<string>()
+  const visit = (blocks: readonly ContentBlock[]): void => {
+    for (const block of blocks) {
+      if (block.type === 'tool-call') names.add(block.name)
+      else if (block.type === 'tool-result') visit(block.content)
+    }
+  }
+  for (const message of messages) visit(message.content)
+  return names
+}
+
+function latestUserText(messages: readonly Message[]): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message?.role !== 'user' || message.source.kind === 'tool') continue
+    return message.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join(' ')
+      .toLowerCase()
+  }
+  return ''
+}
+
+function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetTokens: number): GenerateOptions {
+  const tools = options.tools ?? []
+  if (tools.length === 0) return options
+  const withoutTools: GenerateOptions = { ...options, tools: [] }
+  const baseTokens = estimateGenerateOptionsTokens(withoutTools)
+  const availableChars = Math.max(0, (inputBudgetTokens - baseTokens) * ESTIMATED_CHARS_PER_TOKEN)
+  if (availableChars <= 2) return withoutTools
+
+  const query = latestUserText(options.messages)
+  const used = toolNamesUsedInMessages(options.messages)
+  const words = new Set(query.match(/[\p{L}\p{N}_-]{3,}/gu) ?? [])
+  const ranked = tools.map((tool, index) => {
+    const name = tool.name.toLowerCase()
+    const description = tool.description.toLowerCase()
+    let score = used.has(tool.name) ? 10_000 : 0
+    if (query.includes(name)) score += 2_000
+    if (CORE_PRESSURE_TOOL.test(tool.name)) score += 500
+    for (const word of words) {
+      if (name.includes(word)) score += 200
+      else if (description.includes(word)) score += 20
+    }
+    return { tool, index, score, chars: safeJsonStringify(tool).length + 1 }
+  }).sort((left, right) => right.score - left.score || left.index - right.index)
+
+  const selected: { tool: NonNullable<GenerateOptions['tools']>[number]; index: number }[] = []
+  let chars = 2
+  for (const candidate of ranked) {
+    if (chars + candidate.chars > availableChars) continue
+    selected.push({ tool: candidate.tool, index: candidate.index })
+    chars += candidate.chars
+  }
+  selected.sort((left, right) => left.index - right.index)
+  return { ...options, tools: selected.map(entry => entry.tool) }
+}
+
 export interface ContextBudgetFit {
   /** Request representation to convert and send. */
   options: GenerateOptions
@@ -198,9 +261,20 @@ export function fitGenerateOptionsToContext(
   }
 
   const compactedOptions = compactAuxiliaryContextForPressure(options)
+  const compactedTokens = estimateGenerateOptionsTokens(compactedOptions)
+  if (compactedTokens <= inputBudgetTokens) {
+    return {
+      options: compactedOptions,
+      estimatedTokens: compactedTokens,
+      inputBudgetTokens,
+      compacted: true,
+    }
+  }
+
+  const budgetedOptions = selectToolsForPressureBudget(compactedOptions, inputBudgetTokens)
   return {
-    options: compactedOptions,
-    estimatedTokens: estimateGenerateOptionsTokens(compactedOptions),
+    options: budgetedOptions,
+    estimatedTokens: estimateGenerateOptionsTokens(budgetedOptions),
     inputBudgetTokens,
     compacted: true,
   }
