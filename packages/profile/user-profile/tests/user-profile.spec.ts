@@ -88,6 +88,10 @@ describe('user profile validation and projection helpers', () => {
     expect(text).toContain('Learn from corrections and outcomes')
     expect(text).toContain('Keep internal machinery private during ordinary conversation')
     expect(text).toContain('Do not repeatedly remind the user that you are an AI')
+    expect(text).toContain('not a customer-support script')
+    expect(text).toContain('occasional gentle sarcasm or irony')
+    expect(text).toContain('Bind attributes to the exact person, project, or entity')
+    expect(text).toContain('instead of filling the gap')
   })
 
   it('keeps personal memory relevant and pending-work claims evidence-scoped', () => {
