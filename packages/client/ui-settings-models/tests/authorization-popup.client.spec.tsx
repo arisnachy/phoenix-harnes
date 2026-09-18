@@ -22,11 +22,12 @@ function ok<T>(value: T): RpcResponse<T> {
 /** A stand-in for the browsing context the panel reserves from the gesture. */
 interface ReservedWindow {
   closed: boolean
+  close: ReturnType<typeof vi.fn>
   location: { replace: ReturnType<typeof vi.fn> }
 }
 
 function reservedWindow(): ReservedWindow {
-  return { closed: false, location: { replace: vi.fn() } }
+  return { closed: false, close: vi.fn(), location: { replace: vi.fn() } }
 }
 
 const KEY = 'mcp-client/notion-notion'
@@ -92,6 +93,20 @@ describe('authorization consent window', () => {
     // Same tick as the gesture: this is what the popup blocker checks.
     expect(open).toHaveBeenCalledWith('', '_blank')
     expect(api.begin).toHaveBeenCalledWith({ key: KEY, method: 'oauth' })
+    open.mockRestore()
+  })
+
+  it('closes the reserved blank window when authorization cannot even start', async () => {
+    const reserved = reservedWindow()
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    const api = panelApi(pendingForever)
+    api.begin = vi.fn(() => Promise.reject(new Error('connector unavailable'))) as never
+
+    renderPanel(api)
+    await clickAuthorize()
+
+    await waitFor(() => { expect(reserved.close).toHaveBeenCalledTimes(1) })
+    expect(screen.getByText('Error: connector unavailable')).toBeTruthy()
     open.mockRestore()
   })
 
