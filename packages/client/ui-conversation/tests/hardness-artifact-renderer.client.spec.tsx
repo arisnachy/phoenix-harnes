@@ -49,6 +49,53 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.getByRole('button', { name: 'Collapse' }).getAttribute('aria-expanded')).toBe('true')
   })
 
+
+  it('renders the Phoenix rich visual contract instead of raw JSON', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'visual-1',
+      mime: 'application/vnd.phoenix.visual+json',
+      title: 'Service overview',
+      data: {
+        visualType: 'metrics',
+        metrics: [
+          { label: 'Availability', value: '99.98%', delta: 0.12 },
+          { label: 'Latency', value: '182 ms', delta: -14 },
+        ],
+      },
+    })} />)
+
+    expect(document.querySelector('[data-phoenix-visual-kind="metrics"]')).toBeTruthy()
+    expect(screen.getByText('Availability')).toBeTruthy()
+    expect(screen.getByText('99.98%')).toBeTruthy()
+    expect(screen.queryByText(/"visualType"/)).toBeNull()
+  })
+
+  it('upgrades legacy chart artifacts to the multi-series visual renderer', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'visual-chart-1',
+      mime: 'application/vnd.hardness.chart+json',
+      title: 'Clinical trend',
+      data: {
+        chartType: 'line',
+        xKey: 'month',
+        series: [
+          { dataKey: 'screened', label: 'Screened' },
+          { dataKey: 'linked', label: 'Linked' },
+        ],
+        data: [
+          { month: 'Jan', screened: 42, linked: 31 },
+          { month: 'Feb', screened: 58, linked: 45 },
+          { month: 'Mar', screened: 63, linked: 54 },
+        ],
+      },
+    })} />)
+
+    expect(document.querySelector('[data-phoenix-visual-kind="chart"]')).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'line chart' })).toBeTruthy()
+    expect(screen.getByText('Screened')).toBeTruthy()
+    expect(screen.getByText('Linked')).toBeTruthy()
+  })
+
   it('keeps arbitrary mini-app scripts disabled until the user explicitly enables the sandbox', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'app-1',

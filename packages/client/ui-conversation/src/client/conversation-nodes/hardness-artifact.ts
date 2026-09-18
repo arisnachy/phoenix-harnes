@@ -10,7 +10,7 @@ import { chatNode } from './common.ts'
 export type HardnessArtifactValue = string | Readonly<Record<string, unknown>>
 
 /** Renderer-neutral kind selected from a MIME type and optional execution hint. */
-export type ArtifactKind = 'json' | 'table' | 'html' | 'code' | 'markdown' | 'text' | 'image' | 'execution'
+export type ArtifactKind = 'json' | 'table' | 'visual' | 'html' | 'code' | 'markdown' | 'text' | 'image' | 'execution'
 
 /** One artifact envelope shared by inline chat, workspace previews, and execution controls. */
 export interface UniversalArtifactEnvelope {
@@ -30,6 +30,9 @@ export interface UniversalArtifactEnvelope {
 function artifactKind(mime: string, data: HardnessArtifactValue): ArtifactKind {
   if (mime === 'text/html' || mime === 'application/vnd.hardness.app+html') return 'html'
   if (mime.startsWith('image/')) return 'image'
+  if (mime === 'application/vnd.phoenix.visual+json'
+    || mime === 'application/vnd.hardness.visual+json'
+    || mime === 'application/vnd.hardness.chart+json') return 'visual'
   if (mime.includes('json')) {
     if (typeof data !== 'string' && Array.isArray(data.columns) && Array.isArray(data.rows)) return 'table'
     return 'json'
