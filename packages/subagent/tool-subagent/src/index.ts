@@ -38,6 +38,7 @@ const ACTIVE_SUBAGENT_GUIDANCE =
   'no dupliques investigación y conserva el contexto y la memoria cognitiva en el agente principal.'
 
 interface ActiveSubagentBudget {
+  activeTotal: number
   readonly activeByParent: Map<string, number>
   readonly continuableReleases: Map<string, () => void>
 }
@@ -48,7 +49,7 @@ const ACTIVE_BUDGETS = new WeakMap<object, ActiveSubagentBudget>()
 function activeBudgetFor(runtime: object): ActiveSubagentBudget {
   let state = ACTIVE_BUDGETS.get(runtime)
   if (state !== undefined) return state
-  state = { activeByParent: new Map(), continuableReleases: new Map() }
+  state = { activeTotal: 0, activeByParent: new Map(), continuableReleases: new Map() }
   ACTIVE_BUDGETS.set(runtime, state)
   return state
 }
@@ -60,7 +61,9 @@ function reserveActiveSubagent(
   criticalParallelism: boolean,
 ): () => void {
   const parentId = String(parent.id)
-  const active = state.activeByParent.get(parentId) ?? 0
+  // The budget is runtime-global, not per parent. Different sessions, provider
+  // aliases and tool names therefore cannot each obtain their own 2+1 pool.
+  const active = state.activeTotal
   if (active >= MAX_ACTIVE_SUBAGENTS) {
     throw new Error(
       'Presupuesto Phoenix agotado: ya hay 3 subagentes activos. Nunca lances un cuarto; ' +
@@ -74,11 +77,13 @@ function reserveActiveSubagent(
     )
   }
 
-  state.activeByParent.set(parentId, active + 1)
+  state.activeTotal = active + 1
+  state.activeByParent.set(parentId, (state.activeByParent.get(parentId) ?? 0) + 1)
   let released = false
   return () => {
     if (released) return
     released = true
+    state.activeTotal = Math.max(0, state.activeTotal - 1)
     const current = state.activeByParent.get(parentId) ?? 0
     if (current <= 1) state.activeByParent.delete(parentId)
     else state.activeByParent.set(parentId, current - 1)
