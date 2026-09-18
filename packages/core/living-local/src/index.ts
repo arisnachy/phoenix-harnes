@@ -218,7 +218,7 @@ export class LocalLivingRegistry extends LivingRegistry {
   }
 
   /** Actual loopback endpoint after the built-in control bridge has bound its port. */
-  controlBridgeEndpoint(): Promise<string> {
+  override controlEndpoint(): Promise<string> {
     return this.bridge.endpoint()
   }
 
