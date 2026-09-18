@@ -1,0 +1,21 @@
+name: Targeted Phoenix Local keyless turn
+
+on:
+  pull_request:
+    paths:
+      - 'packages/llm/llm-pi-ai/**'
+      - '.github/workflows/targeted-phoenix-local-keyless.yml'
+
+jobs:
+  phoenix-local:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run Phoenix Local keyless regression
+        run: pnpm exec vitest run packages/llm/llm-pi-ai/tests/builtin-routes-loader.spec.ts
