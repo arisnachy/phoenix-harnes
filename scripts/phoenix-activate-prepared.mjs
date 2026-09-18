@@ -117,7 +117,7 @@ function validatePrepared(root) {
   const requestPath = durablePath(root, RESTART_REQUEST_FILE)
   const preparedPath = durablePath(root, PREPARED_FILE)
   const request = readJson(requestPath, 'restart request')
-  const prepared = readJson(preparedPath, 'prepared update marker')
+  let prepared = readJson(preparedPath, 'prepared update marker')
 
   if (request?.schema !== 1 || typeof request.target !== 'string' || !/^[0-9a-f]{40}$/i.test(request.target)) {
     throw new Error('restart request has an invalid schema or target')
@@ -141,9 +141,6 @@ function validatePrepared(root) {
   if (!cleanWorktree(root)) throw new Error('live checkout changed after preparation; refusing activation')
 
   const current = git(root, ['rev-parse', 'HEAD']).stdout
-  if (current !== prepared.base) {
-    throw new Error(`prepared base ${prepared.base} differs from live HEAD ${current}`)
-  }
   const currentIsAncestorTarget = git(root, ['merge-base', '--is-ancestor', current, prepared.target], { allowFailure: true }).ok
   const targetIsAncestorCurrent = git(root, ['merge-base', '--is-ancestor', prepared.target, current], { allowFailure: true }).ok
   const activation = classifyPreparedActivation({
@@ -163,6 +160,29 @@ function validatePrepared(root) {
   }
   if (git(stage, ['rev-parse', 'HEAD']).stdout !== prepared.target) {
     throw new Error('prepared staging HEAD no longer matches the requested target')
+  }
+
+  // The supervisor normally reanchors a prepared record before invoking this
+  // activator. A stale updater/bridge can race that write and restore the old
+  // runtime base between those two steps. At this boundary we have already
+  // proven the live checkout is clean, the branch/remote are managed, the
+  // target is policy-allowed, and staging still contains that exact target.
+  // Reanchor once more here and force a full build; never reuse client-only
+  // artifacts prepared against a different live base.
+  if (current !== prepared.base) {
+    const previousBase = prepared.base
+    prepared = {
+      ...prepared,
+      base: current,
+      mode: 'full',
+      reanchoredFromBase: previousBase,
+      reanchoredAt: new Date().toISOString(),
+    }
+    writeFileSync(preparedPath, JSON.stringify(prepared, undefined, 2) + '\n', 'utf8')
+    console.error(
+      `[PHOENIX UPDATE] prepared base ${previousBase.slice(0, 12)} became stale before activation; `
+      + `reanchored safely to live HEAD ${current.slice(0, 12)} and forcing a full build.`,
+    )
   }
 
   return { requestPath, preparedPath, prepared, current, stage, replacing: activation === 'replace' }
