@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 Local profile settings with explicit per-field consent. The service validates bounded values, persists only the user-provided fields, and exposes a detached projection for diagnostics plus a consent-filtered projection for model context.
 
-The same namespace stores the assistant identity, defaulting to the name `KIRA` and neutral presentation. The identity is model-visible through a dedicated system-prompt context and asks for natural, warm phrasing without claiming that the assistant is human. It also stores an optional provider-route order; that preference changes display order only and never acts as a routing allowlist.
+The same namespace stores the assistant identity, defaulting to the name `KIRA` and neutral presentation. The identity is model-visible through a dedicated system-prompt context and asks for natural, warm conversation with restrained situational humor, playful phrasing, and gentle sarcasm when appropriate, without claiming that the assistant is human. Recall answers are evidence-bound: attributes stay attached to the exact person, project, or entity supported by profile, memory, or session evidence, and uncertain gaps remain explicit instead of being filled by inference. The namespace also stores an optional provider-route order; that preference changes display order only and never acts as a routing allowlist.
 
 ## Model Experience
 
