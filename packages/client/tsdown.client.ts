@@ -17,6 +17,7 @@ import { transform } from 'lightningcss'
 import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
+import { optimizePhoenixTsdownInput } from '../../scripts/tsdown-performance.ts'
 
 /**
  * Virtual-id wrapper keeping module CSS away from tsdown's own css pipeline
@@ -226,12 +227,7 @@ function clientLibraryConfig(
     fixedExtension: false,
     dts: false,
     clean: false,
-    inputOptions: {
-      // Production dependencies stay imports, but the decision now happens in
-      // Rolldown's native external matcher before tsdown:deps/plugin dispatch.
-      // Dev/phantom dependencies keep the default bundled behavior.
-      external: productionExternalPattern(id),
-    },
+    inputOptions: options => optimizePhoenixTsdownInput(options),
     ...overrides,
   }
 }
@@ -262,13 +258,12 @@ function staticLinkedConfig(id: string, entry: string, outputName = basename(ent
     // The shell compiles this artifact, so its map is the only path from a
     // browser stack frame back to the TSX (tsc emits the lib/types half).
     sourcemap: true,
-    inputOptions: {
+    inputOptions: options => optimizePhoenixTsdownInput(options, {
       // Contract 1. Keep every bare import external before plugin dispatch or
-      // normal resolution. Rolldown evaluates this RegExp in native code, so
-      // static-linked builds no longer cross Rust -> JavaScript once per import.
-      // The extra NUL exclusion keeps plugin-created virtual ids internal.
+      // normal resolution. Rolldown evaluates this RegExp in native code.
       external: BARE_MODULE_ID,
-    },
+      externalizeProductionDeps: false,
+    }),
     plugins: [{
       // Marker only: the native external option above owns the actual routing.
       // Keeping the name preserves the static-channel roster contract used by
@@ -339,7 +334,6 @@ interface WorkspaceManifest {
 }
 
 const manifestCache = new Map<string, WorkspaceManifest>()
-const productionExternalCache = new Map<string, RegExp>()
 const clientExternalCache = new Map<string, ReadonlySet<string>>()
 
 /**
@@ -364,27 +358,6 @@ function workspaceManifest(id: string): WorkspaceManifest {
     return manifest
   }
   throw new Error(`tsdown: no packages/*/*/package.json declares the name ${id}`)
-}
-
-/**
- * Native external matcher for one package's production sections, including
- * subpaths. One RegExp lets Rolldown decide the common external case without
- * crossing into tsdown:deps JavaScript.
- */
-function productionExternalPattern(id: string): RegExp {
-  const cached = productionExternalCache.get(id)
-  if (cached !== undefined) return cached
-  const manifest = workspaceManifest(id)
-  const names = new Set([
-    ...Object.keys(manifest.dependencies ?? {}),
-    ...Object.keys(manifest.peerDependencies ?? {}),
-    ...Object.keys(manifest.optionalDependencies ?? {}),
-  ])
-  const pattern = names.size === 0
-    ? /$a/
-    : new RegExp(`^(?:${[...names].sort().map(escapeSpecifier).join('|')})(?:/|$)`)
-  productionExternalCache.set(id, pattern)
-  return pattern
 }
 
 /**
@@ -520,21 +493,12 @@ function clientConfig(id: string, entry: string): UserConfig {
     // must carry the TS/TSX mapping consumed by browser profiling tools.
     sourcemap: true,
     clean: false,
-    inputOptions: {
-      // Module-table rows are exact external ids. Rolldown evaluates this
-      // RegExp natively before plugin hooks, so common imports such as React
-      // and the client runtime never enter dsh-client-bundle-routing or
-      // tsdown:deps.
+    inputOptions: options => optimizePhoenixTsdownInput(options, {
+      // Module-table rows are exact external ids. Everything else belongs
+      // inside the self-contained browser plugin bundle.
       external: requestedPattern,
-    },
-    deps: {
-      // Every dependency that survives the native module-table external matcher
-      // belongs inside the self-contained browser plugin bundle. A trivial
-      // predicate is cheaper than the former neverBundle + negative-RegExp
-      // matching pair and preserves the same runtime contract.
-      alwaysBundle: () => true,
-      onlyBundle: false,
-    },
+      externalizeProductionDeps: false,
+    }),
     // Browser bundles inline node-idiom deps (zustand/immer read
     // process.env.NODE_ENV; zustand's esm build also probes
     // import.meta.env.MODE, which a CJS output cannot carry — rolldown flags
