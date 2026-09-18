@@ -530,6 +530,8 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   const [registrySnapshot, setRegistrySnapshot] = useState<McpRegistrySearchSnapshot | undefined>()
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryFailure, setRegistryFailure] = useState(false)
+  const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
+  const [installingRegistryName, setInstallingRegistryName] = useState<string | undefined>()
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
   const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
@@ -562,6 +564,16 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     }, (error: unknown) => { if (!stale) setCatalogFailure(String(error)) })
     return () => { stale = true }
   }, [api, refresh])
+
+  useEffect(() => {
+    if (mcpRegistry === undefined) return
+    let stale = false
+    void mcpRegistry.state().then(
+      snapshot => { if (!stale) setMcpHub(snapshot) },
+      error => { if (!stale) setCatalogFailure(String(error)) },
+    )
+    return () => { stale = true }
+  }, [mcpRegistry, refresh])
 
   useEffect(() => {
     const search = query.trim()
@@ -628,6 +640,19 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       .finally(() => { setChatGptWebBusy(false) })
   }
 
+  const installRegistryCandidate = (candidate: McpRegistryCandidateView): void => {
+    if (mcpRegistry === undefined || installingRegistryName !== undefined) return
+    setCatalogFailure(undefined)
+    setInstallingRegistryName(candidate.name)
+    void mcpRegistry.install({ name: candidate.name, version: candidate.version }).then(
+      () => {
+        setRefresh(current => current + 1)
+        onAuthorized()
+      },
+      (error: unknown) => { setCatalogFailure(String(error)) },
+    ).finally(() => { setInstallingRegistryName(undefined) })
+  }
+
   const disconnect = (key: string): void => {
     if (api === undefined) return
     setCatalogFailure(undefined)
@@ -647,6 +672,17 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
       <p className={styles['intro']}>{connectorT('intro')}</p>
+      <div className={hubStyles['intelligenceBanner']}>
+        <div className={hubStyles['intelligenceIcon']} aria-hidden="true">✦</div>
+        <div className={hubStyles['intelligenceCopy']}>
+          <strong>{connectorT('intelligenceTitle')}</strong>
+          <span>{connectorT('intelligenceHint')}</span>
+        </div>
+        <div className={hubStyles['intelligenceChecks']}>
+          <span>✓ {connectorT('intelligenceAuth')}</span>
+          <span>✓ {connectorT('intelligenceOfficial')}</span>
+        </div>
+      </div>
       <p className={hubStyles['safetyNote']}>{connectorT('setupHint')}</p>
 
       {chatGptWeb === undefined || settings === undefined ? null : (
@@ -700,38 +736,63 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
             <h3>{connectorT('accounts')}</h3>
             <p>{connectorT('accountsHint')}</p>
           </div>
-          <div className={hubStyles['accounts']}>
+          <div className={connectorStyles['connectorGrid']}>
             {entries.map((entry) => {
               const lines = telemetryLines(entry.telemetry)
+              const presentation = accountPresentation(entry)
+              const runtime = runtimeForEntry(entry, mcpHub.runtime)
+              const status = accountStatus(entry, runtime, connectorT)
+              const actionLabel = runtime?.status === 'auth-required' && entry.stored !== undefined
+                ? connectorT('reauthorize')
+                : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
               return (
-                <div key={entry.key} className={styles['rowCard']}>
-                  <div className={styles['rowHead']}>
-                    <div className={styles['rowIdentity']}>
-                      <strong className={styles['rowName']}>{entry.label}</strong>
-                      {entry.telemetry !== undefined
-                        ? <span className={styles['connectedChip']}>{connectorT('connectedStatus')}</span>
-                        : entry.stored === undefined
-                          ? null
-                          : <span className={styles['advancedHint']}>{connectorT('reconnectRequiredStatus')}</span>}
+                <article key={entry.key} className={connectorStyles['connectorCard']} data-authorization-key={entry.key}>
+                  <div className={connectorStyles['connectorTop']}>
+                    <div className={hubStyles['logoShell']}>
+                      <span className={connectorStyles['connectorFallback']} aria-hidden="true">{presentation.name.slice(0, 1).toUpperCase()}</span>
+                      {presentation.logoUrl === undefined ? null : (
+                        <img
+                          className={`${connectorStyles['connectorIcon'] ?? ''} ${hubStyles['logoImage'] ?? ''}`.trim()}
+                          src={presentation.logoUrl}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          onError={(event) => { event.currentTarget.hidden = true }}
+                        />
+                      )}
                     </div>
-                    <div className={styles['rowActions']}>
-                      <button type="button" className={styles['secondaryButton']} disabled={attempt?.status === 'pending' || entry.inFlight} onClick={() => { begin(entry.key, 'oauth') }}>
-                        {attempt?.status === 'pending' ? t('signingIn') : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')}
+                    <div className={connectorStyles['connectorIdentity']}>
+                      <span className={connectorStyles['connectorName']}>{presentation.name}</span>
+                      <span className={connectorStyles['connectorCategory']}>{presentation.technical}</span>
+                    </div>
+                  </div>
+                  {presentation.description === undefined ? null : (
+                    <p className={connectorStyles['connectorDescription']}>{presentation.description}</p>
+                  )}
+                  {lines.slice(0, 2).map(line => <p key={line} className={styles['advancedHint']}>{line}</p>)}
+                  <div className={connectorStyles['connectorFooter']}>
+                    <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
+                    <div className={connectorStyles['connectorActions']}>
+                      <button
+                        type="button"
+                        className={connectorStyles['connectorPrimaryButton']}
+                        disabled={attempt?.status === 'pending' || entry.inFlight}
+                        onClick={() => { begin(entry.key, 'oauth') }}
+                      >
+                        {attempt?.status === 'pending' ? t('signingIn') : actionLabel}
                       </button>
                       {entry.stored === undefined || entry.disconnectable !== true ? null : (
-                        <button type="button" className={styles['secondaryButton']} disabled={entry.inFlight || disconnectingKey === entry.key} onClick={() => { disconnect(entry.key) }}>
+                        <button
+                          type="button"
+                          className={connectorStyles['connectorSecondaryButton']}
+                          disabled={entry.inFlight || disconnectingKey === entry.key}
+                          onClick={() => { disconnect(entry.key) }}
+                        >
                           {disconnectingKey === entry.key ? connectorT('disconnecting') : connectorT('disconnect')}
                         </button>
                       )}
                     </div>
                   </div>
-                  {lines.map(line => <p key={line} className={styles['advancedHint']}>{line}</p>)}
-                  {entry.telemetry?.connectors === undefined ? null : (
-                    <div className={connectorStyles['connectorGrid']}>
-                      {entry.telemetry.connectors.map(connector => <LiveConnectorCard key={connector.id} connector={connector} t={connectorT} />)}
-                    </div>
-                  )}
-                </div>
+                </article>
               )
             })}
           </div>
@@ -748,7 +809,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
           <p>{connectorT('catalogHint')}</p>
         </div>
         <div className={hubStyles['toolbar']}>
-          <input className={hubStyles['search']} type="search" aria-label={connectorT('search')} placeholder={connectorT('search')} value={query} onChange={event => { setQuery(event.target.value) }} />
+          <input className={hubStyles['search']} type="search" aria-label={connectorT('search')} placeholder={connectorT('searchRegistry')} value={query} onChange={event => { setQuery(event.target.value) }} />
           <div className={hubStyles['filters']}>
             {(['all', 'connected', 'available'] as const).map(value => (
               <button key={value} type="button" aria-pressed={filter === value} className={filter === value ? hubStyles['filterActive'] : undefined} onClick={() => { setFilter(value) }}>
@@ -792,7 +853,10 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                   key={`${candidate.name}@${candidate.version}`}
                   candidate={candidate}
                   stale={registrySnapshot.stale}
+                  installed={candidate.remoteUrl !== undefined && mcpHub.managed.some(connector => connector.url === candidate.remoteUrl)}
+                  installing={installingRegistryName === candidate.name}
                   t={connectorT}
+                  onInstall={installRegistryCandidate}
                 />
               ))}
             </div>
