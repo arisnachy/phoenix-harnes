@@ -234,6 +234,8 @@ public static class PhoenixDesktop {
   private const uint KEYEVENTF_UNICODE = 0x0004;
   private const uint INPUT_KEYBOARD = 1;
   private const int SW_RESTORE = 9;
+  private const uint WM_COPYDATA = 0x004A;
+  private static readonly IntPtr PHOENIX_BROWSER_OPEN = new IntPtr(0x50485842);
 
   private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
@@ -293,6 +295,16 @@ public static class PhoenixDesktop {
 
   [DllImport("user32.dll")]
   private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  private static extern IntPtr SendMessage(IntPtr hWnd, uint message, IntPtr wParam, ref COPYDATASTRUCT data);
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct COPYDATASTRUCT {
+    public IntPtr dwData;
+    public int cbData;
+    public IntPtr lpData;
+  }
 
   [StructLayout(LayoutKind.Sequential)]
   private struct RECT {
@@ -596,6 +608,28 @@ public static class PhoenixDesktop {
     for (int i = codes.Count - 1; i >= 0; i--) keybd_event(codes[i], 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
   }
 
+  public static string OpenPhoenixBrowser(string selector, string url) {
+    if (String.IsNullOrWhiteSpace(url)) throw new ArgumentException("browser URL is empty");
+    IntPtr hWnd = ResolveWindow(selector);
+    FocusWindow(selector, true);
+
+    IntPtr payload = Marshal.StringToHGlobalUni(url);
+    try {
+      var data = new COPYDATASTRUCT {
+        dwData = PHOENIX_BROWSER_OPEN,
+        cbData = checked((url.Length + 1) * 2),
+        lpData = payload
+      };
+      IntPtr result = SendMessage(hWnd, WM_COPYDATA, IntPtr.Zero, ref data);
+      if (result == IntPtr.Zero) {
+        throw new InvalidOperationException("Phoenix desktop did not accept the embedded-browser IPC request");
+      }
+    } finally {
+      Marshal.FreeHGlobal(payload);
+    }
+    return DescribeWindow(hWnd);
+  }
+
   public static void Guard(string selector) {
     GuardTarget(selector);
   }
@@ -638,12 +672,7 @@ switch ($action) {
   'focus' { [PhoenixDesktop]::FocusWindow($target, $true) }
   'browser_open' {
     $browserTarget = if ([String]::IsNullOrWhiteSpace($target)) { 'Phoenix' } else { $target }
-    [PhoenixDesktop]::FocusWindow($browserTarget, $true)
-    [PhoenixDesktop]::KeyCombo('CTRL+L')
-    Start-Sleep -Milliseconds 80
-    [PhoenixDesktop]::TypeText($env:PHX_URL)
-    [PhoenixDesktop]::KeyCombo('ENTER')
-    [PhoenixDesktop]::ForegroundSummary()
+    [PhoenixDesktop]::OpenPhoenixBrowser($browserTarget, $env:PHX_URL)
   }
   'move' {
     [PhoenixDesktop]::Guard($target)
@@ -769,15 +798,21 @@ function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; r
   return { risk: 'high', reversible: false }
 }
 
+/** Whether this desktop action still needs a one-shot approval under the effective sandbox authority. */
+export function computerActionNeedsApproval(sandboxMode: SandboxMode | undefined, action: ComputerAction): boolean {
+  const mode = computerModeForSandbox(sandboxMode)
+  assertComputerActionAllowed(mode, action)
+  if (action === 'screenshot' || action === 'windows') return false
+  return sandboxMode !== 'danger-full-access'
+}
+
 async function authorizeComputerAction(
   ctx: Context,
   exec: ToolRunContext,
   action: ComputerAction,
   sandboxMode: SandboxMode | undefined,
 ): Promise<void> {
-  const mode = computerModeForSandbox(sandboxMode)
-  assertComputerActionAllowed(mode, action)
-  if (action === 'screenshot' || action === 'windows' || sandboxMode === 'danger-full-access') return
+  if (!computerActionNeedsApproval(sandboxMode, action)) return
   const agent = exec.agent
   if (agent === undefined) throw new Error('Computer input requires an owning agent session')
   const approval = ctx.get('approval')
@@ -851,7 +886,7 @@ export function registerComputerTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
     order: 106,
-    text: 'On Windows Phoenix Desktop, use the computer browser_open action for interactive web navigation. It opens the URL inside Phoenix\'s embedded browser pane instead of intentionally launching an external browser. After browser_open, use the normal screenshot, click, type, key, and scroll actions against the Phoenix window to control the page; F9 toggles the pane and Ctrl+L focuses its address bar.',
+    text: 'On Windows Phoenix Desktop, use the computer browser_open action for interactive web navigation. It sends a direct local IPC command to Phoenix\'s embedded browser pane, so navigation does not depend on keyboard focus and does not intentionally launch an external browser. After browser_open, use screenshot, click, type, key, and scroll against the Phoenix window for full visual control; F9 toggles the pane and Ctrl+L focuses its address bar for manual use.',
   })
 
   ctx.tools.register(defineTool({

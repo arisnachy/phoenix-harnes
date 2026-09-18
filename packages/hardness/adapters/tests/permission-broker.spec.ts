@@ -7,6 +7,13 @@ const surface = {
 } as const satisfies CapabilitySurface
 
 describe('HARDNESS permission broker boundary', () => {
+  it('does not ask when the surface requires no permissions', async () => {
+    const requestApproval = vi.fn(async () => 'rejected' as const)
+    const broker = new PermissionBroker(requestApproval)
+    await expect(broker.request({ ...surface, requiredPermissions: [] })).resolves.toEqual({ kind: 'approved', grants: [] })
+    expect(requestApproval).not.toHaveBeenCalled()
+  })
+
   it('asks explicitly and grants only the current request', async () => {
     const requestApproval = vi.fn(async () => 'allowed-once' as const)
     const broker = new PermissionBroker(requestApproval)

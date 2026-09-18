@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -22,6 +23,20 @@ internal sealed class PhoenixDesktopWindow : Form
     private bool initialized;
     private bool runtimeReady;
     private bool applyingBrowserLayout;
+
+    // Private local desktop IPC used by the model-facing Computer Use tool. WM_COPYDATA keeps
+    // browser_open inside Phoenix instead of relying on focus-sensitive Ctrl+L keyboard injection.
+    private const int WmCopyData = 0x004A;
+    private static readonly nint BrowserOpenCopyDataId = 0x50485842; // "PHXB"
+    private const int MaxBrowserIpcChars = 4096;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CopyDataStruct
+    {
+        public nint DataId;
+        public int ByteCount;
+        public nint Data;
+    }
 
     internal PhoenixDesktopWindow(Uri phoenixUri, bool initializeWebViewsOnShow = true)
     {
@@ -102,6 +117,62 @@ internal sealed class PhoenixDesktopWindow : Form
         {
             applyingBrowserLayout = false;
         }
+    }
+
+    protected override void WndProc(ref Message message)
+    {
+        if (message.Msg == WmCopyData && TryHandleBrowserOpenIpc(message.LParam))
+        {
+            message.Result = 1;
+            return;
+        }
+
+        base.WndProc(ref message);
+    }
+
+    private bool TryHandleBrowserOpenIpc(nint lParam)
+    {
+        if (lParam == 0) return false;
+
+        CopyDataStruct data;
+        try
+        {
+            data = Marshal.PtrToStructure<CopyDataStruct>(lParam);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (data.DataId != BrowserOpenCopyDataId || data.Data == 0 || data.ByteCount < 2 || (data.ByteCount & 1) != 0)
+            return false;
+
+        var charCount = (data.ByteCount / 2) - 1;
+        if (charCount < 0 || charCount > MaxBrowserIpcChars)
+            return false;
+
+        var raw = Marshal.PtrToStringUni(data.Data, charCount)?.Trim();
+        var uri = BrowserNavigation.NormalizeAddress(raw);
+        if (uri is null)
+            return false;
+
+        void Navigate()
+        {
+            ShowAndActivate();
+            OpenBrowser(uri.ToString());
+            DesktopLog.Write($"Embedded browser IPC navigate: {uri}");
+        }
+
+        if (InvokeRequired)
+        {
+            try { BeginInvoke((Action)Navigate); } catch { return false; }
+        }
+        else
+        {
+            Navigate();
+        }
+
+        return true;
     }
 
     internal void ShowAndActivate()
