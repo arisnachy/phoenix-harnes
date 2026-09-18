@@ -99,4 +99,93 @@ describe('CognitiveMemoryLedger', () => {
     expect(value.search({ query: 'concise', projectId: 'phoenix' })).toEqual([])
     expect(value.allRecords()[0]?.status).toBe('forgotten')
   })
+
+  it('forgets stale low-value episodes from automatic recall without deleting history', async () => {
+    const value = await ledger()
+    const day = 86_400_000
+    const stale = await value.remember(input({
+      sessionId: 'session-old',
+      eventSeq: 1,
+      kind: 'conversation',
+      layers: ['episodic', 'temporal'],
+      content: 'Incidental weather note from a long-finished conversation.',
+      summary: 'Old incidental weather note.',
+      subject: 'memory.incidental.weather',
+      value: 'rain',
+      occurredAt: 0,
+      confidence: 0.55,
+      importance: 0.15,
+      entities: [{ type: 'concept', value: 'weather', normalized: 'weather' }],
+    }))
+    const identity = await value.remember(input({
+      sessionId: 'session-identity',
+      eventSeq: 2,
+      content: 'The user identity name is Arisnachy.',
+      summary: 'User identity name: Arisnachy.',
+      subject: 'user.identity.name',
+      value: 'Arisnachy',
+      occurredAt: day,
+      confidence: 0.99,
+      importance: 0.99,
+      entities: [{ type: 'person', value: 'Arisnachy', normalized: 'arisnachy' }],
+    }))
+    const pending = await value.remember(input({
+      sessionId: 'session-now',
+      eventSeq: 3,
+      kind: 'pending',
+      layers: ['episodic', 'prospective', 'temporal'],
+      content: 'Phoenix stable promotion remains pending verification.',
+      summary: 'Stable promotion pending verification.',
+      subject: 'mission.phoenix.release',
+      value: 'pending',
+      occurredAt: day * 180,
+      confidence: 0.9,
+      importance: 0.7,
+      entities: [{ type: 'mission', value: 'stable promotion', normalized: 'promotion stable' }],
+    }))
+
+    const automatic = value.recall({ projectId: 'phoenix', limit: 10 })
+    const automaticIds = automatic.map(hit => hit.record.id)
+    expect(automaticIds).not.toContain(stale.id)
+    expect(automaticIds).toContain(identity.id)
+    expect(automaticIds).toContain(pending.id)
+
+    // Intelligent forgetting is retrieval suppression, not destructive erasure.
+    expect(value.search({ query: 'weather', projectId: 'phoenix' })[0]?.record.id).toBe(stale.id)
+    expect(value.allRecords().find(record => record.id === stale.id)?.status).toBe('active')
+  })
+
+  it('keeps automatic recall lexically relevant to the current task', async () => {
+    const value = await ledger()
+    const database = await value.remember(input({
+      eventSeq: 10,
+      kind: 'lesson',
+      layers: ['episodic', 'procedural', 'temporal'],
+      content: 'For the database migration, verify the schema before switching traffic.',
+      summary: 'Database migration schema verification.',
+      subject: 'lesson.database.migration',
+      value: 'verify schema first',
+      occurredAt: 1_000,
+      confidence: 0.95,
+      importance: 0.85,
+      entities: [{ type: 'concept', value: 'database migration', normalized: 'database migration' }],
+    }))
+    await value.remember(input({
+      eventSeq: 11,
+      kind: 'lesson',
+      layers: ['episodic', 'procedural', 'temporal'],
+      content: 'For image export, preserve transparent backgrounds.',
+      summary: 'Image export transparency.',
+      subject: 'lesson.image.export',
+      value: 'preserve transparency',
+      occurredAt: 1_100,
+      confidence: 0.95,
+      importance: 0.85,
+      entities: [{ type: 'concept', value: 'image export', normalized: 'export image' }],
+    }))
+
+    const recalled = value.recall({ query: 'database migration schema', projectId: 'phoenix', limit: 10 })
+    expect(recalled.map(hit => hit.record.id)).toEqual([database.id])
+  })
+
 })
