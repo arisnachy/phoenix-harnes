@@ -116,13 +116,13 @@ describe('PermissionPresetService', () => {
     const ctx = await mounted({ config: { presets: {
       'workspace-write': { sandbox: 'workspace-write', approval: 'ask' },
       agentish: { sandbox: 'workspace-write', approval: 'ask' },
-      'danger-full-access': { sandbox: 'danger-full-access', approval: 'ask' },
+      'danger-ask': { sandbox: 'danger-full-access', approval: 'ask' },
     } } })
     const session = freshSession('sess-tie')
     ctx.permissionPresets.set(session, 'agentish')
     expect(ctx.permissionPresets.current(session.events)).toBe('agentish')
     session.append('sandbox/mode', { mode: 'danger-full-access' })
-    expect(ctx.permissionPresets.current(session.events)).toBe('danger-full-access')
+    expect(ctx.permissionPresets.current(session.events)).toBe('danger-ask')
   })
 
   it('set() writes the preset and only the knob that differs from the safe defaults', async () => {
