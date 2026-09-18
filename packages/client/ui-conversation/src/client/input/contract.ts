@@ -212,6 +212,15 @@ export interface InputMachineOptions {
 /** Published input state (the currency; per-session). */
 export interface InputState {
   readonly draft: string
+  /**
+   * Browser-side optimistic copy of the ordinary prompt currently crossing
+   * the Host admission boundary. Durable transcript truth still comes from
+   * the session log; this only makes Enter visible immediately.
+   */
+  readonly pendingSubmit?: {
+    readonly text: string
+    readonly startedAt: number
+  }
   /** Ordered runtime-only image ids; bytes and URLs stay in ConversationController. */
   readonly imageIds: readonly DraftAttachmentId[]
   /** Monotonic draft revision (span CAS compares against this). */
