@@ -43,6 +43,15 @@ const DEFAULT_COMPRESSION: JsonlCompression = 'zstd'
  */
 const ZSTD_DECODE_YIELD_INTERVAL_MS = 500
 
+/**
+ * Directory/header scan fan-out for session.list. A browser page may have
+ * hundreds of cold sessions; serial open/stat/read chains make a fresh tab
+ * visibly stall on Windows (especially on synced filesystems). Keep the
+ * filesystem work bounded, but concurrent enough that list latency scales by
+ * batches rather than by total session count.
+ */
+const LIST_ARTIFACT_SCAN_CONCURRENCY = 32
+
 /** Assert that the independently decodable first frame contains only the header record. */
 function assertZstdHeaderFrame(plaintext: Buffer): void {
   if (plaintext.length === 0 || plaintext.indexOf(0x0A) !== plaintext.length - 1) {
@@ -491,35 +500,59 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     const ids = new Set<SessionId>()
     for (const project of await this.listProjectDirs(signal)) {
       signal?.throwIfAborted()
-      for (const dir of await this.listSessionDirs(project, signal)) {
+      const dirs = await this.listSessionDirs(project, signal)
+      for (let offset = 0; offset < dirs.length; offset += LIST_ARTIFACT_SCAN_CONCURRENCY) {
         signal?.throwIfAborted()
-        const opposite = join(dir, `session${logSuffix(this.oppositeCompression())}`)
-        const oppositeExists = await this.exists(opposite)
+        const batch = dirs.slice(offset, offset + LIST_ARTIFACT_SCAN_CONCURRENCY)
+        const listed = await Promise.all(batch.map(dir => this.listArtifactInDir(dir, signal)))
         signal?.throwIfAborted()
-        if (oppositeExists) throw this.encodingMismatch(opposite)
-        const path = join(dir, `session${logSuffix(this.compression)}`)
-        const pathExists = await this.exists(path)
-        signal?.throwIfAborted()
-        if (!pathExists) continue
-        // Read only headers so listing scales with session count, not log size.
-        const first = this.compression === 'zstd'
-          ? await this.readFirstZstdLine(path, signal)
-          : await this.readFirstLine(path, signal)
-        signal?.throwIfAborted()
-        if (first === undefined) continue // empty/half-written file
-        const meta = parseHeaderMeta(first)
-        if (meta === undefined) continue // not a session header
-        await this.assertStoredIdentity(path, meta, undefined, signal)
-        signal?.throwIfAborted()
-        if (ids.has(meta.id)) {
-          throw new Error(`duplicate JSONL session id "${meta.id}" appears in multiple project directories`)
+        for (const artifact of listed) {
+          if (artifact === undefined) continue
+          const { header: meta } = artifact
+          if (ids.has(meta.id)) {
+            throw new Error(`duplicate JSONL session id "${meta.id}" appears in multiple project directories`)
+          }
+          ids.add(meta.id)
+          artifacts.push(artifact)
         }
-        ids.add(meta.id)
-        artifacts.push({ header: meta, path })
       }
     }
     signal?.throwIfAborted()
     return artifacts
+  }
+
+  /**
+   * Inspect one session directory for its configured transcript and read only
+   * the header. One directory enumeration replaces the old pair of
+   * open/close existence probes; this matters on Windows where a missing
+   * opposite-encoding file also triggered an extra parent stat.
+   */
+  private async listArtifactInDir(
+    dir: string,
+    signal?: AbortSignal,
+  ): Promise<{ header: SessionHeader; path: string } | undefined> {
+    signal?.throwIfAborted()
+    const entries = await readdir(dir, { withFileTypes: true })
+    signal?.throwIfAborted()
+    const expectedName = `session${logSuffix(this.compression)}`
+    const oppositeName = `session${logSuffix(this.oppositeCompression())}`
+    if (entries.some(entry => entry.name === oppositeName)) {
+      throw this.encodingMismatch(join(dir, oppositeName))
+    }
+    if (!entries.some(entry => entry.name === expectedName)) return undefined
+
+    const path = join(dir, expectedName)
+    // Read only headers so listing scales with session count, not log size.
+    const first = this.compression === 'zstd'
+      ? await this.readFirstZstdLine(path, signal)
+      : await this.readFirstLine(path, signal)
+    signal?.throwIfAborted()
+    if (first === undefined) return undefined // empty/half-written file
+    const meta = parseHeaderMeta(first)
+    if (meta === undefined) return undefined // not a session header
+    await this.assertStoredIdentity(path, meta, undefined, signal)
+    signal?.throwIfAborted()
+    return { header: meta, path }
   }
 
   // --- materialization / append / repair (file mechanics) ---
