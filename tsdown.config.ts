@@ -1,5 +1,6 @@
 import { defineConfig } from 'tsdown'
 import { decoratorLoweringPlugin } from './packages/typert/generator/lib/types/tsdown-plugin.js'
+import { workspaceDepsFastPathPlugin } from './scripts/tsdown-workspace-deps-fastpath.ts'
 
 function isBuildFaceClient(value: unknown): boolean {
   if (value === undefined || value === 'host') return false
@@ -26,6 +27,6 @@ export default defineConfig(({ env }) => {
     fixedExtension: false,
     dts: false,
     clean: false,
-    plugins: client ? [] : [decoratorLoweringPlugin()],
+    plugins: client ? [] : [workspaceDepsFastPathPlugin(), decoratorLoweringPlugin()],
   }
 })
