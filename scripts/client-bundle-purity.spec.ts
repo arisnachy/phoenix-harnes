@@ -76,6 +76,9 @@ describe('client bundle routing cost', () => {
     expect(filter.test('@phoenix-ai/dsh-agent')).toBe(true)
     expect(filter.test('react')).toBe(true)
     expect(filter.test('zod')).toBe(false)
+    expect(filter.test('@phoenix-ai/dsh-host-apiproxy/api')).toBe(false)
+    expect(filter.test('@phoenix-ai/dsh-goal/remote')).toBe(false)
+    expect(filter.test('@phoenix-ai/cosmokit')).toBe(false)
 
     expect(typeof routing.load).toBe('object')
     if (typeof routing.load !== 'object') throw new Error('filtered load hook missing')
