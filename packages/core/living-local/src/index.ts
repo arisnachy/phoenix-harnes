@@ -24,6 +24,7 @@ interface AttachedProvider {
   readonly disposeSubscription: () => void
 }
 
+/** Configuration for durable living manifests and the owner-local control bridge. */
 export interface Config {
   /** Owner-private JSON document containing remembered creation manifests. */
   path: string
