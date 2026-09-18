@@ -216,6 +216,36 @@ describe('current selection (migrated from ui-layout, arbitrated into the list s
     expect(b.svc.list.getSnapshot().current).toBe('s1')
   })
 
+  it('does not erase the restored tab selection while the first list is still hydrating', async () => {
+    const storage = new Map<string, string>([
+      ['dsh.sessions.current', JSON.stringify({ sessionId: 's1' })],
+    ])
+    vi.stubGlobal('sessionStorage', {
+      getItem: (k: string) => storage.get(k) ?? null,
+      setItem: (k: string, v: string) => { storage.set(k, v) },
+      removeItem: (k: string) => { storage.delete(k) },
+    })
+    const b = bench()
+    const gate = deferred<Awaited<ReturnType<FakeApiClient['onList']>>>()
+    b.api.onList = () => gate.promise
+
+    const hydration = b.svc.refresh()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(b.svc.list.getSnapshot()).toMatchObject({ phase: 'pending', current: undefined })
+    expect(storage.get('dsh.sessions.current')).toContain('s1')
+
+    gate.resolve(ok({
+      items: [{ sessionId: sid('s1'), updatedAt: 1, running: false, blank: false }] as never[],
+    }))
+    await hydration
+    await Promise.resolve()
+
+    expect(b.svc.list.getSnapshot().current).toBe('s1')
+    expect(storage.get('dsh.sessions.current')).toContain('s1')
+  })
+
   it('persists the selection in sessionStorage and rehydrates it in the same tab', async () => {
     const storage = new Map<string, string>()
     vi.stubGlobal('sessionStorage', {
