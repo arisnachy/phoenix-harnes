@@ -13,6 +13,9 @@
  */
 
 import { execFile } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { createConnection } from 'node:net'
+import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -30,6 +33,12 @@ export type ComputerAction =
   | 'screenshot'
   | 'windows'
   | 'focus'
+  | 'browser_open'
+  | 'browser_close'
+  | 'browser_back'
+  | 'browser_forward'
+  | 'browser_reload'
+  | 'browser_focus'
   | 'move'
   | 'click'
   | 'double_click'
@@ -49,6 +58,8 @@ export interface ComputerToolArgs {
    * substring, pid:1234, and hwnd:0x123ABC. focus requires this field.
    */
   target?: string
+  /** URL or search text opened inside the Phoenix embedded browser. */
+  url?: string
   x?: number
   y?: number
   x2?: number
@@ -78,6 +89,182 @@ interface AttachmentWriter {
 /** Resolve the optional attachment capability without adding a hard package edge. */
 function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
   return (ctx as unknown as { attachments?: AttachmentWriter }).attachments
+}
+
+
+/** Current desktop-control discovery document written by Phoenix.exe. */
+export interface DesktopBrowserControlDescriptor {
+  schema: 1
+  pipeName: string
+}
+
+const DESKTOP_CONTROL_SCHEMA = 1
+const DESKTOP_CONTROL_PIPE_PREFIX = 'PhoenixDesktop.Browser.'
+const DESKTOP_CONTROL_DESCRIPTOR_ENV = 'PHOENIX_DESKTOP_CONTROL_DESCRIPTOR'
+const DESKTOP_CONTROL_TIMEOUT_MS = 3_000
+
+type EmbeddedBrowserAction =
+  | 'browser_open'
+  | 'browser_close'
+  | 'browser_back'
+  | 'browser_forward'
+  | 'browser_reload'
+  | 'browser_focus'
+
+interface DesktopBrowserCommand {
+  type: string
+  url?: string
+}
+
+/** Whether this action must travel over the native Phoenix Desktop browser channel. */
+function isEmbeddedBrowserAction(action: ComputerAction): action is EmbeddedBrowserAction {
+  return action === 'browser_open'
+    || action === 'browser_close'
+    || action === 'browser_back'
+    || action === 'browser_forward'
+    || action === 'browser_reload'
+    || action === 'browser_focus'
+}
+
+/**
+ * Parse and validate the current-user desktop-control descriptor before connecting.
+ * @param raw - JSON descriptor written by Phoenix Desktop.
+ * @returns Validated schema-1 desktop-control descriptor.
+ */
+export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowserControlDescriptor {
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    throw new Error('Phoenix Desktop control descriptor is not valid JSON')
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Phoenix Desktop control descriptor must be an object')
+  }
+  const candidate = value as Record<string, unknown>
+  if (candidate.schema !== DESKTOP_CONTROL_SCHEMA) {
+    throw new Error(`Phoenix Desktop control descriptor has unsupported schema ${String(candidate.schema)}`)
+  }
+  const pipeName = candidate.pipeName
+  if (typeof pipeName !== 'string'
+    || pipeName.length === 0
+    || pipeName.length > 128
+    || !pipeName.startsWith(DESKTOP_CONTROL_PIPE_PREFIX)
+    || !/^[A-Za-z0-9._-]+$/u.test(pipeName)) {
+    throw new Error('Phoenix Desktop control descriptor contains an invalid pipe name')
+  }
+  return { schema: 1, pipeName }
+}
+
+/**
+ * Map model-facing browser actions onto the native WebView command vocabulary.
+ * @param args - Validated computer-tool browser action.
+ * @returns Native Phoenix Desktop browser command.
+ */
+export function browserCommandForAction(args: ComputerToolArgs): DesktopBrowserCommand {
+  validateComputerArgs(args)
+  switch (args.action) {
+    case 'browser_open':
+      return { type: 'phoenix.browser.open', url: args.url as string }
+    case 'browser_close':
+      return { type: 'phoenix.browser.close' }
+    case 'browser_back':
+      return { type: 'phoenix.browser.back' }
+    case 'browser_forward':
+      return { type: 'phoenix.browser.forward' }
+    case 'browser_reload':
+      return { type: 'phoenix.browser.reload' }
+    case 'browser_focus':
+      return { type: 'phoenix.browser.focus' }
+    default:
+      throw new TypeError(`computer action "${args.action}" is not an embedded-browser action`)
+  }
+}
+
+function desktopControlDescriptorPath(): string {
+  const configured = process.env[DESKTOP_CONTROL_DESCRIPTOR_ENV]?.trim()
+  if (configured !== undefined && configured.length > 0) return configured
+  const localAppData = process.env.LOCALAPPDATA?.trim()
+  if (localAppData === undefined || localAppData.length === 0) {
+    throw new Error('Phoenix Desktop control is unavailable: LOCALAPPDATA is not set')
+  }
+  return join(localAppData, 'Phoenix', 'desktop-control.json')
+}
+
+function requestNamedPipeLine(pipePath: string, line: string, signal?: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let buffer = ''
+    const socket = createConnection(pipePath)
+    socket.setEncoding('utf8')
+
+    const cleanup = (): void => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+    }
+    const fail = (error: unknown): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      socket.destroy()
+      reject(error instanceof Error ? error : new Error(String(error)))
+    }
+    const succeed = (value: string): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      socket.end()
+      resolve(value)
+    }
+    const onAbort = (): void => {
+      fail(signal?.reason ?? new Error('Phoenix Desktop browser control aborted'))
+    }
+    const timer = setTimeout(() => {
+      fail(new Error('Phoenix Desktop browser control timed out'))
+    }, DESKTOP_CONTROL_TIMEOUT_MS)
+
+    if (signal?.aborted === true) {
+      onAbort()
+      return
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+
+    socket.once('connect', () => {
+      socket.write(`${line}\n`)
+    })
+    socket.on('data', (chunk: string) => {
+      buffer += chunk
+      const newline = buffer.indexOf('\n')
+      if (newline >= 0) succeed(buffer.slice(0, newline).trim())
+    })
+    socket.once('error', fail)
+    socket.once('close', () => {
+      if (!settled) fail(new Error('Phoenix Desktop browser control closed before replying'))
+    })
+  })
+}
+
+async function runEmbeddedBrowserAction(args: ComputerToolArgs, signal?: AbortSignal): Promise<string> {
+  const rawDescriptor = await readFile(desktopControlDescriptorPath(), 'utf8')
+  const descriptor = parseDesktopBrowserControlDescriptor(rawDescriptor)
+  const command = browserCommandForAction(args)
+  const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
+  const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(command), signal)
+
+  let reply: unknown
+  try {
+    reply = JSON.parse(rawReply)
+  } catch {
+    throw new Error('Phoenix Desktop browser control returned invalid JSON')
+  }
+  if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
+    throw new Error('Phoenix Desktop browser control returned an invalid reply')
+  }
+  const response = reply as Record<string, unknown>
+  if (response.ok !== true) {
+    throw new Error(`Phoenix Desktop browser control rejected the command: ${String(response.error ?? 'unknown error')}`)
+  }
+  return `embedded browser command accepted: ${command.type}`
 }
 
 /**
@@ -141,6 +328,22 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
     case 'screenshot':
     case 'windows':
     case 'focus':
+    case 'browser_close':
+    case 'browser_back':
+    case 'browser_forward':
+    case 'browser_reload':
+    case 'browser_focus':
+      return
+    case 'browser_open':
+      if (args.url === undefined || args.url.trim().length === 0) {
+        throw new TypeError('computer browser_open requires a non-empty url')
+      }
+      if (args.url.length > 4096) {
+        throw new RangeError('computer browser_open url exceeds 4096 UTF-16 code units')
+      }
+      if (args.url.includes('\0')) {
+        throw new TypeError('computer browser_open url contains an unsupported NUL character')
+      }
       return
     case 'move':
     case 'click':
@@ -190,6 +393,7 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
  */
 export function shouldCaptureAfterAction(action: ComputerAction): boolean {
   return action === 'focus'
+    || isEmbeddedBrowserAction(action)
     || action === 'click'
     || action === 'double_click'
     || action === 'drag'
@@ -673,6 +877,9 @@ function putNumber(env: Record<string, string>, key: string, value: number | und
  */
 export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvocation {
   validateComputerArgs(args)
+  if (isEmbeddedBrowserAction(args.action)) {
+    throw new Error('Embedded browser actions must use the Phoenix Desktop control channel')
+  }
   const env: Record<string, string> = { PHX_ACTION: args.action }
   putNumber(env, 'PHX_X', args.x)
   putNumber(env, 'PHX_Y', args.y)
@@ -733,14 +940,33 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
     throw new Error(`Computer Use Windows driver is unavailable on ${process.platform}`)
   }
   signal?.throwIfAborted()
+  if (isEmbeddedBrowserAction(args.action)) {
+    return await runEmbeddedBrowserAction(args, signal)
+  }
   const invocation = windowsComputerInvocation(args)
   return await executeComputerInvocation(invocation, signal)
 }
 
 function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; reversible: boolean } {
-  if (action === 'move' || action === 'scroll' || action === 'focus') return { risk: 'low', reversible: true }
+  if (action === 'move' || action === 'scroll' || action === 'focus' || action === 'browser_focus') return { risk: 'low', reversible: true }
+  if (isEmbeddedBrowserAction(action)) return { risk: 'medium', reversible: true }
   if (action === 'click' || action === 'double_click' || action === 'drag') return { risk: 'medium', reversible: false }
   return { risk: 'high', reversible: false }
+}
+
+/**
+ * Whether a permitted desktop interaction still needs an approval prompt.
+ * Full access is deliberately no-prompt authority; read-only cannot interact at all.
+ * @param sandboxMode - Effective sandbox mode for the current session or deployment.
+ * @param action - Computer action being authorized.
+ * @returns True only when the action must go through the approval service.
+ */
+export function computerActionNeedsApproval(
+  sandboxMode: SandboxMode | undefined,
+  action: ComputerAction,
+): boolean {
+  if (action === 'screenshot' || action === 'windows') return false
+  return computerModeForSandbox(sandboxMode) === 'interact' && sandboxMode !== 'danger-full-access'
 }
 
 async function authorizeComputerAction(
@@ -751,7 +977,7 @@ async function authorizeComputerAction(
 ): Promise<void> {
   const mode = computerModeForSandbox(sandboxMode)
   assertComputerActionAllowed(mode, action)
-  if (action === 'screenshot' || action === 'windows' || sandboxMode === 'danger-full-access') return
+  if (!computerActionNeedsApproval(sandboxMode, action)) return
   const agent = exec.agent
   if (agent === undefined) throw new Error('Computer input requires an owning agent session')
   const approval = ctx.get('approval')
@@ -822,17 +1048,24 @@ export function registerComputerTool(ctx: Context): void {
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
   const deploymentDefault = ctx.shell.sandboxMode
 
+  ctx.systemPrompt.section({
+    name: 'tool:computer:embedded-browser',
+    order: 106,
+    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_back/browser_forward/browser_reload/browser_close/browser_focus for native embedded-browser navigation. These commands go directly to Phoenix\'s WebView2 pane through its desktop control channel and must not launch the system browser. Use screenshot, click, type, key, and scroll against the Phoenix window for visual page interaction. Full access is no-prompt desktop authority; workspace-write keeps normal approval.',
+  })
+
   ctx.tools.register(defineTool({
     name: 'computer',
-    description: 'Control the Windows desktop with window-aware actions. Before controlling an external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
+    description: 'Control the Windows desktop with window-aware actions. For interactive web work in Phoenix Desktop, prefer the browser_* actions: they command Phoenix\'s embedded WebView2 pane directly through the native desktop channel and never intentionally launch the system browser. Then use screenshot/click/type/key/scroll against the Phoenix window for full visual control. Before controlling any other external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
     parameters: {
       action: {
         type: 'string',
         required: true,
-        enum: ['screenshot', 'windows', 'focus', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
-        description: 'Desktop operation. windows lists visible top-level windows; focus activates a target and verifies foreground identity.',
+        enum: ['screenshot', 'windows', 'focus', 'browser_open', 'browser_close', 'browser_back', 'browser_forward', 'browser_reload', 'browser_focus', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
+        description: 'Desktop operation. browser_* actions control Phoenix\'s embedded WebView2 directly; windows lists visible top-level windows; focus activates an external target and verifies foreground identity.',
       },
-      target: { type: 'string', description: 'Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus and strongly recommended for external-app input.' },
+      target: { type: 'string', description: 'Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus; embedded browser actions do not need it.' },
+      url: { type: 'string', description: 'URL or search text for browser_open. Phoenix validates it and navigates the embedded WebView2 directly.' },
       x: { type: 'integer', description: 'Screen X coordinate. Required for move/click/double_click/drag; optional with scroll.' },
       y: { type: 'integer', description: 'Screen Y coordinate. Required for move/click/double_click/drag; optional with scroll.' },
       x2: { type: 'integer', description: 'Drag destination X coordinate.' },
@@ -859,9 +1092,11 @@ export function registerComputerTool(ctx: Context): void {
           ? `Visible top-level windows:\n${value.details ?? '<none>'}`
           : value.action === 'screenshot'
             ? 'Desktop screenshot captured and attached for the next model step.'
-            : value.postScreenshot
-              ? `Desktop ${value.action} input sent and a fresh post-action screenshot was attached. Verify the visible result before proceeding.`
-              : `Desktop ${value.action} input sent.`,
+            : value.action.startsWith('browser_')
+              ? `Phoenix embedded browser command ${value.action} completed and a fresh desktop screenshot was attached. Continue controlling the page inside the Phoenix window.`
+              : value.postScreenshot
+                ? `Desktop ${value.action} input sent and a fresh post-action screenshot was attached. Verify the visible result before proceeding.`
+                : `Desktop ${value.action} input sent.`,
       }],
     },
     async execute(args: ComputerToolArgs, exec) {
