@@ -79,6 +79,27 @@ describe('user profile validation and projection helpers', () => {
     expect(next.tone).toBe('direct and warm')
   })
 
+  it('keeps Phoenix identity stable when the model-provider preference changes', () => {
+    const before = profile({
+      assistantName: 'Phoenix',
+      assistantGender: 'feminine',
+      modelProviderOrder: ['openrouter', 'openai-codex'],
+    })
+    const after = mergeUserProfile(before, {
+      modelProviderOrder: ['openai-codex', 'openrouter'],
+    })
+
+    expect(after.assistantName).toBe('Phoenix')
+    expect(after.assistantGender).toBe('feminine')
+    expect(renderAssistantIdentity({
+      name: after.assistantName,
+      gender: after.assistantGender,
+    })).toBe(renderAssistantIdentity({
+      name: before.assistantName,
+      gender: before.assistantGender,
+    }))
+  })
+
   it('renders a stable human-presence contract without exposing orchestration', () => {
     const text = renderAssistantIdentity({ name: 'KIRA', gender: 'feminine' })
 
