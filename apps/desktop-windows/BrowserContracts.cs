@@ -64,12 +64,13 @@ public static class BrowserLayout
 
     /// <summary>
     /// Keep the browser useful without letting it dominate the conversation:
-    /// roughly 26% of the window, clamped to a compact desktop-friendly range.
+    /// roughly 22% of the window, clamped to a compact desktop-friendly range.
+    /// The conversation remains the primary surface even on wide displays.
     /// </summary>
     public static int PreferredBrowserWidth(int clientWidth)
     {
-        var proportional = (int)Math.Round(Math.Max(0, clientWidth) * 0.26d);
-        return Math.Clamp(proportional, 360, 520);
+        var proportional = (int)Math.Round(Math.Max(0, clientWidth) * 0.22d);
+        return Math.Clamp(proportional, 320, 440);
     }
 }
 
