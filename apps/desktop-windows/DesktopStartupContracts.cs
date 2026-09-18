@@ -1,10 +1,46 @@
+using System.Diagnostics;
+
 namespace Phoenix.Desktop;
 
 internal static class DesktopStartupContract
 {
     internal const bool ShowWindowBeforeRuntimeReady = true;
     internal const bool SecondLaunchSignalsExistingWindow = true;
+    internal const bool EmbeddedBrowserStartsLazy = true;
     internal const string InitialStatus = "Preparando Phoenix…";
+}
+
+internal static class DesktopRuntimeLaunchContract
+{
+    internal const string PowerShellExecutable = "powershell.exe";
+
+    internal static ProcessStartInfo CreateOwnedRuntimeStartInfo(string runtimeRoot, string controlDescriptorPath)
+    {
+        var launcher = Path.Combine(runtimeRoot, "phoenix-windows.cmd");
+        var escapedLauncher = launcher.Replace("'", "''");
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = PowerShellExecutable,
+            WorkingDirectory = runtimeRoot,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        startInfo.ArgumentList.Add("-NoLogo");
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-Command");
+        startInfo.ArgumentList.Add($"& '{escapedLauncher}' --no-open; exit $LASTEXITCODE");
+
+        startInfo.Environment["PHOENIX_DESKTOP_MANAGED"] = "1";
+        startInfo.Environment["PHOENIX_DESKTOP_CONTROL_DESCRIPTOR"] = controlDescriptorPath;
+        return startInfo;
+    }
 }
 
 internal enum ManagedRuntimeState
