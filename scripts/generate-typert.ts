@@ -8,7 +8,8 @@
 
 import { createHash } from 'node:crypto'
 import { existsSync, globSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, extname, join, relative, resolve } from 'node:path'
+import ts from 'typescript'
 import { WorkspaceTypertGenerator } from '../packages/typert/generator/src/workspace.ts'
 import type { WorkspaceEmitResult } from '../packages/typert/generator/src/workspace.ts'
 
@@ -62,6 +63,25 @@ function addExisting(matches: Set<string>, root: string, patterns: readonly stri
   }
 }
 
+function hostDeclarationPatterns(root: string): string[] {
+  const configPath = resolve(root, 'tsconfig.host.json')
+  const loaded = ts.readConfigFile(configPath, ts.sys.readFile)
+  if (loaded.error !== undefined) {
+    throw new Error(ts.flattenDiagnosticMessageText(loaded.error.messageText, '\n'))
+  }
+  const config = loaded.config as { references?: readonly { path?: unknown }[] }
+  const patterns = new Set<string>()
+  for (const reference of config.references ?? []) {
+    if (typeof reference.path !== 'string') continue
+    const absolute = resolve(root, reference.path)
+    const projectRoot = extname(absolute) === '.json' ? dirname(absolute) : absolute
+    const repositoryPath = relative(root, projectRoot).split('\\').join('/')
+    if (repositoryPath === '' || repositoryPath.startsWith('..')) continue
+    patterns.add(repositoryPath + '/lib/types/**/*.d.ts')
+  }
+  return [...patterns].sort()
+}
+
 function fingerprintFiles(root: string, contributors: readonly ContributorManifest[]): string[] {
   const files = new Set<string>()
   for (const path of [
@@ -86,15 +106,10 @@ function fingerprintFiles(root: string, contributors: readonly ContributorManife
     ])
   }
 
-  // A contributor may reference public types owned by another package. Hash
-  // tsc's declaration surface across the workspace so those dependency changes
-  // invalidate Typert without parsing the TypeScript program on a cache hit.
-  addExisting(files, root, [
-    'packages/*/*/lib/types/**/*.d.ts',
-    'vendor/*/lib/types/**/*.d.ts',
-    'apps/cli/lib/types/**/*.d.ts',
-    'native/landlock-run/packages/*/lib/types/**/*.d.ts',
-  ])
+  // A contributor may reference public types owned by another Host package.
+  // Hash only the declaration surfaces in the Host project-reference graph:
+  // Client-only tsc output must not invalidate the Host Typert cache.
+  addExisting(files, root, hostDeclarationPatterns(root))
 
   return [...files].sort()
 }
