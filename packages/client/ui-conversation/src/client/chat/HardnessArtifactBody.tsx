@@ -45,6 +45,10 @@ function parseJsonArtifact(value: string): unknown {
   }
 }
 
+function isJsonArtifact(mime: string, title: string): boolean {
+  return mime.toLowerCase().includes('json') || title.trim().toLowerCase().endsWith('.json')
+}
+
 function embeddedVisual(record: JsonRecord): JsonRecord | undefined {
   if (supportsPhoenixVisual(record)) return record
   for (const key of ['visual', 'spec', 'chart'] as const) {
@@ -386,7 +390,7 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
       const url = safeHref(data)
       return <DocumentPreview mime={mime} {...url === undefined ? {} : { url }} expanded={expanded} title={title} />
     }
-    if (mime.includes('json')) {
+    if (isJsonArtifact(mime, title)) {
       const parsed = parseJsonArtifact(data)
       if (isRecord(parsed)) {
         return <RecordPreview
@@ -399,7 +403,7 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
       }
       if (parsed !== undefined) return <pre className={styles.code}>{JSON.stringify(parsed, null, 2)}</pre>
     }
-    return <pre className={mime.includes('json') ? styles.code : styles.text}>{data}</pre>
+    return <pre className={isJsonArtifact(mime, title) ? styles.code : styles.text}>{data}</pre>
   }
   return <RecordPreview
     record={data}
