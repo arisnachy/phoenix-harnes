@@ -29,26 +29,26 @@
 
 .connectorGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
 }
 
 .connectorCard {
   min-width: 0;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--dsw-alias-bg-module-platform);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
   transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .connectorCard:hover {
   transform: translateY(-1px);
   border-color: var(--dsw-alias-border-l3);
-  box-shadow: 0 6px 18px rgb(0 0 0 / 7%);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 8%);
 }
 
 .registryCard {
@@ -65,10 +65,10 @@
 .connectorIcon,
 .connectorFallback {
   box-sizing: border-box;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   flex: none;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-base);
 }
@@ -156,6 +156,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l2);
   font-size: 11px;
   line-height: 16px;
   color: var(--dsw-alias-label-tertiary);
@@ -163,10 +170,26 @@
 
 .connectorStatusReady {
   color: var(--dsw-alias-state-success-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 9%, var(--dsw-alias-bg-base));
+}
+
+.connectorStatusInfo {
+  color: #0b5cff;
+  background: color-mix(in srgb, #2563eb 9%, var(--dsw-alias-bg-base));
+}
+
+.connectorStatusWarn {
+  color: var(--dsw-alias-state-warn-label);
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-label) 9%, var(--dsw-alias-bg-base));
+}
+
+.connectorStatusError {
+  color: #c62828;
+  background: color-mix(in srgb, #dc2626 9%, var(--dsw-alias-bg-base));
 }
 
 .connectorStatusDisabled {
-  color: var(--dsw-alias-state-warn-label);
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .connectorLink {
@@ -190,6 +213,59 @@
 .connectorLink:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+
+
+.connectorActions {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.connectorPrimaryButton,
+.connectorSecondaryButton {
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.connectorPrimaryButton {
+  border: 1px solid #0b5cff;
+  background: #0b5cff;
+  color: white;
+  box-shadow: 0 2px 8px rgb(11 92 255 / 18%);
+}
+
+.connectorPrimaryButton:hover:not(:disabled) {
+  background: #004fe0;
+}
+
+.connectorSecondaryButton {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+}
+
+.connectorSecondaryButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.connectorPrimaryButton:disabled,
+.connectorSecondaryButton:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.connectorPrimaryButton:focus-visible,
+.connectorSecondaryButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #2563eb 32%, transparent);
 }
 
 @media (max-width: 560px) {
