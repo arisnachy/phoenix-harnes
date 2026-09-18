@@ -226,60 +226,60 @@ function sandboxDocument(html: string): string {
 
 interface MiniAppProps {
   readonly html: string
-  readonly expanded: boolean
   readonly title: string
   readonly executable?: boolean
 }
 
-function MiniApp({ html, expanded, title, executable = false }: MiniAppProps) {
-  const [interactive, setInteractive] = useState(executable)
-  const [previewReady, setPreviewReady] = useState(false)
-  const [frameHeight, setFrameHeight] = useState<number | undefined>(undefined)
-  const [reloadToken, setReloadToken] = useState(0)
+function MiniApp({ html, title, executable = false }: MiniAppProps) {
+  const [frameHeight, setFrameHeight] = useState(1)
   const frameRef = useRef<HTMLIFrameElement>(null)
   const srcDoc = useMemo(() => sandboxDocument(html), [html])
+
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
       if (event.source !== frameRef.current?.contentWindow) return
       if (typeof event.data !== 'object' || event.data === null) return
       const message = event.data as Record<string, unknown>
       if (message.type !== 'phoenix-artifact-height' || typeof message.height !== 'number' || !Number.isFinite(message.height)) return
-      setFrameHeight(Math.round(Math.max(160, message.height)))
+      setFrameHeight(Math.max(1, Math.ceil(message.height)))
     }
     window.addEventListener('message', onMessage)
     return () => { window.removeEventListener('message', onMessage) }
-  }, [expanded])
-  const reloadPreview = (): void => {
-    setPreviewReady(false)
-    setFrameHeight(undefined)
-    setReloadToken(value => value + 1)
+  }, [])
+
+  const measureStaticDocument = (): void => {
+    if (executable) return
+    const frame = frameRef.current
+    const documentElement = frame?.contentDocument?.documentElement
+    const body = frame?.contentDocument?.body
+    if (documentElement === undefined || documentElement === null || body === undefined || body === null) return
+    const measure = (): void => {
+      setFrameHeight(Math.max(
+        1,
+        Math.ceil(
+          Math.max(
+            documentElement.scrollHeight,
+            documentElement.offsetHeight,
+            body.scrollHeight,
+            body.offsetHeight,
+          ),
+        ),
+      ))
+    }
+    measure()
+    requestAnimationFrame(measure)
   }
+
   return (
-    <div className={styles.stack}>
-      <div className={styles.previewToolbar} role="status" aria-live="polite">
-        <span className={styles.previewState}>{previewReady ? 'Preview ready' : 'Loading preview'}</span>
-        <button className={styles.uiButton} type="button" onClick={reloadPreview}>Reload preview</button>
-      </div>
-      <iframe
-        key={reloadToken}
-        ref={frameRef}
-        className={`${styles.frame} ${expanded ? styles.frameExpanded : ''}`}
-        title={title}
-        srcDoc={srcDoc}
-        sandbox={interactive ? 'allow-scripts' : ''}
-        style={frameHeight === undefined ? undefined : { height: frameHeight }}
-        onLoad={() => { setPreviewReady(true) }}
-      />
-      <div>
-        <button className={styles.uiButton} type="button" onClick={() => { setInteractive(value => !value); setPreviewReady(false); setFrameHeight(undefined) }}>
-          {interactive ? 'Disable interaction' : 'Enable sandboxed interaction'}
-        </button>
-      </div>
-      <p className={styles.note}>
-        Mini-app scripts run only inside a unique-origin sandbox with network, forms,
-        popups and parent access blocked.
-      </p>
-    </div>
+    <iframe
+      ref={frameRef}
+      className={styles.frame}
+      title={title}
+      srcDoc={srcDoc}
+      sandbox={executable ? 'allow-scripts' : 'allow-same-origin'}
+      style={{ height: frameHeight }}
+      onLoad={measureStaticDocument}
+    />
   )
 }
 
@@ -333,7 +333,7 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
     const html = typeof entryFile === 'string' ? entryFile : text(block.html)
     return html === undefined
       ? <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
-      : <MiniApp key={index} html={html} expanded={expanded} title="HARDNESS mini-app" />
+      : <MiniApp key={index} html={html} title="HARDNESS mini-app" />
   }
   return <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
 }
@@ -371,14 +371,14 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
     || visual !== undefined) return <PhoenixVisualizer spec={visual ?? record} />
   if (typeof record.entry === 'string' && isRecord(record.files)) {
     const html = typeof record.files[record.entry] === 'string' ? record.files[record.entry] as string : undefined
-    if (html !== undefined) return <MiniApp html={html} expanded={expanded} title={title} />
+    if (html !== undefined) return <MiniApp html={html} title={title} />
   }
   return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
 }
 
 export function HardnessArtifactBody({ mime, data, expanded, title, executable = false, renderMessageImages }: ArtifactBodyProps) {
   if (typeof data === 'string') {
-    if (mime === 'text/html' || mime === 'application/vnd.hardness.app+html') return <MiniApp html={data} expanded={expanded} title={title} executable={executable} />
+    if (mime === 'text/html' || mime === 'application/vnd.hardness.app+html') return <MiniApp html={data} title={title} executable={executable} />
     if (mime.startsWith('image/')) {
       const src = safeHref(data)
       if (src === undefined) return <p className={styles.note}>Image source was rejected.</p>
