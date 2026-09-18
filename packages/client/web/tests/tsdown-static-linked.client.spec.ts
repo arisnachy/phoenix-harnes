@@ -22,8 +22,14 @@ describe('static-linked build preset', () => {
     expect(isStaticLinkedConfig(configs)).toBe(true)
     expect(config.entry).toEqual({ index: './lib/types/index.js' })
 
-    const inputOptions = config.inputOptions as { external?: RegExp }
-    const external = inputOptions.external
+    if (typeof config.inputOptions !== 'function') throw new Error('static-linked native optimizer missing')
+    const optimized = config.inputOptions(
+      { plugins: [{ name: 'tsdown:deps' }, { name: 'tsdown:report' }, { name: 'keep-me' }] } as never,
+      'esm' as never,
+      { cjsDts: false },
+    )
+    if (optimized instanceof Promise) throw new Error('static-linked optimizer unexpectedly became async')
+    const external = (optimized as { external?: RegExp }).external
     expect(external).toBeInstanceOf(RegExp)
     expect(external?.test('react')).toBe(true)
     expect(external?.test('@phoenix-ai/dsh-client-runtime')).toBe(true)
@@ -33,6 +39,8 @@ describe('static-linked build preset', () => {
     expect(external?.test('/absolute/local.js')).toBe(false)
     expect(external?.test('C:/absolute/local.js')).toBe(false)
     expect(external?.test('\0virtual:module')).toBe(false)
+    expect(JSON.stringify((optimized as { plugins?: unknown }).plugins)).not.toContain('tsdown:deps')
+    expect(JSON.stringify((optimized as { plugins?: unknown }).plugins)).not.toContain('tsdown:report')
 
     const plugins = (config.plugins ?? []) as HookPlugin[]
     const marker = plugins.find(plugin => plugin.name === 'dsh-static-linked-external')
