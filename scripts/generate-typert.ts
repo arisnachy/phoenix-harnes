@@ -93,6 +93,7 @@ function fingerprintFiles(root: string, contributors: readonly ContributorManife
     'packages/*/*/lib/types/**/*.d.ts',
     'vendor/*/lib/types/**/*.d.ts',
     'apps/cli/lib/types/**/*.d.ts',
+    'native/landlock-run/packages/*/lib/types/**/*.d.ts',
   ])
 
   return [...files].sort()
@@ -195,7 +196,7 @@ function writeCache(root: string, fingerprint: string, outputFiles: readonly str
   writeFileSync(cachePath, JSON.stringify({ version: CACHE_VERSION, fingerprint, outputs }, null, 2) + '\n')
 }
 
-export function generateTypert(root = resolve(import.meta.dirname, '..')): 'hit' | 'generated' {
+function generateTypert(root = resolve(import.meta.dirname, '..')): 'hit' | 'generated' {
   const contributors = contributorManifests(root)
   const fingerprint = workspaceFingerprint(root, contributors)
   const previous = readCache(root)
@@ -209,11 +210,10 @@ export function generateTypert(root = resolve(import.meta.dirname, '..')): 'hit'
   }
 
   const generator = new WorkspaceTypertGenerator(root, { checkDiagnostics: false })
-  const contributorByName = new Map(
-    contributors
-      .filter(candidate => candidate.manifest.name !== undefined)
-      .map(candidate => [candidate.manifest.name as string, candidate]),
-  )
+  const contributorByName = new Map<string, ContributorManifest>()
+  for (const contributor of contributors) {
+    if (contributor.manifest.name !== undefined) contributorByName.set(contributor.manifest.name, contributor)
+  }
   const packages = generator.discover(HOST_FACE)
     .map(candidate => candidate.package)
     .filter(name => contributorByName.has(name))
