@@ -134,8 +134,8 @@ function remember(key: string, snapshot: McpRegistrySearchSnapshot): void {
   cache.delete(key)
   cache.set(key, { at: Date.now(), snapshot })
   while (cache.size > MAX_CACHE_ENTRIES) {
-    const oldest = cache.keys().next().value as string | undefined
-    if (oldest === undefined) break
+    // size > 0 guarantees iterator.value; no defensive empty branch is needed.
+    const oldest = cache.keys().next().value as string
     cache.delete(oldest)
   }
 }
@@ -168,7 +168,7 @@ export async function searchOfficialMcpRegistry(
 
   const controller = new AbortController()
   const timeout = setTimeout(() => { controller.abort() }, REQUEST_TIMEOUT_MS)
-  timeout.unref?.()
+  timeout.unref()
   try {
     const response = await fetch(url, {
       method: 'GET',
