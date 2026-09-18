@@ -552,6 +552,37 @@ describe('catalog routes with per-model configuration', () => {
     expect(models.every(model => model.baseUrl === 'https://api.openai.com/v1')).toBe(true)
   })
 
+  it('repairs the legacy 272k GPT-5.6 context on the official OpenAI API', async () => {
+    const ctx = await harness({
+      providers: {
+        openai: {
+          apiKeyEnv: KEY_ENV,
+          models: [{
+            id: 'gpt-5.6-luna',
+            contextWindow: 272_000,
+            maxTokens: 128_000,
+          }],
+        },
+      },
+    })
+
+    const info = await ctx.llm.resolveModelInfo('openai', 'gpt-5.6-luna')
+    expect(info.context).toEqual({ contextWindow: 1_050_000 })
+    expect(info.defaultMaxTokens).toBe(128_000)
+  })
+
+  it('does not rewrite a 272k context on a custom OpenAI-compatible endpoint', () => {
+    const resolved = resolveProfiles({
+      openai: {
+        api: 'openai-responses',
+        baseURL: 'https://gateway.example/v1',
+        models: [{ id: 'gpt-5.6-luna', contextWindow: 272_000, maxTokens: 128_000 }],
+      },
+    })
+    const model = resolved.get('openai')?.piProvider.getModels()[0]
+    expect(model?.contextWindow).toBe(272_000)
+  })
+
   it('repoints a catalog route at another wire protocol', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness({
