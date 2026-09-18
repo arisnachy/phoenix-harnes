@@ -10,7 +10,7 @@ import type {
 } from '@phoenix-ai/dsh-attachment'
 import { CallId, createMessage, createUserMessage, OFFLOADED_IMAGE_TEXT } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
-import { toPiContext } from '../src/context.ts'
+import { estimateGenerateOptionsTokens, fitGenerateOptionsToContext, toPiContext } from '../src/context.ts'
 import { toPiAssistant } from '../src/replay.ts'
 
 const ref: ImageAttachmentRef = {
@@ -85,6 +85,70 @@ function history(role: 'system' | 'assistant', content: ContentBlock[]): Message
 }
 
 describe('pi-ai request context conversion', () => {
+
+  it('compacts auxiliary catalog and tool schema prose before output room collapses', () => {
+    const huge = 'x'.repeat(20_000)
+    const catalog = createUserMessage({
+      content: [{ type: 'text', text: huge }],
+      source: {
+        kind: 'skill-catalog',
+        form: 'catalog',
+        entries: Array.from({ length: 300 }, (_, index) => ({
+          name: `skill-${index}`,
+          description: huge.slice(0, 200),
+        })),
+      } as never,
+    })
+    const userMessage = createUserMessage({
+      content: [{ type: 'text', text: 'hello from the user' }],
+      source: { kind: 'user' },
+    })
+    const options: GenerateOptions = {
+      provider: 'openrouter',
+      model: 'openrouter/free',
+      system: 'system',
+      maxTokens: 4096,
+      messages: [catalog, userMessage],
+      tools: [{
+        name: 'lookup',
+        description: huge,
+        parameters: {
+          type: 'object',
+          description: huge,
+          properties: {
+            query: { type: 'string', description: huge },
+          },
+          required: ['query'],
+        },
+      }],
+    }
+
+    const before = estimateGenerateOptionsTokens(options)
+    const fitted = fitGenerateOptionsToContext(options, 20_000, 4096)
+
+    expect(fitted.compacted).toBe(true)
+    expect(fitted.estimatedTokens).toBeLessThan(before)
+    expect(fitted.options.messages[1]).toEqual(userMessage)
+    expect(fitted.options.messages[0]?.content[0]).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('Available skills (compact index') as string,
+    })
+    expect(fitted.options.tools?.[0]?.description.length).toBeLessThanOrEqual(160)
+    expect(fitted.options.tools?.[0]?.parameters).toEqual({
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: ['query'],
+    })
+  })
+
+  it('leaves requests untouched when they already preserve reply room', () => {
+    const options = request([user([{ type: 'text', text: 'small request' }])])
+    const fitted = fitGenerateOptionsToContext(options, 200_000, 4096)
+
+    expect(fitted.compacted).toBe(false)
+    expect(fitted.options).toBe(options)
+  })
+
   it('omits absent and empty request-level optional fields', () => {
     const base = { provider: 'openai', model: 'gpt-4.1', messages: [] }
     expect(toPiContext(base)).toEqual({ messages: [] })
