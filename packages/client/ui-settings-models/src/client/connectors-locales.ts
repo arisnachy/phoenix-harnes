@@ -2,7 +2,7 @@
 export const connectorEn = {
   nav: 'Connectors',
   title: 'Connectors',
-  intro: 'Connect external services and see the native capability presets Phoenix can use. Only installed and authorized adapters become callable tools.',
+  intro: 'Connect external services. Only installed and authorized adapters become callable tools.',
   accounts: 'Connected accounts & authorization',
   accountsHint: 'OAuth credentials stay in the Host. Phoenix receives connection state and callable tools, never your account password.',
   superpowers: 'Capability presets',
@@ -61,7 +61,7 @@ export type ConnectorKey = keyof typeof connectorEn
 export const connectorEs: { [Key in ConnectorKey]: string } = {
   nav: 'Conectores',
   title: 'Conectores',
-  intro: 'Conecta servicios externos y revisa los presets de capacidades nativas que Phoenix puede usar. Solo los adapters instalados y autorizados se convierten en herramientas invocables.',
+  intro: 'Conecta servicios externos. Solo los adapters instalados y autorizados se convierten en herramientas invocables.',
   accounts: 'Cuentas conectadas y autorización',
   accountsHint: 'Las credenciales OAuth permanecen en el Host. Phoenix recibe el estado de conexión y las herramientas disponibles, nunca tu contraseña.',
   superpowers: 'Presets de capacidades',
@@ -116,7 +116,7 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
   nav: '连接器', title: '连接器',
-  intro: '连接外部服务并查看 Phoenix 可使用的原生能力预设。只有已安装且已授权的适配器才会成为可调用工具。',
+  intro: '连接外部服务。只有已安装且已授权的适配器才会成为可调用工具。',
   accounts: '已连接账户与授权', accountsHint: 'OAuth 凭据保留在 Host 中；Phoenix 只接收连接状态和可调用工具，不会收到你的账户密码。',
   superpowers: '能力预设', superpowersHint: '预设描述实用的能力组合，不会伪装外部服务已经连接。',
   catalog: '连接器目录', catalogHint: '安装或授权适配器后，其工具才会提供给 Phoenix。',
