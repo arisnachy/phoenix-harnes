@@ -19,21 +19,25 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).toContain("case 'isolate':")
   })
 
-  it('runs updater code from the active runtime while anchoring update ownership to the live source checkout', () => {
+  it('runs the watcher from the active runtime so an isolated update becomes the new version baseline', () => {
     expect(supervisor).toContain("const activeUpdater = join(runtimeRoot, 'scripts', 'phoenix-auto-update.mjs')")
     expect(supervisor).toContain("const activeShim = join(runtimeRoot, 'scripts', 'phoenix-windows-command-shim.mjs')")
     expect(supervisor).toContain('cwd: runtimeRoot')
     expect(supervisor).toContain('PHOENIX_RUNTIME_ROOT: runtimeRoot')
-    expect(supervisor).toContain('PHOENIX_UPDATE_SOURCE_ROOT: root')
-    expect(updater).toContain("const configured = process.env.PHOENIX_UPDATE_SOURCE_ROOT?.trim()")
-    expect(updater).toContain("process.env.PHOENIX_UPDATE_SUPERVISED !== '1'")
-    expect(updater).toContain('sameGitRepository(runtimeRoot, sourceRoot)')
-    expect(updater).toContain('return sourceRoot')
   })
 
   it('clears the consumed prepared marker before relaunching an isolated runtime', () => {
     expect(supervisor).toContain('function clearPreparedRecord()')
     expect(supervisor).toContain('clearPreparedRecord()')
+  })
+
+  it('reanchors runtime-prepared candidates to the live HEAD before in-place activation', () => {
+    expect(supervisor).toContain('function reanchorPreparedForLiveActivation(target)')
+    expect(supervisor).toContain("const liveHead = gitValue(root, ['rev-parse', 'HEAD'])")
+    expect(supervisor).toContain('if (prepared.base === liveHead) return true')
+    expect(supervisor).toContain("mode: 'full'")
+    expect(supervisor).toContain('reanchoredFromBase:')
+    expect(supervisor).toContain('if (!reanchorPreparedForLiveActivation(requestedTarget))')
   })
 
   it('arms the prepared restart bridge after updater-driven incremental client builds', () => {
