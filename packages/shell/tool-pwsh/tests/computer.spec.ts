@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertComputerActionAllowed,
+  computerActionNeedsApproval,
   computerModeForSandbox,
   runWindowsComputerAction,
   shouldCaptureAfterAction,
@@ -24,6 +25,14 @@ describe('Computer Use permissions', () => {
     expect(() => assertComputerActionAllowed('observe', 'windows')).not.toThrow()
     expect(() => assertComputerActionAllowed('interact', 'type')).not.toThrow()
   })
+
+  it('treats Full Access as no-prompt desktop authority', () => {
+    expect(computerActionNeedsApproval('danger-full-access', 'browser_open')).toBe(false)
+    expect(computerActionNeedsApproval('danger-full-access', 'click')).toBe(false)
+    expect(computerActionNeedsApproval('danger-full-access', 'type')).toBe(false)
+    expect(computerActionNeedsApproval('workspace-write', 'click')).toBe(true)
+    expect(computerActionNeedsApproval('read-only', 'screenshot')).toBe(false)
+  })
 })
 
 describe('Computer Use argument contract', () => {
@@ -36,6 +45,8 @@ describe('Computer Use argument contract', () => {
     expect(() => validateComputerArgs({ action: 'windows' })).not.toThrow()
     expect(() => validateComputerArgs({ action: 'focus' })).toThrow(/target/i)
     expect(() => validateComputerArgs({ action: 'focus', target: '7-Zip' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_open', url: 'https://example.com' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_open', url: '' })).toThrow(/url/i)
   })
 
   it('keeps model text and window selectors out of the PowerShell command line', () => {
@@ -75,8 +86,19 @@ describe('Computer Use argument contract', () => {
     expect(shouldCaptureAfterAction('key')).toBe(true)
     expect(shouldCaptureAfterAction('scroll')).toBe(true)
     expect(shouldCaptureAfterAction('focus')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_open')).toBe(true)
     expect(shouldCaptureAfterAction('move')).toBe(false)
     expect(shouldCaptureAfterAction('windows')).toBe(false)
+  })
+
+  it('keeps embedded-browser URLs out of argv and routes them through the fixed driver', () => {
+    const invocation = windowsComputerInvocation({ action: 'browser_open', url: 'https://example.com/path?q=phoenix' })
+    expect(invocation.argv.join(' ')).not.toContain('https://example.com')
+    expect(invocation.env.PHX_URL).toBe('https://example.com/path?q=phoenix')
+    expect(invocation.stdin).toContain('WM_COPYDATA')
+    expect(invocation.stdin).toContain('OpenPhoenixBrowser')
+    expect(invocation.stdin).toContain('$env:PHX_URL')
+    expect(invocation.stdin).not.toContain("KeyCombo('CTRL+L')")
   })
 
   it('rejects key strings outside the closed combo grammar', () => {
