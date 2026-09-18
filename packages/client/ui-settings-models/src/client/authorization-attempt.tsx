@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
@@ -52,11 +52,11 @@ export function useAuthorizationAttempt(
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
 
-  const closeReservedPopup = (): void => {
+  const closeReservedPopup = useCallback((): void => {
     const popup = popupRef.current
     popupRef.current = null
     if (popup !== null && !popup.closed) popup.close()
-  }
+  }, [])
 
   useEffect(() => {
     if (api === undefined || attempt?.status !== 'pending') return
@@ -107,7 +107,7 @@ export function useAuthorizationAttempt(
       })
     }, 650)
     return () => { stale = true; window.clearTimeout(timer) }
-  }, [api, attempt, onAuthorized])
+  }, [api, attempt, onAuthorized, closeReservedPopup])
 
   const begin = (key: string, method = 'oauth'): void => {
     if (api === undefined) return
