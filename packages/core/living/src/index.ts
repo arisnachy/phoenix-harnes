@@ -11,6 +11,7 @@ export type {
   LivingCreationProvider, LivingCreationSnapshot, LivingIntegrationLevel, LivingJson, LivingState,
 } from './types.ts'
 
+/** Stable branded identity of one Phoenix living creation. */
 export type LivingCreationId = LivingCreationIdType
 
 /**
@@ -25,10 +26,14 @@ export function LivingCreationId(value: string): LivingCreationId {
 const LEVELS: readonly LivingIntegrationLevel[] = ['static', 'connected', 'reactive', 'controllable', 'inhabited']
 
 
+/** Wire protocol identifier for Phoenix's built-in living runtime bridge. */
 export const LIVING_CONTROL_PROTOCOL = 'phoenix-living-http-v1' as const
+/** Default loopback host for the built-in living runtime bridge. */
 export const DEFAULT_LIVING_CONTROL_HOST = '127.0.0.1'
+/** Default TCP port for the built-in living runtime bridge. */
 export const DEFAULT_LIVING_CONTROL_PORT = 32145
 
+/** Authenticated transport descriptor persisted with a non-static living creation. */
 export interface LivingControlDescriptor {
   readonly protocol: typeof LIVING_CONTROL_PROTOCOL
   readonly endpoint: string
@@ -48,13 +53,19 @@ function livingControlPort(): number {
 /**
  * Default owner-local endpoint used by the built-in living control bridge.
  * Deployments can override host/port through PHOENIX_LIVING_CONTROL_HOST/PORT.
+ * @returns Fully qualified base endpoint for living runtime control.
  */
 export function defaultLivingControlEndpoint(): string {
   const host = process.env.PHOENIX_LIVING_CONTROL_HOST?.trim() || DEFAULT_LIVING_CONTROL_HOST
   return `http://${host}:${livingControlPort()}/v1/living`
 }
 
-/** Encode one scoped connector descriptor into the manifest's domain-neutral resources list. */
+/**
+ * Encode one scoped connector descriptor into the manifest's domain-neutral resources list.
+ * @param endpoint - HTTP(S) base endpoint exposed by the owning living registry.
+ * @param token - Per-creation bearer secret used to authenticate a generated runtime.
+ * @returns Canonical phoenix-control resource URI suitable for the manifest resources list.
+ */
 export function createLivingControlResource(endpoint: string, token: string): string {
   const target = new URL(endpoint)
   if (target.protocol !== 'http:' && target.protocol !== 'https:') {
@@ -69,7 +80,11 @@ export function createLivingControlResource(endpoint: string, token: string): st
   return resource.toString()
 }
 
-/** Parse one Phoenix control resource; unrelated resources return undefined. */
+/**
+ * Parse one Phoenix control resource; unrelated resources return undefined.
+ * @param resource - Manifest resource candidate to inspect.
+ * @returns Parsed control descriptor, or undefined when the resource belongs to another scheme.
+ */
 export function parseLivingControlResource(resource: string): LivingControlDescriptor | undefined {
   let parsed: URL
   try {
@@ -91,7 +106,11 @@ export function parseLivingControlResource(resource: string): LivingControlDescr
   return { protocol: LIVING_CONTROL_PROTOCOL, endpoint: target.toString().replace(/\/$/, ''), token }
 }
 
-/** Return the single scoped control link carried by a creation manifest, if any. */
+/**
+ * Return the single scoped control link carried by a creation manifest, if any.
+ * @param manifest - Creation manifest whose resources may contain a Phoenix control link.
+ * @returns The unique control descriptor, or undefined for a creation without one.
+ */
 export function livingControlForManifest(manifest: LivingCreationManifest): LivingControlDescriptor | undefined {
   let found: LivingControlDescriptor | undefined
   for (const resource of manifest.resources) {
