@@ -1,5 +1,6 @@
 import type {
   McpRegistryCandidate,
+  McpRegistryIcon,
   McpRegistryPackage,
   McpRegistrySearchRequest,
   McpRegistrySearchSnapshot,
@@ -38,6 +39,41 @@ function safeHttpsUrl(value: unknown): string | undefined {
   } catch {
     return undefined
   }
+}
+
+const ICON_MIME_TYPES = new Set<McpRegistryIcon['mimeType']>([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/svg+xml',
+  'image/webp',
+])
+
+function projectIcons(server: Record<string, unknown>): McpRegistryIcon[] {
+  if (!Array.isArray(server.icons)) return []
+  return server.icons.flatMap((value) => {
+    const item = record(value)
+    if (item === undefined) return []
+    const src = safeHttpsUrl(item.src)
+    if (src === undefined) return []
+    const rawMime = text(item.mimeType)?.toLowerCase()
+    const mimeType = rawMime !== undefined && ICON_MIME_TYPES.has(rawMime as McpRegistryIcon['mimeType'])
+      ? rawMime as McpRegistryIcon['mimeType']
+      : undefined
+    const sizes = Array.isArray(item.sizes)
+      ? item.sizes.flatMap((size) => {
+          const normalized = text(size)
+          return normalized !== undefined && (normalized === 'any' || /^\d+x\d+$/.test(normalized))
+            ? [normalized]
+            : []
+        })
+      : []
+    return [{
+      src,
+      ...(mimeType === undefined ? {} : { mimeType }),
+      ...(sizes.length === 0 ? {} : { sizes }),
+    }]
+  })
 }
 
 function transportOf(value: unknown): McpRegistryTransport | undefined {
@@ -83,6 +119,7 @@ function projectCandidate(value: unknown): McpRegistryCandidate | undefined {
   const version = text(server.version)
   if (name === undefined || description === undefined || version === undefined) return undefined
 
+  const icons = projectIcons(server)
   const packages = projectPackages(server)
   const remotes = Array.isArray(server.remotes) ? server.remotes : []
   const remoteTransports: McpRegistryTransport[] = []
@@ -114,6 +151,7 @@ function projectCandidate(value: unknown): McpRegistryCandidate | undefined {
     version,
     status: registryStatus(response),
     trust: 'registry-listed',
+    icons,
     transports,
     packages,
     ...(repositoryUrl === undefined ? {} : { repositoryUrl }),
