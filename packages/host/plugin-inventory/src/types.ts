@@ -31,6 +31,13 @@ export interface PluginInventorySnapshot {
 /** Supported transport labels projected from Official MCP Registry metadata. */
 export type McpRegistryTransport = 'stdio' | 'streamable-http' | 'sse'
 
+/** Sanitized display icon from one registry-listed MCP server. */
+export interface McpRegistryIcon {
+  readonly src: string
+  readonly mimeType?: 'image/png' | 'image/jpeg' | 'image/jpg' | 'image/svg+xml' | 'image/webp'
+  readonly sizes?: readonly string[]
+}
+
 /** Sanitized package locator from one registry-listed MCP server. */
 export interface McpRegistryPackage {
   readonly registryType: string
@@ -52,6 +59,7 @@ export interface McpRegistryCandidate {
   readonly version: string
   readonly status: 'active' | 'deprecated' | 'deleted' | 'unknown'
   readonly trust: 'registry-listed'
+  readonly icons: readonly McpRegistryIcon[]
   readonly transports: readonly McpRegistryTransport[]
   readonly packages: readonly McpRegistryPackage[]
   readonly repositoryUrl?: string
