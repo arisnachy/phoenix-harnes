@@ -10,6 +10,13 @@ import { Workspace, type WorkspaceCreateInput } from './workspace.ts'
 /** Monotone workspace-list arrival lifecycle. */
 export type WorkspaceListPhase = 'pending' | 'ready'
 
+/** Backoff used only until the first successful workspace baseline of a connection. */
+const INITIAL_BASELINE_RETRY_DELAYS_MS = [250, 750, 1500, 3000] as const
+
+function waitForBaselineRetry(delayMs: number): Promise<void> {
+  return new Promise(resolve => { setTimeout(resolve, delayMs) })
+}
+
 /** Immutable workspace-list snapshot. */
 export interface WorkspaceListSnapshot {
   items: readonly WorkspaceView[]
@@ -43,6 +50,8 @@ export class WorkspaceManager {
   private phase: WorkspaceListPhase = 'pending'
   private error: RpcError | null = null
   private inflight: Promise<void> | null = null
+  /** Cancels stale first-baseline retry loops across connection generations. */
+  private connectionHydrationGeneration = 0
   private refreshFrames: WorkspaceDelta[] | null = null
   /**
    * True once a frame or unary echo installed the archive set while a list
@@ -250,7 +259,29 @@ export class WorkspaceManager {
 
   /** Re-pull the baseline after each connection generation. */
   handleConnected(): void {
-    void this.refresh()
+    const generation = ++this.connectionHydrationGeneration
+    void this.hydrateInitialList(generation)
+  }
+
+  /** Stop pending first-baseline retries when the transport generation dies. */
+  handleDisconnected(): void {
+    this.connectionHydrationGeneration++
+  }
+
+  /**
+   * Recover a new page from a transient first workspace.list failure. After
+   * the first successful baseline, reconnect refreshes stay one-shot because
+   * the existing workspace projection is already usable.
+   */
+  private async hydrateInitialList(generation: number): Promise<void> {
+    await this.refresh()
+    if (generation !== this.connectionHydrationGeneration || this.phase === 'ready') return
+    for (const delayMs of INITIAL_BASELINE_RETRY_DELAYS_MS) {
+      await waitForBaselineRetry(delayMs)
+      if (generation !== this.connectionHydrationGeneration || this.phase === 'ready') return
+      await this.refresh()
+      if (generation !== this.connectionHydrationGeneration || this.phase === 'ready') return
+    }
   }
 
   /**
