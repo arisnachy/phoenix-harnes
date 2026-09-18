@@ -39,6 +39,29 @@ describe('WorkspaceManager', () => {
     expect(manager.getSnapshot().items.map(item => item.workspaceId)).toEqual(['old', 'new'])
   })
 
+  it('recovers a new page when the first workspace baselines fail transiently', async () => {
+    vi.useFakeTimers()
+    try {
+      const api = new FakeApiClient()
+      let attempts = 0
+      api.onWorkspaceList = () => Promise.resolve(
+        attempts++ < 2
+          ? err({ code: 'internal', message: 'workspace boot race', details: {} })
+          : ok({ items: [workspace('recovered')] as never[] }),
+      )
+      const manager = new WorkspaceManager(api)
+
+      manager.handleConnected()
+      await vi.runAllTimersAsync()
+
+      expect(api.callsOf('workspace.list')).toHaveLength(3)
+      expect(manager.getSnapshot()).toMatchObject({ phase: 'ready', state: 'idle' })
+      expect(manager.getSnapshot().items.map(item => item.workspaceId)).toEqual(['recovered'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('single-flights refreshes and exposes result and transport failures independently of readiness', async () => {
     const api = new FakeApiClient()
     const gate = deferred<Awaited<ReturnType<FakeApiClient['onWorkspaceList']>>>()
