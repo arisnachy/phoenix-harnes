@@ -16,12 +16,11 @@
  * remain session-free.
  *
  * PHOENIX HARDNESS self-protection is enabled by the launcher through
- * `PHOENIX_RUNTIME_ROOT`. While active, model-controlled capabilities never get
- * unconfined `danger-full-access`; it is reduced to `workspace-write`. A session
- * rooted at the live PHOENIX checkout or its durable data home is redirected to
- * the isolated `PHOENIX_EVOLUTION_ROOT` worktree when available, otherwise it
- * becomes read-only. This lets the model evolve PHOENIX without editing the
- * runtime that is currently executing it.
+ * `PHOENIX_RUNTIME_ROOT`. It protects the restricted modes: a workspace-write
+ * session rooted at the live PHOENIX checkout or durable data home is redirected
+ * to the isolated `PHOENIX_EVOLUTION_ROOT` worktree when available, otherwise it
+ * becomes read-only. A deliberate `danger-full-access` session is the explicit
+ * user-authorized opt-out: it is never silently clamped or redirected.
  *
  * @module @phoenix-ai/dsh-sandbox-policy
  */
@@ -79,6 +78,7 @@ function renderPolicyContext(policy: SandboxExecutionPolicy, evolutionRoot: stri
       throw new Error(`unreachable sandbox mode: ${String(mode)}`)
     }
   }
+  if (policy.mode === 'danger-full-access') return text
   if (process.env.PHOENIX_RUNTIME_ROOT?.trim().length === 0 || process.env.PHOENIX_RUNTIME_ROOT === undefined) return text
   const destination = evolutionRoot === undefined
     ? 'No isolated evolution worktree is currently available, so self-modification of the live runtime remains read-only.'
@@ -184,9 +184,9 @@ export class SandboxPolicyService extends Service {
   /**
    * Resolve the complete policy for one capability call. An approved explicit
    * mode outranks the session's last `sandbox/mode` event, which outranks the
-   * deployment default. HARDNESS protection then clamps the result: the live
-   * runtime/data roots are never writable through model-controlled capabilities,
-   * and unconfined access becomes workspace-confined while protection is active.
+   * deployment default. A deliberate danger-full-access result is returned
+   * unchanged. HARDNESS protection applies only to restricted modes, redirecting
+   * workspace-write away from the live runtime/data roots when necessary.
    * @param request - optional session and approved mode override.
    * @returns the fully resolved per-call mode and absolute workspace root.
    */
@@ -196,7 +196,9 @@ export class SandboxPolicyService extends Service {
     const requestedRoot = resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot)
     const sessionId = session === undefined ? {} : { sessionId: session.id }
 
-    if (this.phoenixRuntimeRoot === undefined || this.phoenixDataHome === undefined) {
+    if (requestedMode === 'danger-full-access'
+      || this.phoenixRuntimeRoot === undefined
+      || this.phoenixDataHome === undefined) {
       return { mode: requestedMode, workspaceRoot: requestedRoot, ...sessionId }
     }
 
@@ -209,8 +211,7 @@ export class SandboxPolicyService extends Service {
       return { mode: 'workspace-write', workspaceRoot: this.phoenixEvolutionRoot, ...sessionId }
     }
 
-    const mode = requestedMode === 'danger-full-access' ? 'workspace-write' : requestedMode
-    return { mode, workspaceRoot: requestedRoot, ...sessionId }
+    return { mode: requestedMode, workspaceRoot: requestedRoot, ...sessionId }
   }
 
   /**

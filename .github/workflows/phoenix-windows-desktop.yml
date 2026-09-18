@@ -43,6 +43,31 @@ jobs:
           $source = Get-Content installer/windows/bootstrap-runtime.ps1 -Raw
           [void][scriptblock]::Create($source)
 
+      - name: Verify managed runtime update contract
+        shell: pwsh
+        run: |
+          $bootstrap = Get-Content installer/windows/bootstrap-runtime.ps1 -Raw
+          $program = Get-Content apps/desktop-windows/Program.cs -Raw
+
+          if (-not $bootstrap.Contains('Stop-ExistingPhoenixListener')) {
+            throw 'Desktop bootstrap must retire a stale Phoenix listener before synchronizing stable'
+          }
+          if (-not $bootstrap.Contains('phoenix-managed-update.mjs')) {
+            throw 'Desktop bootstrap must use the validated managed stable updater'
+          }
+          if (-not $program.Contains('phoenix-windows-supervisor.mjs')) {
+            throw 'Desktop launcher must start the supervised Windows runtime'
+          }
+          if ($program.Contains('Existing runtime at 127.0.0.1:3080 is ready.')) {
+            throw 'Desktop launcher must never adopt an arbitrary existing listener as current Phoenix'
+          }
+
+      - name: Run desktop contract tests
+        shell: pwsh
+        run: |
+          dotnet run --project apps/desktop-windows/Phoenix.Desktop.Tests/Phoenix.Desktop.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Prepare Phoenix icon
         shell: pwsh
         run: |
@@ -81,8 +106,8 @@ jobs:
           if (-not $iss.Contains('recursesubdirs')) {
             throw 'Installer does not recursively include WebView2 runtime payload'
           }
-          if (-not $iss.Contains('CloseApplications=force')) {
-            throw 'Installer must force-close a running Phoenix process before replacing locked desktop files'
+          if (-not ($iss -match '(?m)^CloseApplications=force\s*$')) {
+            throw 'Installer must force-close a running Phoenix before replacing Phoenix.exe/WebView2Loader.dll'
           }
           if ($iss -match '(?m)^Filename:\s*"powershell\.exe".*bootstrap-runtime\.ps1') {
             throw 'Installer must not hide first-run runtime bootstrap; Phoenix.exe owns visible bootstrap now'
