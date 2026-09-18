@@ -305,7 +305,7 @@ function accountPresentation(entry: Entry): {
   name: string
   description?: string
   logoUrl?: string
-  technical: string
+  technical?: string
 } {
   const definition = catalogDefinitionForText(
     `${entry.label} ${entry.key} ${entry.telemetry?.provider ?? ''}`,
@@ -316,7 +316,7 @@ function accountPresentation(entry: Entry): {
       name: definition.name,
       description: definition.description,
       ...(definition.logoUrl === undefined ? {} : { logoUrl: definition.logoUrl }),
-      technical,
+      ...(normalize(definition.name) === normalize(technical) ? {} : { technical }),
     }
   }
   const name = technical
@@ -584,7 +584,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
 
   useEffect(() => {
     const search = query.trim()
-    if (mcpRegistry === undefined || filter === 'connected' || search.length < 2) {
+    if (mcpRegistry === undefined || search.length < 2) {
       setRegistrySnapshot(undefined)
       setRegistryFailure(false)
       setRegistryBusy(false)
@@ -612,7 +612,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       stale = true
       window.clearTimeout(timer)
     }
-  }, [filter, mcpRegistry, query])
+  }, [mcpRegistry, query])
 
   const liveConnectors = useMemo(
     () => entries.flatMap(entry => entry.telemetry?.connectors ?? []),
@@ -769,7 +769,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                     </div>
                     <div className={connectorStyles['connectorIdentity']}>
                       <span className={connectorStyles['connectorName']}>{presentation.name}</span>
-                      <span className={connectorStyles['connectorCategory']}>{presentation.technical}</span>
+                      {presentation.technical === undefined ? null : <span className={connectorStyles['connectorCategory']}>{presentation.technical}</span>}
                     </div>
                   </div>
                   {presentation.description === undefined ? null : (
@@ -842,7 +842,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
         )}
       </section>
 
-      {mcpRegistry === undefined || filter === 'connected' || query.trim().length < 2 ? null : (
+      {mcpRegistry === undefined || query.trim().length < 2 ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('officialRegistry')}>
           <div className={hubStyles['heading']}>
             <h3>{connectorT('officialRegistry')}</h3>
