@@ -434,8 +434,50 @@ function matchesSpecifier(patterns: readonly RegExp[], specifier: string): boole
   return patterns.some(pattern => pattern.test(specifier))
 }
 
+interface CachedCssCompilation {
+  readonly source: Buffer
+  readonly code: string
+  readonly classMap?: Readonly<Record<string, string>>
+}
+
+const cssCompilationCache = new Map<string, CachedCssCompilation>()
+
+/**
+ * Compile one physical stylesheet at most once per unchanged file content in a
+ * build process. Global and ?inline imports share the same plain-CSS result.
+ */
+function compileClientCss(fileId: string, modules: boolean): CachedCssCompilation {
+  const source = readFileSync(fileId)
+  const cacheKey = `${modules ? 'module' : 'plain'}:${fileId}`
+  const cached = cssCompilationCache.get(cacheKey)
+  if (cached !== undefined && cached.source.equals(source)) return cached
+
+  const result = transform({
+    filename: fileId,
+    code: source,
+    ...(modules ? { cssModules: { pattern: '[hash]_[local]' } } : {}),
+    minify: true,
+  })
+  let classMap: Record<string, string> | undefined
+  if (modules) {
+    classMap = {}
+    const exportEntries = Object.entries(result.exports ?? {})
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    for (const [local, exp] of exportEntries) classMap[local] = exp.name
+  }
+
+  const compiled: CachedCssCompilation = {
+    source,
+    code: result.code.toString(),
+    ...(classMap === undefined ? {} : { classMap }),
+  }
+  cssCompilationCache.set(cacheKey, compiled)
+  return compiled
+}
+
 function clientConfig(id: string, entry: string): UserConfig {
-  const isRequested = (specifier: string): boolean => clientExternals(id).has(specifier)
+  const requested = clientExternals(id)
+  const isRequested = (specifier: string): boolean => requested.has(specifier)
   return {
     name: `${id}/client`,
     entry: { client: entry },
@@ -477,79 +519,62 @@ function clientConfig(id: string, entry: string): UserConfig {
       'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
     },
     plugins: [{
-      // Bundle purity gate (build-time mirror of the module-edge rules): the
-      // baseline and package-specific requests stay external, inline-safe wire layers
-      // inline, and every other @phoenix-ai value import is a build error — a
-      // cross-plugin value import either inlines a duplicate runtime instance
-      // or requires a specifier the module table cannot answer for this package.
-      // Cross-plugin collaboration goes through cordis services instead.
-      name: 'dsh-client-bundle-purity',
-      resolveId(source: string) {
-        if (!source.startsWith('@phoenix-ai/')) return null
-        if (isRequested(source)) return null // requested module-table row: external wins
-        if (VENDORED_LIBRARY.test(source)) return null // vendored library: inline, no shared identity
-        if (INLINE_SAFE.test(source) || GENERATED_REMOTE.test(source)) return null // wire contribution: inline is the point
-        throw new Error(
-          `client bundle purity: "${source}" is not in the default client externals or ${id}'s dsh.client.external, an inline-safe wire layer, or a generated /remote contribution — `
-          + 'cross-plugin value imports are forbidden; declare a non-default module request or collaborate through cordis services '
-          + '(type-only imports are erased and never reach this gate)',
-        )
+      // One pre-routing hook owns the decisions Phoenix already knows. This
+      // avoids making Rolldown dispatch the same import through four separate
+      // JavaScript resolveId hooks and bypasses tsdown:deps for requested
+      // module-table rows that are unconditionally external.
+      name: 'dsh-client-bundle-routing',
+      resolveId: {
+        order: 'pre' as const,
+        handler(source: string, importer: string | undefined) {
+          if (source.endsWith('.module.css')) {
+            const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
+            return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+          }
+          if (source.endsWith(`.css${INLINE_CSS_QUERY}`)) {
+            const stylesheet = source.slice(0, -INLINE_CSS_QUERY.length)
+            const abs = importer !== undefined ? sourceAssetPath(stylesheet, importer) : stylesheet
+            return INLINE_CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+          }
+          if (source.endsWith('.css')) {
+            const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
+            return GLOBAL_CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+          }
+
+          // These are guaranteed loader module-table rows. Resolve them here
+          // instead of paying tsdown:deps to rediscover the same decision.
+          if (isRequested(source)) return { id: source, external: true }
+
+          if (!source.startsWith('@phoenix-ai/')) return null
+          if (VENDORED_LIBRARY.test(source)) return null
+          if (INLINE_SAFE.test(source) || GENERATED_REMOTE.test(source)) return null
+          throw new Error(
+            `client bundle purity: "${source}" is not in the default client externals or ${id}'s dsh.client.external, an inline-safe wire layer, or a generated /remote contribution — `
+            + 'cross-plugin value imports are forbidden; declare a non-default module request or collaborate through cordis services '
+            + '(type-only imports are erased and never reach this gate)',
+          )
+        },
       },
-    }, {
-      name: 'dsh-css-modules-inline',
-      resolveId(source: string, importer: string | undefined) {
-        if (!source.endsWith('.module.css')) return null
-        const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
-        return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
-      },
-      async load(virtualId: string) {
-        if (!virtualId.startsWith(CSS_VIRTUAL_PREFIX)) return null
-        const fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
-        // The virtual id otherwise hides the physical stylesheet from Rolldown's watch graph.
+      load(virtualId: string) {
+        let fileId: string
+        let kind: 'module' | 'text' | 'global'
+        if (virtualId.startsWith(CSS_VIRTUAL_PREFIX)) {
+          fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+          kind = 'module'
+        } else if (virtualId.startsWith(INLINE_CSS_VIRTUAL_PREFIX)) {
+          fileId = virtualId.slice(INLINE_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+          kind = 'text'
+        } else if (virtualId.startsWith(GLOBAL_CSS_VIRTUAL_PREFIX)) {
+          fileId = virtualId.slice(GLOBAL_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+          kind = 'global'
+        } else {
+          return null
+        }
+
         this.addWatchFile(fileId)
-        const source = await readFile(fileId)
-        const { code, exports: cssExports } = transform({
-          filename: fileId,
-          code: source,
-          cssModules: { pattern: '[hash]_[local]' },
-          minify: true,
-        })
-        const classMap: Record<string, string> = {}
-        const exportEntries = Object.entries(cssExports ?? {})
-          .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-        for (const [local, exp] of exportEntries) classMap[local] = exp.name
-        return styleInjectionModule(id, fileId, code.toString(), classMap)
-      },
-    }, {
-      name: 'dsh-css-text-inline',
-      resolveId(source: string, importer: string | undefined) {
-        if (!source.endsWith(`.css${INLINE_CSS_QUERY}`)) return null
-        const stylesheet = source.slice(0, -INLINE_CSS_QUERY.length)
-        const abs = importer !== undefined ? sourceAssetPath(stylesheet, importer) : stylesheet
-        return INLINE_CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
-      },
-      async load(virtualId: string) {
-        if (!virtualId.startsWith(INLINE_CSS_VIRTUAL_PREFIX)) return null
-        const fileId = virtualId.slice(INLINE_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
-        this.addWatchFile(fileId)
-        const source = await readFile(fileId)
-        const { code } = transform({ filename: fileId, code: source, minify: true })
-        return `export default ${JSON.stringify(code.toString())};`
-      },
-    }, {
-      name: 'dsh-css-global-inline',
-      resolveId(source: string, importer: string | undefined) {
-        if (!source.endsWith('.css') || source.endsWith('.module.css')) return null
-        const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
-        return GLOBAL_CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
-      },
-      async load(virtualId: string) {
-        if (!virtualId.startsWith(GLOBAL_CSS_VIRTUAL_PREFIX)) return null
-        const fileId = virtualId.slice(GLOBAL_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
-        this.addWatchFile(fileId)
-        const source = await readFile(fileId)
-        const { code } = transform({ filename: fileId, code: source, minify: true })
-        return styleInjectionModule(id, fileId, code.toString())
+        const compiled = compileClientCss(fileId, kind === 'module')
+        if (kind === 'text') return `export default ${JSON.stringify(compiled.code)};`
+        return styleInjectionModule(id, fileId, compiled.code, compiled.classMap)
       },
     }],
     outputOptions: {
