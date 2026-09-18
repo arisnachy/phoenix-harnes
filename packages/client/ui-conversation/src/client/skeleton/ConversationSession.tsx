@@ -165,6 +165,31 @@ export function ConversationSessionHeader({
 }
 
 /**
+ * Keep draft persistence on its own null-rendering subscriber. Draft updates
+ * are intentionally hot (every keystroke); letting those subscriptions live
+ * in ConversationSession made the entire transcript view re-render for each
+ * character even though the view itself does not consume the draft.
+ */
+function DraftMirrorBridge({
+  useInput, inputActions, useStore, actions, bindDraftMirror,
+}: Pick<
+  ConversationSessionProps,
+  'useInput' | 'inputActions' | 'useStore' | 'actions' | 'bindDraftMirror'
+>) {
+  const inputDraft = useInput(s => s.draft)
+  const storedDraft = useStore(s => s.draft)
+
+  useEffect(() => {
+    if (inputDraft === '' && storedDraft !== '') inputActions.setDraft(storedDraft)
+    const unmirror = bindDraftMirror(actions.setDraft)
+    return () => { unmirror() }
+    // Mount-only bridge setup: later draft writes travel through the mirror.
+  }, [inputActions])
+
+  return null
+}
+
+/**
  * Renders the active Session view inside the resident scrollport and keeps
  * the input draft mirrored while blank Hero chrome is visible.
  * @param props - Strict Session input/store, view ledger, and render shares.
@@ -180,30 +205,32 @@ export function ConversationSession({
   const active = resolveActiveView(tabs, selectedId)
   const composerPhase = useSession(s => s.composerPhase)
   const blank = useSession(s => s.blank)
-  const inputState = useInput(s => s)
-  const storedDraft = useStore(s => s.draft)
   // `?? null`: persisted snapshots from before the inspect field rehydrate without it.
   const inspect = useStore(s => s.inspect ?? null)
-
-  useEffect(() => {
-    if (inputState.draft === '' && storedDraft !== '') inputActions.setDraft(storedDraft)
-    const unmirror = bindDraftMirror(actions.setDraft)
-    return () => { unmirror() }
-    // Mount-only (deps pinned to inputActions): later store writes come from
-    // the machine mirror, not this seed effect.
-  }, [inputActions])
 
   useEffect(() => () => {
     releaseSessionImages(sessionId)
   }, [releaseSessionImages, sessionId])
 
-  if (blank && composerPhase === 'blank') return null
   return (
-    <div className={css.viewArea}>
-      {active !== undefined && renderSlot('conversation.view', {
-        inspect,
-        onInspectDone: () => { actions.setInspect(null) },
-      }, { only: active.id })}
-    </div>
+    <>
+      <DraftMirrorBridge
+        useInput={useInput}
+        inputActions={inputActions}
+        useStore={useStore}
+        actions={actions}
+        bindDraftMirror={bindDraftMirror}
+      />
+      {blank && composerPhase === 'blank'
+        ? null
+        : (
+          <div className={css.viewArea}>
+            {active !== undefined && renderSlot('conversation.view', {
+              inspect,
+              onInspectDone: () => { actions.setInspect(null) },
+            }, { only: active.id })}
+          </div>
+        )}
+    </>
   )
 }
