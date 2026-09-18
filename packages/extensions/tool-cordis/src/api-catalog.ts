@@ -1172,6 +1172,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Service Definition for every creation Phoenix keeps operationally connected. Implementations persist manifests separately from ephemeral provider attachments.',
     methods: [
       {
+        signature: 'controlEndpoint(): Promise<string>',
+        description: 'Resolve the endpoint generated runtimes should use for the universal control transport. Providers with dynamic binding may override this; the default follows Phoenix\'s host/port environment.',
+        parameters: [],
+        returns: 'Fully qualified base endpoint for living runtime control.',
+      },
+      {
         signature: 'abstract remember(manifest: LivingCreationManifest): Promise<LivingCreationSnapshot>',
         description: 'Persist or replace one self-describing creation manifest.',
         parameters: [{ name: 'manifest', description: 'Durable identity and declared capabilities to remember.' }],
