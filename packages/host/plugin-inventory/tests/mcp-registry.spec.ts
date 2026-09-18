@@ -187,7 +187,11 @@ describe('Official MCP Registry proxy', () => {
   })
 
   it('normalizes limits, validates requests, and serves a fresh cache without another fetch', async () => {
-    const fetchMock = vi.fn(async () => response([activeServer('cached')]))
+    const requestedUrls: string[] = []
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      requestedUrls.push(String(input))
+      return response([activeServer('cached')])
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(searchOfficialMcpRegistry({ query: 'x' })).rejects.toThrow('at least 2 characters')
@@ -199,10 +203,10 @@ describe('Official MCP Registry proxy', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     await searchOfficialMcpRegistry({ query: 'low-limit-fixture', limit: -5 })
-    expect(new URL(String(fetchMock.mock.calls.at(-1)?.[0])).searchParams.get('limit')).toBe('1')
+    expect(new URL(requestedUrls.at(-1)!).searchParams.get('limit')).toBe('1')
 
     await searchOfficialMcpRegistry({ query: 'high-limit-fixture', limit: 200 })
-    expect(new URL(String(fetchMock.mock.calls.at(-1)?.[0])).searchParams.get('limit')).toBe('20')
+    expect(new URL(requestedUrls.at(-1)!).searchParams.get('limit')).toBe('20')
   })
 
   it('returns a stale cached snapshot during a short registry outage, then fails after the stale horizon', async () => {
