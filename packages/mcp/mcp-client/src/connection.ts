@@ -298,9 +298,19 @@ export function startConnection(
    * @param startup - Whether this is the plugin's activation attempt.
    */
   async function connectGeneration(startup: boolean): Promise<void> {
+    // Advertise the stable MCP Apps extension so servers may expose their
+    // ui://-backed visual tools. Keeping this on the server connection is
+    // separate from the iframe Apps handshake handled by the Web client.
+    const capabilities = {
+      extensions: {
+        'io.modelcontextprotocol/ui': {
+          mimeTypes: ['text/html;profile=mcp-app'],
+        },
+      },
+    }
     const generation = new Client(
-      { name: 'dsh-mcp-client', version: '0.0.1' },
-      { capabilities: {} },
+      { name: 'phoenix-mcp-client', version: '0.0.1' },
+      { capabilities },
     )
     const closed: PromiseWithResolvers<void> = Promise.withResolvers()
     let attemptSettled = false
