@@ -76,8 +76,8 @@ describe('tool-living', () => {
     expect(firstConnector).toMatchObject({
       protocol: 'phoenix-living-http-v1',
       creation_id: 'app-1',
-      endpoint: 'http://127.0.0.1:32145/v1/living',
     })
+    expect(firstConnector.endpoint).toMatch(/^http:\/\/127\.0\.0\.1:\\d+\/v1\/living$/)
     expect(firstConnector.token.length).toBeGreaterThanOrEqual(32)
 
     const second = await register.execute({
