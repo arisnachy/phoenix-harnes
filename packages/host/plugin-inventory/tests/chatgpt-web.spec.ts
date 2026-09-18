@@ -118,6 +118,43 @@ describe('ChatGPT Web persisted integration', () => {
     expect(bridge.start).toHaveBeenCalledTimes(1)
   })
 
+  it('clears a pending ON state when the bridge stays unhealthy after setup completes', async () => {
+    const path = await enabledPath()
+    let configured = false
+    const bridge = {
+      start: vi.fn(async () => ({
+        status: 'starting' as const,
+        baseUrl: 'http://127.0.0.1:17841/v1',
+        detail: 'starting',
+      })),
+      status: vi.fn(async () => ({
+        status: 'starting' as const,
+        baseUrl: 'http://127.0.0.1:17841/v1',
+        detail: 'unreachable',
+      })),
+      stop: vi.fn(async () => ({ status: 'stopped' as const })),
+    }
+    const integration = new ChatGptWebIntegration({
+      bridge,
+      enabledPath: path,
+      configured: false,
+      baseUrl: 'http://127.0.0.1:17841/v1',
+      openSetup: () => true,
+      resolve: () => ({
+        bridge,
+        configured,
+        baseUrl: 'http://127.0.0.1:17841/v1',
+      }),
+      wait: async () => undefined,
+    })
+
+    await expect(integration.enable()).resolves.toMatchObject({ enabled: true, phase: 'needs-setup' })
+    configured = true
+    await expect(integration.enable()).resolves.toMatchObject({ enabled: false, phase: 'unavailable' })
+    expect(bridge.stop).toHaveBeenCalledTimes(1)
+    await expect(readFile(path, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('persists ON only after the loopback health check succeeds', async () => {
     const path = await enabledPath()
     const bridge = {
