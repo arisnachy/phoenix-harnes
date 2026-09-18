@@ -90,10 +90,40 @@ function node(root, args, options = {}) {
   return command(process.execPath, args, { cwd: root, ...options })
 }
 
-function repositoryRoot() {
-  const result = command('git', ['rev-parse', '--show-toplevel'], { allowFailure: true })
+function repositoryRootAt(cwd) {
+  const result = command('git', ['rev-parse', '--show-toplevel'], { cwd, allowFailure: true })
   if (!result.ok || result.stdout.length === 0) return undefined
   return resolve(result.stdout)
+}
+
+function sameGitRepository(left, right) {
+  const leftCommon = gitCommonDirectory(left)
+  const rightCommon = gitCommonDirectory(right)
+  if (leftCommon === undefined || rightCommon === undefined) return false
+  return process.platform === 'win32'
+    ? leftCommon.toLowerCase() === rightCommon.toLowerCase()
+    : leftCommon === rightCommon
+}
+
+function repositoryRoot() {
+  const runtimeRoot = repositoryRootAt(process.cwd())
+  const configured = process.env.PHOENIX_UPDATE_SOURCE_ROOT?.trim()
+  if (
+    process.env.PHOENIX_UPDATE_SUPERVISED !== '1'
+    || configured === undefined
+    || configured.length === 0
+  ) {
+    return runtimeRoot
+  }
+
+  const sourceRoot = repositoryRootAt(resolve(configured))
+  if (sourceRoot === undefined) {
+    throw new Error('supervised update source root is not a Git checkout')
+  }
+  if (runtimeRoot !== undefined && !sameGitRepository(runtimeRoot, sourceRoot)) {
+    throw new Error('supervised update source root belongs to another repository')
+  }
+  return sourceRoot
 }
 
 function gitDirectory(root) {
