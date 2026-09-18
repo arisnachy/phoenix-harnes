@@ -1,6 +1,6 @@
 /** PHOENIX HARDNESS self-protection tests for the shared sandbox policy. */
 
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -33,6 +33,14 @@ function activeSession(id: string, cwd: string): Session {
     createdAt: 0,
     cwd,
   })
+}
+
+function expectedRoot(path: string): string {
+  try {
+    return resolve(realpathSync.native(path))
+  } catch {
+    return resolve(path)
+  }
 }
 
 async function mounted(defaultMode: 'read-only' | 'workspace-write' | 'danger-full-access' = 'danger-full-access'): Promise<Context> {
@@ -79,7 +87,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted()
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('normal', layout.project) })).toEqual({
         mode: 'danger-full-access',
-        workspaceRoot: resolve(layout.project),
+        workspaceRoot: expectedRoot(layout.project),
         sessionId: 'normal',
       })
     } finally {
@@ -96,7 +104,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       setSandboxMode(active, 'danger-full-access')
       expect(ctx.sandboxPolicy.resolve({ session: active })).toEqual({
         mode: 'danger-full-access',
-        workspaceRoot: resolve(layout.runtime),
+        workspaceRoot: expectedRoot(layout.runtime),
         sessionId: 'full-access-live-runtime',
       })
     } finally {
@@ -111,7 +119,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted()
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('project', layout.project) })).toEqual({
         mode: 'danger-full-access',
-        workspaceRoot: resolve(layout.project),
+        workspaceRoot: expectedRoot(layout.project),
         sessionId: 'project',
       })
     } finally {
@@ -126,7 +134,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted('workspace-write')
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('self-edit', layout.runtime) })).toEqual({
         mode: 'workspace-write',
-        workspaceRoot: resolve(layout.evolution),
+        workspaceRoot: expectedRoot(layout.evolution),
         sessionId: 'self-edit',
       })
     } finally {
@@ -141,7 +149,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted('workspace-write')
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('data-home', layout.data) })).toEqual({
         mode: 'workspace-write',
-        workspaceRoot: resolve(layout.evolution),
+        workspaceRoot: expectedRoot(layout.evolution),
         sessionId: 'data-home',
       })
     } finally {
@@ -156,7 +164,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted('workspace-write')
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('no-evolution', layout.runtime) })).toEqual({
         mode: 'read-only',
-        workspaceRoot: resolve(layout.runtime),
+        workspaceRoot: expectedRoot(layout.runtime),
         sessionId: 'no-evolution',
       })
     } finally {
@@ -184,7 +192,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const ctx = await mounted('read-only')
       expect(ctx.sandboxPolicy.resolve({ session: activeSession('readonly', layout.runtime) })).toEqual({
         mode: 'read-only',
-        workspaceRoot: resolve(layout.runtime),
+        workspaceRoot: expectedRoot(layout.runtime),
         sessionId: 'readonly',
       })
     } finally {
@@ -214,7 +222,7 @@ describe('PHOENIX HARDNESS sandbox policy', () => {
       const assembly = await ctx.systemPrompt.assemble({ agent: agentFor(activeSession('prompt', layout.runtime)) })
       const policy = assembly.contexts.find(context => context.name === 'sandbox:policy')?.text
       expect(policy).toContain('PHOENIX HARDNESS runtime protection is active')
-      expect(policy).toContain(resolve(layout.evolution))
+      expect(policy).toContain(expectedRoot(layout.evolution))
       expect(policy).toContain('isolated evolution worktree')
     } finally {
       rmSync(layout.root, { recursive: true, force: true })

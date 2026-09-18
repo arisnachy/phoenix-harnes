@@ -1,3 +1,5 @@
+using System.IO.Pipes;
+using System.Text;
 using Phoenix.Desktop;
 
 var failures = new List<string>();
@@ -42,7 +44,46 @@ Equal(null, close.Url, "close command has no url", failures);
 
 False(BrowserCommand.TryParse("{not-json}", out _), "malformed json rejected", failures);
 False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"javascript:alert(1)\"}", out _), "unsafe open command rejected", failures);
+
 False(BrowserCommand.TryParse("{\"type\":\"unknown\"}", out _), "unknown command rejected", failures);
+
+// The model/runtime must control the embedded WebView through a direct current-user named pipe.
+// This prevents browser_open from falling back to global Ctrl+L/type/Enter input.
+var controlDescriptorPath = Path.Combine(Path.GetTempPath(), $"phoenix-desktop-control-{Guid.NewGuid():N}.json");
+BrowserCommand? receivedControlCommand = null;
+using (var control = new DesktopBrowserControlServer(
+    command =>
+    {
+        receivedControlCommand = command;
+        return Task.CompletedTask;
+    },
+    controlDescriptorPath))
+{
+    var descriptorJson = await File.ReadAllTextAsync(controlDescriptorPath);
+    True(
+        DesktopBrowserControlDescriptor.TryParse(descriptorJson, out var descriptor),
+        "desktop control descriptor parses",
+        failures);
+    Equal(control.PipeName, descriptor.PipeName, "desktop control descriptor names live pipe", failures);
+    EqualInt(1, descriptor.Schema, "desktop control descriptor schema", failures);
+
+    using var client = new NamedPipeClientStream(
+        ".",
+        control.PipeName,
+        PipeDirection.InOut,
+        PipeOptions.Asynchronous);
+    await client.ConnectAsync(3_000);
+    using var writer = new StreamWriter(client, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+    using var reader = new StreamReader(client, Encoding.UTF8, leaveOpen: true);
+    await writer.WriteLineAsync("{\"type\":\"phoenix.browser.open\",\"url\":\"https://example.com\"}");
+    Equal("{\"ok\":true}", await reader.ReadLineAsync(), "desktop control acknowledges accepted command", failures);
+
+    for (var attempt = 0; attempt < 30 && receivedControlCommand is null; attempt++)
+        await Task.Delay(10);
+    Equal("phoenix.browser.open", receivedControlCommand?.Type, "desktop control dispatches browser command", failures);
+    Equal("https://example.com", receivedControlCommand?.Url, "desktop control preserves browser URL", failures);
+}
+False(File.Exists(controlDescriptorPath), "desktop control descriptor removed on dispose", failures);
 
 True(BrowserLayout.StartCollapsed, "embedded browser starts collapsed", failures);
 EqualInt(360, BrowserLayout.PreferredBrowserWidth(1100), "small window keeps compact browser", failures);
