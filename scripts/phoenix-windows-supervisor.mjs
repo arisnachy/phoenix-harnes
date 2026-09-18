@@ -164,6 +164,29 @@ function clearPreparedRecord() {
   }
 }
 
+function reanchorPreparedForLiveActivation(target) {
+  const path = preparedPath()
+  const prepared = readPreparedRecord()
+  const liveHead = gitValue(root, ['rev-parse', 'HEAD'])
+  if (path === undefined || prepared === undefined || liveHead === undefined) return false
+  if (prepared.target !== target) return false
+  if (preparedStageForTarget(target) === undefined) return false
+  if (prepared.base === liveHead) return true
+
+  writeFileSync(path, JSON.stringify({
+    ...prepared,
+    base: liveHead,
+    mode: 'full',
+    reanchoredFromBase: typeof prepared.base === 'string' ? prepared.base : null,
+    reanchoredAt: new Date().toISOString(),
+  }, undefined, 2) + '\n', 'utf8')
+  console.error(
+    `[PHOENIX UPDATE] prepared candidate was built from runtime base ${String(prepared.base ?? 'unknown').slice(0, 12)}; `
+    + `reanchored to live HEAD ${liveHead.slice(0, 12)} and forcing a full live build before activation.`,
+  )
+  return true
+}
+
 function activeRuntimePath() {
   return gitControlPath(ACTIVE_RUNTIME_FILE)
 }
@@ -475,7 +498,6 @@ function preflightBootConfiguration() {
     env: {
       ...hydratePhoenixEnvironment(process.env),
       PHOENIX_RUNTIME_ROOT: runtimeRoot,
-      PHOENIX_UPDATE_SOURCE_ROOT: root,
       PHOENIX_UPDATE_SUPERVISED: '1',
       PHOENIX_CONFIG_PREFLIGHT: '1',
       PHOENIX_AUTO_UPDATE: '0',
@@ -558,7 +580,6 @@ function startWatcher() {
   const watcherEnv = {
     ...process.env,
     PHOENIX_RUNTIME_ROOT: runtimeRoot,
-    PHOENIX_UPDATE_SOURCE_ROOT: root,
     PHOENIX_UPDATE_SUPERVISED: '1',
     ...(updateTemp === undefined || updateTemp.length === 0
       ? {}
@@ -793,6 +814,12 @@ while (true) {
         clearRestartRequest()
         console.error(`[PHOENIX UPDATE] isolated runtime activation failed safely: ${error instanceof Error ? error.message : String(error)}`)
       }
+      continue
+    }
+
+    if (!reanchorPreparedForLiveActivation(requestedTarget)) {
+      clearRestartRequest()
+      console.error('[PHOENIX UPDATE] prepared update no longer matches a verified staging candidate; refusing live activation and relaunching PHOENIX.')
       continue
     }
 
