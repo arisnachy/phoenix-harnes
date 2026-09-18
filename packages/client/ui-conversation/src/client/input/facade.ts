@@ -102,6 +102,16 @@ export class SessionInputShell implements SessionInput {
   private imageIds: readonly DraftAttachmentId[] = []
   /** One image-only send at a time: Enter during the Host round-trip is a no-op. */
   private imageSendInFlight = false
+  /**
+   * Browser-side optimistic projection of the ordinary prompt currently being
+   * admitted. It is published before reference serialization or Host RPC can
+   * yield, so the user's bubble can render in the same frame as Enter.
+   *
+   * On success the projection stays until the next send; Chat suppresses it
+   * as soon as the durable user/message arrives. Failures clear it immediately
+   * so the retained composer draft remains the only visible source of truth.
+   */
+  private pendingSubmit: { readonly seq: number; readonly text: string; readonly startedAt: number } | undefined
   private disposed = false
   /** Draft persistence mirror (chat store write; receives the clipboard projection, never display-only ranges). */
   private mirrorFn: ((text: string) => void) | undefined
@@ -392,6 +402,7 @@ export class SessionInputShell implements SessionInput {
   /** Teardown: abort any in-flight attempt and stop accepting async settlements. */
   dispose(): void {
     this.disposed = true
+    this.pendingSubmit = undefined
     this.run(this.core.dispatch({ type: 'release' }))
   }
 
@@ -455,6 +466,13 @@ export class SessionInputShell implements SessionInput {
    */
   private sinkSerialized(attempt: SubmitAttempt, draft: string, mode: InputSubmitMode): void {
     const imageIds = [...this.imageIds]
+    // The outer run() publishes after this effect returns, so ordinary text
+    // sends reach React before any async serializer or Host boundary.
+    this.pendingSubmit = {
+      seq: attempt.seq,
+      text: draft.trim(),
+      startedAt: Date.now(),
+    }
     const occurrences = this.core.state.occurrences
     if (occurrences.length === 0) {
       this.settleSubmit(attempt, this.deps.defaultSink(draft.trim(), imageIds, mode, attempt.signal), imageIds)
@@ -486,6 +504,7 @@ export class SessionInputShell implements SessionInput {
       (error: unknown) => {
         controller.abort()
         if (this.dead(attempt)) return
+        if (this.pendingSubmit?.seq === attempt.seq) this.pendingSubmit = undefined
         const message = error instanceof Error ? error.message : String(error)
         this.run(this.core.dispatch({ type: 'submit-settled', attempt, ok: false, message }))
       },
@@ -501,6 +520,9 @@ export class SessionInputShell implements SessionInput {
     pending.then(
       (outcome) => {
         if (this.dead(attempt)) return
+        if (outcome.kind !== 'success' && this.pendingSubmit?.seq === attempt.seq) {
+          this.pendingSubmit = undefined
+        }
         if (outcome.kind === 'success' && imageIds.length > 0) {
           const submitted = new Set(imageIds)
           this.imageIds = this.imageIds.filter(id => !submitted.has(id))
@@ -514,6 +536,7 @@ export class SessionInputShell implements SessionInput {
       },
       (error: unknown) => {
         if (this.dead(attempt)) return
+        if (this.pendingSubmit?.seq === attempt.seq) this.pendingSubmit = undefined
         this.run(this.core.dispatch({
           type: 'submit-settled',
           attempt,
@@ -590,7 +613,15 @@ export class SessionInputShell implements SessionInput {
 
   private compose(): InputState {
     const core = this.core.state
-    return { ...core, imageIds: this.imageIds, queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE }
+    const pending = this.pendingSubmit
+    return {
+      ...core,
+      imageIds: this.imageIds,
+      ...(pending === undefined ? {} : {
+        pendingSubmit: { text: pending.text, startedAt: pending.startedAt },
+      }),
+      queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE,
+    }
   }
 
   private publish(): void {
