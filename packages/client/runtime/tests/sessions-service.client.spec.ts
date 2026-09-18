@@ -186,9 +186,9 @@ describe('current selection (migrated from ui-layout, arbitrated into the list s
     expect(b.svc.list.getSnapshot().current).toBe('s1') // failed open leaves the selection alone
   })
 
-  it('clear() blanks list.current and the persisted selection', async () => {
+  it('clear() blanks list.current and the tab-local persisted selection', async () => {
     const storage = new Map<string, string>()
-    vi.stubGlobal('localStorage', {
+    vi.stubGlobal('sessionStorage', {
       getItem: (k: string) => storage.get(k) ?? null,
       setItem: (k: string, v: string) => { storage.set(k, v) },
       removeItem: (k: string) => { storage.delete(k) },
@@ -200,7 +200,7 @@ describe('current selection (migrated from ui-layout, arbitrated into the list s
     expect(storage.get('dsh.sessions.current')).toContain('s1')
     b.svc.clear()
     expect(b.svc.list.getSnapshot().current).toBeUndefined()
-    // Persisted wipe: a fresh service with the same storage stays on empty.
+    // Same-tab reboot with the same session storage remains empty.
     const again = bench()
     await feedList(again, [{ id: 's1' }])
     expect(again.svc.list.getSnapshot().current).toBeUndefined()
@@ -216,9 +216,9 @@ describe('current selection (migrated from ui-layout, arbitrated into the list s
     expect(b.svc.list.getSnapshot().current).toBe('s1')
   })
 
-  it('persists the selection under dsh.sessions.current and rehydrates it into a fresh service', async () => {
+  it('persists the selection in sessionStorage and rehydrates it in the same tab', async () => {
     const storage = new Map<string, string>()
-    vi.stubGlobal('localStorage', {
+    vi.stubGlobal('sessionStorage', {
       getItem: (k: string) => storage.get(k) ?? null,
       setItem: (k: string, v: string) => { storage.set(k, v) },
     })
@@ -226,10 +226,32 @@ describe('current selection (migrated from ui-layout, arbitrated into the list s
     await feedList(first, [{ id: 's1' }])
     first.svc.open(sid('s1'))
     expect(storage.get('dsh.sessions.current')).toContain('s1')
-    // A fresh boot (same storage) recovers the selection once the list holds the session.
+    // A same-tab boot (same sessionStorage) recovers the selection once the
+    // list holds the session.
     const second = bench()
     await feedList(second, [{ id: 's1' }])
     expect(second.svc.list.getSnapshot().current).toBe('s1')
+  })
+
+  it('does not seed a fresh tab from another tab\'s localStorage selection', async () => {
+    const globalStorage = new Map<string, string>([
+      ['dsh.sessions.current', JSON.stringify({ sessionId: 's1' })],
+    ])
+    const tabStorage = new Map<string, string>()
+    const storage = (backing: Map<string, string>) => ({
+      getItem: (k: string) => backing.get(k) ?? null,
+      setItem: (k: string, v: string) => { backing.set(k, v) },
+      removeItem: (k: string) => { backing.delete(k) },
+    })
+    vi.stubGlobal('localStorage', storage(globalStorage))
+    vi.stubGlobal('sessionStorage', storage(tabStorage))
+
+    const b = bench()
+    await feedList(b, [{ id: 's1' }])
+
+    expect(b.svc.list.getSnapshot().current).toBeUndefined()
+    expect(b.api.calls.filter(call => call.method === 'session.history')).toHaveLength(0)
+    expect(tabStorage.has('dsh.sessions.current')).toBe(false)
   })
 })
 
@@ -332,11 +354,11 @@ describe('cell (render-layer session kit)', () => {
     expect(historyCalls().map(c => (c.payload as { sessionId: string }).sessionId)).toEqual(['s1', 's2'])
   })
 
-  it('startup restore: a persisted selection validated by the first projection opens its window unprompted', async () => {
+  it('startup restore: a tab-local persisted selection validated by the first projection opens its window unprompted', async () => {
     const storage = new Map<string, string>([
       ['dsh.sessions.current', JSON.stringify({ sessionId: 's1' })],
     ])
-    vi.stubGlobal('localStorage', {
+    vi.stubGlobal('sessionStorage', {
       getItem: (k: string) => storage.get(k) ?? null,
       setItem: (k: string, v: string) => { storage.set(k, v) },
     })
