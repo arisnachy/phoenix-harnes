@@ -14,9 +14,12 @@ import type { WorkspaceEmitResult } from './workspace.ts'
 import type { TypertFace } from './model.ts'
 
 /** The subset of the rolldown plugin contract used here (structural; avoids a rolldown type dependency). */
-interface TypertPlugin {
+interface DecoratorLoweringPlugin {
   name: string
   transform: (code: string, id: string) => { code: string; map: string | undefined } | undefined
+}
+
+interface TypertPlugin extends DecoratorLoweringPlugin {
   writeBundle: (options: { dir?: string }) => void
 }
 
@@ -26,6 +29,40 @@ const DECORATOR_SYNTAX = /^\s*@[A-Za-z_$][\w$]*/m
 // would re-diagnose has already passed the workspace tsc build in the same
 // orchestration; the generator skips its per-package diagnostic pass here.
 const TSC_VERIFIED_INPUT = { checkDiagnostics: false } as const
+
+
+function lowerDecoratorSyntax(
+  code: string,
+  id: string,
+): { code: string; map: string | undefined } | undefined {
+  const file = id.split('?', 1)[0] ?? id
+  if (!/\.[cm]?tsx?$/.test(file) || !DECORATOR_SYNTAX.test(code)) return
+  const result = ts.transpileModule(code, {
+    fileName: file,
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2024,
+      module: ts.ModuleKind.ESNext,
+      ...(file.endsWith('x') ? { jsx: ts.JsxEmit.ReactJSX } : {}),
+      sourceMap: true,
+    },
+  })
+  return {
+    code: result.outputText.replace(/\n?\/\/# sourceMappingURL=.*$/u, '\n'),
+    map: result.sourceMapText,
+  }
+}
+
+/**
+ * Lightweight build plugin used by the ordinary workspace bundle. Typert
+ * contract generation runs in scripts/generate-typert.ts before Rolldown, so
+ * this plugin only lowers decorator syntax and cannot trigger workspace analysis.
+ */
+export function decoratorLoweringPlugin(): DecoratorLoweringPlugin {
+  return {
+    name: 'dsh-decorator-lowering',
+    transform: lowerDecoratorSyntax,
+  }
+}
 
 /** Generation scope selected by a tsdown build phase. */
 export interface TypertPluginOptions {
@@ -45,23 +82,7 @@ export function typertPlugin(pluginOptions: TypertPluginOptions = {}): TypertPlu
   const emittedWorkspaces = new Set<string>()
   return {
     name: 'dsh-typert-generator',
-    transform(code, id) {
-      const file = id.split('?', 1)[0] ?? id
-      if (!/\.[cm]?tsx?$/.test(file) || !DECORATOR_SYNTAX.test(code)) return
-      const result = ts.transpileModule(code, {
-        fileName: file,
-        compilerOptions: {
-          target: ts.ScriptTarget.ES2024,
-          module: ts.ModuleKind.ESNext,
-          ...(file.endsWith('x') ? { jsx: ts.JsxEmit.ReactJSX } : {}),
-          sourceMap: true,
-        },
-      })
-      return {
-        code: result.outputText.replace(/\n?\/\/# sourceMappingURL=.*$/u, '\n'),
-        map: result.sourceMapText,
-      }
-    },
+    transform: lowerDecoratorSyntax,
     writeBundle(bundleOptions) {
       // options.dir is the package's absolute outDir (<package>/lib); its
       // nearest package.json owns the bundle even when a custom config writes
