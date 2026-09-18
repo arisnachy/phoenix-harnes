@@ -96,6 +96,41 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.getByText('Linked')).toBeTruthy()
   })
 
+  it('renders JSON-encoded chart specs instead of dumping the JSON text', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'json-chart-1',
+      mime: 'application/json',
+      title: 'chart.json',
+      data: JSON.stringify({
+        chartType: 'bar',
+        xKey: 'day',
+        series: [{ dataKey: 'sales', label: 'Sales' }],
+        data: [{ day: 'Mon', sales: 18 }, { day: 'Tue', sales: 22 }],
+      }),
+    })} />)
+
+    expect(document.querySelector('[data-phoenix-visual-kind="chart"]')).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'bar chart' })).toBeTruthy()
+    expect(screen.queryByText(/"chartType"/)).toBeNull()
+  })
+
+  it('adapts common labels/values JSON into the Phoenix chart renderer', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'json-chart-2',
+      mime: 'application/json',
+      title: 'weekly-sales.json',
+      data: JSON.stringify({
+        labels: ['Lun', 'Mar', 'Mié'],
+        values: [18, 22, 15],
+        seriesName: 'Ventas',
+      }),
+    })} />)
+
+    expect(document.querySelector('[data-phoenix-visual-kind="chart"]')).toBeTruthy()
+    expect(screen.getByText('Ventas')).toBeTruthy()
+    expect(screen.queryByText(/"labels"/)).toBeNull()
+  })
+
   it('keeps arbitrary mini-app scripts disabled until the user explicitly enables the sandbox', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'app-1',
@@ -180,6 +215,8 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(srcDoc).not.toMatch(/<body>\s*<!doctype/i)
     expect(srcDoc).toContain('<h1>Ready</h1>')
     expect(srcDoc).toContain('body{color:red}')
+    expect(srcDoc).toContain("font-src data:; style-src 'unsafe-inline';")
+    expect(srcDoc).not.toContain("font-src data: style-src")
     expect(srcDoc).toContain('min-height:0')
   })
 })
