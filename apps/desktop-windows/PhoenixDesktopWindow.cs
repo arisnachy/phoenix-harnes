@@ -313,6 +313,49 @@ internal sealed class PhoenixDesktopWindow : Form
     private void HandlePhoenixMessage(string json)
     {
         if (!BrowserCommand.TryParse(json, out var command)) return;
+        _ = ExecuteBrowserCommandAsync(command);
+    }
+
+    /// <summary>
+    /// Execute the same typed browser command whether it came from the Phoenix WebView bridge or
+    /// from the model/runtime named-pipe control channel.
+    /// </summary>
+    internal Task ExecuteBrowserCommandAsync(BrowserCommand command)
+    {
+        if (IsDisposed)
+            return Task.FromException(new ObjectDisposedException(nameof(PhoenixDesktopWindow)));
+
+        if (!InvokeRequired)
+        {
+            ExecuteBrowserCommand(command);
+            return Task.CompletedTask;
+        }
+
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            BeginInvoke((Action)(() =>
+            {
+                try
+                {
+                    ExecuteBrowserCommand(command);
+                    completion.SetResult();
+                }
+                catch (Exception ex)
+                {
+                    completion.SetException(ex);
+                }
+            }));
+        }
+        catch (Exception ex)
+        {
+            completion.SetException(ex);
+        }
+        return completion.Task;
+    }
+
+    private void ExecuteBrowserCommand(BrowserCommand command)
+    {
         switch (command.Type)
         {
             case "phoenix.browser.open":
@@ -337,6 +380,8 @@ internal sealed class PhoenixDesktopWindow : Form
                 SetBrowserVisible(true);
                 browserView.Focus();
                 break;
+            default:
+                throw new InvalidOperationException($"Unsupported browser command: {command.Type}");
         }
     }
 
