@@ -344,6 +344,10 @@
 
     - id: tool-skill
       name: '@phoenix-ai/dsh-tool-skill'
+      config:
+        # Keep hundreds of discovered skills useful without allowing the
+        # first request catalog to consume a large fraction of model context.
+        catalogDescriptionMaxLength: 160
 
     - id: commands
       name: '@phoenix-ai/dsh-commands'
@@ -389,7 +393,9 @@
         retainRatio: 0.10
         maxTokens: 4096
         compactionRetries: 0
-        maxOverflowRetries: 0
+        # One bounded retry lets early provider length stops compact and
+        # recover instead of surfacing as an immediate output-limit failure.
+        maxOverflowRetries: 1
 
     # Human `/compact`: one useful reduction below the automatic threshold. Backend
     # independent, so it follows whichever compaction service this leaf mounts.

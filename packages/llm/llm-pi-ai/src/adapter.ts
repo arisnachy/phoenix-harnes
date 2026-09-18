@@ -425,7 +425,11 @@ export class PiAiAdapter extends LlmAdapter {
         // Responses implementation directly.
         ? openAIResponsesApi().streamSimple(wireModel, context, streamOptions)
         : snapshot.models.streamSimple(model, context, streamOptions)
-      const iterator = toStreamChunks(events, model.contextWindow)[Symbol.asyncIterator]()
+      const iterator = toStreamChunks(
+        events,
+        model.contextWindow,
+        options.maxTokens ?? model.maxTokens,
+      )[Symbol.asyncIterator]()
       let exhausted = false
       try {
         while (true) {
