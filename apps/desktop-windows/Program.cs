@@ -12,6 +12,7 @@ internal static class Program
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Phoenix");
     internal static readonly string RuntimeRoot = Path.Combine(InstallRoot, "runtime");
     internal static readonly string LogPath = Path.Combine(InstallRoot, "logs", "desktop.log");
+    internal static readonly string DesktopControlDescriptorPath = Path.Combine(InstallRoot, "desktop-control.json");
 
     private const string MutexName = "Local\\PhoenixDesktop.SingleInstance.v2";
     private const string ShowEventName = "Local\\PhoenixDesktop.ShowWindow.v2";
@@ -120,6 +121,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem autostartItem;
     private readonly HttpClient http = new() { Timeout = TimeSpan.FromSeconds(1.5) };
     private readonly PhoenixDesktopWindow window;
+    private readonly DesktopBrowserControlServer browserControl;
     private readonly EventWaitHandle showEvent;
     private readonly Thread showSignalThread;
     private Process? ownedRuntime;
@@ -134,6 +136,10 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         // so a first launch can never look like a dead EXE again.
         window = new PhoenixDesktopWindow(Program.PhoenixUri);
         _ = window.Handle;
+        browserControl = new DesktopBrowserControlServer(
+            window.ExecuteBrowserCommandAsync,
+            Program.DesktopControlDescriptorPath);
+        DesktopLog.Write($"Desktop browser control pipe ready: {browserControl.PipeName}");
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Abrir Phoenix", null, (_, _) => ShowWindow());
@@ -320,6 +326,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             Environment =
             {
                 ["PHOENIX_DESKTOP_MANAGED"] = "1",
+                ["PHOENIX_DESKTOP_CONTROL_DESCRIPTOR"] = browserControl.DescriptorPath,
             },
         };
 
@@ -426,6 +433,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         shuttingDown = true;
         try { showEvent.Set(); } catch { }
         StopOwnedRuntime();
+        browserControl.Dispose();
         if (!window.IsDisposed) window.Dispose();
         tray.Visible = false;
         tray.Dispose();
