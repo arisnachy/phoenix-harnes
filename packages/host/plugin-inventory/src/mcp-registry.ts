@@ -151,6 +151,8 @@ function staleSnapshot(hit: CachedSearch): McpRegistrySearchSnapshot {
  * Registry-listed is provenance, not a claim that the vendor named by a server
  * title published it. Callers should show repository/publisher provenance and
  * require user approval before installing executable packages.
+ * @param request - Registry query and optional bounded result limit.
+ * @returns Sanitized registry metadata, using a short-lived cache when possible.
  */
 export async function searchOfficialMcpRegistry(
   request: McpRegistrySearchRequest,
