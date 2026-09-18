@@ -40,7 +40,33 @@ export type ToolDisposers = Map<string, () => void>
 export type McpResult<Structured extends JsonValue = JsonValue> = {
   content: JsonValue[]
   structuredContent?: Structured
+  /** MCP result metadata kept for an MCP App View but never rendered into model text. */
+  _meta?: JsonValue
 }
+
+/** One validated MCP Apps HTML resource prefetched from a tool's ui:// URI. */
+interface McpAppResource {
+  resourceUri: string
+  html: string
+  csp?: {
+    connectDomains?: string[]
+    resourceDomains?: string[]
+    frameDomains?: string[]
+    baseUriDomains?: string[]
+  }
+  permissions?: {
+    camera?: boolean
+    microphone?: boolean
+    geolocation?: boolean
+    clipboardWrite?: boolean
+  }
+}
+
+/** MCP Apps stable HTML media type. */
+const MCP_APP_MIME_TYPE = 'text/html;profile=mcp-app'
+
+/** Prevent an external MCP server from turning one tool definition into an unbounded Web payload. */
+const MAX_MCP_APP_HTML_BYTES = 4 * 1024 * 1024
 
 /**
  * DeepSeek function-name contract: at most 64 characters. Wire-protocol
@@ -56,6 +82,9 @@ const HASH_LENGTH = 12
 
 /** Raw result record: the bridge owns JSON-value validation after transport. */
 const RawCallToolResultSchema = z.record(z.string(), z.unknown())
+
+/** Raw resources/read result: the bridge validates the one UI document it consumes. */
+const RawReadResourceResultSchema = z.record(z.string(), z.unknown())
 
 /** Raster formats supported by the durable attachment vocabulary. */
 const IMAGE_MEDIA_TYPES: readonly ImageMediaType[] = [
@@ -92,6 +121,115 @@ function callToolUncached(
       timeout: opts.toolCallTimeoutMs,
     },
   )
+}
+
+
+/** Narrow an untrusted object-shaped protocol field. */
+function unknownRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+/** Read modern and legacy MCP Apps tool metadata without depending on ext-apps at runtime. */
+function toolAppMetadata(tool: unknown): { resourceUri?: string; visibility?: string[] } {
+  const meta = unknownRecord(unknownRecord(tool)?._meta)
+  const ui = unknownRecord(meta?.ui)
+  const modern = ui?.resourceUri
+  const legacy = meta?.['ui/resourceUri']
+  const candidate = typeof modern === 'string' ? modern : legacy
+  const resourceUri = typeof candidate === 'string' && candidate.startsWith('ui://')
+    ? candidate
+    : undefined
+  const visibility = Array.isArray(ui?.visibility)
+    ? ui.visibility.filter((entry): entry is string => typeof entry === 'string')
+    : undefined
+  return { ...resourceUri === undefined ? {} : { resourceUri }, ...visibility === undefined ? {} : { visibility } }
+}
+
+/** App-only tools stay callable inside a future interactive bridge but are never exposed to the model. */
+function visibleToModel(visibility: readonly string[] | undefined): boolean {
+  return visibility === undefined || visibility.includes('model')
+}
+
+function stringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const strings = value.filter((entry): entry is string => typeof entry === 'string' && entry !== '')
+  return strings.length === 0 ? undefined : strings
+}
+
+/** Normalize resource security metadata into Phoenix's provider-neutral result view. */
+function resourceSecurityMeta(content: Record<string, unknown>): Pick<McpAppResource, 'csp' | 'permissions'> {
+  const meta = unknownRecord(content._meta)
+  const ui = unknownRecord(meta?.ui)
+  const rawCsp = unknownRecord(ui?.csp)
+  const csp = rawCsp === undefined ? undefined : {
+    ...stringList(rawCsp.connectDomains) === undefined ? {} : { connectDomains: stringList(rawCsp.connectDomains) },
+    ...stringList(rawCsp.resourceDomains) === undefined ? {} : { resourceDomains: stringList(rawCsp.resourceDomains) },
+    ...stringList(rawCsp.frameDomains) === undefined ? {} : { frameDomains: stringList(rawCsp.frameDomains) },
+    ...stringList(rawCsp.baseUriDomains) === undefined ? {} : { baseUriDomains: stringList(rawCsp.baseUriDomains) },
+  }
+  const rawPermissions = unknownRecord(ui?.permissions)
+  const requested = (key: string): boolean | undefined => {
+    const value = rawPermissions?.[key]
+    return value === true || unknownRecord(value) !== undefined ? true : undefined
+  }
+  const permissions = rawPermissions === undefined ? undefined : {
+    ...requested('camera') === undefined ? {} : { camera: true },
+    ...requested('microphone') === undefined ? {} : { microphone: true },
+    ...requested('geolocation') === undefined ? {} : { geolocation: true },
+    ...requested('clipboardWrite') === undefined ? {} : { clipboardWrite: true },
+  }
+  return {
+    ...csp === undefined ? {} : { csp },
+    ...permissions === undefined ? {} : { permissions },
+  }
+}
+
+/**
+ * Prefetch one ui:// document. Failure is contained: the tool remains available
+ * with its ordinary text fallback instead of making an optional UI break MCP.
+ */
+async function readMcpAppResource(
+  client: Client,
+  ctx: Context,
+  resourceUri: string,
+  opts: ToolBridgeOptions,
+): Promise<McpAppResource | undefined> {
+  try {
+    const response = await client.request(
+      { method: 'resources/read', params: { uri: resourceUri } },
+      RawReadResourceResultSchema,
+      { timeout: opts.toolCallTimeoutMs },
+    )
+    const contents = Array.isArray(response.contents) ? response.contents : []
+    const candidate = contents
+      .map(unknownRecord)
+      .find(item => item?.uri === resourceUri) ?? contents.map(unknownRecord).find(item => item !== undefined)
+    if (candidate === undefined) throw new Error('resources/read returned no content')
+    if (candidate.mimeType !== MCP_APP_MIME_TYPE) {
+      throw new Error(`expected ${MCP_APP_MIME_TYPE}, received ${String(candidate.mimeType ?? 'no MIME type')}`)
+    }
+    let html: string
+    if (typeof candidate.text === 'string') {
+      html = candidate.text
+    } else if (typeof candidate.blob === 'string' && CANONICAL_BASE64.test(candidate.blob)) {
+      html = Buffer.from(candidate.blob, 'base64').toString('utf8')
+    } else {
+      throw new Error('MCP App resource has neither text HTML nor canonical base64 blob')
+    }
+    if (Buffer.byteLength(html, 'utf8') > MAX_MCP_APP_HTML_BYTES) {
+      throw new Error(`MCP App resource exceeds ${MAX_MCP_APP_HTML_BYTES} bytes`)
+    }
+    return {
+      resourceUri,
+      html,
+      ...resourceSecurityMeta(candidate),
+    }
+  } catch (error) {
+    ctx.logger.warn(`mcp-client(${opts.serverName}): UI resource ${resourceUri} unavailable; keeping text fallback: ${String(error)}`)
+    return undefined
+  }
 }
 
 /**
@@ -148,10 +286,20 @@ export async function syncTools(
 ): Promise<ToolDisposers> {
   // Phase 1: fetch and build the next generation without touching the registry.
   const definitions = new Map<string, ToolDefinition>()
+  const appResources = new Map<string, Promise<McpAppResource | undefined>>()
   let cursor: string | undefined
   do {
     const response = await listToolsUncached(client, cursor)
     for (const tool of response.tools) {
+      const appMeta = toolAppMetadata(tool)
+      if (!visibleToModel(appMeta.visibility)) continue
+      const appResource = appMeta.resourceUri === undefined
+        ? undefined
+        : await (appResources.get(appMeta.resourceUri) ?? (() => {
+            const pending = readMcpAppResource(client, ctx, appMeta.resourceUri as string, opts)
+            appResources.set(appMeta.resourceUri as string, pending)
+            return pending
+          })())
       const publicName = publicToolName(opts.serverName, tool.name)
       if (definitions.has(publicName)) {
         throw new Error(
@@ -168,6 +316,8 @@ export async function syncTools(
         supportedOutputSchema(tool.outputSchema),
         tool.execution?.taskSupport === 'required',
         opts,
+        appResource,
+        typeof tool.title === 'string' && tool.title !== '' ? tool.title : tool.name,
       ))
     }
     cursor = response.nextCursor
@@ -251,14 +401,36 @@ function createDefinition(
   structuredSchema: JsonSchemaNode | undefined,
   taskRequired: boolean,
   opts: ToolBridgeOptions,
+  appResource: McpAppResource | undefined,
+  appTitle: string,
 ): ToolDefinition {
   const projections = new WeakMap<ToolExecution, PreparedProjection>()
   return {
     name: publicName,
     description,
     parameters,
-    output: createOutput(rawName, structuredSchema),
+    output: createOutput(rawName, structuredSchema, appResource),
     execute: createExecutor(client, ctx, rawName, taskRequired, opts, projections),
+    ...appResource === undefined ? {} : {
+      presentResult(args, result) {
+        if (result.isError || !isRecord(result.meta as JsonValue)) return { card: 'generic' as const }
+        const envelope = result.meta.mcpApp
+        if (!isRecord(envelope) || envelope.resourceUri !== appResource.resourceUri || !isRecord(envelope.result)) {
+          return { card: 'generic' as const }
+        }
+        const toolInput = unknownRecord(args) ?? {}
+        return {
+          card: 'mcp-app' as const,
+          title: appTitle,
+          resourceUri: appResource.resourceUri,
+          html: appResource.html,
+          toolInput,
+          toolResult: envelope.result as Record<string, unknown>,
+          ...appResource.csp === undefined ? {} : { csp: appResource.csp },
+          ...appResource.permissions === undefined ? {} : { permissions: appResource.permissions },
+        }
+      },
+    },
     finalizeContent(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>) {
       const projection = projections.get(exec)
       if (projection === undefined) return undefined
@@ -272,13 +444,18 @@ function createDefinition(
 }
 
 /** Build the canonical result schema and existing Native text projection. */
-function createOutput(rawName: string, structuredSchema: JsonSchemaNode | undefined): ToolDefinition['output'] {
+function createOutput(
+  rawName: string,
+  structuredSchema: JsonSchemaNode | undefined,
+  appResource: McpAppResource | undefined,
+): ToolDefinition['output'] {
   return {
     schema: {
       type: 'object',
       properties: {
         content: { type: 'array', items: {} },
         structuredContent: structuredSchema ?? {},
+        _meta: {},
       },
       required: structuredSchema === undefined ? ['content'] : ['content', 'structuredContent'],
       additionalProperties: false,
@@ -286,6 +463,16 @@ function createOutput(rawName: string, structuredSchema: JsonSchemaNode | undefi
     render(_args: unknown, value: JsonValue) {
       const result = value as unknown as McpResult
       return [{ type: 'text', text: extractText(result.content, rawName) }]
+    },
+    ...appResource === undefined ? {} : {
+      presentationMeta(_args: unknown, value: JsonValue): JsonValue {
+        return {
+          mcpApp: {
+            resourceUri: appResource.resourceUri,
+            result: value,
+          },
+        }
+      },
     },
   }
 }
@@ -331,6 +518,9 @@ function createExecutor(
         ...result.structuredContent !== undefined
           ? { structuredContent: result.structuredContent as JsonValue }
           : {},
+        ...result._meta !== undefined
+          ? { _meta: result._meta as JsonValue }
+          : {},
       }
     }
 
@@ -349,6 +539,9 @@ function createExecutor(
       content,
       ...result.structuredContent !== undefined
         ? { structuredContent: result.structuredContent as JsonValue }
+        : {},
+      ...result._meta !== undefined
+        ? { _meta: result._meta as JsonValue }
         : {},
     }
     if (containsImage(content)) {
