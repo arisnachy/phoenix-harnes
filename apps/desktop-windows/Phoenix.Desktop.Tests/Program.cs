@@ -110,6 +110,7 @@ False(runtimeLaunch.UseShellExecute, "PowerShell runtime is directly supervised"
 True(runtimeLaunch.ArgumentList.Contains("-NoProfile"), "PowerShell disables user profile side effects", failures);
 True(runtimeLaunch.ArgumentList.Contains("-NonInteractive"), "PowerShell runtime is non-interactive", failures);
 True(runtimeLaunch.ArgumentList.Any(value => value.Contains("phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)), "PowerShell invokes Windows supervisor launcher", failures);
+True(runtimeLaunch.ArgumentList.Any(value => value.Contains("--port 3081", StringComparison.Ordinal)), "desktop runtime owns isolated port 3081", failures);
 True(runtimeLaunch.ArgumentList.Any(value => value.Contains("--no-open", StringComparison.Ordinal)), "desktop runtime never opens an external browser", failures);
 Equal("1", runtimeLaunch.Environment["PHOENIX_DESKTOP_MANAGED"], "desktop managed environment is preserved", failures);
 Equal(@"C:\Phoenix\desktop-control.json", runtimeLaunch.Environment["PHOENIX_DESKTOP_CONTROL_DESCRIPTOR"], "desktop control descriptor reaches supervisor", failures);
