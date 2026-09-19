@@ -30,7 +30,12 @@ export function requiresObjectRootFunctionSchemas(provider: string, api: string)
   return provider === 'openai-codex' || OBJECT_ROOT_FUNCTION_APIS.has(api)
 }
 
-/** Whether this exact route needs the Monday create_action compatibility quarantine. */
+/**
+ * Whether this exact route needs the Monday create_action compatibility quarantine.
+ * @param provider - Harness provider route selected for the request.
+ * @param api - Resolved pi-ai wire protocol.
+ * @returns True only for direct Codex routes.
+ */
 export function requiresCodexToolQuarantine(provider: string, api: string): boolean {
   return provider === 'openai-codex' || api === 'openai-codex-responses'
 }
@@ -167,6 +172,8 @@ export function normalizeCodexToolSchemas(options: GenerateOptions): GenerateOpt
  * This is deliberately a narrow compatibility quarantine, not a generic MCP
  * denylist. Other providers still receive the tool, and the rest of the Monday
  * catalog remains available on Codex.
+ * @param options - Model request after generic schema normalization.
+ * @returns The original request when no quarantined tool is present, otherwise a filtered copy.
  */
 export function quarantineCodexTools(options: GenerateOptions): GenerateOptions {
   if (options.tools === undefined || options.tools.length === 0) return options
@@ -260,6 +267,7 @@ function normalizePayloadTree(value: unknown, quarantine: boolean): unknown {
  * conversation payloads and non-function tools retain identity when unchanged.
  *
  * @param payload - Provider request body produced by pi-ai.
+ * @param quarantine - Whether known Codex-incompatible functions should be removed while walking the payload.
  * @returns The original payload when already compatible, otherwise a copy with
  * every nested function-tool schema projected to Codex's object-root contract.
  */
