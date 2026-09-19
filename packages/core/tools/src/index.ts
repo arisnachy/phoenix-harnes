@@ -63,6 +63,103 @@ const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
   python: renderToolsSdkPy,
 } satisfies Record<CodeSdkLanguage, (schemas: ToolSdkSchema[]) => string>
 
+const MCP_FUNCTION_ROOT_FORBIDDEN_KEYS = new Set(['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not'])
+const MCP_FUNCTION_ROOT_COMPOSITIONS = ['oneOf', 'anyOf', 'allOf'] as const
+
+type McpModelSchema = Record<string, unknown>
+
+function isMcpModelSchema(value: unknown): value is McpModelSchema {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function mcpSchemaProperties(schema: McpModelSchema): McpModelSchema {
+  return isMcpModelSchema(schema.properties) ? schema.properties : {}
+}
+
+function mcpSchemaStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+}
+
+function mergeMcpModelProperty(left: unknown, right: unknown): unknown {
+  if (left === undefined) return right
+  if (right === undefined) return left
+  if (JSON.stringify(left) === JSON.stringify(right)) return left
+
+  const variants: unknown[] = []
+  const append = (value: unknown): void => {
+    if (isMcpModelSchema(value) && Array.isArray(value.anyOf) && Object.keys(value).length === 1) {
+      for (const branch of value.anyOf) append(branch)
+      return
+    }
+    if (!variants.some(existing => JSON.stringify(existing) === JSON.stringify(value))) variants.push(value)
+  }
+  append(left)
+  append(right)
+  return { anyOf: variants }
+}
+
+/**
+ * Last model-facing defense for MCP function parameters.
+ *
+ * MCP accepts broader JSON Schema roots than OpenAI/Codex function tools. MCP
+ * bridges normally project them before registration, but persisted connectors
+ * and alternate registration paths must not be able to poison an entire model
+ * request. Only mcp__* schemas use this projection; execution still forwards
+ * the model's object unchanged to the MCP server for authoritative validation.
+ */
+function normalizeMcpModelParameters(parameters: McpModelSchema): McpModelSchema {
+  const hasForbiddenRoot = Object.keys(parameters).some(key => MCP_FUNCTION_ROOT_FORBIDDEN_KEYS.has(key))
+  if (parameters.type === 'object' && !hasForbiddenRoot) {
+    return isMcpModelSchema(parameters.properties)
+      ? parameters
+      : { ...parameters, properties: {} }
+  }
+
+  const properties: McpModelSchema = { ...mcpSchemaProperties(parameters) }
+  const baseRequired = new Set(mcpSchemaStringArray(parameters.required))
+  let branchRequired: Set<string> | undefined
+
+  for (const key of MCP_FUNCTION_ROOT_COMPOSITIONS) {
+    const raw = parameters[key]
+    if (!Array.isArray(raw)) continue
+    const branches = raw.filter(isMcpModelSchema)
+    if (branches.length === 0) continue
+
+    for (const branch of branches) {
+      for (const [name, value] of Object.entries(mcpSchemaProperties(branch))) {
+        properties[name] = mergeMcpModelProperty(properties[name], value)
+      }
+    }
+
+    if (key === 'allOf') {
+      for (const branch of branches) {
+        for (const name of mcpSchemaStringArray(branch.required)) baseRequired.add(name)
+      }
+    } else {
+      const [first, ...rest] = branches.map(branch => new Set(mcpSchemaStringArray(branch.required)))
+      if (first !== undefined) {
+        const common = new Set([...first].filter(name => rest.every(set => set.has(name))))
+        branchRequired = branchRequired === undefined
+          ? common
+          : new Set([...branchRequired].filter(name => common.has(name)))
+      }
+    }
+  }
+
+  const normalized: McpModelSchema = {}
+  for (const [key, value] of Object.entries(parameters)) {
+    if (MCP_FUNCTION_ROOT_FORBIDDEN_KEYS.has(key)) continue
+    if (key === 'type' || key === 'properties' || key === 'required') continue
+    normalized[key] = value
+  }
+  normalized.type = 'object'
+  normalized.properties = properties
+  const required = new Set(baseRequired)
+  for (const name of branchRequired ?? []) required.add(name)
+  if (required.size > 0) normalized.required = [...required]
+  return normalized
+}
+
 export {
   defineTool,
   valueSchemaSpecToJsonSchema,
@@ -1260,10 +1357,13 @@ export class ToolRuntime extends Service {
     if (detached === undefined) {
       throw new Error(`tool "${name}" parameters must be lossless JSON before schema projection`)
     }
+    const modelParameters = name.startsWith('mcp__') && isMcpModelSchema(detached)
+      ? normalizeMcpModelParameters(detached)
+      : detached
     return {
       name,
       description,
-      parameters: detached,
+      parameters: modelParameters,
     }
   }
 
