@@ -30,6 +30,14 @@ const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() ||
 const CHANNEL_PATH = '.phoenix/channel/stable.json'
 const MANAGED_MARKER = '.phoenix-managed-install'
 const UPDATE_MODE = normalizeMode(process.env.PHOENIX_UPDATE_MODE ?? 'auto')
+const STARTUP_CHECK = process.argv.includes('--startup')
+let staleTargetDiscovered = false
+
+function blockStaleStartup(reason) {
+  if (!STARTUP_CHECK || UPDATE_MODE !== 'auto' || process.exitCode === 12) return
+  process.exitCode = 13
+  console.error(`[PHOENIX STABLE] startup blocked on stale runtime: ${reason}`)
+}
 
 function normalizeMode(value) {
   const normalized = String(value).trim().toLowerCase()
@@ -197,7 +205,8 @@ function restorePrevious(root, previous, failedTarget, cause) {
       failedTarget,
       at: new Date().toISOString(),
     })
-    console.error('[PHOENIX STABLE] recovery succeeded; the previous checkout will start.')
+    console.error('[PHOENIX STABLE] recovery succeeded; the previous checkout was restored.')
+    blockStaleStartup('new stable activation failed and rollback restored an older runtime')
     return true
   } catch (error) {
     console.error(`[PHOENIX STABLE] CRITICAL: recovery failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -214,6 +223,7 @@ function restorePrevious(root, previous, failedTarget, cause) {
 function applyStable(root, current, target, manifest, state) {
   if (!cleanWorktree(root)) {
     console.error('[PHOENIX STABLE] managed checkout has local changes; stable alignment is paused to protect them.')
+    blockStaleStartup('managed checkout is dirty while a newer stable target exists')
     return
   }
   if (UPDATE_MODE === 'notify') {
@@ -272,16 +282,24 @@ async function main() {
   const { manifest, target } = stableTarget(root)
   const state = relation(root, current, target)
   if (state === 'current') return
+  staleTargetDiscovered = true
   if (stableUpdateAction(state, branch) === 'pause') {
     console.error('[PHOENIX STABLE] managed checkout cannot be aligned to the stable target safely.')
+    blockStaleStartup('stable alignment policy paused while the installed runtime is behind')
     return
   }
   applyStable(root, current, target, manifest, state)
 }
 
 await main().catch(error => {
-  // Network/channel/preflight failures keep the current checkout intact. Only
-  // an explicit rollback failure above returns code 12 and blocks startup.
+  // Before a newer target is discovered, network/channel failures remain
+  // availability-safe and the last verified runtime may start. Once we KNOW
+  // this checkout is stale, however, silently booting it reintroduces bugs that
+  // stable already fixed. Startup mode therefore returns 13 and the desktop
+  // must not launch that stale runtime.
   console.error(`[PHOENIX STABLE] check failed safely: ${error instanceof Error ? error.stack ?? error.message : String(error)}`)
-  if (process.exitCode !== 12) process.exitCode = 0
+  if (process.exitCode !== 12) {
+    if (staleTargetDiscovered) blockStaleStartup('update/preflight failed after discovering a newer stable target')
+    else process.exitCode = 0
+  }
 })

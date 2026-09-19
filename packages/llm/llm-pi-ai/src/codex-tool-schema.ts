@@ -153,14 +153,23 @@ export function normalizeCodexToolSchemas(options: GenerateOptions): GenerateOpt
 
 
 function normalizePayloadToolEntry(value: unknown): unknown {
-  if (!isObject(value) || value.type !== 'function') return value
+  if (!isObject(value)) return value
 
-  if (isObject(value.parameters)) {
+  // pi-ai has two relevant shapes:
+  // 1) provider-wire function tools: { type: 'function', name, parameters }
+  // 2) pre-wire context tools:       { name, description, parameters }
+  //
+  // The second shape is important because pi-ai may validate/transform context
+  // tools before onPayload runs. Monday's MCP schema must therefore be safe
+  // before it ever enters provider encoding, not only after the payload exists.
+  const isWireFunction = value.type === 'function'
+  const isMcpContextTool = typeof value.name === 'string' && value.name.startsWith('mcp__')
+  if ((isWireFunction || isMcpContextTool) && isObject(value.parameters)) {
     const parameters = normalizeCodexToolParameters(value.parameters)
     return parameters === value.parameters ? value : { ...value, parameters }
   }
 
-  if (isObject(value.function) && isObject(value.function.parameters)) {
+  if (isWireFunction && isObject(value.function) && isObject(value.function.parameters)) {
     const parameters = normalizeCodexToolParameters(value.function.parameters)
     if (parameters === value.function.parameters) return value
     return {
