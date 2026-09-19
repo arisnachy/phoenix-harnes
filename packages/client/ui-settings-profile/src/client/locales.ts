@@ -49,6 +49,9 @@ export const zh = {
   readOnly: '此部署以只读方式保存设置。',
   saveFailed: '设置未接受这些值，请检查后重试。',
   invalid: '请修正此字段后再保存。',
+  desktopSection: '桌面应用',
+  desktopLogout: '退出登录并关闭 Phoenix',
+  desktopLogoutHint: '清除本机桌面会话数据并立即关闭 Phoenix；不会删除模型/API 配置。',
   privacy: '默认不会发送任何资料；每个字段都必须单独允许。',
 } satisfies Record<string, string>
 
@@ -105,6 +108,9 @@ export const en = {
   readOnly: 'This deployment stores settings read-only.',
   saveFailed: 'The settings did not accept these values. Check them and retry.',
   invalid: 'Correct this field before saving.',
+  desktopSection: 'Desktop app',
+  desktopLogout: 'Sign out and exit Phoenix',
+  desktopLogoutHint: 'Clears this desktop session and closes Phoenix immediately without deleting model/API configuration.',
   privacy: 'Nothing is sent by default; every field requires its own permission.',
 } satisfies Record<UserProfileLocaleKey, string>
 
@@ -158,5 +164,8 @@ export const es = {
   readOnly: 'Esta implementación guarda los ajustes en modo solo lectura.',
   saveFailed: 'Los ajustes no aceptaron estos valores. Revísalos y vuelve a intentarlo.',
   invalid: 'Corrige este campo antes de guardar.',
+  desktopSection: 'Aplicación de escritorio',
+  desktopLogout: 'Cerrar sesión y salir de Phoenix',
+  desktopLogoutHint: 'Borra la sesión local de esta app y cierra Phoenix de inmediato, sin eliminar la configuración de modelos/API.',
   privacy: 'Nada se envía por defecto; cada campo requiere su propio permiso.',
 } satisfies Record<UserProfileLocaleKey, string>
