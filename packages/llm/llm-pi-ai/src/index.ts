@@ -61,8 +61,15 @@ import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoen
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
+import {
+  CODEX_MODEL_REFRESH_INTERVAL_MS,
+  CODEX_PROVIDER,
+  codexCatalogIsAutomatic,
+  codexModelsToProfiles,
+} from './codex-live-catalog.ts'
+import { codexModelListTransport } from './codex-discovery.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
-import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
+import type { PiAiModelProfile, PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
 import { installCodexImageGeneration } from './image-generation.ts'
 import { registerPiAiFlows } from './login.ts'
@@ -208,7 +215,56 @@ export function apply(ctx: Context, config: Config): void {
   let current: () => Config = () => config
   let lastRaw: Config | undefined
   let lastCatalogRevision = -1
+  let lastCodexCatalogRevision = -1
   let memoized: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
+
+  // Codex's model/list is account-scoped and changes independently of the
+  // installed pi-ai snapshot. Keep only the last non-empty valid live catalog
+  // in memory: settings stay untouched, and transient CLI/auth failures cannot
+  // erase a selector that was working a moment ago.
+  let codexCatalog: PiAiModelProfile[] | undefined
+  let codexCatalogRevision = 0
+  let codexLastAttemptAt = Number.NEGATIVE_INFINITY
+  let codexLastSuccessAt = Number.NEGATIVE_INFINITY
+  let codexRefresh: Promise<void> | undefined
+
+  const refreshCodexModels = async (provider: string, force = false): Promise<void> => {
+    if (provider !== CODEX_PROVIDER) return
+    const profile = current().providers?.[CODEX_PROVIDER]
+    if (!codexCatalogIsAutomatic(profile)) return
+
+    if (codexRefresh !== undefined) return codexRefresh
+    const now = Date.now()
+    // A recent successful answer is authoritative even for an exact-model
+    // miss; a forced retry is reserved for the no-cache/failure case.
+    if (codexCatalog !== undefined && now - codexLastSuccessAt < CODEX_MODEL_REFRESH_INTERVAL_MS) return
+    if (!force && now - codexLastAttemptAt < CODEX_MODEL_REFRESH_INTERVAL_MS) return
+
+    codexLastAttemptAt = now
+    codexRefresh = (async () => {
+      try {
+        const discovered = await codexModelListTransport.list()
+        const next = codexModelsToProfiles(discovered)
+        if (next.length === 0) {
+          ctx.logger.warn('llm-pi-ai: Codex returned an empty live model catalog; keeping the last good catalog')
+          return
+        }
+        codexLastSuccessAt = Date.now()
+        if (deepEqualJson(next, codexCatalog)) return
+        codexCatalog = next
+        codexCatalogRevision += 1
+        // A new profile identity makes the adapter build a new immutable
+        // collection on its next operation; in-flight calls keep their old one.
+        memoized = undefined
+      } catch (error: unknown) {
+        ctx.logger.warn('llm-pi-ai: live Codex model refresh failed; keeping the last good/static catalog')
+        ctx.logger.warn(error)
+      }
+    })().finally(() => {
+      codexRefresh = undefined
+    })
+    return codexRefresh
+  }
 
   /**
    * Built-in local and free routes are injected last, so user settings cannot
@@ -216,14 +272,32 @@ export function apply(ctx: Context, config: Config): void {
    */
   const profiles = (): ReadonlyMap<string, ResolvedPiAiProviderProfile> => {
     const raw = current()
-    if (raw === lastRaw && lastCatalogRevision === openCodeCatalogRevision && memoized !== undefined) return memoized
+    if (
+      raw === lastRaw
+      && lastCatalogRevision === openCodeCatalogRevision
+      && lastCodexCatalogRevision === codexCatalogRevision
+      && memoized !== undefined
+    ) return memoized
+
+    const configuredProviders = raw.providers ?? {}
+    const codexProfile = configuredProviders[CODEX_PROVIDER]
+    const providers = codexCatalog !== undefined && codexCatalogIsAutomatic(codexProfile)
+      ? {
+          ...configuredProviders,
+          [CODEX_PROVIDER]: {
+            ...codexProfile,
+            models: codexCatalog,
+          },
+        }
+      : configuredProviders
     const next = resolveProfiles({
-      ...(raw.providers ?? {}),
+      ...providers,
       [PHOENIX_LOCAL_PROVIDER]: phoenixLocalProfile(),
       [OPENCODE_FREE_PROVIDER]: opencodeFreeProfile(openCodeCatalog.models()),
     })
     lastRaw = raw
     lastCatalogRevision = openCodeCatalogRevision
+    lastCodexCatalogRevision = codexCatalogRevision
     memoized = next
     return next
   }
@@ -253,6 +327,7 @@ export function apply(ctx: Context, config: Config): void {
     profiles,
     resolveApiKey,
     auth,
+    refreshModels: refreshCodexModels,
     resolveAttachments: () => ctx.get('attachments'),
     onReplayDegrade: ({ provider, model, reason }) => {
       ctx.logger.warn(
