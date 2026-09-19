@@ -68,11 +68,11 @@ function browserExecutableCandidates(): string[] {
       'C:\\Program Files',
       'C:\\Program Files (x86)',
     ].filter((value): value is string => Boolean(value))
+    const preferred = (process.env.PHOENIX_BROWSER_PREFERRED_ENGINE ?? 'chrome').trim().toLowerCase()
     for (const root of roots) {
-      candidates.push(
-        join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-        join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-      )
+      const chrome = join(root, 'Google', 'Chrome', 'Application', 'chrome.exe')
+      const edge = join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe')
+      candidates.push(...(preferred === 'edge' ? [edge, chrome] : [chrome, edge]))
     }
   } else if (process.platform === 'darwin') {
     candidates.push(
