@@ -115,7 +115,7 @@ function ProfileInput(props: {
     <div className={css.field}>
       <label className={css.label} htmlFor={props.id}>{props.label}</label>
       <input id={props.id} className={props.invalid ? css.inputInvalid : css.input} type={props.type ?? 'text'} value={props.value} disabled={props.disabled} onChange={(event) => { props.onChange(event.target.value) }} />
-      <p className={props.invalid ? css.error : css.hint}>{props.invalid ? '!' : props.hint}</p>
+      <p className={props.invalid ? css.error : css.hint}>{props.hint}</p>
     </div>
   )
 }
