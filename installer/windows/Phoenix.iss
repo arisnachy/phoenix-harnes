@@ -8,7 +8,7 @@
 [Setup]
 AppId={{B4E91D88-7B14-4DA0-A63D-4E61B648AE1F}
 AppName=Phoenix
-AppVersion=1.0.2
+AppVersion=1.0.3
 AppPublisher=Phoenix AI
 DefaultDirName={localappdata}\Programs\Phoenix
 DefaultGroupName=Phoenix
@@ -40,8 +40,8 @@ Name: "{group}\Phoenix"; Filename: "{app}\Phoenix.exe"
 Name: "{autodesktop}\Phoenix"; Filename: "{app}\Phoenix.exe"; Tasks: desktopicon
 
 [Run]
-; Runtime preparation belongs to Phoenix.exe so first launch is visible, logged, repairable,
-; and can explain missing Git/Node/Corepack instead of blocking inside the installer.
+; Runtime preparation belongs to Phoenix.exe so first launch is visible, logged and repairable.
+; Node.js, Corepack and MinGit are bundled in the installer; users need no development prerequisites.
 Filename: "{app}\Phoenix.exe"; Parameters: "--enable-autostart"; Flags: runhidden waituntilterminated skipifsilent; Tasks: autostart
 Filename: "{app}\Phoenix.exe"; Description: "Abrir Phoenix"; Flags: nowait postinstall skipifsilent
 
