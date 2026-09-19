@@ -101,6 +101,11 @@ export interface PiAiAdapterOptions {
    * every request no matter how often the human signed in.
    */
   auth: PiAiAuthInjection
+  /**
+   * Refresh one provider's advisory model catalog before listing it, or on an
+   * exact-model miss. The plugin owns caching/fallback; the adapter only asks.
+   */
+  refreshModels?: (provider: string, force?: boolean) => Promise<readonly string[] | undefined>
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
   /**
@@ -275,6 +280,20 @@ export class PiAiAdapter extends LlmAdapter {
     return resolved
   }
 
+  /**
+   * Capture a snapshot that contains the requested model. Existing configured
+   * models stay zero-I/O; only a miss asks the plugin for a forced live refresh.
+   */
+  private async snapshotForModel(provider: string, model: string): Promise<PiAiSnapshot> {
+    let snapshot = this.current()
+    this.profileOf(snapshot, provider)
+    if (snapshot.models.getModel(provider, model) !== undefined) return snapshot
+    await this.config.refreshModels?.(provider, true)
+    snapshot = this.current()
+    this.profileOf(snapshot, provider)
+    return snapshot
+  }
+
   override providerInfo(provider: string): LlmProviderInfo {
     // The configured name, not the route key: `displayName` exists so a
     // deployment can label a route, and a label only the configuration surface
@@ -286,28 +305,32 @@ export class PiAiAdapter extends LlmAdapter {
     return this.current().profiles.get(provider)?.retryPolicy
   }
 
-  override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
-    return Promise.resolve().then(() => {
-      const snapshot = this.current()
-      this.profileOf(snapshot, provider)
-      return snapshot.models.getModels(provider).map(model => ({
-        provider,
-        id: model.id,
-        name: model.name,
-        inputModalities: [...model.input],
-      }))
-    })
+  override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    const advertised = await this.config.refreshModels?.(provider)
+    const snapshot = this.current()
+    this.profileOf(snapshot, provider)
+    const available = snapshot.models.getModels(provider)
+    const ordered = advertised === undefined
+      ? available
+      : advertised.flatMap((id) => {
+          const model = available.find(candidate => candidate.id === id)
+          return model === undefined ? [] : [model]
+        })
+    return ordered.map(model => ({
+      provider,
+      id: model.id,
+      name: model.name,
+      inputModalities: [...model.input],
+    }))
   }
 
-  override resolveModel(
+  override async resolveModel(
     provider: string,
     model: string,
     _signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
-    return Promise.resolve().then(() => {
-      const snapshot = this.current()
-      return this.modelInfo(snapshot, provider, model)
-    })
+    const snapshot = await this.snapshotForModel(provider, model)
+    return this.modelInfo(snapshot, provider, model)
   }
 
   private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
@@ -328,12 +351,12 @@ export class PiAiAdapter extends LlmAdapter {
     }
   }
 
-  override prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
-    const snapshot = this.current()
-    return Promise.resolve({
+  override async prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
+    const snapshot = await this.snapshotForModel(provider, model)
+    return {
       model: this.modelInfo(snapshot, provider, model),
       stream: options => this.streamWithSnapshot(options, snapshot),
-    })
+    }
   }
 
   stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
