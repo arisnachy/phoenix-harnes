@@ -1,39 +1,32 @@
 /**
- * Codex-first product onboarding with a safe provider-key fallback.
+ * Codex-first first-run onboarding with a separate API-provider fallback.
  *
- * First run prefers the native ChatGPT / Codex authorization plane because it
- * reuses the user's Codex-managed session, live model catalog, refresh
- * lifecycle, quota telemetry, and connectors without asking PHOENIX to store
- * OAuth secrets. After sign-in the flow materializes the openai-codex route
- * and persists the first provider-preferred live Codex model as PHOENIX's
- * default. The existing DeepSeek key editor remains a fallback.
+ * The first screen prefers the official ChatGPT / Codex app-server account
+ * lifecycle. That subscription session is deliberately kept separate from
+ * PHOENIX API-provider credentials: connecting Codex must never be treated as
+ * if it had produced an OpenAI API key. A user may configure a chat provider
+ * next, or defer that choice without blocking the application shell.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { InjectFace, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelsSettingsState, ModelsSettingsStore } from './store.ts'
-import { messageOf, providerUsable } from './store.ts'
+import { providerUsable } from './store.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor } from './ProviderEditor.tsx'
 import {
   AuthorizationAttemptProgress,
   useAuthorizationAttempt,
 } from './authorization-attempt.tsx'
-import {
-  NATIVE_CODEX_AUTH_KEY,
-  NATIVE_CODEX_PROVIDER,
-  authorizationConnected,
-} from './authorization-provider.ts'
 import type { en } from './locales.ts'
 import { OnboardingModal } from './OnboardingModal.tsx'
 import modelStyles from './ModelsSection.module.css'
 import styles from './DeepSeekOnboardingDialog.module.css'
 
-const AGENT_DEFAULT_MODEL_NS = 'agent-default-model'
-const USER_PROFILE_NS = 'user-profile'
+const NATIVE_CODEX_AUTH_KEY = 'subagent-codex/account'
 const LOOPBACK_CHATGPT_WEB_PROVIDER = 'chatgpt-web'
 
 interface AuthorizationEntry {
@@ -78,24 +71,25 @@ function isCodexEntry(entry: AuthorizationEntry): boolean {
   return identity.includes('codex') || identity.includes('chatgpt')
 }
 
-function stringField(value: unknown, field: string): string | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
-  const fieldValue = (value as Record<string, unknown>)[field]
-  return typeof fieldValue === 'string' ? fieldValue : undefined
+function codexConnected(entry: AuthorizationEntry | undefined): boolean {
+  if (entry === undefined) return false
+  return entry.stored !== undefined
+    || entry.telemetry?.provider?.toLowerCase() === 'codex'
 }
 
 /**
- * Prefer native ChatGPT / Codex authorization on first run. A user who already
- * has another confirmed provider skips onboarding; installations without the
- * Codex account flow fall back to the existing official DeepSeek key editor.
+ * First-run ordering:
+ * 1. Connect the official Codex account when that native bridge is installed.
+ * 2. Keep API-provider configuration a clearly separate optional step.
+ * 3. Never synthesize an API credential or select openai-codex merely because
+ *    the native account is connected.
  */
 export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): ReactNode {
   const { complete, controller, useModels, api, schema, t } = props
   const state = useModels(snapshot => snapshot)
   const authorization = api.authorization
   const [showApiKey, setShowApiKey] = useState(false)
-  const [provisioning, setProvisioning] = useState(false)
-  const [provisionFailure, setProvisionFailure] = useState<string | undefined>(undefined)
+  const [connectedThisRun, setConnectedThisRun] = useState(false)
   const [authorizationCatalog, setAuthorizationCatalog] = useState<AuthorizationCatalogState>(
     authorization === undefined
       ? { status: 'unavailable', entries: [] }
@@ -133,19 +127,12 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
     () => authorizationCatalog.entries.find(isCodexEntry),
     [authorizationCatalog.entries],
   )
-  const codexConnected = codexEntry === undefined ? false : authorizationConnected(codexEntry)
-  const codexRow = state.rows.find(row => row.entry.provider === NATIVE_CODEX_PROVIDER)
-  const defaultNamespace = state.namespaces.get(AGENT_DEFAULT_MODEL_NS)
-  const defaultProvider = stringField(defaultNamespace?.value, 'provider')
-  const codexReady = codexConnected
-    && codexRow?.entry.active === true
-    && defaultProvider === NATIVE_CODEX_PROVIDER
+  const accountReady = connectedThisRun || codexConnected(codexEntry)
 
-  // chatgpt-web is a loopback bridge whose keyless route may be mounted before
-  // its external command is configured; it must not suppress first-run auth.
+  // chatgpt-web is only a loopback declaration until its external bridge is
+  // installed and authenticated, so it must not suppress first-run setup.
   const anotherProviderReady = state.rows.some(row =>
-    row.entry.provider !== NATIVE_CODEX_PROVIDER
-    && row.entry.provider !== LOOPBACK_CHATGPT_WEB_PROVIDER
+    row.entry.provider !== LOOPBACK_CHATGPT_WEB_PROVIDER
     && providerUsable(row))
 
   const deepSeekRow = state.rows.find(candidate =>
@@ -164,102 +151,18 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
     && !deepSeekRow.credential.configured
     && deepSeekRow.credential.writable
 
-  /**
-   * Turn a successful native account login into a complete PHOENIX model path:
-   * materialize openai-codex, ask its live catalog, then persist the provider's
-   * preferred first model as the default for new sessions.
-   */
-  const finishCodexSetup = useCallback(async (): Promise<void> => {
-    setProvisioning(true)
-    setProvisionFailure(undefined)
-    try {
-      let snapshot = controller.store.getSnapshot()
-      let row = snapshot.rows.find(candidate => candidate.entry.provider === NATIVE_CODEX_PROVIDER)
-      if (row === undefined) {
-        throw new Error('PHOENIX did not expose the openai-codex provider route')
-      }
-      if (!snapshot.writable) throw new Error('PHOENIX model settings are read-only')
-
-      if (!row.configured) {
-        const namespace = snapshot.namespaces.get(row.entry.settingsNs)
-        if (namespace === undefined) throw new Error('PHOENIX could not resolve Codex model settings')
-        const activated = await api.settings.mutate({
-          ns: row.entry.settingsNs,
-          ops: [{ op: 'set', path: [...row.entry.settingsPath], value: {} }],
-          expectedRevision: namespace.revision,
-        })
-        if (!activated.result.ok) throw new Error(activated.result.error.message)
-        await controller.load()
-        snapshot = controller.store.getSnapshot()
-        row = snapshot.rows.find(candidate => candidate.entry.provider === NATIVE_CODEX_PROVIDER)
-      }
-
-      if (row?.entry.active !== true) {
-        throw new Error('The openai-codex route did not become active after sign-in')
-      }
-
-      const catalog = await api.llm.models({})
-      if (!catalog.result.ok) throw new Error(catalog.result.error.message)
-      const group = catalog.result.value.groups.find(candidate => candidate.id === NATIVE_CODEX_PROVIDER)
-      const preferred = group?.models[0]
-      if (preferred === undefined) {
-        const diagnostic = catalog.result.value.failures
-          .find(candidate => candidate.id === NATIVE_CODEX_PROVIDER)?.message
-        throw new Error(diagnostic ?? 'Codex returned no selectable models for this account')
-      }
-
-      snapshot = controller.store.getSnapshot()
-      const defaults = snapshot.namespaces.get(AGENT_DEFAULT_MODEL_NS)
-      if (defaults === undefined) {
-        throw new Error('PHOENIX could not resolve its default-model settings')
-      }
-      const savedDefault = await api.settings.replace({
-        ns: AGENT_DEFAULT_MODEL_NS,
-        section: { provider: NATIVE_CODEX_PROVIDER, model: preferred.id },
-        expectedRevision: defaults.revision,
-      })
-      if (!savedDefault.result.ok) throw new Error(savedDefault.result.error.message)
-
-      // Presentation-only ordering: best effort. A stale profile revision must
-      // never turn a working Codex login into a failed onboarding.
-      const profile = snapshot.namespaces.get(USER_PROFILE_NS)
-      const currentOrder = typeof profile?.value === 'object'
-        && profile.value !== null
-        && !Array.isArray(profile.value)
-        && Array.isArray((profile.value as Record<string, unknown>).modelProviderOrder)
-        ? (profile.value as { modelProviderOrder: unknown[] }).modelProviderOrder
-          .filter((value): value is string => typeof value === 'string')
-        : snapshot.rows.map(candidate => candidate.entry.provider)
-      if (profile !== undefined) {
-        const order = [
-          NATIVE_CODEX_PROVIDER,
-          ...currentOrder.filter(provider => provider !== NATIVE_CODEX_PROVIDER),
-        ]
-        await api.settings.mutate({
-          ns: USER_PROFILE_NS,
-          ops: [{ op: 'set', path: ['modelProviderOrder'], value: order }],
-          expectedRevision: profile.revision,
-        }).catch(() => undefined)
-      }
-
-      setProvisioning(false)
-      complete()
-    } catch (error) {
-      setProvisionFailure(messageOf(error))
-      setProvisioning(false)
-    }
-  }, [api.llm, api.settings, complete, controller])
-
   const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } =
     useAuthorizationAttempt(authorization, () => {
-      void finishCodexSetup()
+      setConnectedThisRun(true)
     })
 
   const modelFactsSettled = state.status === 'ready' || state.status === 'error'
 
   useEffect(() => {
     if (!modelFactsSettled) return
-    if (anotherProviderReady || codexReady) {
+    // A confirmed chat provider means this installation is already usable; do
+    // not force account onboarding on an existing configured user.
+    if (anotherProviderReady) {
       complete()
       return
     }
@@ -275,17 +178,34 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
     apiFallbackAvailable,
     authorizationCatalog.status,
     codexEntry,
-    codexReady,
     complete,
     modelFactsSettled,
   ])
 
   if (!modelFactsSettled || authorizationCatalog.status === 'loading') return null
-  if (anotherProviderReady || codexReady) return null
+  if (anotherProviderReady) return null
 
   const useApiFallback = showApiKey || codexEntry === undefined
   if (useApiFallback) {
-    if (!apiFallbackAvailable || deepSeekRow === undefined || deepSeekNamespace === undefined) return null
+    if (!apiFallbackAvailable || deepSeekRow === undefined || deepSeekNamespace === undefined) {
+      return accountReady
+        ? (
+          <OnboardingModal title={t('onboardingTitle')}>
+            <p className={styles.description}>{t('onboardingCodexConnected')}</p>
+            <p className={styles.description}>{t('onboardingChooseChatProvider')}</p>
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className={modelStyles.primaryButton}
+                onClick={complete}
+              >
+                {t('onboardingLater')}
+              </button>
+            </div>
+          </OnboardingModal>
+        )
+        : null
+    }
 
     const finishCredential = (changed: boolean): void => {
       if (changed) {
@@ -301,7 +221,7 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
 
     return (
       <OnboardingModal title={t('onboardingTitle')}>
-        <p className={styles.description}>{t('onboardingDescription')}</p>
+        <p className={styles.description}>{t('onboardingApiDescription')}</p>
         <div className={styles.editor}>
           <ProviderEditor
             provider={deepSeekRow.entry.provider}
@@ -326,8 +246,37 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
     )
   }
 
+  if (accountReady) {
+    return (
+      <OnboardingModal title={t('onboardingTitle')}>
+        <p className={styles.description}>{t('onboardingCodexConnected')}</p>
+        <p className={styles.description}>{t('onboardingChooseChatProvider')}</p>
+        <div className={styles.actions}>
+          {apiFallbackAvailable ? (
+            <button
+              type="button"
+              className={modelStyles.primaryButton}
+              onClick={() => { setShowApiKey(true) }}
+            >
+              {t('onboardingUseApiKey')}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={modelStyles.secondaryButton}
+            onClick={complete}
+          >
+            {t('onboardingLater')}
+          </button>
+        </div>
+      </OnboardingModal>
+    )
+  }
+
+  if (codexEntry === undefined) return null
+
   const pending = attempt?.status === 'pending'
-  const busy = pending || provisioning || codexEntry.inFlight
+  const busy = pending || codexEntry.inFlight
   return (
     <OnboardingModal title={t('onboardingTitle')}>
       <p className={styles.description}>{t('onboardingDescription')}</p>
@@ -341,7 +290,6 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
           t={t}
         />
         {failure === undefined ? null : <p className={modelStyles.error}>{failure}</p>}
-        {provisionFailure === undefined ? null : <p className={modelStyles.error}>{provisionFailure}</p>}
       </div>
       <div className={styles.actions}>
         <button
@@ -350,7 +298,7 @@ export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): 
           disabled={busy}
           onClick={() => { begin(codexEntry.key, 'oauth') }}
         >
-          {provisioning ? t('onboardingFinishing') : pending ? t('signingIn') : t('onboardingCodex')}
+          {pending ? t('signingIn') : t('onboardingCodex')}
         </button>
         {apiFallbackAvailable ? (
           <button
