@@ -11,7 +11,6 @@ namespace Phoenix.Desktop;
 internal sealed class PhoenixDesktopWindow : Form
 {
     private readonly Uri phoenixUri;
-    private readonly string phoenixNavigationUrl;
     private readonly SplitContainer split = new();
     private readonly WebView2 phoenixView = new();
     private readonly WebView2 browserView = new();
@@ -25,6 +24,7 @@ internal sealed class PhoenixDesktopWindow : Form
     private bool applyingBrowserLayout;
     private int? browserWidthOverride;
     private Task? browserInitializationTask;
+    private DateTimeOffset lastPhoenixNavigationAt = DateTimeOffset.MinValue;
 
     // Exposed to the native smoke test so CI verifies the real SplitContainer state,
     // not only the pure layout contract.
@@ -35,11 +35,6 @@ internal sealed class PhoenixDesktopWindow : Form
     internal PhoenixDesktopWindow(Uri phoenixUri, bool initializeWebViewsOnShow = true)
     {
         this.phoenixUri = phoenixUri;
-        var launchUri = new UriBuilder(phoenixUri);
-        var existingQuery = launchUri.Query.TrimStart('?');
-        var prefix = string.IsNullOrWhiteSpace(existingQuery) ? string.Empty : existingQuery + "&";
-        launchUri.Query = $"{prefix}surface=desktop&shellVersion={Uri.EscapeDataString(Application.ProductVersion)}&launch={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
-        phoenixNavigationUrl = launchUri.Uri.ToString();
         Text = "Phoenix";
         StartPosition = FormStartPosition.CenterScreen;
         Size = new Size(1440, 900);
@@ -136,6 +131,23 @@ internal sealed class PhoenixDesktopWindow : Form
         BringToFront();
     }
 
+    internal void RefreshPhoenixOnEntry()
+    {
+        if (IsDisposed || !runtimeReady || phoenixView.CoreWebView2 is null) return;
+        if (InvokeRequired)
+        {
+            try { BeginInvoke((Action)RefreshPhoenixOnEntry); } catch { }
+            return;
+        }
+
+        // MarkRuntimeReady may have navigated moments before ShowWindow runs. Avoid a duplicate
+        // first-load request while still guaranteeing that later tray/second-launch entries refresh.
+        if (DateTimeOffset.UtcNow - lastPhoenixNavigationAt < TimeSpan.FromSeconds(1))
+            return;
+
+        _ = NavigatePhoenixFreshAsync();
+    }
+
     internal void SetStartupStatus(string text, bool isError = false)
     {
         if (IsDisposed) return;
@@ -170,6 +182,12 @@ internal sealed class PhoenixDesktopWindow : Form
     {
         var core = phoenixView.CoreWebView2;
         if (core is null) return;
+
+        var launchUri = new UriBuilder(phoenixUri);
+        var existingQuery = launchUri.Query.TrimStart('?');
+        var prefix = string.IsNullOrWhiteSpace(existingQuery) ? string.Empty : existingQuery + "&";
+        launchUri.Query = $"{prefix}surface=desktop&shellVersion={Uri.EscapeDataString(Application.ProductVersion)}&launch={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+
         try
         {
             await core.CallDevToolsProtocolMethodAsync("Network.clearBrowserCache", "{}");
@@ -178,7 +196,9 @@ internal sealed class PhoenixDesktopWindow : Form
         {
             DesktopLog.Write("Phoenix shell cache clear was unavailable; continuing with cache-busted navigation.", ex);
         }
-        core.Navigate(phoenixNavigationUrl);
+
+        lastPhoenixNavigationAt = DateTimeOffset.UtcNow;
+        core.Navigate(launchUri.Uri.ToString());
     }
 
     internal Task ClearSessionAsync()
@@ -535,9 +555,13 @@ internal sealed class PhoenixDesktopWindow : Form
 
     private void SetBrowserVisible(bool visible)
     {
+        var opening = visible && split.Panel2Collapsed;
         split.Panel2Collapsed = !visible;
         if (visible)
         {
+            // Every newly-opened browser pane starts at the requested 60/40 split. A user can
+            // still drag the splitter while it remains open; closing/reopening resets the default.
+            if (opening) browserWidthOverride = null;
             ApplyBrowserSplitLayout();
             _ = EnsureBrowserInitializedAsync();
         }
