@@ -204,14 +204,15 @@ describe('submit transaction hardening', () => {
     expect(shell.snapshot.draft).toBe('mensaje inmediato')
   })
 
-  it('aborts a stalled busy-turn text admission and unlocks Enter with the draft intact', async () => {
+  it('keeps a stalled busy-turn admission alive instead of opening a duplicate retry window', async () => {
     vi.useFakeTimers()
     try {
       let signal: AbortSignal | undefined
+      let settle!: (outcome: SubmitOutcome) => void
       const sink = vi.fn((_text: string, _imageIds: readonly DraftAttachmentId[], mode: 'queue' | 'steer', received: AbortSignal) => {
         expect(mode).toBe('steer')
         signal = received
-        return new Promise<SubmitOutcome>(() => {})
+        return new Promise<SubmitOutcome>((resolve) => { settle = resolve })
       })
       const shell = new SessionInputShell({
         actx: {} as ClientContext,
@@ -223,20 +224,25 @@ describe('submit transaction hardening', () => {
       shell.submit('steer')
       expect(shell.snapshot).toMatchObject({
         phase: 'submitting',
-        pendingSubmit: { text: 'interrumpe esto' },
+        pendingSubmit: { text: 'interrumpe esto', modelText: 'interrumpe esto' },
       })
       expect(signal?.aborted).toBe(false)
 
-      await vi.advanceTimersByTimeAsync(8_000)
+      await vi.advanceTimersByTimeAsync(9_000)
 
-      expect(signal?.aborted).toBe(true)
-      expect(shell.snapshot.phase).toBe('plain')
-      expect(shell.snapshot.pendingSubmit).toBeUndefined()
-      expect(shell.snapshot.draft).toBe('interrumpe esto')
-      expect(shell.notices.getSnapshot()).toMatchObject({
-        level: 'error',
-        text: expect.stringContaining('draft was kept'),
-      })
+      expect(signal?.aborted).toBe(false)
+      expect(shell.snapshot.phase).toBe('submitting')
+      expect(shell.snapshot.pendingSubmit).toMatchObject({ text: 'interrumpe esto' })
+      expect(shell.notices.getSnapshot()).toBeNull()
+
+      // A repeated submit while the original Host admission is unresolved is
+      // ignored by the machine instead of creating a second queued occurrence.
+      shell.submit('steer')
+      expect(sink).toHaveBeenCalledTimes(1)
+
+      settle({ kind: 'success' })
+      await vi.waitFor(() => { expect(shell.snapshot.phase).toBe('plain') })
+      expect(shell.snapshot.draft).toBe('')
     } finally {
       vi.useRealTimers()
     }
