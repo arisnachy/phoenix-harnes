@@ -1,0 +1,35 @@
+# Agent Note: Universal capability-use policy
+
+Status: implemented
+
+English | [中文](2026-09-18-universal-capability-use-policy.zh.md)
+
+## Problem
+
+PHOENIX already exposes a broad capability surface: durable memory, session retrieval, files, web access, Code Mode, visual rendering, connectors, scheduling, background jobs, subagents, and the HARDNESS capability index. The remaining failure mode was orchestration quality rather than raw availability. Different providers could choose a generic route when a more authoritative source existed, answer freshness-sensitive questions from model memory, infer file contents from partial previews, miss relevant prior context, create a textual substitute for a requested visual, or discover connectors before first checking native capabilities. Those mistakes make an equipped harness behave as if it lacks capabilities and can add latency, token use, and unnecessary authorization work.
+
+## Decision
+
+Full model-facing HARDNESS scopes install one stable `hardness:capability-operating-protocol` section. The policy gives every provider the same compact decision ladder before tool use: identify the authoritative source, recover materially relevant context, prefer the most specific healthy native capability, use live public evidence when freshness matters, use connected private sources only when account state is required, retrieve actual file content before making file-dependent claims, and use visual or generative capabilities when the requested deliverable is visual rather than substituting prose.
+
+The policy keeps execution capability-dependent. It does not grant permissions, invent unavailable tools, or bypass approval. A deeper history check corrected two apparent gaps: current main already contains native Windows computer-use/browser control through the `computer` tool (including `browser_open` and screenshot-driven verification), and native `image_generation` is exposed in the standard and Code presets. The protocol therefore prefers those mounted capabilities rather than rediscovering substitutes. This change closes the generic condition-watch gap with `phoenix_watch_create`: a durable watch runs private structured read-only checks on an anchored interval, remains silent while the condition is false or uncertain, and completes after the first verified-true notification. Polling is capped at hourly or slower to control cost; event-driven connector/webhook sources remain preferred when available. When an approved registry connector can supply a missing specialized or external capability or event source, Phoenix routes through the existing connector inventory/discovery/installation protocol. HARDNESS acquisition/building is treated as available only when an actual acquisition provider is mounted; the production adapter currently creates its acquisition registry without builders, so it is never presented as a magical fallback. Future and recurring work uses the durable task system instead of an idle agent. Tool failure is classified before recovery so authorization failures, transient transport failures, unavailable capabilities, invalid input, and stale evidence do not collapse into the same blind retry behavior.
+
+The protocol also sets a latency and cost floor: no redundant inventory calls when a healthy capability is already known, independent read-only work may be batched when safe, and subagents are reserved for genuinely independent work, verification, or review within the shared budget. User-facing output presents the result and evidence rather than internal routing machinery or private reasoning.
+
+## Verification
+
+`packages/hardness/adapters/tests/capability-protocol.spec.ts` pins registration order and the source-authority, freshness, file-retrieval, visual-deliverable, automation, bounded-recovery, and low-overhead rules. `proactivity-engine.spec.ts` pins false-check recurrence and terminal true delivery; `proactivity-watch.spec.ts` proves false checks never enter the user inbox and true checks deliver verified evidence exactly once. `packages/hardness/adapters/src/index.ts` installs the section for model-facing scopes beside the existing HARDNESS, proactivity, human-presence, and connector protocols.
+
+## Alternatives considered
+
+**Rely on each model provider to infer the right tool strategy.** Rejected because provider swaps then change product behavior even though PHOENIX owns the same tools and state.
+
+**Add every tool schema and special case to one giant prompt.** Rejected because that increases prompt cost, harms cache stability, and duplicates registries that already describe executable capabilities.
+
+**Hard-code a deterministic router for every user request.** Rejected because intent classification and tool choice remain partly semantic, while HARDNESS already owns deterministic workflow and capability verification. The new policy guides the model without creating a second execution authority.
+
+**Fold these rules into the connector protocol.** Rejected because connector selection is only one branch of the decision. Local files, session memory, public web evidence, visual rendering, native tools, and scheduled work must follow the same source-first policy even when no connector exists.
+
+## Consequences
+
+Model-facing scopes gain a small stable prompt block in exchange for more consistent use of capabilities across providers. The change should reduce unnecessary connector discovery, stale answers, guessed file content, redundant tool calls, and textual fallbacks for visual requests. Actual execution still depends on mounted capabilities and existing approval, privacy, safety, and verification boundaries; the policy cannot make an unavailable provider real. This change also prevents regressions where a model overlooks Phoenix's existing native computer or image tools merely because they live outside an obvious top-level package name.

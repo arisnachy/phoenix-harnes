@@ -19,6 +19,7 @@ describe('HARDNESS proactivity adapter integration', () => {
     const dispose = await apply(context, { judgeProvider: 'spawn', modelTools: true })
 
     expect(context.tools.get('phoenix_task_create')).toBeDefined()
+    expect(context.tools.get('phoenix_watch_create')).toBeDefined()
     expect(context.tools.get('phoenix_task_list')).toBeDefined()
     expect(context.tools.get('phoenix_task_pause')).toBeDefined()
     expect(context.tools.get('phoenix_task_resume')).toBeDefined()
@@ -26,6 +27,7 @@ describe('HARDNESS proactivity adapter integration', () => {
 
     dispose()
     expect(context.tools.get('phoenix_task_create')).toBeUndefined()
+    expect(context.tools.get('phoenix_watch_create')).toBeUndefined()
     await context.fiber.dispose()
   })
 })
