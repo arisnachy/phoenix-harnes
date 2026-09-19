@@ -78,7 +78,7 @@ describe('ToolRuntime', () => {
       },
       output: {
         schema: { type: 'string' },
-        render: (_args, value) => [{ type: 'text', text: value }],
+        render: (_args, value) => [{ type: 'text', text: String(value) }],
       },
       async execute() { return 'ok' },
     })
