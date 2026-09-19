@@ -90,9 +90,9 @@ using (var control = new DesktopBrowserControlServer(
 False(File.Exists(controlDescriptorPath), "desktop control descriptor removed on dispose", failures);
 
 True(BrowserLayout.StartCollapsed, "embedded browser starts collapsed", failures);
-EqualInt(400, BrowserLayout.PreferredBrowserWidth(1100), "small window keeps useful browser without crowding chat", failures);
-EqualInt(518, BrowserLayout.PreferredBrowserWidth(1440), "normal window uses a Codex-like side pane", failures);
-EqualInt(640, BrowserLayout.PreferredBrowserWidth(2400), "wide window caps browser width", failures);
+EqualInt(440, BrowserLayout.PreferredBrowserWidth(1100), "small window targets a 60/40 chat/browser split", failures);
+EqualInt(576, BrowserLayout.PreferredBrowserWidth(1440), "normal window targets a 60/40 chat/browser split", failures);
+EqualInt(960, BrowserLayout.PreferredBrowserWidth(2400), "wide window preserves the 60/40 chat/browser split", failures);
 
 // Desktop startup must be visible before the managed runtime is ready. This is the regression
 // contract for the installed EXE appearing to do nothing on first launch.
