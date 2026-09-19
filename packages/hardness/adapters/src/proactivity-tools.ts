@@ -77,7 +77,11 @@ function recurrence(args: { everyMinutes?: number; everyYears?: number; timezone
   return undefined
 }
 
-/** Create the model-facing tool that schedules durable proactive work. */
+/**
+ * Create the model-facing tool that schedules durable proactive work.
+ * @param engine - Host-owned proactivity engine that persists and executes scheduled tasks.
+ * @returns Tool definition exposed to the model for durable task creation.
+ */
 export function createProactivityCreateTool(engine: ProactivityEngine): ToolDefinition {
   return defineTool({
     name: 'phoenix_task_create',
@@ -140,7 +144,11 @@ export function createProactivityCreateTool(engine: ProactivityEngine): ToolDefi
   })
 }
 
-/** Create a durable condition watch that stays silent until its condition is verified true. */
+/**
+ * Create a durable condition watch that stays silent until its condition is verified true.
+ * @param engine - Host-owned proactivity engine that persists and executes condition watches.
+ * @returns Tool definition exposed to the model for durable condition monitoring.
+ */
 export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefinition {
   return defineTool({
     name: 'phoenix_watch_create',
@@ -182,7 +190,11 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
   })
 }
 
-/** Create the ordinary task-list tool; unrevealed surprise tasks remain absent. */
+/**
+ * Create the ordinary task-list tool; unrevealed surprise tasks remain absent.
+ * @param engine - Host-owned proactivity engine used to read scheduled task state.
+ * @returns Tool definition exposed to the model for listing visible scheduled tasks.
+ */
 export function createProactivityListTool(engine: ProactivityEngine): ToolDefinition {
   return defineTool({
     name: 'phoenix_task_list',
@@ -220,7 +232,11 @@ function managementTool(
   })
 }
 
-/** Create all model-facing task tools backed by one host-owned engine. */
+/**
+ * Create all model-facing task tools backed by one host-owned engine.
+ * @param engine - Host-owned proactivity engine shared by the returned task tools.
+ * @returns Readonly collection of task-management tool definitions.
+ */
 export function createProactivityTools(engine: ProactivityEngine): readonly ToolDefinition[] {
   return [
     createProactivityCreateTool(engine),
