@@ -180,7 +180,7 @@ pi-ai 会安装多个提供方 SDK，并延迟加载 catalog 模型所选的 SDK
 
 #### 模型看到的内容
 
-所选 catalog 模型会收到 `GenerateOptions.system`、历史、工具，以及 pi-ai 通用流式 API 支持的采样字段。每张保留图片前都有稳定文本，写明完整附件 ID 和实际请求尺寸。请求累积的 base64 图片载荷超过路由的 `maxRequestImageBytes` 时，被 offload 的图片会从最老开始替换为固定文本，要求模型在有路径时重新读取文件，否则请用户重新附上图片。系统不会读取或转换被 offload 的规范化附件。只有当适配器验证提供方原生回放元数据与历史内容匹配时，才会恢复这些元数据。
+所选 catalog 模型会收到 `GenerateOptions.system`、历史、工具，以及 pi-ai 通用流式 API 支持的采样字段。对于 `openai-codex-responses`，请求投影还会规范化使用非对象根，或在根级使用 `oneOf`/`anyOf`/`allOf`/`enum`/`const`/`not` 的 MCP 参数 schema：Phoenix 保持已注册的 MCP schema 不变，仅向 Codex 发送对象根兼容视图，并继续由 MCP 服务器对实际工具参数执行权威校验。每张保留图片前都有稳定文本，写明完整附件 ID 和实际请求尺寸。请求累积的 base64 图片载荷超过路由的 `maxRequestImageBytes` 时，被 offload 的图片会从最老开始替换为固定文本，要求模型在有路径时重新读取文件，否则请用户重新附上图片。系统不会读取或转换被 offload 的规范化附件。只有当适配器验证提供方原生回放元数据与历史内容匹配时，才会恢复这些元数据。
 
 #### Token 影响
 
