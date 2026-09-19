@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Net.Http;
+using System.Text;
 using Microsoft.Win32;
 
 namespace Phoenix.Desktop;
@@ -127,6 +128,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     private Process? ownedRuntime;
     private bool externallyManaged;
     private bool shuttingDown;
+    private bool signingOut;
 
     internal PhoenixApplicationContext(EventWaitHandle showEvent)
     {
@@ -135,6 +137,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         // The desktop window is created and shown immediately. Runtime bootstrap happens behind it,
         // so a first launch can never look like a dead EXE again.
         window = new PhoenixDesktopWindow(Program.PhoenixUri);
+        window.LogoutRequested += async (_, _) => await SignOutAndExitAsync();
         _ = window.Handle;
         browserControl = new DesktopBrowserControlServer(
             window.ExecuteBrowserCommandAsync,
@@ -154,6 +157,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         autostartItem.CheckedChanged += (_, _) => StartupRegistration.SetEnabled(autostartItem.Checked);
         menu.Items.Add(autostartItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Cerrar sesión y salir", null, async (_, _) => await SignOutAndExitAsync());
         menu.Items.Add("Salir", null, (_, _) => ExitPhoenix());
 
         tray = new NotifyIcon
@@ -213,12 +217,16 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             window.SetStartupStatus("Comprobando runtime local…");
             if (await IsReadyAsync())
             {
-                externallyManaged = true;
-                restartItem.Enabled = false;
-                tray.Text = "Phoenix · runtime existente";
-                window.MarkRuntimeReady();
-                DesktopLog.Write("Existing runtime at 127.0.0.1:3080 is ready.");
-                return;
+                window.SetStartupStatus("Cerrando una instancia anterior de Phoenix…");
+                if (!await RetireConflictingPhoenixRuntimeAsync())
+                {
+                    tray.Text = "Phoenix · puerto 3080 ocupado";
+                    window.SetStartupStatus(
+                        "El puerto 3080 está ocupado por otro programa. Phoenix no abrirá una versión ajena o antigua.\n\nCierra el proceso que usa el puerto y vuelve a abrir Phoenix.",
+                        isError: true);
+                    DesktopLog.Write("Refused to attach to an unowned process already listening on 127.0.0.1:3080.");
+                    return;
+                }
             }
 
             if (!await EnsureManagedRuntimeAsync())
@@ -245,7 +253,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         DesktopLog.Write($"Managed runtime state: {state}");
 
         if (state == ManagedRuntimeState.Ready)
-            return true;
+            return await RefreshManagedRuntimeAsync();
 
         if (state == ManagedRuntimeState.Unmanaged)
         {
@@ -306,6 +314,138 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             $"No se pudo preparar el runtime administrado de Phoenix. Comprueba Git, Node.js 22.19+ y Corepack.\n\nDiagnóstico: {Program.LogPath}",
             "Phoenix", MessageBoxButtons.OK, MessageBoxIcon.Error);
         return false;
+    }
+
+    private async Task<bool> RefreshManagedRuntimeAsync()
+    {
+        var updater = Path.Combine(Program.RuntimeRoot, "update-phoenix.ps1");
+        if (!File.Exists(updater))
+        {
+            DesktopLog.Write("Managed runtime has no update-phoenix.ps1; continuing with its current verified build.");
+            return true;
+        }
+
+        window.SetStartupStatus("Comprobando la versión estable más reciente…");
+        tray.Text = "Phoenix · actualizando";
+        var psi = new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = Program.RuntimeRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("-NoLogo");
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-NonInteractive");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-File");
+        psi.ArgumentList.Add(updater);
+
+        DesktopLog.Write("Checking promoted stable before desktop runtime launch.");
+        using var updateProcess = Process.Start(psi);
+        if (updateProcess is null)
+        {
+            DesktopLog.Write("Could not start managed stable updater; keeping the current verified runtime.");
+            return true;
+        }
+
+        var stdoutTask = updateProcess.StandardOutput.ReadToEndAsync();
+        var stderrTask = updateProcess.StandardError.ReadToEndAsync();
+        await updateProcess.WaitForExitAsync();
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+        if (!string.IsNullOrWhiteSpace(stdout)) DesktopLog.Write("stable update stdout:\n" + stdout.Trim());
+        if (!string.IsNullOrWhiteSpace(stderr)) DesktopLog.Write("stable update stderr:\n" + stderr.Trim());
+
+        if (updateProcess.ExitCode == 12)
+        {
+            window.SetStartupStatus(
+                $"La actualización estable falló y no pudo recuperar el runtime.\n\nDiagnóstico: {Program.LogPath}",
+                isError: true);
+            tray.Text = "Phoenix · actualización bloqueada";
+            return false;
+        }
+
+        if (updateProcess.ExitCode != 0)
+            DesktopLog.Write($"Stable update check returned {updateProcess.ExitCode}; starting the last verified runtime.");
+
+        return true;
+    }
+
+    private async Task<bool> RetireConflictingPhoenixRuntimeAsync()
+    {
+        const string script = """
+            $ErrorActionPreference = 'SilentlyContinue'
+            $owners = @(Get-NetTCPConnection -State Listen -LocalPort 3080 -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty OwningProcess -Unique)
+            if ($owners.Count -eq 0) { exit 0 }
+
+            foreach ($ownerId in $owners) {
+              $current = Get-CimInstance Win32_Process -Filter "ProcessId=$ownerId" -ErrorAction SilentlyContinue
+              if (-not $current) { continue }
+              $command = [string]$current.CommandLine
+              $isPhoenix = $command -match '(?i)(phoenix-windows-supervisor\.mjs|apps[\\/]+cli[\\/]+(?:src|lib)[\\/]+bin\.(?:ts|js)|phoenix-harnes|[\\/]Phoenix[\\/]runtime)'
+              if (-not $isPhoenix) {
+                Write-Output "foreign:$ownerId:$($current.Name)"
+                exit 21
+              }
+
+              $root = $current
+              for ($depth = 0; $depth -lt 6; $depth++) {
+                $parentId = [int]$root.ParentProcessId
+                if ($parentId -le 0) { break }
+                $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$parentId" -ErrorAction SilentlyContinue
+                if (-not $parent) { break }
+                $parentCommand = [string]$parent.CommandLine
+                if ($parentCommand -match '(?i)phoenix-windows-supervisor\.mjs') {
+                  $root = $parent
+                  break
+                }
+                if ($parentCommand -match '(?i)(phoenix-harnes|[\\/]Phoenix[\\/]runtime|phoenix-windows\.cmd)') {
+                  $root = $parent
+                  continue
+                }
+                break
+              }
+
+              & taskkill.exe /PID $root.ProcessId /T /F | Out-Null
+            }
+
+            Start-Sleep -Milliseconds 700
+            $remaining = @(Get-NetTCPConnection -State Listen -LocalPort 3080 -ErrorAction SilentlyContinue)
+            if ($remaining.Count -gt 0) { exit 22 }
+            exit 0
+            """;
+
+        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+        var psi = new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("-NoLogo");
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-NonInteractive");
+        psi.ArgumentList.Add("-EncodedCommand");
+        psi.ArgumentList.Add(encoded);
+
+        using var cleanup = Process.Start(psi);
+        if (cleanup is null) return false;
+        var stdoutTask = cleanup.StandardOutput.ReadToEndAsync();
+        var stderrTask = cleanup.StandardError.ReadToEndAsync();
+        await cleanup.WaitForExitAsync();
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+        if (!string.IsNullOrWhiteSpace(stdout)) DesktopLog.Write("port cleanup stdout: " + stdout.Trim());
+        if (!string.IsNullOrWhiteSpace(stderr)) DesktopLog.Write("port cleanup stderr: " + stderr.Trim());
+        DesktopLog.Write($"Port 3080 cleanup exited with code {cleanup.ExitCode}.");
+        return cleanup.ExitCode == 0 && !await IsReadyAsync();
     }
 
     private async Task StartOwnedRuntimeAsync(bool openWhenReady)
@@ -427,6 +567,26 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         {
             ownedRuntime.Dispose();
             ownedRuntime = null;
+        }
+    }
+
+    private async Task SignOutAndExitAsync()
+    {
+        if (shuttingDown || signingOut) return;
+        signingOut = true;
+        try
+        {
+            tray.Text = "Phoenix · cerrando sesión";
+            await window.ClearSessionAsync();
+            DesktopLog.Write("Desktop session storage cleared by explicit user logout.");
+        }
+        catch (Exception ex)
+        {
+            DesktopLog.Write("Desktop logout could not clear every WebView session item; exiting anyway.", ex);
+        }
+        finally
+        {
+            ExitPhoenix();
         }
     }
 
