@@ -14,11 +14,13 @@ type ConnectorListService = Pick<AuthorizationService, 'list' | 'inspect'>
 type McpConnectorListService = Pick<McpConnectorRegistry, 'list'>
 type AuthorizationStatus = 'connected' | 'not-connected' | 'unknown'
 type ConnectorStatus = AuthorizationStatus | McpConnectorEntry['status']
+type ConnectorRecommendedAction = 'use' | 'connect-or-reconnect' | 'wait' | 'repair' | 'inspect'
 type AuthorizationConnector = {
   id: string
   label: string
   methods: { id: string; label: string }[]
   status: AuthorizationStatus
+  recommended_action: ConnectorRecommendedAction
   in_flight: boolean
   disconnectable?: true
   services: JsonValue[]
@@ -29,6 +31,7 @@ type McpConnector = {
   label: string
   methods: []
   status: McpConnectorEntry['status']
+  recommended_action: ConnectorRecommendedAction
   in_flight: false
   services: []
   transport: McpConnectorEntry['transport']
@@ -43,6 +46,7 @@ type ConnectorListResult = {
     label: string
     methods: { id: string; label: string }[]
     status: ConnectorStatus
+    recommended_action: ConnectorRecommendedAction
     in_flight: boolean
     disconnectable?: true
     services: JsonValue[]
@@ -56,6 +60,19 @@ type ConnectorListResult = {
 function connectorStatus(telemetry: AuthorizationTelemetry | undefined, inspectable: boolean): AuthorizationStatus {
   if (telemetry !== undefined) return 'connected'
   return inspectable ? 'not-connected' : 'unknown'
+}
+
+function authorizationRecommendedAction(status: AuthorizationStatus): ConnectorRecommendedAction {
+  if (status === 'connected') return 'use'
+  if (status === 'not-connected') return 'connect-or-reconnect'
+  return 'inspect'
+}
+
+function mcpRecommendedAction(status: McpConnectorEntry['status']): ConnectorRecommendedAction {
+  if (status === 'ready') return 'use'
+  if (status === 'auth-required') return 'connect-or-reconnect'
+  if (status === 'starting') return 'wait'
+  return 'repair'
 }
 
 function serviceViews(telemetry: AuthorizationTelemetry | undefined): JsonValue[] {
@@ -85,11 +102,13 @@ async function projectEntry(
     // Provider telemetry is optional. A failed inspection must not hide the
     // authorization flow or turn a read-only inventory call into a failure.
   }
+  const status = connectorStatus(telemetry, inspectable)
   return {
     id: entry.key,
     label: entry.label,
     methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
-    status: connectorStatus(telemetry, inspectable),
+    status,
+    recommended_action: authorizationRecommendedAction(status),
     in_flight: entry.inFlight,
     ...(entry.disconnectable === true ? { disconnectable: true as const } : {}),
     services: serviceViews(telemetry),
@@ -103,6 +122,7 @@ function projectMcpEntry(entry: McpConnectorEntry): McpConnector {
     label: `MCP ${entry.serverName}`,
     methods: [],
     status: entry.status,
+    recommended_action: mcpRecommendedAction(entry.status),
     in_flight: false,
     services: [],
     transport: entry.transport,
@@ -123,7 +143,7 @@ export function createConnectorListTool(
 ): ToolDefinition {
   return defineTool({
     name: 'connector_list',
-    description: 'List installed/authorized connectors and callable services without changing access. Use status auth-required or not-connected to present authorization/reconnect to the user instead of retrying blindly. If the needed connector is absent, call connector_discover.',
+    description: 'List installed/authorized connectors and callable services without changing access. Call this only when the needed connector is not already directly available, selection is ambiguous, or a connector just failed. Follow recommended_action: use, connect-or-reconnect, wait, repair, or inspect. Authorization failures must surface Connect/Reconnect instead of blind retries. If the needed connector is absent, call connector_discover.',
     parameters: {},
     output: {
       schema: {
@@ -156,6 +176,11 @@ export function createConnectorListTool(
                 status: {
                   type: 'string',
                   enum: ['connected', 'not-connected', 'unknown', 'starting', 'ready', 'disconnected', 'failed', 'auth-required'],
+                  required: true,
+                },
+                recommended_action: {
+                  type: 'string',
+                  enum: ['use', 'connect-or-reconnect', 'wait', 'repair', 'inspect'],
                   required: true,
                 },
                 in_flight: { type: 'boolean', required: true },
