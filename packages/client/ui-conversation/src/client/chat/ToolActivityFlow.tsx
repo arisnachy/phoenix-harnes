@@ -6,6 +6,7 @@ import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool, isSettledTool } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
+import { PendingSteeringBubble } from './MessageItem.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
 import type { TurnProgress } from './turn-progress.ts'
@@ -22,6 +23,8 @@ interface OrderedChatNode {
 
 interface ToolActivityFlowProps extends SeatProps {
   readonly nodes: readonly OrderedChatNode[]
+  /** Ordinary prompt admitted locally but not yet present in the durable transcript. */
+  readonly optimisticSubmit?: { readonly text: string } | undefined
   readonly turnStatus: {
     readonly startTime: number | null
     readonly progress: TurnProgress | null
@@ -313,13 +316,15 @@ function TurnStatus({ startTime, progress, t }: {
 /**
  * Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure.
  * Visible assistant prose precedes its technical activity, and the running status precedes a trailing Tools group.
+ * An ordinary locally admitted send stays at the transcript tail ahead of the current turn status until its durable user node arrives.
  * Running Tool rows stay live above the disclosure and join history once settled.
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
-export function ToolActivityFlow({ nodes, turnStatus, ...seatProps }: ToolActivityFlowProps) {
+export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatProps }: ToolActivityFlowProps) {
   const flow = useMemo(() => buildFlow(nodes), [nodes])
-  const statusBeforeIndex = turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
+  const hasOptimisticSubmit = optimisticSubmit !== undefined && optimisticSubmit.text !== ''
+  const statusBeforeIndex = hasOptimisticSubmit || turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
     ? -1
     : flow.length - 1
   return (
@@ -346,6 +351,13 @@ export function ToolActivityFlow({ nodes, turnStatus, ...seatProps }: ToolActivi
               )}
         </Fragment>
       ))}
+      {hasOptimisticSubmit && (
+        <PendingSteeringBubble
+          content={[{ type: 'text', text: optimisticSubmit.text }]}
+          renderMessageImages={seatProps.renderMessageImages}
+          t={seatProps.t}
+        />
+      )}
       {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
         <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress} t={seatProps.t} />
       )}
