@@ -23,7 +23,6 @@ import type { ModelsSettingsStore, ProviderRow } from './store.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor, type ProviderEditorProps } from './ProviderEditor.tsx'
 import { AuthorizationPanel } from './AuthorizationPanel.tsx'
-import { authorizationConnected, providerForAuthorization } from './authorization-provider.ts'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 
@@ -82,10 +81,8 @@ interface AccountFlow {
   key: string
   label: string
   methods: ReadonlyArray<{ id: string; label: string }>
-  /** Secret-free authorization record metadata, when the flow stores one. */
+  /** The record already stored behind the flow (`grant` = signed in). */
   stored?: { kind: string }
-  /** Optional live account metadata projected by the provider. */
-  telemetry?: { provider?: string }
 }
 
 /** Render an editor for either the setup posture or an expanded provider row. */
@@ -208,9 +205,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   const [savedTarget, setSavedTarget] = useState<ProviderIdentity | undefined>(undefined)
   const [declaring, setDeclaring] = useState(false)
   const [dismissedSetup, setDismissedSetup] = useState<ReadonlySet<string>>(() => new Set())
-  // Registered account flows, keyed by the LLM provider they authenticate.
-  // Most use the suffix after the scope slash; native Codex is explicitly
-  // bridged from subagent-codex/account → openai-codex.
+  // Registered account flows, keyed by the provider id after the scope slash
+  // (`llm-pi-ai/openai-codex` → `openai-codex`): the same join the cards use.
   const [accountFlows, setAccountFlows] = useState<ReadonlyMap<string, AccountFlow>>(() => new Map())
   const [flowNonce, setFlowNonce] = useState(0)
   const [reordering, setReordering] = useState(false)
@@ -222,7 +218,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
     void api.authorization.list({}).then((response) => {
       if (stale || !response.result.ok) return
       setAccountFlows(new Map(response.result.value.entries.map(entry => [
-        providerForAuthorization(entry),
+        entry.key.slice(entry.key.indexOf('/') + 1),
         entry,
       ])))
     }, () => undefined)
@@ -236,9 +232,9 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   }
 
   /**
-   * The provider's account flow, when this deployment registers one. Generic
-   * OAuth uses a stored grant; native Codex uses a secret-free marker (or live
-   * Codex telemetry) because its tokens stay inside the Codex app-server.
+   * The provider's account flow, when this deployment registers one. A flow
+   * whose stored record is a grant is already signed in — that is what lets a
+   * card show connected state without ever seeing a credential value.
    */
   const accountFlowFor = (provider: string): ProviderEditorProps['oauth'] => {
     if (api.authorization === undefined) return undefined
@@ -247,7 +243,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
       key: flow.key,
       label: flow.label,
       methods: [...flow.methods],
-      connected: authorizationConnected(flow),
+      connected: flow.stored?.kind === 'grant',
     }
   }
 
