@@ -396,6 +396,14 @@
         # One bounded retry lets early provider length stops compact and
         # recover instead of surfacing as an immediate output-limit failure.
         maxOverflowRetries: 1
+        # Luna's very large model context must not become the request budget.
+        # Keep the full durable transcript, while compacting the model-facing
+        # semantic head early enough to avoid TPM-heavy giant turns.
+        modelPolicies:
+          - provider: openai
+            model: gpt-5.6-luna
+            thresholdRatio: 0.14
+            retainRatio: 0.05
 
     # Human `/compact`: one useful reduction below the automatic threshold. Backend
     # independent, so it follows whichever compaction service this leaf mounts.

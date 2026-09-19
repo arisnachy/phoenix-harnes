@@ -5,7 +5,7 @@
 
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ContextSnapshotSection } from '@phoenix-ai/dsh-llm'
-import type { Session, UserMessage } from '@phoenix-ai/dsh-session'
+import type { Session, SurfaceIntent, UserMessage } from '@phoenix-ai/dsh-session'
 import { isReplacementSurfaceEvent } from '@phoenix-ai/dsh-session'
 import type { Context } from '@phoenix-ai/cordis'
 
@@ -53,6 +53,22 @@ export class RuntimeContextProjection {
         this.retained = null
       }
     })
+  }
+
+  /**
+   * Keep runtime context durable without replaying stale snapshots to the model.
+   * The previous owned snapshot remains in the append-only session log, while the
+   * model-facing surface replaces it atomically with the new snapshot.
+   * @param message - pre-step message about to be committed.
+   * @returns append for ordinary messages/first snapshot, replace for a newer snapshot.
+   */
+  surfaceIntent(message: UserMessage): SurfaceIntent {
+    if (!isOwned(message) || this.retained == null) return { surfaceOp: 'append' }
+    const seq = this.retained.seq
+    return {
+      surfaceOp: { op: 'replace', start: seq, end: seq },
+      sourceEventSeqs: [seq],
+    }
   }
 
   /**

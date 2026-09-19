@@ -151,6 +151,16 @@
   config:
     - id: compaction-basic
       name: '@phoenix-ai/dsh-compaction-basic'
+      config:
+        # GPT-5.6 Luna has a 1.05M context window, but an API TPM budget can be
+        # much smaller. Compact the old semantic head before one long request
+        # can consume most of a 500k-class minute; the durable log and cognitive
+        # memory remain intact, and a 5% verbatim tail stays available.
+        modelPolicies:
+          - provider: openai
+            model: gpt-5.6-luna
+            thresholdRatio: 0.14
+            retainRatio: 0.05
 
     - id: command-compact
       name: '@phoenix-ai/dsh-command-compact'
