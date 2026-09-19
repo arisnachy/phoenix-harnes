@@ -61,11 +61,19 @@ beforeEach(() => {
 })
 
 describe('PiAiAdapter provider routing', () => {
-  it('refreshes an advisory catalog before listing models', async () => {
+  it('refreshes and filters the advertised catalog without removing dispatchable models', async () => {
     let providers: Record<string, LlmPiAi.PiAiProviderProfile> = { deepseek: {} }
-    const refreshModels = vi.fn(async (provider: string) => {
+    const refreshModels = vi.fn(async (provider: string): Promise<readonly string[]> => {
       expect(provider).toBe('deepseek')
-      providers = { deepseek: { models: [{ id: 'deepseek-v4-flash' }] } }
+      providers = {
+        deepseek: {
+          models: [
+            { id: 'deepseek-v4-flash' },
+            { id: 'phoenix-retired-but-dispatchable' },
+          ],
+        },
+      }
+      return ['deepseek-v4-flash']
     })
     const adapter = new PiAiAdapter({
       profiles: () => resolveProfiles(providers),
@@ -77,6 +85,8 @@ describe('PiAiAdapter provider routing', () => {
     await expect(adapter.listModels('deepseek')).resolves.toEqual([
       expect.objectContaining({ provider: 'deepseek', id: 'deepseek-v4-flash' }),
     ])
+    await expect(adapter.resolveModel('deepseek', 'phoenix-retired-but-dispatchable'))
+      .resolves.toMatchObject({ provider: 'deepseek', id: 'phoenix-retired-but-dispatchable' })
     expect(refreshModels).toHaveBeenCalledTimes(1)
   })
 
@@ -84,7 +94,7 @@ describe('PiAiAdapter provider routing', () => {
     let providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
       deepseek: { models: [{ id: 'deepseek-v4-flash' }] },
     }
-    const refreshModels = vi.fn(async (_provider: string, force?: boolean) => {
+    const refreshModels = vi.fn(async (_provider: string, force?: boolean): Promise<readonly string[]> => {
       expect(force).toBe(true)
       providers = {
         deepseek: {
@@ -94,6 +104,7 @@ describe('PiAiAdapter provider routing', () => {
           ],
         },
       }
+      return ['deepseek-v4-flash', 'phoenix-live-new-model']
     })
     const adapter = new PiAiAdapter({
       profiles: () => resolveProfiles(providers),
