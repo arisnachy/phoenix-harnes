@@ -41,11 +41,12 @@ describe('tool-living', () => {
     expect(ToolLiving.LIVING_CREATION_POLICY).not.toMatch(/chess|spreadsheet|warehouse/i)
   })
 
-  it('requires a connector for every creation and keeps static as a justified exception', async () => {
+  it('requires a connector for every Phoenix-created output with no static downgrade', async () => {
     expect(ToolLiving.LIVING_CREATION_POLICY).toContain('mandatory, not optional')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('never judge a creation too small, too disposable, or too local to connect')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Default every creation to connected or above')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('treat static as an explicit, justified exception')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('never judge a creation too small, too disposable, too local, or too simple to connect')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('must target connected or above')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('do not silently downgrade a Phoenix-created artifact to static')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Agent operation is optional even though Phoenix connectivity is mandatory')
   })
 
   it('requires telemetry, error surfacing, and live control surfaces', async () => {
@@ -69,15 +70,25 @@ describe('tool-living', () => {
     expect(ToolLiving.LIVING_CREATION_POLICY).toContain('binds every model and every session')
   })
 
-  it('registers an unknown static creation kind through the model-facing tool', async () => {
+  it('registers an unknown connected creation kind through the model-facing tool', async () => {
     const root = await bench()
     const tool = root.tools.get('living_register_creation')
     expect(tool).toBeDefined()
     const value = await tool!.execute({
-      id: 'strange-1', title: 'Unforeseen thing', kind: 'future-kind-xyz', target_level: 'static',
+      id: 'strange-1', title: 'Unforeseen thing', kind: 'future-kind-xyz', target_level: 'connected',
+      state: ['revision', 'health', 'last_error', 'updated_at'], actions: [], events: [], resources: ['artifact'], actors: [],
+    }, {} as never) as { connector_json: string }
+    expect(value).toMatchObject({ id: 'strange-1', kind: 'future-kind-xyz', target_level: 'connected', achieved_level: 'static', connected: false })
+    expect(JSON.parse(value.connector_json)).toMatchObject({ protocol: 'phoenix-living-http-v1', creation_id: 'strange-1' })
+  })
+
+  it('refuses static targets in the model-facing creation flow', async () => {
+    const root = await bench()
+    const tool = root.tools.get('living_register_creation')!
+    await expect(tool.execute({
+      id: 'static-1', title: 'Static attempt', kind: 'document', target_level: 'static',
       state: [], actions: [], events: [], resources: ['artifact'], actors: [],
-    }, {} as never)
-    expect(value).toMatchObject({ id: 'strange-1', kind: 'future-kind-xyz', achieved_level: 'static', connected: false })
+    }, {} as never)).rejects.toThrow(/must target connected or above/i)
   })
 
   it('auto-provisions one stable control link and emits secret-safe connector modules', async () => {
