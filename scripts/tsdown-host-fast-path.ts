@@ -56,10 +56,10 @@ function workspaceRootForImporter(importer: string): string | undefined {
  */
 export function declaredHostExternal(
   id: string,
-  importer: string | undefined,
+  importer: string | undefined | null,
 ): boolean | undefined {
   if (isBuiltin(id)) return true
-  if (importer === undefined) return undefined
+  if (importer == null) return undefined
   const packageName = exactPackageSpecifier(id)
   if (packageName === undefined) return undefined
   const packageRoot = workspaceRootForImporter(importer)
