@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { GenerateOptions } from '@phoenix-ai/dsh-llm'
 import {
+  applyMondayCodexMembrane,
   normalizeCodexToolParameters,
   normalizeCodexToolSchemas,
   normalizeOpenAiFunctionToolPayload,
-  quarantineCodexTools,
-  requiresCodexToolQuarantine,
+  requiresMondayCodexMembrane,
   requiresObjectRootFunctionSchemas,
 } from '../src/codex-tool-schema.ts'
 
@@ -27,11 +27,11 @@ describe('Codex tool-schema compatibility', () => {
     expect(requiresObjectRootFunctionSchemas('google', 'google-generative-ai')).toBe(false)
   })
 
-  it('scopes the Monday compatibility quarantine to Codex routes only', () => {
-    expect(requiresCodexToolQuarantine('openai-codex', 'future-codex-wire')).toBe(true)
-    expect(requiresCodexToolQuarantine('custom', 'openai-codex-responses')).toBe(true)
-    expect(requiresCodexToolQuarantine('openai', 'openai-responses')).toBe(false)
-    expect(requiresCodexToolQuarantine('azure', 'azure-openai-responses')).toBe(false)
+  it('scopes the Monday compatibility membrane to Codex routes only', () => {
+    expect(requiresMondayCodexMembrane('openai-codex', 'future-codex-wire')).toBe(true)
+    expect(requiresMondayCodexMembrane('custom', 'openai-codex-responses')).toBe(true)
+    expect(requiresMondayCodexMembrane('openai', 'openai-responses')).toBe(false)
+    expect(requiresMondayCodexMembrane('azure', 'azure-openai-responses')).toBe(false)
   })
 
   it('removes every Codex-forbidden root keyword even without a root union', () => {
@@ -236,30 +236,38 @@ describe('Codex tool-schema compatibility', () => {
     expect(normalized.input[0]).toBe(payload.input[0])
   })
 
-  it('repairs pre-wire pi-ai MCP context tools before provider validation', () => {
+  it('wraps pre-wire Monday context tools in the universal compatibility envelope', () => {
     const context = {
       tools: [{
-        name: 'mcp__monday-com-monday-com__create_action',
-        description: 'Monday action',
+        name: 'mcp__monday-com-monday-com__execute_code',
+        description: 'Execute Monday code',
         parameters: {
           oneOf: [
-            { type: 'object', properties: { board_id: { type: 'string' } } },
-            { type: 'object', properties: { item_id: { type: 'string' } } },
+            { type: 'object', properties: { code: { type: 'string' } } },
+            { type: 'object', properties: { script: { type: 'string' } } },
           ],
         },
       }],
       messages: [],
     }
 
-    const normalized = normalizeOpenAiFunctionToolPayload(context) as typeof context
-    const parameters = normalized.tools[0]?.parameters as Record<string, unknown>
+    const normalized = normalizeOpenAiFunctionToolPayload(context, true) as typeof context
+    const tool = normalized.tools[0]
 
-    expect(parameters.type).toBe('object')
-    expect(parameters).not.toHaveProperty('oneOf')
-    expect(parameters.properties).toMatchObject({
-      board_id: { type: 'string' },
-      item_id: { type: 'string' },
+    expect(tool?.name).toBe('mcp__monday-com-monday-com__execute_code')
+    expect(tool?.parameters).toEqual({
+      type: 'object',
+      properties: {
+        phoenix_arguments: {
+          type: 'object',
+          description: 'Exact argument object forwarded unchanged to the Monday MCP tool.',
+          additionalProperties: true,
+        },
+      },
+      required: ['phoenix_arguments'],
+      additionalProperties: false,
     })
+    expect(tool?.description).toContain('Known Monday argument keys: code, script.')
   })
 
   it('repairs function tools in unknown future nested payload paths', () => {
@@ -295,45 +303,72 @@ describe('Codex tool-schema compatibility', () => {
     })
   })
 
-  it('quarantines Monday create_action from Codex request options while preserving the rest of the catalog', () => {
-    const createAction = {
-      name: 'mcp__monday-com-monday-com__create_action',
-      description: 'Create a Monday action',
-      parameters: { type: 'object', properties: {} },
-    }
-    const getBoards = {
-      name: 'mcp__monday-com-monday-com__get_boards',
-      description: 'List Monday boards',
-      parameters: { type: 'object', properties: {} },
-    }
+  it('wraps every Monday tool in one Codex-safe envelope instead of fixing tools one by one', () => {
     const options: GenerateOptions = {
       provider: 'openai-codex',
       model: 'gpt-5.6-sol',
       messages: [],
-      tools: [createAction, getBoards],
+      tools: [{
+        name: 'mcp__monday-com-monday-com__create_action',
+        description: 'Create action',
+        parameters: {
+          oneOf: [
+            { type: 'object', properties: { board_id: { type: 'string' } } },
+            { type: 'object', properties: { item_id: { type: 'string' } } },
+          ],
+        },
+      }, {
+        name: 'mcp__monday-com-monday-com__execute_code',
+        description: 'Execute code',
+        parameters: {
+          anyOf: [
+            { type: 'object', properties: { code: { type: 'string' } } },
+            { type: 'object', properties: { script: { type: 'string' } } },
+          ],
+        },
+      }, {
+        name: 'mcp__github__search',
+        description: 'Unrelated MCP',
+        parameters: { type: 'object', properties: { query: { type: 'string' } } },
+      }],
     }
 
-    const quarantined = quarantineCodexTools(options)
+    const wrapped = applyMondayCodexMembrane(options)
 
-    expect(quarantined).not.toBe(options)
-    expect(quarantined.tools?.map(tool => tool.name)).toEqual([
-      'mcp__monday-com-monday-com__get_boards',
+    expect(wrapped).not.toBe(options)
+    expect(wrapped.tools?.map(tool => tool.name)).toEqual([
+      'mcp__monday-com-monday-com__create_action',
+      'mcp__monday-com-monday-com__execute_code',
+      'mcp__github__search',
     ])
-    expect(options.tools).toHaveLength(2)
+    for (const tool of wrapped.tools?.slice(0, 2) ?? []) {
+      expect(tool.parameters).toMatchObject({
+        type: 'object',
+        properties: { phoenix_arguments: { type: 'object' } },
+        required: ['phoenix_arguments'],
+        additionalProperties: false,
+      })
+      for (const key of ['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not']) {
+        expect(tool.parameters).not.toHaveProperty(key)
+      }
+    }
+    expect(wrapped.tools?.[2]).toBe(options.tools?.[2])
   })
 
-  it('removes quarantined Monday create_action entries from final nested provider payloads', () => {
+  it('wraps Monday tools in nested final provider payloads, including execute_code', () => {
     const payload = {
       tools: [
         {
           type: 'function',
           name: 'mcp__monday-com-monday-com__create_action',
-          parameters: { type: 'object', properties: {} },
+          description: 'Create action',
+          parameters: { oneOf: [{ type: 'object', properties: { board_id: { type: 'string' } } }] },
         },
         {
           type: 'function',
-          name: 'mcp__monday-com-monday-com__get_boards',
-          parameters: { type: 'object', properties: {} },
+          name: 'mcp__monday-com-monday-com__execute_code',
+          description: 'Execute code',
+          parameters: { anyOf: [{ type: 'object', properties: { code: { type: 'string' } } }] },
         },
       ],
       input: [{
@@ -341,8 +376,9 @@ describe('Codex tool-schema compatibility', () => {
         tools: [{
           type: 'function',
           function: {
-            name: 'mcp__monday-com-monday-com__create_action',
-            parameters: { type: 'object', properties: {} },
+            name: 'mcp__monday-com-monday-com__execute_code',
+            description: 'Execute code',
+            parameters: { oneOf: [{ type: 'object', properties: { code: { type: 'string' } } }] },
           },
         }],
       }],
@@ -350,10 +386,20 @@ describe('Codex tool-schema compatibility', () => {
 
     const normalized = normalizeOpenAiFunctionToolPayload(payload, true) as typeof payload
 
-    expect(normalized.tools.map(tool => tool.name)).toEqual([
-      'mcp__monday-com-monday-com__get_boards',
-    ])
-    expect(normalized.input[0]?.tools).toEqual([])
+    expect(normalized.tools).toHaveLength(2)
+    for (const tool of normalized.tools) {
+      expect(tool.parameters).toMatchObject({
+        type: 'object',
+        properties: { phoenix_arguments: { type: 'object' } },
+        required: ['phoenix_arguments'],
+      })
+    }
+    const nested = normalized.input[0]?.tools[0]?.function.parameters
+    expect(nested).toMatchObject({
+      type: 'object',
+      properties: { phoenix_arguments: { type: 'object' } },
+      required: ['phoenix_arguments'],
+    })
   })
 
   it('keeps already-compatible final payloads referentially stable', () => {
