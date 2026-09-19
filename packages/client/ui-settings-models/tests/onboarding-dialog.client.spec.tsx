@@ -68,6 +68,8 @@ function harness(options: {
   providersReject?: boolean
   setFailure?: string
   setReject?: string
+  codexAuthorization?: boolean
+  codexConnected?: boolean
 } = {}) {
   if (document.getElementById('root') === null) {
     const appRoot = document.createElement('div')
@@ -85,6 +87,19 @@ function harness(options: {
     return Promise.resolve(ok({}))
   })
   const face = {
+    authorization: options.codexAuthorization === true
+      ? {
+        list: () => Promise.resolve(ok({
+          entries: [{
+            key: 'subagent-codex/account',
+            label: 'ChatGPT / Codex',
+            methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
+            inFlight: false,
+            ...options.codexConnected === true ? { stored: { kind: 'api-key' as const } } : {},
+          }],
+        })),
+      }
+      : undefined,
     llm: {
       providers: () => {
         if (options.providersReject === true) return Promise.reject(new Error('provider transport unavailable'))
@@ -156,12 +171,42 @@ describe('DeepSeekOnboardingDialog', () => {
     expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
   })
 
+  it('prefers native Codex authorization and keeps API-key setup as a fallback', async () => {
+    const h = harness({ codexAuthorization: true })
+    render(<DeepSeekOnboardingDialog {...h.props} />)
+    expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en.onboardingCodex })).toBeTruthy()
+    expect(screen.queryByLabelText(en.keyInput)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: en.onboardingUseApiKey }))
+    expect(await screen.findByLabelText(en.keyInput)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.onboardingBackToCodex }))
+    await waitFor(() => { expect(screen.queryByLabelText(en.keyInput)).toBeNull() })
+    expect(screen.getByRole('button', { name: en.onboardingCodex })).toBeTruthy()
+    expect(h.complete).not.toHaveBeenCalled()
+  })
+
+  it('keeps native Codex account auth separate from the main chat provider', async () => {
+    const h = harness({ codexAuthorization: true, codexConnected: true })
+    render(<DeepSeekOnboardingDialog {...h.props} />)
+    expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
+    expect(screen.getByText(en.onboardingCodexConnected)).toBeTruthy()
+    expect(screen.getByText(en.onboardingChooseChatProvider)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.onboardingCodex })).toBeNull()
+    expect(h.mutate).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: en.onboardingUseApiKey }))
+    expect(await screen.findByLabelText(en.keyInput)).toBeTruthy()
+    expect(h.mutate).not.toHaveBeenCalled()
+    expect(h.complete).not.toHaveBeenCalled()
+  })
+
   it('loads a credential-only modal, inerts the product, and focuses the key', async () => {
     const h = harness()
     render(<DeepSeekOnboardingDialog {...h.props} />)
     expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
     expect(document.getElementById('root')?.inert).toBe(true)
-    expect(screen.getByText(en.onboardingDescription)).toBeTruthy()
+    expect(screen.getByText(en.onboardingApiDescription)).toBeTruthy()
     const key = screen.getByLabelText<HTMLInputElement>(en.keyInput)
     await waitFor(() => { expect(document.activeElement).toBe(key) })
     expect(screen.queryByText(en.customized)).toBeNull()
