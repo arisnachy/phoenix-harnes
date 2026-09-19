@@ -1,10 +1,16 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, render } from '@testing-library/react'
 import {
   GenerativeUi,
   parseGenerativeUiBlock,
   splitGenerativeUiText,
   type GenerativeUiBlock,
 } from '../src/client/chat/GenerativeUi.tsx'
+import { AssistantMarkdown } from '../src/client/chat/AssistantMarkdown.tsx'
+
+
+afterEach(cleanup)
 
 describe('conversation generative UI', () => {
   it('accepts a typed event card and rejects executable or unknown props', () => {
@@ -61,6 +67,38 @@ describe('conversation generative UI', () => {
   it('keeps malformed completed fences as ordinary markdown instead of executing them', () => {
     const malformed = '```generative-ui\n{"component":"smart_card","version":1,"props":{"title":"X","onclick":"evil"}}\n```'
     expect(splitGenerativeUiText(malformed)).toEqual([{ kind: 'markdown', text: malformed }])
+  })
+
+  it('mounts validated UI through the real AssistantMarkdown message path', () => {
+    const text = [
+      'Antes de la tarjeta.',
+      '```generative-ui',
+      JSON.stringify({
+        component: 'metric_card',
+        version: 1,
+        props: {
+          title: 'Estado visible',
+          items: [{ label: 'Renderer', value: 'OK', status: 'positive' }],
+        },
+      }),
+      '```',
+      'Después de la tarjeta.',
+    ].join('\n')
+
+    const view = render(
+      <AssistantMarkdown
+        blocks={[{ kind: 'text', text }] as never}
+        streaming={false}
+        renderMessageImages={(() => null) as never}
+        t={((key: string) => key) as never}
+      />,
+    )
+
+    expect(view.container.querySelector('[data-generative-ui="metric_card"]')).not.toBeNull()
+    expect(view.getByText('Estado visible')).toBeTruthy()
+    expect(view.container.textContent).toContain('Antes de la tarjeta.')
+    expect(view.container.textContent).toContain('Después de la tarjeta.')
+    expect(view.container.textContent).not.toContain('```generative-ui')
   })
 
   it('renders validated cards with a stable component marker', () => {
