@@ -302,7 +302,7 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
   const type = text(block.type) ?? 'unknown'
   if (type === 'markdown' || type === 'text') return <p className={styles.text} key={index}>{display(block.text)}</p>
   if (type === 'code') return <pre className={styles.code} key={index}>{display(block.text)}</pre>
-  if (type === 'table' || type === 'chart' || type === 'metrics' || type === 'timeline' || type === 'cards' || type === 'progress' || type === 'visual') {
+  if (type === 'table' || type === 'chart' || type === 'metrics' || type === 'timeline' || type === 'cards' || type === 'progress' || type === 'sports' || type === 'scoreboard' || type === 'standings' || type === 'visual') {
     return <PhoenixVisualizer key={index} spec={isRecord(block.spec) ? block.spec : block} />
   }
   if (type === 'ui' || type === 'form') return <DeclarativeUi key={index} record={isRecord(block.schema) ? block.schema : block} />
