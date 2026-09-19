@@ -108,6 +108,7 @@ export class SessionInputShell implements SessionInput {
     readonly seq: number
     readonly text: string
     readonly modelText?: string
+    readonly mode: InputSubmitMode
     readonly startedAt: number
   } | undefined
   private disposed = false
@@ -469,6 +470,7 @@ export class SessionInputShell implements SessionInput {
     this.pendingSubmit = {
       seq: attempt.seq,
       text: draft.trim(),
+      mode,
       startedAt: Date.now(),
     }
     const occurrences = this.core.state.occurrences
@@ -632,6 +634,7 @@ export class SessionInputShell implements SessionInput {
         pendingSubmit: {
           text: pending.text,
           ...(pending.modelText === undefined ? {} : { modelText: pending.modelText }),
+          mode: pending.mode,
           startedAt: pending.startedAt,
         },
       }),
