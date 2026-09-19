@@ -99,7 +99,7 @@ EqualInt(960, BrowserLayout.PreferredBrowserWidth(2400), "wide window preserves 
 True(DesktopStartupContract.ShowWindowBeforeRuntimeReady, "desktop window is shown before runtime readiness", failures);
 True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch signals existing window", failures);
 True(DesktopStartupContract.EmbeddedBrowserStartsLazy, "embedded browser does not delay chat startup", failures);
-Equal("Preparando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
+Equal("Iniciando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
 
 var toolchainEntries = DesktopBundledToolchain.CandidatePathEntries(@"C:\Program Files\Phoenix");
 True(toolchainEntries.Any(path => path.EndsWith(@"runtime-tools\node", StringComparison.OrdinalIgnoreCase)), "bundled Node path is declared", failures);
