@@ -450,6 +450,34 @@ describe('ChatView', () => {
     expect(previousRow!.compareDocumentPosition(durableRow!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
   })
 
+  it('hands off a reference-bearing optimistic bubble using its serialized model text', () => {
+    const startedAt = Date.now()
+    const h = makeHarness(
+      { nodes: [] },
+      {
+        pendingSubmit: {
+          text: 'abre @reporte',
+          modelText: 'abre <file-ref>reporte</file-ref>',
+          startedAt,
+        },
+      },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getByText('abre @reporte')).toBeTruthy()
+    act(() => {
+      h.set({
+        nodes: [{
+          ...user(1, 'abre <file-ref>reporte</file-ref>'),
+          time: startedAt + 1,
+        }],
+      })
+    })
+
+    expect(view.queryByText('abre @reporte')).toBeNull()
+    expect(view.getAllByText('abre <file-ref>reporte</file-ref>')).toHaveLength(1)
+  })
+
   it('hands a windowless tool result to the Tool seat with an empty tool name', () => {
     const h = makeHarness({
       nodes: [{ ...toolResult(3, 'w1'), call: null }],
