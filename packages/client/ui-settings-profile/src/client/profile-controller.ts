@@ -102,6 +102,7 @@ export class UserProfileForm {
   private source: UserProfileSettings | undefined
   private saving = false
   private failed = false
+  private saved = false
   private disposed = false
   private readonly unsubscribe: () => void
 
@@ -148,6 +149,7 @@ export class UserProfileForm {
   private edit(field: TextField | 'family', text: string): void {
     this.draft[field] = text
     this.failed = false
+    this.saved = false
     this.publish()
   }
 
@@ -155,24 +157,28 @@ export class UserProfileForm {
     this.draft.assistantGender = value
     this.draft.assistantGenderSource = 'manual'
     this.failed = false
+    this.saved = false
     this.publish()
   }
 
   private setAssistantGenderAutomatic(): void {
     this.draft.assistantGenderSource = 'auto'
     this.failed = false
+    this.saved = false
     this.publish()
   }
 
   private setConsent(field: ConsentField, value: boolean): void {
     this.draft.consent = { ...this.draft.consent, [field]: value }
     this.failed = false
+    this.saved = false
     this.publish()
   }
 
   private discard(): void {
     this.draft = toDraft(this.source)
     this.failed = false
+    this.saved = false
     this.publish()
   }
 
@@ -181,6 +187,7 @@ export class UserProfileForm {
     if (!snapshot.writable || snapshot.status !== 'ready' || this.saving) return
     this.saving = true
     this.failed = false
+    this.saved = false
     this.publish()
     let ok = true
     for (const field of [...FIELDS, 'assistantGender' as const, 'assistantGenderSource' as const, 'family' as const, 'consent' as const]) {
@@ -205,6 +212,7 @@ export class UserProfileForm {
     if (!snapshot.writable || snapshot.status !== 'ready' || this.saving || this.invalid()) return
     this.saving = true
     this.failed = false
+    this.saved = false
     this.publish()
     let ok = true
     const values: Record<string, unknown> = {
@@ -253,6 +261,7 @@ export class UserProfileForm {
       if (ok && !this.invalidAgainst(next)) this.draft = toDraft(next)
     }
     this.failed = !ok || this.isDirty()
+    this.saved = !this.failed
     this.saving = false
     this.publish()
   }
@@ -288,6 +297,7 @@ export class UserProfileForm {
       invalid: this.invalid(),
       saving: this.saving,
       failed: this.failed,
+      saved: this.saved,
       assistantName: fieldState(this.draft.assistantName),
       assistantGender: this.draft.assistantGender,
       assistantGenderSource: this.draft.assistantGenderSource,
