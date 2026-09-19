@@ -170,7 +170,7 @@ export function CodexQuotaRemaining({
       stale = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [wide])
+  }, [cacheKey])
 
   useEffect(() => {
     if (!wide || quota === undefined) return
