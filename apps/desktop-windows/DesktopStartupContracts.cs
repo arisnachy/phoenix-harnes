@@ -12,6 +12,7 @@ internal static class DesktopStartupContract
 
 internal static class DesktopRuntimeLaunchContract
 {
+    internal const int DesktopPort = 3081;
     internal const string PowerShellExecutable = "powershell.exe";
 
     internal static ProcessStartInfo CreateOwnedRuntimeStartInfo(string runtimeRoot, string controlDescriptorPath)
@@ -35,7 +36,7 @@ internal static class DesktopRuntimeLaunchContract
         startInfo.ArgumentList.Add("-ExecutionPolicy");
         startInfo.ArgumentList.Add("Bypass");
         startInfo.ArgumentList.Add("-Command");
-        startInfo.ArgumentList.Add($"& '{escapedLauncher}' --no-open; exit $LASTEXITCODE");
+        startInfo.ArgumentList.Add($"& '{escapedLauncher}' --port {DesktopPort} --no-open; exit $LASTEXITCODE");
 
         startInfo.Environment["PHOENIX_DESKTOP_MANAGED"] = "1";
         startInfo.Environment["PHOENIX_DESKTOP_CONTROL_DESCRIPTOR"] = controlDescriptorPath;
