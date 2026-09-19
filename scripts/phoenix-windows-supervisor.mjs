@@ -600,13 +600,26 @@ function startWatcher() {
   })
 }
 
-function superviseWatcher(host) {
+function superviseWatcher() {
   let watcher
   let restartTimer
-  let stopping = false
+  let stopped = false
+  let paused = false
+
+  const clearRestartTimer = () => {
+    if (restartTimer === undefined) return
+    clearTimeout(restartTimer)
+    restartTimer = undefined
+  }
+
+  const stopActive = async () => {
+    const activeWatcher = watcher
+    watcher = undefined
+    await stopWatcher(activeWatcher)
+  }
 
   const start = () => {
-    if (stopping || host.exitCode !== null || host.killed) return
+    if (stopped || paused || shutdownRequested) return
     const child = startWatcher()
     watcher = child
     if (child === undefined) return
@@ -617,7 +630,7 @@ function superviseWatcher(host) {
     child.once('exit', (code, signal) => {
       if (watcher !== child) return
       watcher = undefined
-      if (stopping || host.exitCode !== null || host.killed) return
+      if (stopped || paused || shutdownRequested) return
       const reason = code === null ? `signal ${signal ?? 'unknown'}` : `exit code ${String(code)}`
       console.error(`[PHOENIX UPDATE] watcher exited unexpectedly (${reason}); restarting in ${String(WATCHER_RESTART_DELAY_MS)}ms.`)
       restartTimer = setTimeout(start, WATCHER_RESTART_DELAY_MS)
@@ -628,15 +641,22 @@ function superviseWatcher(host) {
   start()
 
   return {
+    async pause() {
+      if (stopped || paused) return
+      paused = true
+      clearRestartTimer()
+      await stopActive()
+    },
+    resume() {
+      if (stopped || !paused) return
+      paused = false
+      start()
+    },
     async stop() {
-      stopping = true
-      if (restartTimer !== undefined) {
-        clearTimeout(restartTimer)
-        restartTimer = undefined
-      }
-      const activeWatcher = watcher
-      watcher = undefined
-      await stopWatcher(activeWatcher)
+      stopped = true
+      paused = true
+      clearRestartTimer()
+      await stopActive()
     },
   }
 }
@@ -681,6 +701,14 @@ function activatePrepared() {
   return result.status ?? 1
 }
 
+function verifiedPreparedTarget() {
+  const prepared = readPreparedRecord()
+  if (prepared === undefined) return undefined
+  const current = gitValue(runtimeRoot, ['rev-parse', 'HEAD'])
+  if (current === prepared.target) return undefined
+  return preparedStageForTarget(prepared.target) === undefined ? undefined : prepared.target
+}
+
 async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) {
   while (true) {
     const event = await Promise.race([
@@ -689,6 +717,11 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
     ])
     if (event.kind === 'exit') return { ...event, lastObservedFingerprint }
     if (shutdownRequested) continue
+
+    const preparedTarget = verifiedPreparedTarget()
+    if (preparedTarget !== undefined) {
+      return { kind: 'prepared-update', target: preparedTarget, lastObservedFingerprint }
+    }
 
     const currentFingerprint = configurationFingerprint(captureBootCriticalConfiguration())
     if (currentFingerprint !== lastObservedFingerprint) {
@@ -731,6 +764,8 @@ recoverStaleStagingIndexLock()
 restoreActiveRuntime()
 recoverConfigurationBeforeFirstBoot()
 
+const watcherSupervisor = superviseWatcher()
+
 let finalCode = 0
 while (true) {
   const launchConfiguration = captureBootCriticalConfiguration()
@@ -744,8 +779,6 @@ while (true) {
   const hostExitPromise = new Promise(resolveExit => {
     host.once('exit', (code, signal) => resolveExit({ code, signal }))
   })
-  const watcherSupervisor = superviseWatcher(host)
-  let watcherStopped = false
   let healthyCheckpointWritten = false
   const stableTimer = setTimeout(() => {
     if (host.exitCode !== null || shutdownRequested) return
@@ -764,11 +797,13 @@ while (true) {
   let plannedHostRestart = false
   let hostExit
 
-  if (hostEvent.kind === 'safe-restart') {
+  if (hostEvent.kind === 'safe-restart' || hostEvent.kind === 'prepared-update') {
     plannedHostRestart = true
-    await watcherSupervisor.stop()
-    watcherStopped = true
-    console.error('[PHOENIX RECOVERY] configuration preflight passed; restarting under the external supervisor.')
+    if (hostEvent.kind === 'prepared-update') {
+      console.error(`[PHOENIX UPDATE] verified stable ${hostEvent.target.slice(0, 12)} is prepared; restarting the failed Host so the external supervisor can activate it.`)
+    } else {
+      console.error('[PHOENIX RECOVERY] configuration preflight passed; restarting under the external supervisor.')
+    }
     if (host.exitCode === null) host.kill()
     hostExit = await hostExitPromise
   } else {
@@ -776,7 +811,6 @@ while (true) {
   }
 
   clearTimeout(stableTimer)
-  if (!watcherStopped) await watcherSupervisor.stop()
   activeHost = undefined
 
   if (shutdownRequested) {
@@ -784,7 +818,9 @@ while (true) {
     break
   }
 
-  const requestedTarget = restartRequestTarget()
+  const requestedTarget = hostEvent.kind === 'prepared-update'
+    ? hostEvent.target
+    : restartRequestTarget() ?? verifiedPreparedTarget()
   if (requestedTarget !== undefined) {
     const liveStatus = gitStatus(root)
     if (!liveStatus.ok) {
@@ -804,6 +840,7 @@ while (true) {
 
     if (isolationReason !== undefined) {
       console.error(`[PHOENIX UPDATE] ${isolationReason} detected; activating the verified update in an isolated runtime; the live checkout will not be modified.`)
+      await watcherSupervisor.pause()
       try {
         const runtime = activatePreparedRuntime(requestedTarget)
         runtimeRoot = runtime.path
@@ -813,6 +850,8 @@ while (true) {
       } catch (error) {
         clearRestartRequest()
         console.error(`[PHOENIX UPDATE] isolated runtime activation failed safely: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        watcherSupervisor.resume()
       }
       continue
     }
@@ -824,6 +863,7 @@ while (true) {
     }
 
     console.error('[PHOENIX UPDATE] restart request received; activating prepared update under supervisor control...')
+    await watcherSupervisor.pause()
     const activationCode = activatePrepared()
     if (activationCode !== 0) {
       clearRestartRequest()
@@ -832,12 +872,14 @@ while (true) {
         finalCode = activationCode
         break
       }
+      watcherSupervisor.resume()
       console.error(`[PHOENIX UPDATE] activation failed safely with exit code ${String(activationCode)}; relaunching the last-known-good PHOENIX. The prepared update remains available to retry.`)
       continue
     }
 
     runtimeRoot = root
     clearActiveRuntime()
+    watcherSupervisor.resume()
     console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
     continue
   }
@@ -861,4 +903,5 @@ while (true) {
   continue
 }
 
+await watcherSupervisor.stop()
 process.exitCode = finalCode
