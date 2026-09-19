@@ -41,6 +41,7 @@ const FETCH_ATTEMPTS = 3
 const FETCH_RETRY_MS = 750
 const STATE_FILE = 'phoenix-update-state.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
+const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const REFRESH_REQUEST_FILE = 'phoenix-update-refresh-request.json'
 const MANAGED_MARKER = '.phoenix-managed-install'
@@ -118,6 +119,23 @@ function statePath(root) {
 
 function preparedPath(root) {
   return join(controlDirectory(root), PREPARED_FILE)
+}
+
+function activeRuntimePath(root) {
+  return join(controlDirectory(root), ACTIVE_RUNTIME_FILE)
+}
+
+function readActiveRuntime(root) {
+  const path = activeRuntimePath(root)
+  if (!existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
+    if (typeof value.path !== 'string' || value.path.trim().length === 0) return undefined
+    return value
+  } catch {
+    return undefined
+  }
 }
 
 function restartRequestPath(root) {
@@ -966,7 +984,16 @@ async function main() {
     case 'off':
       return
     case 'current':
-      if (args.includes('--check')) console.log(`PHOENIX is current at ${inspection.current}`)
+      if (args.includes('--check')) {
+        const activeRuntime = readActiveRuntime(root)
+        if (activeRuntime !== undefined && activeRuntime.target !== inspection.current) {
+          console.log(
+            `PHOENIX source is current at ${inspection.current}, but active isolated runtime is ${activeRuntime.target} at ${activeRuntime.path}. Restart PHOENIX to reconcile the runtime.`,
+          )
+        } else {
+          console.log(`PHOENIX is current at ${inspection.current}`)
+        }
+      }
       return
     case 'upgrade':
     case 'diverged':

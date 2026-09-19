@@ -14,6 +14,14 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).toContain('join(controlDirectory(root), PREPARED_FILE)')
   })
 
+  it('does not report a checkout as simply current when an older isolated runtime is still marked active', () => {
+    expect(updater).toContain("const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'")
+    expect(updater).toContain('function readActiveRuntime(root)')
+    expect(updater).toContain('activeRuntime.target !== inspection.current')
+    expect(updater).toContain('active isolated runtime is')
+    expect(updater).toContain('Restart PHOENIX to reconcile the runtime')
+  })
+
   it('allows the supervisor to stage stable while the source checkout stays on a development branch', () => {
     expect(updater).toContain("isolatedRuntime: process.env.PHOENIX_UPDATE_SUPERVISED === '1'")
     expect(updater).toContain("case 'isolate':")
