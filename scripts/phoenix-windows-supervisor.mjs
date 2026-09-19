@@ -334,6 +334,17 @@ function activatePreparedRuntime(target) {
   return { target, path: runtime }
 }
 
+function activeRuntimeIsSupersededByLiveCheckout(target) {
+  const liveBranch = gitValue(root, ['branch', '--show-current'])
+  const liveHead = gitValue(root, ['rev-parse', 'HEAD'])
+  const liveStatus = gitStatus(root)
+  if (liveBranch === undefined || liveHead === undefined || liveStatus === undefined) return false
+  if (liveStatus.entries.length > 0) return false
+  if (!isManagedReleaseBranch(liveBranch, STABLE_SOURCE_BRANCH)) return false
+  if (liveHead === target) return false
+  return gitSucceeds(root, ['merge-base', '--is-ancestor', target, liveHead])
+}
+
 function restoreActiveRuntime() {
   const markerPath = activeRuntimePath()
   if (markerPath === undefined || !existsSync(markerPath)) return
@@ -341,6 +352,15 @@ function restoreActiveRuntime() {
     const value = JSON.parse(readFileSync(markerPath, 'utf8'))
     if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target) || typeof value.path !== 'string') {
       clearActiveRuntime()
+      return
+    }
+    if (activeRuntimeIsSupersededByLiveCheckout(value.target)) {
+      clearActiveRuntime()
+      const liveHead = gitValue(root, ['rev-parse', 'HEAD'])
+      console.error(
+        `[PHOENIX UPDATE] retired stale isolated runtime ${value.target.slice(0, 12)}; `
+        + `clean managed checkout is newer at ${liveHead?.slice(0, 12) ?? 'unknown'}.`,
+      )
       return
     }
     const candidate = resolve(value.path)
