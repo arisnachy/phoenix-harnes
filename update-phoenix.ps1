@@ -30,11 +30,16 @@ try {
 
   $code = $LASTEXITCODE
   if ($code -eq 12) {
-    throw 'PHOENIX stable update and rollback both failed. Review .git\phoenix-update-state.json before continuing.'
-  }
-  if ($code -ne 0) {
-    Write-Warning "PHOENIX update check failed safely with exit code $code; the current installation was preserved."
+    Write-Error 'PHOENIX stable update and rollback both failed. Review .git\phoenix-update-state.json before continuing.'
+  } elseif ($code -eq 13) {
+    Write-Error 'PHOENIX found a newer stable runtime but could not activate it. Refusing to start the known-stale runtime.'
+  } elseif ($code -ne 0) {
+    Write-Warning "PHOENIX update check failed with exit code $code."
   }
 } finally {
   Pop-Location
 }
+
+# Preserve the semantic exit code from the Node updater. The desktop launcher
+# uses 12 for unrecoverable rollback failure and 13 for a known-stale runtime.
+if ($null -ne $code -and $code -ne 0) { exit $code }
