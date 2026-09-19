@@ -1,4 +1,4 @@
-/** Compact native Codex quota for the Settings trigger trailing seat. */
+/** Native Codex quota for the expanded Settings row and collapsed sidebar rail. */
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { IApiClient, SessionId } from '@phoenix-ai/dsh-api-remotes/client'
@@ -118,10 +118,9 @@ export function CodexQuotaRemaining({
   authorizationRef.current = authorization
 
   useEffect(() => {
-    if (!wide) {
-      setQuota(undefined)
-      return
-    }
+    // Quota is account telemetry, not expanded-sidebar UI state. Keep it warm
+    // while the rail is collapsed so the 5h/7d percentages never disappear
+    // merely because navigation was minimized.
     let stale = false
     let timer: number | undefined
 
@@ -180,7 +179,7 @@ export function CodexQuotaRemaining({
     return () => { window.clearInterval(timer) }
   }, [quota, wide])
 
-  if (!wide || quota === undefined) return null
+  if (quota === undefined) return null
 
   const windows = [
     quota.primaryLimit === undefined ? undefined : {
@@ -203,6 +202,32 @@ export function CodexQuotaRemaining({
     value: number
     resetText: string | undefined
   } => window !== undefined)
+
+  if (!wide) {
+    return (
+      <span
+        className={css.railRoot}
+        role="group"
+        aria-label="OpenAI Codex usage limits"
+        data-codex-quota-rail="true"
+      >
+        {windows.map(window => (
+          <span
+            className={css.railWindow}
+            key={window.key}
+            title={`OpenAI Codex · ${window.label} · ${window.value}% remaining`}
+            aria-label={`Codex ${window.label} · ${window.value}% remaining`}
+          >
+            <span className={css.railLabel}>{window.label}</span>
+            <strong className={css.railValue}>{window.value}%</strong>
+            <span className={css.railTrack} aria-hidden="true">
+              <span className={css.railFill} style={{ width: `${String(window.value)}%` }} />
+            </span>
+          </span>
+        ))}
+      </span>
+    )
+  }
 
   return (
     <span className={css.root} role="group" aria-label="OpenAI Codex usage limits">
