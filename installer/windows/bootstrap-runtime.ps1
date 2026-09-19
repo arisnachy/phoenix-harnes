@@ -88,8 +88,19 @@ try {
     $_ -and $_ -notmatch '\.phoenix-managed-install(ing)?$'
   }) -join "`n"
   if ($dirty.Trim().Length -gt 0) {
-    throw 'Managed runtime contains local changes; refusing bootstrap mutation.'
+    throw 'Managed runtime contains local changes; desktop self-heal will recreate it.'
   }
+
+  # A recoverable runtime may come from an older interrupted install. Always move it to the
+  # current promoted channel before dependencies/build so a repair never resurrects stale code.
+  & git fetch origin $Channel
+  if ($LASTEXITCODE -ne 0) { throw 'git fetch of the current Phoenix channel failed' }
+
+  & git checkout $Channel
+  if ($LASTEXITCODE -ne 0) { throw 'git checkout of the Phoenix channel failed' }
+
+  & git reset --hard "origin/$Channel"
+  if ($LASTEXITCODE -ne 0) { throw 'git reset to the promoted Phoenix channel failed' }
 
   New-Item -ItemType File -Force -Path $installingMarker | Out-Null
 
