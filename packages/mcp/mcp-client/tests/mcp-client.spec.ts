@@ -270,6 +270,35 @@ describe('syncTools', () => {
       undefined,
       expect.anything(),
     )
+
+    const compat = ctx.tools.get('mcp__monday-com-monday-com__phoenix_create_action')
+    expect(compat?.description).toContain('PHOENIX local compatibility wrapper for Monday create_action')
+    expect(compat?.parameters).toEqual({
+      type: 'object',
+      properties: {
+        arguments: {
+          type: 'object',
+          description: 'Exact argument object forwarded unchanged to Monday create_action.',
+          additionalProperties: true,
+        },
+      },
+      required: ['arguments'],
+      additionalProperties: false,
+    })
+
+    client.callTool.mockClear()
+    await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('monday-create-compat'),
+      name: 'mcp__monday-com-monday-com__phoenix_create_action',
+      arguments: { arguments: args },
+    })
+
+    expect(client.callTool).toHaveBeenCalledWith(
+      { name: 'create_action', arguments: args },
+      undefined,
+      expect.anything(),
+    )
   })
 
   it('adds an empty properties object to parameter-free MCP object schemas', async () => {
