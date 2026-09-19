@@ -208,17 +208,28 @@ export function createProactivityExecutor(
   return {
     async execute(input): Promise<ProactivityExecutionResult> {
       const parent = chooseAgent(agents, input.task.targetAgentId)
-      let conditionEvidence: string | undefined
       if (input.phase === 'deliver' && input.task.condition !== undefined) {
         const decision = await evaluateConditionWatch(input, parent, subagents, config.privateWorkProvider)
         if (!decision.met) return { summary: `condition not met: ${decision.evidence}` }
-        conditionEvidence = decision.evidence
+        parent.followup(createUserMessage({
+          content: [{ type: 'text', text: proactivePrompt(input, config, decision.evidence) }],
+          source: {
+            kind: 'plugin',
+            plugin: 'hardness-adapters',
+            form: 'notice',
+            summary: boundContextSummary(`Condition met: ${input.task.title}`),
+          },
+        }))
+        return {
+          summary: `condition met and notification accepted: ${decision.evidence}`,
+          terminal: true,
+        }
       }
-      const terminalAfterDelivery = input.phase === 'deliver' && input.task.condition !== undefined
+
       const privateWork = input.phase === 'prepare' || input.task.delivery === 'email' || input.task.delivery === 'work'
       if (!privateWork) {
         parent.followup(createUserMessage({
-          content: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence) }],
+          content: [{ type: 'text', text: proactivePrompt(input, config) }],
           source: {
             kind: 'plugin',
             plugin: 'hardness-adapters',
@@ -226,12 +237,7 @@ export function createProactivityExecutor(
             summary: boundContextSummary(`Scheduled task: ${input.task.title}`),
           },
         }))
-        return {
-          summary: conditionEvidence === undefined
-            ? 'accepted by the live Phoenix agent inbox'
-            : `condition met and notification accepted: ${conditionEvidence}`,
-          ...(terminalAfterDelivery ? { terminal: true } : {}),
-        }
+        return { summary: 'accepted by the live Phoenix agent inbox' }
       }
 
       if (subagents === undefined || subagents.getProvider(config.privateWorkProvider) === undefined) {
@@ -240,7 +246,7 @@ export function createProactivityExecutor(
       const controller = new AbortController()
       const run = await subagents.start(config.privateWorkProvider, {
         label: input.phase === 'prepare' ? `Prepare: ${input.task.title}` : `Scheduled: ${input.task.title}`,
-        prompt: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence) }],
+        prompt: [{ type: 'text', text: proactivePrompt(input, config) }],
         parent,
         signal: controller.signal,
       })
@@ -249,10 +255,7 @@ export function createProactivityExecutor(
         if (result.stopReason !== 'completed') {
           throw new Error(result.diagnostic ?? `private proactive work ended with ${result.stopReason}`)
         }
-        return {
-          summary: plainOutput(result.output, config.privateWorkResultChars),
-          ...(terminalAfterDelivery ? { terminal: true } : {}),
-        }
+        return { summary: plainOutput(result.output, config.privateWorkResultChars) }
       } finally {
         await run.dispose()
       }
