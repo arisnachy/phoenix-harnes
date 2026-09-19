@@ -2,16 +2,20 @@
 
 import { Service, type Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-system-prompt'
+import type {} from '@phoenix-ai/dsh-session'
 import { settingsNamespace, type SettingsScope } from '@phoenix-ai/dsh-settings'
 import {
   DEFAULT_USER_PROFILE_CONSENT, USER_PROFILE_SETTINGS_NAMESPACE, UserProfileSettingsSchema,
   deriveAge, mergeUserProfile, validateUserProfile, validateUserProfileUpdate,
 } from './schema.ts'
+import { inferAssistantGenderFromUserMessage } from './inference.ts'
 import type {
   AssistantIdentity, UserProfileConsented, UserProfileRedacted, UserProfileSettings, UserProfileUpdate, UserProfileView,
 } from './types.ts'
 
 export * from './schema.ts'
+export { inferAssistantGenderFromUserMessage } from './inference.ts'
+export type { AssistantGenderInference } from './inference.ts'
 export type * from './types.ts'
 
 /** Branded Settings namespace used by the Host and Client settings scope. */
@@ -65,6 +69,7 @@ export class UserProfileService extends Service {
   static inject = ['settings', 'systemPrompt']
 
   private readonly scope: SettingsScope<UserProfileSettings>
+  private assistantIdentityTail: Promise<void> = Promise.resolve()
 
   /** @param ctx - Host context providing settings and system-prompt services. */
   constructor(ctx: Context) {
@@ -82,6 +87,11 @@ export class UserProfileService extends Service {
       order: -49,
       text: () => renderAssistantIdentity(this.getAssistantIdentity()),
     })
+    ctx.on('session/event', (_session, event) => {
+      if (event.type !== 'user/message') return
+      const text = userMessageText(event.data)
+      if (text !== undefined) this.observeAssistantPresentation(text)
+    })
   }
 
   /** Return a detached local view; no derived age is persisted.
@@ -98,7 +108,15 @@ export class UserProfileService extends Service {
    */
   async update(patch: UserProfileUpdate): Promise<UserProfileView> {
     validateUserProfileUpdate(patch)
-    const next = mergeUserProfile(this.scope.get(), patch)
+    let accepted = patch
+    if (Object.hasOwn(patch, 'assistantGender') && !Object.hasOwn(patch, 'assistantGenderSource')) {
+      accepted = patch.assistantGender === null
+        ? { ...patch, assistantGenderSource: null }
+        : patch.assistantGender === undefined
+          ? patch
+          : { ...patch, assistantGenderSource: 'manual' }
+    }
+    const next = mergeUserProfile(this.scope.get(), accepted)
     await this.scope.replace(next)
     return this.view()
   }
@@ -145,6 +163,25 @@ export class UserProfileService extends Service {
     }
   }
 
+  private observeAssistantPresentation(text: string): void {
+    const operation = this.assistantIdentityTail.then(async () => {
+      const profile = this.scope.get()
+      if (profile.assistantGenderSource === 'manual') return
+      const inference = inferAssistantGenderFromUserMessage(text, profile.assistantName)
+      if (inference === undefined) return
+      if (profile.assistantGenderSource === 'inferred' && inference.strength !== 'explicit') return
+      if (profile.assistantGender === inference.gender && profile.assistantGenderSource === 'inferred') return
+      await this.scope.replace({
+        ...profile,
+        assistantGender: inference.gender,
+        assistantGenderSource: 'inferred',
+      })
+    })
+    this.assistantIdentityTail = operation.catch((error: unknown) => {
+      this.ctx.logger.warn(`user-profile: assistant presentation inference ignored: ${String(error)}`)
+    })
+  }
+
   private view(): UserProfileView {
     const profile = structuredClone(this.scope.get())
     return {
@@ -153,6 +190,18 @@ export class UserProfileService extends Service {
       consented: this.getConsented(),
     }
   }
+}
+
+function userMessageText(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || !('content' in value)) return undefined
+  const content = (value as { content?: unknown }).content
+  if (!Array.isArray(content)) return undefined
+  const text = content.flatMap((part) => {
+    if (typeof part !== 'object' || part === null || !('text' in part)) return []
+    const entry = (part as { text?: unknown }).text
+    return typeof entry === 'string' ? [entry] : []
+  }).join('\n').trim()
+  return text === '' ? undefined : text
 }
 
 /**
