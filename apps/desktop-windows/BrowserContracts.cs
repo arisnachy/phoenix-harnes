@@ -88,6 +88,7 @@ public sealed record BrowserCommand(string Type, string? Url)
         "phoenix.browser.reload",
         "phoenix.browser.home",
         "phoenix.browser.focus",
+        "phoenix.app.logout",
     };
 
     public static bool TryParse(string json, out BrowserCommand command)
