@@ -104,7 +104,12 @@ export class SessionInputShell implements SessionInput {
   /** One image-only send at a time: Enter during the Host round-trip is a no-op. */
   private imageSendInFlight = false
   /** Ordinary prompt currently crossing the Host admission boundary. */
-  private pendingSubmit: { readonly seq: number; readonly text: string; readonly startedAt: number } | undefined
+  private pendingSubmit: {
+    readonly seq: number
+    readonly text: string
+    readonly modelText?: string
+    readonly startedAt: number
+  } | undefined
   private disposed = false
   /** Draft persistence mirror (chat store write; receives the clipboard projection, never display-only ranges). */
   private mirrorFn: ((text: string) => void) | undefined
@@ -468,7 +473,11 @@ export class SessionInputShell implements SessionInput {
     }
     const occurrences = this.core.state.occurrences
     if (occurrences.length === 0) {
-      this.settleSubmit(attempt, this.deps.defaultSink(draft.trim(), imageIds, mode, attempt.signal), imageIds)
+      const modelText = draft.trim()
+      if (this.pendingSubmit?.seq === attempt.seq) {
+        this.pendingSubmit = { ...this.pendingSubmit, modelText }
+      }
+      this.settleSubmit(attempt, this.deps.defaultSink(modelText, imageIds, mode, attempt.signal), imageIds)
       return
     }
     const inputTriggers = this.deps.inputTriggers?.()
@@ -492,7 +501,15 @@ export class SessionInputShell implements SessionInput {
           cursor = part.offset + part.length
         }
         out += draft.slice(cursor)
-        this.settleSubmit(attempt, this.deps.defaultSink(out.trim(), imageIds, mode, attempt.signal), imageIds)
+        const modelText = out.trim()
+        if (this.pendingSubmit?.seq === attempt.seq) {
+          this.pendingSubmit = { ...this.pendingSubmit, modelText }
+          // Reference serialization can make the durable text differ from the
+          // display draft. Publish that correlation before Host admission so
+          // a fast durable event can hand off without a duplicate optimistic row.
+          this.publish()
+        }
+        this.settleSubmit(attempt, this.deps.defaultSink(modelText, imageIds, mode, attempt.signal), imageIds)
       },
       (error: unknown) => {
         controller.abort()
@@ -612,7 +629,11 @@ export class SessionInputShell implements SessionInput {
       ...core,
       imageIds: this.imageIds,
       ...(pending === undefined ? {} : {
-        pendingSubmit: { text: pending.text, startedAt: pending.startedAt },
+        pendingSubmit: {
+          text: pending.text,
+          ...(pending.modelText === undefined ? {} : { modelText: pending.modelText }),
+          startedAt: pending.startedAt,
+        },
       }),
       queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE,
     }
