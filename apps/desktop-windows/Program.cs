@@ -46,6 +46,8 @@ internal static class Program
     private static void MainCore(string[] args)
     {
         DesktopLog.Write($"Phoenix.exe starting. Args: {string.Join(' ', args)}");
+        var bundledToolchainActive = DesktopBundledToolchain.Activate(AppContext.BaseDirectory);
+        DesktopLog.Write($"Bundled runtime toolchain active={bundledToolchainActive}; root={DesktopBundledToolchain.ToolchainRoot(AppContext.BaseDirectory)}");
 
         if (args.Contains("--enable-autostart", StringComparer.OrdinalIgnoreCase))
         {
@@ -311,7 +313,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
         window.SetStartupStatus($"No se pudo preparar Phoenix.\n\nRevisa: {Program.LogPath}", isError: true);
         MessageBox.Show(
-            $"No se pudo preparar el runtime administrado de Phoenix. Comprueba Git, Node.js 22.19+ y Corepack.\n\nDiagnóstico: {Program.LogPath}",
+            $"No se pudo preparar el runtime administrado de Phoenix con los componentes incluidos en el instalador.\n\nReinstala la versión más reciente de Phoenix.\n\nDiagnóstico: {Program.LogPath}",
             "Phoenix", MessageBoxButtons.OK, MessageBoxIcon.Error);
         return false;
     }
