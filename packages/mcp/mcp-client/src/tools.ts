@@ -377,6 +377,7 @@ function supportedOutputSchema(candidate: unknown): JsonSchemaNode | undefined {
  * @param structuredSchema - supported structured-output schema, when advertised.
  * @param taskRequired - whether this MCP tool requires unsupported task execution.
  * @param opts - bridge timeout and namespace options.
+ * @param transformArguments - optional local compatibility projection applied immediately before the MCP wire call.
  * @returns a complete ToolRuntime definition.
  */
 function createDefinition(
@@ -438,6 +439,14 @@ function createOutput(rawName: string, structuredSchema: JsonSchemaNode | undefi
  *
  * When the MCP server returns `isError: true`, the executor throws so that
  * the ToolRuntime's catch path produces an `isError` result for the model.
+ * @param client - connected MCP client used for calls.
+ * @param ctx - plugin context carrying optional attachment and model services.
+ * @param rawName - exact MCP wire tool name.
+ * @param taskRequired - whether the remote tool requires unsupported task execution.
+ * @param opts - bridge timeout and namespace options.
+ * @param projections - execution-local rich result projections.
+ * @param transformArguments - optional local argument envelope unwrapping before the wire call.
+ * @returns the ToolRuntime execute callback for this remote tool.
  */
 function createExecutor(
   client: Client,
