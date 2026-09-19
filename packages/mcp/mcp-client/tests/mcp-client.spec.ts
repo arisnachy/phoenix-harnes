@@ -12,7 +12,7 @@ import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime, { type JsonValue } from '@phoenix-ai/dsh-tools'
 import type { PostToolDecision } from '@phoenix-ai/dsh-tools'
 import { publicToolName, syncTools, type ToolBridgeOptions } from '@phoenix-ai/dsh-mcp-client/src/tools.ts'
-import { createTransport } from '@phoenix-ai/dsh-mcp-client/src/transport.ts'
+import { createTransport, repairPhoenixStdioProxyArgs } from '@phoenix-ai/dsh-mcp-client/src/transport.ts'
 import type { Config } from '@phoenix-ai/dsh-mcp-client'
 
 const testToolSignal = new AbortController().signal
@@ -1198,6 +1198,20 @@ describe('tool execution edge cases', () => {
 })
 
 describe('createTransport', () => {
+  it('repairs a stale absolute PHOENIX stdio proxy path from a previous installation', () => {
+    const stale = 'C:\\Users\\old\\Fenix-evolution\\phoenix-harnes\\scripts\\mcp-stdio-proxy.mjs'
+    const repaired = repairPhoenixStdioProxyArgs([stale, 'npx', '--yes'])
+
+    expect(repaired[0]).not.toBe(stale)
+    expect(repaired[0]?.replace(/\\\\/g, '/')).toMatch(/\/scripts\/mcp-stdio-proxy\.mjs$/u)
+    expect(repaired.slice(1)).toEqual(['npx', '--yes'])
+  })
+
+  it('never rewrites an unrelated missing child argument', () => {
+    const missing = 'C:\\deleted\\server.mjs'
+    expect(repairPhoenixStdioProxyArgs([missing])).toEqual([missing])
+  })
+
   it('creates StdioClientTransport for stdio config', () => {
     const config: Config = {
       transport: 'stdio',
