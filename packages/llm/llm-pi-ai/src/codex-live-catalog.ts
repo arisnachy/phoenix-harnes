@@ -64,8 +64,8 @@ export interface CodexLiveCatalogOptions {
   refreshIntervalMs?: number
   /** Installed route ids retained in the dispatch superset. */
   installedModelIds?: () => readonly string[]
-  /** Non-fatal diagnostic sink. */
-  warn?: (message: string, error?: unknown) => void
+  /** Optional Phoenix-compatible diagnostic sink. */
+  logger?: { warn(value: unknown): void }
 }
 
 /**
@@ -86,7 +86,7 @@ export class CodexLiveCatalog {
   private readonly now: () => number
   private readonly refreshIntervalMs: number
   private readonly installedModelIds: () => readonly string[]
-  private readonly warn: ((message: string, error?: unknown) => void) | undefined
+  private readonly logger: { warn(value: unknown): void } | undefined
   revision = 0
 
   constructor(options: CodexLiveCatalogOptions = {}) {
@@ -95,7 +95,12 @@ export class CodexLiveCatalog {
     this.refreshIntervalMs = options.refreshIntervalMs ?? CODEX_MODEL_REFRESH_INTERVAL_MS
     this.installedModelIds = options.installedModelIds
       ?? (() => [...catalogModels(CODEX_PROVIDER).keys()])
-    this.warn = options.warn
+    this.logger = options.logger
+  }
+
+  private report(message: string, error?: unknown): void {
+    this.logger?.warn(`llm-pi-ai: ${message}`)
+    if (error !== undefined) this.logger?.warn(error)
   }
 
   /** Latest account-visible ids in provider order, or no live answer yet. */
@@ -158,7 +163,7 @@ export class CodexLiveCatalog {
     try {
       const next = codexModelsToProfiles(await this.transport.list())
       if (next.length === 0) {
-        this.warn?.('Codex returned an empty live model catalog; keeping the last good/static catalog')
+        this.report('Codex returned an empty live model catalog; keeping the last good/static catalog')
         return
       }
 
@@ -174,7 +179,7 @@ export class CodexLiveCatalog {
       this.dispatch = nextDispatch
       this.revision += 1
     } catch (error: unknown) {
-      this.warn?.('Live Codex model refresh failed; keeping the last good/static catalog', error)
+      this.report('Live Codex model refresh failed; keeping the last good/static catalog', error)
     }
   }
 }
