@@ -563,7 +563,14 @@ describe('PiAiAdapter provider routing', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(LlmPiAi, {
-      providers: { 'openai-codex': { apiKeyEnv: 'PI_CODEX_MONDAY_JWT', baseURL: server.url } },
+      providers: {
+        'openai-codex': {
+          apiKeyEnv: 'PI_CODEX_MONDAY_JWT',
+          baseURL: server.url,
+          models: [{ id: 'gpt-5.4' }],
+          transport: 'sse',
+        },
+      },
     })
 
     await assemble(ctx, {
