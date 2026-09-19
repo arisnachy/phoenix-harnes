@@ -68,7 +68,7 @@ import {
 } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
-import { normalizeCodexToolSchemas, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
+import { normalizeCodexToolSchemas, normalizeOpenAiFunctionToolPayload, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 
@@ -427,7 +427,8 @@ export class PiAiAdapter extends LlmAdapter {
           CONTEXT_WINDOW_EXCEEDED_CODE,
         )
       }
-      const requestOptions = requiresObjectRootFunctionSchemas(options.provider, model.api)
+      const requiresFunctionSchemaProjection = requiresObjectRootFunctionSchemas(options.provider, model.api)
+      const requestOptions = requiresFunctionSchemaProjection
         ? normalizeCodexToolSchemas(fitted.options)
         : fitted.options
       const containsImage = requestOptions.messages.some(message => contentHasImage(message.content))
@@ -450,6 +451,9 @@ export class PiAiAdapter extends LlmAdapter {
         }, profile.maxInlineFileBytes)
       const streamOptions: SimpleStreamOptions = {
         ...profileOptions(profile, reasoning, apiKey),
+        ...requiresFunctionSchemaProjection
+          ? { onPayload: payload => normalizeOpenAiFunctionToolPayload(payload) }
+          : {},
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
