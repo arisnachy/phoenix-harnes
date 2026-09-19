@@ -61,6 +61,7 @@ import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoen
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
+import { CodexLiveCatalog } from './codex-live-catalog.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
 import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
@@ -205,9 +206,11 @@ export function apply(ctx: Context, config: Config): void {
 
   const openCodeCatalog = createOpenCodeFreeCatalog()
   let openCodeCatalogRevision = 0
+  const codexCatalog = new CodexLiveCatalog({ logger: ctx.logger })
   let current: () => Config = () => config
   let lastRaw: Config | undefined
   let lastCatalogRevision = -1
+  let lastCodexCatalogRevision = -1
   let memoized: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
 
   /**
@@ -216,14 +219,22 @@ export function apply(ctx: Context, config: Config): void {
    */
   const profiles = (): ReadonlyMap<string, ResolvedPiAiProviderProfile> => {
     const raw = current()
-    if (raw === lastRaw && lastCatalogRevision === openCodeCatalogRevision && memoized !== undefined) return memoized
+    if (
+      raw === lastRaw
+      && lastCatalogRevision === openCodeCatalogRevision
+      && lastCodexCatalogRevision === codexCatalog.revision
+      && memoized !== undefined
+    ) return memoized
+
+    const providers = codexCatalog.overlayProviders(raw.providers ?? {})
     const next = resolveProfiles({
-      ...(raw.providers ?? {}),
+      ...providers,
       [PHOENIX_LOCAL_PROVIDER]: phoenixLocalProfile(),
       [OPENCODE_FREE_PROVIDER]: opencodeFreeProfile(openCodeCatalog.models()),
     })
     lastRaw = raw
     lastCatalogRevision = openCodeCatalogRevision
+    lastCodexCatalogRevision = codexCatalog.revision
     memoized = next
     return next
   }
@@ -253,6 +264,8 @@ export function apply(ctx: Context, config: Config): void {
     profiles,
     resolveApiKey,
     auth,
+    refreshModels: (provider, force) =>
+      codexCatalog.refresh(provider, current().providers?.[provider], force),
     resolveAttachments: () => ctx.get('attachments'),
     onReplayDegrade: ({ provider, model, reason }) => {
       ctx.logger.warn(
