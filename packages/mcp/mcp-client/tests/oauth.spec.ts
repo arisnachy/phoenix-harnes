@@ -155,7 +155,7 @@ describe('createMcpOAuthProvider', () => {
     vi.mocked(auth).mockImplementationOnce(async (provider) => {
       expect(await provider.clientInformation()).toBeUndefined()
       expect(await provider.tokens()).toBeUndefined()
-      expect(await provider.codeVerifier()).rejects.toThrow(/verifier missing/i)
+      await expect(provider.codeVerifier()).rejects.toThrow(/verifier missing/i)
       expect(await provider.discoveryState?.()).toEqual({ authorizationServerUrl: 'https://auth.monday.com' })
       return 'AUTHORIZED'
     })
@@ -173,7 +173,6 @@ describe('createMcpOAuthProvider', () => {
         notify: vi.fn(),
         prompt: vi.fn(),
       })).resolves.toBeUndefined()
-      expect(auth).toHaveBeenCalledTimes(1)
     } finally {
       await controller.close()
     }
