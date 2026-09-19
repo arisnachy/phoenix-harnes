@@ -661,8 +661,7 @@ function superviseWatcher() {
   }
 }
 
-function preparedActivator() {
-  const target = restartRequestTarget()
+function preparedActivator(target = restartRequestTarget()) {
   const stage = persistentStage()
   const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')
   // A staged checkout can contain an older activator that only accepts
@@ -679,8 +678,8 @@ function preparedActivator() {
   return liveActivator
 }
 
-function activatePrepared() {
-  const activator = preparedActivator()
+function activatePrepared(target = restartRequestTarget()) {
+  const activator = preparedActivator(target)
   if (!existsSync(activator)) {
     console.error('[PHOENIX UPDATE] supervised activator is missing; refusing restart.')
     return 1
@@ -864,7 +863,7 @@ while (true) {
 
     console.error('[PHOENIX UPDATE] restart request received; activating prepared update under supervisor control...')
     await watcherSupervisor.pause()
-    const activationCode = activatePrepared()
+    const activationCode = activatePrepared(requestedTarget)
     if (activationCode !== 0) {
       clearRestartRequest()
       if (activationCode === 12) {
