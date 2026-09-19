@@ -1,5 +1,7 @@
 # @phoenix-ai/dsh-image-generation
 
+English | [中文](README.zh.md)
+
 PHOENIX image generation capability. This single-purpose package currently contains all three seam roles:
 
 - **Service Definition:** `ctx.imageGeneration` owns provider registration, selection, cancellation, and durable publication.
