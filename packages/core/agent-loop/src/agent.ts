@@ -416,7 +416,7 @@ export class ReactLoopAgent implements Agent {
         if (steeringInterrupt) return null
         throw error
       } finally {
-        if (phase.modelAbort === modelAbort) phase.modelAbort = undefined
+        if (phase.modelAbort === modelAbort) delete phase.modelAbort
       }
 
       /* v8 ignore next -- a non-throwing build always assigns the request. */
