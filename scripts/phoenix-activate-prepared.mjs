@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -92,13 +93,20 @@ function writeState(root, state) {
   writePhoenixUpdateState(durablePath(root, STATE_FILE), { schema: 1, ...state, at: new Date().toISOString() })
 }
 
-function stageDirectory() {
+function stageIdentity(root) {
+  return createHash('sha256').update(gitCommonDirectory(root).toLowerCase()).digest('hex').slice(0, 10)
+}
+
+function stageDirectory(root) {
+  const explicit = process.env.PHOENIX_PREPARED_STAGE?.trim()
+  if (explicit !== undefined && explicit.length > 0) return resolve(explicit)
+
   const configured = process.env.PHOENIX_UPDATE_TEMP?.trim()
   const base = configured !== undefined && configured.length > 0
     ? resolve(configured)
     : process.platform === 'win32' ? join(homedir(), 'p') : join(homedir(), '.phoenix-update')
   mkdirSync(base, { recursive: true })
-  return join(base, 'phoenix-stage')
+  return join(base, `phoenix-stage-${stageIdentity(root)}`)
 }
 
 function remoteMatchesExpected(root) {
@@ -153,7 +161,7 @@ function validatePrepared(root) {
     throw new Error('prepared target diverges from the live checkout and requires a managed installation')
   }
 
-  const stage = stageDirectory()
+  const stage = stageDirectory(root)
   if (!existsSync(stage)) throw new Error(`prepared staging worktree is missing: ${stage}`)
   if (gitCommonDirectory(root).toLowerCase() !== gitCommonDirectory(stage).toLowerCase()) {
     throw new Error('prepared staging worktree belongs to another repository')
