@@ -449,6 +449,11 @@ export class PiAiAdapter extends LlmAdapter {
           maxPixels: profile.requestImagePixelBudget,
           maxBytes: profile.requestImageMaxBytes,
         }, profile.maxInlineFileBytes)
+      // Defense before pi-ai performs any provider-side validation or tool
+      // transformation. onPayload below remains the final wire defense.
+      const providerContext = requiresFunctionSchemaProjection
+        ? normalizeOpenAiFunctionToolPayload(context) as typeof context
+        : context
       const streamOptions: SimpleStreamOptions = {
         ...profileOptions(profile, reasoning, apiKey),
         ...requiresFunctionSchemaProjection
@@ -466,8 +471,8 @@ export class PiAiAdapter extends LlmAdapter {
         // The collection dispatches the codex route to the Codex wire no
         // matter what a model object says, so the fallback calls the platform
         // Responses implementation directly.
-        ? openAIResponsesApi().streamSimple(wireModel, context, streamOptions)
-        : snapshot.models.streamSimple(model, context, streamOptions)
+        ? openAIResponsesApi().streamSimple(wireModel, providerContext, streamOptions)
+        : snapshot.models.streamSimple(model, providerContext, streamOptions)
       const iterator = toStreamChunks(
         events,
         model.contextWindow,
