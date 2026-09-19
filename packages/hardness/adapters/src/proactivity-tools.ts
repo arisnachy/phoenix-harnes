@@ -158,8 +158,8 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args, exec) {
-      const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')
-      if (everyMs === undefined || everyMs < 60 * 60_000) {
+      const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')!
+      if (everyMs < 60 * 60_000) {
         throw new ToolArgsError(['everyMinutes must be at least 60 for condition watches'])
       }
       const agentId = targetAgent(exec)
