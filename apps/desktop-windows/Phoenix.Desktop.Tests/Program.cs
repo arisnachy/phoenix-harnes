@@ -115,7 +115,8 @@ False(runtimeLaunch.UseShellExecute, "PowerShell runtime is directly supervised"
 True(runtimeLaunch.ArgumentList.Contains("-NoProfile"), "PowerShell disables user profile side effects", failures);
 True(runtimeLaunch.ArgumentList.Contains("-NonInteractive"), "PowerShell runtime is non-interactive", failures);
 True(runtimeLaunch.ArgumentList.Any(value => value.Contains("phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)), "PowerShell invokes Windows supervisor launcher", failures);
-True(runtimeLaunch.ArgumentList.Any(value => value.Contains("--port 3081", StringComparison.Ordinal)), "desktop runtime owns isolated port 3081", failures);
+EqualInt(3080, DesktopRuntimeLaunchContract.DesktopPort, "desktop shell uses the normal Phoenix port", failures);
+False(runtimeLaunch.ArgumentList.Any(value => value.Contains("--port 3081", StringComparison.Ordinal)), "desktop launcher never forces the old private 3081 port", failures);
 True(runtimeLaunch.ArgumentList.Any(value => value.Contains("--no-open", StringComparison.Ordinal)), "desktop runtime never opens an external browser", failures);
 Equal("1", runtimeLaunch.Environment["PHOENIX_DESKTOP_MANAGED"], "desktop managed environment is preserved", failures);
 Equal(@"C:\Phoenix\desktop-control.json", runtimeLaunch.Environment["PHOENIX_DESKTOP_CONTROL_DESCRIPTOR"], "desktop control descriptor reaches supervisor", failures);
@@ -130,6 +131,11 @@ var sourceLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
     managedRuntime: false);
 False(sourceLaunch.Environment.ContainsKey("PHOENIX_DESKTOP_MANAGED"), "source checkout is not mislabeled as desktop-managed", failures);
 True(sourceLaunch.ArgumentList.Any(value => value.Contains(@"C:\Working Phoenix\phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)), "source checkout launcher is used directly", failures);
+
+True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node scripts\phoenix-windows-supervisor.mjs"), "supervisor listener is recognized as Phoenix", failures);
+True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node C:\Users\me\Phoenix\phoenix-harnes\apps\cli\lib\bin.js web"), "source checkout listener is recognized as Phoenix", failures);
+True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"powershell -Command corepack pnpm phoenix -- --no-open"), "PowerShell pnpm Phoenix listener is recognized", failures);
+False(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"python -m http.server 3080"), "unrelated local HTTP listener is rejected", failures);
 
 var sourceTestRoot = Path.Combine(Path.GetTempPath(), $"phoenix-source-test-{Guid.NewGuid():N}");
 var sourceInstallRoot = Path.Combine(Path.GetTempPath(), $"phoenix-install-test-{Guid.NewGuid():N}");
