@@ -204,6 +204,85 @@ describe('syncTools', () => {
     expect(ctx.tools.get('add')).toBeUndefined()
   })
 
+  it('normalizes Monday-style root unions before exposing MCP tools to model providers', async () => {
+    const client = createMockClient([
+      {
+        name: 'create_action',
+        description: 'Create or update a Monday action',
+        inputSchema: {
+          oneOf: [
+            {
+              type: 'object',
+              properties: {
+                action: { const: 'create' },
+                board_id: { type: 'string' },
+                item_name: { type: 'string' },
+              },
+              required: ['action', 'board_id', 'item_name'],
+              additionalProperties: false,
+            },
+            {
+              type: 'object',
+              properties: {
+                action: { const: 'update' },
+                item_id: { type: 'string' },
+                column_values: { type: 'object' },
+              },
+              required: ['action', 'item_id'],
+              additionalProperties: false,
+            },
+          ],
+        },
+      },
+    ])
+
+    await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'monday-com-monday-com' }, new Map())
+
+    const tool = ctx.tools.get('mcp__monday-com-monday-com__create_action')
+    expect(tool?.parameters).toMatchObject({
+      type: 'object',
+      properties: {
+        board_id: { type: 'string' },
+        item_name: { type: 'string' },
+        item_id: { type: 'string' },
+        column_values: { type: 'object' },
+        action: { anyOf: [{ const: 'create' }, { const: 'update' }] },
+      },
+      required: ['action'],
+    })
+    expect(tool?.parameters).not.toHaveProperty('oneOf')
+    expect(tool?.parameters).not.toHaveProperty('anyOf')
+    expect(tool?.parameters).not.toHaveProperty('allOf')
+    expect(tool?.parameters).not.toHaveProperty('enum')
+    expect(tool?.parameters).not.toHaveProperty('const')
+    expect(tool?.parameters).not.toHaveProperty('not')
+
+    const args = { action: 'create', board_id: '123', item_name: 'Phoenix' }
+    await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('monday-create'),
+      name: 'mcp__monday-com-monday-com__create_action',
+      arguments: args,
+    })
+
+    expect(client.callTool).toHaveBeenCalledWith(
+      { name: 'create_action', arguments: args },
+      undefined,
+      expect.anything(),
+    )
+  })
+
+  it('adds an empty properties object to parameter-free MCP object schemas', async () => {
+    const client = createMockClient([{ name: 'ping', inputSchema: { type: 'object' } }])
+
+    await syncTools(client as never, ctx, defaultOpts, new Map())
+
+    expect(ctx.tools.get('mcp__srv__ping')?.parameters).toEqual({
+      type: 'object',
+      properties: {},
+    })
+  })
+
   it('lets two servers publish the same raw name side by side', async () => {
     const clientA = createMockClient([{ name: 'search', inputSchema: { type: 'object' } }])
     const clientB = createMockClient([{ name: 'search', inputSchema: { type: 'object' } }])
