@@ -1,6 +1,6 @@
 - dialog "连接 PHOENIX":
   - heading "连接 PHOENIX" [level=2]
-  - paragraph: 优先连接 ChatGPT / Codex；如果你更喜欢其他模型提供方，也可以使用 API 密钥。
+  - paragraph: 为 PHOENIX 主聊天配置模型提供方。此 API 凭据与你的 ChatGPT / Codex 订阅相互独立。
   - text: API 密钥
   - textbox "API 密钥":
     - /placeholder: 输入 API 密钥
