@@ -11,6 +11,7 @@ namespace Phoenix.Desktop;
 internal sealed class PhoenixDesktopWindow : Form
 {
     private readonly Uri phoenixUri;
+    private readonly string phoenixNavigationUrl;
     private readonly SplitContainer split = new();
     private readonly WebView2 phoenixView = new();
     private readonly WebView2 browserView = new();
@@ -29,9 +30,16 @@ internal sealed class PhoenixDesktopWindow : Form
     // not only the pure layout contract.
     internal bool IsBrowserPaneVisible => !split.Panel2Collapsed;
 
+    internal event EventHandler? LogoutRequested;
+
     internal PhoenixDesktopWindow(Uri phoenixUri, bool initializeWebViewsOnShow = true)
     {
         this.phoenixUri = phoenixUri;
+        var launchUri = new UriBuilder(phoenixUri);
+        var existingQuery = launchUri.Query.TrimStart('?');
+        var prefix = string.IsNullOrWhiteSpace(existingQuery) ? string.Empty : existingQuery + "&";
+        launchUri.Query = $"{prefix}surface=desktop&shellVersion={Uri.EscapeDataString(Application.ProductVersion)}&launch={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+        phoenixNavigationUrl = launchUri.Uri.ToString();
         Text = "Phoenix";
         StartPosition = FormStartPosition.CenterScreen;
         Size = new Size(1440, 900);
@@ -155,7 +163,70 @@ internal sealed class PhoenixDesktopWindow : Form
         runtimeReady = true;
         SetStartupStatus("Abriendo Phoenix…");
         if (phoenixView.CoreWebView2 is not null)
-            phoenixView.CoreWebView2.Navigate(phoenixUri.ToString());
+            _ = NavigatePhoenixFreshAsync();
+    }
+
+    private async Task NavigatePhoenixFreshAsync()
+    {
+        var core = phoenixView.CoreWebView2;
+        if (core is null) return;
+        try
+        {
+            await core.CallDevToolsProtocolMethodAsync("Network.clearBrowserCache", "{}");
+        }
+        catch (Exception ex)
+        {
+            DesktopLog.Write("Phoenix shell cache clear was unavailable; continuing with cache-busted navigation.", ex);
+        }
+        core.Navigate(phoenixNavigationUrl);
+    }
+
+    internal Task ClearSessionAsync()
+    {
+        if (IsDisposed) return Task.CompletedTask;
+        if (!InvokeRequired) return ClearSessionCoreAsync();
+
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            BeginInvoke((Action)(async () =>
+            {
+                try
+                {
+                    await ClearSessionCoreAsync();
+                    completion.SetResult();
+                }
+                catch (Exception ex)
+                {
+                    completion.SetException(ex);
+                }
+            }));
+        }
+        catch (Exception ex)
+        {
+            completion.SetException(ex);
+        }
+        return completion.Task;
+    }
+
+    private async Task ClearSessionCoreAsync()
+    {
+        var core = phoenixView.CoreWebView2;
+        if (core is null) return;
+
+        var origin = $"{phoenixUri.Scheme}://{phoenixUri.Host}:{phoenixUri.Port}";
+        try
+        {
+            await core.CallDevToolsProtocolMethodAsync(
+                "Storage.clearDataForOrigin",
+                JsonSerializer.Serialize(new { origin, storageTypes = "all" }));
+            await core.CallDevToolsProtocolMethodAsync("Network.clearBrowserCookies", "{}");
+            await core.CallDevToolsProtocolMethodAsync("Network.clearBrowserCache", "{}");
+        }
+        finally
+        {
+            core.Navigate("about:blank");
+        }
     }
 
     private void BuildStartupOverlay()
@@ -244,20 +315,29 @@ internal sealed class PhoenixDesktopWindow : Form
 
         try
         {
-            await phoenixView.EnsureCoreWebView2Async();
+            var shellProfile = Path.Combine(Program.InstallRoot, "webview", "shell");
+            Directory.CreateDirectory(shellProfile);
+            var shellEnvironment = await CoreWebView2Environment.CreateAsync(null, shellProfile);
+            await phoenixView.EnsureCoreWebView2Async(shellEnvironment);
             ConfigureWebView(phoenixView.CoreWebView2, isPhoenixSurface: true);
             phoenixView.CoreWebView2.WebMessageReceived += (_, e) => HandlePhoenixMessage(e.WebMessageAsJson);
             phoenixView.CoreWebView2.NewWindowRequested += (_, e) =>
             {
                 e.Handled = true;
-                OpenBrowser(e.Uri);
+                if (e.IsUserInitiated)
+                    OpenBrowser(e.Uri);
+                else
+                    DesktopLog.Write($"Blocked background new-window request from the Phoenix shell: {e.Uri}");
             };
             phoenixView.CoreWebView2.NavigationStarting += (_, e) =>
             {
                 if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target)) return;
                 if (IsPhoenixUri(target)) return;
                 e.Cancel = true;
-                OpenBrowser(target.ToString());
+                if (e.IsUserInitiated)
+                    OpenBrowser(target.ToString());
+                else
+                    DesktopLog.Write($"Blocked background external navigation from the Phoenix shell: {target}");
             };
             phoenixView.CoreWebView2.NavigationCompleted += (_, e) =>
             {
@@ -278,7 +358,7 @@ internal sealed class PhoenixDesktopWindow : Form
             // The browser pane is created lazily on the first page request so it cannot delay
             // conversation hydration or steal half of the first rendered frame.
             if (runtimeReady)
-                phoenixView.CoreWebView2.Navigate(phoenixUri.ToString());
+                await NavigatePhoenixFreshAsync();
         }
         catch (WebView2RuntimeNotFoundException ex)
         {
@@ -386,6 +466,9 @@ internal sealed class PhoenixDesktopWindow : Form
                 _ = EnsureBrowserInitializedAsync();
                 browserView.Focus();
                 break;
+            case "phoenix.app.logout":
+                LogoutRequested?.Invoke(this, EventArgs.Empty);
+                break;
             default:
                 throw new InvalidOperationException($"Unsupported browser command: {command.Type}");
         }
@@ -431,7 +514,10 @@ internal sealed class PhoenixDesktopWindow : Form
 
     private async Task InitializeBrowserAsync()
     {
-        await browserView.EnsureCoreWebView2Async();
+        var browserProfile = Path.Combine(Program.InstallRoot, "webview", "browser");
+        Directory.CreateDirectory(browserProfile);
+        var browserEnvironment = await CoreWebView2Environment.CreateAsync(null, browserProfile);
+        await browserView.EnsureCoreWebView2Async(browserEnvironment);
         ConfigureWebView(browserView.CoreWebView2, isPhoenixSurface: false);
         browserView.CoreWebView2.NavigationStarting += (_, e) => address.Text = e.Uri;
         browserView.CoreWebView2.NavigationCompleted += (_, _) => PublishBrowserState();
@@ -529,8 +615,17 @@ internal sealed class PhoenixDesktopWindow : Form
             home: () => send('phoenix.browser.home'),
             focus: () => send('phoenix.browser.focus')
           });
+          const app = Object.freeze({
+            logout: () => send('phoenix.app.logout')
+          });
+          const surface = Object.freeze({
+            kind: 'desktop',
+            nativeShell: true,
+            embeddedBrowser: 'webview2',
+            automationBrowser: 'chrome'
+          });
           Object.defineProperty(window, 'phoenixDesktop', {
-            value: Object.freeze({ browser }),
+            value: Object.freeze({ browser, app, surface }),
             configurable: false,
             enumerable: true,
             writable: false
