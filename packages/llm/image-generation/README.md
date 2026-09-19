@@ -2,13 +2,13 @@
 
 English | [中文](README.zh.md)
 
-PHOENIX image generation capability. This single-purpose package currently contains all three seam roles:
+PHOENIX image generation capability. This single-purpose package contains the provider-neutral runtime, bundled remote providers, and the model-facing `image_generate` consumer.
 
-- **Service Definition:** `ctx.imageGeneration` owns provider registration, selection, cancellation, and durable publication.
-- **Service Provider:** a Cloudflare Workers AI adapter for `@cf/black-forest-labs/flux-1-schnell`.
-- **Consumer:** the model-facing `image_generate` tool and its visual-quality prompt policy.
+- **Service Definition:** `ctx.imageGeneration` owns provider registration, automatic selection/fallback, cancellation, and durable publication.
+- **Service Providers:** configured Cloudflare Workers AI / FLUX.1 schnell is preferred; AI Horde provides a zero-setup anonymous community fallback.
+- **Consumer:** `image_generate` plus the visual-quality prompt policy.
 
-Keeping the three roles in one package makes the first implementation small while still exposing a provider registry. A later provider can be split into its own package without changing the tool or session image format.
+Provider registration remains public, so a later local diffusion runtime can be added without changing the tool contract or session image format.
 
 ## Why generated images become attachments
 
@@ -20,37 +20,53 @@ Providers return encoded bytes, never the durable result. `ctx.imageGeneration` 
 - id: image-generation
   name: '@phoenix-ai/dsh-image-generation'
   config:
-    provider: cloudflare
+    provider: auto
     accountId: YOUR_CLOUDFLARE_ACCOUNT_ID
     apiTokenEnv: CLOUDFLARE_API_TOKEN
     model: '@cf/black-forest-labs/flux-1-schnell'
+    aihordeApiKeyEnv: AIHORDE_API_KEY
     steps: 6
     requestTimeoutMs: 60000
-    toolTimeoutMs: 90000
+    hordeTimeoutMs: 120000
+    toolTimeoutMs: 135000
     visualQualityPolicy: true
 ```
 
-`accountId` falls back to `CLOUDFLARE_ACCOUNT_ID`. The token is always resolved through the credential seam by reference, once per generation; no secret belongs in Cordis config or a session event.
+`provider: auto` prefers Cloudflare when its account is configured. If Cloudflare is unavailable, unauthenticated, rate-limited, out of quota, or transiently fails, PHOENIX falls back to AI Horde.
 
-The default model accepts up to 8 diffusion steps. The tool maps `quality: fast` to 4 and `quality: high` to 8; omission uses the configured default.
+Cloudflare's account id falls back to `CLOUDFLARE_ACCOUNT_ID`; its token is resolved by reference through the credential seam. AI Horde uses the optional `AIHORDE_API_KEY` credential when present and otherwise uses the service's documented anonymous key. No secret belongs in Cordis config, tool arguments, or a session event.
+
+The provider-neutral step hint stays in the 1–8 range. Cloudflare uses it directly; AI Horde maps it to a larger community-generation step budget. The tool maps `quality: fast` to 4 and `quality: high` to 8; omission uses the configured default.
 
 ## Visual quality policy
 
-With `visualQualityPolicy: true`, PHOENIX is told to use `image_generate` for artwork and product visuals instead of fabricating decorative CSS/SVG/emoji substitutes. Prompt refinement preserves the requested subject/style while adding composition, palette, lighting/material, polish, no-watermark, and no-accidental-text guidance.
+With `visualQualityPolicy: true`, PHOENIX is told to use `image_generate` for artwork, hero/splash/background images, concept art, and product visuals instead of fabricating decorative CSS/SVG/emoji/ASCII substitutes. Prompt refinement preserves the requested subject/style while adding composition, palette, lighting/material, polish, no-watermark, and no-accidental-text guidance.
 
-The policy explicitly prevents a common branding failure: the product name **PHOENIX** alone is not permission to insert a bird, phoenix, turkey, flame mascot, or logo.
+The policy explicitly prevents a branding failure: the product name **PHOENIX** alone is not permission to insert a bird, phoenix, turkey, flame mascot, or logo.
 
 SVG and primitives remain correct for actual vectors, icons, logos, diagrams, charts, and shape-based assets.
 
-## Model Experience
+## Model experience
 
-A successful `image_generate` call returns a short text receipt plus an `image` content block backed by a durable local attachment. The Web conversation surface already recognizes tool-result image blocks and displays them outside the collapsed Tools group.
+A successful `image_generate` call returns a short receipt plus an `image` content block backed by a durable local attachment. The Web conversation surface already recognizes tool-result image blocks and displays them outside the collapsed Tools group.
 
-If the provider is not configured, the tool fails explicitly. The model-facing policy tells PHOENIX not to fake the requested artwork with low-quality primitives as a fallback.
+When all providers fail, the tool reports the real provider failure. The model-facing policy explicitly forbids replacing the requested artwork with a crude local primitive merely to avoid reporting that failure.
 
-## Known Limitations and Deferred Work
+## Provider behavior
 
-- The bundled provider requires a Cloudflare account id and Workers AI token. The provider's free allocation is external policy and is not guaranteed by PHOENIX.
-- Version one generates one text-to-image result per call. Reference-image editing, masks, variations, seeds, explicit aspect-ratio control, and multi-provider fallback are deferred.
-- The bundled FLUX.1 schnell adapter records JPEG output because that is the provider's documented response for this model.
-- A future local provider (for example a user-owned local diffusion runtime) can register on the same seam to remove network/API dependence without changing the consumer.
+### Cloudflare Workers AI
+
+The Cloudflare adapter calls Workers AI's REST API with the configured account id and a token resolved per operation through `ctx.credentials`. The shipped model is `@cf/black-forest-labs/flux-1-schnell` and returns JPEG bytes.
+
+### AI Horde
+
+The AI Horde adapter is the zero-setup fallback. With no stored key it uses the documented anonymous key and therefore has the community service's lowest queue priority. It submits one 1024×1024 safe-by-default request, polls the lightweight check endpoint, retrieves the final result once, and requests inline WebP bytes rather than persisting an expiring remote URL.
+
+An optional registered AI Horde key can be stored under `AIHORDE_API_KEY` to receive the service's normal registered-user priority.
+
+## Known limitations and deferred work
+
+- External free allocations and community availability are controlled by their providers; PHOENIX cannot guarantee permanent quotas, queue times, or uptime.
+- Version one generates one text-to-image result per call. Reference-image editing, masks, variations, seeds, explicit aspect-ratio control, and user-selectable provider/model UI are deferred.
+- Anonymous AI Horde generation can be slower under load; automatic fallback is bounded by `hordeTimeoutMs`.
+- A future local provider can register on the same seam to remove network/API dependence without changing the consumer.
