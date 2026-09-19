@@ -18,6 +18,9 @@ type JsonObject = Record<string, unknown>
  * wires below share that request contract. Keeping the decision at the final
  * provider seam catches MCPs that entered through any registration path while
  * leaving unrelated provider protocols untouched.
+ * @param provider - Harness provider route selected for this request.
+ * @param api - pi-ai wire protocol used by the resolved model.
+ * @returns True when function schemas require the OpenAI/Codex object-root projection.
  */
 export function requiresObjectRootFunctionSchemas(provider: string, api: string): boolean {
   return provider === 'openai-codex' || OBJECT_ROOT_FUNCTION_APIS.has(api)
