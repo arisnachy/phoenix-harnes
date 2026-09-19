@@ -16,6 +16,7 @@ describe('root tsdown host performance contract', () => {
     expect(declaredHostExternal('@phoenix-ai/dsh-typert-registry', importer)).toBeUndefined()
     expect(declaredHostExternal('@phoenix-ai/dsh-llm/remote', importer)).toBeUndefined()
     expect(declaredHostExternal('./local.js', importer)).toBeUndefined()
+    expect(declaredHostExternal('@phoenix-ai/dsh-llm', null)).toBeUndefined()
   })
 
   it('does not install the Host external fast-path into the Client pass', () => {
