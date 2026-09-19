@@ -41,6 +41,21 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('&& !preparedTargetIsDivergent(target)')
   })
 
+  it('does not reject a prepared source candidate merely because Host build output is absent', () => {
+    const start = source.indexOf('function preparedStageForTarget')
+    const end = source.indexOf('function runtimeIsHealthy', start)
+    const preparedStageSource = source.slice(start, end)
+
+    expect(preparedStageSource).toContain("join(stage, 'scripts', 'phoenix-activate-prepared.mjs')")
+    expect(preparedStageSource).not.toContain("apps', 'cli', 'lib', 'bin.js")
+  })
+
+  it('invalidates a rejected prepared marker so the restart bridge cannot loop forever', () => {
+    expect(source).toContain('clearPreparedRecord()')
+    expect(source).toContain('invalidated the cached candidate')
+    expect(source).not.toContain('prepared update no longer matches a verified staging candidate; refusing live activation')
+  })
+
   it('reconciles stale runtime and client artifacts before the Windows supervisor starts', () => {
     expect(cliSource).toContain("import { preparePhoenixWebRuntime } from './phoenix-runtime-freshness.ts'")
     expect(cliSource).toContain('preparePhoenixWebRuntime(runtimeSourceRoot)')
