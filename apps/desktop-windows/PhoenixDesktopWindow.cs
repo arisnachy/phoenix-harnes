@@ -614,10 +614,11 @@ internal sealed class PhoenixDesktopWindow : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        if (e.CloseReason == CloseReason.UserClosing)
+        if (DesktopStartupContract.UserCloseHidesToTray && e.CloseReason == CloseReason.UserClosing)
         {
             e.Cancel = true;
             Hide();
+            DesktopLog.Write("Phoenix window closed by user; shell hidden to tray while runtime remains active.");
             return;
         }
         base.OnFormClosing(e);

@@ -74,8 +74,10 @@ internal static class Program
             return;
         }
 
+        var developerConsoleVisible = DesktopDeveloperConsole.Requested(InstallRoot, args);
+        DesktopLog.Write($"Developer console requested={developerConsoleVisible}.");
         ApplicationConfiguration.Initialize();
-        Application.Run(new PhoenixApplicationContext(showEvent));
+        Application.Run(new PhoenixApplicationContext(showEvent, developerConsoleVisible));
     }
 
     private static void RunVisibleWindowSmokeTest()
@@ -121,6 +123,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 {
     private readonly NotifyIcon tray;
     private readonly ToolStripMenuItem restartItem;
+    private readonly ToolStripMenuItem developerConsoleItem;
     private readonly ToolStripMenuItem autostartItem;
     private readonly HttpClient http = new() { Timeout = TimeSpan.FromSeconds(1.5) };
     private readonly PhoenixDesktopWindow window;
@@ -131,12 +134,15 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     private string runtimeRoot = Program.RuntimeRoot;
     private bool sourceCheckoutRuntime;
     private bool externallyManaged;
+    private bool developerConsoleVisible;
+    private bool changingDeveloperConsole;
     private bool shuttingDown;
     private bool signingOut;
 
-    internal PhoenixApplicationContext(EventWaitHandle showEvent)
+    internal PhoenixApplicationContext(EventWaitHandle showEvent, bool developerConsoleVisible)
     {
         this.showEvent = showEvent;
+        this.developerConsoleVisible = developerConsoleVisible;
 
         // The desktop window is created and shown immediately. Runtime bootstrap happens behind it,
         // so a first launch can never look like a dead EXE again.
@@ -152,6 +158,16 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         menu.Items.Add("Abrir Phoenix", null, (_, _) => ShowWindow());
         restartItem = new ToolStripMenuItem("Reiniciar runtime administrado", null, async (_, _) => await RestartOwnedRuntimeAsync());
         menu.Items.Add(restartItem);
+
+        developerConsoleItem = new ToolStripMenuItem("Mostrar consola de desarrollo")
+        {
+            Checked = developerConsoleVisible,
+            CheckOnClick = true,
+            ToolTipText = "Muestra PowerShell y los logs del runtime. Desactivado por defecto para usuarios normales.",
+        };
+        developerConsoleItem.CheckedChanged += async (_, _) => await ChangeDeveloperConsoleAsync(developerConsoleItem.Checked);
+        menu.Items.Add(developerConsoleItem);
+
         menu.Items.Add(new ToolStripSeparator());
         autostartItem = new ToolStripMenuItem("Iniciar con Windows")
         {
@@ -564,7 +580,8 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         var psi = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
             runtimeRoot,
             browserControl.DescriptorPath,
-            managedRuntime: !sourceCheckoutRuntime);
+            managedRuntime: !sourceCheckoutRuntime,
+            showDeveloperConsole: developerConsoleVisible);
         DesktopLog.Write($"Launching Phoenix runtime from {runtimeRoot} through PowerShell supervisor: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
 
         ownedRuntime = Process.Start(psi);
@@ -580,10 +597,16 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return false;
         }
 
-        ownedRuntime.OutputDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) DesktopLog.Write("runtime: " + e.Data); };
-        ownedRuntime.ErrorDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) DesktopLog.Write("runtime stderr: " + e.Data); };
-        ownedRuntime.BeginOutputReadLine();
-        ownedRuntime.BeginErrorReadLine();
+        if (psi.RedirectStandardOutput)
+        {
+            ownedRuntime.OutputDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) DesktopLog.Write("runtime: " + e.Data); };
+            ownedRuntime.BeginOutputReadLine();
+        }
+        if (psi.RedirectStandardError)
+        {
+            ownedRuntime.ErrorDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) DesktopLog.Write("runtime stderr: " + e.Data); };
+            ownedRuntime.BeginErrorReadLine();
+        }
 
         externallyManaged = false;
         restartItem.Enabled = true;
@@ -632,6 +655,46 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         await Task.Delay(700);
         await StartOwnedRuntimeAsync(openWhenReady: false, reportFailure: true);
     }
+    private async Task ChangeDeveloperConsoleAsync(bool enabled)
+    {
+        if (changingDeveloperConsole || shuttingDown)
+            return;
+
+        changingDeveloperConsole = true;
+        try
+        {
+            developerConsoleVisible = enabled;
+            DesktopDeveloperConsole.SetEnabled(Program.InstallRoot, enabled);
+            DesktopLog.Write($"Developer console preference changed: visible={enabled}.");
+
+            if (externallyManaged)
+            {
+                tray.ShowBalloonTip(
+                    2500,
+                    "Phoenix",
+                    enabled
+                        ? "La consola de desarrollo se mostrará la próxima vez que Phoenix inicie su propio runtime."
+                        : "La consola de desarrollo quedó desactivada para el próximo arranque.",
+                    ToolTipIcon.Info);
+                return;
+            }
+
+            if (ownedRuntime is { HasExited: false })
+            {
+                window.SetStartupStatus(enabled
+                    ? "Reiniciando Phoenix con consola de desarrollo…"
+                    : "Reiniciando Phoenix en segundo plano…");
+                StopOwnedRuntime();
+                await Task.Delay(500);
+                await StartOwnedRuntimeAsync(openWhenReady: false, reportFailure: true);
+            }
+        }
+        finally
+        {
+            changingDeveloperConsole = false;
+        }
+    }
+
 
     private async Task<bool> IsReadyAsync()
     {
