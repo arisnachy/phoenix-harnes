@@ -49,7 +49,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
 
   it('routes dirty live checkouts through the verified isolated runtime', () => {
     expect(source).toContain('const liveStatus = gitStatus(root)')
-    expect(source).toContain('liveStatus.entries.length > 0')
+    expect(source).toContain('!liveStatus.ok || liveStatus.entries.length > 0')
     expect(source).toContain('activatePreparedRuntime(requestedTarget)')
     expect(source).toContain('the live checkout will not be modified')
   })
