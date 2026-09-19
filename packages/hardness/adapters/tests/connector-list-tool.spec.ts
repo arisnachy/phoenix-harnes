@@ -48,6 +48,7 @@ describe('connector_list tool', () => {
         label: 'Google Workspace',
         methods: [{ id: 'oauth', label: 'Sign in with Google' }],
         status: 'connected',
+        recommended_action: 'use',
         in_flight: false,
         disconnectable: true,
         services: [{
@@ -68,12 +69,12 @@ describe('connector_list tool', () => {
   it('distinguishes an inspectable disconnected flow from a provider without telemetry', async () => {
     const tool = createConnectorListTool(service({ inspect: vi.fn(async () => undefined) }))
     await expect(tool.execute({}, {} as never)).resolves.toMatchObject({
-      connectors: [{ status: 'not-connected', services: [] }],
+      connectors: [{ status: 'not-connected', recommended_action: 'connect-or-reconnect', services: [] }],
     })
 
     const unknown = createConnectorListTool(service({ inspect: vi.fn(async () => { throw new Error('offline') }) }))
     await expect(unknown.execute({}, {} as never)).resolves.toMatchObject({
-      connectors: [{ status: 'unknown', services: [] }],
+      connectors: [{ status: 'unknown', recommended_action: 'inspect', services: [] }],
     })
   })
 
@@ -117,6 +118,7 @@ describe('connector_list tool', () => {
           label: 'MCP github',
           methods: [],
           status: 'ready',
+          recommended_action: 'use',
           in_flight: false,
           services: [],
           transport: 'streamable-http',
@@ -128,6 +130,7 @@ describe('connector_list tool', () => {
           label: 'MCP local',
           methods: [],
           status: 'disconnected',
+          recommended_action: 'repair',
           in_flight: false,
           services: [],
           transport: 'stdio',
@@ -140,6 +143,7 @@ describe('connector_list tool', () => {
           label: 'MCP private',
           methods: [],
           status: 'auth-required',
+          recommended_action: 'connect-or-reconnect',
           in_flight: false,
           services: [],
           transport: 'streamable-http',
@@ -152,6 +156,33 @@ describe('connector_list tool', () => {
     expect(rendered).not.toContain('https://')
     expect(rendered).not.toContain('Authorization')
     expect(rendered).not.toContain('token')
+  })
+
+  it('maps starting and failed MCP lifecycle states to bounded wait or repair', async () => {
+    const tool = createConnectorListTool(undefined, {
+      list: () => [
+        {
+          serverName: 'warming',
+          transport: 'streamable-http',
+          status: 'starting',
+          toolNames: [],
+        },
+        {
+          serverName: 'broken',
+          transport: 'stdio',
+          status: 'failed',
+          reasonCode: 'retry-exhausted',
+          toolNames: [],
+        },
+      ],
+    })
+
+    await expect(tool.execute({}, {} as never)).resolves.toMatchObject({
+      connectors: [
+        { id: 'mcp:warming', status: 'starting', recommended_action: 'wait' },
+        { id: 'mcp:broken', status: 'failed', recommended_action: 'repair' },
+      ],
+    })
   })
 
   it('registers the inventory with only the MCP registry', async () => {
