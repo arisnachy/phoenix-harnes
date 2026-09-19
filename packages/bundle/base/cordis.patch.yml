@@ -567,6 +567,23 @@
         fetch: false
         searchTimeoutMs: 60000
 
+    # Original visual artwork is a first-class capability rather than a CSS/SVG
+    # fallback. The provider uses Cloudflare Workers AI's free allocation when
+    # the operator supplies an account id and token; secrets resolve only through
+    # the credential seam. Keeping the tool mounted while unconfigured lets the
+    # model explain the missing connection instead of fabricating poor artwork.
+    - id: image-generation
+      name: '@phoenix-ai/dsh-image-generation'
+      config:
+        provider: cloudflare
+        accountId: !!js process.env.CLOUDFLARE_ACCOUNT_ID ?? ''
+        apiTokenEnv: CLOUDFLARE_API_TOKEN
+        model: '@cf/black-forest-labs/flux-1-schnell'
+        steps: 6
+        requestTimeoutMs: 60000
+        toolTimeoutMs: 90000
+        visualQualityPolicy: true
+
     # ── rows every mode mounts, whose values each overlay may state ──────────────
 
     # Secret-free lifecycle state for MCP servers. MCP client overlays publish their
