@@ -1554,6 +1554,9 @@ importers:
       '@phoenix-ai/dsh-storage-json':
         specifier: workspace:^
         version: link:../../storage/storage-json
+      '@phoenix-ai/dsh-subagent-codex':
+        specifier: workspace:^
+        version: link:../../subagent/subagent-codex
       '@phoenix-ai/dsh-subprocess':
         specifier: workspace:^
         version: link:../../subprocess/subprocess

@@ -243,10 +243,11 @@
           model: gpt-5.6-luna
           reasoningEffort: xhigh
 
-    # Production dsh does not install these optional providers. Install the
-    # matching Bundle in this Profile and restart the Host, then copy this
-    # preset and remove `disabled` from the matching tool row. Host availability
-    # alone grants no tool.
+    # The Web bundle ships the native Codex account bridge so first-run
+    # ChatGPT / Codex authorization is always available. Model-facing subagent
+    # tools remain opt-in: copy this preset and remove `disabled` only when the
+    # user explicitly wants that worker. Claude Code still requires its optional
+    # bundle. Host availability alone grants no model-facing tool.
     - id: tool-subagent-codex
       name: '@phoenix-ai/dsh-tool-subagent'
       disabled: true
