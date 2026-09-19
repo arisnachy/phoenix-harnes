@@ -29,7 +29,7 @@ describe('PHOENIX capability operating protocol', () => {
     expect(CAPABILITY_OPERATING_PROTOCOL).toContain('use a live web/data capability')
     expect(CAPABILITY_OPERATING_PROTOCOL).toContain('private/account-scoped state')
     expect(CAPABILITY_OPERATING_PROTOCOL).toContain('phoenix_visualize')
-    expect(CAPABILITY_OPERATING_PROTOCOL).toContain('generative-image capability')
+    expect(CAPABILITY_OPERATING_PROTOCOL).toContain('generative-image capability')\n    expect(CAPABILITY_OPERATING_PROTOCOL).toContain('GUI computer-use/browser control')\n    expect(CAPABILITY_OPERATING_PROTOCOL).toContain('dedicated computer-use capability')\n    expect(CAPABILITY_OPERATING_PROTOCOL).toContain('actual acquisition provider is mounted')
     expect(CAPABILITY_OPERATING_PROTOCOL).toContain('durable task system')
     expect(CAPABILITY_OPERATING_PROTOCOL).toContain('classifying it')
     expect(CAPABILITY_OPERATING_PROTOCOL).toContain('Batch independent read-only operations')
