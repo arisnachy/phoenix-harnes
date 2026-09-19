@@ -470,6 +470,64 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.headers[0]?.['chatgpt-account-id']).toBeUndefined()
   })
 
+  it('sends a Monday-style MCP union as an object-root Codex function schema on the wire', async () => {
+    const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'captured' } }) }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: { 'openai-codex': { apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url } },
+    })
+
+    await assemble(ctx, {
+      provider: 'openai-codex',
+      model: 'gpt-5.4',
+      messages: [],
+      tools: [{
+        name: 'mcp__monday-com-monday-com__create_action',
+        description: 'Create a Monday action',
+        parameters: {
+          oneOf: [
+            {
+              type: 'object',
+              properties: {
+                action: { const: 'create' },
+                board_id: { type: 'string' },
+              },
+              required: ['action', 'board_id'],
+              additionalProperties: false,
+            },
+            {
+              type: 'object',
+              properties: {
+                action: { const: 'update' },
+                item_id: { type: 'string' },
+              },
+              required: ['action', 'item_id'],
+              additionalProperties: false,
+            },
+          ],
+        },
+      }],
+    })
+
+    expect(server.requests).toHaveLength(1)
+    const request = server.requests[0] as {
+      tools?: Array<{ name?: string; parameters?: Record<string, unknown> }>
+    }
+    const monday = request.tools?.find(tool => tool.name === 'mcp__monday-com-monday-com__create_action')
+    expect(monday).toBeDefined()
+    expect(monday?.parameters).toMatchObject({
+      type: 'object',
+      properties: {
+        board_id: { type: 'string' },
+        item_id: { type: 'string' },
+      },
+    })
+    for (const key of ['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not']) {
+      expect(monday?.parameters).not.toHaveProperty(key)
+    }
+  })
+
   it('keeps the Codex wire for a ChatGPT access JWT credential', async () => {
     const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'expected mock failure' } }) }])
     const payload = Buffer
