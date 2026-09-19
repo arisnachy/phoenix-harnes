@@ -70,6 +70,54 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.queryByText(/"visualType"/)).toBeNull()
   })
 
+  it('renders sports scoreboards as a dedicated rich visual instead of raw JSON', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'sports-1',
+      mime: 'application/vnd.phoenix.visual+json',
+      title: 'NBA scores',
+      data: {
+        visualType: 'sports',
+        title: 'NBA · Tonight',
+        games: [
+          {
+            league: 'NBA',
+            status: 'Final',
+            away: { name: 'Boston Celtics', abbreviation: 'BOS', score: 108, record: '52-18' },
+            home: { name: 'New York Knicks', abbreviation: 'NYK', score: 104, record: '47-23' },
+          },
+        ],
+      },
+    })} />)
+
+    expect(document.querySelector('[data-phoenix-visual-kind="sports"]')).toBeTruthy()
+    expect(screen.getByText('Boston Celtics')).toBeTruthy()
+    expect(screen.getByText('New York Knicks')).toBeTruthy()
+    expect(screen.getByText('108')).toBeTruthy()
+    expect(screen.getByText('104')).toBeTruthy()
+    expect(screen.queryByText(/"visualType"/)).toBeNull()
+  })
+
+  it('renders sports standings with team identity and ranking columns', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'standings-1',
+      mime: 'application/vnd.phoenix.visual+json',
+      title: 'Conference standings',
+      data: {
+        visualType: 'standings',
+        standings: [
+          { rank: 1, team: { name: 'Boston Celtics', abbreviation: 'BOS' }, record: '52-18', pct: '.743', gb: '—', streak: 'W3' },
+          { rank: 2, team: { name: 'New York Knicks', abbreviation: 'NYK' }, record: '47-23', pct: '.671', gb: '5.0', streak: 'W1' },
+        ],
+      },
+    })} />)
+
+    expect(document.querySelector('[data-phoenix-visual-kind="standings"]')).toBeTruthy()
+    expect(screen.getByRole('table')).toBeTruthy()
+    expect(screen.getByText('Conference standings')).toBeTruthy()
+    expect(screen.getByText('52-18')).toBeTruthy()
+    expect(screen.queryByText(/"standings"/)).toBeNull()
+  })
+
   it('upgrades legacy chart artifacts to the multi-series visual renderer', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'visual-chart-1',
