@@ -5,11 +5,32 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+.authorization {
+  margin-top: 16px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
 .editor {
   margin-top: 24px;
 }
 
 @media (max-width: 560px) {
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actions > button {
+    width: 100%;
+  }
+
   .editor {
     margin-top: 20px;
   }
