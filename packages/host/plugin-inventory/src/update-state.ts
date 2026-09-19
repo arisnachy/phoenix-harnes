@@ -45,6 +45,25 @@ function gitDirectory(root: string): string | undefined {
   return isAbsolute(value) ? value : resolve(root, value)
 }
 
+/** Resolve the shared Git control directory used across linked PHOENIX worktrees. */
+function gitCommonDirectory(root: string): string | undefined {
+  const result = spawnSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd: root,
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+  if (result.status !== 0 || typeof result.stdout !== 'string') return undefined
+  const value = result.stdout.trim()
+  if (value.length === 0) return undefined
+  return isAbsolute(value) ? value : resolve(root, value)
+}
+
+/** Match the updater's control-file location even when Host runs in an isolated worktree. */
+function controlDirectory(root: string): string | undefined {
+  return gitCommonDirectory(root) ?? gitDirectory(root)
+}
+
 /** Return one optional bounded string field from an updater state object. */
 function textField(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key]
@@ -100,6 +119,21 @@ function writeStateJson(path: string, value: unknown): void {
   }
 }
 
+/** Read the exact update target already queued for activation, if any. */
+function queuedRestartTarget(controlDir: string): string | undefined {
+  const path = join(controlDir, RESTART_REQUEST_FILE)
+  if (!existsSync(path)) return undefined
+  try {
+    const value = readStateJson(path)
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const target = (value as Record<string, unknown>).target
+    return typeof target === 'string' && SHA_PATTERN.test(target) ? target : undefined
+  } catch {
+    // A racing/partial legacy marker must never turn a healthy update into an error.
+    return undefined
+  }
+}
+
 /**
  * Parse the updater's durable JSON into the narrow browser-visible vocabulary.
  * @param value - decoded JSON from the repository-owned updater state file.
@@ -146,12 +180,24 @@ export function parsePhoenixUpdateSnapshot(value: unknown): PhoenixUpdateSnapsho
  * @returns sanitized durable updater state, or `idle` when no updater state exists.
  */
 export function readPhoenixUpdateSnapshot(root: string = runtimeRoot()): PhoenixUpdateSnapshot {
-  const gitDir = gitDirectory(root)
-  if (gitDir === undefined) return { status: 'idle' }
-  const path = join(gitDir, STATE_FILE)
+  const controlDir = controlDirectory(root)
+  if (controlDir === undefined) return { status: 'idle' }
+  const path = join(controlDir, STATE_FILE)
   if (!existsSync(path)) return { status: 'idle' }
   try {
-    return parsePhoenixUpdateSnapshot(readStateJson(path))
+    const snapshot = parsePhoenixUpdateSnapshot(readStateJson(path))
+    // In supervised auto-update, writing the durable ready state also queues
+    // activation/restart immediately. There is a short window where STATE_FILE
+    // still says ready while RESTART_REQUEST_FILE already proves activation is
+    // in flight. Never expose an actionable Ready button during that window.
+    if (
+      snapshot.status === 'ready'
+      && snapshot.target !== undefined
+      && queuedRestartTarget(controlDir) === snapshot.target
+    ) {
+      return { ...snapshot, status: 'restarting', phase: 'restart' }
+    }
+    return snapshot
   } catch {
     return { status: 'error', detail: 'PHOENIX update state could not be read.' }
   }
@@ -166,19 +212,25 @@ export function readPhoenixUpdateSnapshot(root: string = runtimeRoot()): Phoenix
  */
 export function requestPhoenixUpdateRestart(root: string = runtimeRoot()): PhoenixUpdateRestartReceipt {
   const snapshot = readPhoenixUpdateSnapshot(root)
+  // Restart requests are idempotent. If automatic activation has already
+  // crossed the ready -> restarting boundary, a user click racing that
+  // transition must be treated as accepted rather than as a failure.
+  if (snapshot.status === 'restarting') {
+    return { accepted: true, status: 'restarting' }
+  }
   if (snapshot.status !== 'ready' || snapshot.target === undefined) {
     return { accepted: false, status: snapshot.status }
   }
-  const gitDir = gitDirectory(root)
-  if (gitDir === undefined) return { accepted: false, status: 'error' }
+  const controlDir = controlDirectory(root)
+  if (controlDir === undefined) return { accepted: false, status: 'error' }
 
   const at = new Date().toISOString()
-  writeStateJson(join(gitDir, RESTART_REQUEST_FILE), {
+  writeStateJson(join(controlDir, RESTART_REQUEST_FILE), {
     schema: 1,
     target: snapshot.target,
     requestedAt: at,
   })
-  writeStateJson(join(gitDir, STATE_FILE), {
+  writeStateJson(join(controlDir, STATE_FILE), {
     schema: 1,
     ...snapshot,
     status: 'restarting',
@@ -194,9 +246,9 @@ export function requestPhoenixUpdateRestart(root: string = runtimeRoot()): Phoen
  * @returns whether the refresh request was durably written.
  */
 export function requestPhoenixUpdateRefresh(root: string = runtimeRoot()): PhoenixUpdateRefreshReceipt {
-  const gitDir = gitDirectory(root)
-  if (gitDir === undefined) return { accepted: false }
-  writeStateJson(join(gitDir, REFRESH_REQUEST_FILE), {
+  const controlDir = controlDirectory(root)
+  if (controlDir === undefined) return { accepted: false }
+  writeStateJson(join(controlDir, REFRESH_REQUEST_FILE), {
     schema: 1,
     requestedAt: new Date().toISOString(),
   })
