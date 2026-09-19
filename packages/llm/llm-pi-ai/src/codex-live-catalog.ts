@@ -28,7 +28,7 @@ const SUPPORTED_THINKING_LEVELS = new Set<string>(THINKING_LEVELS)
  * Schemastery may materialize an omitted array as [], so empty and absent are
  * both treated as "automatic".
  */
-export function codexCatalogIsAutomatic(profile: PiAiProviderProfile | undefined): boolean {
+export function codexCatalogIsAutomatic(profile: PiAiProviderProfile | undefined): profile is PiAiProviderProfile {
   return profile !== undefined && (profile.models === undefined || profile.models.length === 0)
 }
 
