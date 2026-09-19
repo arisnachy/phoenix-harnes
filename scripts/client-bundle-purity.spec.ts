@@ -36,8 +36,14 @@ async function loadWith(
     : plugin.load.handler.call(context, id)
 }
 
-function matchesRule(rules: readonly (string | RegExp)[], specifier: string): boolean {
-  return rules.some(rule => typeof rule === 'string' ? rule === specifier : rule.test(specifier))
+function matchesExternal(rule: unknown, specifier: string): boolean {
+  if (Array.isArray(rule)) return rule.some(candidate => matchesExternal(candidate, specifier))
+  if (typeof rule === 'string') return rule === specifier
+  if (rule instanceof RegExp) {
+    rule.lastIndex = 0
+    return rule.test(specifier)
+  }
+  return false
 }
 
 /** A representative dynamic bundle using the shared client baseline. */
@@ -47,6 +53,20 @@ function clientConfigs(id = REQUESTING_PACKAGE) {
   return clientBundle(id, ['lib/types/index.js', 'lib/types/invariant.js'])(
     { env: { DSH_BUILD_FACE: 'client' } },
   ).filter(config => config.platform === 'browser')
+}
+
+function clientNativeInput(id = REQUESTING_PACKAGE): { external?: unknown; plugins?: unknown } {
+  const config = clientConfigs(id)[0]
+  if (config === undefined || typeof config.inputOptions !== 'function') {
+    throw new Error('client native input optimizer missing')
+  }
+  const result = config.inputOptions(
+    { plugins: [{ name: 'tsdown:deps' }, { name: 'keep-me' }] } as never,
+    'cjs' as never,
+    { cjsDts: false },
+  )
+  if (result instanceof Promise) throw new Error('client input optimizer unexpectedly became async')
+  return result as { external?: unknown; plugins?: unknown }
 }
 
 describe('client bundle build faces', () => {
@@ -74,7 +94,7 @@ describe('client bundle routing cost', () => {
     if (filter === undefined) throw new Error('native resolveId filter missing')
     expect(filter.test('./QueueDock.module.css')).toBe(true)
     expect(filter.test('@phoenix-ai/dsh-agent')).toBe(true)
-    expect(filter.test('react')).toBe(true)
+    expect(filter.test('react')).toBe(false)
     expect(filter.test('zod')).toBe(false)
     expect(filter.test('@phoenix-ai/dsh-host-apiproxy/api')).toBe(false)
     expect(filter.test('@phoenix-ai/dsh-goal/remote')).toBe(false)
@@ -115,16 +135,18 @@ function cssModulePlugin(): ClientRoutingPlugin {
 describe('client bundle purity gate', () => {
   const resolveId = purityResolveId()
 
-  it('externalizes requested module-table rows before tsdown:deps and leaves bundled packages alone', () => {
+  it('externalizes requested module-table rows natively before plugin dispatch', () => {
+    const native = clientNativeInput()
     for (const source of [
       '@phoenix-ai/dsh-client-ui-slots',
       '@phoenix-ai/dsh-client-ui-primitives',
       '@phoenix-ai/dsh-client-runtime/client',
       'react',
     ]) {
-      expect(resolveId(source)).toEqual({ id: source, external: true })
+      expect(matchesExternal(native.external, source)).toBe(true)
     }
-    expect(resolveId('zod')).toBeNull()
+    expect(matchesExternal(native.external, 'zod')).toBe(false)
+    expect(JSON.stringify(native.plugins)).not.toContain('tsdown:deps')
   })
 
   it('rejects the retired web-react platform package', () => {
@@ -161,33 +183,25 @@ describe('client bundle purity gate', () => {
   })
 
   it('admits the parser-preloaded runtime for every dynamic bundle', () => {
-    expect(resolveId('@phoenix-ai/dsh-client-runtime/client')).toEqual({
-      id: '@phoenix-ai/dsh-client-runtime/client',
-      external: true,
-    })
-    const withoutRequest = purityResolveId('@phoenix-ai/dsh-client-ui-goal')
-    expect(withoutRequest('@phoenix-ai/dsh-client-runtime/client')).toEqual({
-      id: '@phoenix-ai/dsh-client-runtime/client',
-      external: true,
-    })
+    expect(matchesExternal(
+      clientNativeInput().external,
+      '@phoenix-ai/dsh-client-runtime/client',
+    )).toBe(true)
+    expect(matchesExternal(
+      clientNativeInput('@phoenix-ai/dsh-client-ui-goal').external,
+      '@phoenix-ai/dsh-client-runtime/client',
+    )).toBe(true)
   })
 
-  it('externalizes the baseline with static dependency matchers', () => {
-    const requesting = clientConfigs()[0]?.deps as {
-      neverBundle: (string | RegExp)[]
-      alwaysBundle: (string | RegExp)[]
-    }
-    const plain = clientConfigs('@phoenix-ai/dsh-client-connection')[0]?.deps as {
-      neverBundle: (string | RegExp)[]
-      alwaysBundle: (string | RegExp)[]
-    }
+  it('externalizes only the module-table baseline and keeps ordinary dependencies bundled', () => {
+    const requesting = clientNativeInput()
+    const plain = clientNativeInput('@phoenix-ai/dsh-client-connection')
 
-    expect(matchesRule(requesting.neverBundle, 'react')).toBe(true)
-    expect(matchesRule(requesting.neverBundle, 'zod')).toBe(false)
-    expect(matchesRule(requesting.alwaysBundle, 'react')).toBe(false)
-    expect(matchesRule(requesting.alwaysBundle, 'zod')).toBe(true)
-    expect(matchesRule(plain.neverBundle, 'react')).toBe(true)
-    expect(matchesRule(plain.neverBundle, '@phoenix-ai/dsh-client-runtime/client')).toBe(true)
+    expect(matchesExternal(requesting.external, 'react')).toBe(true)
+    expect(matchesExternal(requesting.external, 'zod')).toBe(false)
+    expect(matchesExternal(plain.external, 'react')).toBe(true)
+    expect(matchesExternal(plain.external, '@phoenix-ai/dsh-client-runtime/client')).toBe(true)
+    expect(matchesExternal(plain.external, 'zod')).toBe(false)
   })
 })
 
