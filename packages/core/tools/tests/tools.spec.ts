@@ -51,6 +51,53 @@ describe('ToolRuntime', () => {
     expect(assembly.tools.map(t => t.name)).toEqual(['echo'])
   })
 
+  it('projects every MCP schema to an OpenAI/Codex-safe object root even when registration bypasses the MCP client', async () => {
+    const ctx = await setup()
+    ctx.tools.register({
+      name: 'mcp__monday-com-monday-com__create_action',
+      description: 'Monday action',
+      parameters: {
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              action: { const: 'create' },
+              board_id: { type: 'string' },
+            },
+            required: ['action', 'board_id'],
+          },
+          {
+            type: 'object',
+            properties: {
+              action: { const: 'update' },
+              item_id: { type: 'string' },
+            },
+            required: ['action', 'item_id'],
+          },
+        ],
+      },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: String(value) }],
+      },
+      async execute() { return 'ok' },
+    })
+
+    const schema = ctx.tools.schemas()[0]
+    expect(schema?.parameters).toMatchObject({
+      type: 'object',
+      properties: {
+        board_id: { type: 'string' },
+        item_id: { type: 'string' },
+        action: { anyOf: [{ const: 'create' }, { const: 'update' }] },
+      },
+      required: ['action'],
+    })
+    for (const key of ['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not']) {
+      expect(schema?.parameters).not.toHaveProperty(key)
+    }
+  })
+
   it('schemas() drops host callbacks — they must never reach the model', async () => {
     const ctx = await setup()
     // Tool definitions contain output, finalization, execution, and presentation
