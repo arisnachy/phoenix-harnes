@@ -19,10 +19,14 @@ export interface UserProfileFamilyMember {
 /** Data persisted by the profile namespace. Age is intentionally absent. */
 export type AssistantGender = 'masculine' | 'feminine' | 'neutral'
 
+/** Provenance for a persisted assistant presentation; absence keeps inference open. */
+export type AssistantGenderSource = 'inferred' | 'manual'
+
 /** Data persisted by the profile namespace. Age is intentionally absent. */
 export interface UserProfileSettings {
   assistantName: string
   assistantGender: AssistantGender
+  assistantGenderSource?: AssistantGenderSource
   /** Provider route order shown by model selectors; absent means directory order. */
   modelProviderOrder?: string[]
   preferredName?: string
@@ -38,6 +42,7 @@ export interface UserProfileSettings {
 export interface UserProfileUpdate {
   assistantName?: string | null
   assistantGender?: AssistantGender | null
+  assistantGenderSource?: AssistantGenderSource | null
   modelProviderOrder?: string[] | null
   preferredName?: string | null
   dateOfBirth?: string | null

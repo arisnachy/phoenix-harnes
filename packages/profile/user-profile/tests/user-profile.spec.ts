@@ -4,6 +4,7 @@ import {
   DEFAULT_ASSISTANT_NAME,
   DEFAULT_USER_PROFILE_CONSENT,
   deriveAge,
+  inferAssistantGenderFromUserMessage,
   mergeUserProfile,
   renderAssistantIdentity,
   validateDateOfBirth,
@@ -63,20 +64,49 @@ describe('user profile validation and projection helpers', () => {
     expect(next.assistantName).toBe('Nova')
     expect(next.assistantGender).toBe('feminine')
     expect(profile().assistantName).toBe('KIRA')
-    expect(profile().assistantGender).toBe('neutral')
+    expect(profile().assistantGender).toBe('feminine')
   })
 
-  it('preserves configured assistant gender across unrelated profile updates', () => {
+  it('preserves configured assistant gender and provenance across unrelated profile updates', () => {
     const current = profile({
       assistantName: 'KIRA',
       assistantGender: 'feminine',
+      assistantGenderSource: 'manual',
       preferredName: 'Arisnachy',
     })
     const next = mergeUserProfile(current, { tone: 'direct and warm' })
 
     expect(next.assistantName).toBe('KIRA')
     expect(next.assistantGender).toBe('feminine')
+    expect(next.assistantGenderSource).toBe('manual')
     expect(next.tone).toBe('direct and warm')
+  })
+
+  it('infers presentation only from explicit or assistant-addressed user language', () => {
+    expect(inferAssistantGenderFromUserMessage('Gracias, Kira, eres una querida amiga.')).toEqual({
+      gender: 'feminine',
+      strength: 'addressed',
+    })
+    expect(inferAssistantGenderFromUserMessage('Phoenix, compañero, revisa esto por favor.')).toEqual({
+      gender: 'masculine',
+      strength: 'addressed',
+    })
+    expect(inferAssistantGenderFromUserMessage('Prefiero que te presentes de forma neutral.')).toEqual({
+      gender: 'neutral',
+      strength: 'explicit',
+    })
+    expect(inferAssistantGenderFromUserMessage('Mi esposa es una mujer muy querida.')).toBeUndefined()
+  })
+
+  it('recognizes direct explicit presentation changes without guessing from unrelated gender text', () => {
+    expect(inferAssistantGenderFromUserMessage('Quiero que seas femenina y hables como mujer.')).toEqual({
+      gender: 'feminine',
+      strength: 'explicit',
+    })
+    expect(inferAssistantGenderFromUserMessage('I prefer you to be male and present as a man.')).toEqual({
+      gender: 'masculine',
+      strength: 'explicit',
+    })
   })
 
   it('keeps Phoenix identity stable when the model-provider preference changes', () => {
@@ -126,8 +156,9 @@ describe('user profile validation and projection helpers', () => {
     expect(text).toContain('Do not turn unrelated memories into a menu of suggested topics')
   })
 
-  it('rejects an assistant gender outside the supported presentation modes', () => {
+  it('rejects an assistant gender or provenance outside the supported presentation modes', () => {
     expect(() => { validateUserProfileUpdate({ assistantGender: 'robot' }) }).toThrow('assistantGender')
+    expect(() => { validateUserProfileUpdate({ assistantGenderSource: 'provider' }) }).toThrow('assistantGenderSource')
   })
 
   it('rejects unknown consent keys and control characters', () => {
