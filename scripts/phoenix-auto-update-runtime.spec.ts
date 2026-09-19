@@ -53,4 +53,13 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(build).toContain("'phoenix-prepared-restart-bridge.mjs'")
     expect(build).toContain("'--arm-staging'")
   })
+  it('namespaces persistent updater worktrees per checkout so stale clones cannot block updates', () => {
+    expect(updater).toContain("import { createHash } from 'node:crypto'")
+    expect(updater).toContain('function stageIdentity(root)')
+    expect(updater).toContain('`phoenix-stage-${stageIdentity(root)}`')
+    expect(supervisor).toContain('function stageIdentity()')
+    expect(supervisor).toContain('`phoenix-stage-${stageIdentity()}`')
+    expect(supervisor).toContain('`phoenix-runtime-${stageIdentity()}-${target.slice(0, 12)}`')
+  })
+
 })
