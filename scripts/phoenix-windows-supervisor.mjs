@@ -112,12 +112,17 @@ function absoluteGitPath(cwd, value) {
   return value === undefined ? undefined : (isAbsolute(value) ? resolve(value) : resolve(cwd, value))
 }
 
+function stageIdentity() {
+  const common = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-common-dir'])) ?? root
+  return createHash('sha256').update(common.toLowerCase()).digest('hex').slice(0, 10)
+}
+
 function persistentStage() {
   const configured = process.env.PHOENIX_UPDATE_TEMP?.trim()
   const base = configured !== undefined && configured.length > 0
     ? resolve(configured)
     : join(homedir(), 'p')
-  return join(base, 'phoenix-stage')
+  return join(base, `phoenix-stage-${stageIdentity()}`)
 }
 
 function sameRepository(stage) {
@@ -213,7 +218,7 @@ function runtimeBaseDirectory() {
 }
 
 function persistentRuntime(target) {
-  return join(runtimeBaseDirectory(), `phoenix-runtime-${target.slice(0, 12)}`)
+  return join(runtimeBaseDirectory(), `phoenix-runtime-${stageIdentity()}-${target.slice(0, 12)}`)
 }
 
 function runChecked(cwd, bin, args, label) {
