@@ -333,6 +333,7 @@ interface ProjectedImage {
   width: number
   height: number
   name?: string
+  originalDimensions?: { width: number; height: number }
 }
 
 function projectImage(ref: ImageAttachmentRef): ProjectedImage {
@@ -343,6 +344,7 @@ function projectImage(ref: ImageAttachmentRef): ProjectedImage {
     width: ref.width,
     height: ref.height,
     ...ref.name === undefined ? {} : { name: ref.name },
+    ...ref.originalDimensions === undefined ? {} : { originalDimensions: ref.originalDimensions },
   }
 }
 
@@ -354,6 +356,7 @@ function restoreImage(value: ProjectedImage): ImageAttachmentRef {
     width: value.width,
     height: value.height,
     ...value.name === undefined ? {} : { name: value.name },
+    ...value.originalDimensions === undefined ? {} : { originalDimensions: value.originalDimensions },
   }
 }
 
@@ -417,6 +420,14 @@ function registerTool(ctx: Context, config: ResolvedConfig): void {
               width: { type: 'integer', required: true },
               height: { type: 'integer', required: true },
               name: { type: 'string' },
+              originalDimensions: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  width: { type: 'integer', required: true },
+                  height: { type: 'integer', required: true },
+                },
+              },
             },
           },
           provider: { type: 'string', required: true },
