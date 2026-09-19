@@ -201,8 +201,8 @@ export function ChatView({
     return chatNodes.some((node) => {
       if (node.kind !== 'user') return false
       const user = node.data as UserMessageNode
-      if (user.time >= pendingSubmit.startedAt) return true
-      return user.time >= floor && userMessageText(user) === pendingSubmit.text
+      const expectedText = pendingSubmit.modelText ?? pendingSubmit.text
+      return user.time >= floor && userMessageText(user) === expectedText
     })
   }, [chatNodes, pendingSubmit])
   const optimisticSubmit = useMemo(() => (
