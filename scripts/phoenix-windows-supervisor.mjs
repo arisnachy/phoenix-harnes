@@ -338,8 +338,8 @@ function activeRuntimeIsSupersededByLiveCheckout(target) {
   const liveBranch = gitValue(root, ['branch', '--show-current'])
   const liveHead = gitValue(root, ['rev-parse', 'HEAD'])
   const liveStatus = gitStatus(root)
-  if (liveBranch === undefined || liveHead === undefined || liveStatus === undefined) return false
-  if (liveStatus.entries.length > 0) return false
+  if (liveBranch === undefined || liveHead === undefined) return false
+  if (!liveStatus.ok || liveStatus.entries.length > 0) return false
   if (!isManagedReleaseBranch(liveBranch, STABLE_SOURCE_BRANCH)) return false
   if (liveHead === target) return false
   return gitSucceeds(root, ['merge-base', '--is-ancestor', target, liveHead])
