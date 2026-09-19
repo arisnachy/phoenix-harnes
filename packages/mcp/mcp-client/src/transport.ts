@@ -6,6 +6,8 @@
  * @module
  */
 
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
@@ -21,6 +23,37 @@ import type { Config } from './index.ts'
  */
 function buildChildEnv(extra: Record<string, string>): Record<string, string> {
   return { ...scrubbedParentEnv(), ...extra }
+}
+
+const CURRENT_PHOENIX_STDIO_PROXY = fileURLToPath(
+  new URL('../../../../scripts/mcp-stdio-proxy.mjs', import.meta.url),
+)
+
+function isPhoenixStdioProxyPath(value: string): boolean {
+  return value.replace(/\\/g, '/').toLowerCase().endsWith('/scripts/mcp-stdio-proxy.mjs')
+}
+
+/**
+ * Repair only a stale absolute PHOENIX proxy argument left by an older install.
+ *
+ * Owner-local Cordis/Codex overlays survive a source reinstall by design. If
+ * such an overlay captured the previous checkout's absolute proxy path, Node
+ * would otherwise keep launching that deleted path forever. Unknown arguments
+ * are never rewritten.
+ *
+ * @param args - Stdio child arguments from persisted connector configuration.
+ * @returns Original arguments when already portable, otherwise a copy pointing
+ * at this running PHOENIX installation's checked-in proxy.
+ */
+export function repairPhoenixStdioProxyArgs(args: readonly string[]): string[] {
+  let changed = false
+  const repaired = args.map((argument) => {
+    if (!isPhoenixStdioProxyPath(argument) || existsSync(argument)) return argument
+    if (!existsSync(CURRENT_PHOENIX_STDIO_PROXY)) return argument
+    changed = true
+    return CURRENT_PHOENIX_STDIO_PROXY
+  })
+  return changed ? repaired : [...args]
 }
 
 /**
@@ -55,7 +88,7 @@ export function createTransport(config: Config, options: TransportOptions = {}):
     case 'stdio':
       return new StdioClientTransport({
         command: config.command,
-        args: config.args,
+        args: repairPhoenixStdioProxyArgs(config.args),
         env: buildChildEnv(config.env),
         cwd: config.cwd,
       })
