@@ -30,6 +30,11 @@ export function requiresObjectRootFunctionSchemas(provider: string, api: string)
   return provider === 'openai-codex' || OBJECT_ROOT_FUNCTION_APIS.has(api)
 }
 
+/** Whether this exact route needs the Monday create_action compatibility quarantine. */
+export function requiresCodexToolQuarantine(provider: string, api: string): boolean {
+  return provider === 'openai-codex' || api === 'openai-codex-responses'
+}
+
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -206,16 +211,16 @@ function normalizePayloadToolEntry(value: unknown): unknown {
   return value
 }
 
-function normalizePayloadTree(value: unknown): unknown {
+function normalizePayloadTree(value: unknown, quarantine: boolean): unknown {
   if (Array.isArray(value)) {
     let changed = false
     const normalized: unknown[] = []
     for (const entry of value) {
-      if (isQuarantinedPayloadFunction(entry)) {
+      if (quarantine && isQuarantinedPayloadFunction(entry)) {
         changed = true
         continue
       }
-      const next = normalizePayloadTree(entry)
+      const next = normalizePayloadTree(entry, quarantine)
       if (next !== entry) changed = true
       normalized.push(next)
     }
@@ -232,7 +237,7 @@ function normalizePayloadTree(value: unknown): unknown {
   let normalized: JsonObject | undefined
 
   for (const [key, child] of Object.entries(source)) {
-    const next = normalizePayloadTree(child)
+    const next = normalizePayloadTree(child, quarantine)
     if (next === child) continue
     normalized ??= { ...source }
     normalized[key] = next
@@ -258,6 +263,6 @@ function normalizePayloadTree(value: unknown): unknown {
  * @returns The original payload when already compatible, otherwise a copy with
  * every nested function-tool schema projected to Codex's object-root contract.
  */
-export function normalizeOpenAiFunctionToolPayload(payload: unknown): unknown {
-  return normalizePayloadTree(payload)
+export function normalizeOpenAiFunctionToolPayload(payload: unknown, quarantine = false): unknown {
+  return normalizePayloadTree(payload, quarantine)
 }
