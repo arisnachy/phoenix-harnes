@@ -909,7 +909,13 @@ while (true) {
         finalCode = activationCode
         break
       }
-      console.error(`[PHOENIX UPDATE] activation failed safely with exit code ${String(activationCode)}; relaunching the last-known-good PHOENIX. The prepared update remains available to retry.`)
+      // A failed activator may have discovered stale staging or may have rolled
+      // the live checkout back after a failed build/smoke. Never keep the same
+      // prepared marker armed: the bridge would immediately request another
+      // restart and loop forever. Retire only the disposable marker so the
+      // watcher can verify/rebuild a fresh candidate on the last-known-good Host.
+      clearPreparedRecord()
+      console.error(`[PHOENIX UPDATE] activation failed safely with exit code ${String(activationCode)}; invalidated the prepared candidate and relaunching the last-known-good PHOENIX so it can be prepared again.`)
       continue
     }
 
