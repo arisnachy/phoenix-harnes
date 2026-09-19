@@ -175,67 +175,53 @@ function normalizePayloadToolEntry(value: unknown): unknown {
   return value
 }
 
-function normalizePayloadToolList(value: unknown): unknown {
-  if (!Array.isArray(value)) return value
-  let changed = false
-  const tools = value.map((entry) => {
-    const normalized = normalizePayloadToolEntry(entry)
-    if (normalized !== entry) changed = true
-    return normalized
-  })
-  return changed ? tools : value
+function normalizePayloadTree(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    let changed = false
+    const normalized = value.map((entry) => {
+      const next = normalizePayloadTree(entry)
+      if (next !== entry) changed = true
+      return next
+    })
+    return changed ? normalized : value
+  }
+  if (!isObject(value)) return value
+
+  // Normalize a function-tool definition wherever pi-ai (or a future provider
+  // adapter) nests it, then keep walking because tool catalogs can themselves
+  // contain deferred/nested tool lists.
+  const tool = normalizePayloadToolEntry(value)
+  const source = isObject(tool) ? tool : value
+  let changed = tool !== value
+  let normalized: JsonObject | undefined
+
+  for (const [key, child] of Object.entries(source)) {
+    const next = normalizePayloadTree(child)
+    if (next === child) continue
+    normalized ??= { ...source }
+    normalized[key] = next
+    changed = true
+  }
+
+  if (normalized !== undefined) return normalized
+  return changed ? source : value
 }
 
 /**
  * Final-wire defense for OpenAI-compatible payloads.
  *
- * Phoenix already normalizes ToolRuntime definitions before pi-ai sees them,
- * but pi-ai is allowed to rebuild provider payloads from its own transcript and
- * constrained-sampling layers. This hook runs after that conversion and before
- * network I/O, guaranteeing that function-tool parameter schemas still satisfy
- * OpenAI/Codex's object-root contract.
+ * Phoenix normalizes ToolRuntime definitions before pi-ai sees them, but pi-ai
+ * may rebuild or defer provider tool payloads in nested structures. This hook
+ * therefore enforces the function-schema invariant recursively over the final
+ * JSON request body instead of depending on a fixed list of payload paths.
  *
- * Both Responses-style tools ({ type: 'function', name, parameters }) and Chat
- * Completions-style wrappers ({ type: 'function', function: { parameters } })
- * are supported. Unknown payload fields and non-function tools are untouched.
+ * Only objects that are actual function-tool entries are rewritten; ordinary
+ * conversation payloads and non-function tools retain identity when unchanged.
  *
  * @param payload - Provider request body produced by pi-ai.
- * @returns The original payload when already compatible, otherwise a shallow
- * copy with normalized function-tool schemas.
+ * @returns The original payload when already compatible, otherwise a copy with
+ * every nested function-tool schema projected to Codex's object-root contract.
  */
 export function normalizeOpenAiFunctionToolPayload(payload: unknown): unknown {
-  if (!isObject(payload)) return payload
-
-  let changed = false
-  const normalized: JsonObject = { ...payload }
-  for (const key of ['tools', 'additional_tools'] as const) {
-    if (!(key in payload)) continue
-    const next = normalizePayloadToolList(payload[key])
-    if (next !== payload[key]) {
-      normalized[key] = next
-      changed = true
-    }
-  }
-
-  // OpenAI Responses/Codex can introduce tools mid-transcript. pi-ai encodes
-  // those as input items such as an additional_tools developer item, and
-  // tool-search output items also carry a tools array. Those definitions
-  // bypass the request's top-level tools, so normalize every input item's
-  // tool list at this final provider seam as well.
-  if (Array.isArray(payload.input)) {
-    let inputChanged = false
-    const input = payload.input.map((item) => {
-      if (!isObject(item) || !('tools' in item)) return item
-      const tools = normalizePayloadToolList(item.tools)
-      if (tools === item.tools) return item
-      inputChanged = true
-      return { ...item, tools }
-    })
-    if (inputChanged) {
-      normalized.input = input
-      changed = true
-    }
-  }
-
-  return changed ? normalized : payload
+  return normalizePayloadTree(payload)
 }
