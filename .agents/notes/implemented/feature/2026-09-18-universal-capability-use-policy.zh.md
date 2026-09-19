@@ -12,13 +12,13 @@ PHOENIX 已经拥有很广的能力面：持久记忆、会话检索、文件、
 
 所有面向模型的完整 HARDNESS scope 都安装稳定的 `hardness:capability-operating-protocol` 区块。该策略在使用工具前给每个模型相同的紧凑决策顺序：先确定权威数据源，再恢复真正相关的上下文，优先选择最具体且健康的原生能力；当时效性重要时使用实时公共证据；只有在任务需要账户私有状态时才使用已连接的私有来源；涉及文件内容的判断必须先读取真实文件；当用户要求视觉交付物时应使用可视化或生成式能力，而不是用文字假装完成。
 
-该策略仍然受真实能力约束。它不会授予权限、虚构不存在的工具或绕过审批。进一步检查提交历史后纠正了两个表面上的缺口：当前 main 已经通过原生 `computer` 工具提供 Windows computer-use/浏览器控制（包括 `browser_open` 与基于截图的验证），而 standard 与 Code preset 也已经暴露原生 `image_generation`。因此协议会优先使用这些已挂载能力，而不是重复寻找替代品。真正仍然存在的通用缺口是事件源/条件监控执行：Phoenix 已有持久 interval/yearly 调度，但还没有第一方 condition-watch/webhook 任务家族。当官方 registry 中经过治理的连接器能够提供缺失的专用、外部能力或事件源时，Phoenix 会进入现有的连接器清单、发现和安装协议。只有在真正挂载 acquisition provider 时，HARDNESS acquisition/building 才被视为可用；当前生产 adapter 创建 acquisition registry 时没有 builders，因此不能把它描述成凭空制造能力的万能后备。未来或重复工作使用持久任务系统，而不是让 Agent 空转。条件监控在存在事件驱动连接器时优先使用事件；否则使用有界的定时检查。工具失败必须先分类，再恢复，避免把授权失败、临时网络失败、能力缺失、输入无效和证据过时都当成同一种错误反复重试。
+该策略仍然受真实能力约束。它不会授予权限、虚构不存在的工具或绕过审批。进一步检查提交历史后纠正了两个表面上的缺口：当前 main 已经通过原生 `computer` 工具提供 Windows computer-use/浏览器控制（包括 `browser_open` 与基于截图的验证），而 standard 与 Code preset 也已经暴露原生 `image_generation`。因此协议会优先使用这些已挂载能力，而不是重复寻找替代品。本次变更通过 `phoenix_watch_create` 关闭了通用条件监控缺口：持久 watch 按固定间隔进行私有、结构化、只读检查；条件为假或证据不确定时保持静默；第一次验证为真后只通知一次并自动完成。为了控制成本，轮询频率限制为每小时一次或更慢；如果已有事件驱动 connector/webhook，则优先使用事件源。当官方 registry 中经过治理的连接器能够提供缺失的专用、外部能力或事件源时，Phoenix 会进入现有的连接器清单、发现和安装协议。只有在真正挂载 acquisition provider 时，HARDNESS acquisition/building 才被视为可用；当前生产 adapter 创建 acquisition registry 时没有 builders，因此不能把它描述成凭空制造能力的万能后备。未来或重复工作使用持久任务系统，而不是让 Agent 空转。工具失败必须先分类，再恢复，避免把授权失败、临时网络失败、能力缺失、输入无效和证据过时都当成同一种错误反复重试。
 
 该协议还规定延迟与成本底线：已经知道健康能力时不重复枚举库存；安全时可以批量执行彼此独立的只读工作；子代理只用于真正独立的工作、验证或审查，并遵守共享预算。面向用户的输出展示结果与证据，不暴露内部路由机制或私有推理。
 
 ## 验证
 
-`packages/hardness/adapters/tests/capability-protocol.spec.ts` 固定验证注册顺序，以及数据源权威、时效性、文件检索、视觉交付、自动化、有界恢复和低开销规则。`packages/hardness/adapters/src/index.ts` 会在面向模型的 scope 中把该区块与现有 HARDNESS、主动性、人性化存在感和连接器协议一起安装。
+`packages/hardness/adapters/tests/capability-protocol.spec.ts` 固定验证注册顺序，以及数据源权威、时效性、文件检索、视觉交付、自动化、有界恢复和低开销规则。`proactivity-engine.spec.ts` 固定验证条件为假时继续调度、条件为真时终止；`proactivity-watch.spec.ts` 证明假条件不会进入用户 inbox，而真条件只携带已验证证据通知一次。`packages/hardness/adapters/src/index.ts` 会在面向模型的 scope 中把该区块与现有 HARDNESS、主动性、人性化存在感和连接器协议一起安装。
 
 ## 备选方案
 
