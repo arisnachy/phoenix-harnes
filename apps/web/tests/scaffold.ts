@@ -258,6 +258,13 @@ export interface LaunchOptions {
    * keyless first-run configuration lane; the default disables the adapter.
    */
   deepSeekMissingCredential?: boolean
+  /**
+   * Keep the production native ChatGPT / Codex account bridge mounted in this
+   * scaffold. Ordinary keyless E2E disables it so CI never inspects or launches
+   * a developer/runner Codex session implicitly; dedicated account scenarios
+   * opt in explicitly.
+   */
+  codexAccountBridge?: boolean
   /** Leave the current welcome notice pending; ordinary scenarios pre-acknowledge it before browser boot. */
   welcomeNoticePending?: boolean
   /**
@@ -525,6 +532,11 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     ...mode === 'record' || options.deepSeekMissingCredential === true
       ? []
       : [{ id: 'llm-deepseek', disabled: true }],
+    // Production ships the native Codex bridge. Keyless browser fixtures keep
+    // it inert unless a scenario explicitly owns that account lifecycle.
+    ...options.codexAccountBridge === true
+      ? []
+      : [{ id: 'subagent-codex', disabled: true }],
   ]
 
   // Sessions inherit the gateway's process.cwd() default; run the boot from
