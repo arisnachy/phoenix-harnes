@@ -10,9 +10,8 @@ const OBJECT_ROOT_FUNCTION_APIS = new Set([
   'azure-openai-responses',
 ])
 
-const CODEX_QUARANTINED_FUNCTION_TOOLS = new Set([
-  'mcp__monday-com-monday-com__create_action',
-])
+const MONDAY_TOOL_PREFIX = 'mcp__monday-com-monday-com__'
+const MONDAY_ARGUMENT_ENVELOPE_KEY = 'phoenix_arguments'
 
 type JsonObject = Record<string, unknown>
 
@@ -31,12 +30,12 @@ export function requiresObjectRootFunctionSchemas(provider: string, api: string)
 }
 
 /**
- * Whether this exact route needs the Monday create_action compatibility quarantine.
+ * Whether this exact route needs the PHOENIX Monday compatibility membrane.
  * @param provider - Harness provider route selected for the request.
  * @param api - Resolved pi-ai wire protocol.
  * @returns True only for direct Codex routes.
  */
-export function requiresCodexToolQuarantine(provider: string, api: string): boolean {
+export function requiresMondayCodexMembrane(provider: string, api: string): boolean {
   return provider === 'openai-codex' || api === 'openai-codex-responses'
 }
 
@@ -165,54 +164,98 @@ export function normalizeCodexToolSchemas(options: GenerateOptions): GenerateOpt
   return changed ? { ...options, tools } : options
 }
 
+function isMondayToolName(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith(MONDAY_TOOL_PREFIX)
+}
+
+function mondayEnvelopeParameters(): JsonObject {
+  return {
+    type: 'object',
+    properties: {
+      [MONDAY_ARGUMENT_ENVELOPE_KEY]: {
+        type: 'object',
+        description: 'Exact argument object forwarded unchanged to the Monday MCP tool.',
+        additionalProperties: true,
+      },
+    },
+    required: [MONDAY_ARGUMENT_ENVELOPE_KEY],
+    additionalProperties: false,
+  }
+}
+
+function mondayCompatibilityDescription(description: unknown, parameters: JsonObject): string {
+  const base = typeof description === 'string' ? description.trim() : ''
+  const normalized = normalizeCodexToolParameters(parameters)
+  const knownKeys = Object.keys(propertiesOf(normalized)).sort()
+  const compatibility = [
+    'PHOENIX Monday compatibility: put the exact tool arguments inside "phoenix_arguments".',
+    knownKeys.length > 0 ? `Known Monday argument keys: ${knownKeys.join(', ')}.` : '',
+  ].filter(Boolean).join(' ')
+  return base.length > 0 ? `${base} ${compatibility}` : compatibility
+}
+
 /**
- * Remove provider-specific tool definitions that are known to make Codex reject
- * the entire request before the model can answer.
+ * Replace every Monday tool schema with one stable Codex-safe envelope while
+ * keeping the original tool name and execution identity.
  *
- * This is deliberately a narrow compatibility quarantine, not a generic MCP
- * denylist. Other providers still receive the tool, and the rest of the Monday
- * catalog remains available on Codex.
+ * The MCP client accepts the envelope and unwraps it immediately before the
+ * remote tools/call request. This makes the compatibility rule server-wide:
+ * newly-added Monday tools cannot break Codex merely by advertising another
+ * root union or unsupported JSON-Schema keyword.
  * @param options - Model request after generic schema normalization.
- * @returns The original request when no quarantined tool is present, otherwise a filtered copy.
+ * @returns The original request when no Monday tool is present, otherwise a copy with wrapped Monday schemas.
  */
-export function quarantineCodexTools(options: GenerateOptions): GenerateOptions {
+export function applyMondayCodexMembrane(options: GenerateOptions): GenerateOptions {
   if (options.tools === undefined || options.tools.length === 0) return options
-  const tools = options.tools.filter(tool => !CODEX_QUARANTINED_FUNCTION_TOOLS.has(tool.name))
-  return tools.length === options.tools.length ? options : { ...options, tools }
-}
-
-function payloadFunctionName(value: unknown): string | undefined {
-  if (!isObject(value) || value.type !== 'function') return undefined
-  if (typeof value.name === 'string') return value.name
-  return isObject(value.function) && typeof value.function.name === 'string'
-    ? value.function.name
-    : undefined
-}
-
-function isQuarantinedPayloadFunction(value: unknown): boolean {
-  const name = payloadFunctionName(value)
-  return name !== undefined && CODEX_QUARANTINED_FUNCTION_TOOLS.has(name)
+  let changed = false
+  const tools = options.tools.map((tool) => {
+    if (!isMondayToolName(tool.name)) return tool
+    changed = true
+    return {
+      ...tool,
+      description: mondayCompatibilityDescription(tool.description, tool.parameters),
+      parameters: mondayEnvelopeParameters(),
+    }
+  })
+  return changed ? { ...options, tools } : options
 }
 
 
-function normalizePayloadToolEntry(value: unknown): unknown {
+function normalizePayloadToolEntry(value: unknown, mondayMembrane: boolean): unknown {
   if (!isObject(value)) return value
 
   // pi-ai has two relevant shapes:
   // 1) provider-wire function tools: { type: 'function', name, parameters }
   // 2) pre-wire context tools:       { name, description, parameters }
   //
-  // The second shape is important because pi-ai may validate/transform context
-  // tools before onPayload runs. Monday's MCP schema must therefore be safe
-  // before it ever enters provider encoding, not only after the payload exists.
+  // The second shape matters because pi-ai may validate context tools before
+  // onPayload runs. The Monday membrane must therefore exist both before and
+  // after provider encoding.
   const isWireFunction = value.type === 'function'
   const isMcpContextTool = typeof value.name === 'string' && value.name.startsWith('mcp__')
   if ((isWireFunction || isMcpContextTool) && isObject(value.parameters)) {
+    if (mondayMembrane && isMondayToolName(value.name)) {
+      return {
+        ...value,
+        description: mondayCompatibilityDescription(value.description, value.parameters),
+        parameters: mondayEnvelopeParameters(),
+      }
+    }
     const parameters = normalizeCodexToolParameters(value.parameters)
     return parameters === value.parameters ? value : { ...value, parameters }
   }
 
   if (isWireFunction && isObject(value.function) && isObject(value.function.parameters)) {
+    if (mondayMembrane && isMondayToolName(value.function.name)) {
+      return {
+        ...value,
+        function: {
+          ...value.function,
+          description: mondayCompatibilityDescription(value.function.description, value.function.parameters),
+          parameters: mondayEnvelopeParameters(),
+        },
+      }
+    }
     const parameters = normalizeCodexToolParameters(value.function.parameters)
     if (parameters === value.function.parameters) return value
     return {
@@ -227,19 +270,14 @@ function normalizePayloadToolEntry(value: unknown): unknown {
   return value
 }
 
-function normalizePayloadTree(value: unknown, quarantine: boolean): unknown {
+function normalizePayloadTree(value: unknown, mondayMembrane: boolean): unknown {
   if (Array.isArray(value)) {
     let changed = false
-    const normalized: unknown[] = []
-    for (const entry of value) {
-      if (quarantine && isQuarantinedPayloadFunction(entry)) {
-        changed = true
-        continue
-      }
-      const next = normalizePayloadTree(entry, quarantine)
+    const normalized = value.map((entry) => {
+      const next = normalizePayloadTree(entry, mondayMembrane)
       if (next !== entry) changed = true
-      normalized.push(next)
-    }
+      return next
+    })
     return changed ? normalized : value
   }
   if (!isObject(value)) return value
@@ -247,13 +285,13 @@ function normalizePayloadTree(value: unknown, quarantine: boolean): unknown {
   // Normalize a function-tool definition wherever pi-ai (or a future provider
   // adapter) nests it, then keep walking because tool catalogs can themselves
   // contain deferred/nested tool lists.
-  const tool = normalizePayloadToolEntry(value)
+  const tool = normalizePayloadToolEntry(value, mondayMembrane)
   const source = isObject(tool) ? tool : value
   let changed = tool !== value
   let normalized: JsonObject | undefined
 
   for (const [key, child] of Object.entries(source)) {
-    const next = normalizePayloadTree(child, quarantine)
+    const next = normalizePayloadTree(child, mondayMembrane)
     if (next === child) continue
     normalized ??= { ...source }
     normalized[key] = next
@@ -276,10 +314,10 @@ function normalizePayloadTree(value: unknown, quarantine: boolean): unknown {
  * conversation payloads and non-function tools retain identity when unchanged.
  *
  * @param payload - Provider request body produced by pi-ai.
- * @param quarantine - Whether known Codex-incompatible functions should be removed while walking the payload.
+ * @param mondayMembrane - Whether every Monday tool should use the local PHOENIX argument envelope.
  * @returns The original payload when already compatible, otherwise a copy with
  * every nested function-tool schema projected to Codex's object-root contract.
  */
-export function normalizeOpenAiFunctionToolPayload(payload: unknown, quarantine = false): unknown {
-  return normalizePayloadTree(payload, quarantine)
+export function normalizeOpenAiFunctionToolPayload(payload: unknown, mondayMembrane = false): unknown {
+  return normalizePayloadTree(payload, mondayMembrane)
 }
