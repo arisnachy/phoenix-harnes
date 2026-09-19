@@ -18,6 +18,7 @@ import { installHardnessProtocol, type HardnessPromptRegistrar } from './protoco
 import { installProactivityProtocol } from './proactivity-protocol.ts'
 import { installHumanPresenceProtocol } from './presence-protocol.ts'
 import { installConnectorProtocol } from './connector-protocol.ts'
+import { installCapabilityOperatingProtocol } from './capability-protocol.ts'
 import { acquireProactivityEngine } from './proactivity-registry.ts'
 import { createProactivityExecutor, installProactivityRuntime } from './proactivity-runtime.ts'
 import { createProactivityTools } from './proactivity-tools.ts'
@@ -108,6 +109,7 @@ export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
 export { CONNECTOR_OPERATING_PROTOCOL, installConnectorProtocol } from './connector-protocol.ts'
 export { HUMAN_PRESENCE_PROTOCOL, installHumanPresenceProtocol } from './presence-protocol.ts'
+export { CAPABILITY_OPERATING_PROTOCOL, installCapabilityOperatingProtocol } from './capability-protocol.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -201,6 +203,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     if (modelTools) {
       disposers.push(installProactivityProtocol(systemPrompt))
       disposers.push(installHumanPresenceProtocol(systemPrompt))
+      disposers.push(installCapabilityOperatingProtocol(systemPrompt))
     }
     if (modelTools && (authorization !== undefined || mcpConnectors !== undefined)) {
       disposers.push(installConnectorProtocol(systemPrompt))
