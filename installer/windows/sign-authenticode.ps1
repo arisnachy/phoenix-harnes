@@ -70,7 +70,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $signature = Get-AuthenticodeSignature -LiteralPath $target
 if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-  throw "Authenticode verification failed for $target: $($signature.Status) $($signature.StatusMessage)"
+  throw "Authenticode verification failed for ${target}: $($signature.Status) $($signature.StatusMessage)"
 }
 
 Write-Host "Authenticode valid: $target"
