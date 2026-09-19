@@ -7,6 +7,7 @@ internal static class DesktopStartupContract
     internal const bool ShowWindowBeforeRuntimeReady = true;
     internal const bool SecondLaunchSignalsExistingWindow = true;
     internal const bool EmbeddedBrowserStartsLazy = true;
+    internal const bool UserCloseHidesToTray = true;
     internal const string InitialStatus = "Iniciando Phoenix…";
 }
 
@@ -18,7 +19,8 @@ internal static class DesktopRuntimeLaunchContract
     internal static ProcessStartInfo CreateOwnedRuntimeStartInfo(
         string runtimeRoot,
         string controlDescriptorPath,
-        bool managedRuntime = true)
+        bool managedRuntime = true,
+        bool showDeveloperConsole = false)
     {
         var launcher = Path.Combine(runtimeRoot, "phoenix-windows.cmd");
         var escapedLauncher = launcher.Replace("'", "''");
@@ -28,9 +30,10 @@ internal static class DesktopRuntimeLaunchContract
             FileName = PowerShellExecutable,
             WorkingDirectory = runtimeRoot,
             UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            CreateNoWindow = !showDeveloperConsole,
+            RedirectStandardOutput = !showDeveloperConsole,
+            RedirectStandardError = !showDeveloperConsole,
+            WindowStyle = showDeveloperConsole ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden,
         };
 
         startInfo.ArgumentList.Add("-NoLogo");
@@ -50,6 +53,7 @@ internal static class DesktopRuntimeLaunchContract
         startInfo.Environment["PHOENIX_DESKTOP_CONTROL_DESCRIPTOR"] = controlDescriptorPath;
         startInfo.Environment["PHOENIX_SURFACE"] = "desktop";
         startInfo.Environment["PHOENIX_DESKTOP_SHELL"] = "1";
+        startInfo.Environment["PHOENIX_DESKTOP_CONSOLE"] = showDeveloperConsole ? "1" : "0";
         startInfo.Environment["PHOENIX_BROWSER_AUTOSTART"] = "true";
         startInfo.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"] = "chrome";
         return startInfo;
@@ -68,6 +72,48 @@ internal static class DesktopRuntimeLaunchContract
     }
 }
 
+
+
+internal static class DesktopDeveloperConsole
+{
+    internal const string FlagFileName = "developer-console.enabled";
+
+    internal static string FlagPath(string installRoot) => Path.Combine(installRoot, FlagFileName);
+
+    internal static bool Requested(string installRoot, IReadOnlyCollection<string> args)
+    {
+        if (args.Any(arg => string.Equals(arg, "--developer-console", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        var env = Environment.GetEnvironmentVariable("PHOENIX_DESKTOP_CONSOLE")?.Trim();
+        if (string.Equals(env, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "yes", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return File.Exists(FlagPath(installRoot));
+    }
+
+    internal static void SetEnabled(string installRoot, bool enabled)
+    {
+        Directory.CreateDirectory(installRoot);
+        var path = FlagPath(installRoot);
+        if (enabled)
+        {
+            File.WriteAllText(path, "enabled\n");
+            return;
+        }
+
+        try
+        {
+            File.Delete(path);
+        }
+        catch (FileNotFoundException)
+        {
+            // Already disabled.
+        }
+    }
+}
 
 internal static class DesktopSourceCheckout
 {
