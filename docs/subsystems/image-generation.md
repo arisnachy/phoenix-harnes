@@ -1,5 +1,7 @@
 # Image generation
 
+English | [中文](image-generation.zh.md)
+
 PHOENIX exposes original image creation through the provider-neutral `ctx.imageGeneration` seam and the `image_generate` tool.
 
 The first implementation lives in `@phoenix-ai/dsh-image-generation`. It intentionally combines the Service Definition, the Cloudflare Workers AI provider, and the model-facing consumer while there is only one shipped provider. Provider registration remains public so future Cloudflare alternatives or local runtimes do not change the tool contract.
