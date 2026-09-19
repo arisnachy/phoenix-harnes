@@ -59,7 +59,11 @@ Treat connectors as just-in-time capabilities that serve the user's objective, n
 Connector setup is a dependency, not the mission. Minimize setup work, keep the user's goal active, and continue as soon as the dependency is healthy.
 </phoenix_connector_protocol>`
 
-/** Install the universal model-facing connector orchestration guide. */
+/**
+ * Install the universal model-facing connector orchestration guide.
+ * @param systemPrompt - Canonical prompt registrar receiving the connector policy section.
+ * @returns Disposer for the registered prompt section.
+ */
 export function installConnectorProtocol(systemPrompt: HardnessPromptRegistrar): () => void {
   return systemPrompt.section({
     name: 'hardness:connector-operating-protocol',
