@@ -153,8 +153,10 @@ True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"powershel
 False(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"python -m http.server 3080"), "unrelated local HTTP listener is rejected", failures);
 
 var consolePrefRoot = Path.Combine(Path.GetTempPath(), $"phoenix-console-test-{Guid.NewGuid():N}");
+var previousConsoleEnv = Environment.GetEnvironmentVariable("PHOENIX_DESKTOP_CONSOLE");
 try
 {
+    Environment.SetEnvironmentVariable("PHOENIX_DESKTOP_CONSOLE", null);
     False(DesktopDeveloperConsole.Requested(consolePrefRoot, Array.Empty<string>()), "developer console defaults off", failures);
     True(DesktopDeveloperConsole.Requested(consolePrefRoot, new[] { "--developer-console" }), "developer console CLI switch enables it", failures);
     DesktopDeveloperConsole.SetEnabled(consolePrefRoot, true);
@@ -164,7 +166,9 @@ try
 }
 finally
 {
-    Directory.Delete(consolePrefRoot, recursive: true);
+    Environment.SetEnvironmentVariable("PHOENIX_DESKTOP_CONSOLE", previousConsoleEnv);
+    if (Directory.Exists(consolePrefRoot))
+        Directory.Delete(consolePrefRoot, recursive: true);
 }
 
 var sourceTestRoot = Path.Combine(Path.GetTempPath(), $"phoenix-source-test-{Guid.NewGuid():N}");
