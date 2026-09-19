@@ -1,6 +1,6 @@
 {
   "name": "@phoenix-ai/dsh-cognitive-runtime",
-  "description": "Deterministic, read-only cognitive state projection for PHOENIX sessions",
+  "description": "Deterministic cognitive state, model continuity, and completion-quality projection for PHOENIX sessions",
   "version": "0.1.1-rc.2",
   "publishConfig": {
     "access": "public"
@@ -33,6 +33,14 @@
     "./workspace": {
       "types": "./lib/types/workspace.d.ts",
       "default": "./lib/types/workspace.js"
+    },
+    "./model-context": {
+      "types": "./lib/types/model-context.d.ts",
+      "default": "./lib/types/model-context.js"
+    },
+    "./quality-gate": {
+      "types": "./lib/types/quality-gate.d.ts",
+      "default": "./lib/types/quality-gate.js"
     },
     "./types": {
       "types": "./lib/types/types.d.ts",
