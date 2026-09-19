@@ -68,7 +68,7 @@ import {
 } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
-import { normalizeCodexToolSchemas, normalizeOpenAiFunctionToolPayload, quarantineCodexTools, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
+import { normalizeCodexToolSchemas, normalizeOpenAiFunctionToolPayload, quarantineCodexTools, requiresCodexToolQuarantine, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 
@@ -428,9 +428,13 @@ export class PiAiAdapter extends LlmAdapter {
         )
       }
       const requiresFunctionSchemaProjection = requiresObjectRootFunctionSchemas(options.provider, model.api)
-      const requestOptions = requiresFunctionSchemaProjection
-        ? quarantineCodexTools(normalizeCodexToolSchemas(fitted.options))
+      const requiresMondayQuarantine = requiresCodexToolQuarantine(options.provider, model.api)
+      const projectedOptions = requiresFunctionSchemaProjection
+        ? normalizeCodexToolSchemas(fitted.options)
         : fitted.options
+      const requestOptions = requiresMondayQuarantine
+        ? quarantineCodexTools(projectedOptions)
+        : projectedOptions
       const containsImage = requestOptions.messages.some(message => contentHasImage(message.content))
       const containsFile = requestOptions.messages.some(message => contentHasFile(message.content))
       if (containsImage && !model.input.includes('image')) {
@@ -452,7 +456,7 @@ export class PiAiAdapter extends LlmAdapter {
       const streamOptions: SimpleStreamOptions = {
         ...profileOptions(profile, reasoning, apiKey),
         ...requiresFunctionSchemaProjection
-          ? { onPayload: payload => normalizeOpenAiFunctionToolPayload(payload) }
+          ? { onPayload: payload => normalizeOpenAiFunctionToolPayload(payload, requiresMondayQuarantine) }
           : {},
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
