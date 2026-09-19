@@ -27,6 +27,6 @@ describe('PHOENIX proactivity protocol', () => {
     expect(PROACTIVITY_PROTOCOL).toContain('clear trigger/time and expected user benefit')
     expect(PROACTIVITY_PROTOCOL).toContain('Prefer one high-value follow-up')
     expect(PROACTIVITY_PROTOCOL).toContain('never create a duplicate')
-    expect(PROACTIVITY_PROTOCOL).toContain('Autonomous tasks never grant new permissions')
+    expect(PROACTIVITY_PROTOCOL).toContain('Autonomous tasks never grant new permissions')\n    expect(PROACTIVITY_PROTOCOL).toContain('phoenix_watch_create')\n    expect(PROACTIVITY_PROTOCOL).toContain('stays silent while false or uncertain')\n    expect(PROACTIVITY_PROTOCOL).toContain('no more often than hourly')\n    expect(PROACTIVITY_PROTOCOL).toContain('event-driven connector or webhook')
   })
 })
