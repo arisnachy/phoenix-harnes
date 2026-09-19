@@ -58,6 +58,10 @@ const HASH_LENGTH = 12
 const FUNCTION_ROOT_FORBIDDEN_KEYS = new Set(['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not'])
 const FUNCTION_ROOT_COMPOSITIONS = ['oneOf', 'anyOf', 'allOf'] as const
 
+const MONDAY_SERVER_NAME = 'monday-com-monday-com'
+const MONDAY_CREATE_ACTION_RAW_NAME = 'create_action'
+const MONDAY_CREATE_ACTION_COMPAT_RAW_NAME = 'phoenix_create_action'
+
 type SchemaObject = Record<string, unknown>
 
 function isSchemaObject(value: unknown): value is SchemaObject {
@@ -270,6 +274,39 @@ export async function syncTools(
         tool.execution?.taskSupport === 'required',
         opts,
       ))
+      if (opts.serverName === MONDAY_SERVER_NAME && tool.name === MONDAY_CREATE_ACTION_RAW_NAME) {
+        const compatPublicName = publicToolName(opts.serverName, MONDAY_CREATE_ACTION_COMPAT_RAW_NAME)
+        const knownArguments = Object.keys(schemaProperties(modelInputSchema(tool.inputSchema))).sort()
+        definitions.set(compatPublicName, createDefinition(
+          client,
+          ctx,
+          compatPublicName,
+          tool.name,
+          [
+            'PHOENIX local compatibility wrapper for Monday create_action.',
+            'Use this instead of the raw create_action tool on OpenAI/Codex routes.',
+            'Put the exact Monday create_action argument object inside the arguments field.',
+            knownArguments.length > 0 ? `Known argument keys from the live Monday schema: ${knownArguments.join(', ')}.` : '',
+            tool.description ?? '',
+          ].filter(Boolean).join(' '),
+          {
+            type: 'object',
+            properties: {
+              arguments: {
+                type: 'object',
+                description: 'Exact argument object forwarded unchanged to Monday create_action.',
+                additionalProperties: true,
+              },
+            },
+            required: ['arguments'],
+            additionalProperties: false,
+          },
+          supportedOutputSchema(tool.outputSchema),
+          tool.execution?.taskSupport === 'required',
+          opts,
+          (args) => isSchemaObject(args.arguments) ? args.arguments : {},
+        ))
+      }
     }
     cursor = response.nextCursor
   } while (cursor)
@@ -352,6 +389,7 @@ function createDefinition(
   structuredSchema: JsonSchemaNode | undefined,
   taskRequired: boolean,
   opts: ToolBridgeOptions,
+  transformArguments?: (args: Record<string, unknown>) => Record<string, unknown>,
 ): ToolDefinition {
   const projections = new WeakMap<ToolExecution, PreparedProjection>()
   return {
@@ -359,7 +397,7 @@ function createDefinition(
     description,
     parameters,
     output: createOutput(rawName, structuredSchema),
-    execute: createExecutor(client, ctx, rawName, taskRequired, opts, projections),
+    execute: createExecutor(client, ctx, rawName, taskRequired, opts, projections, transformArguments),
     finalizeContent(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>) {
       const projection = projections.get(exec)
       if (projection === undefined) return undefined
@@ -408,6 +446,7 @@ function createExecutor(
   taskRequired: boolean,
   opts: ToolBridgeOptions,
   projections: WeakMap<ToolExecution, PreparedProjection>,
+  transformArguments?: (args: Record<string, unknown>) => Record<string, unknown>,
 ): ToolDefinition['execute'] {
   return async (args: unknown, exec: ToolExecution) => {
     if (taskRequired) {
@@ -418,7 +457,8 @@ function createExecutor(
     // string/number/null). Fallback to {} lets the MCP server produce a
     // specific "missing required param" error the model can learn from.
     const argsObj = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
-    const result = await callToolUncached(client, rawName, argsObj, exec, opts)
+    const wireArgs = transformArguments === undefined ? argsObj : transformArguments(argsObj)
+    const result = await callToolUncached(client, rawName, wireArgs, exec, opts)
 
     // The SDK may return a legacy `toolResult` shape; normalize to content array.
     if (!Array.isArray(result.content)) {
