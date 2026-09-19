@@ -8,6 +8,24 @@ $ErrorActionPreference = 'Stop'
 $readyMarker = Join-Path $RuntimeRoot '.phoenix-managed-install'
 $installingMarker = Join-Path $RuntimeRoot '.phoenix-managed-installing'
 
+$toolRoot = Join-Path $PSScriptRoot 'runtime-tools'
+
+function Enable-BundledToolchain {
+  $entries = @(
+    (Join-Path $toolRoot 'node'),
+    (Join-Path $toolRoot 'git\\cmd'),
+    (Join-Path $toolRoot 'git\\mingw64\\bin'),
+    (Join-Path $toolRoot 'git\\usr\\bin')
+  ) | Where-Object { Test-Path $_ }
+
+  if ($entries.Count -gt 0) {
+    $env:PATH = (($entries + @($env:PATH)) -join [IO.Path]::PathSeparator)
+    $env:PHOENIX_TOOLCHAIN_ROOT = $toolRoot
+  }
+}
+
+Enable-BundledToolchain
+
 function Require-Command([string]$Name, [string]$Hint) {
   if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
     throw "$Name is required. $Hint"
@@ -24,9 +42,9 @@ function Test-ReadyMarker {
   }
 }
 
-Require-Command 'git' 'Install Git for Windows and retry.'
-Require-Command 'node' 'Install Node.js 22.19 or newer and retry.'
-Require-Command 'corepack' 'Use a Node.js installation that includes Corepack.'
+Require-Command 'git' 'The Phoenix installer is missing its bundled Git runtime. Reinstall Phoenix.'
+Require-Command 'node' 'The Phoenix installer is missing its bundled Node.js runtime. Reinstall Phoenix.'
+Require-Command 'corepack' 'The Phoenix installer is missing its bundled Corepack runtime. Reinstall Phoenix.'
 
 $nodeVersion = (& node -p "process.versions.node").Trim()
 $nodeMajor = [int]($nodeVersion.Split('.')[0])
