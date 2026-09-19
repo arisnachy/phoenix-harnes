@@ -127,6 +127,57 @@ describe('createMcpOAuthProvider', () => {
     expect(records.size).toBe(0)
   })
 
+  it('drops a stale dynamic client registration before reauthorization on a new loopback redirect', async () => {
+    const key = credentialKey('mcp-client', 'monday-com-monday-com')
+    const records = new Map<string, unknown>([[
+      String(key),
+      {
+        kind: 'grant',
+        payload: {
+          clientInformation: { client_id: 'client-registered-for-old-port' },
+          tokens: { access_token: 'expired-access', token_type: 'Bearer' },
+          codeVerifier: 'old-verifier',
+          discoveryState: { authorizationServerUrl: 'https://auth.monday.com' },
+        },
+      },
+    ]])
+    const credentials = {
+      readRecord: vi.fn(async (recordKey: unknown) => records.get(String(recordKey))),
+      modifyRecord: vi.fn(async (recordKey: unknown, mutate: (current: unknown) => Promise<unknown>) => {
+        const next = await mutate(records.get(String(recordKey)))
+        if (next === undefined) records.delete(String(recordKey))
+        else records.set(String(recordKey), next)
+        return next
+      }),
+      deleteRecord: vi.fn(async (recordKey: unknown) => { records.delete(String(recordKey)) }),
+    } as unknown as CredentialProvider
+
+    vi.mocked(auth).mockImplementationOnce(async (provider) => {
+      expect(await provider.clientInformation()).toBeUndefined()
+      expect(await provider.tokens()).toBeUndefined()
+      await expect(provider.codeVerifier()).rejects.toThrow(/verifier missing/i)
+      expect(await provider.discoveryState?.()).toEqual({ authorizationServerUrl: 'https://auth.monday.com' })
+      return 'AUTHORIZED'
+    })
+
+    const controller = new McpOAuthController(
+      credentials,
+      'monday-com-monday-com',
+      'https://mcp.monday.com',
+    )
+    try {
+      await controller.ready
+      await expect(controller.authorize({
+        method: 'oauth',
+        signal: new AbortController().signal,
+        notify: vi.fn(),
+        prompt: vi.fn(),
+      })).resolves.toBeUndefined()
+    } finally {
+      await controller.close()
+    }
+  })
+
   it('reports connected only when access or refresh tokens exist', () => {
     expect(hasUsableMcpOAuthTokens(undefined)).toBe(false)
     expect(hasUsableMcpOAuthTokens({ clientInformation: { client_id: 'id' } })).toBe(false)
