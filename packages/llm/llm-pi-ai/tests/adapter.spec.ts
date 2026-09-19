@@ -61,6 +61,52 @@ beforeEach(() => {
 })
 
 describe('PiAiAdapter provider routing', () => {
+  it('refreshes an advisory catalog before listing models', async () => {
+    let providers: Record<string, LlmPiAi.PiAiProviderProfile> = { deepseek: {} }
+    const refreshModels = vi.fn(async (provider: string) => {
+      expect(provider).toBe('deepseek')
+      providers = { deepseek: { models: [{ id: 'deepseek-v4-flash' }] } }
+    })
+    const adapter = new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve('test-key'),
+      auth: memoryAuth(),
+      refreshModels,
+    })
+
+    await expect(adapter.listModels('deepseek')).resolves.toEqual([
+      expect.objectContaining({ provider: 'deepseek', id: 'deepseek-v4-flash' }),
+    ])
+    expect(refreshModels).toHaveBeenCalledTimes(1)
+  })
+
+  it('forces one refresh when an exact model is absent from the current snapshot', async () => {
+    let providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
+      deepseek: { models: [{ id: 'deepseek-v4-flash' }] },
+    }
+    const refreshModels = vi.fn(async (_provider: string, force?: boolean) => {
+      expect(force).toBe(true)
+      providers = {
+        deepseek: {
+          models: [
+            { id: 'deepseek-v4-flash' },
+            { id: 'phoenix-live-new-model' },
+          ],
+        },
+      }
+    })
+    const adapter = new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve('test-key'),
+      auth: memoryAuth(),
+      refreshModels,
+    })
+
+    await expect(adapter.resolveModel('deepseek', 'phoenix-live-new-model'))
+      .resolves.toMatchObject({ provider: 'deepseek', id: 'phoenix-live-new-model' })
+    expect(refreshModels).toHaveBeenCalledWith('deepseek', true)
+  })
+
   it('resolves a catalog model dynamically and uses a private endpoint', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url)
