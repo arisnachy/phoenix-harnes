@@ -103,12 +103,6 @@
     - id: plugin-inventory
       name: '@phoenix-ai/dsh-host-plugin-inventory'
 
-    # Native ChatGPT / Codex account bridge for first-run auth and Codex
-    # telemetry. It is idle until sign-in or an account read; tokens remain
-    # owned by the official Codex app-server, never by PHOENIX.
-    - id: subagent-codex
-      name: '@phoenix-ai/dsh-subagent-codex'
-
     # The API gateway: the transport-agnostic dispatch face every client shape
     # shares. The base layer's agent-default-model service owns the default model.
     - id: api-gateway
