@@ -48,8 +48,8 @@ type Phase =
   | {
     kind: 'running'
     abort: AbortController
-    /** Abort controller scoped only to the active model stream; steering may cut it without canceling the turn. */
-    modelAbort?: AbortController
+    /** Active model stream state; visible prose makes it eligible for steering preemption. */
+    modelStream?: { abort: AbortController; interruptible: boolean }
     turn: number
     step: number
     wakeRequested: boolean
@@ -145,8 +145,9 @@ export class ReactLoopAgent implements Agent {
     // prose that was generated before the instruction existed. Only the model
     // stream is interrupted: tool execution keeps its existing safety and
     // side-effect contract, and the turn itself remains live.
-    if (this.phase.kind === 'running' && !this.phase.abort.signal.aborted) {
-      this.phase.modelAbort?.abort(STEERING_MODEL_INTERRUPT)
+    if (this.phase.kind === 'running' && !this.phase.abort.signal.aborted
+      && this.phase.modelStream?.interruptible === true) {
+      this.phase.modelStream.abort.abort(STEERING_MODEL_INTERRUPT)
     }
   }
 
@@ -373,9 +374,9 @@ export class ReactLoopAgent implements Agent {
     const system = renderPrompt(assembly)
 
     while (true) {
-      const modelAbort = new AbortController()
-      phase.modelAbort = modelAbort
-      const signal = AbortSignal.any([turnSignal, modelAbort.signal])
+      const modelStream = { abort: new AbortController(), interruptible: false }
+      phase.modelStream = modelStream
+      const signal = AbortSignal.any([turnSignal, modelStream.abort.signal])
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
       let request: GenerateOptions | undefined
@@ -392,12 +393,16 @@ export class ReactLoopAgent implements Agent {
           signal.throwIfAborted()
           chunkSeqs.push(this.session.append('assistant/chunk', { turn, step, chunk }).seq)
           assembler.push(chunk)
+          if ((chunk.type === 'text-delta' && chunk.text.length > 0)
+            || (chunk.type === 'block-end' && chunk.block.type === 'text' && chunk.block.text.length > 0)) {
+            modelStream.interruptible = true
+          }
         }
         signal.throwIfAborted()
       } catch (error: unknown) {
         const steeringInterrupt = !turnSignal.aborted
-          && modelAbort.signal.aborted
-          && modelAbort.signal.reason === STEERING_MODEL_INTERRUPT
+          && modelStream.abort.signal.aborted
+          && modelStream.abort.signal.reason === STEERING_MODEL_INTERRUPT
         if ((turnSignal.aborted || steeringInterrupt) && request !== undefined) {
           const content = assembler.interruptedBlocks()
           if (content.length > 0) {
@@ -416,7 +421,7 @@ export class ReactLoopAgent implements Agent {
         if (steeringInterrupt) return null
         throw error
       } finally {
-        if (phase.modelAbort === modelAbort) delete phase.modelAbort
+        if (phase.modelStream === modelStream) delete phase.modelStream
       }
 
       /* v8 ignore next -- a non-throwing build always assigns the request. */
