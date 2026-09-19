@@ -252,6 +252,32 @@ function runtimeIsHealthy(path, target) {
     && existsSync(join(path, 'apps', 'cli', 'lib', 'bin.js'))
 }
 
+function runtimeBootPreflight(path) {
+  const result = spawnSync(process.execPath, [
+    '--import', 'tsx/esm',
+    'apps/cli/src/bin.ts',
+    'web', '--dump-config',
+  ], {
+    cwd: path,
+    env: {
+      ...hydratePhoenixEnvironment(process.env),
+      PHOENIX_RUNTIME_ROOT: path,
+      PHOENIX_UPDATE_SUPERVISED: '1',
+      PHOENIX_CONFIG_PREFLIGHT: '1',
+      PHOENIX_AUTO_UPDATE: '0',
+    },
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 60_000,
+  })
+  const detail = [result.error?.message, result.stderr, result.stdout]
+    .filter(value => typeof value === 'string' && value.trim().length > 0)
+    .join('\n')
+    .trim()
+  return { ok: result.error === undefined && result.status === 0, detail }
+}
+
 function writeActiveRuntime(target, path) {
   const markerPath = activeRuntimePath()
   if (markerPath === undefined) throw new Error('could not resolve active runtime marker path')
@@ -298,6 +324,12 @@ function activatePreparedRuntime(target) {
   if (!runtimeIsHealthy(runtime, target)) {
     throw new Error(`isolated runtime ${target.slice(0, 12)} failed post-build validation`)
   }
+  const bootPreflight = runtimeBootPreflight(runtime)
+  if (!bootPreflight.ok) {
+    throw new Error(
+      `isolated runtime ${target.slice(0, 12)} failed boot preflight: ${bootPreflight.detail || 'unknown error'}`,
+    )
+  }
   writeActiveRuntime(target, runtime)
   return { target, path: runtime }
 }
@@ -314,6 +346,15 @@ function restoreActiveRuntime() {
     const candidate = resolve(value.path)
     if (!runtimeIsHealthy(candidate, value.target)) {
       clearActiveRuntime()
+      return
+    }
+    const bootPreflight = runtimeBootPreflight(candidate)
+    if (!bootPreflight.ok) {
+      clearActiveRuntime()
+      console.error(
+        `[PHOENIX RECOVERY] retired isolated runtime ${value.target.slice(0, 12)} because boot preflight failed: `
+        + (bootPreflight.detail || 'unknown error'),
+      )
       return
     }
     runtimeRoot = candidate
@@ -489,30 +530,7 @@ function writeConfigurationRecoveryReport(reason, detail = '') {
 }
 
 function preflightBootConfiguration() {
-  const result = spawnSync(process.execPath, [
-    '--import', 'tsx/esm',
-    'apps/cli/src/bin.ts',
-    'web', '--dump-config',
-  ], {
-    cwd: runtimeRoot,
-    env: {
-      ...hydratePhoenixEnvironment(process.env),
-      PHOENIX_RUNTIME_ROOT: runtimeRoot,
-      PHOENIX_UPDATE_SUPERVISED: '1',
-      PHOENIX_CONFIG_PREFLIGHT: '1',
-      PHOENIX_AUTO_UPDATE: '0',
-    },
-    encoding: 'utf8',
-    windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 60_000,
-  })
-  if (result.error !== undefined) return { ok: false, detail: result.error.message }
-  const detail = [result.stderr, result.stdout]
-    .filter(value => typeof value === 'string' && value.trim().length > 0)
-    .join('\n')
-    .trim()
-  return { ok: result.status === 0, detail }
+  return runtimeBootPreflight(runtimeRoot)
 }
 
 function recoverConfigurationBeforeFirstBoot() {
@@ -853,6 +871,17 @@ while (true) {
     } else {
       writeConfigurationRecoveryReport('early-boot-crash-no-last-known-good', `exit=${String(hostExit.code)} signal=${String(hostExit.signal)}`)
     }
+  }
+
+  if (earlyCrash && runtimeRoot !== root) {
+    const failedRuntime = runtimeRoot
+    runtimeRoot = root
+    clearActiveRuntime()
+    console.error(
+      `[PHOENIX RECOVERY] isolated runtime ${failedRuntime} exited before its health checkpoint; `
+      + 'retired its active marker and falling back to the source checkout.',
+    )
+    continue
   }
 
   const reason = hostExit.code === null ? `signal ${hostExit.signal ?? 'unknown'}` : `exit code ${String(hostExit.code)}`
