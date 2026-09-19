@@ -597,25 +597,28 @@ describe('PiAiAdapter provider routing', () => {
     })
 
     type CapturedTool = { name?: string; parameters?: Record<string, unknown> }
-    const capturedTools = server.requests.flatMap((request): CapturedTool[] => {
-      if (typeof request !== 'object' || request === null) return []
-      const record = request as Record<string, unknown>
-      const tools: CapturedTool[] = []
-
-      if (Array.isArray(record.tools)) tools.push(...record.tools as CapturedTool[])
-      if (Array.isArray(record.additional_tools)) tools.push(...record.additional_tools as CapturedTool[])
-
-      if (Array.isArray(record.input)) {
-        for (const item of record.input) {
-          if (typeof item !== 'object' || item === null) continue
-          const itemTools = (item as Record<string, unknown>).tools
-          if (Array.isArray(itemTools)) tools.push(...itemTools as CapturedTool[])
+    const findCapturedTool = (value: unknown): CapturedTool | undefined => {
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          const found = findCapturedTool(entry)
+          if (found !== undefined) return found
         }
+        return undefined
       }
-      return tools
-    })
-    const monday = capturedTools
-      .find(tool => tool.name === 'mcp__monday-com-monday-com__create_action')
+      if (typeof value !== 'object' || value === null) return undefined
+      const record = value as Record<string, unknown>
+      if (record.name === 'mcp__monday-com-monday-com__create_action') {
+        return record as CapturedTool
+      }
+      for (const child of Object.values(record)) {
+        const found = findCapturedTool(child)
+        if (found !== undefined) return found
+      }
+      return undefined
+    }
+    const monday = server.requests
+      .map(request => findCapturedTool(request))
+      .find((tool): tool is CapturedTool => tool !== undefined)
 
     expect(server.paths.length).toBeGreaterThan(0)
     expect(server.paths.every(path => path === '/codex/responses')).toBe(true)
