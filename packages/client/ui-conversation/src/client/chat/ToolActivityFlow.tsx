@@ -71,8 +71,7 @@ function isActionableConnectorRecovery(node: OrderedChatNode): boolean {
   const root = (node.data as ToolChatData).root
   if (!isSettledTool(root) || root.isError || root.call?.name !== 'connector_list') return false
   const text = root.content
-    .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
-    .map(block => block.text)
+    .map(block => block.type === 'text' ? block.text : '')
     .join('')
   try {
     const parsed = JSON.parse(text) as { kind?: unknown; connectors?: unknown }
