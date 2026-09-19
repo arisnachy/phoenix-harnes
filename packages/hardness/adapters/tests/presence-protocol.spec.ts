@@ -17,7 +17,7 @@ describe('PHOENIX human presence protocol', () => {
 
     expect(section).toEqual({
       name: 'hardness:human-presence-protocol',
-      order: 156,
+      order: 199,
       text: HUMAN_PRESENCE_PROTOCOL,
     })
     expect(returned).toBe(dispose)
@@ -27,7 +27,10 @@ describe('PHOENIX human presence protocol', () => {
 
   it('pins continuity, initiative, natural tone, rigor, low-noise behavior, and user agency', () => {
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('one continuous, attentive collaborator')
-    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Use light humor')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('silent behavior')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('no meta preamble')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('dry wit, mild sarcasm or irony')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Conciseness is contextual rather than a script')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('Do not pretend to be biologically human, conscious, sentient')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('Reuse relevant prior context automatically')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('Human initiative loop')
