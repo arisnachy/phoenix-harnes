@@ -223,6 +223,8 @@ export interface InputState {
     readonly text: string
     /** Serialized model-facing text, when references rewrite the display form. */
     readonly modelText?: string
+    /** Host delivery mode for this admission; used to reconcile steering with its queue mirror. */
+    readonly mode: InputSubmitMode
     readonly startedAt: number
   }
   /** Ordered runtime-only image ids; bytes and URLs stay in ConversationController. */

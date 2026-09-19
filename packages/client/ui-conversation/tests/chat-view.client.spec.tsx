@@ -427,7 +427,7 @@ describe('ChatView', () => {
     const previousAnswer = assistant(2, 'respuesta previa')
     const h = makeHarness(
       { nodes: [previousUser, previousAnswer] },
-      { pendingSubmit: { text: 'mensaje inmediato', startedAt } },
+      { pendingSubmit: { text: 'mensaje inmediato', mode: 'queue', startedAt } },
     )
     const view = render(<h.ChatView {...h.props} />)
 
@@ -458,6 +458,7 @@ describe('ChatView', () => {
         pendingSubmit: {
           text: 'abre @reporte',
           modelText: 'abre <file-ref>reporte</file-ref>',
+          mode: 'queue',
           startedAt,
         },
       },
@@ -544,6 +545,43 @@ describe('ChatView', () => {
         'fixture:user:1', 'fixture:assistant:2',
         'fixture:tool:a', 'call:a', 'fixture:tool:b', 'call:b',
       ])
+  })
+
+  it('renders one bubble when a local steer is already mirrored by the Host queue', () => {
+    const startedAt = Date.now()
+    const pending = {
+      id: 'steer-occurrence-local' as never,
+      messageId: 'steer-message-local' as never,
+      placement: 'steering' as const,
+      content: [{ type: 'text' as const, text: 'crea una grafica' }],
+      preview: 'crea una grafica',
+      text: 'crea una grafica',
+    }
+    const h = makeHarness(
+      { nodes: [assistant(1, 'terminando saludo')], queue: [pending], running: true },
+      { pendingSubmit: { text: 'crea una grafica', modelText: 'crea una grafica', mode: 'steer', startedAt } },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getAllByText('crea una grafica')).toHaveLength(1)
+    expect(view.container.querySelectorAll('[data-pending-steering]')).toHaveLength(1)
+
+    act(() => {
+      h.set({
+        queue: [],
+        nodes: [
+          assistant(1, 'terminando saludo'),
+          {
+            kind: 'steering', messageId: pending.messageId,
+            seq: 2, time: startedAt + 1,
+            content: pending.content, source: null,
+          },
+        ],
+      })
+    })
+
+    expect(view.getAllByText('crea una grafica')).toHaveLength(1)
+    expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
   })
 
   it('renders Host-pending steering at the flow tail and hands off to the durable node', () => {
