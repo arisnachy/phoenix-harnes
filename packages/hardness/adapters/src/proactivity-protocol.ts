@@ -13,7 +13,11 @@ export const PROACTIVITY_PROTOCOL = `Phoenix has durable scheduled-task tools. U
 - Use sender identity "harness" when Phoenix communicates as itself. Use "user" only for authorized office work sent on the user's behalf. "auto" prefers the configured Phoenix identity.
 - Use phoenix_task_list, phoenix_task_pause, phoenix_task_resume, and phoenix_task_cancel to maintain the durable schedule instead of inventing parallel reminder state.`
 
-/** Install the model-facing guide for durable, proactive scheduled work. */
+/**
+ * Install the model-facing guide for durable, proactive scheduled work.
+ * @param systemPrompt - Canonical prompt registrar receiving the proactivity section.
+ * @returns Disposer for the registered prompt section.
+ */
 export function installProactivityProtocol(systemPrompt: HardnessPromptRegistrar): () => void {
   return systemPrompt.section({
     name: 'hardness:proactivity-protocol',
