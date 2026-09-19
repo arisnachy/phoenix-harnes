@@ -127,7 +127,7 @@ export interface Agent {
 
   /**
    * Submit steering for the nearest step. An idle driver starts a turn.
-   * While a model stream is active, a running driver interrupts that stream
+   * Once a model stream is emitting visible assistant text, a running driver interrupts that stream
    * without canceling the turn, preserves any user-visible prefix as an
    * interrupted assistant message, and consumes the steering at the next step
    * boundary. Tool execution is not interrupted; steering waits for its safe
