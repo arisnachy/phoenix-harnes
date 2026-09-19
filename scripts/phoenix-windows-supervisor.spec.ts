@@ -38,13 +38,14 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   })
 
   it('uses only an exact clean verified staged activator for prepared self-updates', () => {
-    expect(source).toContain('function preparedActivator()')
+    expect(source).toContain('function preparedActivator(target = restartRequestTarget())')
     expect(source).toContain("const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')")
     expect(source).toContain('target !== undefined')
     expect(source).toContain('sameRepository(stage)')
     expect(source).toContain('gitClean(stage)')
     expect(source).toContain("gitValue(stage, ['rev-parse', 'HEAD']) === target")
     expect(source).toContain('using the verified staged activator for prepared self-update compatibility')
+    expect(source).toContain('activatePrepared(requestedTarget)')
   })
 
   it('uses the live activator when the prepared target needs managed realignment', () => {
