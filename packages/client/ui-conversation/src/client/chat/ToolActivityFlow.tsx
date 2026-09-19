@@ -66,6 +66,26 @@ function isWholeActivity(kind: string): boolean {
   return kind === 'context' || kind === 'tool-call' || kind === 'model-retry'
 }
 
+function isActionableConnectorRecovery(node: OrderedChatNode): boolean {
+  if (node.kind !== 'tool-call') return false
+  const root = (node.data as ToolChatData).root
+  if (!isSettledTool(root) || root.isError || root.call?.name !== 'connector_list') return false
+  const text = root.content
+    .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
+    .map(block => block.text)
+    .join('')
+  try {
+    const parsed = JSON.parse(text) as { kind?: unknown; connectors?: unknown }
+    if (parsed.kind !== 'connector_list' || !Array.isArray(parsed.connectors)) return false
+    return parsed.connectors.some(value => {
+      if (typeof value !== 'object' || value === null) return false
+      return (value as { recommended_action?: unknown }).recommended_action === 'connect-or-reconnect'
+    })
+  } catch {
+    return false
+  }
+}
+
 function activityNode(node: OrderedChatNode): ActivityItem {
   const liveTool = node.kind === 'tool-call'
     && isRunningTool((node.data as ToolChatData).root)
@@ -118,6 +138,14 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   }
 
   for (const node of nodes) {
+    // Connector authorization is a user action, not background tool telemetry.
+    // Keep its compact Connect/Reconnect card directly in the chat flow instead
+    // of burying it inside the collapsed Tools disclosure.
+    if (isActionableConnectorRecovery(node)) {
+      flush()
+      flow.push({ kind: 'node', key: node.key })
+      continue
+    }
     if (isWholeActivity(node.kind)) {
       const images = imageActivity(node)
       if (images.length > 0) {
