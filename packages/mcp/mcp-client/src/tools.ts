@@ -59,8 +59,7 @@ const FUNCTION_ROOT_FORBIDDEN_KEYS = new Set(['oneOf', 'anyOf', 'allOf', 'enum',
 const FUNCTION_ROOT_COMPOSITIONS = ['oneOf', 'anyOf', 'allOf'] as const
 
 const MONDAY_SERVER_NAME = 'monday-com-monday-com'
-const MONDAY_CREATE_ACTION_RAW_NAME = 'create_action'
-const MONDAY_CREATE_ACTION_COMPAT_RAW_NAME = 'phoenix_create_action'
+const MONDAY_ARGUMENT_ENVELOPE_KEY = 'phoenix_arguments'
 
 type SchemaObject = Record<string, unknown>
 
@@ -74,6 +73,11 @@ function schemaStringArray(value: unknown): string[] {
 
 function schemaProperties(schema: SchemaObject): SchemaObject {
   return isSchemaObject(schema.properties) ? schema.properties : {}
+}
+
+function unwrapMondayArguments(args: Record<string, unknown>): Record<string, unknown> {
+  const wrapped = args[MONDAY_ARGUMENT_ENVELOPE_KEY]
+  return Object.keys(args).length === 1 && isSchemaObject(wrapped) ? wrapped : args
 }
 
 function mergeSchemaProperty(left: unknown, right: unknown): unknown {
@@ -273,40 +277,8 @@ export async function syncTools(
         supportedOutputSchema(tool.outputSchema),
         tool.execution?.taskSupport === 'required',
         opts,
+        opts.serverName === MONDAY_SERVER_NAME ? unwrapMondayArguments : undefined,
       ))
-      if (opts.serverName === MONDAY_SERVER_NAME && tool.name === MONDAY_CREATE_ACTION_RAW_NAME) {
-        const compatPublicName = publicToolName(opts.serverName, MONDAY_CREATE_ACTION_COMPAT_RAW_NAME)
-        const knownArguments = Object.keys(schemaProperties(modelInputSchema(tool.inputSchema))).sort()
-        definitions.set(compatPublicName, createDefinition(
-          client,
-          ctx,
-          compatPublicName,
-          tool.name,
-          [
-            'PHOENIX local compatibility wrapper for Monday create_action.',
-            'Use this instead of the raw create_action tool on OpenAI/Codex routes.',
-            'Put the exact Monday create_action argument object inside the arguments field.',
-            knownArguments.length > 0 ? `Known argument keys from the live Monday schema: ${knownArguments.join(', ')}.` : '',
-            tool.description ?? '',
-          ].filter(Boolean).join(' '),
-          {
-            type: 'object',
-            properties: {
-              arguments: {
-                type: 'object',
-                description: 'Exact argument object forwarded unchanged to Monday create_action.',
-                additionalProperties: true,
-              },
-            },
-            required: ['arguments'],
-            additionalProperties: false,
-          },
-          supportedOutputSchema(tool.outputSchema),
-          tool.execution?.taskSupport === 'required',
-          opts,
-          (args) => isSchemaObject(args.arguments) ? args.arguments : {},
-        ))
-      }
     }
     cursor = response.nextCursor
   } while (cursor)
@@ -445,7 +417,7 @@ function createOutput(rawName: string, structuredSchema: JsonSchemaNode | undefi
  * @param taskRequired - whether the remote tool requires unsupported task execution.
  * @param opts - bridge timeout and namespace options.
  * @param projections - execution-local rich result projections.
- * @param transformArguments - optional local argument envelope unwrapping before the wire call.
+ * @param transformArguments - optional local argument-envelope unwrapping before the wire call.
  * @returns the ToolRuntime execute callback for this remote tool.
  */
 function createExecutor(
