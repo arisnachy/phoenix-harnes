@@ -27,6 +27,9 @@ const SUPPORTED_THINKING_LEVELS = new Set<string>(THINKING_LEVELS)
  * Whether Phoenix may overlay the live Codex catalog on this route.
  * Schemastery may materialize an omitted array as [], so empty and absent both
  * mean automatic; a non-empty list is an explicit human pin.
+ *
+ * @param profile - Provider settings currently active for the Codex route.
+ * @returns True only when the route exists and does not pin a non-empty model list.
  */
 export function codexCatalogIsAutomatic(profile: PiAiProviderProfile | undefined): profile is PiAiProviderProfile {
   return profile !== undefined && (profile.models === undefined || profile.models.length === 0)
@@ -36,6 +39,9 @@ export function codexCatalogIsAutomatic(profile: PiAiProviderProfile | undefined
  * Translate Codex account metadata into the profile vocabulary pi-ai can
  * materialize today. Unknown future reasoning levels are ignored rather than
  * crashing the whole selector; the model itself remains selectable.
+ *
+ * @param models - Account-visible models returned by Codex app-server.
+ * @returns Pi-ai model profiles safe to materialize in the current runtime.
  */
 export function codexModelsToProfiles(models: readonly CodexDiscoveredModel[]): PiAiModelProfile[] {
   return models.map((model) => {
@@ -55,6 +61,7 @@ export function codexModelsToProfiles(models: readonly CodexDiscoveredModel[]): 
   })
 }
 
+/** Dependencies and policy knobs for one live Codex catalog instance. */
 export interface CodexLiveCatalogOptions {
   /** Injectable app-server seam for deterministic tests. */
   transport?: CodexModelListTransport
@@ -87,6 +94,7 @@ export class CodexLiveCatalog {
   private readonly refreshIntervalMs: number
   private readonly installedModelIds: () => readonly string[]
   private readonly logger: { warn(value: unknown): void } | undefined
+  /** Monotonic catalog generation used to invalidate provider-profile memoization. */
   revision = 0
 
   constructor(options: CodexLiveCatalogOptions = {}) {
@@ -103,7 +111,11 @@ export class CodexLiveCatalog {
     if (error !== undefined) this.logger?.warn(error)
   }
 
-  /** Latest account-visible ids in provider order, or no live answer yet. */
+  /**
+   * Read the latest account-visible ids in provider order.
+   *
+   * @returns The last valid live id list, or undefined before any valid refresh.
+   */
   visibleIds(): readonly string[] | undefined {
     return this.visible?.map(model => model.id)
   }
@@ -111,6 +123,9 @@ export class CodexLiveCatalog {
   /**
    * Overlay the dispatch superset only when the route is automatic. The input
    * object is returned by identity when no overlay applies.
+   *
+   * @param providers - Raw provider settings before live Codex augmentation.
+   * @returns Provider settings with the dispatch-safe Codex model superset when applicable.
    */
   overlayProviders(
     providers: Readonly<Record<string, PiAiProviderProfile>>,
@@ -130,6 +145,11 @@ export class CodexLiveCatalog {
    * Refresh Codex when the adapter asks for this route. Failures and empty
    * replies keep the previous/static catalog. Concurrent callers share one
    * app-server interrogation.
+   *
+   * @param provider - Provider route requested by the adapter.
+   * @param profile - Current raw provider profile for that route.
+   * @param force - Retry even inside the failure cooldown when no fresh success exists.
+   * @returns The last valid account-visible model ids, or undefined when unavailable/inapplicable.
    */
   async refresh(
     provider: string,
