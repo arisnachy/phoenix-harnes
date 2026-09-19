@@ -95,6 +95,7 @@ export function UserProfileRow(props: UserProfileRowProps) {
       <div className={css.actions}>
         <button type="button" className={css.secondary} disabled={!state.dirty || disabled} onClick={props.discard}>{t('discard')}</button>
         <button type="button" className={css.primary} disabled={!state.dirty || state.invalid || disabled} onClick={props.save}>{t(state.saving ? 'saving' : 'save')}</button>
+        {state.saved ? <span className={css.saved} role="status" aria-live="polite">✓ {t('saved')}</span> : null}
         <button type="button" className={css.danger} disabled={disabled} onClick={props.clear}>{t('clear')}</button>
       </div>
     </section>
