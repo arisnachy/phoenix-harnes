@@ -210,6 +210,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return;
         }
         window.ShowAndActivate();
+        window.RefreshPhoenixOnEntry();
     }
 
     private async Task StartAsync()
@@ -257,15 +258,6 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         if (state == ManagedRuntimeState.Ready)
             return await RefreshManagedRuntimeAsync();
 
-        if (state == ManagedRuntimeState.Unmanaged)
-        {
-            window.SetStartupStatus("Phoenix encontró un runtime local no administrado.", isError: true);
-            MessageBox.Show(
-                $"Phoenix encontró un runtime no administrado en:\n{Program.RuntimeRoot}\n\nPor seguridad no lo modificará.\n\nDiagnóstico: {Program.LogPath}",
-                "Phoenix", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return false;
-        }
-
         var script = Path.Combine(AppContext.BaseDirectory, "bootstrap-runtime.ps1");
         if (!File.Exists(script))
         {
@@ -275,15 +267,51 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return false;
         }
 
-        window.SetStartupStatus(state == ManagedRuntimeState.Recoverable
-            ? "Reparando una instalación incompleta de Phoenix…"
-            : "Preparando Phoenix por primera vez…");
-        tray.Text = state == ManagedRuntimeState.Recoverable ? "Phoenix · reparando" : "Phoenix · instalando";
+        if (state == ManagedRuntimeState.Unmanaged)
+        {
+            // %LOCALAPPDATA%\Phoenix\runtime belongs exclusively to the installed desktop shell.
+            // A half-created folder from an interrupted install must be replaced, not treated as
+            // immutable user data. The user's source checkout lives elsewhere and is never touched.
+            window.SetStartupStatus("Reparando el runtime local de Phoenix…");
+            tray.Text = "Phoenix · reparando";
+            if (!ResetManagedRuntimeDirectoryForRepair("runtime exists without a valid Phoenix managed marker/Git state"))
+            {
+                ShowRuntimePreparationFailure();
+                return false;
+            }
+            state = ManagedRuntimeState.Missing;
+        }
 
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            window.SetStartupStatus(state == ManagedRuntimeState.Recoverable || attempt > 1
+                ? "Reparando una instalación incompleta de Phoenix…"
+                : "Preparando Phoenix por primera vez…");
+            tray.Text = state == ManagedRuntimeState.Recoverable || attempt > 1 ? "Phoenix · reparando" : "Phoenix · instalando";
+
+            var exitCode = await RunBootstrapAsync(script, attempt);
+            if (exitCode == 0 && ManagedRuntimeMarker.Inspect(Program.RuntimeRoot) == ManagedRuntimeState.Ready)
+                return true;
+
+            if (attempt == 1)
+            {
+                DesktopLog.Write($"Bootstrap attempt {attempt} did not produce a ready runtime (exit={exitCode}); recreating the disposable managed runtime and retrying once.");
+                if (!ResetManagedRuntimeDirectoryForRepair($"bootstrap attempt {attempt} failed with exit code {exitCode}"))
+                    break;
+                state = ManagedRuntimeState.Missing;
+            }
+        }
+
+        ShowRuntimePreparationFailure();
+        return false;
+    }
+
+    private async Task<int> RunBootstrapAsync(string script, int attempt)
+    {
         var psi = new ProcessStartInfo
         {
             FileName = "powershell.exe",
-            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -RuntimeRoot \"{Program.RuntimeRoot}\"",
+            Arguments = $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{script}\" -RuntimeRoot \"{Program.RuntimeRoot}\"",
             UseShellExecute = false,
             CreateNoWindow = true,
             WorkingDirectory = AppContext.BaseDirectory,
@@ -291,12 +319,12 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             RedirectStandardError = true,
         };
 
-        DesktopLog.Write($"Starting managed runtime bootstrap: {psi.FileName} {psi.Arguments}");
+        DesktopLog.Write($"Starting managed runtime bootstrap attempt {attempt}: {psi.FileName} {psi.Arguments}");
         using var bootstrap = Process.Start(psi);
         if (bootstrap is null)
         {
-            window.SetStartupStatus("No se pudo lanzar el preparador del runtime.", isError: true);
-            return false;
+            DesktopLog.Write($"Bootstrap attempt {attempt} could not start.");
+            return -1;
         }
 
         var stdoutTask = bootstrap.StandardOutput.ReadToEndAsync();
@@ -304,18 +332,62 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         await bootstrap.WaitForExitAsync();
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
-        if (!string.IsNullOrWhiteSpace(stdout)) DesktopLog.Write("bootstrap stdout:\n" + stdout.Trim());
-        if (!string.IsNullOrWhiteSpace(stderr)) DesktopLog.Write("bootstrap stderr:\n" + stderr.Trim());
-        DesktopLog.Write($"Bootstrap exited with code {bootstrap.ExitCode}.");
+        if (!string.IsNullOrWhiteSpace(stdout)) DesktopLog.Write($"bootstrap attempt {attempt} stdout:\n" + stdout.Trim());
+        if (!string.IsNullOrWhiteSpace(stderr)) DesktopLog.Write($"bootstrap attempt {attempt} stderr:\n" + stderr.Trim());
+        DesktopLog.Write($"Bootstrap attempt {attempt} exited with code {bootstrap.ExitCode}.");
+        return bootstrap.ExitCode;
+    }
 
-        if (bootstrap.ExitCode == 0 && ManagedRuntimeMarker.Inspect(Program.RuntimeRoot) == ManagedRuntimeState.Ready)
+    private bool ResetManagedRuntimeDirectoryForRepair(string reason)
+    {
+        try
+        {
+            var runtime = Path.GetFullPath(Program.RuntimeRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var expected = Path.GetFullPath(Path.Combine(Program.InstallRoot, "runtime"))
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (!string.Equals(runtime, expected, StringComparison.OrdinalIgnoreCase))
+            {
+                DesktopLog.Write($"Refused managed-runtime repair outside the desktop-owned path: {runtime}");
+                return false;
+            }
+
+            if (!Directory.Exists(runtime))
+                return true;
+
+            var quarantine = $"{runtime}.broken-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}";
+            DesktopLog.Write($"Self-healing managed runtime ({reason}); moving {runtime} to {quarantine}.");
+            Directory.Move(runtime, quarantine);
+
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    Directory.Delete(quarantine, recursive: true);
+                    DesktopLog.Write($"Removed quarantined runtime after successful detach: {quarantine}");
+                }
+                catch (Exception ex)
+                {
+                    DesktopLog.Write($"Could not remove quarantined runtime immediately: {quarantine}", ex);
+                }
+            });
             return true;
+        }
+        catch (Exception ex)
+        {
+            DesktopLog.Write("Managed runtime self-heal failed", ex);
+            return false;
+        }
+    }
 
-        window.SetStartupStatus($"No se pudo preparar Phoenix.\n\nRevisa: {Program.LogPath}", isError: true);
+    private void ShowRuntimePreparationFailure()
+    {
+        window.SetStartupStatus(
+            $"Phoenix intentó reparar su runtime automáticamente, pero no pudo terminar la preparación.\n\nRevisa: {Program.LogPath}",
+            isError: true);
+        tray.Text = "Phoenix · reparación bloqueada";
         MessageBox.Show(
-            $"No se pudo preparar el runtime administrado de Phoenix con los componentes incluidos en el instalador.\n\nReinstala la versión más reciente de Phoenix.\n\nDiagnóstico: {Program.LogPath}",
+            $"Phoenix intentó reparar y reconstruir automáticamente su runtime, pero la preparación siguió fallando.\n\nDiagnóstico: {Program.LogPath}",
             "Phoenix", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        return false;
     }
 
     private async Task<bool> RefreshManagedRuntimeAsync()
