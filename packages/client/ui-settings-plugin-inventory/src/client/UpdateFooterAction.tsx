@@ -187,12 +187,6 @@ export function UpdateFooterAction({
     void _error
   }, [])
 
-  const reportRestartFailure = useCallback(() => {
-    // A failed restart request is an actionable updater operation failure,
-    // unlike a background read that may only be a transient transport gap.
-    setSnapshot({ status: 'error' })
-  }, [])
-
   const refresh = useCallback(async () => {
     try {
       acceptDurableSnapshot(await readUpdateState())
@@ -282,16 +276,29 @@ export function UpdateFooterAction({
   const onRestart = async (): Promise<void> => {
     if (requesting) return
     setRequesting(true)
+
+    // Move to restarting optimistically before the RPC. In supervised mode the
+    // Host may already have received the automatic activation request and can
+    // disappear before this click's response reaches the browser. That expected
+    // disconnect must never flash a false "update failed" state.
+    armRestartReconnectGrace()
+    setSnapshot({ ...snapshot, status: 'restarting', phase: 'restart' })
+
     try {
       const receipt = await restartForUpdate()
-      if (receipt.accepted) {
-        armRestartReconnectGrace()
-        setSnapshot({ ...snapshot, status: 'restarting', phase: 'restart' })
-        return
-      }
+      if (receipt.accepted) return
+
+      // The Host stayed reachable and explicitly rejected the request, so the
+      // durable state is authoritative again.
+      clearRestartReconnectGrace()
       await refresh()
     } catch {
-      reportRestartFailure()
+      // Keep "restarting" during the bounded reconnect grace. If the Host never
+      // actually restarts, the next successful poll clears the grace marker and
+      // replaces this optimistic state with the durable updater state.
+      if (!restartReconnectGraceActive()) {
+        await refresh()
+      }
     } finally {
       setRequesting(false)
     }

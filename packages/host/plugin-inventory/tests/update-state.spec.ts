@@ -150,6 +150,55 @@ describe('PHOENIX updater state bridge', () => {
     expect(requestPhoenixUpdateRestart(repo)).toEqual({ accepted: false, status: 'ready' })
   })
 
+  it('projects an already queued automatic activation as restarting instead of actionable ready', () => {
+    const repo = repository()
+    const target = git(repo, 'rev-parse', 'HEAD')
+    writeFileSync(statePath(repo), JSON.stringify({
+      schema: 1,
+      status: 'ready',
+      phase: 'ready',
+      current: target,
+      target,
+    }))
+    writeFileSync(join(repo, '.git', 'phoenix-update-restart-request.json'), JSON.stringify({
+      schema: 1,
+      target,
+      requestedAt: new Date().toISOString(),
+    }))
+
+    expect(readPhoenixUpdateSnapshot(repo)).toMatchObject({
+      status: 'restarting',
+      phase: 'restart',
+      target,
+    })
+    expect(requestPhoenixUpdateRestart(repo)).toEqual({
+      accepted: true,
+      status: 'restarting',
+    })
+  })
+
+  it('uses the common Git control directory from an isolated linked runtime', () => {
+    const repo = repository()
+    const target = git(repo, 'rev-parse', 'HEAD')
+    const linked = tempRoot()
+    rmSync(linked, { recursive: true, force: true })
+    git(repo, 'worktree', 'add', '--detach', linked, target)
+
+    writeFileSync(statePath(repo), JSON.stringify({
+      schema: 1,
+      status: 'ready',
+      phase: 'ready',
+      current: target,
+      target,
+    }))
+    expect(readPhoenixUpdateSnapshot(linked)).toMatchObject({ status: 'ready', target })
+
+    expect(requestPhoenixUpdateRefresh(linked)).toEqual({ accepted: true })
+    expect(JSON.parse(readFileSync(join(repo, '.git', 'phoenix-update-refresh-request.json'), 'utf8'))).toMatchObject({
+      schema: 1,
+    })
+  })
+
   it('queues an immediate updater refresh without changing the durable update state', () => {
     const repo = repository()
     expect(requestPhoenixUpdateRefresh(repo)).toEqual({ accepted: true })
