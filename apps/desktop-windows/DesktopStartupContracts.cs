@@ -39,6 +39,10 @@ internal static class DesktopRuntimeLaunchContract
 
         startInfo.Environment["PHOENIX_DESKTOP_MANAGED"] = "1";
         startInfo.Environment["PHOENIX_DESKTOP_CONTROL_DESCRIPTOR"] = controlDescriptorPath;
+        startInfo.Environment["PHOENIX_SURFACE"] = "desktop";
+        startInfo.Environment["PHOENIX_DESKTOP_SHELL"] = "1";
+        startInfo.Environment["PHOENIX_BROWSER_AUTOSTART"] = "true";
+        startInfo.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"] = "chrome";
         return startInfo;
     }
 }
