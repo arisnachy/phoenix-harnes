@@ -51,6 +51,7 @@ export interface UserProfileRowState {
   invalid: boolean
   saving: boolean
   failed: boolean
+  saved: boolean
   preferredName: UserProfileFieldState
   dateOfBirth: UserProfileFieldState
   gender: UserProfileFieldState
