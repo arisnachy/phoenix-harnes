@@ -71,6 +71,37 @@ jobs:
           Copy-Item apps/desktop-windows/phoenix.ico dist/phoenix-desktop/phoenix.ico
           Copy-Item installer/windows/bootstrap-runtime.ps1 dist/phoenix-desktop/bootstrap-runtime.ps1
 
+      - name: Bundle managed runtime toolchain
+        shell: pwsh
+        run: |
+          $nodeVersion = '22.19.0'
+          $gitRelease = 'v2.55.0.windows.5'
+          $gitVersion = '2.55.0.5'
+          $toolRoot = Join-Path (Resolve-Path dist/phoenix-desktop).Path 'runtime-tools'
+          $nodeRoot = Join-Path $toolRoot 'node'
+          $gitRoot = Join-Path $toolRoot 'git'
+          New-Item -ItemType Directory -Force $toolRoot | Out-Null
+
+          $nodeZip = Join-Path $env:RUNNER_TEMP "node-v$nodeVersion-win-x64.zip"
+          Invoke-WebRequest -Uri "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x64.zip" -OutFile $nodeZip
+          $nodeExtract = Join-Path $env:RUNNER_TEMP "phoenix-node-$nodeVersion"
+          Remove-Item $nodeExtract -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -Path $nodeZip -DestinationPath $nodeExtract -Force
+          $nodeSource = Join-Path $nodeExtract "node-v$nodeVersion-win-x64"
+          Move-Item -Path $nodeSource -Destination $nodeRoot
+
+          $gitZip = Join-Path $env:RUNNER_TEMP "MinGit-$gitVersion-64-bit.zip"
+          Invoke-WebRequest -Uri "https://github.com/git-for-windows/git/releases/download/$gitRelease/MinGit-$gitVersion-64-bit.zip" -OutFile $gitZip
+          Expand-Archive -Path $gitZip -DestinationPath $gitRoot -Force
+
+          if (-not (Test-Path (Join-Path $nodeRoot 'node.exe'))) { throw 'Bundled node.exe is missing' }
+          if (-not (Test-Path (Join-Path $nodeRoot 'corepack.cmd'))) { throw 'Bundled corepack.cmd is missing' }
+          if (-not (Test-Path (Join-Path $gitRoot 'cmd\git.exe'))) { throw 'Bundled git.exe is missing' }
+
+          & (Join-Path $nodeRoot 'node.exe') --version
+          & (Join-Path $nodeRoot 'corepack.cmd') --version
+          & (Join-Path $gitRoot 'cmd\git.exe') --version
+
       - name: Verify WebView2 deployment payload
         shell: pwsh
         run: |
@@ -89,6 +120,15 @@ jobs:
           }
           if (-not ($iss -match '(?m)^CloseApplications=force\s*$')) {
             throw 'Installer must force-close a running Phoenix before replacing Phoenix.exe/WebView2Loader.dll'
+          }
+          if (-not (Test-Path dist/phoenix-desktop/runtime-tools/node/node.exe)) {
+            throw 'Installer payload is missing bundled Node.js'
+          }
+          if (-not (Test-Path dist/phoenix-desktop/runtime-tools/node/corepack.cmd)) {
+            throw 'Installer payload is missing bundled Corepack'
+          }
+          if (-not (Test-Path dist/phoenix-desktop/runtime-tools/git/cmd/git.exe)) {
+            throw 'Installer payload is missing bundled MinGit'
           }
           if ($iss -match '(?m)^Filename:\s*"powershell\.exe".*bootstrap-runtime\.ps1') {
             throw 'Installer must not hide first-run runtime bootstrap; Phoenix.exe owns visible bootstrap now'
