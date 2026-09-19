@@ -182,6 +182,51 @@ describe('Codex tool-schema compatibility', () => {
     expect(wrapper.function.parameters).not.toHaveProperty('anyOf')
   })
 
+  it('repairs deferred additional_tools and tool-search output definitions inside Responses input', () => {
+    const raw = {
+      oneOf: [
+        { type: 'object', properties: { board_id: { type: 'string' } } },
+        { type: 'object', properties: { item_id: { type: 'string' } } },
+      ],
+    }
+    const payload = {
+      tools: [],
+      input: [
+        { role: 'user', content: [{ type: 'input_text', text: 'use Monday' }] },
+        {
+          type: 'additional_tools',
+          role: 'developer',
+          tools: [{
+            type: 'function',
+            name: 'mcp__monday-com-monday-com__create_action',
+            parameters: raw,
+          }],
+        },
+        {
+          type: 'tool_search_output',
+          call_id: 'pi_tool_load_1',
+          execution: 'client',
+          status: 'completed',
+          tools: [{
+            type: 'function',
+            name: 'mcp__monday-com-monday-com__create_action',
+            parameters: raw,
+          }],
+        },
+      ],
+    }
+
+    const normalized = normalizeOpenAiFunctionToolPayload(payload) as typeof payload
+    for (const index of [1, 2]) {
+      const item = normalized.input[index] as {
+        tools: Array<{ parameters: Record<string, unknown> }>
+      }
+      expect(item.tools[0]?.parameters.type).toBe('object')
+      expect(item.tools[0]?.parameters).not.toHaveProperty('oneOf')
+    }
+    expect(normalized.input[0]).toBe(payload.input[0])
+  })
+
   it('keeps already-compatible final payloads referentially stable', () => {
     const payload = {
       tools: [{
