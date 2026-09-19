@@ -16,6 +16,7 @@ import {
 } from './mission-runtime.ts'
 import { installHardnessProtocol, type HardnessPromptRegistrar } from './protocol.ts'
 import { installProactivityProtocol } from './proactivity-protocol.ts'
+import { installConnectorProtocol } from './connector-protocol.ts'
 import { acquireProactivityEngine } from './proactivity-registry.ts'
 import { createProactivityExecutor, installProactivityRuntime } from './proactivity-runtime.ts'
 import { createProactivityTools } from './proactivity-tools.ts'
@@ -104,6 +105,7 @@ export { createConnectorInstallTool } from './connector-install-tool.ts'
 export type { McpRegistryInstallerService } from './connector-install-tool.ts'
 export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
+export { CONNECTOR_OPERATING_PROTOCOL, installConnectorProtocol } from './connector-protocol.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -195,6 +197,9 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   try {
     disposers.push(installHardnessProtocol(systemPrompt))
     if (modelTools) disposers.push(installProactivityProtocol(systemPrompt))
+    if (modelTools && (authorization !== undefined || mcpConnectors !== undefined)) {
+      disposers.push(installConnectorProtocol(systemPrompt))
+    }
 
     if (!modelTools) {
       // Capability projections and the mission/proactivity runtimes are host-owned.
