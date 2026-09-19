@@ -220,9 +220,6 @@ export function CodexQuotaRemaining({
           >
             <span className={css.railLabel}>{window.label}</span>
             <strong className={css.railValue}>{window.value}%</strong>
-            <span className={css.railTrack} aria-hidden="true">
-              <span className={css.railFill} style={{ width: `${String(window.value)}%` }} />
-            </span>
           </span>
         ))}
       </span>

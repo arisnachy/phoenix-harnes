@@ -135,7 +135,7 @@ describe('CodexQuotaRemaining', () => {
     expect(group.querySelectorAll('[data-quota-meter]')).toHaveLength(2)
   })
 
-  it('keeps 5h and 7d percentages visible in the collapsed sidebar rail', async () => {
+  it('keeps a quiet text-only 5h/7d readout in the collapsed sidebar rail', async () => {
     const d = directory('openai-codex')
     const auth = {
       list: vi.fn(() => Promise.resolve({
@@ -166,6 +166,9 @@ describe('CodexQuotaRemaining', () => {
     const rail = view.container.querySelector('[data-codex-quota-rail="true"]')
     expect(rail).not.toBeNull()
     expect(rail?.getAttribute('aria-label')).toBe('OpenAI Codex usage limits')
+    // Two window wrappers + two labels: no decorative progress-track/fill spans.
+    expect(rail?.querySelectorAll('span')).toHaveLength(4)
+    expect(rail?.querySelector('[style]')).toBeNull()
     expect(screen.queryByText(/↻/)).toBeNull()
   })
 
