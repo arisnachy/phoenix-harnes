@@ -550,6 +550,68 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.headers.some(headers => headers['chatgpt-account-id'] === 'acc_test')).toBe(true)
   })
 
+  it('sanitizes Monday MCP schemas on the direct ChatGPT Codex wire', async () => {
+    const server = await mockServer([
+      { status: 401, body: JSON.stringify({ error: { message: 'captured direct Codex request' } }) },
+      { status: 401, body: JSON.stringify({ error: { message: 'captured direct Codex fallback request' } }) },
+    ])
+    const jwtPayload = Buffer
+      .from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acc_monday_test' } }))
+      .toString('base64')
+    vi.stubEnv('PI_CODEX_MONDAY_JWT', `eyJhbGciOiJub25lIn0.${jwtPayload}.sig`)
+
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: { 'openai-codex': { apiKeyEnv: 'PI_CODEX_MONDAY_JWT', baseURL: server.url } },
+    })
+
+    await assemble(ctx, {
+      provider: 'openai-codex',
+      model: 'gpt-5.4',
+      messages: [],
+      tools: [{
+        name: 'mcp__monday-com-monday-com__create_action',
+        description: 'Create a Monday action',
+        parameters: {
+          oneOf: [
+            {
+              type: 'object',
+              properties: {
+                action: { const: 'create' },
+                board_id: { type: 'string' },
+              },
+              required: ['action', 'board_id'],
+            },
+            {
+              type: 'object',
+              properties: {
+                action: { const: 'update' },
+                item_id: { type: 'string' },
+              },
+              required: ['action', 'item_id'],
+            },
+          ],
+        },
+      }],
+    })
+
+    const requests = server.requests.filter((request): request is {
+      tools?: Array<{ name?: string; parameters?: Record<string, unknown> }>
+    } => typeof request === 'object' && request !== null)
+    const monday = requests
+      .flatMap(request => request.tools ?? [])
+      .find(tool => tool.name === 'mcp__monday-com-monday-com__create_action')
+
+    expect(server.paths.length).toBeGreaterThan(0)
+    expect(server.paths.every(path => path === '/codex/responses')).toBe(true)
+    expect(monday).toBeDefined()
+    expect(monday?.parameters?.type).toBe('object')
+    for (const key of ['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not']) {
+      expect(monday?.parameters).not.toHaveProperty(key)
+    }
+  })
+
   it('fails a claimless JWT on the Codex route before any request with sign-in guidance', async () => {
     const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'never reached' } }) }])
     // The JWT shape passes the platform-key fallback but carries no
