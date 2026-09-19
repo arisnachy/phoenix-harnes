@@ -14,7 +14,7 @@ export interface SpeechSynthesisUtteranceLike {
   onerror: (() => void) | null
   /** Browser speech rate; a slightly slower cadence sounds less mechanical. */
   rate?: number
-  /** Browser pitch; a small lift keeps the voice conversational. */
+  /** Browser pitch. */
   pitch?: number
   /** Browser output volume. */
   volume?: number
@@ -22,7 +22,7 @@ export interface SpeechSynthesisUtteranceLike {
   voice?: SpeechSynthesisVoiceLike
 }
 
-/** Minimal installed voice metadata used to choose a natural local voice. */
+/** Minimal installed voice metadata used to choose a natural voice. */
 export interface SpeechSynthesisVoiceLike {
   readonly name: string
   readonly lang: string
@@ -65,12 +65,66 @@ function defaultLanguage(): string {
   return navigator.language
 }
 
-/**
- * Remove formatting that should not be read aloud as punctuation or markup.
- * @param text - Assistant text before speech normalization.
- * @returns Plain conversational text suitable for speech synthesis.
- */
-export function conversationalSpeechText(text: string): string {
+const HUMAN_FIELDS = ['summary', 'message', 'description', 'result', 'objective', 'title', 'details', 'reason'] as const
+const TELEMETRY_LINE = /^\s*(?:tokens?|cache(?:[_ -]?(?:read|write|hit))?|revision|rev|sha|hash|id|usage|duration|timing|latency|elapsed|input[_ -]?tokens?|output[_ -]?tokens?)\s*[:=]\s*\S.*$/i
+const STANDALONE_STATUS = /^\s*(?:done|complete|completed|pass|passed|success|successful|ok|blocked|failed|failure|error|needs[_ -]?changes)\s*[:.!-]*\s*$/i
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function humanStatus(value: unknown, language: string): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const status = value.trim().toLowerCase().replace(/[ -]+/g, '_')
+  const spanish = language.toLowerCase().startsWith('es')
+  if (['done', 'complete', 'completed', 'pass', 'passed', 'success', 'successful', 'ok'].includes(status)) {
+    return spanish
+      ? 'Terminé la tarea y la verificación salió bien.'
+      : 'I finished the task and verification passed.'
+  }
+  if (['fail', 'failed', 'failure', 'error', 'needs_changes'].includes(status)) {
+    return spanish
+      ? 'Encontré un problema que debo corregir antes de dar la tarea por terminada.'
+      : 'I found a problem that I need to fix before I can call the task complete.'
+  }
+  if (status === 'blocked') {
+    return spanish
+      ? 'Encontré un bloqueo externo que impide continuar por ahora.'
+      : 'I found an external blocker that prevents me from continuing for now.'
+  }
+  return undefined
+}
+
+function structuredSpeechText(text: string, language: string): string | undefined {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    return undefined
+  }
+  if (!isRecord(parsed)) return undefined
+  for (const field of HUMAN_FIELDS) {
+    const value = parsed[field]
+    if (typeof value === 'string' && value.trim() !== '') return value.trim()
+  }
+  for (const field of ['status', 'phase', 'verdict', 'state'] as const) {
+    const spoken = humanStatus(parsed[field], language)
+    if (spoken !== undefined) return spoken
+  }
+  return undefined
+}
+
+function removeTelemetryLines(text: string): string {
+  const lines = text.split(/\r?\n/)
+  const meaningful = lines.filter(line => !TELEMETRY_LINE.test(line) && !STANDALONE_STATUS.test(line))
+  if (meaningful.some(line => line.trim() !== '')) return meaningful.join('\n')
+  const status = lines.map(line => line.trim()).find(line => STANDALONE_STATUS.test(line))
+  return status ?? text
+}
+
+function cleanSpeechMarkup(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -86,7 +140,24 @@ export function conversationalSpeechText(text: string): string {
     .trim()
 }
 
-/** Choose the closest installed voice, preferring language and local natural voices. */
+/**
+ * Convert assistant output into a short human transcript instead of reading
+ * machine telemetry, identifiers, markup, or raw structured status aloud.
+ * @param text - Assistant text before speech normalization.
+ * @param language - BCP 47 language used for natural status fallbacks.
+ * @returns Plain conversational text suitable for speech synthesis.
+ */
+export function conversationalSpeechText(text: string, language = defaultLanguage()): string {
+  const structured = structuredSpeechText(text, language)
+  const candidate = structured ?? removeTelemetryLines(text)
+  const cleaned = cleanSpeechMarkup(candidate)
+  if (structured === undefined && STANDALONE_STATUS.test(cleaned)) {
+    return humanStatus(cleaned.replace(/[:.!-]+$/g, ''), language) ?? cleaned
+  }
+  return cleaned
+}
+
+/** Choose the closest installed voice, strongly preferring natural Spanish voices. */
 function bestVoice(synthesis: SpeechSynthesisLike, language: string): SpeechSynthesisVoiceLike | undefined {
   const voices = synthesis.getVoices?.() ?? []
   const target = language.toLowerCase()
@@ -96,12 +167,15 @@ function bestVoice(synthesis: SpeechSynthesisLike, language: string): SpeechSynt
     const voiceLanguage = voice.lang.toLowerCase()
     const voiceBase = voiceLanguage.split('-')[0]
     if (voiceBase !== base) continue
-    const natural = /natural|neural|premium|enhanced/i.test(voice.name) ? 4 : 0
+    const natural = /natural|neural|premium|enhanced/i.test(voice.name) ? 60 : 0
     const feminine = [
-      'aria', 'samantha', 'sofia', 'sofía', 'jenny', 'sabina', 'zira', 'karen', 'susan',
-      'helena', 'luciana', 'marisol', 'paulina', 'ava', 'emma', 'laura', 'female', 'feminine', 'mujer',
-    ].some(name => voice.name.toLowerCase().includes(name)) ? 12 : 0
-    const score = feminine * 100 + (voiceLanguage === target ? 18 : 10) + (voice.localService === true ? 3 : 0) + natural
+      'alba', 'aria', 'ava', 'conchita', 'dalia', 'elena', 'elvira', 'emma', 'helena', 'isabela',
+      'jenny', 'karen', 'laura', 'luciana', 'marisol', 'monica', 'mónica', 'paloma', 'paulina',
+      'sabina', 'samantha', 'sofia', 'sofía', 'susan', 'ximena', 'zira', 'female', 'feminine', 'mujer',
+    ].some(name => voice.name.toLowerCase().includes(name)) ? 100 : 0
+    const languageScore = voiceLanguage === target ? 18 : 10
+    const local = voice.localService === true ? 2 : 0
+    const score = feminine + natural + languageScore + local
     if (best === undefined || score > best.score) best = { voice, score }
   }
   return best?.voice
@@ -161,7 +235,8 @@ export function createSpeechOutput(
 
   return {
     speak(text: string): void {
-      const transcript = conversationalSpeechText(text)
+      const selectedLanguage = language?.trim() || defaultLanguage()
+      const transcript = conversationalSpeechText(text, selectedLanguage)
       if (transcript === '') return
       if (synthesis === undefined || Utterance === undefined) {
         onState('unsupported')
@@ -170,10 +245,9 @@ export function createSpeechOutput(
       const current = ++epoch
       synthesis.cancel()
       const utterance = new Utterance(transcript)
-      const selectedLanguage = language?.trim() || defaultLanguage()
       utterance.lang = selectedLanguage
-      utterance.rate = 0.96
-      utterance.pitch = 1.02
+      utterance.rate = 0.93
+      utterance.pitch = 1
       utterance.volume = 0.98
       const voice = bestVoice(synthesis, selectedLanguage)
       if (voice !== undefined) utterance.voice = voice
