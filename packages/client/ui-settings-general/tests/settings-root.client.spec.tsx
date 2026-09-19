@@ -38,6 +38,7 @@ function mount({
   const renderSlot = vi.fn(
     ((key: string, _owner: unknown, opts?: { only?: string }) => {
       if (key === 'settings.section') return <div data-testid={`section-${opts?.only ?? 'all'}`} />
+      if (key === 'settings.trigger.trailing') return <span data-testid="settings-trailing-seat" />
       return SEAT_CONTENT[key]
     }) as SettingsRootComponentProps['renderSlot'],
   )
@@ -85,15 +86,20 @@ describe('SettingsRoot trigger', () => {
     const trigger = screen.getByRole('button', { name: 'Settings' })
     expect(trigger.hasAttribute('aria-label')).toBe(false)
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: true })
+    expect(trigger.contains(screen.getByTestId('settings-trailing-seat'))).toBe(true)
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(trigger)
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Settings', expanded: true })).toBeTruthy()
   })
 
-  it('hands the rail state to the trigger seat', () => {
+  it('hands the rail state to the trigger seat and keeps trailing telemetry outside the gear button', () => {
     const { renderSlot } = mount({ wide: false })
+    const trigger = screen.getByRole('button', { name: 'Settings' })
+    const trailing = screen.getByTestId('settings-trailing-seat')
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: false })
+    expect(renderSlot).toHaveBeenCalledWith('settings.trigger.trailing', { wide: false })
+    expect(trigger.contains(trailing)).toBe(false)
   })
 })
 
