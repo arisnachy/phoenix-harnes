@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-18-universal-capability-use-policy.md
-2026-09-18-universal-capability-use-policy.md: 837b01adf6de5af1cd5d9e76dc151612e93d0573
-2026-09-18-universal-capability-use-policy.zh.md: 13db142d1ba46891808d44b02217364822e390c9
+2026-09-18-universal-capability-use-policy.md: 318877faecbc08f9496de14e5d063053b5267166
+2026-09-18-universal-capability-use-policy.zh.md: 31554a81cf6630ddb46eb9b2e25d0cd21e23fbf1
