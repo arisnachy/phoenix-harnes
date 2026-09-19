@@ -106,6 +106,8 @@ describe('HARDNESS model operating protocol', () => {
     expect(rendered).toContain('inspect → resolve → plan → approve → execute → verify → present → audit')
     expect(rendered).toContain('classify the mission and select or adapt the HARDNESS cognitive workflow')
     expect(rendered).toContain('For every non-trivial mission call hardness_workflow')
+    expect(rendered).toContain('Never preface a user-facing reply by saying that you are following guidance')
+    expect(spanish).toContain('Nunca antepongas a una respuesta que estás siguiendo una guía')
     expect(rendered).toContain('workflow selection never grants execution authority')
     expect(rendered).toContain('Never execute an unresolved, unapproved, or unverified operation.')
     expect(rendered).toContain('only pass with a passing quality gate may enter DONE')
