@@ -4,6 +4,9 @@
     - button "General":
       - img
       - text: General
+    - button "Profile":
+      - img
+      - text: Profile
     - button "Models":
       - img
       - text: Models
