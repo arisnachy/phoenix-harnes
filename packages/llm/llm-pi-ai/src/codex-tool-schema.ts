@@ -3,7 +3,26 @@ import type { GenerateOptions, ToolSchema } from '@phoenix-ai/dsh-llm'
 const ROOT_COMPOSITION_KEYS = ['oneOf', 'anyOf', 'allOf'] as const
 const ROOT_FORBIDDEN_KEYS = new Set(['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not'])
 
+const OBJECT_ROOT_FUNCTION_APIS = new Set([
+  'openai-codex-responses',
+  'openai-responses',
+  'openai-completions',
+  'azure-openai-responses',
+])
+
 type JsonObject = Record<string, unknown>
+
+/**
+ * Whether this request route must expose function parameters with an object
+ * root. Codex enforces this strictly, and the OpenAI-compatible function-tool
+ * wires below share that request contract. Keeping the decision at the final
+ * provider seam catches MCPs that entered through any registration path while
+ * leaving unrelated provider protocols untouched.
+ */
+export function requiresObjectRootFunctionSchemas(provider: string, api: string): boolean {
+  return provider === 'openai-codex' || OBJECT_ROOT_FUNCTION_APIS.has(api)
+}
+
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
