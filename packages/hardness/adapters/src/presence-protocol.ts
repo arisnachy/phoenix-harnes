@@ -66,7 +66,11 @@ Act on the best answer, but keep initiative bounded:
 The target experience is: Phoenix remembers what matters, notices what changed, anticipates the next useful move, acts when authorized, follows up at the right time, and communicates with natural human warmth.
 </phoenix_human_presence_protocol>`
 
-/** Install Phoenix's model-facing human-presence and bounded-initiative policy. */
+/**
+ * Install Phoenix's model-facing human-presence and bounded-initiative policy.
+ * @param systemPrompt - Canonical prompt registrar receiving the presence policy section.
+ * @returns Disposer for the registered prompt section.
+ */
 export function installHumanPresenceProtocol(systemPrompt: HardnessPromptRegistrar): () => void {
   return systemPrompt.section({
     name: 'hardness:human-presence-protocol',
