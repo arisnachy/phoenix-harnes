@@ -416,25 +416,66 @@ describe('Chat node rendering', () => {
 })
 
 describe('ChatView', () => {
-  it('shows an ordinary sent message immediately before the durable Host event arrives', () => {
+  it('shows an ordinary sent message immediately at the flow tail before the durable Host event arrives', () => {
     const startedAt = Date.now()
+    const previousUser = {
+      ...user(1, 'mensaje previo'),
+      // Inside the Host/browser jitter window on purpose: unrelated earlier
+      // input must not suppress the new optimistic bubble.
+      time: startedAt - 500,
+    }
+    const previousAnswer = assistant(2, 'respuesta previa')
     const h = makeHarness(
-      { nodes: [] },
+      { nodes: [previousUser, previousAnswer] },
       { pendingSubmit: { text: 'mensaje inmediato', startedAt } },
     )
     const view = render(<h.ChatView {...h.props} />)
 
     const optimistic = view.getByText('mensaje inmediato').closest('[data-pending-steering]')
     expect(optimistic).not.toBeNull()
+    const previousRow = view.getByText('respuesta previa').closest('[data-chat-flow-key]')
+    expect(previousRow).not.toBeNull()
+    expect(previousRow!.compareDocumentPosition(optimistic!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
 
     const durable = {
-      ...user(1, 'mensaje inmediato'),
+      ...user(3, 'mensaje inmediato'),
       time: startedAt + 1,
     }
-    act(() => { h.set({ nodes: [durable] }) })
+    act(() => { h.set({ nodes: [previousUser, previousAnswer, durable] }) })
 
     expect(view.getAllByText('mensaje inmediato')).toHaveLength(1)
     expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+    const durableRow = view.getByText('mensaje inmediato').closest('[data-chat-flow-key]')
+    expect(durableRow).not.toBeNull()
+    expect(previousRow!.compareDocumentPosition(durableRow!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
+  it('hands off a reference-bearing optimistic bubble using its serialized model text', () => {
+    const startedAt = Date.now()
+    const h = makeHarness(
+      { nodes: [] },
+      {
+        pendingSubmit: {
+          text: 'abre @reporte',
+          modelText: 'abre <file-ref>reporte</file-ref>',
+          startedAt,
+        },
+      },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getByText('abre @reporte')).toBeTruthy()
+    act(() => {
+      h.set({
+        nodes: [{
+          ...user(1, 'abre <file-ref>reporte</file-ref>'),
+          time: startedAt + 1,
+        }],
+      })
+    })
+
+    expect(view.queryByText('abre @reporte')).toBeNull()
+    expect(view.getAllByText('abre <file-ref>reporte</file-ref>')).toHaveLength(1)
   })
 
   it('hands a windowless tool result to the Tool seat with an empty tool name', () => {

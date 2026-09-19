@@ -219,7 +219,10 @@ export interface InputState {
    * shell an attempt identity for admission recovery.
    */
   readonly pendingSubmit?: {
+    /** Display text echoed immediately in the transcript. */
     readonly text: string
+    /** Serialized model-facing text, when references rewrite the display form. */
+    readonly modelText?: string
     readonly startedAt: number
   }
   /** Ordered runtime-only image ids; bytes and URLs stay in ConversationController. */
