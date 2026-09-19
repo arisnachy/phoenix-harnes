@@ -9,6 +9,7 @@ type AuthorizationClient = IApiClient['authorization']
 /** One browser-visible authorization attempt, carrying its last notice forward. */
 export interface AuthorizationAttempt {
   id: string
+  key: string
   status: 'pending' | 'authorized' | 'cancelled' | 'failed'
   nextSeq: number
   message?: string
@@ -51,10 +52,12 @@ export function useAuthorizationAttempt(
   const [failure, setFailure] = useState<string | undefined>()
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
+  const popupClosedAt = useRef<number | undefined>()
 
   const closeReservedPopup = useCallback((): void => {
     const popup = popupRef.current
     popupRef.current = null
+    popupClosedAt.current = undefined
     if (popup !== null && !popup.closed) popup.close()
   }, [])
 
@@ -62,6 +65,25 @@ export function useAuthorizationAttempt(
     if (api === undefined || attempt?.status !== 'pending') return
     let stale = false
     const timer = window.setTimeout(() => {
+      const popup = popupRef.current
+      if (popup !== null && popup.closed) {
+        const firstClosedAt = popupClosedAt.current
+        if (firstClosedAt === undefined) popupClosedAt.current = Date.now()
+        else if (Date.now() - firstClosedAt >= 900) {
+          popupRef.current = null
+          popupClosedAt.current = undefined
+          void api.cancel({ attemptId: attempt.id }).finally(() => {
+            if (stale) return
+            setAttempt((current) => current?.id === attempt.id
+              ? { ...current, status: 'cancelled' }
+              : current)
+          })
+          return
+        }
+      } else {
+        popupClosedAt.current = undefined
+      }
+
       void api.status({ attemptId: attempt.id, after: attempt.nextSeq }).then((response) => {
         if (stale) return
         if (!response.result.ok) {
@@ -77,7 +99,7 @@ export function useAuthorizationAttempt(
           if (popupRef.current !== null && !popupRef.current.closed) {
             popupRef.current.location.replace(latest.url)
           } else {
-            window.open(latest.url, '_blank')
+            popupRef.current = window.open(latest.url, '_blank')
           }
         }
         const message = latest?.message ?? attempt.message
@@ -85,6 +107,7 @@ export function useAuthorizationAttempt(
         const code = latest?.code ?? attempt.code
         setAttempt({
           id: view.attemptId,
+          key: attempt.key,
           status: view.status,
           nextSeq: view.nextSeq,
           ...message === undefined ? {} : { message },
@@ -113,6 +136,7 @@ export function useAuthorizationAttempt(
     if (api === undefined) return
     setFailure(undefined)
     setAttempt(undefined)
+    opened.current.clear()
     // OAuth needs a window reserved synchronously inside the click gesture so
     // popup blockers allow the later consent navigation. Other methods never
     // reserve a tab. Any failed/cancelled attempt closes an unused reservation
@@ -125,12 +149,21 @@ export function useAuthorizationAttempt(
         setFailure(response.result.error.message)
         return
       }
-      setAttempt({ id: response.result.value.attemptId, status: 'pending', nextSeq: 0 })
+      setAttempt({ id: response.result.value.attemptId, key, status: 'pending', nextSeq: 0 })
     }, (error: unknown) => {
       closeReservedPopup()
       setFailure(String(error))
     })
   }
+
+  useEffect(() => {
+    if (attempt?.status !== 'authorized' && attempt?.status !== 'cancelled') return
+    const timeoutMs = attempt.status === 'authorized' ? 4_500 : 2_500
+    const timer = window.setTimeout(() => {
+      setAttempt((current) => current?.id === attempt.id ? undefined : current)
+    }, timeoutMs)
+    return () => { window.clearTimeout(timer) }
+  }, [attempt?.id, attempt?.status])
 
   const submitAnswer = (): void => {
     if (api === undefined || attempt?.prompt === undefined) return
@@ -178,6 +211,35 @@ export function AuthorizationAttemptProgress(props: {
 }): ReactNode {
   const { attempt } = props
   if (attempt === undefined) return null
+  if (attempt.status === 'authorized') {
+    return (
+      <div
+        className={`${styles['authorizationOutcome']} ${styles['authorizationOutcomeSuccess']}`}
+        role="status"
+        data-authorization-outcome="success"
+      >
+        <span className={styles['authorizationOutcomeIcon']} aria-hidden="true">✓</span>
+        <div className={styles['authorizationOutcomeCopy']}>
+          <strong>{props.t('accountConnected')}</strong>
+          {attempt.message === undefined ? null : <span>{attempt.message}</span>}
+        </div>
+      </div>
+    )
+  }
+  if (attempt.status === 'cancelled') {
+    return (
+      <div
+        className={`${styles['authorizationOutcome']} ${styles['authorizationOutcomeNeutral']}`}
+        role="status"
+        data-authorization-outcome="cancelled"
+      >
+        <span className={styles['authorizationOutcomeIcon']} aria-hidden="true">×</span>
+        <div className={styles['authorizationOutcomeCopy']}>
+          <strong>{props.t('authorizationCancelled')}</strong>
+        </div>
+      </div>
+    )
+  }
   return (
     <>
       {attempt.message === undefined ? null : <p role="status">{attempt.message}</p>}
@@ -216,8 +278,6 @@ export function AuthorizationAttemptProgress(props: {
       {attempt.status === 'pending'
         ? <button type="button" className={styles['secondaryButton']} onClick={props.cancel}>{props.t('cancel')}</button>
         : null}
-      {attempt.status === 'authorized' ? <p role="status">{props.t('accountConnected')}</p> : null}
-      {attempt.status === 'cancelled' ? <p role="status">{props.t('authorizationCancelled')}</p> : null}
       {attempt.error === undefined ? null : <p className={styles['error']}>{attempt.error}</p>}
     </>
   )

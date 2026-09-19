@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IApiClient, RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
 import { AuthorizationPanel, ConnectorsSettingsSection, safeExternalHref } from '../src/client/AuthorizationPanel.tsx'
@@ -157,6 +157,115 @@ describe('connectors settings section', () => {
     })
     expect(screen.getByText('Permission needed')).toBeTruthy()
     expect(screen.queryByText(/access-token|refresh-token|password/i)).toBeNull()
+  })
+
+  it('cancels a pending OAuth attempt when the user closes the consent window and restores connector actions', async () => {
+    vi.useFakeTimers()
+    const popup = {
+      closed: false,
+      close: vi.fn(),
+      location: { replace: vi.fn() },
+    }
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+    const cancel = vi.fn(() => Promise.resolve(ok({})))
+    const begin = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546015', status: 'pending' as const,
+    })))
+    const status = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546015',
+      status: 'pending' as const,
+      nextSeq: 0,
+      notices: [],
+    })))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'authorization-google/account',
+        label: 'Google Workspace',
+        methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+        inFlight: false,
+      }] }))),
+      begin,
+      status,
+      answer: vi.fn(),
+      cancel,
+      disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    try {
+      renderHub(api)
+      await act(async () => { await Promise.resolve() })
+      const authorize = screen.getAllByRole('button', { name: 'Authorize' })[0]!
+      fireEvent.click(authorize)
+      await act(async () => { await Promise.resolve() })
+      expect(begin).toHaveBeenCalledTimes(1)
+
+      popup.closed = true
+      await act(async () => {
+        vi.advanceTimersByTime(2_200)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(cancel).toHaveBeenCalledWith({ attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546015' })
+      expect(screen.getByText('Authorization cancelled')).toBeTruthy()
+      expect((screen.getAllByRole('button', { name: 'Authorize' })[0] as HTMLButtonElement).disabled).toBe(false)
+    } finally {
+      open.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('renders successful authorization as a polished success notice', async () => {
+    vi.useFakeTimers()
+    const popup = {
+      closed: false,
+      close: vi.fn(),
+      location: { replace: vi.fn() },
+    }
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+    const begin = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546016', status: 'pending' as const,
+    })))
+    const status = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546016',
+      status: 'authorized' as const,
+      nextSeq: 1,
+      notices: [{ seq: 1, notice: { message: 'Authorization complete' } }],
+    })))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'authorization-google/account',
+        label: 'Google Workspace',
+        methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+        inFlight: false,
+      }] }))),
+      begin,
+      status,
+      answer: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    try {
+      renderHub(api)
+      await act(async () => { await Promise.resolve() })
+      fireEvent.click(screen.getAllByRole('button', { name: 'Authorize' })[0]!)
+      await act(async () => {
+        await Promise.resolve()
+        vi.advanceTimersByTime(700)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      const notice = document.querySelector('[data-authorization-outcome="success"]')
+      expect(notice).not.toBeNull()
+      expect(notice?.textContent).toContain('Account connected')
+      expect(notice?.textContent).toContain('Authorization complete')
+      expect(popup.close).toHaveBeenCalled()
+    } finally {
+      open.mockRestore()
+      vi.useRealTimers()
+    }
   })
 
   it('marks only service-level live telemetry as connected', async () => {
