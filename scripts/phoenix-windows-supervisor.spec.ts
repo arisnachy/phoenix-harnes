@@ -49,7 +49,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
 
   it('routes dirty live checkouts through the verified isolated runtime', () => {
     expect(source).toContain('const liveStatus = gitStatus(root)')
-    expect(source).toContain('liveStatus.entries.length > 0')
+    expect(source).toContain('!liveStatus.ok || liveStatus.entries.length > 0')
     expect(source).toContain('activatePreparedRuntime(requestedTarget)')
     expect(source).toContain('the live checkout will not be modified')
   })
@@ -125,6 +125,16 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('const bootPreflight = runtimeBootPreflight(candidate)')
     expect(source).toContain('failed boot preflight')
     expect(source).toContain('retired isolated runtime')
+  })
+
+  it('retires a stale isolated runtime when a clean managed checkout has advanced past it', () => {
+    expect(source).toContain('function activeRuntimeIsSupersededByLiveCheckout(target)')
+    expect(source).toContain('liveStatus.entries.length > 0')
+    expect(source).toContain('isManagedReleaseBranch(liveBranch, STABLE_SOURCE_BRANCH)')
+    expect(source).toContain("['merge-base', '--is-ancestor', target, liveHead]")
+    expect(source).toContain('activeRuntimeIsSupersededByLiveCheckout(value.target)')
+    expect(source).toContain('retired stale isolated runtime')
+    expect(source).toContain('clean managed checkout is newer')
   })
 
   it('retires an isolated runtime that crashes before its health checkpoint', () => {
