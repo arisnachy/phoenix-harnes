@@ -42,4 +42,25 @@ describe('RuntimeContextProjection', () => {
     other.append('user/message', contextMessage('other'), { surfaceOp: 'append' })
     expect(projection.project('retained', [])).toBeUndefined()
   })
+  it('replaces stale owned snapshots on the model surface without deleting durable history', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const session = ctx.sessions.create(SessionId('runtime-context-replacement'))
+    const projection = new RuntimeContextProjection(ctx, session)
+
+    const first = projection.project('first runtime context', [])
+    expect(first).toBeDefined()
+    const firstEvent = session.append('user/message', first!, projection.surfaceIntent(first!))
+
+    const second = projection.project('second runtime context', [])
+    expect(second).toBeDefined()
+    const secondEvent = session.append('user/message', second!, projection.surfaceIntent(second!))
+
+    expect(session.events.some(event => event.seq === firstEvent.seq)).toBe(true)
+    expect(session.events.some(event => event.seq === secondEvent.seq)).toBe(true)
+    expect(session.surface.nodes).not.toContain(firstEvent.seq)
+    expect(session.surface.nodes).toContain(secondEvent.seq)
+    expect(session.deriveMessages()).toEqual([second])
+  })
+
 })

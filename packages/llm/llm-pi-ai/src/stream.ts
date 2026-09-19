@@ -36,6 +36,19 @@ export function mapUsage(usage: PiUsage): TokenUsage {
 // wrapper a bare `terminated`, so we are left pattern-matching terse words here.
 // If pi-ai ever forwards the original Error (or a fetch/dispatcher hook that lets
 // us capture the cause ourselves), classify on `code`/`cause` instead of text.
+/** Recover provider wait hints that pi-ai flattened into the error message. */
+function retryAfterMsFromMessage(message: string): number | undefined {
+  const match = message.match(
+    /\b(?:(?:please\s+)?(?:try|retry)\s+again\s+in|retry[- ]after\s*:?)\s*(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|sec(?:ond)?s?)\b/i,
+  )
+  if (match === null) return undefined
+  const amount = Number(match[1])
+  if (!Number.isFinite(amount) || amount <= 0) return undefined
+  const unit = match[2]?.toLowerCase() ?? 's'
+  const milliseconds = unit.startsWith('m') ? amount : amount * 1_000
+  return Math.max(1, Math.ceil(milliseconds))
+}
+
 function classifyPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
   // pi-ai's ChatGPT Codex backend derives the account from an OAuth JWT's
@@ -138,7 +151,16 @@ export function mapStopReason(
     }
     case 'error': {
       const text = message.errorMessage ?? 'pi-ai stream error'
-      return { kind: 'error', failure: { message: text, code: classifyPiAiError(text) } }
+      const code = classifyPiAiError(text)
+      const providerRetryAfterMs = code === 'RATE_LIMIT' ? retryAfterMsFromMessage(text) : undefined
+      return {
+        kind: 'error',
+        failure: {
+          message: text,
+          code,
+          ...providerRetryAfterMs === undefined ? {} : { providerRetryAfterMs },
+        },
+      }
     }
   }
 }
