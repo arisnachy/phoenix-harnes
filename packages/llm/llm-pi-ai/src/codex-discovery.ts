@@ -50,7 +50,7 @@ interface CodexModelListShape {
 }
 
 /** Extra discovery metadata Codex exposes beyond the provider-neutral minimum. */
-interface CodexDiscoveredModel extends LlmDiscoveredModel {
+export interface CodexDiscoveredModel extends LlmDiscoveredModel {
   reasoning?: {
     efforts: Array<{ id: string; name: string; description?: string }>
     defaultEffort?: string
@@ -59,7 +59,7 @@ interface CodexDiscoveredModel extends LlmDiscoveredModel {
 
 /** Injectable transport seam used by regression tests. */
 export interface CodexModelListTransport {
-  list(signal?: AbortSignal): Promise<readonly LlmDiscoveredModel[]>
+  list(signal?: AbortSignal): Promise<readonly CodexDiscoveredModel[]>
 }
 
 function text(value: unknown): string | undefined {
