@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
+const activatorSource = readFileSync(resolve('scripts/phoenix-activate-prepared.mjs'), 'utf8')
 const cliSource = readFileSync(resolve('apps/cli/src/bin.ts'), 'utf8')
 const acpPackage = JSON.parse(readFileSync(resolve('packages/examples/acp-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
 const jsonrpcPackage = JSON.parse(readFileSync(resolve('packages/examples/jsonrpc-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
@@ -54,6 +55,25 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('clearPreparedRecord()')
     expect(source).toContain('invalidated the cached candidate')
     expect(source).not.toContain('prepared update no longer matches a verified staging candidate; refusing live activation')
+  })
+
+  it('uses the same repository-scoped staging directory in the activator and supervisor', () => {
+    expect(source).toContain('phoenix-stage-${stageIdentity()}')
+    expect(activatorSource).toContain("import { createHash } from 'node:crypto'")
+    expect(activatorSource).toContain('function stageIdentity(root)')
+    expect(activatorSource).toContain('phoenix-stage-${stageIdentity(root)}')
+    expect(activatorSource).toContain('const stage = stageDirectory(root)')
+    expect(activatorSource).not.toContain("return join(base, 'phoenix-stage')")
+  })
+
+  it('invalidates a candidate after any non-critical activation failure instead of retrying it forever', () => {
+    const start = source.indexOf('const activationCode = activatePrepared()')
+    const end = source.indexOf('runtimeRoot = root', start)
+    const failurePath = source.slice(start, end)
+
+    expect(failurePath).toContain('clearPreparedRecord()')
+    expect(failurePath).toContain('invalidated the prepared candidate')
+    expect(failurePath).not.toContain('The prepared update remains available to retry')
   })
 
   it('reconciles stale runtime and client artifacts before the Windows supervisor starts', () => {
