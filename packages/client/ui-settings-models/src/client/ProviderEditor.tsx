@@ -87,7 +87,7 @@ export interface ProviderEditorProps {
    * account-only, so the key field steps aside for the sign-in buttons.
    */
   oauth?: {
-    /** Registered authorization key (generic provider flow or native account bridge). */
+    /** The registered flow's credential key (`llm-pi-ai/<provider>`). */
     key: string
     /** The flow label — the account name the host registered. */
     label: string
