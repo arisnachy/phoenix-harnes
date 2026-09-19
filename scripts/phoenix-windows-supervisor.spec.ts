@@ -8,17 +8,28 @@ const acpPackage = JSON.parse(readFileSync(resolve('packages/examples/acp-demo/p
 const jsonrpcPackage = JSON.parse(readFileSync(resolve('packages/examples/jsonrpc-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
 
 describe('PHOENIX Windows updater supervisor resilience', () => {
-  it('restarts the updater watcher when it exits while the host is still alive', () => {
-    expect(source).toContain('function superviseWatcher(host)')
+  it('keeps the updater watcher owned by the external supervisor across Host crash loops', () => {
+    expect(source).toContain('function superviseWatcher()')
+    expect(source).toContain('const watcherSupervisor = superviseWatcher()')
     expect(source).toContain('watcher exited unexpectedly')
     expect(source).toContain('restartTimer = setTimeout(start, WATCHER_RESTART_DELAY_MS)')
     expect(source).toContain('restartTimer.unref?.()')
+    expect(source).not.toContain('function superviseWatcher(host)')
   })
 
-  it('disables watcher respawn before an intentional host/update shutdown', () => {
+  it('pauses the updater only around activation and stops it when the supervisor itself exits', () => {
+    expect(source).toContain('await watcherSupervisor.pause()')
+    expect(source).toContain('watcherSupervisor.resume()')
     expect(source).toContain('await watcherSupervisor.stop()')
-    expect(source).toContain('stopping = true')
-    expect(source).toContain('clearTimeout(restartTimer)')
+    expect(source).toContain('clearRestartTimer()')
+  })
+
+  it('activates a verified prepared update even when a crashing Host cannot keep the restart bridge alive', () => {
+    expect(source).toContain('function verifiedPreparedTarget()')
+    expect(source).toContain('preparedStageForTarget(prepared.target)')
+    expect(source).toContain("kind: 'prepared-update'")
+    expect(source).toContain("restartRequestTarget() ?? verifiedPreparedTarget()")
+    expect(source).toContain('verified stable')
   })
 
   it('does not start or respawn the updater watcher when update mode is off', () => {
