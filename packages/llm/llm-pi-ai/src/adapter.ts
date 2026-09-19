@@ -105,7 +105,7 @@ export interface PiAiAdapterOptions {
    * Refresh one provider's advisory model catalog before listing it, or on an
    * exact-model miss. The plugin owns caching/fallback; the adapter only asks.
    */
-  refreshModels?: (provider: string, force?: boolean) => Promise<void>
+  refreshModels?: (provider: string, force?: boolean) => Promise<readonly string[] | undefined>
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
   /**
@@ -306,10 +306,17 @@ export class PiAiAdapter extends LlmAdapter {
   }
 
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
-    await this.config.refreshModels?.(provider)
+    const advertised = await this.config.refreshModels?.(provider)
     const snapshot = this.current()
     this.profileOf(snapshot, provider)
-    return snapshot.models.getModels(provider).map(model => ({
+    const available = snapshot.models.getModels(provider)
+    const ordered = advertised === undefined
+      ? available
+      : advertised.flatMap((id) => {
+          const model = available.find(candidate => candidate.id === id)
+          return model === undefined ? [] : [model]
+        })
+    return ordered.map(model => ({
       provider,
       id: model.id,
       name: model.name,
