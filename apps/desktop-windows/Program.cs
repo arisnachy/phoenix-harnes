@@ -219,19 +219,27 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     {
         try
         {
-            window.SetStartupStatus("Comprobando runtime local…");
+            window.SetStartupStatus("Buscando Phoenix local…");
             if (await IsReadyAsync())
             {
-                window.SetStartupStatus("Cerrando una instancia anterior de Phoenix…");
-                if (!await RetireConflictingPhoenixRuntimeAsync())
+                if (await IsCompatiblePhoenixListenerAsync())
                 {
-                    tray.Text = "Phoenix · puerto 3081 ocupado";
-                    window.SetStartupStatus(
-                        "El puerto 3081 está ocupado por otro programa. Phoenix no abrirá una versión ajena o antigua.\n\nCierra el proceso que usa el puerto y vuelve a abrir Phoenix.",
-                        isError: true);
-                    DesktopLog.Write("Refused to attach to an unowned process already listening on 127.0.0.1:3081.");
+                    externallyManaged = true;
+                    restartItem.Enabled = false;
+                    restartItem.Text = "Phoenix ya está activo";
+                    tray.Text = "Phoenix · activo";
+                    window.MarkRuntimeReady();
+                    ShowWindow();
+                    DesktopLog.Write("Attached desktop shell to the already-running Phoenix on 127.0.0.1:3080.");
                     return;
                 }
+
+                tray.Text = "Phoenix · puerto 3080 ocupado";
+                window.SetStartupStatus(
+                    "El puerto normal de Phoenix (3080) está ocupado por otro programa.\n\nCierra ese proceso y vuelve a abrir Phoenix.",
+                    isError: true);
+                DesktopLog.Write("Refused to attach because 127.0.0.1:3080 answered but its listener did not look like Phoenix.");
+                return;
             }
 
             var sourceRoot = DesktopSourceCheckout.Resolve(Program.InstallRoot);
@@ -482,49 +490,22 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         return true;
     }
 
-    private async Task<bool> RetireConflictingPhoenixRuntimeAsync()
+    private async Task<bool> IsCompatiblePhoenixListenerAsync()
     {
         const string script = """
             $ErrorActionPreference = 'SilentlyContinue'
-            $owners = @(Get-NetTCPConnection -State Listen -LocalPort 3081 -ErrorAction SilentlyContinue |
+            $owners = @(Get-NetTCPConnection -State Listen -LocalPort 3080 -ErrorAction SilentlyContinue |
               Select-Object -ExpandProperty OwningProcess -Unique)
-            if ($owners.Count -eq 0) { exit 0 }
-
             foreach ($ownerId in $owners) {
               $current = Get-CimInstance Win32_Process -Filter "ProcessId=$ownerId" -ErrorAction SilentlyContinue
-              if (-not $current) { continue }
-              $command = [string]$current.CommandLine
-              $isPhoenix = $command -match '(?i)(phoenix-windows-supervisor\.mjs|apps[\\/]+cli[\\/]+(?:src|lib)[\\/]+bin\.(?:ts|js)|phoenix-harnes|[\\/]Phoenix[\\/]runtime)'
-              if (-not $isPhoenix) {
-                Write-Output "foreign:${ownerId}:$($current.Name)"
-                exit 21
-              }
-
-              $root = $current
-              for ($depth = 0; $depth -lt 6; $depth++) {
-                $parentId = [int]$root.ParentProcessId
+              for ($depth = 0; $depth -lt 6 -and $current; $depth++) {
+                $command = [string]$current.CommandLine
+                if ($command) { Write-Output $command }
+                $parentId = [int]$current.ParentProcessId
                 if ($parentId -le 0) { break }
-                $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$parentId" -ErrorAction SilentlyContinue
-                if (-not $parent) { break }
-                $parentCommand = [string]$parent.CommandLine
-                if ($parentCommand -match '(?i)phoenix-windows-supervisor\.mjs') {
-                  $root = $parent
-                  break
-                }
-                if ($parentCommand -match '(?i)(phoenix-harnes|[\\/]Phoenix[\\/]runtime|phoenix-windows\.cmd)') {
-                  $root = $parent
-                  continue
-                }
-                break
+                $current = Get-CimInstance Win32_Process -Filter "ProcessId=$parentId" -ErrorAction SilentlyContinue
               }
-
-              & taskkill.exe /PID $root.ProcessId /T /F | Out-Null
             }
-
-            Start-Sleep -Milliseconds 700
-            $remaining = @(Get-NetTCPConnection -State Listen -LocalPort 3081 -ErrorAction SilentlyContinue)
-            if ($remaining.Count -gt 0) { exit 22 }
-            exit 0
             """;
 
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
@@ -542,17 +523,20 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         psi.ArgumentList.Add("-EncodedCommand");
         psi.ArgumentList.Add(encoded);
 
-        using var cleanup = Process.Start(psi);
-        if (cleanup is null) return false;
-        var stdoutTask = cleanup.StandardOutput.ReadToEndAsync();
-        var stderrTask = cleanup.StandardError.ReadToEndAsync();
-        await cleanup.WaitForExitAsync();
+        using var probe = Process.Start(psi);
+        if (probe is null) return false;
+        var stdoutTask = probe.StandardOutput.ReadToEndAsync();
+        var stderrTask = probe.StandardError.ReadToEndAsync();
+        await probe.WaitForExitAsync();
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
-        if (!string.IsNullOrWhiteSpace(stdout)) DesktopLog.Write("port cleanup stdout: " + stdout.Trim());
-        if (!string.IsNullOrWhiteSpace(stderr)) DesktopLog.Write("port cleanup stderr: " + stderr.Trim());
-        DesktopLog.Write($"Port 3081 cleanup exited with code {cleanup.ExitCode}.");
-        return cleanup.ExitCode == 0 && !await IsReadyAsync();
+        if (!string.IsNullOrWhiteSpace(stderr))
+            DesktopLog.Write("Phoenix listener probe stderr: " + stderr.Trim());
+
+        var lines = stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var compatible = lines.Any(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine);
+        DesktopLog.Write($"Phoenix listener probe compatible={compatible}; candidates={lines.Length}.");
+        return probe.ExitCode == 0 && compatible;
     }
 
     private async Task<bool> StartOwnedRuntimeAsync(bool openWhenReady, bool reportFailure = true)
@@ -604,9 +588,10 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         externallyManaged = false;
         restartItem.Enabled = true;
         tray.Text = "Phoenix · iniciando";
-        DesktopLog.Write($"Managed runtime process started with PID {ownedRuntime.Id}.");
+        DesktopLog.Write($"Phoenix runtime process started with PID {ownedRuntime.Id} from {runtimeRoot}.");
 
-        for (var attempt = 0; attempt < 120 && !shuttingDown; attempt++)
+        var maxAttempts = sourceCheckoutRuntime ? 60 : 120;
+        for (var attempt = 0; attempt < maxAttempts && !shuttingDown; attempt++)
         {
             if (await IsReadyAsync())
             {
@@ -629,9 +614,9 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             if (reportFailure)
             {
                 tray.Text = "Phoenix · error de inicio";
-                window.SetStartupStatus($"Phoenix no alcanzó 127.0.0.1:3081.{exit}\n\nDiagnóstico: {Program.LogPath}", isError: true);
+                window.SetStartupStatus($"Phoenix no alcanzó 127.0.0.1:3080.{exit}\n\nDiagnóstico: {Program.LogPath}", isError: true);
                 MessageBox.Show(
-                    $"Phoenix no alcanzó http://127.0.0.1:3081.{exit}\n\nDiagnóstico: {Program.LogPath}",
+                    $"Phoenix no alcanzó http://127.0.0.1:3080.{exit}\n\nDiagnóstico: {Program.LogPath}",
                     "Phoenix", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
