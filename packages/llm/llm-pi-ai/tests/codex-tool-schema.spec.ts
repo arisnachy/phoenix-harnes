@@ -3,6 +3,7 @@ import type { GenerateOptions } from '@phoenix-ai/dsh-llm'
 import {
   normalizeCodexToolParameters,
   normalizeCodexToolSchemas,
+  normalizeOpenAiFunctionToolPayload,
   requiresObjectRootFunctionSchemas,
 } from '../src/codex-tool-schema.ts'
 
@@ -113,6 +114,87 @@ describe('Codex tool-schema compatibility', () => {
     }
 
     expect(normalizeCodexToolParameters(schema)).toBe(schema)
+  })
+
+  it('repairs Responses-style function tools at the final provider payload seam', () => {
+    const payload = {
+      model: 'gpt-5.6-sol',
+      tools: [{
+        type: 'function',
+        name: 'mcp__monday-com-monday-com__create_action',
+        parameters: {
+          oneOf: [
+            {
+              type: 'object',
+              properties: { board_id: { type: 'string' } },
+              required: ['board_id'],
+            },
+            {
+              type: 'object',
+              properties: { item_id: { type: 'string' } },
+              required: ['item_id'],
+            },
+          ],
+        },
+      }],
+    }
+
+    const normalized = normalizeOpenAiFunctionToolPayload(payload) as typeof payload
+    const parameters = normalized.tools[0]?.parameters as Record<string, unknown>
+
+    expect(normalized).not.toBe(payload)
+    expect(parameters).toMatchObject({
+      type: 'object',
+      properties: {
+        board_id: { type: 'string' },
+        item_id: { type: 'string' },
+      },
+    })
+    expect(parameters).not.toHaveProperty('oneOf')
+  })
+
+  it('repairs Chat Completions-style function wrappers without touching non-function tools', () => {
+    const passthrough = { type: 'web_search_preview', search_context_size: 'medium' }
+    const payload = {
+      tools: [
+        passthrough,
+        {
+          type: 'function',
+          function: {
+            name: 'mcp__monday-com-monday-com__create_action',
+            parameters: {
+              anyOf: [
+                { type: 'object', properties: { board_id: { type: 'string' } } },
+                { type: 'object', properties: { item_id: { type: 'string' } } },
+              ],
+            },
+          },
+        },
+      ],
+    }
+
+    const normalized = normalizeOpenAiFunctionToolPayload(payload) as typeof payload
+    expect(normalized.tools[0]).toBe(passthrough)
+    const wrapper = normalized.tools[1] as {
+      function: { parameters: Record<string, unknown> }
+    }
+    expect(wrapper.function.parameters.type).toBe('object')
+    expect(wrapper.function.parameters).not.toHaveProperty('anyOf')
+  })
+
+  it('keeps already-compatible final payloads referentially stable', () => {
+    const payload = {
+      tools: [{
+        type: 'function',
+        name: 'search',
+        parameters: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+        },
+      }],
+    }
+
+    expect(normalizeOpenAiFunctionToolPayload(payload)).toBe(payload)
   })
 
   it('rewrites only incompatible tool entries in a Codex request projection', () => {
