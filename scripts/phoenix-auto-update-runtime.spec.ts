@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest'
 
 const updater = readFileSync(resolve('scripts/phoenix-auto-update.mjs'), 'utf8')
 const supervisor = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
+const managedUpdater = readFileSync(resolve('scripts/phoenix-managed-update.mjs'), 'utf8')
+const updatePowerShell = readFileSync(resolve('update-phoenix.ps1'), 'utf8')
+const desktop = readFileSync(resolve('apps/desktop-windows/Program.cs'), 'utf8')
 const build = readFileSync(resolve('scripts/build.ts'), 'utf8')
 
 describe('PHOENIX supervised updater runtime isolation', () => {
@@ -60,6 +63,21 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain('function stageIdentity()')
     expect(supervisor).toContain('`phoenix-stage-${stageIdentity()}`')
     expect(supervisor).toContain('`phoenix-runtime-${stageIdentity()}-${target.slice(0, 12)}`')
+  })
+
+
+  it('fails desktop startup closed after a newer stable target is known but cannot be activated', () => {
+    expect(managedUpdater).toContain("const STARTUP_CHECK = process.argv.includes('--startup')")
+    expect(managedUpdater).toContain('let staleTargetDiscovered = false')
+    expect(managedUpdater).toContain('process.exitCode = 13')
+    expect(managedUpdater).toContain("blockStaleStartup('update/preflight failed after discovering a newer stable target')")
+  })
+
+  it('propagates managed updater semantic exit codes through PowerShell to the desktop', () => {
+    expect(updatePowerShell).toContain("if ($null -ne $code -and $code -ne 0) { exit $code }")
+    expect(updatePowerShell).toContain("$code -eq 13")
+    expect(desktop).toContain('if (updateProcess.ExitCode == 13)')
+    expect(desktop).toContain('La versión vieja no se iniciará')
   })
 
 })

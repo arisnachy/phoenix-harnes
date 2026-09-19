@@ -371,8 +371,18 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return false;
         }
 
+        if (updateProcess.ExitCode == 13)
+        {
+            window.SetStartupStatus(
+                $"Phoenix detectó un runtime desactualizado y no pudo activar la versión estable nueva. La versión vieja no se iniciará.\n\nDiagnóstico: {Program.LogPath}",
+                isError: true);
+            tray.Text = "Phoenix · runtime desactualizado";
+            DesktopLog.Write("Stable updater refused startup because the installed runtime is known stale.");
+            return false;
+        }
+
         if (updateProcess.ExitCode != 0)
-            DesktopLog.Write($"Stable update check returned {updateProcess.ExitCode}; starting the last verified runtime.");
+            DesktopLog.Write($"Stable update check returned {updateProcess.ExitCode}; starting the last verified runtime because no newer stable target was confirmed.");
 
         return true;
     }
