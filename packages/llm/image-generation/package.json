@@ -1,6 +1,6 @@
 {
   "name": "@phoenix-ai/dsh-image-generation",
-  "description": "Provider-neutral image generation seam, Cloudflare free-tier provider, and model-facing image_generate tool for PHOENIX",
+  "description": "Provider-neutral image generation with visual-quality policy, Cloudflare FLUX, and zero-setup AI Horde fallback for PHOENIX",
   "version": "0.1.1-rc.2",
   "publishConfig": {
     "access": "public"
