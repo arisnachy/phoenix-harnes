@@ -155,7 +155,7 @@ describe.skipIf(MODE === 'record')('web e2e: first-run DeepSeek credential setup
       setInterval(() => {
         if (document.querySelector(
           '[role="dialog"][aria-label="内测声明"], '
-          + '[role="dialog"][aria-label="添加一个 API Key 开始使用"]',
+          + '[role="dialog"][aria-label="连接 PHOENIX"]',
         ) !== null) {
           sightings.push('chrome')
         }
