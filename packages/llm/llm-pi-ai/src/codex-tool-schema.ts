@@ -213,5 +213,26 @@ export function normalizeOpenAiFunctionToolPayload(payload: unknown): unknown {
       changed = true
     }
   }
+
+  // OpenAI Responses/Codex can introduce tools mid-transcript. pi-ai encodes
+  // those as input items such as an additional_tools developer item, and
+  // tool-search output items also carry a tools array. Those definitions
+  // bypass the request's top-level tools, so normalize every input item's
+  // tool list at this final provider seam as well.
+  if (Array.isArray(payload.input)) {
+    let inputChanged = false
+    const input = payload.input.map((item) => {
+      if (!isObject(item) || !('tools' in item)) return item
+      const tools = normalizePayloadToolList(item.tools)
+      if (tools === item.tools) return item
+      inputChanged = true
+      return { ...item, tools }
+    })
+    if (inputChanged) {
+      normalized.input = input
+      changed = true
+    }
+  }
+
   return changed ? normalized : payload
 }
