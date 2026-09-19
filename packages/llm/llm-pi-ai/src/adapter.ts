@@ -68,6 +68,7 @@ import {
 } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
+import { normalizeCodexToolSchemas } from './codex-tool-schema.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 
@@ -426,7 +427,9 @@ export class PiAiAdapter extends LlmAdapter {
           CONTEXT_WINDOW_EXCEEDED_CODE,
         )
       }
-      const requestOptions = fitted.options
+      const requestOptions = model.api === 'openai-codex-responses'
+        ? normalizeCodexToolSchemas(fitted.options)
+        : fitted.options
       const containsImage = requestOptions.messages.some(message => contentHasImage(message.content))
       const containsFile = requestOptions.messages.some(message => contentHasFile(message.content))
       if (containsImage && !model.input.includes('image')) {
