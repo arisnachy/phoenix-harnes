@@ -65,14 +65,14 @@ public static class BrowserLayout
     public const int MinimumBrowserWidth = 360;
 
     /// <summary>
-    /// Codex-like split: keep the browser large enough to render real sites while preserving
-    /// the conversation as the primary surface. Wide displays cap the browser instead of
-    /// allowing it to swallow the chat.
+    /// Phoenix desktop split: when the browser is visible it targets 40% of the usable width,
+    /// leaving 60% for chat. The host SplitContainer still enforces the minimum chat/browser
+    /// widths on compact windows.
     /// </summary>
     public static int PreferredBrowserWidth(int clientWidth)
     {
-        var proportional = (int)Math.Round(Math.Max(0, clientWidth) * 0.36d);
-        return Math.Clamp(proportional, 400, 640);
+        var proportional = (int)Math.Round(Math.Max(0, clientWidth) * 0.40d);
+        return Math.Max(MinimumBrowserWidth, proportional);
     }
 }
 
