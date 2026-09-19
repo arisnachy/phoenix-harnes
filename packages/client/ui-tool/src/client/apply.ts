@@ -6,6 +6,7 @@ import { ToolCallTree } from './tool/ToolCallTree.tsx'
 import { ToolDetails } from './tool/ToolDetails.tsx'
 import { CONVERSATION_NS as NS } from './locale.ts'
 import { askQuestionToolview } from './tool/toolviews/ask-question-row.tsx'
+import { connectorListToolview } from './tool/toolviews/connector-list-row.tsx'
 import { bashToolviewSample } from './tool/toolviews/bash-sample.tsx'
 import { fileMutationToolview } from './tool/toolviews/file-mutation-row.tsx'
 import { readToolview } from './tool/toolviews/read-row.tsx'
@@ -46,4 +47,5 @@ export function apply(ctx: ClientContext): void {
   ctx.plugin(webToolview)
   ctx.plugin(todoToolview)
   ctx.plugin(askQuestionToolview)
+  ctx.plugin(connectorListToolview)
 }
