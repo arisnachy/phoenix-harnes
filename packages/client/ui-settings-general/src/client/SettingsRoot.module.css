@@ -4,6 +4,29 @@
    panel is a two-column layout — 188px nav rail + content column with a
    54px header and the 24px-padded options area. */
 
+/* Expanded keeps the historical DOM layout via display: contents. On the
+   compact rail the wrapper becomes a vertical stack so account telemetry can
+   sit above the Settings gear without squeezing or obscuring the button. */
+.triggerStack {
+  display: contents;
+}
+
+.triggerStackRail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 36px;
+}
+
+.railStatus {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-height: 0;
+}
+
 /* Trigger row: the 42px foot-row box shared with the Cordis footer action. */
 .trigger {
   flex: none;

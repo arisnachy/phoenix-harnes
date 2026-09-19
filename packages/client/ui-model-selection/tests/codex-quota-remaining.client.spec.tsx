@@ -135,6 +135,40 @@ describe('CodexQuotaRemaining', () => {
     expect(group.querySelectorAll('[data-quota-meter]')).toHaveLength(2)
   })
 
+  it('keeps 5h and 7d percentages visible in the collapsed sidebar rail', async () => {
+    const d = directory('openai-codex')
+    const auth = {
+      list: vi.fn(() => Promise.resolve({
+        rpcId: 'authorization-list-collapsed-two-windows' as never,
+        result: {
+          ok: true as const,
+          value: {
+            entries: [{
+              key: 'subagent-codex/account',
+              label: 'ChatGPT / Codex',
+              telemetry: {
+                kind: 'account' as const,
+                provider: 'Codex',
+                primaryLimit: { usedPercent: 14, windowDurationMins: 300 },
+                secondaryLimit: { usedPercent: 9, windowDurationMins: 10080 },
+              },
+            }],
+          },
+        },
+      })),
+    }
+    const view = render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} wide={false} />)
+
+    expect(await screen.findByText('86%')).toBeTruthy()
+    expect(screen.getByText('91%')).toBeTruthy()
+    expect(screen.getByText('5h')).toBeTruthy()
+    expect(screen.getByText('7d')).toBeTruthy()
+    const rail = view.container.querySelector('[data-codex-quota-rail="true"]')
+    expect(rail).not.toBeNull()
+    expect(rail?.getAttribute('aria-label')).toBe('OpenAI Codex usage limits')
+    expect(screen.queryByText(/↻/)).toBeNull()
+  })
+
   it('keeps a window visible without inventing a countdown when reset time is absent', async () => {
     const d = directory('openai-codex')
     const auth = authorization(14)
