@@ -40,8 +40,8 @@ Name: "{group}\Phoenix"; Filename: "{app}\Phoenix.exe"
 Name: "{autodesktop}\Phoenix"; Filename: "{app}\Phoenix.exe"; Tasks: desktopicon
 
 [Run]
-; Runtime preparation belongs to Phoenix.exe so first launch is visible, logged, repairable,
-; and can explain missing Git/Node/Corepack instead of blocking inside the installer.
+; Runtime preparation belongs to Phoenix.exe so first launch is visible, logged and repairable.
+; Node.js, Corepack and MinGit are bundled in the installer; users need no development prerequisites.
 Filename: "{app}\Phoenix.exe"; Parameters: "--enable-autostart"; Flags: runhidden waituntilterminated skipifsilent; Tasks: autostart
 Filename: "{app}\Phoenix.exe"; Description: "Abrir Phoenix"; Flags: nowait postinstall skipifsilent
 
