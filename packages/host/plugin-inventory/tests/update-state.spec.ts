@@ -183,7 +183,6 @@ describe('PHOENIX updater state bridge', () => {
     const linked = tempRoot()
     rmSync(linked, { recursive: true, force: true })
     git(repo, 'worktree', 'add', '--detach', linked, target)
-    roots.push(linked)
 
     writeFileSync(statePath(repo), JSON.stringify({
       schema: 1,
