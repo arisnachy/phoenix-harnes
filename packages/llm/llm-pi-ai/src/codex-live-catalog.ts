@@ -86,7 +86,7 @@ export class CodexLiveCatalog {
   private readonly now: () => number
   private readonly refreshIntervalMs: number
   private readonly installedModelIds: () => readonly string[]
-  private readonly warn: (message: string, error?: unknown) => void
+  private readonly warn: ((message: string, error?: unknown) => void) | undefined
   revision = 0
 
   constructor(options: CodexLiveCatalogOptions = {}) {
@@ -95,7 +95,7 @@ export class CodexLiveCatalog {
     this.refreshIntervalMs = options.refreshIntervalMs ?? CODEX_MODEL_REFRESH_INTERVAL_MS
     this.installedModelIds = options.installedModelIds
       ?? (() => [...catalogModels(CODEX_PROVIDER).keys()])
-    this.warn = options.warn ?? (() => undefined)
+    this.warn = options.warn
   }
 
   /** Latest account-visible ids in provider order, or no live answer yet. */
@@ -158,7 +158,7 @@ export class CodexLiveCatalog {
     try {
       const next = codexModelsToProfiles(await this.transport.list())
       if (next.length === 0) {
-        this.warn('Codex returned an empty live model catalog; keeping the last good/static catalog')
+        this.warn?.('Codex returned an empty live model catalog; keeping the last good/static catalog')
         return
       }
 
@@ -174,7 +174,7 @@ export class CodexLiveCatalog {
       this.dispatch = nextDispatch
       this.revision += 1
     } catch (error: unknown) {
-      this.warn('Live Codex model refresh failed; keeping the last good/static catalog', error)
+      this.warn?.('Live Codex model refresh failed; keeping the last good/static catalog', error)
     }
   }
 }
