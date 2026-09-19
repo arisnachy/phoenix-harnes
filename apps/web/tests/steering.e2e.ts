@@ -102,10 +102,11 @@ describe('web e2e: mid-turn steering lands durably and visibly', () => {
     await input.fill(PROMPT)
     await input.press('Enter')
 
-    // Enter remains the Queue gesture. The row action then atomically moves
-    // this exact occurrence into the current turn's steering outbox.
+    // With Steer as the busy-state Enter default, the complementary
+    // Cmd/Ctrl+Enter gesture remains Queue. The row action then atomically
+    // moves this exact occurrence into the current turn's steering outbox.
     await input.fill(STEER)
-    await input.press('Enter')
+    await input.press('Meta+Enter')
     const queuedRow = page.getByRole('listitem').filter({ hasText: STEER })
     await queuedRow.waitFor({ timeout: 10_000 })
     const steerButton = queuedRow.getByRole('button', { name: 'Steer queued message' })
@@ -197,7 +198,7 @@ describe('web e2e: composer shortcut steers directly', () => {
     await scaffold?.close()
   })
 
-  it.skipIf(MODE === 'record')('uses Cmd+Enter without creating a Queue row', async () => {
+  it.skipIf(MODE === 'record')('uses plain Enter to steer without creating a Queue row', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-steering'))
     expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT, STEER])
     const input = page.locator('textarea').first()
@@ -208,7 +209,7 @@ describe('web e2e: composer shortcut steers directly', () => {
     await page.getByRole('button', { name: 'Stop generating' }).waitFor({ timeout: 10_000 })
 
     await input.fill(STEER)
-    await input.press('Meta+Enter')
+    await input.press('Enter')
     await expect.poll(() => input.inputValue(), { timeout: 5_000 }).toBe('')
     expect(await page.locator('[data-queue-dock]').count()).toBe(0)
 
@@ -254,13 +255,13 @@ describe('web e2e: composer shortcut follows the swapped busy behavior', () => {
     await scaffold?.close()
   })
 
-  it.skipIf(MODE === 'record')('queues Cmd+Enter when plain Enter is configured to Steer', async () => {
+  it.skipIf(MODE === 'record')('uses Cmd+Enter to steer when plain Enter is configured to Queue', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-swapped-shortcut'))
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Settings' })
-    await dialog.getByRole('button', { name: 'Queue' }).click()
-    await page.getByRole('menuitem', { name: 'Steer' }).click()
-    await dialog.getByRole('button', { name: 'Steer' }).waitFor({ timeout: 10_000 })
+    await dialog.getByRole('button', { name: 'Steer' }).click()
+    await page.getByRole('menuitem', { name: 'Queue' }).click()
+    await dialog.getByRole('button', { name: 'Queue' }).waitFor({ timeout: 10_000 })
     await page.keyboard.press('Escape')
 
     const input = page.locator('textarea').first()
@@ -269,22 +270,21 @@ describe('web e2e: composer shortcut follows the swapped busy behavior', () => {
     await input.press('Enter')
     await page.getByRole('button', { name: 'Stop generating' }).waitFor({ timeout: 10_000 })
 
-    const queuedText = 'Queued by the complementary Cmd+Enter shortcut.'
-    await input.fill(queuedText)
+    await input.fill(STEER)
     await input.press('Meta+Enter')
-    const queuedRow = page.locator('[data-queue-dock]').getByRole('listitem').filter({ hasText: queuedText })
-    await queuedRow.getByText(queuedText, { exact: true }).waitFor({ timeout: 10_000 })
-    expect(await page.locator('[data-pending-steering]').filter({ hasText: queuedText }).count()).toBe(0)
-    expect(claimedMessages(sessionEvents, queuedText)).toHaveLength(0)
+    await expect.poll(() => input.inputValue(), { timeout: 5_000 }).toBe('')
+    expect(await page.locator('[data-queue-dock]').count()).toBe(0)
 
-    // Remove the asserted Queue row, then finish the recorded question turn
-    // so replay teardown still proves that every fixture call was consumed.
-    await queuedRow.getByRole('button', { name: 'Remove queued message' }).click()
     const composer = page.locator('[data-question-key]')
     await composer.waitFor({ timeout: 30_000 })
+    const pendingSteering = page.locator('[data-pending-steering]').filter({ hasText: STEER })
+    await pendingSteering.waitFor({ timeout: 10_000 })
     await composer.getByRole('radio', { name: 'Yes' }).click()
     await composer.getByRole('radio', { name: 'Yes' }).press('Enter')
     await settled
+
+    expect(claimedMessages(sessionEvents, STEER)).toHaveLength(1)
+    expect(await pendingSteering.count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, 90_000)

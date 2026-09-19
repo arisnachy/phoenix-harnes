@@ -635,6 +635,74 @@ describe('agent loop', () => {
     expect(deltaText).toBe('abc')
   })
 
+  it('preempts an active stale model request before its first visible text', async () => {
+    const adapter = new MockAdapter([
+      { hangAfter: [{ type: 'block-start', index: 0, blockType: 'text' }] },
+      textResponse('grafica lista'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('steer-preempts-before-text'), { provider: 'mock', model: 'mock' })
+    let steered = false
+    ctx.on('session/event', (_session, event) => {
+      if (event.type !== 'assistant/chunk' || event.data.chunk.type !== 'block-start' || steered) return
+      steered = true
+      queueMicrotask(() => {
+        agent.steer(createUserMessage({
+          content: [{ type: 'text', text: 'crea una grafica' }],
+          source: { kind: 'user' },
+        }))
+      })
+    })
+
+    const idle = waitForIdle(ctx, agent)
+    send(agent, 'hola')
+    await idle
+
+    expect(adapter.requests).toHaveLength(2)
+    expect(JSON.stringify(adapter.requests[0]?.messages)).toContain('hola')
+    expect(JSON.stringify(adapter.requests[0]?.messages)).not.toContain('crea una grafica')
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('crea una grafica')
+    expect(userTexts(agent)).toEqual(['hola', 'crea una grafica'])
+    expect(agent.session.events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+    expect(agent.session.events.filter(event => event.type === 'step/start')).toHaveLength(2)
+    expect(agent.session.events.some(event =>
+      event.type === 'assistant/message' && event.data.interrupted === true)).toBe(false)
+  })
+
+  it('cuts stale model prose when steering arrives during generation and feeds the steer to the next step', async () => {
+    const adapter = new MockAdapter([
+      'hang',
+      textResponse('grafica lista'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('steer-preempts-model'), { provider: 'mock', model: 'mock' })
+    let steered = false
+    ctx.on('session/event', (_session, event) => {
+      if (event.type !== 'assistant/chunk' || event.data.chunk.type !== 'text-delta' || steered) return
+      steered = true
+      queueMicrotask(() => {
+        agent.steer(createUserMessage({
+          content: [{ type: 'text', text: 'crea una grafica' }],
+          source: { kind: 'user' },
+        }))
+      })
+    })
+
+    const idle = waitForIdle(ctx, agent)
+    send(agent, 'hola')
+    await idle
+
+    expect(adapter.requests).toHaveLength(2)
+    expect(JSON.stringify(adapter.requests[0]?.messages)).toContain('hola')
+    expect(JSON.stringify(adapter.requests[0]?.messages)).not.toContain('crea una grafica')
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('crea una grafica')
+    expect(userTexts(agent)).toEqual(['hola', 'crea una grafica'])
+    expect(agent.session.events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+    expect(agent.session.events.filter(event => event.type === 'step/start')).toHaveLength(2)
+    expect(agent.session.events.some(event =>
+      event.type === 'assistant/message' && event.data.interrupted === true)).toBe(true)
+  })
+
   it('injects steering between steps and continues the turn', async () => {
     const adapter = new MockAdapter([
       toolCallResponse('c1', 'slow', {}),
