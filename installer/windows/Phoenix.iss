@@ -4,6 +4,9 @@
 #ifndef OutputDir
   #define OutputDir "..\..\dist\installer"
 #endif
+#ifndef EnableAuthenticodeSigning
+  #define EnableAuthenticodeSigning 0
+#endif
 
 [Setup]
 AppId={{B4E91D88-7B14-4DA0-A63D-4E61B648AE1F}
@@ -27,6 +30,10 @@ SetupIconFile={#SourceDir}\phoenix.ico
 ; so Restart Manager must force-close the process before replacing the desktop payload.
 CloseApplications=force
 RestartApplications=no
+#if EnableAuthenticodeSigning
+SignTool=phoenix
+SignedUninstaller=yes
+#endif
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
