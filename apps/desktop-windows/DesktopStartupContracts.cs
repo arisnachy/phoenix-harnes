@@ -12,7 +12,7 @@ internal static class DesktopStartupContract
 
 internal static class DesktopRuntimeLaunchContract
 {
-    internal const int DesktopPort = 3081;
+    internal const int DesktopPort = 3080;
     internal const string PowerShellExecutable = "powershell.exe";
 
     internal static ProcessStartInfo CreateOwnedRuntimeStartInfo(
@@ -39,7 +39,9 @@ internal static class DesktopRuntimeLaunchContract
         startInfo.ArgumentList.Add("-ExecutionPolicy");
         startInfo.ArgumentList.Add("Bypass");
         startInfo.ArgumentList.Add("-Command");
-        startInfo.ArgumentList.Add($"& '{escapedLauncher}' --port {DesktopPort} --no-open; exit $LASTEXITCODE");
+        // Use the same normal Phoenix launch contract as PowerShell. The desktop shell owns the
+        // window, not a second application runtime, so do not force a private alternate port.
+        startInfo.ArgumentList.Add($"& '{escapedLauncher}' --no-open; exit $LASTEXITCODE");
 
         if (managedRuntime)
             startInfo.Environment["PHOENIX_DESKTOP_MANAGED"] = "1";
@@ -51,6 +53,18 @@ internal static class DesktopRuntimeLaunchContract
         startInfo.Environment["PHOENIX_BROWSER_AUTOSTART"] = "true";
         startInfo.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"] = "chrome";
         return startInfo;
+    }
+
+    internal static bool LooksLikePhoenixProcessCommandLine(string? commandLine)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine)) return false;
+        return commandLine.Contains("phoenix-windows-supervisor.mjs", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains("phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains("phoenix-harnes", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains(@"apps\cli\", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains("apps/cli/", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains("pnpm phoenix", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains(@"\Phoenix\runtime", StringComparison.OrdinalIgnoreCase);
     }
 }
 
