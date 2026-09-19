@@ -220,9 +220,13 @@ export class UserProfileForm {
       consent: this.draft.consent,
     }
     try {
-      await this.scope.set('assistantGender', values.assistantGender)
-      if (values.assistantGenderSource === 'auto') await this.scope.unset('assistantGenderSource')
-      else await this.scope.set('assistantGenderSource', values.assistantGenderSource)
+      if (values.assistantGenderSource === 'auto') {
+        await this.scope.unset('assistantGenderSource')
+        await this.scope.unset('assistantGender')
+      } else {
+        await this.scope.set('assistantGenderSource', values.assistantGenderSource)
+        await this.scope.set('assistantGender', values.assistantGender)
+      }
     } catch {
       ok = false
     }
