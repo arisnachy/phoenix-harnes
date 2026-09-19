@@ -68,6 +68,7 @@ function harness(options: {
   providersReject?: boolean
   setFailure?: string
   setReject?: string
+  codexAuthorization?: boolean
 } = {}) {
   if (document.getElementById('root') === null) {
     const appRoot = document.createElement('div')
@@ -85,6 +86,18 @@ function harness(options: {
     return Promise.resolve(ok({}))
   })
   const face = {
+    authorization: options.codexAuthorization === true
+      ? {
+        list: () => Promise.resolve(ok({
+          entries: [{
+            key: 'subagent-codex/account',
+            label: 'ChatGPT / Codex',
+            methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
+            inFlight: false,
+          }],
+        })),
+      }
+      : undefined,
     llm: {
       providers: () => {
         if (options.providersReject === true) return Promise.reject(new Error('provider transport unavailable'))
@@ -154,6 +167,21 @@ describe('DeepSeekOnboardingDialog', () => {
     document.getElementById('root')!.remove()
     render(<DeepSeekOnboardingDialog {...h.props} />)
     expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
+  })
+
+  it('prefers native Codex authorization and keeps API-key setup as a fallback', async () => {
+    const h = harness({ codexAuthorization: true })
+    render(<DeepSeekOnboardingDialog {...h.props} />)
+    expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en.onboardingCodex })).toBeTruthy()
+    expect(screen.queryByLabelText(en.keyInput)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: en.onboardingUseApiKey }))
+    expect(await screen.findByLabelText(en.keyInput)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.onboardingBackToCodex }))
+    await waitFor(() => { expect(screen.queryByLabelText(en.keyInput)).toBeNull() })
+    expect(screen.getByRole('button', { name: en.onboardingCodex })).toBeTruthy()
+    expect(h.complete).not.toHaveBeenCalled()
   })
 
   it('loads a credential-only modal, inerts the product, and focuses the key', async () => {
