@@ -247,19 +247,19 @@ function preparedStageForTarget(target, { diagnose = false } = {}) {
   }
   const stage = persistentStage()
   if (!sameRepository(stage)) {
-    if (diagnose) console.error(\`[PHOENIX UPDATE] prepared candidate validation failed: staging worktree is missing or belongs to a different repository: \${stage}\`)
+    if (diagnose) console.error(`[PHOENIX UPDATE] prepared candidate validation failed: staging worktree is missing or belongs to a different repository: ${stage}`)
     return undefined
   }
   if (!gitClean(stage)) {
-    if (diagnose) console.error(\`[PHOENIX UPDATE] prepared candidate validation failed: staging worktree is not clean: \${stage}\`)
+    if (diagnose) console.error(`[PHOENIX UPDATE] prepared candidate validation failed: staging worktree is not clean: ${stage}`)
     return undefined
   }
   const stageHead = gitValue(stage, ['rev-parse', 'HEAD'])
   if (stageHead !== target) {
     if (diagnose) {
       console.error(
-        \`[PHOENIX UPDATE] prepared candidate validation failed: staging HEAD \${String(stageHead ?? 'unknown').slice(0, 12)} \`
-        + \`does not match target \${target.slice(0, 12)}.\`,
+        `[PHOENIX UPDATE] prepared candidate validation failed: staging HEAD ${String(stageHead ?? 'unknown').slice(0, 12)} `
+        + `does not match target ${target.slice(0, 12)}.`,
       )
     }
     return undefined
@@ -270,7 +270,7 @@ function preparedStageForTarget(target, { diagnose = false } = {}) {
   // live/isolated activation performs its own build + smoke verification.
   const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')
   if (!existsSync(stagedActivator)) {
-    if (diagnose) console.error(\`[PHOENIX UPDATE] prepared candidate validation failed: staged activator is missing: \${stagedActivator}\`)
+    if (diagnose) console.error(`[PHOENIX UPDATE] prepared candidate validation failed: staged activator is missing: ${stagedActivator}`)
     return undefined
   }
   return stage
