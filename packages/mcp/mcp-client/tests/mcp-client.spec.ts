@@ -1203,7 +1203,7 @@ describe('createTransport', () => {
     const repaired = repairPhoenixStdioProxyArgs([stale, 'npx', '--yes'])
 
     expect(repaired[0]).not.toBe(stale)
-    expect(repaired[0]).toMatch(/scripts[\\\\/]mcp-stdio-proxy\.mjs$/u)
+    expect(repaired[0]).toMatch(/mcp-stdio-proxy\.mjs$/u)
     expect(repaired.slice(1)).toEqual(['npx', '--yes'])
   })
 
