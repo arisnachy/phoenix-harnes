@@ -183,6 +183,13 @@ function mondayEnvelopeParameters(): JsonObject {
   }
 }
 
+function isMondayEnvelopeParameters(parameters: JsonObject): boolean {
+  const properties = propertiesOf(parameters)
+  return parameters.type === 'object'
+    && isObject(properties[MONDAY_ARGUMENT_ENVELOPE_KEY])
+    && stringArray(parameters.required).includes(MONDAY_ARGUMENT_ENVELOPE_KEY)
+}
+
 function mondayCompatibilityDescription(description: unknown, parameters: JsonObject): string {
   const base = typeof description === 'string' ? description.trim() : ''
   const normalized = normalizeCodexToolParameters(parameters)
@@ -209,7 +216,7 @@ export function applyMondayCodexMembrane(options: GenerateOptions): GenerateOpti
   if (options.tools === undefined || options.tools.length === 0) return options
   let changed = false
   const tools = options.tools.map((tool) => {
-    if (!isMondayToolName(tool.name)) return tool
+    if (!isMondayToolName(tool.name) || isMondayEnvelopeParameters(tool.parameters)) return tool
     changed = true
     return {
       ...tool,
@@ -235,6 +242,7 @@ function normalizePayloadToolEntry(value: unknown, mondayMembrane: boolean): unk
   const isMcpContextTool = typeof value.name === 'string' && value.name.startsWith('mcp__')
   if ((isWireFunction || isMcpContextTool) && isObject(value.parameters)) {
     if (mondayMembrane && isMondayToolName(value.name)) {
+      if (isMondayEnvelopeParameters(value.parameters)) return value
       return {
         ...value,
         description: mondayCompatibilityDescription(value.description, value.parameters),
@@ -247,6 +255,7 @@ function normalizePayloadToolEntry(value: unknown, mondayMembrane: boolean): unk
 
   if (isWireFunction && isObject(value.function) && isObject(value.function.parameters)) {
     if (mondayMembrane && isMondayToolName(value.function.name)) {
+      if (isMondayEnvelopeParameters(value.function.parameters)) return value
       return {
         ...value,
         function: {
