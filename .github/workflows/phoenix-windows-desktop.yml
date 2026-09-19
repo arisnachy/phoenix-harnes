@@ -37,11 +37,13 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Validate bootstrap syntax
+      - name: Validate bootstrap and signing syntax
         shell: pwsh
         run: |
-          $source = Get-Content installer/windows/bootstrap-runtime.ps1 -Raw
-          [void][scriptblock]::Create($source)
+          $bootstrap = Get-Content installer/windows/bootstrap-runtime.ps1 -Raw
+          [void][scriptblock]::Create($bootstrap)
+          $signing = Get-Content installer/windows/sign-authenticode.ps1 -Raw
+          [void][scriptblock]::Create($signing)
 
       - name: Desktop contract tests
         shell: pwsh
@@ -101,6 +103,37 @@ jobs:
           & (Join-Path $nodeRoot 'node.exe') --version
           & (Join-Path $nodeRoot 'corepack.cmd') --version
           & (Join-Path $gitRoot 'cmd\git.exe') --version
+
+      - name: Prepare Authenticode signing
+        id: signing
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_PFX_B64: ${{ secrets.WINDOWS_SIGNING_PFX_B64 }}
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          $enabled = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_PFX_B64) -and
+            -not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_PFX_PASSWORD)
+
+          if (-not $enabled) {
+            Write-Warning 'Windows Authenticode signing is not configured. This artifact will show Publisher: Unknown and may trigger SmartScreen.'
+            "enabled=false" >> $env:GITHUB_OUTPUT
+            "artifact_name=Phoenix-Windows-Desktop-UNSIGNED-${{ github.sha }}" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'phoenix-code-signing.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_B64))
+          "PHOENIX_SIGNING_PFX_PATH=$pfxPath" >> $env:GITHUB_ENV
+          "PHOENIX_SIGNING_PFX_PASSWORD=$env:WINDOWS_SIGNING_PFX_PASSWORD" >> $env:GITHUB_ENV
+          "PHOENIX_SIGNING_TIMESTAMP_URL=http://timestamp.digicert.com" >> $env:GITHUB_ENV
+          "enabled=true" >> $env:GITHUB_OUTPUT
+          "artifact_name=Phoenix-Windows-Desktop-SIGNED-${{ github.sha }}" >> $env:GITHUB_OUTPUT
+
+      - name: Sign Phoenix executable
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          ./installer/windows/sign-authenticode.ps1 -File dist/phoenix-desktop/Phoenix.exe -Description 'Phoenix'
 
       - name: Verify WebView2 deployment payload
         shell: pwsh
@@ -162,6 +195,8 @@ jobs:
 
       - name: Build installer
         shell: pwsh
+        env:
+          PHOENIX_AUTHENTICODE_ENABLED: ${{ steps.signing.outputs.enabled }}
         run: |
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           if (-not (Test-Path $iscc)) {
@@ -172,16 +207,58 @@ jobs:
           New-Item -ItemType Directory -Force dist/installer | Out-Null
           $source = (Resolve-Path dist/phoenix-desktop).Path
           $output = (Resolve-Path dist/installer).Path
-          & $iscc "/DSourceDir=$source" "/DOutputDir=$output" installer/windows/Phoenix.iss
+
+          if ($env:PHOENIX_AUTHENTICODE_ENABLED -eq 'true') {
+            $signScript = (Resolve-Path installer/windows/sign-authenticode.ps1).Path
+            $signTool = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$signScript`" -File `$f"
+            & $iscc "/DSourceDir=$source" "/DOutputDir=$output" "/DEnableAuthenticodeSigning=1" "/Sphoenix=$signTool" installer/windows/Phoenix.iss
+          } else {
+            & $iscc "/DSourceDir=$source" "/DOutputDir=$output" installer/windows/Phoenix.iss
+          }
+
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not (Test-Path dist/installer/Phoenix-Windows-Setup.exe)) { throw 'Installer artifact missing' }
+
+      - name: Verify release signing status
+        shell: pwsh
+        env:
+          PHOENIX_AUTHENTICODE_ENABLED: ${{ steps.signing.outputs.enabled }}
+        run: |
+          $files = @(
+            'dist/phoenix-desktop/Phoenix.exe',
+            'dist/installer/Phoenix-Windows-Setup.exe'
+          )
+
+          if ($env:PHOENIX_AUTHENTICODE_ENABLED -eq 'true') {
+            foreach ($file in $files) {
+              $signature = Get-AuthenticodeSignature -LiteralPath $file
+              if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+                throw "Invalid Authenticode signature on $file : $($signature.Status) $($signature.StatusMessage)"
+              }
+              Write-Host "SIGNED: $file"
+              Write-Host "Publisher: $($signature.SignerCertificate.Subject)"
+              Write-Host "Thumbprint: $($signature.SignerCertificate.Thumbprint)"
+            }
+            Set-Content dist/installer/SIGNING-STATUS.txt "SIGNED Authenticode release. SmartScreen publisher identity is backed by the configured trusted certificate."
+          } else {
+            Set-Content dist/installer/SIGNING-STATUS.txt "UNSIGNED build. Do not distribute as a consumer release: Windows may show Publisher: Unknown and SmartScreen warnings."
+          }
+
+      - name: Cleanup signing material
+        if: always() && steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          if ($env:PHOENIX_SIGNING_PFX_PATH -and (Test-Path $env:PHOENIX_SIGNING_PFX_PATH)) {
+            Remove-Item -LiteralPath $env:PHOENIX_SIGNING_PFX_PATH -Force
+          }
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: Phoenix-Windows-Desktop-${{ github.sha }}
+          name: ${{ steps.signing.outputs.artifact_name }}
           path: |
             dist/installer/Phoenix-Windows-Setup.exe
             dist/phoenix-desktop/Phoenix.exe
+            dist/installer/SIGNING-STATUS.txt
           if-no-files-found: error
           retention-days: 30
