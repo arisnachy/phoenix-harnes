@@ -109,6 +109,7 @@
     "@phoenix-ai/dsh-session-reference": "workspace:^",
     "@phoenix-ai/dsh-session-log-export": "workspace:^",
     "@phoenix-ai/dsh-session-stats": "workspace:^",
+    "@phoenix-ai/dsh-subagent-codex": "workspace:^",
     "@phoenix-ai/dsh-storage": "workspace:^",
     "@phoenix-ai/dsh-storage-domain": "workspace:^",
     "@phoenix-ai/dsh-storage-json": "workspace:^",
