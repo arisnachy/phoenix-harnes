@@ -8,7 +8,7 @@ namespace Phoenix.Desktop;
 
 internal static class Program
 {
-    internal static readonly Uri PhoenixUri = new("http://127.0.0.1:3080/");
+    internal static readonly Uri PhoenixUri = new($"http://127.0.0.1:{DesktopRuntimeLaunchContract.DesktopPort}/");
     internal static readonly string InstallRoot = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Phoenix");
     internal static readonly string RuntimeRoot = Path.Combine(InstallRoot, "runtime");
@@ -220,11 +220,11 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 window.SetStartupStatus("Cerrando una instancia anterior de Phoenix…");
                 if (!await RetireConflictingPhoenixRuntimeAsync())
                 {
-                    tray.Text = "Phoenix · puerto 3080 ocupado";
+                    tray.Text = "Phoenix · puerto 3081 ocupado";
                     window.SetStartupStatus(
-                        "El puerto 3080 está ocupado por otro programa. Phoenix no abrirá una versión ajena o antigua.\n\nCierra el proceso que usa el puerto y vuelve a abrir Phoenix.",
+                        "El puerto 3081 está ocupado por otro programa. Phoenix no abrirá una versión ajena o antigua.\n\nCierra el proceso que usa el puerto y vuelve a abrir Phoenix.",
                         isError: true);
-                    DesktopLog.Write("Refused to attach to an unowned process already listening on 127.0.0.1:3080.");
+                    DesktopLog.Write("Refused to attach to an unowned process already listening on 127.0.0.1:3081.");
                     return;
                 }
             }
@@ -379,7 +379,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     {
         const string script = """
             $ErrorActionPreference = 'SilentlyContinue'
-            $owners = @(Get-NetTCPConnection -State Listen -LocalPort 3080 -ErrorAction SilentlyContinue |
+            $owners = @(Get-NetTCPConnection -State Listen -LocalPort 3081 -ErrorAction SilentlyContinue |
               Select-Object -ExpandProperty OwningProcess -Unique)
             if ($owners.Count -eq 0) { exit 0 }
 
@@ -415,7 +415,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             }
 
             Start-Sleep -Milliseconds 700
-            $remaining = @(Get-NetTCPConnection -State Listen -LocalPort 3080 -ErrorAction SilentlyContinue)
+            $remaining = @(Get-NetTCPConnection -State Listen -LocalPort 3081 -ErrorAction SilentlyContinue)
             if ($remaining.Count -gt 0) { exit 22 }
             exit 0
             """;
@@ -444,7 +444,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         var stderr = await stderrTask;
         if (!string.IsNullOrWhiteSpace(stdout)) DesktopLog.Write("port cleanup stdout: " + stdout.Trim());
         if (!string.IsNullOrWhiteSpace(stderr)) DesktopLog.Write("port cleanup stderr: " + stderr.Trim());
-        DesktopLog.Write($"Port 3080 cleanup exited with code {cleanup.ExitCode}.");
+        DesktopLog.Write($"Port 3081 cleanup exited with code {cleanup.ExitCode}.");
         return cleanup.ExitCode == 0 && !await IsReadyAsync();
     }
 
@@ -511,9 +511,9 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         {
             var exit = ownedRuntime.HasExited ? $" El proceso terminó con código {ownedRuntime.ExitCode}." : string.Empty;
             tray.Text = "Phoenix · error de inicio";
-            window.SetStartupStatus($"Phoenix no alcanzó 127.0.0.1:3080.{exit}\n\nDiagnóstico: {Program.LogPath}", isError: true);
+            window.SetStartupStatus($"Phoenix no alcanzó 127.0.0.1:3081.{exit}\n\nDiagnóstico: {Program.LogPath}", isError: true);
             MessageBox.Show(
-                $"Phoenix no alcanzó http://127.0.0.1:3080.{exit}\n\nDiagnóstico: {Program.LogPath}",
+                $"Phoenix no alcanzó http://127.0.0.1:3081.{exit}\n\nDiagnóstico: {Program.LogPath}",
                 "Phoenix", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             DesktopLog.Write("Runtime did not become ready within the startup window." + exit);
         }
