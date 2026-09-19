@@ -136,6 +136,7 @@ export function useAuthorizationAttempt(
     if (api === undefined) return
     setFailure(undefined)
     setAttempt(undefined)
+    opened.current.clear()
     // OAuth needs a window reserved synchronously inside the click gesture so
     // popup blockers allow the later consent navigation. Other methods never
     // reserve a tab. Any failed/cancelled attempt closes an unused reservation
@@ -156,10 +157,11 @@ export function useAuthorizationAttempt(
   }
 
   useEffect(() => {
-    if (attempt?.status !== 'authorized') return
+    if (attempt?.status !== 'authorized' && attempt?.status !== 'cancelled') return
+    const timeoutMs = attempt.status === 'authorized' ? 4_500 : 2_500
     const timer = window.setTimeout(() => {
       setAttempt((current) => current?.id === attempt.id ? undefined : current)
-    }, 4_500)
+    }, timeoutMs)
     return () => { window.clearTimeout(timer) }
   }, [attempt?.id, attempt?.status])
 
