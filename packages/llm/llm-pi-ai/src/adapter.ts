@@ -68,7 +68,7 @@ import {
 } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
-import { normalizeCodexToolSchemas, normalizeOpenAiFunctionToolPayload, quarantineCodexTools, requiresCodexToolQuarantine, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
+import { applyMondayCodexMembrane, normalizeCodexToolSchemas, normalizeOpenAiFunctionToolPayload, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 
@@ -428,12 +428,12 @@ export class PiAiAdapter extends LlmAdapter {
         )
       }
       const requiresFunctionSchemaProjection = requiresObjectRootFunctionSchemas(options.provider, model.api)
-      const requiresMondayQuarantine = requiresCodexToolQuarantine(options.provider, model.api)
+      const requiresMondayMembrane = requiresMondayCodexMembrane(options.provider, model.api)
       const projectedOptions = requiresFunctionSchemaProjection
         ? normalizeCodexToolSchemas(fitted.options)
         : fitted.options
-      const requestOptions = requiresMondayQuarantine
-        ? quarantineCodexTools(projectedOptions)
+      const requestOptions = requiresMondayMembrane
+        ? applyMondayCodexMembrane(projectedOptions)
         : projectedOptions
       const containsImage = requestOptions.messages.some(message => contentHasImage(message.content))
       const containsFile = requestOptions.messages.some(message => contentHasFile(message.content))
@@ -456,12 +456,12 @@ export class PiAiAdapter extends LlmAdapter {
       // Defense before pi-ai performs any provider-side validation or tool
       // transformation. onPayload below remains the final wire defense.
       const providerContext = requiresFunctionSchemaProjection
-        ? normalizeOpenAiFunctionToolPayload(context) as typeof context
+        ? normalizeOpenAiFunctionToolPayload(context, requiresMondayMembrane) as typeof context
         : context
       const streamOptions: SimpleStreamOptions = {
         ...profileOptions(profile, reasoning, apiKey),
         ...requiresFunctionSchemaProjection
-          ? { onPayload: payload => normalizeOpenAiFunctionToolPayload(payload, requiresMondayQuarantine) }
+          ? { onPayload: payload => normalizeOpenAiFunctionToolPayload(payload, requiresMondayMembrane) }
           : {},
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
