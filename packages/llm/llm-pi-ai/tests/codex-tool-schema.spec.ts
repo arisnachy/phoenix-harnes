@@ -1,8 +1,42 @@
 import { describe, expect, it } from 'vitest'
 import type { GenerateOptions } from '@phoenix-ai/dsh-llm'
-import { normalizeCodexToolParameters, normalizeCodexToolSchemas } from '../src/codex-tool-schema.ts'
+import {
+  normalizeCodexToolParameters,
+  normalizeCodexToolSchemas,
+  requiresObjectRootFunctionSchemas,
+} from '../src/codex-tool-schema.ts'
 
 describe('Codex tool-schema compatibility', () => {
+  it('projects every strict OpenAI/Codex function-tool route at the final provider seam', () => {
+    expect(requiresObjectRootFunctionSchemas('openai-codex', 'future-codex-wire')).toBe(true)
+    for (const api of [
+      'openai-codex-responses',
+      'openai-responses',
+      'openai-completions',
+      'azure-openai-responses',
+    ]) {
+      expect(requiresObjectRootFunctionSchemas('custom-openai-compatible', api)).toBe(true)
+    }
+  })
+
+  it('leaves unrelated provider protocols outside the OpenAI/Codex projection', () => {
+    expect(requiresObjectRootFunctionSchemas('anthropic', 'anthropic-messages')).toBe(false)
+    expect(requiresObjectRootFunctionSchemas('google', 'google-generative-ai')).toBe(false)
+  })
+
+  it('removes every Codex-forbidden root keyword even without a root union', () => {
+    const normalized = normalizeCodexToolParameters({
+      enum: [{ action: 'create' }],
+      const: { action: 'create' },
+      not: { type: 'null' },
+    })
+
+    expect(normalized.type).toBe('object')
+    for (const key of ['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not']) {
+      expect(normalized).not.toHaveProperty(key)
+    }
+  })
+
   it('projects a Monday-style root oneOf to an object schema without changing argument names', () => {
     const schema = {
       oneOf: [
