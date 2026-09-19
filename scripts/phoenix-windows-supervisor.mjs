@@ -175,7 +175,7 @@ function reanchorPreparedForLiveActivation(target) {
   const liveHead = gitValue(root, ['rev-parse', 'HEAD'])
   if (path === undefined || prepared === undefined || liveHead === undefined) return false
   if (prepared.target !== target) return false
-  if (preparedStageForTarget(target) === undefined) return false
+  if (preparedStageForTarget(target, { diagnose: true }) === undefined) return false
   if (prepared.base === liveHead) return true
 
   writeFileSync(path, JSON.stringify({
@@ -239,13 +239,40 @@ function runPnpm(cwd, args, label) {
   runChecked(cwd, commandProcessor, ['/d', '/s', '/c', commandLine], label)
 }
 
-function preparedStageForTarget(target) {
+function preparedStageForTarget(target, { diagnose = false } = {}) {
   const prepared = readPreparedRecord()
-  if (prepared?.target !== target) return undefined
+  if (prepared?.target !== target) {
+    if (diagnose) console.error('[PHOENIX UPDATE] prepared candidate validation failed: prepared marker is missing or targets a different commit.')
+    return undefined
+  }
   const stage = persistentStage()
-  if (!sameRepository(stage) || !gitClean(stage)) return undefined
-  if (gitValue(stage, ['rev-parse', 'HEAD']) !== target) return undefined
-  if (!existsSync(join(stage, 'apps', 'cli', 'lib', 'bin.js'))) return undefined
+  if (!sameRepository(stage)) {
+    if (diagnose) console.error(`[PHOENIX UPDATE] prepared candidate validation failed: staging worktree is missing or belongs to a different repository: ${stage}`)
+    return undefined
+  }
+  if (!gitClean(stage)) {
+    if (diagnose) console.error(`[PHOENIX UPDATE] prepared candidate validation failed: staging worktree is not clean: ${stage}`)
+    return undefined
+  }
+  const stageHead = gitValue(stage, ['rev-parse', 'HEAD'])
+  if (stageHead !== target) {
+    if (diagnose) {
+      console.error(
+        `[PHOENIX UPDATE] prepared candidate validation failed: staging HEAD ${String(stageHead ?? 'unknown').slice(0, 12)} `
+        + `does not match target ${target.slice(0, 12)}.`,
+      )
+    }
+    return undefined
+  }
+  // A prepared candidate is a source checkout plus the verified preparation
+  // marker. Do not require apps/cli/lib/bin.js here: documentation-only and
+  // client-only plans are allowed to prepare without a fresh Host build, and
+  // live/isolated activation performs its own build + smoke verification.
+  const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')
+  if (!existsSync(stagedActivator)) {
+    if (diagnose) console.error(`[PHOENIX UPDATE] prepared candidate validation failed: staged activator is missing: ${stagedActivator}`)
+    return undefined
+  }
   return stage
 }
 
@@ -861,8 +888,15 @@ while (true) {
     }
 
     if (!reanchorPreparedForLiveActivation(requestedTarget)) {
+      // Never leave a rejected prepared marker armed. The Host-side bridge
+      // watches that marker and would otherwise recreate the same restart
+      // request after every relaunch, producing an infinite restart loop while
+      // the updater keeps saying "already prepared". Invalidate only the
+      // disposable preparation record; the source checkout and user data stay
+      // untouched, and the stable watcher will build a fresh candidate.
+      clearPreparedRecord()
       clearRestartRequest()
-      console.error('[PHOENIX UPDATE] prepared update no longer matches a verified staging candidate; refusing live activation and relaunching PHOENIX.')
+      console.error('[PHOENIX UPDATE] prepared update failed staging verification; invalidated the cached candidate and relaunching PHOENIX so the updater can prepare it again.')
       continue
     }
 
