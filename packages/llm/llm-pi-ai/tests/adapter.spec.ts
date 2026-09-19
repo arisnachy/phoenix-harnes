@@ -596,11 +596,25 @@ describe('PiAiAdapter provider routing', () => {
       }],
     })
 
-    const requests = server.requests.filter((request): request is {
-      tools?: Array<{ name?: string; parameters?: Record<string, unknown> }>
-    } => typeof request === 'object' && request !== null)
-    const monday = requests
-      .flatMap(request => request.tools ?? [])
+    type CapturedTool = { name?: string; parameters?: Record<string, unknown> }
+    const capturedTools = server.requests.flatMap((request): CapturedTool[] => {
+      if (typeof request !== 'object' || request === null) return []
+      const record = request as Record<string, unknown>
+      const tools: CapturedTool[] = []
+
+      if (Array.isArray(record.tools)) tools.push(...record.tools as CapturedTool[])
+      if (Array.isArray(record.additional_tools)) tools.push(...record.additional_tools as CapturedTool[])
+
+      if (Array.isArray(record.input)) {
+        for (const item of record.input) {
+          if (typeof item !== 'object' || item === null) continue
+          const itemTools = (item as Record<string, unknown>).tools
+          if (Array.isArray(itemTools)) tools.push(...itemTools as CapturedTool[])
+        }
+      }
+      return tools
+    })
+    const monday = capturedTools
       .find(tool => tool.name === 'mcp__monday-com-monday-com__create_action')
 
     expect(server.paths.length).toBeGreaterThan(0)
