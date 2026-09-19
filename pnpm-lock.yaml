@@ -830,9 +830,6 @@ importers:
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
-      '@phoenix-ai/dsh-image-generation':
-        specifier: workspace:^
-        version: link:../../llm/image-generation
       '@phoenix-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
@@ -1117,6 +1114,9 @@ importers:
       '@phoenix-ai/dsh-living-local':
         specifier: workspace:^
         version: link:../../core/living-local
+      '@phoenix-ai/dsh-image-generation':
+        specifier: workspace:^
+        version: link:../../llm/image-generation
       '@phoenix-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
