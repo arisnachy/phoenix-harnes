@@ -10,6 +10,10 @@ const OBJECT_ROOT_FUNCTION_APIS = new Set([
   'azure-openai-responses',
 ])
 
+const CODEX_QUARANTINED_FUNCTION_TOOLS = new Set([
+  'mcp__monday-com-monday-com__create_action',
+])
+
 type JsonObject = Record<string, unknown>
 
 /**
@@ -151,6 +155,33 @@ export function normalizeCodexToolSchemas(options: GenerateOptions): GenerateOpt
   return changed ? { ...options, tools } : options
 }
 
+/**
+ * Remove provider-specific tool definitions that are known to make Codex reject
+ * the entire request before the model can answer.
+ *
+ * This is deliberately a narrow compatibility quarantine, not a generic MCP
+ * denylist. Other providers still receive the tool, and the rest of the Monday
+ * catalog remains available on Codex.
+ */
+export function quarantineCodexTools(options: GenerateOptions): GenerateOptions {
+  if (options.tools === undefined || options.tools.length === 0) return options
+  const tools = options.tools.filter(tool => !CODEX_QUARANTINED_FUNCTION_TOOLS.has(tool.name))
+  return tools.length === options.tools.length ? options : { ...options, tools }
+}
+
+function payloadFunctionName(value: unknown): string | undefined {
+  if (!isObject(value) || value.type !== 'function') return undefined
+  if (typeof value.name === 'string') return value.name
+  return isObject(value.function) && typeof value.function.name === 'string'
+    ? value.function.name
+    : undefined
+}
+
+function isQuarantinedPayloadFunction(value: unknown): boolean {
+  const name = payloadFunctionName(value)
+  return name !== undefined && CODEX_QUARANTINED_FUNCTION_TOOLS.has(name)
+}
+
 
 function normalizePayloadToolEntry(value: unknown): unknown {
   if (!isObject(value) || value.type !== 'function') return value
@@ -178,11 +209,16 @@ function normalizePayloadToolEntry(value: unknown): unknown {
 function normalizePayloadTree(value: unknown): unknown {
   if (Array.isArray(value)) {
     let changed = false
-    const normalized = value.map((entry) => {
+    const normalized: unknown[] = []
+    for (const entry of value) {
+      if (isQuarantinedPayloadFunction(entry)) {
+        changed = true
+        continue
+      }
       const next = normalizePayloadTree(entry)
       if (next !== entry) changed = true
-      return next
-    })
+      normalized.push(next)
+    }
     return changed ? normalized : value
   }
   if (!isObject(value)) return value
