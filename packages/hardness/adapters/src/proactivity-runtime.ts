@@ -4,6 +4,7 @@ import { boundContextSummary, createUserMessage, type ContentBlock } from '@phoe
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
 import type { RpcResult } from '@phoenix-ai/dsh-host-apiproxy/api'
+import type { ObjectJsonSchema, ToolRestriction } from '@phoenix-ai/dsh-tools'
 import {
   ProactivityDeferredError,
   type ProactivityEngine,
@@ -82,7 +83,7 @@ function mailIdentity(sender: ProactivitySenderIdentity, config: ProactivityRunt
   throw new Error('no mail identity is configured')
 }
 
-function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntimeConfig): string {
+function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntimeConfig, conditionEvidence?: string): string {
   const lines = [
     '<phoenix_proactive_task>',
     `Task: ${input.task.title}`,
@@ -91,6 +92,7 @@ function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntime
     `Instruction: ${input.instruction}`,
   ]
   if (input.preparationResult !== undefined) lines.push(`Prepared result: ${input.preparationResult}`)
+  if (conditionEvidence !== undefined) lines.push(`Condition verified true: ${conditionEvidence}`)
   if (input.task.delivery === 'email') {
     lines.push(`Delivery: send email using configured identity reference ${JSON.stringify(mailIdentity(input.task.senderIdentity, config))}.`)
     if (input.task.recipient !== undefined) lines.push(`Recipient: ${input.task.recipient}`)
@@ -102,6 +104,90 @@ function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntime
   }
   lines.push('Treat this as scheduled work, not as a new planning request. Do not create or escalate permissions to complete it.', '</phoenix_proactive_task>')
   return lines.join('\n')
+}
+
+const CONDITION_WATCH_OUTPUT_SCHEMA: ObjectJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    met: { type: 'boolean' },
+    evidence: { type: 'string' },
+  },
+  required: ['met', 'evidence'],
+}
+
+const CONDITION_WATCH_READ_ONLY_TOOLS: ToolRestriction = {
+  allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'],
+}
+
+interface ConditionWatchDecision {
+  readonly met: boolean
+  readonly evidence: string
+}
+
+function conditionDecision(value: unknown): ConditionWatchDecision | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  if (typeof record.met !== 'boolean' || typeof record.evidence !== 'string') return undefined
+  const evidence = record.evidence.trim()
+  if (evidence.length === 0 || evidence.length > 2_000) return undefined
+  return { met: record.met, evidence }
+}
+
+function conditionWatchPrompt(input: ProactivityExecution): ContentBlock[] {
+  const recent = input.task.history
+    .filter(row => row.phase === 'deliver' && row.summary !== undefined)
+    .slice(-4)
+    .map(row => ({ scheduledFor: row.scheduledFor, summary: row.summary }))
+  return [{
+    type: 'text',
+    text: '<phoenix_condition_watch>\n'
+      + `Watch: ${input.task.title}\n`
+      + `Scheduled check: ${input.scheduledFor}\n`
+      + `Condition: ${input.task.condition}\n`
+      + `Recent checks: ${JSON.stringify(recent)}\n\n`
+      + 'Evaluate the condition against current evidence. Use only the available read-only tools. '
+      + 'Do not send messages, edit state, install connectors, schedule work, or perform side effects. '
+      + 'Return met=true only when current evidence clearly satisfies the condition. '
+      + 'If evidence is missing, stale, ambiguous, or the condition is not yet true, return met=false. '
+      + 'Keep evidence concise and factual.\n</phoenix_condition_watch>',
+  }]
+}
+
+async function evaluateConditionWatch(
+  input: ProactivityExecution,
+  parent: Agent,
+  subagents: Pick<SubagentRuntime, 'getProvider' | 'start'> | undefined,
+  providerName: string,
+): Promise<ConditionWatchDecision> {
+  if (input.task.condition === undefined) throw new Error('condition watch requires a condition')
+  const provider = subagents?.getProvider(providerName)
+  if (subagents === undefined || provider === undefined) {
+    throw new ProactivityDeferredError(`condition-watch provider is not available: ${providerName}`)
+  }
+  if (!provider.capabilities.outputSchema || !provider.capabilities.toolFilter) {
+    throw new ProactivityDeferredError(`condition-watch provider lacks structured read-only evaluation: ${providerName}`)
+  }
+  const controller = new AbortController()
+  const run = await subagents.start(providerName, {
+    label: `Watch: ${input.task.title}`,
+    prompt: conditionWatchPrompt(input),
+    parent,
+    signal: controller.signal,
+    outputSchema: CONDITION_WATCH_OUTPUT_SCHEMA,
+    toolFilter: CONDITION_WATCH_READ_ONLY_TOOLS,
+  })
+  try {
+    const result = await run.result
+    if (result.stopReason !== 'completed') {
+      throw new Error(result.diagnostic ?? `condition watch ended with ${result.stopReason}`)
+    }
+    const decision = conditionDecision(result.structured)
+    if (decision === undefined) throw new Error('condition watch returned invalid structured output')
+    return decision
+  } finally {
+    await run.dispose()
+  }
 }
 
 /**
@@ -122,10 +208,17 @@ export function createProactivityExecutor(
   return {
     async execute(input): Promise<ProactivityExecutionResult> {
       const parent = chooseAgent(agents, input.task.targetAgentId)
+      let conditionEvidence: string | undefined
+      if (input.phase === 'deliver' && input.task.condition !== undefined) {
+        const decision = await evaluateConditionWatch(input, parent, subagents, config.privateWorkProvider)
+        if (!decision.met) return { summary: `condition not met: ${decision.evidence}` }
+        conditionEvidence = decision.evidence
+      }
+      const terminalAfterDelivery = input.phase === 'deliver' && input.task.condition !== undefined
       const privateWork = input.phase === 'prepare' || input.task.delivery === 'email' || input.task.delivery === 'work'
       if (!privateWork) {
         parent.followup(createUserMessage({
-          content: [{ type: 'text', text: proactivePrompt(input, config) }],
+          content: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence) }],
           source: {
             kind: 'plugin',
             plugin: 'hardness-adapters',
@@ -133,7 +226,12 @@ export function createProactivityExecutor(
             summary: boundContextSummary(`Scheduled task: ${input.task.title}`),
           },
         }))
-        return { summary: 'accepted by the live Phoenix agent inbox' }
+        return {
+          summary: conditionEvidence === undefined
+            ? 'accepted by the live Phoenix agent inbox'
+            : `condition met and notification accepted: ${conditionEvidence}`,
+          ...(terminalAfterDelivery ? { terminal: true } : {}),
+        }
       }
 
       if (subagents === undefined || subagents.getProvider(config.privateWorkProvider) === undefined) {
@@ -142,7 +240,7 @@ export function createProactivityExecutor(
       const controller = new AbortController()
       const run = await subagents.start(config.privateWorkProvider, {
         label: input.phase === 'prepare' ? `Prepare: ${input.task.title}` : `Scheduled: ${input.task.title}`,
-        prompt: [{ type: 'text', text: proactivePrompt(input, config) }],
+        prompt: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence) }],
         parent,
         signal: controller.signal,
       })
@@ -151,7 +249,10 @@ export function createProactivityExecutor(
         if (result.stopReason !== 'completed') {
           throw new Error(result.diagnostic ?? `private proactive work ended with ${result.stopReason}`)
         }
-        return { summary: plainOutput(result.output, config.privateWorkResultChars) }
+        return {
+          summary: plainOutput(result.output, config.privateWorkResultChars),
+          ...(terminalAfterDelivery ? { terminal: true } : {}),
+        }
       } finally {
         await run.dispose()
       }
