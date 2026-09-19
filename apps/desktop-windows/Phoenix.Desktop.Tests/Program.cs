@@ -99,6 +99,7 @@ EqualInt(960, BrowserLayout.PreferredBrowserWidth(2400), "wide window preserves 
 True(DesktopStartupContract.ShowWindowBeforeRuntimeReady, "desktop window is shown before runtime readiness", failures);
 True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch signals existing window", failures);
 True(DesktopStartupContract.EmbeddedBrowserStartsLazy, "embedded browser does not delay chat startup", failures);
+True(DesktopStartupContract.UserCloseHidesToTray, "user close hides Phoenix to tray instead of stopping runtime", failures);
 Equal("Iniciando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
 
 var toolchainEntries = DesktopBundledToolchain.CandidatePathEntries(@"C:\Program Files\Phoenix");
@@ -124,6 +125,20 @@ Equal("desktop", runtimeLaunch.Environment["PHOENIX_SURFACE"], "runtime knows it
 Equal("1", runtimeLaunch.Environment["PHOENIX_DESKTOP_SHELL"], "desktop shell marker reaches runtime", failures);
 Equal("true", runtimeLaunch.Environment["PHOENIX_BROWSER_AUTOSTART"], "desktop automation browser may start on demand", failures);
 Equal("chrome", runtimeLaunch.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"], "desktop prefers Chrome automation", failures);
+Equal("0", runtimeLaunch.Environment["PHOENIX_DESKTOP_CONSOLE"], "normal users get a hidden runtime console", failures);
+True(runtimeLaunch.CreateNoWindow, "normal runtime creates no PowerShell window", failures);
+True(runtimeLaunch.RedirectStandardOutput, "hidden runtime stdout is captured to desktop log", failures);
+True(runtimeLaunch.RedirectStandardError, "hidden runtime stderr is captured to desktop log", failures);
+
+var developerLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
+    @"C:\Phoenix Runtime",
+    @"C:\Phoenix\desktop-control.json",
+    managedRuntime: true,
+    showDeveloperConsole: true);
+Equal("1", developerLaunch.Environment["PHOENIX_DESKTOP_CONSOLE"], "developer mode exposes runtime console", failures);
+False(developerLaunch.CreateNoWindow, "developer mode allows a PowerShell window", failures);
+False(developerLaunch.RedirectStandardOutput, "developer stdout stays attached to visible console", failures);
+False(developerLaunch.RedirectStandardError, "developer stderr stays attached to visible console", failures);
 
 var sourceLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
     @"C:\Working Phoenix",
@@ -136,6 +151,21 @@ True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node scri
 True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node C:\Users\me\Phoenix\phoenix-harnes\apps\cli\lib\bin.js web"), "source checkout listener is recognized as Phoenix", failures);
 True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"powershell -Command corepack pnpm phoenix -- --no-open"), "PowerShell pnpm Phoenix listener is recognized", failures);
 False(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"python -m http.server 3080"), "unrelated local HTTP listener is rejected", failures);
+
+var consolePrefRoot = Path.Combine(Path.GetTempPath(), $"phoenix-console-test-{Guid.NewGuid():N}");
+try
+{
+    False(DesktopDeveloperConsole.Requested(consolePrefRoot, Array.Empty<string>()), "developer console defaults off", failures);
+    True(DesktopDeveloperConsole.Requested(consolePrefRoot, new[] { "--developer-console" }), "developer console CLI switch enables it", failures);
+    DesktopDeveloperConsole.SetEnabled(consolePrefRoot, true);
+    True(DesktopDeveloperConsole.Requested(consolePrefRoot, Array.Empty<string>()), "developer console persisted preference enables it", failures);
+    DesktopDeveloperConsole.SetEnabled(consolePrefRoot, false);
+    False(DesktopDeveloperConsole.Requested(consolePrefRoot, Array.Empty<string>()), "developer console preference can be disabled", failures);
+}
+finally
+{
+    Directory.Delete(consolePrefRoot, recursive: true);
+}
 
 var sourceTestRoot = Path.Combine(Path.GetTempPath(), $"phoenix-source-test-{Guid.NewGuid():N}");
 var sourceInstallRoot = Path.Combine(Path.GetTempPath(), $"phoenix-install-test-{Guid.NewGuid():N}");
