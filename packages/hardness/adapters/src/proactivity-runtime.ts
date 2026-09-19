@@ -160,13 +160,18 @@ async function evaluateConditionWatch(
   subagents: Pick<SubagentRuntime, 'getProvider' | 'start'> | undefined,
   providerName: string,
 ): Promise<ConditionWatchDecision> {
-  if (input.task.condition === undefined) throw new Error('condition watch requires a condition')
-  const provider = subagents?.getProvider(providerName)
-  if (subagents === undefined || provider === undefined) {
+  if (subagents === undefined) {
     throw new ProactivityDeferredError(`condition-watch provider is not available: ${providerName}`)
   }
-  if (!provider.capabilities.outputSchema || !provider.capabilities.toolFilter) {
-    throw new ProactivityDeferredError(`condition-watch provider lacks structured read-only evaluation: ${providerName}`)
+  const provider = subagents.getProvider(providerName)
+  if (provider === undefined) {
+    throw new ProactivityDeferredError(`condition-watch provider is not available: ${providerName}`)
+  }
+  if (!provider.capabilities.outputSchema) {
+    throw new ProactivityDeferredError(`condition-watch provider lacks structured output: ${providerName}`)
+  }
+  if (!provider.capabilities.toolFilter) {
+    throw new ProactivityDeferredError(`condition-watch provider lacks read-only tool filtering: ${providerName}`)
   }
   const controller = new AbortController()
   const run = await subagents.start(providerName, {
