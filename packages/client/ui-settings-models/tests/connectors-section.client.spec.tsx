@@ -208,7 +208,7 @@ describe('connectors settings section', () => {
 
       expect(cancel).toHaveBeenCalledWith({ attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546015' })
       expect(screen.getByText('Authorization cancelled')).toBeTruthy()
-      expect(screen.getAllByRole('button', { name: 'Authorize' })[0]).not.toBeDisabled()
+      expect((screen.getAllByRole('button', { name: 'Authorize' })[0] as HTMLButtonElement).disabled).toBe(false)
     } finally {
       open.mockRestore()
       vi.useRealTimers()
