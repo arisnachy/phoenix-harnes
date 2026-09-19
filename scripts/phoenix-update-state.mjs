@@ -50,17 +50,19 @@ function supervisedAutoActivationEnabled() {
     && mode === 'auto'
 }
 
-function requestPreparedActivation(path, value) {
-  if (!supervisedAutoActivationEnabled()) return
-  if (basename(path) !== UPDATE_STATE_FILE) return
-  if (value?.schema !== 1 || value?.status !== 'ready') return
-  if (typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return
+function supervisedReadyTarget(path, value) {
+  if (!supervisedAutoActivationEnabled()) return undefined
+  if (basename(path) !== UPDATE_STATE_FILE) return undefined
+  if (value?.schema !== 1 || value?.status !== 'ready') return undefined
+  if (typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
+  return value.target
+}
 
+function requestPreparedActivation(path, target, now) {
   const controlDirectory = dirname(path)
-  const now = new Date().toISOString()
   writeJsonAtomic(join(controlDirectory, UPDATE_RESTART_FILE), {
     schema: 1,
-    target: value.target,
+    target,
     requestedAt: now,
     requestedByPid: process.pid,
     source: 'updater-ready-state',
@@ -70,7 +72,7 @@ function requestPreparedActivation(path, value) {
     kind: 'host-restart',
     requestedAt: now,
     requestedByPid: process.pid,
-    reason: `verified stable update ${value.target.slice(0, 12)} ready; activate and restart`,
+    reason: `verified stable update ${target.slice(0, 12)} ready; activate and restart`,
     source: 'updater-ready-state',
   })
 }
@@ -78,15 +80,30 @@ function requestPreparedActivation(path, value) {
 /**
  * Persist one updater state document without exposing a partially written JSON
  * file to the Host polling process. A supervised auto-update that reaches the
- * verified `ready` state also durably requests activation and a Host restart,
- * so the prepared-update bridge is a compatibility fallback rather than a
- * single point of failure.
+ * verified `ready` state never exposes an actionable ready window: activation
+ * is durably queued first and the browser-visible state is persisted directly
+ * as `restarting`. The prepared-update bridge remains a compatibility fallback
+ * rather than a single point of failure.
  *
  * @param {string} path - destination state path
  * @param {unknown} value - JSON-serializable state value
  * @returns {void}
  */
 export function writePhoenixUpdateState(path, value) {
+  const target = supervisedReadyTarget(path, value)
+  if (target !== undefined) {
+    const now = new Date().toISOString()
+    // Queue activation before publishing the transition. Readers either keep
+    // seeing the previous preparing state or see restarting; they never see a
+    // clickable ready state while the supervisor is already taking over.
+    requestPreparedActivation(path, target, now)
+    writeJsonAtomic(path, {
+      ...value,
+      status: 'restarting',
+      phase: 'restart',
+      at: value?.at ?? now,
+    })
+    return
+  }
   writeJsonAtomic(path, value)
-  requestPreparedActivation(path, value)
 }
