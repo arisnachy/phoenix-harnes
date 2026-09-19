@@ -17,6 +17,7 @@ import { en, type PluginInventoryLocaleKey } from '../src/client/locales.ts'
 
 afterEach(() => {
   vi.useRealTimers()
+  window.sessionStorage.clear()
   cleanup()
 })
 
@@ -260,12 +261,15 @@ describe('UpdateFooterAction', () => {
     expect(readUpdateState).toHaveBeenCalledTimes(2)
   })
 
-  it('contains restart failures without exposing transport detail', async () => {
+  it('keeps restart transport loss in the restarting state instead of flashing a false error', async () => {
     const restartForUpdate = vi.fn<UpdateFooterActionInjected['restartForUpdate']>()
       .mockRejectedValue(new Error('private restart detail'))
     render(<UpdateFooterAction {...updateProps(async () => ({ status: 'ready', target: 'a'.repeat(40) }), restartForUpdate)} />)
+
     fireEvent.click(await screen.findByRole('button', { name: en.updateRestart }))
-    expect(await screen.findByRole('status', { name: en.updateError })).toBeTruthy()
+
+    expect(await screen.findByRole('status', { name: en.updateRestarting })).toBeTruthy()
+    expect(screen.queryByRole('status', { name: en.updateError })).toBeNull()
     expect(screen.queryByText('private restart detail')).toBeNull()
   })
 
