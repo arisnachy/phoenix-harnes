@@ -206,12 +206,7 @@ export function apply(ctx: Context, config: Config): void {
 
   const openCodeCatalog = createOpenCodeFreeCatalog()
   let openCodeCatalogRevision = 0
-  const codexCatalog = new CodexLiveCatalog({
-    warn: (message, error) => {
-      ctx.logger.warn(`llm-pi-ai: ${message}`)
-      if (error !== undefined) ctx.logger.warn(error)
-    },
-  })
+  const codexCatalog = new CodexLiveCatalog({ logger: ctx.logger })
   let current: () => Config = () => config
   let lastRaw: Config | undefined
   let lastCatalogRevision = -1
