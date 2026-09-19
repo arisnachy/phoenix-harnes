@@ -766,6 +766,8 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
               const actionLabel = runtime?.status === 'auth-required' && entry.stored !== undefined
                 ? connectorT('reauthorize')
                 : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
+              const authorizationPending = attempt?.status === 'pending'
+              const thisAuthorizationPending = authorizationPending && attempt.key === entry.key
               return (
                 <article key={entry.key} className={connectorStyles['connectorCard']} data-authorization-key={entry.key}>
                   <div className={connectorStyles['connectorTop']}>
@@ -796,10 +798,10 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                       <button
                         type="button"
                         className={connectorStyles['connectorPrimaryButton']}
-                        disabled={attempt?.status === 'pending' || entry.inFlight}
+                        disabled={authorizationPending || entry.inFlight}
                         onClick={() => { begin(entry.key, 'oauth') }}
                       >
-                        {attempt?.status === 'pending' ? t('signingIn') : actionLabel}
+                        {thisAuthorizationPending ? t('signingIn') : actionLabel}
                       </button>
                       {entry.stored === undefined || entry.disconnectable !== true ? null : (
                         <button
