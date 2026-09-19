@@ -1,23 +1,47 @@
 /**
- * Official-DeepSeek first-run step. Readiness comes from the same
- * provider/settings/credential join as the Models page: any provider the user
- * can already talk to ends the step, and only a user with none is offered the
- * official DeepSeek route. The step reuses that page's credential editor in
- * the onboarding plugin's shared modal, so the key is entered once.
+ * Codex-first first-run onboarding with a separate API-provider fallback.
+ *
+ * The first screen prefers the official ChatGPT / Codex app-server account
+ * lifecycle. That subscription session is deliberately kept separate from
+ * PHOENIX API-provider credentials: connecting Codex must never be treated as
+ * if it had produced an OpenAI API key. A user may configure a chat provider
+ * next, or defer that choice without blocking the application shell.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { InjectFace, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelsSettingsState, ModelsSettingsStore } from './store.ts'
-import { onboardingReadiness } from './store.ts'
+import { providerUsable } from './store.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor } from './ProviderEditor.tsx'
+import {
+  AuthorizationAttemptProgress,
+  useAuthorizationAttempt,
+} from './authorization-attempt.tsx'
 import type { en } from './locales.ts'
 import { OnboardingModal } from './OnboardingModal.tsx'
+import modelStyles from './ModelsSection.module.css'
 import styles from './DeepSeekOnboardingDialog.module.css'
+
+const NATIVE_CODEX_AUTH_KEY = 'subagent-codex/account'
+const LOOPBACK_CHATGPT_WEB_PROVIDER = 'chatgpt-web'
+
+interface AuthorizationEntry {
+  key: string
+  label: string
+  methods: Array<{ id: string; label: string }>
+  inFlight: boolean
+  stored?: { kind: 'api-key' | 'grant' }
+  telemetry?: { kind?: string; provider?: string }
+}
+
+type AuthorizationCatalogState =
+  | { status: 'loading'; entries: AuthorizationEntry[] }
+  | { status: 'ready'; entries: AuthorizationEntry[] }
+  | { status: 'unavailable'; entries: AuthorizationEntry[] }
 
 /** Registration-side dependencies of {@link DeepSeekOnboardingDialog}. */
 export interface DeepSeekOnboardingInjected {
@@ -27,8 +51,9 @@ export interface DeepSeekOnboardingInjected {
   }
   /** Shared Models-page join controller. */
   controller: ModelsSettingsStore
-  /** Existing wire face reused by the Models credential editor. */
+  /** Existing wire faces reused by provider setup and native account login. */
   api: Pick<IApiClient, 'settings' | 'credentials' | 'llm'>
+    & Partial<Pick<IApiClient, 'authorization'>>
   /** Settings schema and immutable path callbacks. */
   schema: SettingsSchemaOperations
   /** Feature copy. */
@@ -39,85 +64,260 @@ export interface DeepSeekOnboardingInjected {
 export type DeepSeekOnboardingDialogProps =
   PropsRuntime<'settings.onboarding'> & InjectFace<DeepSeekOnboardingInjected>
 
-/* v8 ignore next 3 -- closed-union defaults only defend future source widening */
-function assertNever(_value: never): never {
-  throw new Error('unexpected DeepSeek onboarding state')
+function isCodexEntry(entry: AuthorizationEntry): boolean {
+  if (!entry.methods.some(method => method.id === 'oauth')) return false
+  if (entry.key === NATIVE_CODEX_AUTH_KEY) return true
+  const identity = `${entry.label} ${entry.telemetry?.provider ?? ''}`.toLowerCase()
+  return identity.includes('codex') || identity.includes('chatgpt')
+}
+
+function codexConnected(entry: AuthorizationEntry | undefined): boolean {
+  if (entry === undefined) return false
+  return entry.stored !== undefined
+    || entry.telemetry?.provider?.toLowerCase() === 'codex'
 }
 
 /**
- * Prompt a first-run user for the official DeepSeek credential while no
- * provider can serve requests and that credential is writable.
- * @param props - settings-shell owner state and Models feature dependencies.
- * @returns the onboarding modal or null when onboarding needs no intervention.
+ * First-run ordering:
+ * 1. Connect the official Codex account when that native bridge is installed.
+ * 2. Keep API-provider configuration a clearly separate optional step.
+ * 3. Never synthesize an API credential or select openai-codex merely because
+ *    the native account is connected.
  */
 export function DeepSeekOnboardingDialog(props: DeepSeekOnboardingDialogProps): ReactNode {
   const { complete, controller, useModels, api, schema, t } = props
   const state = useModels(snapshot => snapshot)
-  const readiness = onboardingReadiness(state)
+  const authorization = api.authorization
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [connectedThisRun, setConnectedThisRun] = useState(false)
+  const [authorizationCatalog, setAuthorizationCatalog] = useState<AuthorizationCatalogState>(
+    authorization === undefined
+      ? { status: 'unavailable', entries: [] }
+      : { status: 'loading', entries: [] },
+  )
 
   useEffect(() => {
     if (state.status === 'idle') void controller.load()
   }, [controller, state.status])
 
   useEffect(() => {
-    if (
-      readiness.kind === 'adapter-absent'
-      || readiness.kind === 'provider-ready'
-      || readiness.kind === 'unavailable'
-    ) complete()
-  }, [complete, readiness.kind])
+    if (authorization === undefined) {
+      setAuthorizationCatalog({ status: 'unavailable', entries: [] })
+      return
+    }
+    let stale = false
+    setAuthorizationCatalog({ status: 'loading', entries: [] })
+    void authorization.list({}).then((response) => {
+      if (stale) return
+      if (!response.result.ok) {
+        setAuthorizationCatalog({ status: 'unavailable', entries: [] })
+        return
+      }
+      setAuthorizationCatalog({
+        status: 'ready',
+        entries: response.result.value.entries as unknown as AuthorizationEntry[],
+      })
+    }, () => {
+      if (!stale) setAuthorizationCatalog({ status: 'unavailable', entries: [] })
+    })
+    return () => { stale = true }
+  }, [authorization])
 
-  switch (readiness.kind) {
-    case 'loading':
-    case 'adapter-absent':
-    case 'provider-ready':
-    case 'unavailable':
-      return null
-    case 'credential-missing':
-      break
-    /* v8 ignore next -- every current readiness variant is handled above */
-    default:
-      return assertNever(readiness)
-  }
+  const codexEntry = useMemo(
+    () => authorizationCatalog.entries.find(isCodexEntry),
+    [authorizationCatalog.entries],
+  )
+  const accountReady = connectedThisRun || codexConnected(codexEntry)
 
-  const row = state.rows.find(candidate =>
+  // chatgpt-web is only a loopback declaration until its external bridge is
+  // installed and authenticated, so it must not suppress first-run setup.
+  const anotherProviderReady = state.rows.some(row =>
+    row.entry.provider !== LOOPBACK_CHATGPT_WEB_PROVIDER
+    && providerUsable(row))
+
+  const deepSeekRow = state.rows.find(candidate =>
     candidate.entry.provider === 'deepseek-official'
     && candidate.entry.settingsNs === 'llm-deepseek'
     && candidate.entry.settingsPath.length === 0)
-  const namespace = state.namespaces.get('llm-deepseek')
-  /* v8 ignore next 2 -- credential-missing is derived only from this exact joined row. */
-  if (row === undefined || namespace === undefined) return null
+  const deepSeekNamespace = state.namespaces.get('llm-deepseek')
+  const apiFallbackAvailable = state.status === 'ready'
+    && state.credentialError === null
+    && state.writable
+    && deepSeekRow !== undefined
+    && deepSeekNamespace !== undefined
+    && deepSeekRow.entry.active
+    && deepSeekRow.apiKeyEnv !== undefined
+    && deepSeekRow.credential !== undefined
+    && !deepSeekRow.credential.configured
+    && deepSeekRow.credential.writable
 
-  const finishCredential = (changed: boolean): void => {
-    if (!changed) {
+  const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } =
+    useAuthorizationAttempt(authorization, () => {
+      setConnectedThisRun(true)
+    })
+
+  const modelFactsSettled = state.status === 'ready' || state.status === 'error'
+
+  useEffect(() => {
+    if (!modelFactsSettled) return
+    // A confirmed chat provider means this installation is already usable; do
+    // not force account onboarding on an existing configured user.
+    if (anotherProviderReady) {
       complete()
       return
     }
-    void controller.load()
+    if (
+      authorizationCatalog.status !== 'loading'
+      && codexEntry === undefined
+      && !apiFallbackAvailable
+    ) {
+      complete()
+    }
+  }, [
+    anotherProviderReady,
+    apiFallbackAvailable,
+    authorizationCatalog.status,
+    codexEntry,
+    complete,
+    modelFactsSettled,
+  ])
+
+  if (!modelFactsSettled || authorizationCatalog.status === 'loading') return null
+  if (anotherProviderReady) return null
+
+  const useApiFallback = showApiKey || codexEntry === undefined
+  if (useApiFallback) {
+    if (!apiFallbackAvailable || deepSeekRow === undefined || deepSeekNamespace === undefined) {
+      return accountReady
+        ? (
+          <OnboardingModal title={t('onboardingTitle')}>
+            <p className={styles.description}>{t('onboardingCodexConnected')}</p>
+            <p className={styles.description}>{t('onboardingChooseChatProvider')}</p>
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className={modelStyles.primaryButton}
+                onClick={complete}
+              >
+                {t('onboardingLater')}
+              </button>
+            </div>
+          </OnboardingModal>
+        )
+        : null
+    }
+
+    const finishCredential = (changed: boolean): void => {
+      if (changed) {
+        void controller.load()
+        return
+      }
+      if (codexEntry !== undefined) {
+        setShowApiKey(false)
+        return
+      }
+      complete()
+    }
+
+    return (
+      <OnboardingModal title={t('onboardingTitle')}>
+        <p className={styles.description}>{t('onboardingApiDescription')}</p>
+        <div className={styles.editor}>
+          <ProviderEditor
+            provider={deepSeekRow.entry.provider}
+            displayName={deepSeekRow.entry.displayName}
+            namespace={deepSeekNamespace}
+            schema={schema}
+            settingsPath={deepSeekRow.entry.settingsPath}
+            api={api}
+            t={t}
+            readOnly={false}
+            hideTitle
+            credentialOnly
+            credentialRequired
+            autoFocusCredential
+            cancelLabel={codexEntry === undefined ? 'onboardingLater' : 'onboardingBackToCodex'}
+            submitLabel="onboardingSave"
+            submitBusyLabel="onboardingSaving"
+            onClose={finishCredential}
+          />
+        </div>
+      </OnboardingModal>
+    )
   }
 
+  if (accountReady) {
+    return (
+      <OnboardingModal title={t('onboardingTitle')}>
+        <p className={styles.description}>{t('onboardingCodexConnected')}</p>
+        <p className={styles.description}>{t('onboardingChooseChatProvider')}</p>
+        <div className={styles.actions}>
+          {apiFallbackAvailable ? (
+            <button
+              type="button"
+              className={modelStyles.primaryButton}
+              onClick={() => { setShowApiKey(true) }}
+            >
+              {t('onboardingUseApiKey')}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={modelStyles.secondaryButton}
+            onClick={complete}
+          >
+            {t('onboardingLater')}
+          </button>
+        </div>
+      </OnboardingModal>
+    )
+  }
+
+  if (codexEntry === undefined) return null
+
+  const pending = attempt?.status === 'pending'
+  const busy = pending || codexEntry.inFlight
   return (
     <OnboardingModal title={t('onboardingTitle')}>
       <p className={styles.description}>{t('onboardingDescription')}</p>
-      <div className={styles.editor}>
-        <ProviderEditor
-          provider={row.entry.provider}
-          displayName={row.entry.displayName}
-          namespace={namespace}
-          schema={schema}
-          settingsPath={row.entry.settingsPath}
-          api={api}
+      <div className={styles.authorization}>
+        <AuthorizationAttemptProgress
+          attempt={attempt}
+          answer={answer}
+          setAnswer={setAnswer}
+          submitAnswer={submitAnswer}
+          cancel={cancel}
           t={t}
-          readOnly={false}
-          hideTitle
-          credentialOnly
-          credentialRequired
-          autoFocusCredential
-          cancelLabel="onboardingLater"
-          submitLabel="onboardingSave"
-          submitBusyLabel="onboardingSaving"
-          onClose={finishCredential}
         />
+        {failure === undefined ? null : <p className={modelStyles.error}>{failure}</p>}
+      </div>
+      <div className={styles.actions}>
+        <button
+          type="button"
+          className={modelStyles.primaryButton}
+          disabled={busy}
+          onClick={() => { begin(codexEntry.key, 'oauth') }}
+        >
+          {pending ? t('signingIn') : t('onboardingCodex')}
+        </button>
+        {apiFallbackAvailable ? (
+          <button
+            type="button"
+            className={modelStyles.secondaryButton}
+            disabled={busy}
+            onClick={() => { setShowApiKey(true) }}
+          >
+            {t('onboardingUseApiKey')}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={modelStyles.secondaryButton}
+          disabled={busy}
+          onClick={complete}
+        >
+          {t('onboardingLater')}
+        </button>
       </div>
     </OnboardingModal>
   )
