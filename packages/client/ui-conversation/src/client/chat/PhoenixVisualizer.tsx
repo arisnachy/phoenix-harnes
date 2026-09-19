@@ -23,7 +23,37 @@ interface ParsedChart {
   readonly data: readonly VisualDatum[]
 }
 
-const VISUAL_TYPES = new Set(['chart', 'table', 'metrics', 'timeline', 'cards', 'progress', 'visual'])
+interface SportsTeam {
+  readonly name: string
+  readonly abbreviation?: string
+  readonly score?: string
+  readonly record?: string
+  readonly rank?: string
+  readonly logo?: string
+}
+
+interface SportsGame {
+  readonly league?: string
+  readonly status: string
+  readonly detail?: string
+  readonly date?: string
+  readonly venue?: string
+  readonly broadcast?: string
+  readonly home: SportsTeam
+  readonly away: SportsTeam
+}
+
+interface StandingRow {
+  readonly rank?: string
+  readonly team: SportsTeam
+  readonly record?: string
+  readonly pct?: string
+  readonly gb?: string
+  readonly streak?: string
+  readonly points?: string
+}
+
+const VISUAL_TYPES = new Set(['chart', 'table', 'metrics', 'timeline', 'cards', 'progress', 'sports', 'scoreboard', 'standings', 'visual'])
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -53,6 +83,25 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)
 }
 
+function scalar(value: unknown): string | undefined {
+  if (typeof value === 'string') return value.trim() === '' ? undefined : value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'boolean') return String(value)
+  return undefined
+}
+
+function safeImageSource(value: unknown): string | undefined {
+  const source = nonEmpty(value)
+  if (source === undefined) return undefined
+  return /^(https?:|blob:|data:image\/|\/|\.\/|\.\.\/)/i.test(source) ? source : undefined
+}
+
+function teamInitials(team: SportsTeam): string {
+  if (team.abbreviation !== undefined) return team.abbreviation.slice(0, 4).toUpperCase()
+  const initials = team.name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase() ?? '').join('')
+  return initials || '?'
+}
+
 function visualType(spec: JsonRecord): string | undefined {
   const explicit = nonEmpty(spec.visualType)
   if (explicit !== undefined) return explicit.toLowerCase()
@@ -60,6 +109,8 @@ function visualType(spec: JsonRecord): string | undefined {
   if (kind !== undefined && VISUAL_TYPES.has(kind.toLowerCase())) return kind.toLowerCase()
   const type = nonEmpty(spec.type)
   if (type !== undefined && VISUAL_TYPES.has(type.toLowerCase())) return type.toLowerCase()
+  if (Array.isArray(spec.games) || Array.isArray(spec.matchups)) return 'sports'
+  if (Array.isArray(spec.standings)) return 'standings'
   if (nonEmpty(spec.chartType) !== undefined || Array.isArray(spec.series)) return 'chart'
   if (Array.isArray(spec.columns) && Array.isArray(spec.rows)) return 'table'
   if (Array.isArray(spec.metrics)) return 'metrics'
@@ -442,6 +493,193 @@ function CardsView({ spec }: { readonly spec: JsonRecord }) {
   )
 }
 
+
+function parseSportsTeam(value: unknown, fallbackName?: unknown, fallbackScore?: unknown, fallbackRecord?: unknown): SportsTeam {
+  const source = isRecord(value) ? value : {}
+  const name = nonEmpty(source.name)
+    ?? nonEmpty(source.displayName)
+    ?? nonEmpty(source.team)
+    ?? scalar(fallbackName)
+    ?? 'Team'
+  const abbreviation = nonEmpty(source.abbreviation) ?? nonEmpty(source.abbr) ?? nonEmpty(source.shortName)
+  const score = scalar(source.score) ?? scalar(fallbackScore)
+  const record = scalar(source.record) ?? scalar(fallbackRecord)
+  const rank = scalar(source.rank) ?? scalar(source.seed)
+  const logo = safeImageSource(source.logo) ?? safeImageSource(source.logoUrl) ?? safeImageSource(source.image)
+  return {
+    name,
+    ...(abbreviation === undefined ? {} : { abbreviation }),
+    ...(score === undefined ? {} : { score }),
+    ...(record === undefined ? {} : { record }),
+    ...(rank === undefined ? {} : { rank }),
+    ...(logo === undefined ? {} : { logo }),
+  }
+}
+
+function parseSportsGame(value: unknown): SportsGame | undefined {
+  if (!isRecord(value)) return undefined
+  const homeValue = isRecord(value.home) ? value.home : isRecord(value.homeTeam) ? value.homeTeam : undefined
+  const awayValue = isRecord(value.away) ? value.away : isRecord(value.awayTeam) ? value.awayTeam : undefined
+  const home = parseSportsTeam(homeValue, value.homeTeam ?? value.homeName, value.homeScore, value.homeRecord)
+  const away = parseSportsTeam(awayValue, value.awayTeam ?? value.awayName, value.awayScore, value.awayRecord)
+  const status = nonEmpty(value.status) ?? nonEmpty(value.state) ?? nonEmpty(value.phase) ?? 'Scheduled'
+  const detailParts = [scalar(value.clock), scalar(value.period), scalar(value.detail)].filter((item): item is string => item !== undefined)
+  const detail = detailParts.length > 0 ? detailParts.join(' · ') : undefined
+  const league = nonEmpty(value.league) ?? nonEmpty(value.competition)
+  const date = scalar(value.date) ?? scalar(value.startTime) ?? scalar(value.time)
+  const venue = nonEmpty(value.venue)
+  const broadcast = nonEmpty(value.broadcast) ?? nonEmpty(value.network)
+  return {
+    status,
+    home,
+    away,
+    ...(league === undefined ? {} : { league }),
+    ...(detail === undefined ? {} : { detail }),
+    ...(date === undefined ? {} : { date }),
+    ...(venue === undefined ? {} : { venue }),
+    ...(broadcast === undefined ? {} : { broadcast }),
+  }
+}
+
+function TeamMark({ team }: { readonly team: SportsTeam }) {
+  if (team.logo !== undefined) {
+    return <img className={css.teamLogo} src={team.logo} alt="" loading="lazy" referrerPolicy="no-referrer" />
+  }
+  return <span className={css.teamMark} aria-hidden="true">{teamInitials(team)}</span>
+}
+
+function TeamScoreRow({ team }: { readonly team: SportsTeam }) {
+  return (
+    <div className={css.sportsTeam}>
+      <TeamMark team={team} />
+      <div className={css.teamIdentity}>
+        <strong>{team.name}</strong>
+        {(team.record !== undefined || team.rank !== undefined) && (
+          <span>
+            {team.rank !== undefined ? '#' + team.rank : ''}
+            {team.rank !== undefined && team.record !== undefined ? ' · ' : ''}
+            {team.record ?? ''}
+          </span>
+        )}
+      </div>
+      <b className={css.teamScore}>{team.score ?? '—'}</b>
+    </div>
+  )
+}
+
+function ScoreboardView({ spec }: { readonly spec: JsonRecord }) {
+  const source = Array.isArray(spec.games)
+    ? spec.games
+    : Array.isArray(spec.matchups)
+      ? spec.matchups
+      : Array.isArray(spec.data)
+        ? spec.data
+        : []
+  const games = source.map(parseSportsGame).filter((item): item is SportsGame => item !== undefined).slice(0, 24)
+  if (games.length === 0) return <Fallback spec={spec} />
+  return (
+    <section className={css.section} data-phoenix-visual-kind="sports">
+      {header(spec)}
+      <div className={css.scoreboardGrid}>
+        {games.map((game, index) => {
+          const state = game.status.toLowerCase()
+          return (
+            <article className={css.gameCard} key={index}>
+              <div className={css.gameMeta}>
+                <span>{game.league ?? 'Game'}</span>
+                <strong data-state={state}>{game.status}{game.detail !== undefined ? ' · ' + game.detail : ''}</strong>
+              </div>
+              <TeamScoreRow team={game.away} />
+              <TeamScoreRow team={game.home} />
+              {(game.date !== undefined || game.venue !== undefined || game.broadcast !== undefined) && (
+                <div className={css.gameFooter}>
+                  {game.date !== undefined && <span>{game.date}</span>}
+                  {game.venue !== undefined && <span>{game.venue}</span>}
+                  {game.broadcast !== undefined && <span>{game.broadcast}</span>}
+                </div>
+              )}
+            </article>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function parseStanding(value: unknown, index: number): StandingRow | undefined {
+  if (!isRecord(value)) return undefined
+  const nestedTeam = isRecord(value.team) ? value.team : undefined
+  const team = parseSportsTeam(
+    nestedTeam,
+    nestedTeam === undefined ? value.team ?? value.name : undefined,
+    undefined,
+    value.record,
+  )
+  const rank = scalar(value.rank) ?? scalar(value.position) ?? scalar(value.seed) ?? String(index + 1)
+  const record = scalar(value.record) ?? team.record
+  const pct = scalar(value.pct) ?? scalar(value.percentage) ?? scalar(value.winPct)
+  const gb = scalar(value.gb) ?? scalar(value.gamesBehind)
+  const streak = scalar(value.streak)
+  const points = scalar(value.points) ?? scalar(value.pts)
+  return {
+    team,
+    ...(rank === undefined ? {} : { rank }),
+    ...(record === undefined ? {} : { record }),
+    ...(pct === undefined ? {} : { pct }),
+    ...(gb === undefined ? {} : { gb }),
+    ...(streak === undefined ? {} : { streak }),
+    ...(points === undefined ? {} : { points }),
+  }
+}
+
+function StandingsView({ spec }: { readonly spec: JsonRecord }) {
+  const source = Array.isArray(spec.standings)
+    ? spec.standings
+    : Array.isArray(spec.teams)
+      ? spec.teams
+      : Array.isArray(spec.data)
+        ? spec.data
+        : []
+  const rows = source.map(parseStanding).filter((item): item is StandingRow => item !== undefined).slice(0, 80)
+  if (rows.length === 0) return <Fallback spec={spec} />
+  return (
+    <section className={css.section} data-phoenix-visual-kind="standings">
+      {header(spec)}
+      <div className={css.tableWrap}>
+        <table className={`${css.table} ${css.standingsTable}`}>
+          <thead>
+            <tr><th>#</th><th>Team</th><th>Record</th><th>PCT</th><th>GB</th><th>Streak</th><th>Pts</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={index}>
+                <td>{row.rank ?? index + 1}</td>
+                <td>
+                  <span className={css.standingTeam}>
+                    <TeamMark team={row.team} />
+                    <span><strong>{row.team.name}</strong>{row.team.abbreviation !== undefined && <small>{row.team.abbreviation}</small>}</span>
+                  </span>
+                </td>
+                <td>{row.record ?? '—'}</td>
+                <td>{row.pct ?? '—'}</td>
+                <td>{row.gb ?? '—'}</td>
+                <td>{row.streak ?? '—'}</td>
+                <td>{row.points ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function SportsView({ spec }: { readonly spec: JsonRecord }) {
+  const kind = visualType(spec)
+  if (kind === 'standings' || Array.isArray(spec.standings)) return <StandingsView spec={spec} />
+  return <ScoreboardView spec={spec} />
+}
+
 function ProgressView({ spec }: { readonly spec: JsonRecord }) {
   const source = Array.isArray(spec.progress) ? spec.progress : Array.isArray(spec.items) ? spec.items : Array.isArray(spec.data) ? spec.data : []
   const items = source.filter(isRecord).slice(0, 40)
@@ -490,7 +728,14 @@ export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
       return <CardsView spec={spec} />
     case 'progress':
       return <ProgressView spec={spec} />
+    case 'sports':
+    case 'scoreboard':
+      return <ScoreboardView spec={spec} />
+    case 'standings':
+      return <StandingsView spec={spec} />
     case 'visual': {
+      if (Array.isArray(spec.games) || Array.isArray(spec.matchups)) return <ScoreboardView spec={spec} />
+      if (Array.isArray(spec.standings)) return <StandingsView spec={spec} />
       if (Array.isArray(spec.metrics)) return <MetricsView spec={spec} />
       if (Array.isArray(spec.timeline)) return <TimelineView spec={spec} />
       if (Array.isArray(spec.cards)) return <CardsView spec={spec} />
