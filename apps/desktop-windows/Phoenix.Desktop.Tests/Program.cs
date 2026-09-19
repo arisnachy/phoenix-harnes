@@ -101,6 +101,11 @@ True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch si
 True(DesktopStartupContract.EmbeddedBrowserStartsLazy, "embedded browser does not delay chat startup", failures);
 Equal("Preparando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
 
+var toolchainEntries = DesktopBundledToolchain.CandidatePathEntries(@"C:\Program Files\Phoenix");
+True(toolchainEntries.Any(path => path.EndsWith(@"runtime-tools\node", StringComparison.OrdinalIgnoreCase)), "bundled Node path is declared", failures);
+True(toolchainEntries.Any(path => path.EndsWith(@"runtime-tools\git\cmd", StringComparison.OrdinalIgnoreCase)), "bundled Git path is declared", failures);
+Equal(@"C:\Program Files\Phoenix\runtime-tools", DesktopBundledToolchain.ToolchainRoot(@"C:\Program Files\Phoenix"), "toolchain root is app-local", failures);
+
 var runtimeLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
     @"C:\Phoenix Runtime",
     @"C:\Phoenix\desktop-control.json");
