@@ -493,6 +493,42 @@ describe('Enter semantics', () => {
     expect(empty.sink).not.toHaveBeenCalled()
   })
 
+  it('keeps a slow prompt admission alive instead of aborting it into a duplicate retry window', async () => {
+    vi.useFakeTimers()
+    try {
+      const send = bench({ draft: 'slow admission' })
+      let settle!: (outcome: SubmitOutcome) => void
+      let signal: AbortSignal | undefined
+      send.sink.mockImplementationOnce((_text, _imageIds, _mode, requestSignal) => {
+        signal = requestSignal
+        return new Promise<SubmitOutcome>((resolve) => { settle = resolve })
+      })
+
+      fireEvent.keyDown(send.textarea, { key: 'Enter' })
+      expect(send.shell.snapshot.pendingSubmit?.text).toBe('slow admission')
+      expect(send.shell.snapshot.phase).toBe('submitting')
+      expect(send.sink).toHaveBeenCalledTimes(1)
+
+      act(() => { vi.advanceTimersByTime(9_000) })
+      expect(signal?.aborted).toBe(false)
+      expect(send.shell.snapshot.phase).toBe('submitting')
+      expect(send.view.queryByRole('alert')).toBeNull()
+
+      // The unresolved admission still owns the submit slot, so a second Enter
+      // cannot create a second queued copy of the same user gesture.
+      fireEvent.keyDown(send.textarea, { key: 'Enter' })
+      expect(send.sink).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        settle({ kind: 'success' })
+        await Promise.resolve()
+      })
+      expect(send.shell.snapshot.phase).toBe('plain')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('non-Enter keys and Shift+Enter fall through to native behavior', () => {
     const { textarea, sink } = bench({ draft: 'hello' })
     fireEvent.keyDown(textarea, { key: 'a' })
