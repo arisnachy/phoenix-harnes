@@ -60,7 +60,7 @@ import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigu
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
-import { catalogProviderIds } from './catalog.ts'
+import { catalogModels, catalogProviderIds } from './catalog.ts'
 import {
   CODEX_MODEL_REFRESH_INTERVAL_MS,
   CODEX_PROVIDER,
@@ -223,22 +223,36 @@ export function apply(ctx: Context, config: Config): void {
   // in memory: settings stay untouched, and transient CLI/auth failures cannot
   // erase a selector that was working a moment ago.
   let codexCatalog: PiAiModelProfile[] | undefined
+  let codexDispatchCatalog: PiAiModelProfile[] | undefined
   let codexCatalogRevision = 0
   let codexLastAttemptAt = Number.NEGATIVE_INFINITY
   let codexLastSuccessAt = Number.NEGATIVE_INFINITY
   let codexRefresh: Promise<void> | undefined
 
-  const refreshCodexModels = async (provider: string, force = false): Promise<void> => {
-    if (provider !== CODEX_PROVIDER) return
-    const profile = current().providers?.[CODEX_PROVIDER]
-    if (!codexCatalogIsAutomatic(profile)) return
+  const visibleCodexModelIds = (): readonly string[] | undefined =>
+    codexCatalog?.map(model => model.id)
 
-    if (codexRefresh !== undefined) return codexRefresh
+  const refreshCodexModels = async (
+    provider: string,
+    force = false,
+  ): Promise<readonly string[] | undefined> => {
+    if (provider !== CODEX_PROVIDER) return undefined
+    const profile = current().providers?.[CODEX_PROVIDER]
+    if (!codexCatalogIsAutomatic(profile)) return undefined
+
+    if (codexRefresh !== undefined) {
+      await codexRefresh
+      return visibleCodexModelIds()
+    }
     const now = Date.now()
     // A recent successful answer is authoritative even for an exact-model
     // miss; a forced retry is reserved for the no-cache/failure case.
-    if (codexCatalog !== undefined && now - codexLastSuccessAt < CODEX_MODEL_REFRESH_INTERVAL_MS) return
-    if (!force && now - codexLastAttemptAt < CODEX_MODEL_REFRESH_INTERVAL_MS) return
+    if (codexCatalog !== undefined && now - codexLastSuccessAt < CODEX_MODEL_REFRESH_INTERVAL_MS) {
+      return visibleCodexModelIds()
+    }
+    if (!force && now - codexLastAttemptAt < CODEX_MODEL_REFRESH_INTERVAL_MS) {
+      return visibleCodexModelIds()
+    }
 
     codexLastAttemptAt = now
     codexRefresh = (async () => {
@@ -250,8 +264,20 @@ export function apply(ctx: Context, config: Config): void {
           return
         }
         codexLastSuccessAt = Date.now()
-        if (deepEqualJson(next, codexCatalog)) return
+
+        // Visibility follows Codex exactly. Dispatchability is intentionally a
+        // superset: installed models and models already seen in this process
+        // remain resolvable so a catalog retirement cannot break an in-flight
+        // or already-selected session merely by disappearing from the picker.
+        const dispatch = new Map<string, PiAiModelProfile>()
+        for (const id of catalogModels(CODEX_PROVIDER).keys()) dispatch.set(id, { id })
+        for (const model of codexDispatchCatalog ?? []) dispatch.set(model.id, model)
+        for (const model of next) dispatch.set(model.id, model)
+        const nextDispatch = [...dispatch.values()]
+
+        if (deepEqualJson(next, codexCatalog) && deepEqualJson(nextDispatch, codexDispatchCatalog)) return
         codexCatalog = next
+        codexDispatchCatalog = nextDispatch
         codexCatalogRevision += 1
         // A new profile identity makes the adapter build a new immutable
         // collection on its next operation; in-flight calls keep their old one.
@@ -263,7 +289,8 @@ export function apply(ctx: Context, config: Config): void {
     })().finally(() => {
       codexRefresh = undefined
     })
-    return codexRefresh
+    await codexRefresh
+    return visibleCodexModelIds()
   }
 
   /**
@@ -281,12 +308,12 @@ export function apply(ctx: Context, config: Config): void {
 
     const configuredProviders = raw.providers ?? {}
     const codexProfile = configuredProviders[CODEX_PROVIDER]
-    const providers = codexCatalog !== undefined && codexCatalogIsAutomatic(codexProfile)
+    const providers = codexDispatchCatalog !== undefined && codexCatalogIsAutomatic(codexProfile)
       ? {
           ...configuredProviders,
           [CODEX_PROVIDER]: {
             ...codexProfile,
-            models: codexCatalog,
+            models: codexDispatchCatalog,
           },
         }
       : configuredProviders
