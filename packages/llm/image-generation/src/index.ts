@@ -22,12 +22,17 @@ import type {} from '@phoenix-ai/dsh-system-prompt'
 export const name = 'image-generation'
 export const inject = ['attachments', 'credentials', 'systemPrompt', 'tools']
 
+export const AUTO_PROVIDER_ID = 'auto'
 export const CLOUDFLARE_PROVIDER_ID = 'cloudflare'
+export const AI_HORDE_PROVIDER_ID = 'aihorde'
 export const DEFAULT_CLOUDFLARE_MODEL = '@cf/black-forest-labs/flux-1-schnell'
 export const DEFAULT_CLOUDFLARE_TOKEN_ENV = 'CLOUDFLARE_API_TOKEN'
+export const DEFAULT_AI_HORDE_TOKEN_ENV = 'AIHORDE_API_KEY'
+export const AI_HORDE_ANONYMOUS_KEY = '0000000000'
 export const DEFAULT_GENERATION_STEPS = 6
 export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000
-export const DEFAULT_TOOL_TIMEOUT_MS = 90_000
+export const DEFAULT_HORDE_TIMEOUT_MS = 120_000
+export const DEFAULT_TOOL_TIMEOUT_MS = 135_000
 const CLOUDFLARE_PROMPT_LIMIT = 2_048
 
 /** Provider-neutral request after the consumer has authored the visual prompt. */
@@ -46,6 +51,8 @@ export interface ImageGenerationProviderResult {
 /** Replaceable image-generation backend. */
 export interface ImageGenerationProvider {
   readonly id: string
+  /** Higher values are preferred when provider=auto. */
+  readonly priority: number
   available(): boolean
   generate(request: ImageGenerationRequest, signal?: AbortSignal): Promise<ImageGenerationProviderResult>
 }
@@ -66,9 +73,9 @@ declare module '@phoenix-ai/cordis' {
   }
 }
 
-/** Runtime configuration for provider selection and the bundled Cloudflare adapter. */
+/** Runtime configuration for provider selection and the bundled remote adapters. */
 export interface Config {
-  /** Provider id selected by the seam. Defaults to cloudflare. */
+  /** Provider id selected by the seam. "auto" prefers configured Cloudflare then free anonymous AI Horde. */
   provider?: string
   /** Cloudflare account id. Defaults to CLOUDFLARE_ACCOUNT_ID from the host environment. */
   accountId?: string
@@ -76,23 +83,29 @@ export interface Config {
   apiTokenEnv?: string
   /** Workers AI image model. */
   model?: string
+  /** Optional AI Horde credential reference; absence uses the public anonymous key. */
+  aihordeApiKeyEnv?: string
   /** Default diffusion steps when the tool does not request fast/high explicitly. */
   steps?: number
-  /** Cooperative network timeout for the provider request. */
+  /** Cooperative timeout for one remote HTTP request. */
   requestTimeoutMs?: number
-  /** Tool-level timeout budget, slightly larger than the provider timeout. */
+  /** Maximum wall time for an anonymous/registered AI Horde queue job. */
+  hordeTimeoutMs?: number
+  /** Tool-level timeout budget, slightly larger than the slowest bundled provider. */
   toolTimeoutMs?: number
   /** Add PHOENIX's visual-quality guidance and prompt refinement. */
   visualQualityPolicy?: boolean
 }
 
 export const Config: z<Config> = z.object({
-  provider: z.string().default(CLOUDFLARE_PROVIDER_ID),
+  provider: z.string().default(AUTO_PROVIDER_ID),
   accountId: z.string(),
   apiTokenEnv: z.string().role('credential-ref').default(DEFAULT_CLOUDFLARE_TOKEN_ENV),
   model: z.string().default(DEFAULT_CLOUDFLARE_MODEL),
+  aihordeApiKeyEnv: z.string().role('credential-ref').default(DEFAULT_AI_HORDE_TOKEN_ENV),
   steps: z.number().step(1).min(1).max(8).default(DEFAULT_GENERATION_STEPS),
   requestTimeoutMs: z.number().step(1).min(1).default(DEFAULT_REQUEST_TIMEOUT_MS),
+  hordeTimeoutMs: z.number().step(1).min(1).default(DEFAULT_HORDE_TIMEOUT_MS),
   toolTimeoutMs: z.number().step(1).min(1).default(DEFAULT_TOOL_TIMEOUT_MS),
   visualQualityPolicy: z.boolean().default(true),
 })
@@ -102,8 +115,10 @@ interface ResolvedConfig {
   readonly accountId: string
   readonly apiTokenEnv: string
   readonly model: string
+  readonly aihordeApiKeyEnv: string
   readonly steps: number
   readonly requestTimeoutMs: number
+  readonly hordeTimeoutMs: number
   readonly toolTimeoutMs: number
   readonly visualQualityPolicy: boolean
 }
@@ -143,34 +158,73 @@ export class ImageGenerationRuntime extends Service {
 
   /** Generate and durably publish one image through the selected backend. */
   async generate(request: ImageGenerationRequest, signal?: AbortSignal): Promise<ImageGenerationResult> {
-    const provider = this.resolveProvider()
-    signal?.throwIfAborted()
-    const generated = await provider.generate(request, signal)
-    signal?.throwIfAborted()
-    const image = await this.ctx.attachments.saveImage({
-      data: generated.data,
-      mediaType: generated.mediaType,
-      name: 'phoenix-generated.jpg',
-    })
-    return { image, provider: provider.id, model: generated.model }
+    const providers = this.resolveProviders()
+    let lastRecoverable: unknown
+    for (const provider of providers) {
+      signal?.throwIfAborted()
+      try {
+        const generated = await provider.generate(request, signal)
+        signal?.throwIfAborted()
+        const extension = generated.mediaType === 'image/jpeg' ? 'jpg'
+          : generated.mediaType === 'image/png' ? 'png'
+            : generated.mediaType === 'image/webp' ? 'webp' : 'gif'
+        const image = await this.ctx.attachments.saveImage({
+          data: generated.data,
+          mediaType: generated.mediaType,
+          name: `phoenix-generated.${extension}`,
+        })
+        return { image, provider: provider.id, model: generated.model }
+      } catch (error) {
+        if (signal?.aborted === true) throw signal.reason ?? error
+        if (this.configuredProvider !== AUTO_PROVIDER_ID || !isRecoverableProviderError(error)) throw error
+        lastRecoverable = error
+      }
+    }
+    throw new ImageGenerationError(
+      'all automatic image providers failed; configure Cloudflare or retry the free community provider later',
+      'IMAGE_GENERATION_PROVIDER_FALLBACK_EXHAUSTED',
+      { cause: lastRecoverable },
+    )
   }
 
-  private resolveProvider(): ImageGenerationProvider {
-    const selected = this.providers.get(this.configuredProvider)
-    if (selected === undefined) {
-      throw new ImageGenerationError(
-        `configured image provider "${this.configuredProvider}" is not registered`,
-        'IMAGE_GENERATION_PROVIDER_MISSING',
-      )
+  private resolveProviders(): ImageGenerationProvider[] {
+    if (this.configuredProvider !== AUTO_PROVIDER_ID) {
+      const selected = this.providers.get(this.configuredProvider)
+      if (selected === undefined) {
+        throw new ImageGenerationError(
+          `configured image provider "${this.configuredProvider}" is not registered`,
+          'IMAGE_GENERATION_PROVIDER_MISSING',
+        )
+      }
+      if (!selected.available()) {
+        throw new ImageGenerationError(
+          `configured image provider "${this.configuredProvider}" is not available`,
+          'IMAGE_GENERATION_PROVIDER_UNAVAILABLE',
+        )
+      }
+      return [selected]
     }
-    if (!selected.available()) {
-      throw new ImageGenerationError(
-        `configured image provider "${this.configuredProvider}" is not available; configure its account before generating images`,
-        'IMAGE_GENERATION_PROVIDER_UNAVAILABLE',
-      )
+    const usable = [...this.providers.values()]
+      .filter(provider => provider.available())
+      .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))
+    if (usable.length === 0) {
+      throw new ImageGenerationError('no image generation provider is available', 'IMAGE_GENERATION_PROVIDER_UNAVAILABLE')
     }
-    return selected
+    return usable
   }
+}
+
+const RECOVERABLE_PROVIDER_CODES = new Set([
+  'IMAGE_GENERATION_AUTH',
+  'IMAGE_GENERATION_QUOTA',
+  'IMAGE_GENERATION_RATE_LIMIT',
+  'IMAGE_GENERATION_TIMEOUT',
+  'IMAGE_GENERATION_TRANSIENT',
+  'IMAGE_GENERATION_PROVIDER_UNAVAILABLE',
+])
+
+function isRecoverableProviderError(error: unknown): boolean {
+  return error instanceof ImageGenerationError && RECOVERABLE_PROVIDER_CODES.has(error.code)
 }
 
 /** Compact visual-quality suffix that preserves the user's requested style. */
@@ -221,17 +275,20 @@ function positiveInteger(value: number, field: string, max?: number): number {
 }
 
 function resolveConfig(config: Config): ResolvedConfig {
-  const provider = config.provider?.trim() || CLOUDFLARE_PROVIDER_ID
+  const provider = config.provider?.trim() || AUTO_PROVIDER_ID
   const accountId = config.accountId?.trim() || process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || ''
   const apiTokenEnv = config.apiTokenEnv?.trim() || DEFAULT_CLOUDFLARE_TOKEN_ENV
   const model = config.model?.trim() || DEFAULT_CLOUDFLARE_MODEL
+  const aihordeApiKeyEnv = config.aihordeApiKeyEnv?.trim() || DEFAULT_AI_HORDE_TOKEN_ENV
   return {
     provider,
     accountId,
     apiTokenEnv,
     model,
+    aihordeApiKeyEnv,
     steps: positiveInteger(config.steps ?? DEFAULT_GENERATION_STEPS, 'steps', 8),
     requestTimeoutMs: positiveInteger(config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS, 'requestTimeoutMs'),
+    hordeTimeoutMs: positiveInteger(config.hordeTimeoutMs ?? DEFAULT_HORDE_TIMEOUT_MS, 'hordeTimeoutMs'),
     toolTimeoutMs: positiveInteger(config.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS, 'toolTimeoutMs'),
     visualQualityPolicy: config.visualQualityPolicy ?? true,
   }
@@ -270,6 +327,7 @@ async function fetchWithTimeout(
 
 class CloudflareImageProvider implements ImageGenerationProvider {
   readonly id = CLOUDFLARE_PROVIDER_ID
+  readonly priority = 100
 
   constructor(
     private readonly ctx: Context,
@@ -323,6 +381,216 @@ class CloudflareImageProvider implements ImageGenerationProvider {
       throw new ImageGenerationError('Cloudflare returned empty image bytes', 'IMAGE_GENERATION_PROVIDER_INVALID_RESPONSE')
     }
     return { data, mediaType: 'image/jpeg', model: this.config.model }
+  }
+}
+
+interface AIHordeAsyncResponse {
+  id?: unknown
+  message?: unknown
+  rc?: unknown
+}
+
+interface AIHordeCheckResponse {
+  done?: unknown
+  faulted?: unknown
+  is_possible?: unknown
+  message?: unknown
+  rc?: unknown
+}
+
+interface AIHordeGeneration {
+  img?: unknown
+  model?: unknown
+  state?: unknown
+  censored?: unknown
+}
+
+interface AIHordeStatusResponse {
+  generations?: unknown
+  message?: unknown
+  rc?: unknown
+}
+
+function jsonRecord(value: unknown, provider: string): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new ImageGenerationError(
+      `${provider} returned an invalid JSON response`,
+      'IMAGE_GENERATION_PROVIDER_INVALID_RESPONSE',
+    )
+  }
+  return value as Record<string, unknown>
+}
+
+function providerMessage(value: Record<string, unknown>): string {
+  return typeof value.message === 'string' && value.message.trim() !== '' ? value.message.trim() : 'unknown provider error'
+}
+
+function cancellableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted === true) return Promise.reject(signal.reason)
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      reject(signal?.reason)
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+class AIHordeImageProvider implements ImageGenerationProvider {
+  readonly id = AI_HORDE_PROVIDER_ID
+  readonly priority = 10
+  private readonly baseURL = 'https://aihorde.net/api/v2/generate'
+
+  constructor(
+    private readonly ctx: Context,
+    private readonly config: ResolvedConfig,
+  ) {}
+
+  available(): boolean {
+    return true
+  }
+
+  async generate(request: ImageGenerationRequest, signal?: AbortSignal): Promise<ImageGenerationProviderResult> {
+    const credential = await this.ctx.credentials.resolve(credentialRef(this.config.aihordeApiKeyEnv))
+    const apiKey = credential?.value.trim() || AI_HORDE_ANONYMOUS_KEY
+    const headers = {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      apikey: apiKey,
+      'Client-Agent': 'PhoenixAI:0.1:https://github.com/arisnachy/phoenix-harnes',
+    }
+    const hordeSteps = Math.min(32, Math.max(16, (request.steps ?? this.config.steps) * 4))
+    const created = await this.requestJson(`${this.baseURL}/async`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        prompt: request.prompt,
+        params: {
+          n: 1,
+          width: 1024,
+          height: 1024,
+          steps: hordeSteps,
+          cfg_scale: 6,
+          sampler_name: 'k_euler_a',
+          karras: true,
+          post_processing: [],
+        },
+        allow_downgrade: true,
+        nsfw: false,
+        censor_nsfw: true,
+        r2: false,
+        shared: false,
+        slow_workers: true,
+      }),
+    }, signal) as AIHordeAsyncResponse
+    const createdRecord = jsonRecord(created, 'AI Horde')
+    if (createdRecord.rc !== undefined) {
+      throw new ImageGenerationError(
+        `AI Horde rejected image generation: ${providerMessage(createdRecord)}`,
+        'IMAGE_GENERATION_PROVIDER_FAILURE',
+      )
+    }
+    const id = createdRecord.id
+    if (typeof id !== 'string' || id.length === 0) {
+      throw new ImageGenerationError('AI Horde did not return a generation id', 'IMAGE_GENERATION_PROVIDER_INVALID_RESPONSE')
+    }
+
+    const deadline = Date.now() + this.config.hordeTimeoutMs
+    while (Date.now() < deadline) {
+      signal?.throwIfAborted()
+      const check = await this.requestJson(`${this.baseURL}/check/${encodeURIComponent(id)}`, {
+        method: 'GET',
+        headers: { accept: 'application/json', 'Client-Agent': headers['Client-Agent'] },
+      }, signal) as AIHordeCheckResponse
+      const checkRecord = jsonRecord(check, 'AI Horde')
+      if (checkRecord.rc !== undefined) {
+        throw new ImageGenerationError(
+          `AI Horde status check failed: ${providerMessage(checkRecord)}`,
+          'IMAGE_GENERATION_TRANSIENT',
+        )
+      }
+      if (checkRecord.faulted === true || checkRecord.is_possible === false) {
+        throw new ImageGenerationError('AI Horde could not fulfill this image request', 'IMAGE_GENERATION_PROVIDER_UNAVAILABLE')
+      }
+      if (checkRecord.done === true) {
+        return this.readCompleted(id, headers['Client-Agent'], signal)
+      }
+      await cancellableDelay(2_000, signal)
+    }
+
+    void fetch(`${this.baseURL}/status/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { accept: 'application/json', 'Client-Agent': headers['Client-Agent'] },
+    }).catch(() => undefined)
+    throw new ImageGenerationError(
+      'AI Horde image generation exceeded the queue timeout',
+      'IMAGE_GENERATION_TIMEOUT',
+    )
+  }
+
+  private async readCompleted(id: string, clientAgent: string, signal?: AbortSignal): Promise<ImageGenerationProviderResult> {
+    const status = await this.requestJson(`${this.baseURL}/status/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      headers: { accept: 'application/json', 'Client-Agent': clientAgent },
+    }, signal) as AIHordeStatusResponse
+    const statusRecord = jsonRecord(status, 'AI Horde')
+    if (statusRecord.rc !== undefined) {
+      throw new ImageGenerationError(
+        `AI Horde result retrieval failed: ${providerMessage(statusRecord)}`,
+        'IMAGE_GENERATION_TRANSIENT',
+      )
+    }
+    if (!Array.isArray(statusRecord.generations) || statusRecord.generations.length === 0) {
+      throw new ImageGenerationError('AI Horde returned no generated image', 'IMAGE_GENERATION_PROVIDER_INVALID_RESPONSE')
+    }
+    const generation = jsonRecord(statusRecord.generations[0], 'AI Horde') as AIHordeGeneration & Record<string, unknown>
+    if (generation.state !== undefined && generation.state !== 'ok') {
+      throw new ImageGenerationError('AI Horde generation did not complete successfully', 'IMAGE_GENERATION_PROVIDER_FAILURE')
+    }
+    if (generation.censored === true) {
+      throw new ImageGenerationError('AI Horde censored the generated image', 'IMAGE_GENERATION_PROVIDER_FAILURE')
+    }
+    if (typeof generation.img !== 'string' || generation.img.length === 0 || /^https?:\/\//i.test(generation.img)) {
+      throw new ImageGenerationError(
+        'AI Horde did not return the expected inline WebP image',
+        'IMAGE_GENERATION_PROVIDER_INVALID_RESPONSE',
+      )
+    }
+    const data = new Uint8Array(Buffer.from(generation.img, 'base64'))
+    if (data.byteLength === 0) {
+      throw new ImageGenerationError('AI Horde returned empty image bytes', 'IMAGE_GENERATION_PROVIDER_INVALID_RESPONSE')
+    }
+    const model = typeof generation.model === 'string' && generation.model.trim() !== ''
+      ? generation.model
+      : 'AI Horde community worker'
+    return { data, mediaType: 'image/webp', model }
+  }
+
+  private async requestJson(url: string, init: RequestInit, signal?: AbortSignal): Promise<unknown> {
+    let response: Response
+    try {
+      response = await fetchWithTimeout(url, init, this.config.requestTimeoutMs, signal)
+    } catch (error) {
+      if (signal?.aborted === true) throw signal.reason ?? error
+      if (error instanceof ImageGenerationError) throw error
+      throw new ImageGenerationError('AI Horde request failed', 'IMAGE_GENERATION_TRANSIENT', { cause: error })
+    }
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 600)
+      const code = response.status === 429 ? 'IMAGE_GENERATION_RATE_LIMIT'
+        : response.status >= 500 ? 'IMAGE_GENERATION_TRANSIENT'
+          : response.status === 401 || response.status === 403 ? 'IMAGE_GENERATION_AUTH'
+            : 'IMAGE_GENERATION_PROVIDER_FAILURE'
+      throw new ImageGenerationError(
+        `AI Horde request failed with HTTP ${response.status}${detail === '' ? '' : `: ${detail}`}`,
+        code,
+      )
+    }
+    return response.json() as Promise<unknown>
   }
 }
 
@@ -380,7 +648,7 @@ function registerTool(ctx: Context, config: ResolvedConfig): void {
         'Use SVG/primitives only when the user actually asks for a vector, icon, logo, diagram, chart, or shape-based asset.',
         'For image_generate, describe the intended use plus the subject, composition, palette, lighting/material treatment, and requested style. Prefer coherent premium-looking results over generic filler.',
         'Do not infer that PHOENIX means the image needs a bird, phoenix, turkey, flame mascot, or logo. Add those only when the user explicitly requests them.',
-        'If image generation is unavailable, report that provider connection is needed instead of faking the requested artwork with low-quality primitives.',
+        'If image generation is unavailable after provider fallback, report the real generation failure instead of faking the requested artwork with low-quality primitives.',
       ].join(' '),
     })
   }
@@ -469,6 +737,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   const resolved = resolveConfig(config)
   const runtime = new ImageGenerationRuntime(ctx, resolved.provider)
   runtime.registerProvider(new CloudflareImageProvider(ctx, resolved))
+  runtime.registerProvider(new AIHordeImageProvider(ctx, resolved))
   registerTool(ctx, resolved)
 }
 
