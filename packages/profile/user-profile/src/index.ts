@@ -2,7 +2,6 @@
 
 import { Service, type Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-system-prompt'
-import type {} from '@phoenix-ai/dsh-session'
 import { settingsNamespace, type SettingsScope } from '@phoenix-ai/dsh-settings'
 import {
   DEFAULT_USER_PROFILE_CONSENT, USER_PROFILE_SETTINGS_NAMESPACE, UserProfileSettingsSchema,
@@ -87,9 +86,8 @@ export class UserProfileService extends Service {
       order: -49,
       text: () => renderAssistantIdentity(this.getAssistantIdentity()),
     })
-    ctx.on('session/event', (_session, event) => {
-      if (event.type !== 'user/message') return
-      const text = userMessageText(event.data)
+    ctx.events.on('session/event', (_session: unknown, event: unknown) => {
+      const text = userMessageEventText(event)
       if (text !== undefined) this.observeAssistantPresentation(text)
     })
   }
@@ -108,7 +106,7 @@ export class UserProfileService extends Service {
    */
   async update(patch: UserProfileUpdate): Promise<UserProfileView> {
     validateUserProfileUpdate(patch)
-    let accepted = patch
+    let accepted: UserProfileUpdate = patch
     if (Object.hasOwn(patch, 'assistantGender') && !Object.hasOwn(patch, 'assistantGenderSource')) {
       accepted = patch.assistantGender === null
         ? { ...patch, assistantGenderSource: null }
@@ -190,6 +188,13 @@ export class UserProfileService extends Service {
       consented: this.getConsented(),
     }
   }
+}
+
+function userMessageEventText(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || !('type' in value) || !('data' in value)) return undefined
+  const event = value as { type?: unknown; data?: unknown }
+  if (event.type !== 'user/message') return undefined
+  return userMessageText(event.data)
 }
 
 function userMessageText(value: unknown): string | undefined {
