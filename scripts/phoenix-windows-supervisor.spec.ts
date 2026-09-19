@@ -118,4 +118,21 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('configuration changed since the last healthy boot')
     expect(source).toContain('restored last-known-good configuration')
   })
+  it('boot-preflights isolated runtimes before activation or restoration', () => {
+    expect(source).toContain('function runtimeBootPreflight(path)')
+    expect(source).toContain("web', '--dump-config'")
+    expect(source).toContain('const bootPreflight = runtimeBootPreflight(runtime)')
+    expect(source).toContain('const bootPreflight = runtimeBootPreflight(candidate)')
+    expect(source).toContain('failed boot preflight')
+    expect(source).toContain('retired isolated runtime')
+  })
+
+  it('retires an isolated runtime that crashes before its health checkpoint', () => {
+    expect(source).toContain('if (earlyCrash && runtimeRoot !== root)')
+    expect(source).toContain('const failedRuntime = runtimeRoot')
+    expect(source).toContain('runtimeRoot = root')
+    expect(source).toContain('clearActiveRuntime()')
+    expect(source).toContain('falling back to the source checkout')
+  })
+
 })
