@@ -4,7 +4,7 @@ English | [中文](image-generation.zh.md)
 
 PHOENIX exposes original image creation through the provider-neutral `ctx.imageGeneration` seam and the `image_generate` tool.
 
-The first implementation lives in `@phoenix-ai/dsh-image-generation`. It intentionally combines the Service Definition, the Cloudflare Workers AI provider, and the model-facing consumer while there is only one shipped provider. Provider registration remains public so future Cloudflare alternatives or local runtimes do not change the tool contract.
+The first implementation lives in `@phoenix-ai/dsh-image-generation`. It combines the Service Definition, two bundled Service Providers, and the model-facing Consumer in one package while keeping provider registration public.
 
 ## Data flow
 
@@ -12,7 +12,7 @@ The first implementation lives in `@phoenix-ai/dsh-image-generation`. It intenti
 model -> image_generate
       -> visual prompt policy
       -> ctx.imageGeneration
-      -> selected provider
+      -> provider selection / fallback
       -> encoded image bytes
       -> ctx.attachments.saveImage()
       -> durable ImageAttachmentRef
@@ -20,7 +20,7 @@ model -> image_generate
       -> existing Web message-image renderer
 ```
 
-Generated images never use a provider URL as session truth. The attachment store validates, normalizes, content-addresses, and persists the bytes before the tool result is appended.
+Generated images never use a provider URL as session truth. The attachment store validates, normalizes, content-addresses, and persists bytes before the tool result becomes durable.
 
 ## Visual-quality rule
 
@@ -30,14 +30,18 @@ For original artwork and product visuals, PHOENIX prefers `image_generate` over 
 
 The product name does not imply a mascot. Prompts must not add a phoenix, bird, turkey, flames, or a logo merely because the interface is named PHOENIX.
 
-## Cloudflare provider
+## Provider selection
 
-The bundled provider calls Workers AI's REST API with the configured account id and a token resolved per operation through `ctx.credentials`. The token value never enters Cordis config, tool arguments, result metadata, or the durable session log.
+`provider: auto` prefers Cloudflare when its account configuration is present. Recoverable Cloudflare failures—authentication, quota, rate limit, timeout, or transient transport/service failure—fall through to AI Horde.
 
-The shipped model is `@cf/black-forest-labs/flux-1-schnell`. Provider/model choice remains configuration, not a tool argument, so the model cannot redirect execution to an unreviewed backend.
+Cloudflare uses `@cf/black-forest-labs/flux-1-schnell`. Its token is resolved per operation through `ctx.credentials`.
+
+AI Horde is always available as the zero-setup community fallback. It resolves an optional `AIHORDE_API_KEY`; when none is stored it uses the service's documented anonymous key. The adapter asks for inline WebP output so an expiring provider URL never becomes part of the durable session.
+
+Explicit provider selection is fail-closed: choosing `cloudflare` or `aihorde` disables automatic fallback.
 
 ## Failure semantics
 
-Missing account configuration, missing credentials, authentication errors, quota/rate limits, timeouts, malformed provider responses, and remote failures use stable `IMAGE_GENERATION_*` codes.
+Provider selection, missing credentials, authentication errors, quota/rate limits, queue timeout, malformed provider responses, and remote failures use stable `IMAGE_GENERATION_*` codes. In auto mode only explicitly recoverable provider failures advance to the next provider.
 
-When generation is unavailable, the model should report the missing provider connection rather than fabricate low-quality visual artwork locally.
+When all generation paths fail, the model reports that failure instead of fabricating low-quality visual artwork locally.
