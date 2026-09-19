@@ -22,6 +22,9 @@ import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 const root = resolve(process.cwd())
 let runtimeRoot = root
 const hostArgs = process.argv.slice(2)
+const desktopConsoleVisible = ['1', 'true', 'yes']
+  .includes((process.env.PHOENIX_DESKTOP_CONSOLE ?? '').trim().toLowerCase())
+const hideRuntimeWindows = !desktopConsoleVisible
 const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() || 'stable'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
@@ -226,7 +229,7 @@ function runChecked(cwd, bin, args, label) {
     cwd,
     env: process.env,
     stdio: 'inherit',
-    windowsHide: false,
+    windowsHide: hideRuntimeWindows,
   })
   if (result.error !== undefined) throw new Error(`${label}: ${result.error.message}`)
   if ((result.status ?? 1) !== 0) throw new Error(`${label} exited with ${String(result.status ?? 1)}`)
@@ -626,7 +629,7 @@ function startHost() {
   ], {
     cwd: runtimeRoot,
     stdio: 'inherit',
-    windowsHide: false,
+    windowsHide: hideRuntimeWindows,
     env: {
       ...hydratePhoenixEnvironment(process.env),
       PHOENIX_RUNTIME_ROOT: runtimeRoot,
@@ -742,7 +745,7 @@ function activatePrepared() {
     cwd: root,
     env: process.env,
     stdio: 'inherit',
-    windowsHide: false,
+    windowsHide: hideRuntimeWindows,
   })
   if (result.error !== undefined) {
     console.error(`[PHOENIX UPDATE] activator launch failed: ${result.error.message}`)
