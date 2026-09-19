@@ -46,6 +46,8 @@ export interface ProactivityEngineLease {
 /**
  * Share one in-process engine per durable ledger so host and model-facing Cordis
  * scopes never cache competing snapshots of the same task file.
+ * @param ledgerPath - Durable ledger path, or `:memory:` for an in-memory engine.
+ * @returns Scoped lease for the shared engine and its runtime executor binding.
  */
 export function acquireProactivityEngine(ledgerPath: string): ProactivityEngineLease {
   const key = ledgerPath.trim()

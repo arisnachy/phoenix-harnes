@@ -41,6 +41,7 @@ function taskView(task: ProactivityTask): Record<string, JsonValue> {
     catch_up: task.catchUp,
     visibility: task.visibility,
     delivery: task.delivery,
+    ...(task.condition === undefined ? {} : { condition: task.condition }),
     sender_identity: task.senderIdentity,
     created_by: task.createdBy,
     history: task.history.slice(-5).map(row => ({
@@ -76,7 +77,11 @@ function recurrence(args: { everyMinutes?: number; everyYears?: number; timezone
   return undefined
 }
 
-/** Create the model-facing tool that schedules durable proactive work. */
+/**
+ * Create the model-facing tool that schedules durable proactive work.
+ * @param engine - Host-owned proactivity engine that persists and executes scheduled tasks.
+ * @returns Tool definition exposed to the model for durable task creation.
+ */
 export function createProactivityCreateTool(engine: ProactivityEngine): ToolDefinition {
   return defineTool({
     name: 'phoenix_task_create',
@@ -139,7 +144,57 @@ export function createProactivityCreateTool(engine: ProactivityEngine): ToolDefi
   })
 }
 
-/** Create the ordinary task-list tool; unrevealed surprise tasks remain absent. */
+/**
+ * Create a durable condition watch that stays silent until its condition is verified true.
+ * @param engine - Host-owned proactivity engine that persists and executes condition watches.
+ * @returns Tool definition exposed to the model for durable condition monitoring.
+ */
+export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefinition {
+  return defineTool({
+    name: 'phoenix_watch_create',
+    description: 'Create a durable condition watch. Phoenix checks privately on an anchored interval and sends one notification only when the condition is verified true; false checks remain silent. Use an event-driven connector/webhook instead when one already exists. Polling watches are limited to once per hour or slower.',
+    parameters: {
+      title: { type: 'string', required: true },
+      condition: { type: 'string', required: true, description: 'Objective condition to verify from current read-only evidence.' },
+      notificationInstruction: { type: 'string', required: true, description: 'What Phoenix should tell the user after the condition becomes true.' },
+      runAt: { type: 'string', required: true, description: 'ISO-8601 date-time for the first check, including the intended UTC offset when known.' },
+      everyMinutes: { type: 'number', required: true, description: 'Check interval in minutes. Must be at least 60.' },
+      requestedByUser: { type: 'boolean', description: 'True when the user explicitly requested this watch.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args, exec) {
+      const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')!
+      if (everyMs < 60 * 60_000) {
+        throw new ToolArgsError(['everyMinutes must be at least 60 for condition watches'])
+      }
+      const agentId = targetAgent(exec)
+      const task = await engine.create({
+        title: args.title,
+        condition: args.condition,
+        instruction: args.notificationInstruction,
+        runAt: args.runAt,
+        createdBy: args.requestedByUser === true ? 'user' : 'harness',
+        recurrence: { kind: 'interval', everyMs },
+        catchUp: 'latest',
+        delivery: 'chat',
+        ...(agentId === undefined ? {} : { targetAgentId: agentId }),
+      })
+      return taskView(task)
+    },
+    presentCall(args) {
+      return { card: 'generic', title: `Watch: ${args.title}`, kind: 'execute', rawInput: args.condition }
+    },
+  })
+}
+
+/**
+ * Create the ordinary task-list tool; unrevealed surprise tasks remain absent.
+ * @param engine - Host-owned proactivity engine used to read scheduled task state.
+ * @returns Tool definition exposed to the model for listing visible scheduled tasks.
+ */
 export function createProactivityListTool(engine: ProactivityEngine): ToolDefinition {
   return defineTool({
     name: 'phoenix_task_list',
@@ -177,10 +232,15 @@ function managementTool(
   })
 }
 
-/** Create all model-facing task tools backed by one host-owned engine. */
+/**
+ * Create all model-facing task tools backed by one host-owned engine.
+ * @param engine - Host-owned proactivity engine shared by the returned task tools.
+ * @returns Readonly collection of task-management tool definitions.
+ */
 export function createProactivityTools(engine: ProactivityEngine): readonly ToolDefinition[] {
   return [
     createProactivityCreateTool(engine),
+    createProactivityWatchTool(engine),
     createProactivityListTool(engine),
     managementTool('phoenix_task_pause', 'Pause a scheduled Phoenix task without changing its recurrence anchor.', 'Pause', id => engine.pause(id)),
     managementTool('phoenix_task_resume', 'Resume a paused or failed Phoenix task at its still-pending occurrence.', 'Resume', id => engine.resume(id)),

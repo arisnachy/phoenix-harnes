@@ -137,6 +137,48 @@ describe('HARDNESS ProactivityEngine', () => {
     expect(execute).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps a recurring condition watch scheduled while false and completes after the first true notification', async () => {
+    const seen: ProactivityExecution[] = []
+    let met = false
+    const engine = new ProactivityEngine(new MemoryProactivityStore(), {
+      execute: async input => {
+        seen.push(input)
+        return met
+          ? { summary: 'condition met', terminal: true }
+          : { summary: 'condition not met' }
+      },
+    }, { id: fixedIds('watch') })
+    const created = await engine.create({
+      title: 'Release watch',
+      condition: 'The release is publicly available.',
+      instruction: 'Notify the user that the release is available.',
+      runAt: '2026-09-18T12:00:00.000Z',
+      createdBy: 'user',
+      recurrence: { kind: 'interval', everyMs: 3_600_000 },
+      catchUp: 'latest',
+    })
+
+    await engine.runDue(new Date('2026-09-18T12:05:00.000Z'))
+    const falseCheck = await engine.get(created.id)
+    expect(falseCheck?.status).toBe('scheduled')
+    expect(falseCheck?.nextRunAt).toBe('2026-09-18T13:00:00.000Z')
+    expect(falseCheck?.history).toHaveLength(1)
+    expect(falseCheck?.history[0]?.summary).toBe('condition not met')
+
+    met = true
+    await engine.runDue(new Date('2026-09-18T13:05:00.000Z'))
+    const trueCheck = await engine.get(created.id)
+    expect(trueCheck?.status).toBe('completed')
+    expect(trueCheck?.history).toHaveLength(2)
+    expect(trueCheck?.history[1]?.summary).toBe('condition met')
+
+    await engine.runDue(new Date('2026-09-18T14:05:00.000Z'))
+    expect(seen.map(item => item.scheduledFor)).toEqual([
+      '2026-09-18T12:00:00.000Z',
+      '2026-09-18T13:00:00.000Z',
+    ])
+  })
+
   it('records failures and permits an explicit resume to retry the same occurrence', async () => {
     let fail = true
     const engine = new ProactivityEngine(new MemoryProactivityStore(), {

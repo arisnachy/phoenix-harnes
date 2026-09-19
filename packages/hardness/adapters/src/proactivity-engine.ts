@@ -52,6 +52,8 @@ export interface ProactivityTask {
   readonly revealAt?: string
   readonly preparationInstruction?: string
   readonly prepareLeadMs?: number
+  /** Optional condition evaluated privately before delivery; false checks stay silent. */
+  readonly condition?: string
   readonly delivery: ProactivityDelivery
   readonly senderIdentity: ProactivitySenderIdentity
   readonly recipient?: string
@@ -72,6 +74,8 @@ export interface CreateProactivityTaskInput {
   readonly revealAt?: string
   readonly preparationInstruction?: string
   readonly prepareLeadMs?: number
+  /** Optional condition that must be verified true before delivery. */
+  readonly condition?: string
   readonly delivery?: ProactivityDelivery
   readonly senderIdentity?: ProactivitySenderIdentity
   readonly recipient?: string
@@ -89,7 +93,11 @@ export interface ProactivityExecution {
 }
 
 /** Safe execution result retained as history and optionally passed from preparation to delivery. */
-export interface ProactivityExecutionResult { readonly summary?: string }
+export interface ProactivityExecutionResult {
+  readonly summary?: string
+  /** Complete a recurring task immediately after this successful occurrence. */
+  readonly terminal?: boolean
+}
 
 /** Host seam used by the pure scheduler to perform work. */
 export interface ProactivityExecutor {
@@ -321,6 +329,7 @@ function parseTask(raw: unknown): ProactivityTask {
   if (raw.revealAt !== undefined && typeof raw.revealAt !== 'string') throw new Error('invalid revealAt')
   if (raw.preparationInstruction !== undefined && typeof raw.preparationInstruction !== 'string') throw new Error('invalid preparationInstruction')
   if (raw.prepareLeadMs !== undefined && typeof raw.prepareLeadMs !== 'number') throw new Error('invalid prepareLeadMs')
+  if (raw.condition !== undefined && typeof raw.condition !== 'string') throw new Error('invalid condition')
   if (raw.recipient !== undefined && typeof raw.recipient !== 'string') throw new Error('invalid recipient')
   if (raw.targetAgentId !== undefined && typeof raw.targetAgentId !== 'string') throw new Error('invalid targetAgentId')
   return {
@@ -337,6 +346,7 @@ function parseTask(raw: unknown): ProactivityTask {
     ...(raw.revealAt === undefined ? {} : { revealAt: iso(raw.revealAt, 'revealAt') }),
     ...(raw.preparationInstruction === undefined ? {} : { preparationInstruction: nonEmpty(raw.preparationInstruction, 'preparationInstruction') }),
     ...(raw.prepareLeadMs === undefined ? {} : { prepareLeadMs: finitePositive(raw.prepareLeadMs, 'prepareLeadMs') }),
+    ...(raw.condition === undefined ? {} : { condition: nonEmpty(raw.condition, 'condition') }),
     delivery: raw.delivery,
     senderIdentity: raw.senderIdentity,
     ...(raw.recipient === undefined ? {} : { recipient: nonEmpty(raw.recipient, 'recipient') }),
@@ -494,6 +504,7 @@ export class ProactivityEngine {
         ...(input.revealAt === undefined ? {} : { revealAt: iso(input.revealAt, 'revealAt') }),
         ...(input.preparationInstruction === undefined ? {} : { preparationInstruction: nonEmpty(input.preparationInstruction, 'preparationInstruction') }),
         ...(input.prepareLeadMs === undefined ? {} : { prepareLeadMs: finitePositive(input.prepareLeadMs, 'prepareLeadMs') }),
+        ...(input.condition === undefined ? {} : { condition: nonEmpty(input.condition, 'condition') }),
         delivery: input.delivery ?? 'chat',
         senderIdentity: input.senderIdentity ?? 'auto',
         ...(input.recipient === undefined ? {} : { recipient: nonEmpty(input.recipient, 'recipient') }),
@@ -623,7 +634,7 @@ export class ProactivityEngine {
         const externallyStopped = current.status === 'cancelled' || current.status === 'paused'
         const next: ProactivityTask = {
           ...current,
-          status: externallyStopped ? current.status : 'scheduled',
+          status: externallyStopped ? current.status : result.terminal === true ? 'completed' : 'scheduled',
           updatedAt: finishedAt,
           history: [...current.history, {
             phase, scheduledFor, idempotencyKey, startedAt, finishedAt, status: 'completed',
