@@ -154,6 +154,25 @@ describe('Codex automatic live catalog policy', () => {
     expect(catalog.revision).toBe(1)
   })
 
+  it('covers silent diagnostics when no logger is installed', async () => {
+    let mode: 'empty' | 'throw' = 'empty'
+    const catalog = new CodexLiveCatalog({
+      transport: {
+        list: async () => {
+          if (mode === 'throw') throw new Error('silent failure')
+          return []
+        },
+      },
+      now: () => 0,
+      refreshIntervalMs: 10,
+      installedModelIds: () => [],
+    })
+
+    await expect(catalog.refresh(CODEX_PROVIDER, {})).resolves.toBeUndefined()
+    mode = 'throw'
+    await expect(catalog.refresh(CODEX_PROVIDER, {}, true)).resolves.toBeUndefined()
+  })
+
   it('supports production defaults without requiring them in tests', async () => {
     expect(new CodexLiveCatalog().revision).toBe(0)
 
