@@ -5,6 +5,7 @@ import {
   normalizeCodexToolSchemas,
   normalizeOpenAiFunctionToolPayload,
   quarantineCodexTools,
+  requiresCodexToolQuarantine,
   requiresObjectRootFunctionSchemas,
 } from '../src/codex-tool-schema.ts'
 
@@ -24,6 +25,13 @@ describe('Codex tool-schema compatibility', () => {
   it('leaves unrelated provider protocols outside the OpenAI/Codex projection', () => {
     expect(requiresObjectRootFunctionSchemas('anthropic', 'anthropic-messages')).toBe(false)
     expect(requiresObjectRootFunctionSchemas('google', 'google-generative-ai')).toBe(false)
+  })
+
+  it('scopes the Monday compatibility quarantine to Codex routes only', () => {
+    expect(requiresCodexToolQuarantine('openai-codex', 'future-codex-wire')).toBe(true)
+    expect(requiresCodexToolQuarantine('custom', 'openai-codex-responses')).toBe(true)
+    expect(requiresCodexToolQuarantine('openai', 'openai-responses')).toBe(false)
+    expect(requiresCodexToolQuarantine('azure', 'azure-openai-responses')).toBe(false)
   })
 
   it('removes every Codex-forbidden root keyword even without a root union', () => {
@@ -314,7 +322,7 @@ describe('Codex tool-schema compatibility', () => {
       }],
     }
 
-    const normalized = normalizeOpenAiFunctionToolPayload(payload) as typeof payload
+    const normalized = normalizeOpenAiFunctionToolPayload(payload, true) as typeof payload
 
     expect(normalized.tools.map(tool => tool.name)).toEqual([
       'mcp__monday-com-monday-com__get_boards',
