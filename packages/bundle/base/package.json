@@ -65,6 +65,7 @@
     "@phoenix-ai/dsh-goal-round-driver": "workspace:^",
     "@phoenix-ai/dsh-home-gateway": "workspace:^",
     "@phoenix-ai/dsh-api-gateway": "workspace:^",
+    "@phoenix-ai/dsh-image-generation": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-llm-deepseek": "workspace:^",
     "@phoenix-ai/dsh-llm-pi-ai": "workspace:^",
