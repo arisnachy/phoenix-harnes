@@ -57,7 +57,7 @@ describe('Codex automatic live catalog policy', () => {
       now: () => now,
       refreshIntervalMs: 10,
       installedModelIds: () => ['installed-only', 'new-live-model'],
-      warn,
+      logger: { warn },
     })
     const automatic = { [CODEX_PROVIDER]: {} }
     const pinned = { [CODEX_PROVIDER]: { models: [{ id: 'pinned-model' }] } }
@@ -129,14 +129,14 @@ describe('Codex automatic live catalog policy', () => {
       now: () => now,
       refreshIntervalMs: 10,
       installedModelIds: () => [],
-      warn,
+      logger: { warn },
     })
 
     await expect(catalog.refresh(CODEX_PROVIDER, {})).resolves.toBeUndefined()
     expect(warn).toHaveBeenCalledWith(
-      'Live Codex model refresh failed; keeping the last good/static catalog',
-      expect.any(Error),
+      'llm-pi-ai: Live Codex model refresh failed; keeping the last good/static catalog',
     )
+    expect(warn).toHaveBeenCalledWith(expect.any(Error))
 
     now = 5
     await catalog.refresh(CODEX_PROVIDER, {})
@@ -146,7 +146,7 @@ describe('Codex automatic live catalog policy', () => {
     await catalog.refresh(CODEX_PROVIDER, {}, true)
     expect(list).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenCalledWith(
-      'Codex returned an empty live model catalog; keeping the last good/static catalog',
+      'llm-pi-ai: Codex returned an empty live model catalog; keeping the last good/static catalog',
     )
 
     mode = 'success'
