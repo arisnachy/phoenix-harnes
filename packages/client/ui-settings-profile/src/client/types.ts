@@ -18,11 +18,14 @@ export interface UserProfileFamilyMember {
 
 /** Presentation preference for the assistant identity shown by Settings. */
 export type AssistantGender = 'masculine' | 'feminine' | 'neutral'
+export type AssistantGenderSource = 'inferred' | 'manual'
+export type AssistantGenderMode = 'auto' | AssistantGenderSource
 
 /** Browser-local settings values mirrored from the Host profile namespace. */
 export interface UserProfileSettings {
   assistantName: string
   assistantGender: AssistantGender
+  assistantGenderSource?: AssistantGenderSource
   modelProviderOrder?: string[]
   preferredName?: string
   dateOfBirth?: string
@@ -56,5 +59,6 @@ export interface UserProfileRowState {
   family: UserProfileFieldState
   assistantName: UserProfileFieldState
   assistantGender: AssistantGender
+  assistantGenderSource: AssistantGenderMode
   consent: UserProfileConsent
 }
