@@ -674,12 +674,6 @@ function StandingsView({ spec }: { readonly spec: JsonRecord }) {
   )
 }
 
-function SportsView({ spec }: { readonly spec: JsonRecord }) {
-  const kind = visualType(spec)
-  if (kind === 'standings' || Array.isArray(spec.standings)) return <StandingsView spec={spec} />
-  return <ScoreboardView spec={spec} />
-}
-
 function ProgressView({ spec }: { readonly spec: JsonRecord }) {
   const source = Array.isArray(spec.progress) ? spec.progress : Array.isArray(spec.items) ? spec.items : Array.isArray(spec.data) ? spec.data : []
   const items = source.filter(isRecord).slice(0, 40)
