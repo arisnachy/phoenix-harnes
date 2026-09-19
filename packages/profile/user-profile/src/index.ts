@@ -69,6 +69,7 @@ export class UserProfileService extends Service {
 
   private readonly scope: SettingsScope<UserProfileSettings>
   private assistantIdentityTail: Promise<void> = Promise.resolve()
+  private legacyAssistantGenderManual = false
 
   /** @param ctx - Host context providing settings and system-prompt services. */
   constructor(ctx: Context) {
@@ -86,6 +87,12 @@ export class UserProfileService extends Service {
       order: -49,
       text: () => renderAssistantIdentity(this.getAssistantIdentity()),
     })
+    const rawProfile = ctx.settings.describe().find(entry => entry.ns === USER_PROFILE_NAMESPACE)?.user
+    this.legacyAssistantGenderManual = hasLegacyAssistantGenderOverride(rawProfile)
+    if (this.legacyAssistantGenderManual) {
+      this.assistantIdentityTail = this.persistLegacyAssistantGenderProvenance()
+    }
+
     ctx.events.on('session/event', (_session: unknown, event: unknown) => {
       const text = userMessageEventText(event)
       if (text !== undefined) this.observeAssistantPresentation(text)
@@ -161,10 +168,19 @@ export class UserProfileService extends Service {
     }
   }
 
+  private async persistLegacyAssistantGenderProvenance(): Promise<void> {
+    try {
+      await this.scope.update({ assistantGenderSource: 'manual' })
+      this.legacyAssistantGenderManual = false
+    } catch (error) {
+      this.ctx.logger.warn(`user-profile: legacy assistant presentation remains protected in memory: ${String(error)}`)
+    }
+  }
+
   private observeAssistantPresentation(text: string): void {
     const operation = this.assistantIdentityTail.then(async () => {
       const profile = this.scope.get()
-      if (profile.assistantGenderSource === 'manual') return
+      if (this.legacyAssistantGenderManual || profile.assistantGenderSource === 'manual') return
       const inference = inferAssistantGenderFromUserMessage(text, profile.assistantName)
       if (inference === undefined) return
       if (profile.assistantGenderSource === 'inferred' && inference.strength !== 'explicit') return
@@ -188,6 +204,12 @@ export class UserProfileService extends Service {
       consented: this.getConsented(),
     }
   }
+}
+
+function hasLegacyAssistantGenderOverride(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const section = value as Record<string, unknown>
+  return Object.hasOwn(section, 'assistantGender') && !Object.hasOwn(section, 'assistantGenderSource')
 }
 
 function userMessageEventText(value: unknown): string | undefined {
