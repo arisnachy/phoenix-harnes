@@ -9,7 +9,7 @@ PHOENIX could construct HTML/CSS/SVG artifacts but had no first-class raster ima
 Add `@phoenix-ai/dsh-image-generation` as one single-purpose package containing all three capability-seam roles for the first provider:
 
 1. `ctx.imageGeneration` is the provider registry and durable-publication Service Definition.
-2. Cloudflare Workers AI is the first provider.
+2. Cloudflare Workers AI and AI Horde are the first providers. `provider: auto` prefers configured Cloudflare and uses AI Horde as a zero-setup community fallback.
 3. `image_generate` is the model-facing Consumer.
 
 The service returns durable `ImageAttachmentRef` values by writing provider bytes through the existing attachment service. The Web client already promotes image blocks from completed tool calls into the generated-image surface, so no new client card or image transport is required.
@@ -22,11 +22,12 @@ Vectors, icons, logos, diagrams, and charts keep their existing shape-based rend
 
 ## Provider choice
 
-Cloudflare FLUX.1 schnell was selected for the initial provider because it has a documented text-to-image REST surface, returns base64 image bytes, and can operate inside Cloudflare's free Workers AI allocation. Provider account/token setup remains user-owned; PHOENIX does not promise that an external free tier is permanent.
+Cloudflare FLUX.1 schnell remains the preferred configured route because it has a documented text-to-image REST surface and a free Workers AI allocation. AI Horde is the zero-setup fallback: its official service documents the public anonymous key `0000000000`, with lowest queue priority and possible restriction under load. PHOENIX requests inline WebP results so expiring community URLs never become session truth. External free capacity remains provider-owned and is not a PHOENIX guarantee.
 
 ## Security and durability
 
-- API token values resolve through `ctx.credentials` on each generation.
+- Cloudflare and optional registered AI Horde token values resolve through `ctx.credentials` on each generation.
+- AI Horde falls back to its documented public anonymous key when no user credential is stored.
 - Secrets never enter tool arguments/results or session events.
 - Remote URLs are not persisted.
 - Attachment admission validates and normalizes the image before the tool result becomes durable.
