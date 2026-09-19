@@ -34,10 +34,10 @@ function execution(task: ProactivityTask): ProactivityExecution {
 }
 
 function harness(structured: { met: boolean; evidence: string }) {
-  const followup = vi.fn()
+  const followup = vi.fn((_message: unknown) => undefined)
   const parent = { id: 'parent', followup } as never
   const dispose = vi.fn(async () => undefined)
-  const start = vi.fn(async () => ({
+  const start = vi.fn(async (_providerName: string, _request: unknown) => ({
     id: 'watch-child',
     localAgent: undefined,
     result: Promise.resolve({
