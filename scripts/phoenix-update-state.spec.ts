@@ -21,6 +21,7 @@ afterEach(() => {
 
 describe('PHOENIX updater state persistence', () => {
   it('replaces the state document atomically and leaves no temporary file', () => {
+    process.env.PHOENIX_UPDATE_SUPERVISED = '0'
     const root = mkdtempSync(join(tmpdir(), 'phoenix-update-state-write-'))
     roots.push(root)
     const path = join(root, 'phoenix-update-state.json')
@@ -44,6 +45,12 @@ describe('PHOENIX updater state persistence', () => {
 
     writePhoenixUpdateState(path, { schema: 1, status: 'ready', target })
 
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
+      schema: 1,
+      status: 'restarting',
+      phase: 'restart',
+      target,
+    })
     expect(JSON.parse(readFileSync(join(root, 'phoenix-update-restart-request.json'), 'utf8'))).toMatchObject({
       schema: 1,
       target,
@@ -64,6 +71,11 @@ describe('PHOENIX updater state persistence', () => {
 
     writePhoenixUpdateState(path, { schema: 1, status: 'ready', target: 'c'.repeat(40) })
 
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
+      schema: 1,
+      status: 'ready',
+      target: 'c'.repeat(40),
+    })
     expect(existsSync(join(root, 'phoenix-update-restart-request.json'))).toBe(false)
     expect(existsSync(join(root, 'phoenix-host-restart-request.json'))).toBe(false)
   })
