@@ -15,7 +15,7 @@ jobs:
   cordis-mission:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: codex/cordis-visual-workspace-20260913
           fetch-depth: 0
