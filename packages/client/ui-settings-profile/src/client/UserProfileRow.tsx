@@ -27,6 +27,9 @@ export function UserProfileRow(props: UserProfileRowProps) {
   const t = props.t
   if (!state.available) return null
   const disabled = !state.writable || state.saving
+  const desktopApp = typeof window === 'undefined'
+    ? undefined
+    : (window as Window & { phoenixDesktop?: { app?: { logout?: () => void } } }).phoenixDesktop?.app
   const field = (key: keyof typeof state) => state[key] as { text: string; invalid: boolean }
   const sourceKey = state.assistantGenderSource === 'manual'
     ? 'assistantGenderManual'
@@ -90,6 +93,16 @@ export function UserProfileRow(props: UserProfileRowProps) {
           ))}
         </fieldset>
       </div>
+
+      {desktopApp?.logout !== undefined ? (
+        <div className={css.group}>
+          <h3 className={css.groupTitle}>{t('desktopSection')}</h3>
+          <p className={css.hint}>{t('desktopLogoutHint')}</p>
+          <div className={css.actions}>
+            <button type="button" className={css.danger} onClick={() => { desktopApp.logout?.() }}>{t('desktopLogout')}</button>
+          </div>
+        </div>
+      ) : null}
 
       {state.failed ? <p className={css.error} role="status">{t('saveFailed')}</p> : null}
       <div className={css.actions}>
