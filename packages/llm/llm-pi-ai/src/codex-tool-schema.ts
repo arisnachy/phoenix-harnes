@@ -147,3 +147,71 @@ export function normalizeCodexToolSchemas(options: GenerateOptions): GenerateOpt
   })
   return changed ? { ...options, tools } : options
 }
+
+
+function normalizePayloadToolEntry(value: unknown): unknown {
+  if (!isObject(value) || value.type !== 'function') return value
+
+  if (isObject(value.parameters)) {
+    const parameters = normalizeCodexToolParameters(value.parameters)
+    return parameters === value.parameters ? value : { ...value, parameters }
+  }
+
+  if (isObject(value.function) && isObject(value.function.parameters)) {
+    const parameters = normalizeCodexToolParameters(value.function.parameters)
+    if (parameters === value.function.parameters) return value
+    return {
+      ...value,
+      function: {
+        ...value.function,
+        parameters,
+      },
+    }
+  }
+
+  return value
+}
+
+function normalizePayloadToolList(value: unknown): unknown {
+  if (!Array.isArray(value)) return value
+  let changed = false
+  const tools = value.map((entry) => {
+    const normalized = normalizePayloadToolEntry(entry)
+    if (normalized !== entry) changed = true
+    return normalized
+  })
+  return changed ? tools : value
+}
+
+/**
+ * Final-wire defense for OpenAI-compatible payloads.
+ *
+ * Phoenix already normalizes ToolRuntime definitions before pi-ai sees them,
+ * but pi-ai is allowed to rebuild provider payloads from its own transcript and
+ * constrained-sampling layers. This hook runs after that conversion and before
+ * network I/O, guaranteeing that function-tool parameter schemas still satisfy
+ * OpenAI/Codex's object-root contract.
+ *
+ * Both Responses-style tools ({ type: 'function', name, parameters }) and Chat
+ * Completions-style wrappers ({ type: 'function', function: { parameters } })
+ * are supported. Unknown payload fields and non-function tools are untouched.
+ *
+ * @param payload - Provider request body produced by pi-ai.
+ * @returns The original payload when already compatible, otherwise a shallow
+ * copy with normalized function-tool schemas.
+ */
+export function normalizeOpenAiFunctionToolPayload(payload: unknown): unknown {
+  if (!isObject(payload)) return payload
+
+  let changed = false
+  const normalized: JsonObject = { ...payload }
+  for (const key of ['tools', 'additional_tools'] as const) {
+    if (!(key in payload)) continue
+    const next = normalizePayloadToolList(payload[key])
+    if (next !== payload[key]) {
+      normalized[key] = next
+      changed = true
+    }
+  }
+  return changed ? normalized : payload
+}
