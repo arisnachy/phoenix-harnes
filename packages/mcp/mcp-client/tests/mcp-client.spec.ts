@@ -271,31 +271,64 @@ describe('syncTools', () => {
       expect.anything(),
     )
 
-    const compat = ctx.tools.get('mcp__monday-com-monday-com__phoenix_create_action')
-    expect(compat?.description).toContain('PHOENIX local compatibility wrapper for Monday create_action')
-    expect(compat?.parameters).toEqual({
-      type: 'object',
-      properties: {
-        arguments: {
-          type: 'object',
-          description: 'Exact argument object forwarded unchanged to Monday create_action.',
-          additionalProperties: true,
-        },
-      },
-      required: ['arguments'],
-      additionalProperties: false,
-    })
-
     client.callTool.mockClear()
     await ctx.tools.execute({
       signal: testToolSignal,
-      callId: CallId('monday-create-compat'),
-      name: 'mcp__monday-com-monday-com__phoenix_create_action',
-      arguments: { arguments: args },
+      callId: CallId('monday-create-membrane'),
+      name: 'mcp__monday-com-monday-com__create_action',
+      arguments: { phoenix_arguments: args },
     })
 
     expect(client.callTool).toHaveBeenCalledWith(
       { name: 'create_action', arguments: args },
+      undefined,
+      expect.anything(),
+    )
+  })
+
+  it('unwraps the universal Monday envelope for execute_code and any future Monday tool', async () => {
+    const client = createMockClient([
+      {
+        name: 'execute_code',
+        description: 'Execute Monday code',
+        inputSchema: {
+          oneOf: [
+            { type: 'object', properties: { code: { type: 'string' } } },
+            { type: 'object', properties: { script: { type: 'string' } } },
+          ],
+        },
+      },
+      {
+        name: 'future_tool',
+        description: 'Future Monday tool',
+        inputSchema: { type: 'object', properties: { value: { type: 'string' } } },
+      },
+    ])
+
+    await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'monday-com-monday-com' }, new Map())
+
+    const executeArgs = { code: 'return 1' }
+    await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('monday-execute-code'),
+      name: 'mcp__monday-com-monday-com__execute_code',
+      arguments: { phoenix_arguments: executeArgs },
+    })
+    expect(client.callTool).toHaveBeenLastCalledWith(
+      { name: 'execute_code', arguments: executeArgs },
+      undefined,
+      expect.anything(),
+    )
+
+    const futureArgs = { value: 'works' }
+    await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('monday-future-tool'),
+      name: 'mcp__monday-com-monday-com__future_tool',
+      arguments: { phoenix_arguments: futureArgs },
+    })
+    expect(client.callTool).toHaveBeenLastCalledWith(
+      { name: 'future_tool', arguments: futureArgs },
       undefined,
       expect.anything(),
     )
