@@ -13,9 +13,9 @@ $toolRoot = Join-Path $PSScriptRoot 'runtime-tools'
 function Enable-BundledToolchain {
   $entries = @(
     (Join-Path $toolRoot 'node'),
-    (Join-Path $toolRoot 'git\\cmd'),
-    (Join-Path $toolRoot 'git\\mingw64\\bin'),
-    (Join-Path $toolRoot 'git\\usr\\bin')
+    (Join-Path $toolRoot 'git\cmd'),
+    (Join-Path $toolRoot 'git\mingw64\bin'),
+    (Join-Path $toolRoot 'git\usr\bin')
   ) | Where-Object { Test-Path $_ }
 
   if ($entries.Count -gt 0) {
