@@ -181,6 +181,13 @@
   color: var(--dsw-alias-brand-primary);
 }
 
+.saved {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-brand-primary);
+}
+
 .danger {
   margin-left: auto;
   color: var(--dsw-alias-label-error);
