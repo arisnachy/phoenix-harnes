@@ -132,10 +132,12 @@ export class ImageGenerationRuntime extends Service {
         'IMAGE_GENERATION_DUPLICATE_PROVIDER',
       )
     }
+    const providers = this.providers
+    const id = provider.id
     const dispose = this.ctx.effect(function* () {
-      this.providers.set(provider.id, provider)
-      yield () => this.providers.delete(provider.id)
-    }.bind(this), 'image-generation.registerProvider()')
+      providers.set(id, provider)
+      yield () => providers.delete(id)
+    }, 'image-generation.registerProvider()')
     return () => { void dispose() }
   }
 
