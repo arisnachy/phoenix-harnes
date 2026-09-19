@@ -54,6 +54,107 @@ const INVALID_NAME_CHARS = /[^A-Za-z0-9_-]/g
 /** Hex chars of the SHA-256 identity hash appended on lossy normalization. */
 const HASH_LENGTH = 12
 
+/** Root keywords accepted by JSON Schema/MCP but rejected for function-tool parameters by OpenAI/Codex. */
+const FUNCTION_ROOT_FORBIDDEN_KEYS = new Set(['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not'])
+const FUNCTION_ROOT_COMPOSITIONS = ['oneOf', 'anyOf', 'allOf'] as const
+
+type SchemaObject = Record<string, unknown>
+
+function isSchemaObject(value: unknown): value is SchemaObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function schemaStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+}
+
+function schemaProperties(schema: SchemaObject): SchemaObject {
+  return isSchemaObject(schema.properties) ? schema.properties : {}
+}
+
+function mergeSchemaProperty(left: unknown, right: unknown): unknown {
+  if (left === undefined) return right
+  if (right === undefined) return left
+  if (JSON.stringify(left) === JSON.stringify(right)) return left
+
+  const variants: unknown[] = []
+  const append = (value: unknown): void => {
+    if (isSchemaObject(value) && Array.isArray(value.anyOf) && Object.keys(value).length === 1) {
+      for (const branch of value.anyOf) append(branch)
+      return
+    }
+    if (!variants.some(existing => JSON.stringify(existing) === JSON.stringify(value))) variants.push(value)
+  }
+  append(left)
+  append(right)
+  return { anyOf: variants }
+}
+
+/**
+ * Project an MCP input schema into the object-root contract used by model function tools.
+ *
+ * MCP servers can legally advertise broader JSON Schema shapes (notably root-level
+ * oneOf/anyOf/allOf), while OpenAI/Codex rejects the whole request when even one
+ * function schema has those keywords at the root. The bridge therefore keeps the
+ * tool call itself unchanged but exposes a model-safe object-root view. The MCP
+ * server remains authoritative for exact argument validation when tools/call runs.
+ */
+function modelInputSchema(candidate: SchemaObject): SchemaObject {
+  const hasForbiddenRoot = Object.keys(candidate).some(key => FUNCTION_ROOT_FORBIDDEN_KEYS.has(key))
+  const alreadyObject = candidate.type === 'object'
+
+  if (!hasForbiddenRoot && alreadyObject && isSchemaObject(candidate.properties)) return candidate
+
+  const properties: SchemaObject = { ...schemaProperties(candidate) }
+  const required = new Set(schemaStringArray(candidate.required))
+  let sawComposition = false
+
+  for (const key of FUNCTION_ROOT_COMPOSITIONS) {
+    const raw = candidate[key]
+    if (!Array.isArray(raw)) continue
+    const branches = raw.filter(isSchemaObject)
+    if (branches.length === 0) continue
+    sawComposition = true
+
+    for (const branch of branches) {
+      for (const [name, value] of Object.entries(schemaProperties(branch))) {
+        properties[name] = mergeSchemaProperty(properties[name], value)
+      }
+    }
+
+    if (key === 'allOf') {
+      for (const branch of branches) {
+        for (const name of schemaStringArray(branch.required)) required.add(name)
+      }
+    } else {
+      const [first, ...rest] = branches.map(branch => new Set(schemaStringArray(branch.required)))
+      if (first !== undefined) {
+        for (const name of first) {
+          if (rest.every(set => set.has(name))) required.add(name)
+        }
+      }
+    }
+  }
+
+  const normalized: SchemaObject = {}
+  for (const [key, value] of Object.entries(candidate)) {
+    if (FUNCTION_ROOT_FORBIDDEN_KEYS.has(key)) continue
+    if (key === 'type' || key === 'properties' || key === 'required') continue
+    normalized[key] = value
+  }
+  normalized.type = 'object'
+  normalized.properties = properties
+  if (required.size > 0) normalized.required = [...required]
+
+  // A non-object schema without composition cannot faithfully describe function
+  // arguments. Keep annotations/$defs above but expose an unconstrained object;
+  // tools/call still sends the model's object unchanged for server validation.
+  if (!alreadyObject && !sawComposition && Object.keys(properties).length === 0) {
+    delete normalized.required
+  }
+  return normalized
+}
+
 /** Raw result record: the bridge owns JSON-value validation after transport. */
 const RawCallToolResultSchema = z.record(z.string(), z.unknown())
 
@@ -164,7 +265,7 @@ export async function syncTools(
         publicName,
         tool.name,
         tool.description ?? '',
-        tool.inputSchema,
+        modelInputSchema(tool.inputSchema),
         supportedOutputSchema(tool.outputSchema),
         tool.execution?.taskSupport === 'required',
         opts,
