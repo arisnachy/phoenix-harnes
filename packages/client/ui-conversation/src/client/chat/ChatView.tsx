@@ -113,6 +113,11 @@ function runningTurnStartTime(timeline: ConversationTimelineSnapshot): number | 
   return latest
 }
 
+/** Plain-text projection used only to disambiguate Host/browser clock jitter during optimistic handoff. */
+function userMessageText(node: UserMessageNode): string {
+  return node.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+}
+
 /**
  * The chat view slot entry: pure component over the composed props; each
  * ordered business Node crosses the keyed renderer seat.
@@ -196,9 +201,15 @@ export function ChatView({
     return chatNodes.some((node) => {
       if (node.kind !== 'user') return false
       const user = node.data as UserMessageNode
-      return user.time >= floor
+      if (user.time >= pendingSubmit.startedAt) return true
+      return user.time >= floor && userMessageText(user) === pendingSubmit.text
     })
   }, [chatNodes, pendingSubmit])
+  const optimisticSubmit = useMemo(() => (
+    pendingSubmit !== undefined && !pendingSubmitDurable && pendingSubmit.text !== ''
+      ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt }
+      : undefined
+  ), [pendingSubmit, pendingSubmitDurable])
 
   useEffect(() => {
     const finished = previousRunning.current && !running
@@ -235,7 +246,7 @@ export function ChatView({
   const lastKey = order.at(-1) ?? null
   const lastNode = lastKey === null ? undefined : nodeStore.get(lastKey)
   const lastSteeringId = pendingSteering[pendingSteering.length - 1]?.id ?? null
-  const followSig = `${openState}:${firstSeq}:${lastKey}:${order.length}:${running ? 1 : 0}:${lastSteeringId ?? ''}`
+  const followSig = `${openState}:${firstSeq}:${lastKey}:${order.length}:${running ? 1 : 0}:${optimisticSubmit?.startedAt ?? ''}:${lastSteeringId ?? ''}`
 
   const toBottom = (el: HTMLElement): void => {
     anchorRef.current = null
@@ -425,15 +436,9 @@ export function ChatView({
               </button>
             </div>
           )}
-          {pendingSubmit !== undefined && !pendingSubmitDurable && pendingSubmit.text !== '' && (
-            <PendingSteeringBubble
-              content={[{ type: 'text', text: pendingSubmit.text }]}
-              renderMessageImages={renderMessageImages}
-              t={t}
-            />
-          )}
           <ToolActivityFlow
             nodes={chatNodes}
+            optimisticSubmit={optimisticSubmit}
             turnStatus={running ? { startTime: runningTurnStart, progress } : undefined}
             useSession={useSession}
             selectedCallId={selectedCallId}
