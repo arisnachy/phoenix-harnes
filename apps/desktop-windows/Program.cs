@@ -128,6 +128,8 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     private readonly EventWaitHandle showEvent;
     private readonly Thread showSignalThread;
     private Process? ownedRuntime;
+    private string runtimeRoot = Program.RuntimeRoot;
+    private bool sourceCheckoutRuntime;
     private bool externallyManaged;
     private bool shuttingDown;
     private bool signingOut;
@@ -232,10 +234,31 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 }
             }
 
+            var sourceRoot = DesktopSourceCheckout.Resolve(Program.InstallRoot);
+            if (sourceRoot is not null)
+            {
+                runtimeRoot = sourceRoot;
+                sourceCheckoutRuntime = true;
+                restartItem.Text = "Reiniciar Phoenix";
+                tray.Text = "Phoenix · iniciando checkout local";
+                window.SetStartupStatus("Iniciando tu Phoenix local…");
+                DesktopLog.Write($"Using runnable local Phoenix checkout: {runtimeRoot}");
+
+                if (await StartOwnedRuntimeAsync(openWhenReady: true, reportFailure: false))
+                    return;
+
+                DesktopLog.Write("Local Phoenix checkout did not become ready; falling back to the desktop-managed runtime.");
+                StopOwnedRuntime();
+            }
+
+            runtimeRoot = Program.RuntimeRoot;
+            sourceCheckoutRuntime = false;
+            restartItem.Text = "Reiniciar runtime administrado";
+
             if (!await EnsureManagedRuntimeAsync())
                 return;
 
-            await StartOwnedRuntimeAsync(openWhenReady: true);
+            await StartOwnedRuntimeAsync(openWhenReady: true, reportFailure: true);
         }
         catch (Exception ex)
         {
@@ -532,37 +555,45 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         return cleanup.ExitCode == 0 && !await IsReadyAsync();
     }
 
-    private async Task StartOwnedRuntimeAsync(bool openWhenReady)
+    private async Task<bool> StartOwnedRuntimeAsync(bool openWhenReady, bool reportFailure = true)
     {
         if (ownedRuntime is { HasExited: false })
-            return;
+            return true;
 
         window.SetStartupStatus("Iniciando Phoenix…");
-        var launcher = Path.Combine(Program.RuntimeRoot, "phoenix-windows.cmd");
+        var launcher = Path.Combine(runtimeRoot, "phoenix-windows.cmd");
         if (!File.Exists(launcher))
         {
-            window.SetStartupStatus("Phoenix no encontró su supervisor de Windows.", isError: true);
-            DesktopLog.Write($"Managed runtime launcher is missing: {launcher}");
-            MessageBox.Show(
-                $"Falta el supervisor de Windows de Phoenix.\n\n{launcher}\n\nDiagnóstico: {Program.LogPath}",
-                "Phoenix · error de inicio",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-            return;
+            DesktopLog.Write($"Phoenix runtime launcher is missing: {launcher}");
+            if (reportFailure)
+            {
+                window.SetStartupStatus("Phoenix no encontró su supervisor de Windows.", isError: true);
+                MessageBox.Show(
+                    $"Falta el supervisor de Windows de Phoenix.\n\n{launcher}\n\nDiagnóstico: {Program.LogPath}",
+                    "Phoenix · error de inicio",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            return false;
         }
 
         var psi = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
-            Program.RuntimeRoot,
-            browserControl.DescriptorPath);
-        DesktopLog.Write($"Launching managed runtime through PowerShell supervisor: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
+            runtimeRoot,
+            browserControl.DescriptorPath,
+            managedRuntime: !sourceCheckoutRuntime);
+        DesktopLog.Write($"Launching Phoenix runtime from {runtimeRoot} through PowerShell supervisor: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
 
         ownedRuntime = Process.Start(psi);
         if (ownedRuntime is null)
         {
-            window.SetStartupStatus("Phoenix no pudo iniciar su runtime.", isError: true);
-            MessageBox.Show("Phoenix no pudo iniciar el runtime administrado.", "Phoenix",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
+            DesktopLog.Write($"Phoenix could not start runtime from {runtimeRoot}.");
+            if (reportFailure)
+            {
+                window.SetStartupStatus("Phoenix no pudo iniciar su runtime.", isError: true);
+                MessageBox.Show("Phoenix no pudo iniciar el runtime.", "Phoenix",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            return false;
         }
 
         ownedRuntime.OutputDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) DesktopLog.Write("runtime: " + e.Data); };
@@ -583,8 +614,8 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 window.MarkRuntimeReady();
                 if (openWhenReady)
                     ShowWindow();
-                DesktopLog.Write("Managed runtime is ready and desktop WebView is navigating to Phoenix.");
-                return;
+                DesktopLog.Write($"Phoenix runtime is ready from {runtimeRoot}; desktop WebView is navigating to Phoenix.");
+                return true;
             }
             if (ownedRuntime.HasExited)
                 break;
@@ -594,13 +625,17 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         if (!shuttingDown)
         {
             var exit = ownedRuntime.HasExited ? $" El proceso terminó con código {ownedRuntime.ExitCode}." : string.Empty;
-            tray.Text = "Phoenix · error de inicio";
-            window.SetStartupStatus($"Phoenix no alcanzó 127.0.0.1:3081.{exit}\n\nDiagnóstico: {Program.LogPath}", isError: true);
-            MessageBox.Show(
-                $"Phoenix no alcanzó http://127.0.0.1:3081.{exit}\n\nDiagnóstico: {Program.LogPath}",
-                "Phoenix", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            DesktopLog.Write("Runtime did not become ready within the startup window." + exit);
+            DesktopLog.Write($"Runtime from {runtimeRoot} did not become ready within the startup window." + exit);
+            if (reportFailure)
+            {
+                tray.Text = "Phoenix · error de inicio";
+                window.SetStartupStatus($"Phoenix no alcanzó 127.0.0.1:3081.{exit}\n\nDiagnóstico: {Program.LogPath}", isError: true);
+                MessageBox.Show(
+                    $"Phoenix no alcanzó http://127.0.0.1:3081.{exit}\n\nDiagnóstico: {Program.LogPath}",
+                    "Phoenix", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
+        return false;
     }
 
     private async Task RestartOwnedRuntimeAsync()
@@ -610,7 +645,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         StopOwnedRuntime();
         window.SetStartupStatus("Reiniciando Phoenix…");
         await Task.Delay(700);
-        await StartOwnedRuntimeAsync(openWhenReady: false);
+        await StartOwnedRuntimeAsync(openWhenReady: false, reportFailure: true);
     }
 
     private async Task<bool> IsReadyAsync()
