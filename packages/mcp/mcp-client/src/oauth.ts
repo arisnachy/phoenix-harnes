@@ -361,7 +361,23 @@ export class McpOAuthController {
   async authorize(session: AuthorizationSession): Promise<void> {
     await this.ready
     const previous = await this.store.read()
-    if (previous?.tokens !== undefined) await this.store.write(cloneWithout(previous, 'tokens'))
+    // The callback server deliberately binds an ephemeral loopback port. Any
+    // dynamically registered OAuth client from an earlier PHOENIX process is
+    // therefore bound to a redirect_uri that no longer exists. Reusing that
+    // client_id makes providers such as monday.com reject the new authorization
+    // request with "redirect_uri is not registered for this app". An explicit
+    // authorization attempt is a fresh registration boundary: keep reusable
+    // discovery metadata, but drop the old client registration, tokens, and
+    // verifier so the SDK registers a client for the callback URI of this run.
+    if (previous !== undefined) {
+      const {
+        clientInformation: _clientInformation,
+        tokens: _tokens,
+        codeVerifier: _codeVerifier,
+        ...reusable
+      } = previous
+      await this.store.write(reusable)
+    }
     const state = randomState()
     const attempt = this.callbackServer.begin(state, session.signal)
     // The callback promise may be closed during cleanup before the flow reaches

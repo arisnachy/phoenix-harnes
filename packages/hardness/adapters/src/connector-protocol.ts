@@ -31,6 +31,8 @@ Treat connectors as just-in-time capabilities that serve the user's objective, n
 - If there is evidence the user had previously connected the service, label the primary action Reconnect. Otherwise label it Connect.
 - Never ask the user to paste OAuth tokens, refresh tokens, passwords, API secrets, or browser cookies into chat. Use the connector's governed authorization flow.
 - A temporary transport/network failure may be retried with the normal bounded retry policy; an authorization failure must not be hidden behind repeated transport retries.
+- If the governed authorization flow itself fails or is rejected, treat that connector route as unhealthy for the rest of the current task. Do not reopen the same consent flow in a loop. Keep the connector marked as needing recovery, choose an already healthy equivalent route when one exists, and otherwise leave one visible Connect/Reconnect action for the user to retry deliberately.
+- A later successful authorization clears that task-local avoidance: refresh connector state once and resume the blocked step.
 
 4. Discover missing capabilities safely.
 - Only after connector_list confirms the needed capability is absent, use connector_discover against the Official MCP Registry.
