@@ -23,6 +23,7 @@ jobs:
       DSH_GATE_CONCURRENCY: '1'
       DSH_PUBLINT_CONCURRENCY: '2'
       DSH_TELEMETRY_DISABLED: '1'
+      PHOENIX_BUILD_TIMINGS: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -39,10 +40,28 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Prove host and client contracts
         shell: pwsh
-        run: pnpm run typecheck
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'phoenix-typecheck.log'
+          pnpm run typecheck 2>&1 | Tee-Object -FilePath $log
+          $commandExit = $LASTEXITCODE
+          if ($commandExit -ne 0) { exit $commandExit }
+          if (Select-String -Path $log -SimpleMatch '[PLUGIN_TIMINGS]' -Quiet) {
+            Write-Error 'PLUGIN_TIMINGS regression detected during typecheck.'
+            Select-String -Path $log -SimpleMatch '[PLUGIN_TIMINGS]' -Context 0,8
+            exit 1
+          }
       - name: Build the exact main SHA
         shell: pwsh
-        run: pnpm run build
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'phoenix-build.log'
+          pnpm run build 2>&1 | Tee-Object -FilePath $log
+          $commandExit = $LASTEXITCODE
+          if ($commandExit -ne 0) { exit $commandExit }
+          if (Select-String -Path $log -SimpleMatch '[PLUGIN_TIMINGS]' -Quiet) {
+            Write-Error 'PLUGIN_TIMINGS regression detected during exact-SHA build.'
+            Select-String -Path $log -SimpleMatch '[PLUGIN_TIMINGS]' -Context 0,8
+            exit 1
+          }
       - name: Verify native Windows inventory
         shell: pwsh
         run: pnpm run check:ci:windows-blocking

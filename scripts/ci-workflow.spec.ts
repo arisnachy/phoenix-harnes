@@ -22,8 +22,10 @@ describe('CI workflow', () => {
     const commands = job.steps
       .filter((step): step is Record<string, unknown> & { run: string } => isRecord(step) && typeof step.run === 'string')
       .map(step => step.run)
-    expect(commands).toContain('pnpm run typecheck')
-    expect(commands).toContain('pnpm run build')
+    expect(job.env).toMatchObject({ PHOENIX_BUILD_TIMINGS: '1' })
+    expect(commands.some(command => command.includes('pnpm run typecheck'))).toBe(true)
+    expect(commands.some(command => command.includes('pnpm run build'))).toBe(true)
+    expect(commands.some(command => command.includes("Select-String -Path $log -SimpleMatch '[PLUGIN_TIMINGS]' -Quiet"))).toBe(true)
     expect(commands).toContain('pnpm run check:ci:windows-blocking')
   })
 
