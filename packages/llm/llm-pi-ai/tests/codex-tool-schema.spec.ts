@@ -227,6 +227,39 @@ describe('Codex tool-schema compatibility', () => {
     expect(normalized.input[0]).toBe(payload.input[0])
   })
 
+  it('repairs function tools in unknown future nested payload paths', () => {
+    const payload = {
+      model: 'gpt-5.6-sol',
+      transportEnvelope: {
+        deferredCatalog: [{
+          arbitraryFutureKey: {
+            tools: [{
+              type: 'function',
+              name: 'mcp__monday-com-monday-com__create_action',
+              parameters: {
+                oneOf: [
+                  { type: 'object', properties: { board_id: { type: 'string' } } },
+                  { type: 'object', properties: { item_id: { type: 'string' } } },
+                ],
+              },
+            }],
+          },
+        }],
+      },
+    }
+
+    const normalized = normalizeOpenAiFunctionToolPayload(payload) as typeof payload
+    const parameters = normalized.transportEnvelope.deferredCatalog[0]
+      ?.arbitraryFutureKey.tools[0]?.parameters as Record<string, unknown>
+
+    expect(parameters.type).toBe('object')
+    expect(parameters).not.toHaveProperty('oneOf')
+    expect(parameters.properties).toMatchObject({
+      board_id: { type: 'string' },
+      item_id: { type: 'string' },
+    })
+  })
+
   it('keeps already-compatible final payloads referentially stable', () => {
     const payload = {
       tools: [{
