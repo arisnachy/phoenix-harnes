@@ -17,6 +17,7 @@
  * - $DSH_HOME, credentials, sessions and project data are never touched.
  */
 
+import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
   existsSync, mkdirSync, readFileSync, unlinkSync,
@@ -335,10 +336,16 @@ function stageBaseDirectory() {
   return join(homedir(), '.phoenix-update')
 }
 
-function stageDirectory() {
+function stageIdentity(root) {
+  const common = gitCommonDirectory(root) ?? resolve(root)
+  const normalized = process.platform === 'win32' ? common.toLowerCase() : common
+  return createHash('sha256').update(normalized).digest('hex').slice(0, 10)
+}
+
+function stageDirectory(root) {
   const base = stageBaseDirectory()
   mkdirSync(base, { recursive: true })
-  return join(base, 'phoenix-stage')
+  return join(base, `phoenix-stage-${stageIdentity(root)}`)
 }
 
 function sameRepositoryWorktree(root, stage) {
@@ -352,7 +359,7 @@ function sameRepositoryWorktree(root, stage) {
 }
 
 function ensureStagingWorktree(root, target) {
-  const stage = stageDirectory()
+  const stage = stageDirectory(root)
   if (existsSync(stage)) {
     if (!sameRepositoryWorktree(root, stage)) {
       throw new Error(`PHOENIX staging path exists but is not this repository: ${stage}`)
@@ -368,7 +375,7 @@ function ensureStagingWorktree(root, target) {
 }
 
 function recoverStaleStagingIndexLock(root) {
-  const stage = stageDirectory()
+  const stage = stageDirectory(root)
   if (!sameRepositoryWorktree(root, stage)) return
   const stageGit = gitDirectory(stage)
   const lock = join(stageGit, 'index.lock')
@@ -421,7 +428,7 @@ function stagedCandidateValid(root, target) {
   const prepared = readPrepared(root)
   if (prepared?.target !== target) return false
   if (prepared.base !== currentCommit(root)) return false
-  const stage = stageDirectory()
+  const stage = stageDirectory(root)
   if (!sameRepositoryWorktree(root, stage)) return false
   const stageHead = git(stage, ['rev-parse', 'HEAD'], { allowFailure: true })
   const stageStatus = git(stage, ['status', '--porcelain=v1', '--untracked-files=all'], { allowFailure: true })
