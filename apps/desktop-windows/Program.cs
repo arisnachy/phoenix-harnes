@@ -389,7 +389,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
               $command = [string]$current.CommandLine
               $isPhoenix = $command -match '(?i)(phoenix-windows-supervisor\.mjs|apps[\\/]+cli[\\/]+(?:src|lib)[\\/]+bin\.(?:ts|js)|phoenix-harnes|[\\/]Phoenix[\\/]runtime)'
               if (-not $isPhoenix) {
-                Write-Output "foreign:$ownerId:$($current.Name)"
+                Write-Output "foreign:${ownerId}:$($current.Name)"
                 exit 21
               }
 
