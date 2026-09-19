@@ -75,6 +75,8 @@ function mergedRequired(
  * The projection keeps every visible object property from root alternatives.
  * For oneOf/anyOf only requirements common to every branch remain required;
  * the MCP server still performs authoritative validation when the tool runs.
+ * @param parameters - Registered JSON Schema arguments from the tool catalog.
+ * @returns A Codex-compatible object-root schema, or the original schema when already compatible.
  */
 export function normalizeCodexToolParameters(parameters: JsonObject): JsonObject {
   const hasForbiddenRoot = Object.keys(parameters).some(key => ROOT_FORBIDDEN_KEYS.has(key))
@@ -112,6 +114,8 @@ function normalizeTool(tool: ToolSchema): ToolSchema {
 /**
  * Request-only Codex projection. Non-Codex providers receive the exact original
  * tool schemas; Codex gets only the compatibility rewrite it requires.
+ * @param options - Fully assembled Harness request before provider projection.
+ * @returns The original request when no rewrite is needed, otherwise a request with projected tool schemas.
  */
 export function normalizeCodexToolSchemas(options: GenerateOptions): GenerateOptions {
   if (options.tools === undefined || options.tools.length === 0) return options
