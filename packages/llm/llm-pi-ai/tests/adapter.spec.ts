@@ -73,7 +73,7 @@ describe('PiAiAdapter provider routing', () => {
           ],
         },
       }
-      return ['deepseek-v4-flash']
+      return ['ghost-not-dispatchable', 'deepseek-v4-flash']
     })
     const adapter = new PiAiAdapter({
       profiles: () => resolveProfiles(providers),
