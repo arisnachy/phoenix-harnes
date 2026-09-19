@@ -355,6 +355,32 @@ describe('Codex tool-schema compatibility', () => {
     expect(wrapped.tools?.[2]).toBe(options.tools?.[2])
   })
 
+  it('keeps the Monday membrane idempotent across repeated provider defenses', () => {
+    const options: GenerateOptions = {
+      provider: 'openai-codex',
+      model: 'gpt-5.6-sol',
+      messages: [],
+      tools: [{
+        name: 'mcp__monday-com-monday-com__execute_code',
+        description: 'Execute code',
+        parameters: {
+          oneOf: [{ type: 'object', properties: { code: { type: 'string' } } }],
+        },
+      }],
+    }
+
+    const once = applyMondayCodexMembrane(options)
+    const twice = applyMondayCodexMembrane(once)
+
+    expect(twice).toBe(once)
+    expect(twice.tools?.[0]?.description?.match(/PHOENIX Monday compatibility/gu)).toHaveLength(1)
+    expect(twice.tools?.[0]?.parameters).toMatchObject({
+      type: 'object',
+      properties: { phoenix_arguments: { type: 'object' } },
+      required: ['phoenix_arguments'],
+    })
+  })
+
   it('wraps Monday tools in nested final provider payloads, including execute_code', () => {
     const payload = {
       tools: [
