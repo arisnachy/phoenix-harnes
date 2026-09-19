@@ -42,6 +42,10 @@ True(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.close\"}", out var clo
 Equal("phoenix.browser.close", close.Type, "close command type", failures);
 Equal(null, close.Url, "close command has no url", failures);
 
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.app.logout\"}", out var logout), "native logout command parses", failures);
+Equal("phoenix.app.logout", logout.Type, "native logout command type", failures);
+Equal(null, logout.Url, "native logout command has no url", failures);
+
 False(BrowserCommand.TryParse("{not-json}", out _), "malformed json rejected", failures);
 False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"javascript:alert(1)\"}", out _), "unsafe open command rejected", failures);
 
@@ -109,6 +113,10 @@ True(runtimeLaunch.ArgumentList.Any(value => value.Contains("phoenix-windows.cmd
 True(runtimeLaunch.ArgumentList.Any(value => value.Contains("--no-open", StringComparison.Ordinal)), "desktop runtime never opens an external browser", failures);
 Equal("1", runtimeLaunch.Environment["PHOENIX_DESKTOP_MANAGED"], "desktop managed environment is preserved", failures);
 Equal(@"C:\Phoenix\desktop-control.json", runtimeLaunch.Environment["PHOENIX_DESKTOP_CONTROL_DESCRIPTOR"], "desktop control descriptor reaches supervisor", failures);
+Equal("desktop", runtimeLaunch.Environment["PHOENIX_SURFACE"], "runtime knows it is hosted by the desktop shell", failures);
+Equal("1", runtimeLaunch.Environment["PHOENIX_DESKTOP_SHELL"], "desktop shell marker reaches runtime", failures);
+Equal("true", runtimeLaunch.Environment["PHOENIX_BROWSER_AUTOSTART"], "desktop automation browser may start on demand", failures);
+Equal("chrome", runtimeLaunch.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"], "desktop prefers Chrome automation", failures);
 
 // A managed runtime is healthy only after install/build completed. Old desktop builds could leave
 // an empty marker behind before those steps completed; that state must never be accepted as ready.
