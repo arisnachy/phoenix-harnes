@@ -99,7 +99,7 @@ EqualInt(960, BrowserLayout.PreferredBrowserWidth(2400), "wide window preserves 
 True(DesktopStartupContract.ShowWindowBeforeRuntimeReady, "desktop window is shown before runtime readiness", failures);
 True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch signals existing window", failures);
 True(DesktopStartupContract.EmbeddedBrowserStartsLazy, "embedded browser does not delay chat startup", failures);
-Equal("Preparando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
+Equal("Iniciando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
 
 var toolchainEntries = DesktopBundledToolchain.CandidatePathEntries(@"C:\Program Files\Phoenix");
 True(toolchainEntries.Any(path => path.EndsWith(@"runtime-tools\node", StringComparison.OrdinalIgnoreCase)), "bundled Node path is declared", failures);
@@ -123,6 +123,35 @@ Equal("desktop", runtimeLaunch.Environment["PHOENIX_SURFACE"], "runtime knows it
 Equal("1", runtimeLaunch.Environment["PHOENIX_DESKTOP_SHELL"], "desktop shell marker reaches runtime", failures);
 Equal("true", runtimeLaunch.Environment["PHOENIX_BROWSER_AUTOSTART"], "desktop automation browser may start on demand", failures);
 Equal("chrome", runtimeLaunch.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"], "desktop prefers Chrome automation", failures);
+
+var sourceLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
+    @"C:\Working Phoenix",
+    @"C:\Phoenix\desktop-control.json",
+    managedRuntime: false);
+False(sourceLaunch.Environment.ContainsKey("PHOENIX_DESKTOP_MANAGED"), "source checkout is not mislabeled as desktop-managed", failures);
+True(sourceLaunch.ArgumentList.Any(value => value.Contains(@"C:\Working Phoenix\phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)), "source checkout launcher is used directly", failures);
+
+var sourceTestRoot = Path.Combine(Path.GetTempPath(), $"phoenix-source-test-{Guid.NewGuid():N}");
+var sourceInstallRoot = Path.Combine(Path.GetTempPath(), $"phoenix-install-test-{Guid.NewGuid():N}");
+try
+{
+    Directory.CreateDirectory(Path.Combine(sourceTestRoot, ".git"));
+    Directory.CreateDirectory(Path.Combine(sourceTestRoot, "node_modules", ".pnpm"));
+    File.WriteAllText(Path.Combine(sourceTestRoot, "package.json"), "{}");
+    File.WriteAllText(Path.Combine(sourceTestRoot, "phoenix-windows.cmd"), "@echo off");
+    True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "working source checkout is recognized", failures);
+
+    DesktopSourceCheckout.Remember(sourceInstallRoot, sourceTestRoot);
+    Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "remembered working source checkout resolves before managed bootstrap", failures);
+
+    Directory.Delete(Path.Combine(sourceTestRoot, "node_modules"), recursive: true);
+    False(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "checkout without installed dependencies is not preferred", failures);
+}
+finally
+{
+    Directory.Delete(sourceTestRoot, recursive: true);
+    Directory.Delete(sourceInstallRoot, recursive: true);
+}
 
 // A managed runtime is healthy only after install/build completed. Old desktop builds could leave
 // an empty marker behind before those steps completed; that state must never be accepted as ready.
