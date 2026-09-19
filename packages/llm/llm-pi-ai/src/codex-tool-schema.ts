@@ -10,6 +10,10 @@ const OBJECT_ROOT_FUNCTION_APIS = new Set([
   'azure-openai-responses',
 ])
 
+const CODEX_QUARANTINED_FUNCTION_TOOLS = new Set([
+  'mcp__monday-com-monday-com__create_action',
+])
+
 type JsonObject = Record<string, unknown>
 
 /**
@@ -24,6 +28,16 @@ type JsonObject = Record<string, unknown>
  */
 export function requiresObjectRootFunctionSchemas(provider: string, api: string): boolean {
   return provider === 'openai-codex' || OBJECT_ROOT_FUNCTION_APIS.has(api)
+}
+
+/**
+ * Whether this exact route needs the Monday create_action compatibility quarantine.
+ * @param provider - Harness provider route selected for the request.
+ * @param api - Resolved pi-ai wire protocol.
+ * @returns True only for direct Codex routes.
+ */
+export function requiresCodexToolQuarantine(provider: string, api: string): boolean {
+  return provider === 'openai-codex' || api === 'openai-codex-responses'
 }
 
 
@@ -151,6 +165,35 @@ export function normalizeCodexToolSchemas(options: GenerateOptions): GenerateOpt
   return changed ? { ...options, tools } : options
 }
 
+/**
+ * Remove provider-specific tool definitions that are known to make Codex reject
+ * the entire request before the model can answer.
+ *
+ * This is deliberately a narrow compatibility quarantine, not a generic MCP
+ * denylist. Other providers still receive the tool, and the rest of the Monday
+ * catalog remains available on Codex.
+ * @param options - Model request after generic schema normalization.
+ * @returns The original request when no quarantined tool is present, otherwise a filtered copy.
+ */
+export function quarantineCodexTools(options: GenerateOptions): GenerateOptions {
+  if (options.tools === undefined || options.tools.length === 0) return options
+  const tools = options.tools.filter(tool => !CODEX_QUARANTINED_FUNCTION_TOOLS.has(tool.name))
+  return tools.length === options.tools.length ? options : { ...options, tools }
+}
+
+function payloadFunctionName(value: unknown): string | undefined {
+  if (!isObject(value) || value.type !== 'function') return undefined
+  if (typeof value.name === 'string') return value.name
+  return isObject(value.function) && typeof value.function.name === 'string'
+    ? value.function.name
+    : undefined
+}
+
+function isQuarantinedPayloadFunction(value: unknown): boolean {
+  const name = payloadFunctionName(value)
+  return name !== undefined && CODEX_QUARANTINED_FUNCTION_TOOLS.has(name)
+}
+
 
 function normalizePayloadToolEntry(value: unknown): unknown {
   if (!isObject(value)) return value
@@ -184,14 +227,19 @@ function normalizePayloadToolEntry(value: unknown): unknown {
   return value
 }
 
-function normalizePayloadTree(value: unknown): unknown {
+function normalizePayloadTree(value: unknown, quarantine: boolean): unknown {
   if (Array.isArray(value)) {
     let changed = false
-    const normalized = value.map((entry) => {
-      const next = normalizePayloadTree(entry)
+    const normalized: unknown[] = []
+    for (const entry of value) {
+      if (quarantine && isQuarantinedPayloadFunction(entry)) {
+        changed = true
+        continue
+      }
+      const next = normalizePayloadTree(entry, quarantine)
       if (next !== entry) changed = true
-      return next
-    })
+      normalized.push(next)
+    }
     return changed ? normalized : value
   }
   if (!isObject(value)) return value
@@ -205,7 +253,7 @@ function normalizePayloadTree(value: unknown): unknown {
   let normalized: JsonObject | undefined
 
   for (const [key, child] of Object.entries(source)) {
-    const next = normalizePayloadTree(child)
+    const next = normalizePayloadTree(child, quarantine)
     if (next === child) continue
     normalized ??= { ...source }
     normalized[key] = next
@@ -228,9 +276,10 @@ function normalizePayloadTree(value: unknown): unknown {
  * conversation payloads and non-function tools retain identity when unchanged.
  *
  * @param payload - Provider request body produced by pi-ai.
+ * @param quarantine - Whether known Codex-incompatible functions should be removed while walking the payload.
  * @returns The original payload when already compatible, otherwise a copy with
  * every nested function-tool schema projected to Codex's object-root contract.
  */
-export function normalizeOpenAiFunctionToolPayload(payload: unknown): unknown {
-  return normalizePayloadTree(payload)
+export function normalizeOpenAiFunctionToolPayload(payload: unknown, quarantine = false): unknown {
+  return normalizePayloadTree(payload, quarantine)
 }

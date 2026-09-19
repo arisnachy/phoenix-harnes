@@ -470,7 +470,7 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.headers[0]?.['chatgpt-account-id']).toBeUndefined()
   })
 
-  it('sends a Monday-style MCP union as an object-root Codex function schema on the wire', async () => {
+  it('quarantines Monday create_action and keeps the local compatibility wrapper on the Codex wire', async () => {
     const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'captured' } }) }])
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
@@ -484,28 +484,23 @@ describe('PiAiAdapter provider routing', () => {
       messages: [],
       tools: [{
         name: 'mcp__monday-com-monday-com__create_action',
-        description: 'Create a Monday action',
+        description: 'Raw Monday create_action',
         parameters: {
           oneOf: [
-            {
-              type: 'object',
-              properties: {
-                action: { const: 'create' },
-                board_id: { type: 'string' },
-              },
-              required: ['action', 'board_id'],
-              additionalProperties: false,
-            },
-            {
-              type: 'object',
-              properties: {
-                action: { const: 'update' },
-                item_id: { type: 'string' },
-              },
-              required: ['action', 'item_id'],
-              additionalProperties: false,
-            },
+            { type: 'object', properties: { board_id: { type: 'string' } } },
+            { type: 'object', properties: { item_id: { type: 'string' } } },
           ],
+        },
+      }, {
+        name: 'mcp__monday-com-monday-com__phoenix_create_action',
+        description: 'PHOENIX local Monday compatibility wrapper',
+        parameters: {
+          type: 'object',
+          properties: {
+            arguments: { type: 'object', additionalProperties: true },
+          },
+          required: ['arguments'],
+          additionalProperties: false,
         },
       }],
     })
@@ -514,18 +509,15 @@ describe('PiAiAdapter provider routing', () => {
     const request = server.requests[0] as {
       tools?: Array<{ name?: string; parameters?: Record<string, unknown> }>
     }
-    const monday = request.tools?.find(tool => tool.name === 'mcp__monday-com-monday-com__create_action')
-    expect(monday).toBeDefined()
-    expect(monday?.parameters).toMatchObject({
+    expect(request.tools?.find(tool => tool.name === 'mcp__monday-com-monday-com__create_action')).toBeUndefined()
+    const compat = request.tools?.find(tool => tool.name === 'mcp__monday-com-monday-com__phoenix_create_action')
+    expect(compat?.parameters).toMatchObject({
       type: 'object',
       properties: {
-        board_id: { type: 'string' },
-        item_id: { type: 'string' },
+        arguments: { type: 'object' },
       },
+      required: ['arguments'],
     })
-    for (const key of ['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not']) {
-      expect(monday?.parameters).not.toHaveProperty(key)
-    }
   })
 
   it('keeps the Codex wire for a ChatGPT access JWT credential', async () => {
@@ -550,7 +542,7 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.headers.some(headers => headers['chatgpt-account-id'] === 'acc_test')).toBe(true)
   })
 
-  it('sanitizes Monday MCP schemas on the direct ChatGPT Codex wire', async () => {
+  it('quarantines Monday create_action on the direct ChatGPT Codex wire while keeping the local wrapper', async () => {
     const server = await mockServer([
       { status: 401, body: JSON.stringify({ error: { message: 'captured direct Codex request' } }) },
       { status: 401, body: JSON.stringify({ error: { message: 'captured direct Codex fallback request' } }) },
@@ -579,61 +571,58 @@ describe('PiAiAdapter provider routing', () => {
       messages: [],
       tools: [{
         name: 'mcp__monday-com-monday-com__create_action',
-        description: 'Create a Monday action',
+        description: 'Raw Monday create_action',
         parameters: {
           oneOf: [
-            {
-              type: 'object',
-              properties: {
-                action: { const: 'create' },
-                board_id: { type: 'string' },
-              },
-              required: ['action', 'board_id'],
-            },
-            {
-              type: 'object',
-              properties: {
-                action: { const: 'update' },
-                item_id: { type: 'string' },
-              },
-              required: ['action', 'item_id'],
-            },
+            { type: 'object', properties: { board_id: { type: 'string' } } },
+            { type: 'object', properties: { item_id: { type: 'string' } } },
           ],
+        },
+      }, {
+        name: 'mcp__monday-com-monday-com__phoenix_create_action',
+        description: 'PHOENIX local Monday compatibility wrapper',
+        parameters: {
+          type: 'object',
+          properties: {
+            arguments: { type: 'object', additionalProperties: true },
+          },
+          required: ['arguments'],
+          additionalProperties: false,
         },
       }],
     })
 
     type CapturedTool = { name?: string; parameters?: Record<string, unknown> }
-    const findCapturedTool = (value: unknown): CapturedTool | undefined => {
+    const findCapturedTool = (value: unknown, name: string): CapturedTool | undefined => {
       if (Array.isArray(value)) {
         for (const entry of value) {
-          const found = findCapturedTool(entry)
+          const found = findCapturedTool(entry, name)
           if (found !== undefined) return found
         }
         return undefined
       }
       if (typeof value !== 'object' || value === null) return undefined
       const record = value as Record<string, unknown>
-      if (record.name === 'mcp__monday-com-monday-com__create_action') {
-        return record as CapturedTool
-      }
+      if (record.name === name) return record as CapturedTool
       for (const child of Object.values(record)) {
-        const found = findCapturedTool(child)
+        const found = findCapturedTool(child, name)
         if (found !== undefined) return found
       }
       return undefined
     }
-    const monday = server.requests
-      .map(request => findCapturedTool(request))
+
+    const raw = server.requests
+      .map(request => findCapturedTool(request, 'mcp__monday-com-monday-com__create_action'))
+      .find((tool): tool is CapturedTool => tool !== undefined)
+    const compat = server.requests
+      .map(request => findCapturedTool(request, 'mcp__monday-com-monday-com__phoenix_create_action'))
       .find((tool): tool is CapturedTool => tool !== undefined)
 
     expect(server.paths.length).toBeGreaterThan(0)
     expect(server.paths.every(path => path === '/codex/responses')).toBe(true)
-    expect(monday).toBeDefined()
-    expect(monday?.parameters?.type).toBe('object')
-    for (const key of ['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not']) {
-      expect(monday?.parameters).not.toHaveProperty(key)
-    }
+    expect(raw).toBeUndefined()
+    expect(compat?.parameters?.type).toBe('object')
+    expect(compat?.parameters).not.toHaveProperty('oneOf')
   })
 
   it('fails a claimless JWT on the Codex route before any request with sign-in guidance', async () => {

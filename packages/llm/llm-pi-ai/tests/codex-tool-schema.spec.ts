@@ -4,6 +4,8 @@ import {
   normalizeCodexToolParameters,
   normalizeCodexToolSchemas,
   normalizeOpenAiFunctionToolPayload,
+  quarantineCodexTools,
+  requiresCodexToolQuarantine,
   requiresObjectRootFunctionSchemas,
 } from '../src/codex-tool-schema.ts'
 
@@ -23,6 +25,13 @@ describe('Codex tool-schema compatibility', () => {
   it('leaves unrelated provider protocols outside the OpenAI/Codex projection', () => {
     expect(requiresObjectRootFunctionSchemas('anthropic', 'anthropic-messages')).toBe(false)
     expect(requiresObjectRootFunctionSchemas('google', 'google-generative-ai')).toBe(false)
+  })
+
+  it('scopes the Monday compatibility quarantine to Codex routes only', () => {
+    expect(requiresCodexToolQuarantine('openai-codex', 'future-codex-wire')).toBe(true)
+    expect(requiresCodexToolQuarantine('custom', 'openai-codex-responses')).toBe(true)
+    expect(requiresCodexToolQuarantine('openai', 'openai-responses')).toBe(false)
+    expect(requiresCodexToolQuarantine('azure', 'azure-openai-responses')).toBe(false)
   })
 
   it('removes every Codex-forbidden root keyword even without a root union', () => {
@@ -121,7 +130,7 @@ describe('Codex tool-schema compatibility', () => {
       model: 'gpt-5.6-sol',
       tools: [{
         type: 'function',
-        name: 'mcp__monday-com-monday-com__create_action',
+        name: 'mcp__fixture__union_tool',
         parameters: {
           oneOf: [
             {
@@ -161,7 +170,7 @@ describe('Codex tool-schema compatibility', () => {
         {
           type: 'function',
           function: {
-            name: 'mcp__monday-com-monday-com__create_action',
+            name: 'mcp__fixture__union_tool',
             parameters: {
               anyOf: [
                 { type: 'object', properties: { board_id: { type: 'string' } } },
@@ -198,7 +207,7 @@ describe('Codex tool-schema compatibility', () => {
           role: 'developer',
           tools: [{
             type: 'function',
-            name: 'mcp__monday-com-monday-com__create_action',
+            name: 'mcp__fixture__union_tool',
             parameters: raw,
           }],
         },
@@ -209,7 +218,7 @@ describe('Codex tool-schema compatibility', () => {
           status: 'completed',
           tools: [{
             type: 'function',
-            name: 'mcp__monday-com-monday-com__create_action',
+            name: 'mcp__fixture__union_tool',
             parameters: raw,
           }],
         },
@@ -261,7 +270,7 @@ describe('Codex tool-schema compatibility', () => {
           arbitraryFutureKey: {
             tools: [{
               type: 'function',
-              name: 'mcp__monday-com-monday-com__create_action',
+              name: 'mcp__fixture__union_tool',
               parameters: {
                 oneOf: [
                   { type: 'object', properties: { board_id: { type: 'string' } } },
@@ -284,6 +293,67 @@ describe('Codex tool-schema compatibility', () => {
       board_id: { type: 'string' },
       item_id: { type: 'string' },
     })
+  })
+
+  it('quarantines Monday create_action from Codex request options while preserving the rest of the catalog', () => {
+    const createAction = {
+      name: 'mcp__monday-com-monday-com__create_action',
+      description: 'Create a Monday action',
+      parameters: { type: 'object', properties: {} },
+    }
+    const getBoards = {
+      name: 'mcp__monday-com-monday-com__get_boards',
+      description: 'List Monday boards',
+      parameters: { type: 'object', properties: {} },
+    }
+    const options: GenerateOptions = {
+      provider: 'openai-codex',
+      model: 'gpt-5.6-sol',
+      messages: [],
+      tools: [createAction, getBoards],
+    }
+
+    const quarantined = quarantineCodexTools(options)
+
+    expect(quarantined).not.toBe(options)
+    expect(quarantined.tools?.map(tool => tool.name)).toEqual([
+      'mcp__monday-com-monday-com__get_boards',
+    ])
+    expect(options.tools).toHaveLength(2)
+  })
+
+  it('removes quarantined Monday create_action entries from final nested provider payloads', () => {
+    const payload = {
+      tools: [
+        {
+          type: 'function',
+          name: 'mcp__monday-com-monday-com__create_action',
+          parameters: { type: 'object', properties: {} },
+        },
+        {
+          type: 'function',
+          name: 'mcp__monday-com-monday-com__get_boards',
+          parameters: { type: 'object', properties: {} },
+        },
+      ],
+      input: [{
+        type: 'additional_tools',
+        tools: [{
+          type: 'function',
+          function: {
+            name: 'mcp__monday-com-monday-com__create_action',
+            parameters: { type: 'object', properties: {} },
+          },
+        }],
+      }],
+    }
+
+    const normalized = normalizeOpenAiFunctionToolPayload(payload, true) as typeof payload
+
+    expect(normalized.tools.map(tool => tool.name)).toEqual([
+      'mcp__monday-com-monday-com__get_boards',
+    ])
+    expect(normalized.input[0]?.tools).toEqual([])
   })
 
   it('keeps already-compatible final payloads referentially stable', () => {
