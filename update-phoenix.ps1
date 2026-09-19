@@ -30,9 +30,9 @@ try {
 
   $code = $LASTEXITCODE
   if ($code -eq 12) {
-    Write-Error 'PHOENIX stable update and rollback both failed. Review .git\phoenix-update-state.json before continuing.'
+    [Console]::Error.WriteLine('PHOENIX stable update and rollback both failed. Review .git\phoenix-update-state.json before continuing.')
   } elseif ($code -eq 13) {
-    Write-Error 'PHOENIX found a newer stable runtime but could not activate it. Refusing to start the known-stale runtime.'
+    [Console]::Error.WriteLine('PHOENIX found a newer stable runtime but could not activate it. Refusing to start the known-stale runtime.')
   } elseif ($code -ne 0) {
     Write-Warning "PHOENIX update check failed with exit code $code."
   }
