@@ -776,6 +776,35 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
       lastObservedFingerprint = currentFingerprint
     }
 
+    const updateTarget = restartRequestTarget()
+    if (updateTarget !== undefined) {
+      try {
+        console.error(
+          `[PHOENIX UPDATE] prepared ${updateTarget.slice(0, 12)} is ready; warming replacement runtime while current Host remains online...`,
+        )
+        const runtime = activatePreparedRuntime(updateTarget)
+        runtimeRoot = runtime.path
+        clearPreparedRecord()
+        clearRestartRequest()
+        // Older prepared bridges also emitted a generic Host restart marker.
+        // Consume it here so mixed-version upgrades cannot kill the healthy Host
+        // before the replacement runtime has passed its boot preflight.
+        clearHostRestartRequest()
+        console.error(
+          `[PHOENIX UPDATE] replacement runtime ${runtime.target.slice(0, 12)} passed build, smoke, and boot preflight; switching Hosts now.`,
+        )
+        return { kind: 'safe-update-handoff', target: updateTarget, lastObservedFingerprint }
+      } catch (error) {
+        clearRestartRequest()
+        clearPreparedRecord()
+        clearHostRestartRequest()
+        console.error(
+          `[PHOENIX UPDATE] replacement runtime prewarm failed safely; current Host remains online: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        continue
+      }
+    }
+
     if (hostRestartRequested()) {
       const preflight = preflightBootConfiguration()
       if (!preflight.ok) {
@@ -837,11 +866,15 @@ while (true) {
   let plannedHostRestart = false
   let hostExit
 
-  if (hostEvent.kind === 'safe-restart') {
+  if (hostEvent.kind === 'safe-restart' || hostEvent.kind === 'safe-update-handoff') {
     plannedHostRestart = true
     await watcherSupervisor.stop()
     watcherStopped = true
-    console.error('[PHOENIX RECOVERY] configuration preflight passed; restarting under the external supervisor.')
+    if (hostEvent.kind === 'safe-update-handoff') {
+      console.error('[PHOENIX UPDATE] replacement runtime is fully ready; handing off from the current Host.')
+    } else {
+      console.error('[PHOENIX RECOVERY] configuration preflight passed; restarting under the external supervisor.')
+    }
     if (host.exitCode === null) host.kill()
     hostExit = await hostExitPromise
   } else {
