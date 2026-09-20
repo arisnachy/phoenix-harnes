@@ -144,7 +144,7 @@ export class CodexLiveCatalog {
       ...providers,
       [CODEX_PROVIDER]: {
         ...liveProfile,
-        ...this.dispatch === undefined ? {} : { models: this.dispatch },
+        ...(this.dispatch === undefined ? {} : { models: this.dispatch }),
       },
     }
   }
