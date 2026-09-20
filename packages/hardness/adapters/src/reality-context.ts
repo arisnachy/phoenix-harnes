@@ -58,6 +58,33 @@ interface WeatherPayload {
   timezone: string | null
 }
 
+interface BatteryPayload {
+  readonly present: boolean
+  readonly batteries: readonly {
+    readonly chargePercent: number | null
+    readonly statusCode: number | null
+    readonly status: string | null
+    readonly estimatedRunTimeMinutes: number | null
+  }[]
+}
+
+interface GpuPayload {
+  readonly devices: readonly {
+    readonly name: string
+    readonly adapterRamBytes: number | null
+    readonly driverVersion: string | null
+    readonly status: string | null
+  }[]
+}
+
+interface InternetProbePayload {
+  readonly reachable: boolean
+  readonly target: string
+  readonly dnsLookupMs: number | null
+  readonly httpsRoundTripMs: number | null
+  readonly httpStatus: number | null
+}
+
 interface AuthorizationEntryLike {
   readonly key: string
   readonly label: string
@@ -376,6 +403,152 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined
 }
 
+function numericValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function textValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
+}
+
+function batteryStatusLabel(code: number | null): string | null {
+  switch (code) {
+    case 1: return 'discharging'
+    case 2: return 'on-ac'
+    case 3: return 'fully-charged'
+    case 4: return 'low'
+    case 5: return 'critical'
+    case 6: return 'charging'
+    case 7: return 'charging-high'
+    case 8: return 'charging-low'
+    case 9: return 'charging-critical'
+    case 10: return 'undefined'
+    case 11: return 'partially-charged'
+    default: return null
+  }
+}
+
+async function windowsCimJson(script: string): Promise<Record<string, unknown>[]> {
+  const { stdout } = await execFileAsync('powershell.exe', [
+    '-NoLogo',
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    script,
+  ], {
+    timeout: 4_000,
+    windowsHide: true,
+    maxBuffer: 512 * 1024,
+  })
+  const text = String(stdout).trim()
+  if (text === '' || text === 'null') return []
+  const parsed: unknown = JSON.parse(text)
+  const rows = Array.isArray(parsed) ? parsed : [parsed]
+  return rows
+    .map(row => asRecord(row))
+    .filter((row): row is Record<string, unknown> => row !== undefined)
+}
+
+async function probeBattery(): Promise<{ value: BatteryPayload | null; source: string; confidence: number }> {
+  if (platform() !== 'win32') return { value: null, source: `unsupported-platform:${platform()}`, confidence: 0 }
+  try {
+    const rows = await windowsCimJson(
+      '$items = @(Get-CimInstance -ClassName Win32_Battery | Select-Object EstimatedChargeRemaining,BatteryStatus,EstimatedRunTime); ConvertTo-Json -InputObject $items -Compress',
+    )
+    return {
+      value: {
+        present: rows.length > 0,
+        batteries: rows.map((row) => {
+          const charge = numericValue(row.EstimatedChargeRemaining)
+          const statusCode = numericValue(row.BatteryStatus)
+          const runtime = numericValue(row.EstimatedRunTime)
+          return {
+            chargePercent: charge !== null && charge >= 0 && charge <= 100 ? charge : null,
+            statusCode,
+            status: batteryStatusLabel(statusCode),
+            estimatedRunTimeMinutes: runtime !== null && runtime >= 0 && runtime < 10_080 ? runtime : null,
+          }
+        }),
+      },
+      source: 'windows-cim:Win32_Battery',
+      confidence: 0.95,
+    }
+  } catch {
+    return { value: null, source: 'windows-cim:Win32_Battery-unavailable', confidence: 0 }
+  }
+}
+
+async function probeGpu(): Promise<{ value: GpuPayload | null; source: string; confidence: number }> {
+  if (platform() !== 'win32') return { value: null, source: `unsupported-platform:${platform()}`, confidence: 0 }
+  try {
+    const rows = await windowsCimJson(
+      '$items = @(Get-CimInstance -ClassName Win32_VideoController | Select-Object Name,AdapterRAM,DriverVersion,Status); ConvertTo-Json -InputObject $items -Compress',
+    )
+    return {
+      value: {
+        devices: rows.flatMap((row) => {
+          const name = textValue(row.Name)
+          if (name === null) return []
+          const ram = numericValue(row.AdapterRAM)
+          return [{
+            name,
+            adapterRamBytes: ram !== null && ram >= 0 ? ram : null,
+            driverVersion: textValue(row.DriverVersion),
+            status: textValue(row.Status),
+          }]
+        }),
+      },
+      source: 'windows-cim:Win32_VideoController',
+      confidence: rows.length > 0 ? 0.9 : 0.5,
+    }
+  } catch {
+    return { value: null, source: 'windows-cim:Win32_VideoController-unavailable', confidence: 0 }
+  }
+}
+
+async function probeInternet(): Promise<{ value: InternetProbePayload; source: string; confidence: number }> {
+  const target = 'https://example.com/'
+  const dnsStarted = performance.now()
+  try {
+    await lookup('example.com')
+  } catch {
+    return {
+      value: { reachable: false, target, dnsLookupMs: null, httpsRoundTripMs: null, httpStatus: null },
+      source: 'dns+https:example.com',
+      confidence: 0.9,
+    }
+  }
+  const dnsLookupMs = Math.max(0, Math.round(performance.now() - dnsStarted))
+  const requestStarted = performance.now()
+  try {
+    const response = await fetch(target, {
+      method: 'HEAD',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(4_000),
+    })
+    return {
+      value: {
+        reachable: true,
+        target,
+        dnsLookupMs,
+        httpsRoundTripMs: Math.max(0, Math.round(performance.now() - requestStarted)),
+        httpStatus: response.status,
+      },
+      source: 'dns+https:example.com',
+      confidence: 0.95,
+    }
+  } catch {
+    return {
+      value: { reachable: false, target, dnsLookupMs, httpsRoundTripMs: null, httpStatus: null },
+      source: 'dns+https:example.com',
+      confidence: 0.85,
+    }
+  }
+}
+
 function method<T>(
   value: unknown,
   name: string,
@@ -619,7 +792,9 @@ async function probeClockSync(): Promise<{ value: boolean | null; source: string
 }
 
 export class RealityContextEngine {
-  private internet = cache<boolean>(null, 'not-probed', 1, 0)
+  private internet = cache<InternetProbePayload>(null, 'not-probed', 1, 0)
+  private battery = cache<BatteryPayload>(null, 'not-probed', 1, 0)
+  private gpu = cache<GpuPayload>(null, 'not-probed', 1, 0)
   private clockSync = cache<boolean>(null, 'not-probed', 1, 0)
   private weather = cache<WeatherPayload>(null, 'not-configured', 1, 0)
   private runtimeServices = cache<RuntimeServiceTelemetry>(null, 'not-probed', 1, 0)
@@ -647,14 +822,31 @@ export class RealityContextEngine {
     this.refreshing = true
     try {
       const now = Date.now()
+      const hostProbes: Promise<void>[] = []
       if (now > this.internet.expiresAt) {
-        try {
-          await lookup('example.com')
-          this.internet = cache(true, 'dns:example.com', this.config.refreshMs * 2, 0.85)
-        } catch {
-          this.internet = cache(false, 'dns:example.com', this.config.refreshMs, 0.75)
-        }
+        hostProbes.push((async () => {
+          const probe = await probeInternet()
+          this.internet = cache(
+            probe.value,
+            probe.source,
+            probe.value.reachable ? this.config.refreshMs * 2 : this.config.refreshMs,
+            probe.confidence,
+          )
+        })())
       }
+      if (now > this.battery.expiresAt) {
+        hostProbes.push((async () => {
+          const probe = await probeBattery()
+          this.battery = cache(probe.value, probe.source, 60_000, probe.confidence)
+        })())
+      }
+      if (now > this.gpu.expiresAt) {
+        hostProbes.push((async () => {
+          const probe = await probeGpu()
+          this.gpu = cache(probe.value, probe.source, 10 * 60_000, probe.confidence)
+        })())
+      }
+      await Promise.all(hostProbes)
       if (now > this.clockSync.expiresAt) {
         const probe = await probeClockSync()
         this.clockSync = cache(probe.value, probe.source, 5 * 60_000, probe.confidence)
@@ -711,6 +903,9 @@ export class RealityContextEngine {
     const daylightKnown = Number.isFinite(sunriseMs) && Number.isFinite(sunsetMs)
     const runtimeServices = signal(this.runtimeServices, epoch)
     const runtimeValue = runtimeServices.value
+    const internet = signal(this.internet, epoch)
+    const battery = signal(this.battery, epoch)
+    const gpu = signal(this.gpu, epoch)
 
     return {
       schema: 1,
@@ -790,15 +985,38 @@ export class RealityContextEngine {
         memoryFreeBytes: freemem(),
         memoryTotalBytes: totalmem(),
         disk: diskSnapshot(),
-        battery: { value: null, source: 'no-cross-platform-host-adapter', stale: true },
-        gpu: { value: null, source: 'no-cross-platform-host-adapter', stale: true },
-        temperature: { value: null, source: 'no-cross-platform-host-adapter', stale: true },
+        battery,
+        gpu,
+        temperature: {
+          value: null,
+          source: 'not-authoritatively-exposed-by-current-host-adapter',
+          stale: true,
+          rule: 'do not infer thermals from load, fan noise, GPU status, or battery state',
+        },
       },
       network: {
         local: localNetworkState(),
-        internetReachable: signal(this.internet, epoch),
-        latencyMs: { value: null, source: 'not-yet-measured', stale: true },
-        bandwidthMbps: { value: null, source: 'not-yet-measured', stale: true },
+        internetReachable: {
+          ...internet,
+          value: internet.value?.reachable ?? null,
+        },
+        latencyMs: {
+          ...internet,
+          value: internet.value?.httpsRoundTripMs ?? null,
+          precision: 'HTTPS HEAD round trip to example.com after DNS resolution; not ICMP ping',
+        },
+        dnsLookupLatencyMs: {
+          ...internet,
+          value: internet.value?.dnsLookupMs ?? null,
+          precision: 'DNS lookup wall-clock duration for example.com',
+        },
+        probeTarget: internet.value?.target ?? 'https://example.com/',
+        httpStatus: internet.value?.httpStatus ?? null,
+        bandwidthMbps: {
+          value: null,
+          source: 'not-measured-to-avoid-bulk-background-traffic',
+          stale: true,
+        },
         serviceOutages: { value: null, source: 'requires-target-specific-check', stale: true },
       },
       runtime: {
