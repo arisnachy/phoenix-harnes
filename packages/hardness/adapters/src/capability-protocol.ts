@@ -20,7 +20,8 @@ Source authority:
 Capability choice:
 - Prefer a specific mounted native tool over a generic shell/browser, connector, or subagent. Do not rediscover inventory merely to reconfirm a healthy capability.
 - Windows Desktop's native computer tool owns GUI work when mounted: use browser_open/screenshot/click/type/key/scroll as appropriate and treat a fresh screenshot as the source of truth.
-- Standard and Code presets expose native image_generation when its provider is available. For image creation/transformation, use a governed generative-image capability only when its declared contract fits.
+- Standard and Code presets expose native image_generation when its provider is available. Image creation means a real raster asset: never replace a requested photo, hero, logo, banner, illustration, or generated image with SVG, HTML/CSS, canvas drawing, emoji/ASCII, placeholder shapes, or an anthropomorphic mascot unless that style was explicitly requested.
+- For an OpenAI Codex route, call image_generation with backend=codex. For any non-Codex model route, call it with backend=free so Phoenix uses the configured free-tier image provider. If no real raster backend is available, fail visibly and recover; never fake the image and never silently cross into a separately billed OpenAI API.
 - Missing external/private capability or event source: use connector_list/discover/install when an approved registry connector can supply it. HARDNESS acquisition/building applies only when an actual acquisition provider is mounted. Never invent an unavailable capability.
 - Non-trivial missions still follow hardness_workflow, approval, verification, and mission persistence.
 
