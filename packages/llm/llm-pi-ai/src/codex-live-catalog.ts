@@ -133,6 +133,7 @@ export class CodexLiveCatalog {
   ): Readonly<Record<string, PiAiProviderProfile>> {
     const profile = providers[CODEX_PROVIDER]
     if (!codexCatalogIsAutomatic(profile)) return providers
+    if (this.dispatch === undefined && profile.models === undefined) return providers
 
     // Codex app-server owns this route's catalog. Drop any legacy/user-pinned
     // list before resolution so a settings file written by an older PHOENIX
