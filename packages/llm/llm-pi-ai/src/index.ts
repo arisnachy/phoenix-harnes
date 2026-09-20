@@ -54,6 +54,7 @@
  */
 
 import type { Context } from '@phoenix-ai/cordis'
+import type { Agent, RequestErrorAction } from '@phoenix-ai/dsh-agent'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError } from '@phoenix-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@phoenix-ai/dsh-llm'
@@ -280,12 +281,12 @@ export function apply(ctx: Context, config: Config): void {
   // delegates do we move to the next user-enabled reserve that Codex still
   // advertises. This keeps retired ids out of both normal selection and failover.
   const reserveFailures = new Set(['QUOTA', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT', 'EMPTY_RESPONSE', 'UNKNOWN_MODEL'])
-  const reserveState = new WeakMap<object, {
+  const reserveState = new WeakMap<Agent, {
     originalModel: string
     activeModel: string
     attempted: Set<string>
   }>()
-  const lastCodexModel = new WeakMap<object, string>()
+  const lastCodexModel = new WeakMap<Agent, string>()
 
   ctx.on('agent/request', async ({ agent }, next) => {
     const resolved = await next()
@@ -318,7 +319,7 @@ export function apply(ctx: Context, config: Config): void {
     }
   })
 
-  ctx.on('agent/request-error', async ({ agent, provider, failure, signal }, next) => {
+  ctx.on('agent/request-error', async ({ agent, provider, failure, signal }, next): Promise<RequestErrorAction> => {
     const downstream = await next()
     if (downstream !== undefined || signal.aborted || provider !== CODEX_PROVIDER || !reserveFailures.has(failure.code)) {
       return downstream
