@@ -8,6 +8,7 @@ import {
   codexDoctorSupportsImageGeneration,
   imageGenerationToolDescription,
   imageGenerationBackendOrder,
+  freeImageProviderOrder,
   installCodexImageGeneration,
   selectFreshGeneratedImage,
   selectImageGenerationBackend,
@@ -85,6 +86,7 @@ describe('Codex image generation bridge', () => {
     expect(imageGenerationBackendOrder('local', 'openai-codex')).toEqual(['local'])
     expect(imageGenerationBackendOrder('free', 'openai-codex')).toEqual(['free'])
     expect(imageGenerationBackendOrder('codex', 'deepseek-official')).toEqual(['codex'])
+    expect(freeImageProviderOrder).toEqual(['cloudflare', 'huggingface'])
   })
 
   it('selects only a new or changed generated image and prefers the newest', () => {
@@ -112,6 +114,8 @@ describe('Codex image generation bridge', () => {
     expect(imageGenerationToolDescription).toContain('backend=auto')
     expect(imageGenerationToolDescription).toContain('Higgsfield')
     expect(imageGenerationToolDescription).toContain('local image endpoint')
+    expect(imageGenerationToolDescription).toContain('Cloudflare Workers AI')
+    expect(imageGenerationToolDescription).toContain('Hugging Face free credits')
     expect(imageGenerationToolDescription).toContain('SVG, HTML, CSS, canvas')
     expect(imageGenerationToolDescription).toContain('brief or objective')
   })
@@ -206,6 +210,9 @@ describe('Codex image generation bridge', () => {
     if (tool === undefined) throw new Error('image_generation tool was not registered')
 
     expect(tool.output.schema.properties.path).toMatchObject({ type: 'string' })
+    expect(tool.output.schema.properties.provider).toMatchObject({
+      enum: ['codex', 'local', 'cloudflare', 'huggingface'],
+    })
     expect(tool.output.schema.required).toContain('path')
     expect(tool.output.presentationMeta?.({}, {
       provider: 'codex',
