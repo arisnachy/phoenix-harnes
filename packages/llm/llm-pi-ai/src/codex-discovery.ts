@@ -15,6 +15,9 @@ import type { Interface as ReadlineInterface } from 'node:readline'
 import { LlmError } from '@phoenix-ai/dsh-llm'
 import type { LlmDiscoveredModel } from '@phoenix-ai/dsh-llm'
 
+/** Codex model discovery is read-only and must not contend on the user's SQLite thread/log state. */
+export const CODEX_DISCOVERY_DISABLE_SQLITE = true
+
 const RPC_TIMEOUT_MS = 20_000
 const PAGE_LIMIT = 100
 const MAX_PAGES = 50
@@ -195,11 +198,11 @@ function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
     // also handles npm's `codex.cmd` shim, which cannot be execFile'd directly.
     return finishProcessSetup(spawn(
       shell,
-      ['/d', '/s', '/c', 'codex app-server --listen stdio://'],
+      ['/d', '/s', '/c', 'codex --disable sqlite app-server --listen stdio://'],
       common,
     ))
   }
-  return finishProcessSetup(spawn('codex', ['app-server', '--listen', 'stdio://'], common))
+  return finishProcessSetup(spawn('codex', ['--disable', 'sqlite', 'app-server', '--listen', 'stdio://'], common))
 }
 
 function writeFrame(
