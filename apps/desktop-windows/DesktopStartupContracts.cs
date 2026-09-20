@@ -6,6 +6,8 @@ internal static class DesktopStartupContract
 {
     internal const bool ShowWindowBeforeRuntimeReady = true;
     internal const bool SecondLaunchSignalsExistingWindow = true;
+    internal const bool ReentryCollapsesBrowser = true;
+    internal const bool ReentryRetriesFailedStartup = true;
     internal const bool EmbeddedBrowserStartsLazy = true;
     internal const bool UserCloseHidesToTray = true;
     internal const string InitialStatus = "Iniciando Phoenix…";
