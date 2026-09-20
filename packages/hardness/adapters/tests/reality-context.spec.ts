@@ -55,6 +55,62 @@ describe('Phoenix reality context', () => {
         stale: true,
       },
     })
+    expect(snapshot.userState).toMatchObject({
+      status: 'unknown',
+      idleSeconds: null,
+      awayThresholdSeconds: 300,
+      source: 'not-probed',
+      doNotDisturb: {
+        value: null,
+        source: 'not-authoritatively-probed',
+        stale: true,
+      },
+    })
+  })
+
+  it('derives active versus away only from measured idle time and the explicit threshold', () => {
+    const engine = new RealityContextEngine({ refreshMs: 30_000 })
+    const internal = engine as unknown as {
+      userActivity: {
+        value: { idleSeconds: number } | null
+        source: string
+        observedAt: number
+        expiresAt: number
+        confidence: number
+      }
+    }
+    const now = Date.parse('2026-09-20T15:00:00.000Z')
+    internal.userActivity = {
+      value: { idleSeconds: 299.9 },
+      source: 'test:last-input',
+      observedAt: now - 1_000,
+      expiresAt: now + 30_000,
+      confidence: 0.98,
+    }
+    const active = engine.snapshot({ get() { return undefined } } as never, new Date(now))
+    expect(active.userState).toMatchObject({
+      status: 'active',
+      idleSeconds: 299.9,
+      awayThresholdSeconds: 300,
+      source: 'test:last-input',
+      stale: false,
+    })
+
+    internal.userActivity = {
+      value: { idleSeconds: 300 },
+      source: 'test:last-input',
+      observedAt: now - 1_000,
+      expiresAt: now + 30_000,
+      confidence: 0.98,
+    }
+    const away = engine.snapshot({ get() { return undefined } } as never, new Date(now))
+    expect(away.userState).toMatchObject({
+      status: 'away',
+      idleSeconds: 300,
+      awayThresholdSeconds: 300,
+      source: 'test:last-input',
+      stale: false,
+    })
   })
 
   it('projects sanitized authorization, MCP, active-model, and provider quota telemetry', async () => {
