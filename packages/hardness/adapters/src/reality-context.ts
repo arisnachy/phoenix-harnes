@@ -552,9 +552,11 @@ public static class PhoenixLastInput {
     return (long)elapsed;
   }
 }`
+  const encodedSource = Buffer.from(source, 'utf8').toString('base64')
   const script = [
     '$ErrorActionPreference = "Stop"',
-    `Add-Type -TypeDefinition ${JSON.stringify(source)} -Language CSharp`,
+    `$source = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedSource}'))`,
+    'Add-Type -TypeDefinition $source -Language CSharp',
     '$milliseconds = [PhoenixLastInput]::IdleMilliseconds()',
     'if ($milliseconds -lt 0) { throw "GetLastInputInfo failed" }',
     '[pscustomobject]@{ idleSeconds = [math]::Round($milliseconds / 1000.0, 1) } | ConvertTo-Json -Compress',
