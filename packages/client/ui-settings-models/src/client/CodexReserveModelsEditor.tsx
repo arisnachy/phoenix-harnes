@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
@@ -29,7 +30,7 @@ export interface CodexReserveModelsEditorProps {
 }
 
 /** Render live Codex models and let the user opt specific live ids into reserve failover. */
-export function CodexReserveModelsEditor(props: CodexReserveModelsEditorProps) {
+export function CodexReserveModelsEditor(props: CodexReserveModelsEditorProps): ReactNode {
   const { reserveModels, onChange, probe, api, t, disabled } = props
   const [models, setModels] = useState<readonly { id: string; name?: string }[]>([])
   const [loading, setLoading] = useState(false)
