@@ -355,6 +355,10 @@
     - id: command-feedback
       name: '@phoenix-ai/dsh-command-feedback'
 
+    # Durable Quality/Foresight assessment state is host-owned and keyed by session.
+    - id: quality-session
+      name: '@phoenix-ai/dsh-quality-session'
+
     - id: goal
       name: '@phoenix-ai/dsh-goal'
 
