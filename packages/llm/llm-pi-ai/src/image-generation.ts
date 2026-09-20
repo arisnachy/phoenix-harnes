@@ -99,8 +99,8 @@ interface ImageRuntimeContext {
 type ImageSize = 'auto' | '1024x1024' | '1536x1024' | '1024x1536'
 type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
 type ImageBackground = 'auto' | 'opaque' | 'transparent'
-export type ImageGenerationBackend = 'auto' | 'codex' | 'free'
-export type ImageGenerationProvider = 'codex' | 'huggingface'
+export type ImageGenerationBackend = 'auto' | 'codex' | 'local' | 'free'
+export type ImageGenerationProvider = 'codex' | 'local' | 'huggingface'
 
 interface ImageGenerationArgs {
   readonly prompt: string
@@ -125,7 +125,8 @@ interface ImageGenerationValue {
 export const imageGenerationToolDescription =
   'Generate one actual, high-quality raster image with PHOENIX. Never satisfy an image, photo, hero, logo, banner, poster, cover, illustration, mockup, thumbnail, or visual-asset request with SVG, HTML, CSS, canvas drawing, emoji, ASCII art, a placeholder, or an anthropomorphic mascot unless the user explicitly requested that style. '
   + 'Use this whenever the user explicitly asks to create, draw, design, render, visualize, or generate an image, and when a project materially requires real imagery. '
-  + 'When the active route is OpenAI Codex, set backend=codex so PHOENIX uses the locally authenticated Codex/ChatGPT built-in image generator. For a non-Codex model, set backend=free so PHOENIX uses the configured free-tier raster provider; never silently switch to a separately billed OpenAI API. '
+  + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint with no hosted quota, then the configured Hugging Face free-tier raster provider. '
+  + 'Do not claim that only an external connector such as Higgsfield is available until image_generation itself has actually been attempted. Do not silently switch to a separately billed OpenAI API. '
   + 'If a real raster backend is unavailable, fail loudly instead of fabricating a vector/HTML substitute. '
   + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, generate type-appropriate imagery when it materially improves the requested result and wire the generated attachment into the final artifact when the format permits it; keep data charts and tables on structured visualization surfaces rather than inventing them as image content. '
   + 'For ordinary real-world subjects, prefer natural, professional, coherent imagery and do not turn objects into living characters or mascots unless the user asks for that. '
@@ -227,13 +228,21 @@ function codexHome(): string {
 const DEFAULT_FREE_IMAGE_MODEL = 'stabilityai/stable-diffusion-3-medium-diffusers'
 const MAX_FREE_IMAGE_BYTES = 32 * 1024 * 1024
 
-/** Select the concrete image backend without silently crossing billing domains. */
+/** Resolve the backend attempt order without coupling image generation to the text route. */
+export function imageGenerationBackendOrder(
+  requested: ImageGenerationBackend | undefined,
+  _activeProvider: string | undefined,
+): readonly Exclude<ImageGenerationBackend, 'auto'>[] {
+  if (requested === 'codex' || requested === 'local' || requested === 'free') return [requested]
+  return ['codex', 'local', 'free']
+}
+
+/** Select the first image backend PHOENIX will try. */
 export function selectImageGenerationBackend(
   requested: ImageGenerationBackend | undefined,
   activeProvider: string | undefined,
 ): Exclude<ImageGenerationBackend, 'auto'> {
-  if (requested === 'codex' || requested === 'free') return requested
-  return activeProvider === undefined || activeProvider === 'openai-codex' ? 'codex' : 'free'
+  return imageGenerationBackendOrder(requested, activeProvider)[0] ?? 'codex'
 }
 
 function highQualityPrompt(prompt: string): string {
@@ -295,6 +304,106 @@ async function huggingFaceToken(ctx: Context): Promise<string | undefined> {
   return fromEnvironment === undefined || fromEnvironment.length === 0 ? undefined : fromEnvironment
 }
 
+interface LocalImageEndpoint {
+  readonly baseURL: string
+  readonly model: string
+  readonly apiKey?: string
+}
+
+function localImageEndpoint(): LocalImageEndpoint | undefined {
+  const baseURL = process.env.PHOENIX_IMAGE_LOCAL_BASE_URL?.trim().replace(/\/+$/u, '')
+  if (baseURL === undefined || baseURL.length === 0) return undefined
+  const model = process.env.PHOENIX_IMAGE_LOCAL_MODEL?.trim() || 'local-image'
+  const apiKey = process.env.PHOENIX_IMAGE_LOCAL_API_KEY?.trim()
+  return {
+    baseURL,
+    model,
+    ...(apiKey === undefined || apiKey.length === 0 ? {} : { apiKey }),
+  }
+}
+
+async function generatedImageBytesFromOpenAiShape(
+  response: Response,
+  signal: AbortSignal,
+): Promise<{ readonly data: Buffer; readonly mediaType: ImageMediaType }> {
+  const payload = await response.json() as {
+    data?: Array<{ b64_json?: string; url?: string }>
+  }
+  const image = payload.data?.[0]
+  if (image?.b64_json !== undefined) {
+    const data = Buffer.from(image.b64_json, 'base64')
+    const mediaType = imageMediaTypeFromBytes(data)
+    if (data.length === 0 || mediaType === undefined) {
+      throw new Error('image_generation: local image endpoint returned invalid base64 raster data')
+    }
+    return { data, mediaType }
+  }
+  if (image?.url !== undefined) {
+    const fetched = await fetch(image.url, { signal })
+    if (!fetched.ok) throw new Error(`image_generation: local image result URL failed with HTTP ${fetched.status}`)
+    const data = Buffer.from(await fetched.arrayBuffer())
+    const mediaType = imageMediaTypeFromHeader(fetched.headers.get('content-type')) ?? imageMediaTypeFromBytes(data)
+    if (data.length === 0 || mediaType === undefined) {
+      throw new Error('image_generation: local image result URL did not return a supported raster')
+    }
+    return { data, mediaType }
+  }
+  throw new Error('image_generation: local image endpoint returned neither b64_json nor url')
+}
+
+async function generateWithLocalProvider(
+  ctx: Context,
+  args: ImageGenerationArgs,
+  prompt: string,
+  signal: AbortSignal,
+): Promise<ImageGenerationValue> {
+  const endpoint = localImageEndpoint()
+  if (endpoint === undefined) {
+    throw new Error(
+      'image_generation: local image backend is not configured; set PHOENIX_IMAGE_LOCAL_BASE_URL and optionally PHOENIX_IMAGE_LOCAL_MODEL',
+    )
+  }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (endpoint.apiKey !== undefined) headers.Authorization = `Bearer ${endpoint.apiKey}`
+  const response = await fetch(`${endpoint.baseURL}/images/generations`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: endpoint.model,
+      prompt: highQualityPrompt(prompt),
+      n: 1,
+      response_format: 'b64_json',
+      ...(args.size === undefined || args.size === 'auto' ? {} : { size: args.size }),
+    }),
+    signal,
+  })
+  if (!response.ok) {
+    const diagnostic = (await response.text()).trim().slice(0, 1600)
+    throw new Error(
+      `image_generation: local image backend failed with HTTP ${response.status}${diagnostic.length === 0 ? '' : `: ${diagnostic}`}`,
+    )
+  }
+  const { data, mediaType } = await generatedImageBytesFromOpenAiShape(response, signal)
+  if (data.length > MAX_FREE_IMAGE_BYTES) {
+    throw new Error(`image_generation: local backend returned ${data.length} bytes, exceeding the ${MAX_FREE_IMAGE_BYTES}-byte safety bound`)
+  }
+  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
+  await mkdir(generatedRoot, { recursive: true })
+  const path = join(generatedRoot, `local-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
+  await writeFile(path, data, { flag: 'wx' })
+  const attachment = await servicesOf(ctx).attachments.saveImage({
+    data,
+    mediaType,
+    name: basename(path),
+  })
+  return {
+    provider: 'local',
+    model: endpoint.model,
+    path,
+    attachment,
+  }
+}
+
 async function generateWithFreeProvider(
   ctx: Context,
   args: ImageGenerationArgs,
@@ -304,7 +413,7 @@ async function generateWithFreeProvider(
   const token = await huggingFaceToken(ctx)
   if (token === undefined) {
     throw new Error(
-      'image_generation: non-Codex image generation requires a Hugging Face free-tier token in the Phoenix credential vault or HF_TOKEN. PHOENIX will not fabricate SVG/HTML art and will not silently use a paid OpenAI API.',
+      'image_generation: Hugging Face free-tier generation requires a token in the Phoenix credential vault or HF_TOKEN. PHOENIX will not fabricate SVG/HTML art and will not silently use a paid OpenAI API.',
     )
   }
 
@@ -554,6 +663,68 @@ function imageFailureError(kind: CodexImageFailureKind, combined: string): Error
   }
 }
 
+async function generateWithCodexProvider(
+  ctx: Context,
+  args: ImageGenerationArgs,
+  prompt: string,
+  signal: AbortSignal,
+): Promise<ImageGenerationValue> {
+  await probeCodexImagePosture(ctx, signal)
+  const generatedRoot = join(codexHome(), 'generated_images')
+  const baselineCandidates = await listGeneratedImages(generatedRoot)
+  const baseline = new Map(baselineCandidates.map(candidate => [candidate.path, stamp(candidate)]))
+
+  let run: ProcessResult
+  try {
+    run = await runCodex(ctx, [
+      'exec',
+      '--ignore-user-config',
+      '--ephemeral',
+      '--skip-git-repo-check',
+      '--enable',
+      'image_generation',
+      '-s',
+      'read-only',
+      '-',
+    ], generationPrompt(
+      prompt,
+      args.size ?? 'auto',
+      args.quality ?? 'auto',
+      args.background ?? 'auto',
+    ), signal)
+  } catch (error) {
+    signal.throwIfAborted()
+    throw new Error(`image_generation: Codex CLI/image worker is not available: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  const combined = `${run.stdout}\n${run.stderr}`.trim()
+  if (run.exitCode !== 0) throw imageFailureError(classifyCodexImageFailure(combined), combined)
+
+  const generated = await waitForFreshImage(generatedRoot, baseline, signal)
+  if (generated === undefined) {
+    const kind = classifyCodexImageFailure(combined)
+    if (kind !== 'runtime') throw imageFailureError(kind, combined)
+    throw new Error(
+      'image_generation: Codex exited without exposing a new generated raster. PHOENIX refuses to claim success without a verifiable image artifact.',
+    )
+  }
+
+  const mediaType = mediaTypeOf(generated.path)
+  if (mediaType === undefined) throw new Error('image_generation: generated file has an unsupported image type')
+  const data = await readFile(generated.path)
+  const attachment = await servicesOf(ctx).attachments.saveImage({
+    data,
+    mediaType,
+    name: basename(generated.path),
+  })
+  return {
+    provider: 'codex',
+    model: 'codex-integrated-image-generation',
+    path: generated.path,
+    attachment,
+  }
+}
+
 /**
  * Register the model-facing image tool when the normal tools/subprocess/
  * attachment stack is composed. Runtime services are accessed through this
@@ -599,8 +770,8 @@ export function installCodexImageGeneration(ctx: Context): void {
         },
         backend: {
           type: 'string',
-          enum: ['auto', 'codex', 'free'],
-          description: 'Image backend. Use codex for OpenAI Codex routes and free for non-Codex routes. Auto infers from the calling agent provider.',
+          enum: ['auto', 'codex', 'local', 'free'],
+          description: 'Image backend. Prefer auto: Codex/ChatGPT first regardless of the text model, then a configured local endpoint, then Hugging Face free tier. Explicit values disable fallback.',
         },
       },
     },
@@ -609,7 +780,7 @@ export function installCodexImageGeneration(ctx: Context): void {
         type: 'object',
         additionalProperties: false,
         properties: {
-          provider: { type: 'string', enum: ['codex', 'huggingface'] },
+          provider: { type: 'string', enum: ['codex', 'local', 'huggingface'] },
           model: { type: 'string' },
           path: { type: 'string' },
           attachment: {
@@ -633,7 +804,7 @@ export function installCodexImageGeneration(ctx: Context): void {
         return [
           {
             type: 'text',
-            text: `Generated image with ${result.provider === 'codex' ? 'Codex' : 'Hugging Face'} (${result.attachment.width}×${result.attachment.height}, ${result.attachment.mediaType}).\n<path>${result.path}</path>`,
+            text: `Generated image with ${result.provider === 'codex' ? 'Codex' : result.provider === 'local' ? 'Local image backend' : 'Hugging Face'} (${result.attachment.width}×${result.attachment.height}, ${result.attachment.mediaType}).\n<path>${result.path}</path>`,
           },
           { type: 'image', attachment: result.attachment },
         ]
@@ -647,64 +818,22 @@ export function installCodexImageGeneration(ctx: Context): void {
       if (prompt.length === 0) throw new Error('image_generation: prompt must not be empty')
       if (prompt.length > 32_000) throw new Error('image_generation: prompt exceeds the 32,000-character safety bound')
 
-      const backend = selectImageGenerationBackend(args.backend, exec.agent?.options.provider)
-      if (backend === 'free') {
-        return generateWithFreeProvider(ctx, args, prompt, exec.signal)
+      const requestedBackend = args.backend ?? 'auto'
+      const failures: string[] = []
+      for (const backend of imageGenerationBackendOrder(requestedBackend, exec.agent?.options.provider)) {
+        try {
+          if (backend === 'codex') return await generateWithCodexProvider(ctx, args, prompt, exec.signal)
+          if (backend === 'local') return await generateWithLocalProvider(ctx, args, prompt, exec.signal)
+          return await generateWithFreeProvider(ctx, args, prompt, exec.signal)
+        } catch (error) {
+          exec.signal.throwIfAborted()
+          if (requestedBackend !== 'auto') throw error
+          failures.push(`${backend}: ${error instanceof Error ? error.message : String(error)}`)
+        }
       }
-
-      await probeCodexImagePosture(ctx, exec.signal)
-      const generatedRoot = join(codexHome(), 'generated_images')
-      const baselineCandidates = await listGeneratedImages(generatedRoot)
-      const baseline = new Map(baselineCandidates.map(candidate => [candidate.path, stamp(candidate)]))
-
-      let run: ProcessResult
-      try {
-        run = await runCodex(ctx, [
-          'exec',
-          '--ignore-user-config',
-          '--ephemeral',
-          '--skip-git-repo-check',
-          '--enable',
-          'image_generation',
-          '-s',
-          'read-only',
-          '-',
-        ], generationPrompt(
-          prompt,
-          args.size ?? 'auto',
-          args.quality ?? 'auto',
-          args.background ?? 'auto',
-        ), exec.signal)
-      } catch (error) {
-        throw new Error(`image_generation: Codex CLI/image worker is not available: ${error instanceof Error ? error.message : String(error)}`)
-      }
-
-      const combined = `${run.stdout}\n${run.stderr}`.trim()
-      if (run.exitCode !== 0) throw imageFailureError(classifyCodexImageFailure(combined), combined)
-
-      const generated = await waitForFreshImage(generatedRoot, baseline, exec.signal)
-      if (generated === undefined) {
-        const kind = classifyCodexImageFailure(combined)
-        if (kind !== 'runtime') throw imageFailureError(kind, combined)
-        throw new Error(
-          'image_generation: Codex exited without exposing a new generated raster. PHOENIX refuses to claim success without a verifiable image artifact.',
-        )
-      }
-
-      const mediaType = mediaTypeOf(generated.path)
-      if (mediaType === undefined) throw new Error('image_generation: generated file has an unsupported image type')
-      const data = await readFile(generated.path)
-      const attachment = await services.attachments.saveImage({
-        data,
-        mediaType,
-        name: basename(generated.path),
-      })
-      return {
-        provider: 'codex' as const,
-        model: 'codex-built-in-image-gen',
-        path: generated.path,
-        attachment,
-      }
+      throw new Error(
+        `image_generation: no real raster backend succeeded. ${failures.join(' | ')}`,
+      )
     },
   })
 }
