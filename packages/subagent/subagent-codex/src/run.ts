@@ -145,11 +145,16 @@ export function codexSubagentEnvironment(
   const home = configuredHome && configuredHome.length > 0
     ? resolve(configuredHome)
     : join(homedir(), '.codex')
-  const configuredSqlite = explicit.CODEX_SQLITE_HOME?.trim()
-    ?? process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
-  const sqliteHome = configuredSqlite && configuredSqlite.length > 0
-    ? resolve(configuredSqlite)
-    : join(home, 'phoenix-runtime', 'sqlite', 'subagent')
+  const explicitConfiguredSqlite = explicit.CODEX_SQLITE_HOME?.trim()
+  const phoenixConfiguredSqlite = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
+  const ambientCodexSqlite = process.env.CODEX_SQLITE_HOME?.trim()
+  const sqliteHome = explicitConfiguredSqlite && explicitConfiguredSqlite.length > 0
+    ? resolve(explicitConfiguredSqlite)
+    : phoenixConfiguredSqlite && phoenixConfiguredSqlite.length > 0
+      ? resolve(phoenixConfiguredSqlite, 'subagent')
+      : ambientCodexSqlite && ambientCodexSqlite.length > 0
+        ? resolve(ambientCodexSqlite, 'phoenix-runtime', 'subagent')
+        : join(home, 'phoenix-runtime', 'sqlite', 'subagent')
   mkdirSync(sqliteHome, { recursive: true })
   return {
     ...explicit,
