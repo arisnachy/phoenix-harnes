@@ -13,7 +13,7 @@ import { assertNever, deepFreeze, HarnessError } from '@phoenix-ai/dsh-llm'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { snapshotJsonValue } from '@phoenix-ai/dsh-session'
 import type { JsonValue, UserMessage } from '@phoenix-ai/dsh-session'
-import type { ToolProviderResult } from '@phoenix-ai/dsh-system-prompt'
+import type { AssembleContext, ToolProviderResult } from '@phoenix-ai/dsh-system-prompt'
 import type { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'
 import type { ApprovalRisk } from '@phoenix-ai/dsh-user-approval'
 // Type-only: makes `ctx.get('approval')` resolve to the ApprovalService
@@ -62,6 +62,30 @@ const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
   typescript: renderToolsSdk,
   python: renderToolsSdkPy,
 } satisfies Record<CodeSdkLanguage, (schemas: ToolSdkSchema[]) => string>
+
+const NATIVE_IMAGE_GENERATION_TOOL = 'image_generation'
+
+/**
+ * Match only explicit requests to CREATE an image. Merely discussing, reading,
+ * or analyzing an existing image must keep the ordinary tool catalog.
+ *
+ * Normalizing accents once keeps the policy deterministic across Spanish and
+ * English without tying it to any model/provider.
+ */
+function explicitlyRequestsImageGeneration(message: UserMessage): boolean {
+  if (message.source.kind !== 'user') return false
+  const text = message.content
+    .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+    .map(block => block.text)
+    .join(' ')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+
+  const action = /\b(?:generate|create|make|design|draw|render|visualize|produce|genera(?:r|me)?|crea(?:r|me)?|disena(?:r|me)?|dibuja(?:r|me)?|renderiza(?:r|me)?|visualiza(?:r|me)?|produce|haz(?:me)?)\b/u
+  const subject = /\b(?:image|images|photo|photos|picture|pictures|illustration|illustrations|logo|banner|poster|cover|mockup|thumbnail|hero|imagen(?:es)?|foto(?:s)?|fotografia(?:s)?|ilustracion(?:es)?|portada|miniatura|fotorealista|photorealistic)\b/u
+  return action.test(text) && subject.test(text)
+}
 
 const MCP_FUNCTION_ROOT_FORBIDDEN_KEYS = new Set(['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not'])
 const MCP_FUNCTION_ROOT_COMPOSITIONS = ['oneOf', 'anyOf', 'allOf'] as const
@@ -906,6 +930,14 @@ export class ToolRuntime extends Service {
   private cancellationStates = new WeakMap<ToolRunContext, ToolCancellationState>()
   /** Definition-owned final content transform snapshotted before policy begins. */
   private contentFinalizers = new WeakMap<ToolRunContext, ToolDefinition['finalizeContent']>()
+  /**
+   * Agents whose current claimed prompt explicitly requests image creation.
+   * While armed, the model sees only the first-party image_generation
+   * capability (plus run_code when presentation mode requires it). This is an
+   * execution-structural preference, not prompt advice, so connector discovery
+   * cannot jump ahead of Codex/local/free image routing.
+   */
+  private readonly nativeImageFirst = new WeakSet<Agent>()
   private readonly layers = new ScopedLayers(
     scope => new ToolLayer(scope),
     () => { this.ctx.emit('tools/change') },
@@ -927,7 +959,28 @@ export class ToolRuntime extends Service {
     // optional-input type for direct (non-Loader) construction in tests.
     this.defaultMode = config.mode ?? 'native'
     this.maxParallelSubCalls = resolveMaxParallelSubCalls(config.maxParallelSubCalls)
-    ctx.systemPrompt.tools(context => this.wireSchemas(context.scope))
+
+    // Arm before system-prompt assembly: Inbox.claim() emits this notification
+    // immediately before the loop asks SystemPrompt to assemble the next model
+    // request. The exact same gate therefore covers Native and Code Mode.
+    ctx.on('agent/inbox/claimed', ({ agent, message }) => {
+      if (explicitlyRequestsImageGeneration(message)) this.nativeImageFirst.add(agent)
+    })
+    // One real native attempt is enough to release the catalog. The
+    // image_generation tool owns its own Codex -> local -> free fallback chain;
+    // after it settles, external connectors may be considered if needed.
+    ctx.on('tools/result', (exec) => {
+      if (exec.name === NATIVE_IMAGE_GENERATION_TOOL && exec.agent !== undefined) {
+        this.nativeImageFirst.delete(exec.agent)
+      }
+    })
+    // Never leak a gate into a later turn when a model elects to answer
+    // without using a tool.
+    ctx.on('agent/status', ({ agent, status }) => {
+      if (status === 'idle') this.nativeImageFirst.delete(agent)
+    })
+
+    ctx.systemPrompt.tools(context => this.wireSchemas(context.scope, context.agent))
     if (this.defaultMode !== 'native') {
       ctx.systemPrompt.section(this.collapseSection())
       ctx.systemPrompt.section(this.sdkSection())
@@ -970,7 +1023,7 @@ export class ToolRuntime extends Service {
    * dropped from the rendered prompt.
    * @returns the section registration.
    */
-  private sdkSection(): { name: string; order: number; text: (context: { scope?: ScopeKey }) => string } {
+  private sdkSection(): { name: string; order: number; text: (context: AssembleContext) => string } {
     return {
       name: 'tools:sdk',
       order: SDK_SECTION_ORDER,
@@ -984,7 +1037,7 @@ export class ToolRuntime extends Service {
         const render = SDK_RENDERERS[runtime.language]
         /* v8 ignore next -- requireCodeRuntime rejects an unknown language before this runs. */
         if (render === undefined) throw new Error(`dsh-tools: no SDK renderer for ${runtime.language}`)
-        return render(this.sdkSchemas(context.scope))
+        return render(this.sdkSchemas(context.scope, context.agent))
       },
     }
   }
@@ -1075,11 +1128,12 @@ export class ToolRuntime extends Service {
    * Build one scope's wire schemas and names for prompt-order validation.
    * Restrictions do not make known tools invalid, but a mode collapse does.
    */
-  private wireSchemas(scope?: ScopeKey): ToolProviderResult {
+  private wireSchemas(scope?: ScopeKey, agent?: Agent): ToolProviderResult {
     const view = this.view(scope)
+    const visible = this.modelVisibleDefinitions(view.visible.values(), agent)
     const mode = this.modeFor(scope)
     if (mode === 'native') {
-      const schemas = [...view.visible.values()].map(definition => this.schemaOf(definition, false))
+      const schemas = visible.map(definition => this.schemaOf(definition, false))
       return { schemas, knownNames: [...view.knownNames] }
     }
     // Validate the runtime language BEFORE projecting schemas: schemaOf reads
@@ -1088,7 +1142,7 @@ export class ToolRuntime extends Service {
     // renderer-table rejection the canonical assembly-time error for a
     // language with no SDK renderer.
     this.requireCodeRuntime(mode)
-    const schemas = [...view.visible.values()].map(definition => this.schemaOf(definition, false))
+    const schemas = visible.map(definition => this.schemaOf(definition, false))
     if (mode === 'code') {
       return {
         schemas: schemas.filter(schema => schema.name === RUN_CODE_NAME),
@@ -1333,9 +1387,25 @@ export class ToolRuntime extends Service {
     return [...this.view(scope).visible.values()].map(definition => this.schemaOf(definition, true))
   }
 
+  /**
+   * Apply the one-turn native-image-first gate to model-visible definitions.
+   * Execution visibility is unchanged: after image_generation settles the next
+   * assembly sees the full catalog again.
+   */
+  private modelVisibleDefinitions(
+    definitions: Iterable<ToolDefinition>,
+    agent?: Agent,
+  ): ToolDefinition[] {
+    const visible = [...definitions]
+    if (agent === undefined || !this.nativeImageFirst.has(agent)) return visible
+    if (!visible.some(definition => definition.name === NATIVE_IMAGE_GENERATION_TOOL)) return visible
+    return visible.filter(definition =>
+      definition.name === NATIVE_IMAGE_GENERATION_TOOL || definition.name === RUN_CODE_NAME)
+  }
+
   /** Project visible callable tools onto the generated Code Mode SDK contract. */
-  private sdkSchemas(scope?: ScopeKey): ToolSdkSchema[] {
-    return [...this.view(scope).visible.values()]
+  private sdkSchemas(scope?: ScopeKey, agent?: Agent): ToolSdkSchema[] {
+    return this.modelVisibleDefinitions(this.view(scope).visible.values(), agent)
       .filter(definition => definition.name !== RUN_CODE_NAME)
       .map((definition): ToolSdkSchema => {
         const output = snapshotJsonValue(definition.output.schema)
