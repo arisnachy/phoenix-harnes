@@ -1000,8 +1000,8 @@ export class RealityContextEngine {
   private weather = cache<WeatherPayload>(null, 'not-configured', 1, 0)
   private runtimeServices = cache<RuntimeServiceTelemetry>(null, 'not-probed', 1, 0)
   private timer: ReturnType<typeof setInterval> | undefined
-  private refreshing = false
-  private runtimeRefreshing = false
+  private refreshJob: Promise<void> | undefined
+  private runtimeRefreshJob: Promise<void> | undefined
 
   constructor(readonly config: RealityContextConfig) {}
 
@@ -1018,11 +1018,17 @@ export class RealityContextEngine {
     this.timer = undefined
   }
 
-  private async refresh(): Promise<void> {
-    if (this.refreshing) return
-    this.refreshing = true
-    try {
-      const now = Date.now()
+  private refresh(): Promise<void> {
+    if (this.refreshJob !== undefined) return this.refreshJob
+    const job = this.performRefresh().finally(() => {
+      if (this.refreshJob === job) this.refreshJob = undefined
+    })
+    this.refreshJob = job
+    return job
+  }
+
+  private async performRefresh(): Promise<void> {
+    const now = Date.now()
       const hostProbes: Promise<void>[] = []
       if (now > this.internet.expiresAt) {
         hostProbes.push((async () => {
@@ -1058,23 +1064,28 @@ export class RealityContextEngine {
         const probe = await probeClockSync()
         this.clockSync = cache(probe.value, probe.source, 5 * 60_000, probe.confidence)
       }
-      if (this.config.latitude !== undefined
-        && this.config.longitude !== undefined
-        && now > this.weather.expiresAt) {
-        try {
-          this.weather = cache(await fetchWeather(this.config), 'open-meteo', 10 * 60_000, 0.95)
-        } catch {
-          this.weather = cache<WeatherPayload>(null, 'open-meteo-unavailable', 60_000, 0)
-        }
+    if (this.config.latitude !== undefined
+      && this.config.longitude !== undefined
+      && now > this.weather.expiresAt) {
+      try {
+        this.weather = cache(await fetchWeather(this.config), 'open-meteo', 10 * 60_000, 0.95)
+      } catch {
+        this.weather = cache<WeatherPayload>(null, 'open-meteo-unavailable', 60_000, 0)
       }
-    } finally {
-      this.refreshing = false
     }
   }
 
   async refreshRuntimeServices(ctx: Context): Promise<void> {
-    if (this.runtimeRefreshing || Date.now() <= this.runtimeServices.expiresAt) return
-    this.runtimeRefreshing = true
+    if (Date.now() <= this.runtimeServices.expiresAt) return
+    if (this.runtimeRefreshJob !== undefined) return this.runtimeRefreshJob
+    const job = this.performRuntimeRefresh(ctx).finally(() => {
+      if (this.runtimeRefreshJob === job) this.runtimeRefreshJob = undefined
+    })
+    this.runtimeRefreshJob = job
+    return job
+  }
+
+  private async performRuntimeRefresh(ctx: Context): Promise<void> {
     try {
       this.runtimeServices = cache(
         await probeRuntimeServices(ctx),
@@ -1089,9 +1100,36 @@ export class RealityContextEngine {
         Math.min(this.config.refreshMs, 30_000),
         0,
       )
-    } finally {
-      this.runtimeRefreshing = false
     }
+  }
+
+  /**
+   * Wait for a usable Reality Context refresh. Full mode deliberately expires
+   * cached probes first; ordinary mode respects per-signal TTLs and only waits
+   * for currently due work.
+   */
+  async refreshNow(ctx: Context, full = false): Promise<void> {
+    if (full) {
+      await Promise.all([
+        this.refreshJob ?? Promise.resolve(),
+        this.runtimeRefreshJob ?? Promise.resolve(),
+      ])
+      for (const entry of [
+        this.internet,
+        this.userActivity,
+        this.battery,
+        this.gpu,
+        this.clockSync,
+        this.weather,
+        this.runtimeServices,
+      ]) {
+        entry.expiresAt = 0
+      }
+    }
+    await Promise.all([
+      this.refresh(),
+      this.refreshRuntimeServices(ctx),
+    ])
   }
 
   snapshot(
