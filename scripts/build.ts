@@ -1,7 +1,7 @@
 /** Run repository builds and bind client artifacts to their public environment. */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
@@ -39,6 +39,20 @@ function buildPnpmInvocation(args: readonly string[], environment: NodeJS.Proces
     }
   }
   return { command: 'corepack', args: ['pnpm', ...args] }
+}
+
+/** Give build subprocesses a private Codex home so shared user SQLite state can never gate compilation. */
+export function isolateBuildCodexHome(
+  root: string,
+  environment: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  const codexHome = resolve(root, '.cache', 'phoenix', 'build-codex-home')
+  mkdirSync(codexHome, { recursive: true })
+  return {
+    ...environment,
+    CODEX_HOME: codexHome,
+    PHOENIX_BUILD_PROCESS: '1',
+  }
 }
 
 /** Run one package script through the active pnpm lifecycle or the updater-safe Corepack fallback. */
@@ -106,7 +120,10 @@ function main(): void {
     DSH_CLIENT_COMMIT_HASH: repositoryCommitHash(root, process.env),
   }
   const clientEnvironment = resolveClientBuildEnvironment(parentEnvironment, values.profile)
-  const buildEnvironment = clientBuildProcessEnvironment(parentEnvironment, clientEnvironment)
+  const buildEnvironment = isolateBuildCodexHome(
+    root,
+    clientBuildProcessEnvironment(parentEnvironment, clientEnvironment),
+  )
   const scope = buildScope(values.scope)
 
   rmSync(resolve(root, CLIENT_BUILD_RECORD_PATH), { force: true })
