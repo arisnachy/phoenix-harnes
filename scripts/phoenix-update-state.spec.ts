@@ -44,7 +44,7 @@ describe('PHOENIX updater state persistence', () => {
     process.env.PHOENIX_AUTO_UPDATE = '1'
     process.env.PHOENIX_UPDATE_MODE = 'auto'
 
-    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target: activeTarget })
+    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target })
 
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
       schema: 1,
@@ -95,7 +95,7 @@ describe('PHOENIX updater state persistence', () => {
       reason: `verified stable update ${activeTarget.slice(0, 12)} ready; activate and restart`,
     }), 'utf8')
 
-    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target })
+    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target: activeTarget })
 
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
       schema: 1,
