@@ -266,13 +266,13 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 restartItem.Text = "Reiniciar Phoenix";
                 tray.Text = "Phoenix · iniciando checkout local";
                 window.SetStartupStatus("Iniciando tu Phoenix local…");
-                DesktopLog.Write($"Using runnable local Phoenix checkout: {runtimeRoot}");
+                DesktopLog.Write($"Using bootstrappable local Phoenix checkout as source of truth: {runtimeRoot}");
 
-                if (await StartOwnedRuntimeAsync(openWhenReady: true, reportFailure: false))
-                    return;
-
-                DesktopLog.Write("Local Phoenix checkout did not become ready; falling back to the desktop-managed runtime.");
-                StopOwnedRuntime();
+                // A discovered source checkout already contains Phoenix's own bootstrap launcher.
+                // Let that launcher install/build what is missing instead of silently switching to
+                // a second AppData checkout when first-run preparation takes longer than expected.
+                await StartOwnedRuntimeAsync(openWhenReady: true, reportFailure: true);
+                return;
             }
 
             runtimeRoot = Program.RuntimeRoot;
@@ -613,7 +613,9 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         tray.Text = "Phoenix · iniciando";
         DesktopLog.Write($"Phoenix runtime process started with PID {ownedRuntime.Id} from {runtimeRoot}.");
 
-        var maxAttempts = sourceCheckoutRuntime ? 60 : 120;
+        var maxAttempts = sourceCheckoutRuntime
+            ? DesktopRuntimeLaunchContract.SourceStartupWaitSeconds
+            : DesktopRuntimeLaunchContract.ManagedStartupWaitSeconds;
         for (var attempt = 0; attempt < maxAttempts && !shuttingDown; attempt++)
         {
             if (await IsReadyAsync())
@@ -637,9 +639,13 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             if (reportFailure)
             {
                 tray.Text = "Phoenix · error de inicio";
-                window.SetStartupStatus($"Phoenix no alcanzó 127.0.0.1:3080.{exit}\n\nDiagnóstico: {Program.LogPath}", isError: true);
+                var subject = sourceCheckoutRuntime ? "Tu Phoenix local" : "Phoenix";
+                var detail = ownedRuntime.HasExited
+                    ? $"{subject} no pudo completar el arranque.{exit}"
+                    : $"{subject} sigue sin responder en 127.0.0.1:3080 después del tiempo de preparación.";
+                window.SetStartupStatus($"{detail}\n\nRevisa: {Program.LogPath}", isError: true);
                 MessageBox.Show(
-                    $"Phoenix no alcanzó http://127.0.0.1:3080.{exit}\n\nDiagnóstico: {Program.LogPath}",
+                    $"{detail}\n\nDiagnóstico: {Program.LogPath}",
                     "Phoenix", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
