@@ -26,6 +26,12 @@ The plugin also contributes the `tool:pwsh` prompt section (order 105): non-zero
 
 `command`, `workdir`, and `timeoutMs` are resolved against the executor's config defaults via `ctx.shell.resolve()` before execution. The workdir default is applied in the tool layer from the calling agent's `session.header.cwd` BEFORE `resolve()` — the per-session cwd must come from `exec.agent`, since N sessions share one executor; only when no session cwd is available does the executor fall back to its own config / `process.cwd()`.
 
+### `computer` (Windows)
+
+The Windows composition also registers the guarded `computer` tool. In Phoenix Desktop its structured browser actions operate the embedded WebView2 directly: `browser_inspect` returns visible text, field metadata and buttons without returning current field values; `browser_fill_form` fills inspected non-secret fields; `browser_click_text` activates a visible button/link by text; and `browser_login` resolves an origin-bound login internally from `ctx.credentials`.
+
+A human can authorize one site once with `/secret login-set https://example.com ACCOUNT SECRET`. That exact canonical origin then has an `autonomous` grant for unattended open/login/form/click work, so a recurring authorized task does not need another workspace-write approval for each step. The account secret is never a model argument, tool result, prompt token, or inspection value. Both the TypeScript broker and WebView script verify the origin; remote grants require HTTPS (loopback HTTP is allowed). Other Computer Use actions retain the normal sandbox/approval policy.
+
 ### Managed shell environment
 
 Every foreground and background model pwsh call receives a freshly collected trusted `DSH_*` environment through the shared [`dsh-shell-env`](../shell-env/) registry: `DSH_HOME` (the absolute Harness home), `DSH_SHELL=1`, the agent's `DSH_SESSION_ID`, and `DSH_SESSION_JSONL` when the active persistence backend locates one. Plugins contributing `DSH_*` facts to `ctx.shellEnv` apply to pwsh calls exactly as they do to bash calls. The snapshot passes through the dedicated `ShellExecRequest.dshEnv` channel; `process.env` is never modified. The description teaches the generic `$env:DSH_*` convention rather than naming persistence-specific variables.
