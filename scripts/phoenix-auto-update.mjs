@@ -138,6 +138,24 @@ function readActiveRuntime(root) {
   }
 }
 
+function validatedActiveRuntime(root) {
+  const value = readActiveRuntime(root)
+  if (value === undefined) return undefined
+
+  const candidate = resolve(value.path)
+  if (!existsSync(candidate) || !sameRepositoryWorktree(root, candidate)) return undefined
+
+  const head = git(candidate, ['rev-parse', 'HEAD'], { allowFailure: true })
+  const status = git(candidate, ['status', '--porcelain=v1', '--untracked-files=all'], { allowFailure: true })
+  if (!head.ok || head.stdout !== value.target || !status.ok || status.stdout.length > 0) return undefined
+
+  return { ...value, path: candidate }
+}
+
+function effectiveCurrentCommit(root) {
+  return validatedActiveRuntime(root)?.target ?? currentCommit(root)
+}
+
 function restartRequestPath(root) {
   return join(controlDirectory(root), RESTART_REQUEST_FILE)
 }
@@ -258,9 +276,20 @@ function inspectUpdate(root) {
   const branch = currentBranch(root)
   const manifest = fetchStableManifest(root)
   const target = fetchTarget(root, manifest)
-  const current = currentCommit(root)
+  const sourceCurrent = currentCommit(root)
+  const activeRuntime = validatedActiveRuntime(root)
+  const current = activeRuntime?.target ?? sourceCurrent
   const state = relation(root, current, target)
-  return { status: state, branch, current, target, manifest, sourceBranch: STABLE_SOURCE_BRANCH }
+  return {
+    status: state,
+    branch,
+    current,
+    sourceCurrent,
+    target,
+    manifest,
+    sourceBranch: STABLE_SOURCE_BRANCH,
+    activeRuntime,
+  }
 }
 
 function recoveryRef(root, commit) {
@@ -445,7 +474,7 @@ function clearPrepared(root) {
 function stagedCandidateValid(root, target) {
   const prepared = readPrepared(root)
   if (prepared?.target !== target) return false
-  if (prepared.base !== currentCommit(root)) return false
+  if (prepared.base !== effectiveCurrentCommit(root)) return false
   const stage = stageDirectory(root)
   if (!sameRepositoryWorktree(root, stage)) return false
   const stageHead = git(stage, ['rev-parse', 'HEAD'], { allowFailure: true })
@@ -812,7 +841,7 @@ async function watch(root, parentPid) {
   writeState(root, {
     status: 'checking',
     phase: 'channel',
-    current: currentCommit(root),
+    current: effectiveCurrentCommit(root),
   })
 
   while (parentAlive(parentPid)) {
@@ -886,7 +915,20 @@ async function watch(root, parentPid) {
               pending = undefined
               preparedTarget = undefined
               clearPrepared(root)
-              writeState(root, { status: 'current', phase: 'idle', current: inspection.current })
+              writeState(root, {
+                status: 'current',
+                phase: 'idle',
+                current: inspection.current,
+                ...(inspection.activeRuntime === undefined
+                  ? {}
+                  : {
+                      runtimePath: inspection.activeRuntime.path,
+                      sourceCurrent: inspection.sourceCurrent,
+                      detail: inspection.sourceCurrent === inspection.current
+                        ? undefined
+                        : `Stable ${inspection.current.slice(0, 12)} is already active in the verified isolated runtime; no update action is required.`,
+                    }),
+              })
               break
             case 'ahead':
               writeState(root, {

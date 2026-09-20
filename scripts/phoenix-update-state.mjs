@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
 const REPLACE_ATTEMPTS = 4
@@ -8,6 +9,7 @@ const REPLACE_RETRY_MS = 20
 const UPDATE_STATE_FILE = 'phoenix-update-state.json'
 const UPDATE_RESTART_FILE = 'phoenix-update-restart-request.json'
 const HOST_RESTART_FILE = 'phoenix-host-restart-request.json'
+const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
 
 function waitForReplaceRetry() {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, REPLACE_RETRY_MS)
@@ -39,6 +41,45 @@ function writeJsonAtomic(path, value) {
       unlinkSync(temporaryPath)
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error
+    }
+  }
+}
+
+function readActiveRuntimeTarget(controlDirectory) {
+  const path = join(controlDirectory, ACTIVE_RUNTIME_FILE)
+  if (!existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
+    if (typeof value.path !== 'string' || value.path.trim().length === 0) return undefined
+    const runtimePath = resolve(value.path)
+    if (!existsSync(runtimePath)) return undefined
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], {
+      cwd: runtimePath,
+      encoding: 'utf8',
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    if (head.status !== 0 || head.stdout?.trim() !== value.target) return undefined
+    return value.target
+  } catch {
+    return undefined
+  }
+}
+
+function clearDuplicateActivationRequests(controlDirectory, target) {
+  for (const filename of [UPDATE_RESTART_FILE, HOST_RESTART_FILE]) {
+    const path = join(controlDirectory, filename)
+    if (!existsSync(path)) continue
+    try {
+      const value = JSON.parse(readFileSync(path, 'utf8'))
+      const matches = filename === UPDATE_RESTART_FILE
+        ? value?.schema === 1 && value.target === target
+        : value?.schema === 1 && value.kind === 'host-restart'
+          && typeof value.reason === 'string' && value.reason.includes(target.slice(0, 12))
+      if (matches) unlinkSync(path)
+    } catch {
+      // Malformed control files remain for the supervisor's fail-closed handling.
     }
   }
 }
@@ -92,6 +133,20 @@ function requestPreparedActivation(path, target, now) {
 export function writePhoenixUpdateState(path, value) {
   const target = supervisedReadyTarget(path, value)
   if (target !== undefined) {
+    const controlDirectory = dirname(path)
+    if (readActiveRuntimeTarget(controlDirectory) === target) {
+      clearDuplicateActivationRequests(controlDirectory, target)
+      writeJsonAtomic(path, {
+        ...value,
+        status: 'current',
+        phase: 'idle',
+        current: target,
+        detail: `Stable ${target.slice(0, 12)} is already active; duplicate activation suppressed.`,
+        at: value?.at ?? new Date().toISOString(),
+      })
+      return
+    }
+
     const now = new Date().toISOString()
     // Queue activation before publishing the transition. Readers either keep
     // seeing the previous preparing state or see restarting; they never see a
