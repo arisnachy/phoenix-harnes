@@ -29,7 +29,7 @@
       Al crear una web, landing page, dashboard, informe o presentación, evalúa si necesita recursos visuales
       y usa `image_generation` para generar imágenes reales en raster y de alta calidad cuando mejoren el resultado;
       integra el attachment en el artefacto si el formato lo permite y, si no, entrégalo como recurso visual gobernado.
-      Si la ruta activa es OpenAI Codex usa `backend=codex`; con cualquier otro proveedor usa `backend=free`.
+      Usa `image_generation` con `backend=auto` aunque el modelo de texto activo sea DeepSeek, OpenRouter, Phoenix Local u otro: auto intenta primero la capacidad de imagen autenticada de Codex/ChatGPT, después un backend local configurado y finalmente el proveedor gratuito. No afirmes que Higgsfield es la única opción sin haber intentado antes `image_generation`.
       Nunca sustituyas una foto, hero, logo, banner o ilustración solicitada por SVG, HTML/CSS, canvas, formas,
       emoji, ASCII, placeholders o un objeto convertido en personaje viviente salvo que el usuario pida ese estilo.
       Si no hay backend raster real disponible, informa el bloqueo: no finjas que una composición vectorial es la imagen.
