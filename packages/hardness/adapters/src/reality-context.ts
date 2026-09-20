@@ -58,6 +58,79 @@ interface WeatherPayload {
   timezone: string | null
 }
 
+interface AuthorizationEntryLike {
+  readonly key: string
+  readonly label: string
+  readonly inFlight: boolean
+  readonly methods: readonly { readonly id: string; readonly label: string }[]
+}
+
+interface AuthorizationTelemetryLike {
+  readonly kind: 'account'
+  readonly provider: string
+  readonly accountType?: string
+  readonly email?: string
+  readonly plan?: string
+  readonly primaryLimit?: {
+    readonly usedPercent: number
+    readonly windowDurationMins?: number
+    readonly resetsAt?: number
+  }
+  readonly secondaryLimit?: {
+    readonly usedPercent: number
+    readonly windowDurationMins?: number
+    readonly resetsAt?: number
+  }
+  readonly credits?: {
+    readonly hasCredits: boolean
+    readonly unlimited: boolean
+    readonly balance?: string
+  }
+  readonly usage?: {
+    readonly lifetimeTokens?: number
+    readonly peakDailyTokens?: number
+    readonly longestRunningTurnSec?: number
+    readonly currentStreakDays?: number
+    readonly longestStreakDays?: number
+  }
+  readonly connectors?: readonly {
+    readonly id: string
+    readonly name: string
+    readonly category?: string
+    readonly accessible: boolean
+    readonly enabled: boolean
+    readonly installed?: boolean
+    readonly callable?: boolean
+  }[]
+}
+
+interface RuntimeServiceTelemetry {
+  readonly authorization: {
+    readonly accounts: readonly Record<string, unknown>[]
+    readonly mcp: readonly Record<string, unknown>[]
+  }
+  readonly ai: {
+    readonly activeModel: Record<string, unknown> | null
+    readonly registeredProviders: readonly Record<string, unknown>[]
+    readonly configurableProviders: readonly Record<string, unknown>[]
+    readonly contextWindowTokens: number | null
+    readonly remainingContextTokens: null
+    readonly accumulatedCost: null
+    readonly accountLimits: readonly Record<string, unknown>[]
+  }
+  readonly calendar: {
+    readonly connectorCandidates: readonly Record<string, unknown>[]
+    readonly events: null
+    readonly availability: null
+  }
+  readonly phoenix: {
+    readonly pluginSummary: Record<string, unknown>
+    readonly degradedPlugins: readonly Record<string, unknown>[]
+    readonly update: Record<string, unknown> | null
+    readonly localModel: Record<string, unknown> | null
+  }
+}
+
 export interface RealitySnapshot {
   readonly schema: 1
   readonly generatedAt: string
@@ -198,6 +271,8 @@ function serviceCapabilities(ctx: Context): string[] {
     'web',
     'authorization',
     'mcpConnectors',
+    'llm',
+    'agentDefaultModel',
     'subagents',
     'codeRuntime',
     'pythonCodeRuntime',
@@ -295,6 +370,228 @@ async function fetchWeather(config: RealityContextConfig): Promise<WeatherPayloa
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function method<T>(
+  value: unknown,
+  name: string,
+): T | undefined {
+  const record = asRecord(value)
+  const candidate = record?.[name]
+  return typeof candidate === 'function' ? candidate.bind(value) as T : undefined
+}
+
+function authorizationAccountView(
+  entry: AuthorizationEntryLike,
+  telemetry: AuthorizationTelemetryLike | undefined,
+  inspectFailed: boolean,
+): Record<string, unknown> {
+  return {
+    key: entry.key,
+    label: entry.label,
+    inFlight: entry.inFlight,
+    methods: entry.methods.map(item => ({ id: item.id, label: item.label })),
+    credentialState: telemetry !== undefined ? 'valid' : inspectFailed ? 'unknown' : 'missing',
+    expiryState: 'unreported',
+    ...(telemetry === undefined ? {} : {
+      provider: telemetry.provider,
+      accountType: telemetry.accountType ?? null,
+      plan: telemetry.plan ?? null,
+      primaryLimit: telemetry.primaryLimit ?? null,
+      secondaryLimit: telemetry.secondaryLimit ?? null,
+      credits: telemetry.credits ?? null,
+      usage: telemetry.usage ?? null,
+      connectors: telemetry.connectors?.map(connector => ({
+        id: connector.id,
+        name: connector.name,
+        category: connector.category ?? null,
+        accessible: connector.accessible,
+        enabled: connector.enabled,
+        installed: connector.installed ?? null,
+        callable: connector.callable ?? null,
+      })) ?? [],
+    }),
+  }
+}
+
+function calendarCandidates(
+  accounts: readonly Record<string, unknown>[],
+  mcp: readonly Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const candidates: Record<string, unknown>[] = []
+  for (const account of accounts) {
+    const connectors = account.connectors
+    if (!Array.isArray(connectors)) continue
+    for (const raw of connectors) {
+      const connector = asRecord(raw)
+      const haystack = [
+        connector?.id,
+        connector?.name,
+        connector?.category,
+      ].filter((value): value is string => typeof value === 'string').join(' ').toLowerCase()
+      if (haystack.includes('calendar')) candidates.push({ source: 'authorization', ...connector })
+    }
+  }
+  for (const row of mcp) {
+    const tools = Array.isArray(row.tools) ? row.tools.filter((value): value is string => typeof value === 'string') : []
+    if (tools.some(tool => tool.toLowerCase().includes('calendar'))) {
+      candidates.push({ source: 'mcp', serverName: row.serverName ?? null, status: row.status ?? null, tools })
+    }
+  }
+  return candidates
+}
+
+async function probeRuntimeServices(ctx: Context): Promise<RuntimeServiceTelemetry> {
+  const get = ctx.get as unknown as (name: string) => unknown
+  const authorization = get.call(ctx, 'authorization')
+  const authList = method<() => readonly AuthorizationEntryLike[]>(authorization, 'list')
+  const authInspect = method<(key: string) => Promise<AuthorizationTelemetryLike | undefined>>(authorization, 'inspect')
+  const accounts: Record<string, unknown>[] = []
+  if (authList !== undefined) {
+    for (const entry of authList()) {
+      let telemetry: AuthorizationTelemetryLike | undefined
+      let inspectFailed = false
+      if (authInspect !== undefined) {
+        try {
+          telemetry = await authInspect(entry.key)
+        } catch {
+          inspectFailed = true
+        }
+      }
+      accounts.push(authorizationAccountView(entry, telemetry, inspectFailed))
+    }
+  }
+
+  const mcpRegistry = get.call(ctx, 'mcpConnectors')
+  const mcpList = method<() => readonly Record<string, unknown>[]>(mcpRegistry, 'list')
+  const mcp = (mcpList?.() ?? []).map((row) => ({
+    serverName: row.serverName ?? null,
+    status: row.status ?? 'unknown',
+    transport: row.transport ?? null,
+    reasonCode: row.reasonCode ?? null,
+    tools: Array.isArray(row.toolNames) ? [...row.toolNames] : [],
+  }))
+
+  const llm = get.call(ctx, 'llm')
+  const listProviders = method<() => readonly { id: string; name: string }[]>(llm, 'listProviders')
+  const listConfigurableProviders = method<() => readonly Record<string, unknown>[]>(llm, 'listConfigurableProviders')
+  const resolveModelInfo = method<(
+    provider: string,
+    model: string,
+    signal?: AbortSignal,
+  ) => Promise<Record<string, unknown>>>(llm, 'resolveModelInfo')
+
+  const defaultModel = get.call(ctx, 'agentDefaultModel')
+  const currentSelection = method<() => Record<string, unknown>>(defaultModel, 'currentSelection')
+  const activeModel = currentSelection?.() ?? null
+  let contextWindowTokens: number | null = null
+  if (activeModel !== null
+    && typeof activeModel.provider === 'string'
+    && typeof activeModel.model === 'string'
+    && resolveModelInfo !== undefined) {
+    try {
+      const model = await resolveModelInfo(activeModel.provider, activeModel.model, AbortSignal.timeout(2_000))
+      const context = asRecord(model.context)
+      const window = context?.contextWindow
+      if (typeof window === 'number' && Number.isSafeInteger(window) && window > 0) contextWindowTokens = window
+    } catch {
+      // Exact-model metadata is advisory; provider/runtime availability is still projected below.
+    }
+  }
+
+  const accountLimits = accounts
+    .filter(account => account.primaryLimit !== undefined
+      || account.secondaryLimit !== undefined
+      || account.credits !== undefined
+      || account.usage !== undefined)
+    .map(account => ({
+      key: account.key,
+      provider: account.provider ?? null,
+      primaryLimit: account.primaryLimit ?? null,
+      secondaryLimit: account.secondaryLimit ?? null,
+      credits: account.credits ?? null,
+      usage: account.usage ?? null,
+    }))
+
+  const pluginInventory = get.call(ctx, 'pluginInventory')
+  const pluginList = method<() => { readonly entries: readonly Record<string, unknown>[] }>(pluginInventory, 'list')
+  const updateState = method<() => Record<string, unknown>>(pluginInventory, 'updateState')
+  const localModelState = method<() => Promise<Record<string, unknown>>>(pluginInventory, 'localModelState')
+  const pluginEntries = pluginList?.().entries ?? []
+  const countPhase = (phase: string): number =>
+    pluginEntries.filter(entry => entry.fiberPhase === phase).length
+  const pluginSummary = {
+    total: pluginEntries.length,
+    enabled: pluginEntries.filter(entry => entry.enabled === true).length,
+    active: countPhase('active'),
+    loading: countPhase('loading'),
+    pending: countPhase('pending'),
+    failed: countPhase('failed'),
+    unloading: countPhase('unloading'),
+  }
+  const degradedPlugins = pluginEntries
+    .filter(entry => entry.fiberPhase === 'failed')
+    .slice(0, 20)
+    .map(entry => ({
+      entryId: entry.entryId ?? null,
+      moduleName: entry.moduleName ?? null,
+      enabled: entry.enabled ?? null,
+      fiberPhase: entry.fiberPhase ?? null,
+    }))
+  let localModel: Record<string, unknown> | null = null
+  if (localModelState !== undefined) {
+    try {
+      const raw = await localModelState()
+      localModel = {
+        mode: raw.mode ?? null,
+        selectedModelId: raw.selectedModelId ?? null,
+        installedModelIds: Array.isArray(raw.installedModelIds) ? [...raw.installedModelIds] : [],
+        phase: raw.phase ?? null,
+        progress: raw.progress ?? null,
+        error: raw.error ?? null,
+      }
+    } catch {
+      localModel = null
+    }
+  }
+
+  return {
+    authorization: { accounts, mcp },
+    ai: {
+      activeModel,
+      registeredProviders: (listProviders?.() ?? []).map(provider => ({
+        id: provider.id,
+        name: provider.name,
+        health: 'registered-not-probed',
+      })),
+      configurableProviders: (listConfigurableProviders?.() ?? []).map(provider => ({
+        provider: provider.provider ?? null,
+        displayName: provider.displayName ?? null,
+        settingsNs: provider.settingsNs ?? null,
+      })),
+      contextWindowTokens,
+      remainingContextTokens: null,
+      accumulatedCost: null,
+      accountLimits,
+    },
+    calendar: {
+      connectorCandidates: calendarCandidates(accounts, mcp),
+      events: null,
+      availability: null,
+    },
+    phoenix: {
+      pluginSummary,
+      degradedPlugins,
+      update: updateState?.() ?? null,
+      localModel,
+    },
+  }
+}
+
 async function probeClockSync(): Promise<{ value: boolean | null; source: string; confidence: number }> {
   try {
     if (platform() === 'win32') {
@@ -325,8 +622,10 @@ export class RealityContextEngine {
   private internet = cache<boolean>(null, 'not-probed', 1, 0)
   private clockSync = cache<boolean>(null, 'not-probed', 1, 0)
   private weather = cache<WeatherPayload>(null, 'not-configured', 1, 0)
+  private runtimeServices = cache<RuntimeServiceTelemetry>(null, 'not-probed', 1, 0)
   private timer: ReturnType<typeof setInterval> | undefined
   private refreshing = false
+  private runtimeRefreshing = false
 
   constructor(readonly config: RealityContextConfig) {}
 
@@ -374,7 +673,30 @@ export class RealityContextEngine {
     }
   }
 
+  async refreshRuntimeServices(ctx: Context): Promise<void> {
+    if (this.runtimeRefreshing || Date.now() <= this.runtimeServices.expiresAt) return
+    this.runtimeRefreshing = true
+    try {
+      this.runtimeServices = cache(
+        await probeRuntimeServices(ctx),
+        'phoenix-runtime-services',
+        this.config.refreshMs,
+        0.95,
+      )
+    } catch {
+      this.runtimeServices = cache<RuntimeServiceTelemetry>(
+        null,
+        'phoenix-runtime-services-unavailable',
+        Math.min(this.config.refreshMs, 30_000),
+        0,
+      )
+    } finally {
+      this.runtimeRefreshing = false
+    }
+  }
+
   snapshot(ctx: Context, now = new Date()): RealitySnapshot {
+    void this.refreshRuntimeServices(ctx)
     const epoch = now.getTime()
     const intl = new Intl.DateTimeFormat().resolvedOptions()
     const timezone = intl.timeZone || 'UTC'
@@ -387,6 +709,8 @@ export class RealityContextEngine {
     const sunriseMs = sunrise === null ? Number.NaN : Date.parse(sunrise)
     const sunsetMs = sunset === null ? Number.NaN : Date.parse(sunset)
     const daylightKnown = Number.isFinite(sunriseMs) && Number.isFinite(sunsetMs)
+    const runtimeServices = signal(this.runtimeServices, epoch)
+    const runtimeValue = runtimeServices.value
 
     return {
       schema: 1,
@@ -448,8 +772,14 @@ export class RealityContextEngine {
             reason: 'sunrise/sunset require fresh weather/location evidence',
           },
       calendar: {
-        status: 'requires-live-connector-check',
-        rule: 'verify holidays, meetings, commitments, and availability through an authorized calendar connector before relying on them',
+        status: runtimeValue === null ? 'unknown' : 'connector-state-known',
+        connectorCandidates: runtimeValue?.calendar.connectorCandidates ?? [],
+        events: runtimeValue?.calendar.events ?? null,
+        availability: runtimeValue?.calendar.availability ?? null,
+        observedAt: runtimeServices.observedAt,
+        expiresAt: runtimeServices.expiresAt,
+        stale: runtimeServices.stale,
+        rule: 'connector presence is not calendar content; query the authorized calendar before relying on meetings, commitments, holidays, or availability',
       },
       device: {
         os: platform(),
@@ -486,20 +816,54 @@ export class RealityContextEngine {
         rule: 'presence means available in this Cordis scope; a missing service must not be invented',
       },
       authentication: {
-        status: 'requires-live-connector-check',
+        status: runtimeValue === null ? 'unknown' : 'available',
         authorizationServiceAvailable: serviceCapabilities(ctx).includes('authorization'),
-        rule: 'inspect connector state immediately before actions that depend on credentials; never assume a token remains valid',
+        accounts: runtimeValue?.authorization.accounts ?? [],
+        mcp: runtimeValue?.authorization.mcp ?? [],
+        observedAt: runtimeServices.observedAt,
+        expiresAt: runtimeServices.expiresAt,
+        stale: runtimeServices.stale,
+        rule: 'credentialState=valid means the provider returned sanitized account telemetry at observation time; expiryState remains unreported unless a provider exposes it. Re-check before sensitive actions.',
       },
       phoenix: {
         channel: process.env.PHOENIX_CHANNEL ?? process.env.PHOENIX_UPDATE_CHANNEL ?? null,
         commit: process.env.PHOENIX_RUNTIME_SHA ?? process.env.GIT_COMMIT ?? null,
         version: process.env.npm_package_version ?? null,
-        updateState: process.env.PHOENIX_UPDATE_STATE ?? null,
+        update: runtimeValue?.phoenix.update ?? (
+          process.env.PHOENIX_UPDATE_STATE === undefined
+            ? null
+            : { status: process.env.PHOENIX_UPDATE_STATE, source: 'environment' }
+        ),
         supervisor: process.env.PHOENIX_SUPERVISOR === '1' ? 'active' : 'unknown',
+        pluginSummary: runtimeValue?.phoenix.pluginSummary ?? {
+          total: null,
+          enabled: null,
+          active: null,
+          loading: null,
+          pending: null,
+          failed: null,
+          unloading: null,
+        },
+        degradedPlugins: runtimeValue?.phoenix.degradedPlugins ?? [],
+        localModel: runtimeValue?.phoenix.localModel ?? null,
+        observedAt: runtimeServices.observedAt,
+        expiresAt: runtimeServices.expiresAt,
+        stale: runtimeServices.stale,
       },
       ai: {
-        status: 'requires-live-runtime-check',
-        rule: 'verify selected model, remaining context, quota, rate limits, provider health, and cost before relying on them',
+        status: runtimeValue === null ? 'unknown' : 'available',
+        activeModel: runtimeValue?.ai.activeModel ?? null,
+        registeredProviders: runtimeValue?.ai.registeredProviders ?? [],
+        configurableProviders: runtimeValue?.ai.configurableProviders ?? [],
+        contextWindowTokens: runtimeValue?.ai.contextWindowTokens ?? null,
+        remainingContextTokens: runtimeValue?.ai.remainingContextTokens ?? null,
+        accumulatedCost: runtimeValue?.ai.accumulatedCost ?? null,
+        accountLimits: runtimeValue?.ai.accountLimits ?? [],
+        tokenMeterAvailable: serviceCapabilities(ctx).includes('tokenMeter'),
+        observedAt: runtimeServices.observedAt,
+        expiresAt: runtimeServices.expiresAt,
+        stale: runtimeServices.stale,
+        rule: 'registered provider is not the same as healthy provider. Remaining context requires the active session token meter; accumulated cost remains unknown unless a provider exposes it.',
       },
       region: {
         locale: intl.locale,
