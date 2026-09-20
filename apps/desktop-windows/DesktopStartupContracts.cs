@@ -18,6 +18,7 @@ internal static class DesktopRuntimeLaunchContract
     internal const int ManagedStartupWaitSeconds = 120;
     internal const int ReadyConsecutiveSamples = 3;
     internal const int ReadySampleDelayMilliseconds = 700;
+    internal const int MaxUnexpectedBackendRestarts = 3;
     internal const string PowerShellExecutable = "powershell.exe";
 
     internal static ProcessStartInfo CreateOwnedRuntimeStartInfo(
@@ -208,16 +209,45 @@ internal static class DesktopSourceCheckout
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         if (!string.IsNullOrWhiteSpace(home))
-        {
-            values.Add(Path.Combine(home, "OneDrive", "Documentos", "ChatGPT", "Phoenix", "phoenix-harnes"));
-            values.Add(Path.Combine(home, "OneDrive", "Documents", "ChatGPT", "Phoenix", "phoenix-harnes"));
-            values.Add(Path.Combine(home, "Documents", "ChatGPT", "Phoenix", "phoenix-harnes"));
-            values.Add(Path.Combine(home, "ChatGPT", "Phoenix", "phoenix-harnes"));
-            values.Add(Path.Combine(home, "Phoenix", "phoenix-harnes"));
-        }
+            values.AddRange(ConventionalRoots(home));
 
         return values
             .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value =>
+            {
+                try { return Path.GetFullPath(value); }
+                catch { return value; }
+            })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    internal static IReadOnlyList<string> ConventionalRoots(string home)
+    {
+        if (string.IsNullOrWhiteSpace(home)) return Array.Empty<string>();
+
+        var chatRoots = new[]
+        {
+            Path.Combine(home, "OneDrive", "Documentos", "ChatGPT"),
+            Path.Combine(home, "OneDrive", "Documents", "ChatGPT"),
+            Path.Combine(home, "Documents", "ChatGPT"),
+            Path.Combine(home, "ChatGPT"),
+        };
+
+        var values = new List<string>();
+        foreach (var chatRoot in chatRoots)
+        {
+            // Historical Phoenix locations are intentionally explicit and cheap to probe.
+            // In particular, Fenix-evolution may contain a repository folder nested one level
+            // deeper after a zip/worktree migration: ...\phoenix-harnes\phoenix-harnes.
+            values.Add(Path.Combine(chatRoot, "Fenix-evolution", "phoenix-harnes", "phoenix-harnes"));
+            values.Add(Path.Combine(chatRoot, "Fenix-evolution", "phoenix-harnes"));
+            values.Add(Path.Combine(chatRoot, "Phoenix", "phoenix-harnes"));
+            values.Add(Path.Combine(chatRoot, "phoenix-harnes"));
+        }
+
+        values.Add(Path.Combine(home, "Phoenix", "phoenix-harnes"));
+        return values
             .Select(value =>
             {
                 try { return Path.GetFullPath(value); }
