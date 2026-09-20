@@ -408,7 +408,8 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(Program.RuntimeRoot)!);
-            Directory.Delete(staging, recursive: true);
+            if (Directory.Exists(staging))
+                Directory.Delete(staging, recursive: true);
             Directory.CreateDirectory(staging);
 
             window.SetStartupStatus("Preparando Phoenix…");
