@@ -126,10 +126,14 @@ export interface Agent {
   followup(message: UserMessage): void
 
   /**
-   * Submit steering for the nearest step. An idle driver starts a turn;
-   * a running driver consumes it at its next step boundary.
-   * A rejected step leaves steering parked in the inbox until the next
-   * wake; cancellation or disposal may discard pending steering.
+   * Submit steering for the nearest step. An idle driver starts a turn.
+   * While a model request is active, a running driver interrupts only that
+   * request without canceling the turn and consumes the steering at the next
+   * step boundary. Any already-visible assistant prefix is preserved as an
+   * interrupted message; a request preempted before visible output leaves no
+   * assistant surface. Tool execution is not interrupted; steering waits for
+   * its safe step boundary there. A rejected step leaves steering parked in
+   * the inbox until the next wake; cancellation or disposal may discard pending steering.
    * @param message - identified steering content and the source that supplied it.
    */
   steer(message: UserMessage): void

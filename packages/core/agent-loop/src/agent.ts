@@ -48,6 +48,8 @@ type Phase =
   | {
     kind: 'running'
     abort: AbortController
+    /** Active model request owner; human steering may preempt it without aborting the turn. */
+    modelStream?: { abort: AbortController }
     turn: number
     step: number
     wakeRequested: boolean
@@ -57,6 +59,8 @@ type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }
 
 const SILENT_TOOL_PROGRESS_REMINDER = 'Before calling more tools, send the user a brief progress update in their language. Summarize what you just did or found and what you will do next. Do not reveal hidden chain-of-thought or private reasoning.'
 const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest tool result without waiting for a new user prompt. Keep working until the task is complete. Before more tool calls, give the user a brief progress update if you have not done so recently; do not reveal hidden chain-of-thought.'
+/** Internal reason used to end only the active model stream when fresh human steering arrives. */
+const STEERING_MODEL_INTERRUPT = Symbol('steering-model-interrupt')
 
 type PreparedStep =
   | { kind: 'reject' }
@@ -137,6 +141,14 @@ export class ReactLoopAgent implements Agent {
 
   steer(input: UserMessage): void {
     this.send(input, 'next-step', true)
+    // A human steer should reach the nearest model boundary, not wait behind
+    // a request that started before the instruction existed. Only the active
+    // model request is interrupted: already-running tools keep their existing
+    // safety and side-effect contract, and the turn itself remains live.
+    if (this.phase.kind === 'running' && !this.phase.abort.signal.aborted
+      && this.phase.modelStream !== undefined) {
+      this.phase.modelStream.abort.abort(STEERING_MODEL_INTERRUPT)
+    }
   }
 
   inject(input: UserMessage): void {
@@ -356,19 +368,27 @@ export class ReactLoopAgent implements Agent {
   private async step(assembly: PromptAssembly): Promise<StepEndReason | null> {
     /* v8 ignore next -- private callers establish the running phase before executing a step */
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": step outside running phase`)
-    const { turn, step, abort: { signal } } = this.phase
-    signal.throwIfAborted()
+    const phase = this.phase
+    const { turn, step, abort: { signal: turnSignal } } = phase
+    turnSignal.throwIfAborted()
     const system = renderPrompt(assembly)
 
     while (true) {
-      const { request, preparedCall } = await this.buildRequest(
-        turn, step, assembly.tools, system, this.session.deriveMessages(), signal,
-      )
+      const modelStream = { abort: new AbortController() }
+      phase.modelStream = modelStream
+      const signal = AbortSignal.any([turnSignal, modelStream.abort.signal])
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
+      let request: GenerateOptions | undefined
+      let preparedCall: PreparedLlmCall | undefined
       try {
-        const stream = preparedCall?.stream(request) ?? this.loopCtx.llm.stream(request)
+        const built = await this.buildRequest(
+          turn, step, assembly.tools, system, this.session.deriveMessages(), signal,
+        )
+        request = built.request
+        preparedCall = built.preparedCall
         signal.throwIfAborted()
+        const stream = preparedCall?.stream(request) ?? this.loopCtx.llm.stream(request)
         for await (const chunk of stream) {
           signal.throwIfAborted()
           chunkSeqs.push(this.session.append('assistant/chunk', { turn, step, chunk }).seq)
@@ -376,7 +396,10 @@ export class ReactLoopAgent implements Agent {
         }
         signal.throwIfAborted()
       } catch (error: unknown) {
-        if (signal.aborted) {
+        const steeringInterrupt = !turnSignal.aborted
+          && modelStream.abort.signal.aborted
+          && modelStream.abort.signal.reason === STEERING_MODEL_INTERRUPT
+        if ((turnSignal.aborted || steeringInterrupt) && request !== undefined) {
           const content = assembler.interruptedBlocks()
           if (content.length > 0) {
             this.session.append('assistant/message', {
@@ -391,8 +414,14 @@ export class ReactLoopAgent implements Agent {
             }, { surfaceOp: 'append', sourceEventSeqs: chunkSeqs })
           }
         }
+        if (steeringInterrupt) return null
         throw error
+      } finally {
+        if (phase.modelStream === modelStream) delete phase.modelStream
       }
+
+      /* v8 ignore next -- a non-throwing build always assigns the request. */
+      if (request === undefined) throw new Error('model request missing after successful build')
       const finish = assembler.finish
       if (finish.kind === 'error' || finish.kind === 'aborted') {
         const action = await this.dispatch.waterfall(
@@ -402,11 +431,11 @@ export class ReactLoopAgent implements Agent {
             provider: request.provider,
             failure: finish.failure,
             retryPolicy: preparedCall?.retryPolicy,
-            signal,
+            signal: turnSignal,
           },
           () => Promise.resolve<RequestErrorAction>(undefined),
         )
-        signal.throwIfAborted()
+        turnSignal.throwIfAborted()
         if (action?.kind !== 'retry') {
           throw new LlmError(finish.failure.message, finish.failure.code, finish.failure)
         }
@@ -437,7 +466,7 @@ export class ReactLoopAgent implements Agent {
       if (toolCalls.length === 0) return { kind: 'completed' }
       const hasVisibleProgress = message.content.some(block => block.type === 'text' && block.text.trim().length > 0)
       const { concluded } = await executeToolCalls(
-        this.loopCtx, turn, step, toolCalls, signal,
+        this.loopCtx, turn, step, toolCalls, turnSignal,
         context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
       )
       // Some providers jump straight from hidden reasoning into tool calls.
@@ -454,10 +483,6 @@ export class ReactLoopAgent implements Agent {
     }
   }
 
-  /**
-   * Compose one frozen request and bind it to the adapter registration that
-   * resolved its exact-model defaults.
-   */
   private async buildRequest(
     turn: number,
     step: number,
