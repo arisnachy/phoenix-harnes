@@ -66,7 +66,6 @@ describe('PHOENIX updater state persistence', () => {
     const root = mkdtempSync(join(tmpdir(), 'phoenix-update-already-active-'))
     roots.push(root)
     const path = join(root, 'phoenix-update-state.json')
-    const target = 'd'.repeat(40)
     process.env.PHOENIX_UPDATE_SUPERVISED = '1'
     process.env.PHOENIX_AUTO_UPDATE = '1'
     process.env.PHOENIX_UPDATE_MODE = 'auto'
