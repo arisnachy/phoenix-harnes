@@ -233,10 +233,13 @@ function codexHome(): string {
  * is the public Codex seam for exactly this split-state layout.
  */
 export async function phoenixCodexSqliteHome(purpose = 'image'): Promise<string> {
-  const configured = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
-  const root = configured && configured.length > 0
-    ? resolve(configured)
-    : join(codexHome(), 'phoenix-runtime', 'sqlite')
+  const explicitPhoenix = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
+  const explicitCodex = process.env.CODEX_SQLITE_HOME?.trim()
+  const root = explicitPhoenix && explicitPhoenix.length > 0
+    ? resolve(explicitPhoenix)
+    : explicitCodex && explicitCodex.length > 0
+      ? resolve(explicitCodex, 'phoenix-runtime')
+      : join(codexHome(), 'phoenix-runtime', 'sqlite')
   const directory = join(root, purpose)
   await mkdir(directory, { recursive: true })
   return directory
