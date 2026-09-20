@@ -7,6 +7,7 @@ import {
   classifyCodexImageFailure,
   codexDoctorSupportsImageGeneration,
   imageGenerationToolDescription,
+  imageGenerationBackendOrder,
   installCodexImageGeneration,
   selectFreshGeneratedImage,
   selectImageGenerationBackend,
@@ -75,14 +76,15 @@ describe('Codex image generation bridge', () => {
     expect(classifyCodexImageFailure('codex: command failed')).toBe('runtime')
   })
 
-  it('routes Codex callers to Codex and non-Codex callers to the free raster backend', () => {
+  it('prefers Codex image credits independently of the active text model and keeps explicit backends strict', () => {
     expect(selectImageGenerationBackend(undefined, 'openai-codex')).toBe('codex')
-    expect(selectImageGenerationBackend('auto', 'openai-codex')).toBe('codex')
-    expect(selectImageGenerationBackend(undefined, 'deepseek-official')).toBe('free')
-    expect(selectImageGenerationBackend('auto', 'openrouter')).toBe('free')
-    expect(selectImageGenerationBackend('free', 'openai-codex')).toBe('free')
-    expect(selectImageGenerationBackend('codex', 'deepseek-official')).toBe('codex')
-    expect(selectImageGenerationBackend(undefined, undefined)).toBe('codex')
+    expect(selectImageGenerationBackend('auto', 'deepseek-official')).toBe('codex')
+    expect(selectImageGenerationBackend('auto', 'openrouter')).toBe('codex')
+    expect(imageGenerationBackendOrder('auto', 'deepseek-official')).toEqual(['codex', 'local', 'free'])
+    expect(imageGenerationBackendOrder(undefined, 'phoenix-local')).toEqual(['codex', 'local', 'free'])
+    expect(imageGenerationBackendOrder('local', 'openai-codex')).toEqual(['local'])
+    expect(imageGenerationBackendOrder('free', 'openai-codex')).toEqual(['free'])
+    expect(imageGenerationBackendOrder('codex', 'deepseek-official')).toEqual(['codex'])
   })
 
   it('selects only a new or changed generated image and prefers the newest', () => {
@@ -107,7 +109,9 @@ describe('Codex image generation bridge', () => {
     expect(imageGenerationToolDescription).toContain('hero')
     expect(imageGenerationToolDescription).toContain('charts')
     expect(imageGenerationToolDescription).toContain('OpenAI Codex')
-    expect(imageGenerationToolDescription).toContain('backend=free')
+    expect(imageGenerationToolDescription).toContain('backend=auto')
+    expect(imageGenerationToolDescription).toContain('Higgsfield')
+    expect(imageGenerationToolDescription).toContain('local image endpoint')
     expect(imageGenerationToolDescription).toContain('SVG, HTML, CSS, canvas')
     expect(imageGenerationToolDescription).toContain('brief or objective')
   })
@@ -205,7 +209,7 @@ describe('Codex image generation bridge', () => {
     expect(tool.output.schema.required).toContain('path')
     expect(tool.output.presentationMeta?.({}, {
       provider: 'codex',
-      model: 'codex-built-in-image-gen',
+      model: 'codex-integrated-image-generation',
       path: 'C:/workspace/generated_images/portrait.png',
       attachment: {
         attachmentId: 'image-2',
@@ -221,7 +225,7 @@ describe('Codex image generation bridge', () => {
         mime: 'image/png',
         data: {
           provider: 'codex',
-          model: 'codex-built-in-image-gen',
+          model: 'codex-integrated-image-generation',
           path: 'C:/workspace/generated_images/portrait.png',
           attachment: {
             attachmentId: 'image-2',
