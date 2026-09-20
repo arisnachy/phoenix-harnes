@@ -692,12 +692,14 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             tray.Text = "Phoenix · preparando";
             return;
         }
+
         if (line.Contains("Building PHOENIX for the first run", StringComparison.OrdinalIgnoreCase))
         {
             window.SetStartupStatus("Construyendo Phoenix por primera vez…");
             tray.Text = "Phoenix · construyendo";
             return;
         }
+
         if (line.Contains("PHOENIX RECOVERY", StringComparison.OrdinalIgnoreCase)
             || line.Contains("configuration preflight", StringComparison.OrdinalIgnoreCase))
         {
@@ -705,6 +707,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             tray.Text = "Phoenix · verificando";
             return;
         }
+
         if (line.Contains("host exited unexpectedly", StringComparison.OrdinalIgnoreCase)
             || line.Contains("relaunch", StringComparison.OrdinalIgnoreCase)
             || line.Contains("restarting", StringComparison.OrdinalIgnoreCase))
@@ -713,6 +716,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             tray.Text = "Phoenix · reiniciando";
             return;
         }
+
         if (line.Contains("127.0.0.1:3080", StringComparison.OrdinalIgnoreCase)
             || line.Contains("listening", StringComparison.OrdinalIgnoreCase)
             || (line.Contains("server", StringComparison.OrdinalIgnoreCase)
