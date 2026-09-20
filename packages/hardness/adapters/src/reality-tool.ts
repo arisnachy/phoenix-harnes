@@ -1,5 +1,5 @@
 import type { Context } from '@phoenix-ai/cordis'
-import { defineTool, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import type { RealityContextEngine } from './reality-context.ts'
 
 /**
@@ -27,11 +27,15 @@ export function createRealitySnapshotTool(
     },
     async execute(args, exec) {
       await engine.refreshNow(ctx, args.mode === 'full')
-      return engine.snapshot(
+      const snapshot = engine.snapshot(
         ctx,
         new Date(),
         exec.agent === undefined ? undefined : { agent: exec.agent },
       )
+      // Tool results must satisfy the JSON-value contract. RealitySnapshot is
+      // deliberately modeled with typed records rather than an index signature,
+      // so round-trip through JSON at the tool boundary to enforce serializability.
+      return JSON.parse(JSON.stringify(snapshot)) as Record<string, JsonValue>
     },
     presentCall(args) {
       return {
