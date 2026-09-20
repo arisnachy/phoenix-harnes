@@ -41,16 +41,16 @@ function buildPnpmInvocation(args: readonly string[], environment: NodeJS.Proces
   return { command: 'corepack', args: ['pnpm', ...args] }
 }
 
-/** Give build subprocesses a private Codex home so shared user SQLite state can never gate compilation. */
+/** Keep the user's real Codex home while isolating only build-time SQLite state. */
 export function isolateBuildCodexHome(
   root: string,
   environment: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
-  const codexHome = resolve(root, '.cache', 'phoenix', 'build-codex-home')
-  mkdirSync(codexHome, { recursive: true })
+  const sqliteHome = resolve(root, '.cache', 'phoenix', 'build-codex-sqlite')
+  mkdirSync(sqliteHome, { recursive: true })
   return {
     ...environment,
-    CODEX_HOME: codexHome,
+    CODEX_SQLITE_HOME: sqliteHome,
     PHOENIX_BUILD_PROCESS: '1',
   }
 }
