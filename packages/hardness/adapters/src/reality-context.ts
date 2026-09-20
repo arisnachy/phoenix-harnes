@@ -244,10 +244,6 @@ function numberField(record: Record<string, unknown>, key: string): number | nul
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-function stringField(record: Record<string, unknown>, key: string): string | null {
-  const value = record[key]
-  return typeof value === 'string' && value.length > 0 ? value : null
-}
 
 async function fetchWeather(config: RealityContextConfig): Promise<WeatherPayload> {
   if (config.latitude === undefined || config.longitude === undefined) {
@@ -370,7 +366,7 @@ export class RealityContextEngine {
         try {
           this.weather = cache(await fetchWeather(this.config), 'open-meteo', 10 * 60_000, 0.95)
         } catch {
-          this.weather = cache(null, 'open-meteo-unavailable', 60_000, 0)
+          this.weather = cache<WeatherPayload>(null, 'open-meteo-unavailable', 60_000, 0)
         }
       }
     } finally {
