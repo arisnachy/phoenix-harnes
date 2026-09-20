@@ -5,7 +5,7 @@ import type { MessageId } from '@phoenix-ai/dsh-llm/brand'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import {
-  contentBlockSchema, historyEntrySchema, sessionIdSchema, sessionProjectionsBlockSchema,
+  clientLocationSchema, contentBlockSchema, historyEntrySchema, sessionIdSchema, sessionProjectionsBlockSchema,
 } from './sessions.schema.ts'
 import type { SubagentListEntry } from './subagents.ts'
 
