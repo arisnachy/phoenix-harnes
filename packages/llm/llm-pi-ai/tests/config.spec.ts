@@ -112,3 +112,24 @@ describe('ChatGPT Web route defaults', () => {
     ])
   })
 })
+
+
+describe('Codex reserve model configuration', () => {
+  it('keeps ordered reserve ids in the resolved profile', () => {
+    const profile = resolveProfiles({
+      'openai-codex': { reserveModels: ['gpt-reserve', 'codex-auto-review'] },
+    }).get('openai-codex')
+
+    expect(profile?.reserveModels).toEqual(['gpt-reserve', 'codex-auto-review'])
+  })
+
+  it('rejects empty or duplicate reserve ids', () => {
+    expect(() => resolveProfiles({
+      'openai-codex': { reserveModels: ['gpt-reserve', ''] },
+    })).toThrow(/reserveModels must contain non-empty model ids/)
+
+    expect(() => resolveProfiles({
+      'openai-codex': { reserveModels: ['gpt-reserve', 'gpt-reserve'] },
+    })).toThrow(/reserveModels must not contain duplicates/)
+  })
+})
