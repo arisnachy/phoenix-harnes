@@ -93,6 +93,18 @@ export interface SessionProjectionsBlock {
   values: Partial<SessionProjectionMap>
 }
 
+/** Browser geolocation sampled only after the browser reports permission=granted. */
+export interface ClientLocation {
+  /** WGS84 latitude in decimal degrees. */
+  latitude: number
+  /** WGS84 longitude in decimal degrees. */
+  longitude: number
+  /** Browser-reported horizontal accuracy radius in metres. */
+  accuracyMeters: number
+  /** Browser geolocation observation time as Unix epoch milliseconds. */
+  observedAt: number
+}
+
 /** Browser-submitted prompt content; the host promotes image bytes to durable references. */
 export type PromptContentPart =
   | { type: 'text'; text: string }
@@ -367,6 +379,8 @@ export interface SessionsApi {
     mode: 'queue' | 'steer'
     content: PromptContentPart[]
     clientTimeZone?: string
+    /** Ephemeral browser position; host reality cache consumes it but message history does not persist it. */
+    clientLocation?: ClientLocation
   }>):
   Promise<RpcResponse<{ accepted: true; command?: { kind: 'success'; text?: string } }>>
 

@@ -8,7 +8,7 @@ import type { MessageId } from '@phoenix-ai/dsh-llm/brand'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm/types'
 import type { SessionId } from '@phoenix-ai/dsh-session/types'
 import type { RpcRequest, RpcResponse } from './rpc.ts'
-import type { HistoryEntry, SessionProjectionsBlock } from './sessions.ts'
+import type { ClientLocation, HistoryEntry, SessionProjectionsBlock } from './sessions.ts'
 
 /** Complete durable direct-child catalog row. */
 export type SubagentListEntry =
@@ -100,6 +100,8 @@ export interface SubagentsApi {
         content: ContentBlock[]
         /** Optional browser zone sampled for this exact human prompt. */
         clientTimeZone?: string
+        /** Ephemeral browser position; never written into durable message provenance. */
+        clientLocation?: ClientLocation
       }
     >,
     signal: AbortSignal,
