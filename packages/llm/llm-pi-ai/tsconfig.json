@@ -24,6 +24,9 @@
       "path": "../../llm/llm"
     },
     {
+      "path": "../../core/agent"
+    },
+    {
       "path": "../../attachment/attachment"
     },
     {
