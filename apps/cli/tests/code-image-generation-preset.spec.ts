@@ -16,4 +16,9 @@ it('keeps image_generation exposed in Code Mode just like the standard preset', 
 
   expect(standard).toContain(imageGenerationRow)
   expect(code).toContain(imageGenerationRow)
+  expect(standard).toContain('imágenes reales en raster y de alta calidad')
+  expect(standard).toContain('backend=codex')
+  expect(standard).toContain('backend=free')
+  expect(code).toContain('high-quality raster asset')
+  expect(code).toContain('instead of faking the image')
 })
