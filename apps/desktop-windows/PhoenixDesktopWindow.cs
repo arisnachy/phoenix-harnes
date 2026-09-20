@@ -25,6 +25,8 @@ internal sealed class PhoenixDesktopWindow : Form
     private int? browserWidthOverride;
     private Task? browserInitializationTask;
     private DateTimeOffset lastPhoenixNavigationAt = DateTimeOffset.MinValue;
+    private int phoenixNavigationRetryCount;
+    private bool phoenixNavigationRetryScheduled;
 
     // Exposed to the native smoke test so CI verifies the real SplitContainer state,
     // not only the pure layout contract.
@@ -173,6 +175,8 @@ internal sealed class PhoenixDesktopWindow : Form
         }
 
         runtimeReady = true;
+        phoenixNavigationRetryCount = 0;
+        phoenixNavigationRetryScheduled = false;
         SetStartupStatus("Abriendo Phoenix…");
         if (phoenixView.CoreWebView2 is not null)
             _ = NavigatePhoenixFreshAsync();
@@ -199,6 +203,30 @@ internal sealed class PhoenixDesktopWindow : Form
 
         lastPhoenixNavigationAt = DateTimeOffset.UtcNow;
         core.Navigate(launchUri.Uri.ToString());
+    }
+
+    private async Task RetryPhoenixNavigationAsync(int attempt)
+    {
+        if (phoenixNavigationRetryScheduled || IsDisposed || !runtimeReady)
+            return;
+
+        phoenixNavigationRetryScheduled = true;
+        try
+        {
+            await Task.Delay(DesktopNavigationRecovery.RetryDelayMilliseconds(attempt));
+            if (IsDisposed || !runtimeReady || phoenixView.CoreWebView2 is null)
+                return;
+
+            await NavigatePhoenixFreshAsync();
+        }
+        catch (Exception ex)
+        {
+            DesktopLog.Write("Phoenix WebView retry failed before navigation.", ex);
+        }
+        finally
+        {
+            phoenixNavigationRetryScheduled = false;
+        }
     }
 
     internal Task ClearSessionAsync()
@@ -364,13 +392,25 @@ internal sealed class PhoenixDesktopWindow : Form
                 if (!runtimeReady) return;
                 if (e.IsSuccess)
                 {
+                    phoenixNavigationRetryCount = 0;
+                    phoenixNavigationRetryScheduled = false;
                     startupOverlay.Visible = false;
+                    return;
                 }
-                else
+
+                var status = e.WebErrorStatus.ToString();
+                if (DesktopNavigationRecovery.IsTransient(status)
+                    && phoenixNavigationRetryCount < DesktopNavigationRecovery.MaxRetries)
                 {
-                    SetStartupStatus($"Phoenix está activo, pero la interfaz no pudo cargarse ({e.WebErrorStatus}).\n\nDiagnóstico: {Program.LogPath}", isError: true);
-                    DesktopLog.Write($"Phoenix WebView navigation failed: {e.WebErrorStatus}");
+                    phoenixNavigationRetryCount++;
+                    SetStartupStatus("Phoenix está terminando de iniciar…");
+                    DesktopLog.Write($"Transient Phoenix WebView navigation failure: {status}; retry {phoenixNavigationRetryCount}/{DesktopNavigationRecovery.MaxRetries}.");
+                    _ = RetryPhoenixNavigationAsync(phoenixNavigationRetryCount);
+                    return;
                 }
+
+                SetStartupStatus($"Phoenix está activo, pero la interfaz no pudo cargarse ({status}).\n\nDiagnóstico: {Program.LogPath}", isError: true);
+                DesktopLog.Write($"Phoenix WebView navigation failed after retries: {status}");
             };
             await phoenixView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(BridgeScript);
 
