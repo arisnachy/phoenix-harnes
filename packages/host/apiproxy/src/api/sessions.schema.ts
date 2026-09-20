@@ -305,12 +305,21 @@ export const promptContentPartSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('file'), mediaType: z.string().min(1), data: z.string(), name: z.string().optional() }),
 ])
 
+/** Browser position: bounded WGS84 coordinates plus browser-reported accuracy and epoch observation time. */
+export const clientLocationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  accuracyMeters: z.number().positive().max(100_000),
+  observedAt: z.number().int().nonnegative(),
+})
+
 /** session.prompt request payload, including optional browser-local request provenance. */
 export const sessionPromptRequestSchema = z.object({
   sessionId: sessionIdSchema,
   mode: z.union([z.literal('queue'), z.literal('steer')]),
   content: z.array(promptContentPartSchema),
   clientTimeZone: z.string().optional(),
+  clientLocation: clientLocationSchema.optional(),
 }) as unknown as z.ZodType<RequestPayload<'session.prompt'>>
 
 /** session.prompt response value (the command slot appears only when the prompt dispatched a slash command). */
