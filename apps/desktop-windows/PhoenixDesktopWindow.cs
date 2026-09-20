@@ -34,6 +34,7 @@ internal sealed class PhoenixDesktopWindow : Form
     // Exposed to the native smoke test so CI verifies the real SplitContainer state,
     // not only the pure layout contract.
     internal bool IsBrowserPaneVisible => !split.Panel2Collapsed;
+    internal bool RuntimeReady => runtimeReady;
 
     internal event EventHandler? LogoutRequested;
 
@@ -136,6 +137,24 @@ internal sealed class PhoenixDesktopWindow : Form
         BringToFront();
     }
 
+    internal void PrepareForAppEntry()
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired)
+        {
+            try { BeginInvoke((Action)PrepareForAppEntry); } catch { }
+            return;
+        }
+
+        // Re-entering Phoenix must never resurrect an old browser split as if it were the app
+        // itself. Keep the browser session available in memory, but return the visible surface to
+        // chat-first every time the user opens Phoenix from the EXE or tray.
+        if (DesktopStartupContract.ReentryCollapsesBrowser && !split.Panel2Collapsed)
+            SetBrowserVisible(false);
+
+        RefreshPhoenixOnEntry();
+    }
+
     internal void RefreshPhoenixOnEntry()
     {
         if (IsDisposed || !runtimeReady || phoenixView.CoreWebView2 is null) return;
@@ -151,6 +170,18 @@ internal sealed class PhoenixDesktopWindow : Form
             return;
 
         _ = NavigatePhoenixFreshAsync();
+    }
+
+    internal void MarkRuntimeUnavailable()
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired)
+        {
+            try { BeginInvoke((Action)MarkRuntimeUnavailable); } catch { }
+            return;
+        }
+
+        runtimeReady = false;
     }
 
     internal void SetStartupStatus(string text, bool isError = false)
