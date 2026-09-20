@@ -101,6 +101,12 @@ True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch si
 True(DesktopStartupContract.EmbeddedBrowserStartsLazy, "embedded browser does not delay chat startup", failures);
 True(DesktopStartupContract.UserCloseHidesToTray, "user close hides Phoenix to tray instead of stopping runtime", failures);
 Equal("Iniciando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
+EqualInt(3, DesktopRuntimeLaunchContract.ReadyConsecutiveSamples, "desktop waits for multiple stable backend probes", failures);
+EqualInt(700, DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds, "stable backend probes are spaced out", failures);
+True(DesktopNavigationRecovery.IsTransient("ConnectionAborted"), "connection-aborted WebView startup failure is retried", failures);
+True(DesktopNavigationRecovery.IsTransient("ConnectionReset"), "connection-reset WebView startup failure is retried", failures);
+False(DesktopNavigationRecovery.IsTransient("CertificateIsInvalid"), "non-transient WebView failures are not retried blindly", failures);
+True(DesktopNavigationRecovery.RetryDelayMilliseconds(1) < DesktopNavigationRecovery.RetryDelayMilliseconds(4), "WebView retry backoff increases", failures);
 
 var toolchainEntries = DesktopBundledToolchain.CandidatePathEntries(@"C:\Program Files\Phoenix");
 True(toolchainEntries.Any(path => path.EndsWith(@"runtime-tools\node", StringComparison.OrdinalIgnoreCase)), "bundled Node path is declared", failures);
@@ -175,6 +181,7 @@ finally
 
 var sourceTestRoot = Path.Combine(Path.GetTempPath(), $"phoenix-source-test-{Guid.NewGuid():N}");
 var sourceInstallRoot = Path.Combine(Path.GetTempPath(), $"phoenix-install-test-{Guid.NewGuid():N}");
+var previousSourceRoot = Environment.GetEnvironmentVariable("PHOENIX_SOURCE_ROOT");
 try
 {
     Directory.CreateDirectory(Path.Combine(sourceTestRoot, "apps", "cli"));
@@ -184,8 +191,18 @@ try
     File.WriteAllText(Path.Combine(sourceTestRoot, "scripts", "phoenix-windows-supervisor.mjs"), "// supervisor");
     True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "bootstrappable Phoenix source is recognized without node_modules or .git", failures);
 
-    DesktopSourceCheckout.Remember(sourceInstallRoot, sourceTestRoot);
-    Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "remembered bootstrappable source resolves before managed bootstrap", failures);
+    // Explicit/configured source roots are candidates, but discovery alone must not persist
+    // them as the trusted backend until the runtime stability handshake succeeds.
+    Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", sourceTestRoot);
+    Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "configured bootstrappable source resolves before managed bootstrap", failures);
+    False(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)), "unverified source is not persisted as the backend of record", failures);
+
+    DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
+    Equal(Path.GetFullPath(sourceTestRoot), File.ReadAllText(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)).Trim(), "verified backend root is persisted", failures);
+    Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "verified backend root resolves first on later launches", failures);
+
+    DesktopInstallationState.RememberApplicationRoot(sourceInstallRoot, @"C:\Program Files\Phoenix");
+    Equal(@"C:\Program Files\Phoenix", File.ReadAllText(DesktopInstallationState.AppRootPath(sourceInstallRoot)).Trim(), "installed application root is persisted separately from backend root", failures);
 
     Directory.CreateDirectory(Path.Combine(sourceTestRoot, ".git"));
     True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "normal Git checkout remains recognized", failures);
@@ -199,8 +216,11 @@ try
 }
 finally
 {
-    Directory.Delete(sourceTestRoot, recursive: true);
-    Directory.Delete(sourceInstallRoot, recursive: true);
+    Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", previousSourceRoot);
+    if (Directory.Exists(sourceTestRoot))
+        Directory.Delete(sourceTestRoot, recursive: true);
+    if (Directory.Exists(sourceInstallRoot))
+        Directory.Delete(sourceInstallRoot, recursive: true);
 }
 
 // A managed runtime is healthy only after install/build completed. Old desktop builds could leave
