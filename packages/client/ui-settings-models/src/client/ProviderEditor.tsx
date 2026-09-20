@@ -498,6 +498,20 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             {shownKeyFailure === undefined ? null : <p className={styles['error']}>{t(shownKeyFailure)}</p>}
           </div>
         )}
+        {props.credentialOnly === true || props.provider !== CODEX_PROVIDER ? null : (
+          <CodexReserveModelsEditor
+            reserveModels={reserveModels}
+            onChange={(next) => {
+              setDraft(current => next.length === 0
+                ? schema.deletePath(current, ['reserveModels'])
+                : schema.setPath(current, ['reserveModels'], next))
+            }}
+            probe={probe}
+            api={api}
+            t={t}
+            disabled={disabled}
+          />
+        )}
         {props.credentialOnly === true ? null : <details className={styles['customized']}>
           <summary className={styles['customizedSummary']}>{t('customized')}</summary>
           <div className={styles['customizedBody']}>
@@ -583,20 +597,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 />
               )
               : props.provider === CODEX_PROVIDER
-                ? (
-                  <CodexReserveModelsEditor
-                    reserveModels={reserveModels}
-                    onChange={(next) => {
-                      setDraft(current => next.length === 0
-                        ? schema.deletePath(current, ['reserveModels'])
-                        : schema.setPath(current, ['reserveModels'], next))
-                    }}
-                    probe={probe}
-                    api={api}
-                    t={t}
-                    disabled={disabled}
-                  />
-                )
+                ? null
                 : <ModelListEditor {...catalogProps} probe={probe} probeBlocked={keyFailure} api={api} />}
           </div>
         </details>}
