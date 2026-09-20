@@ -807,6 +807,8 @@ internal sealed class PhoenixDesktopWindow : Form
           if (submit) {
             if (touchedForms.size !== 1) throw new Error('submit requires all changed fields to belong to one form');
             const form = Array.from(touchedForms)[0];
+            const actionOrigin = new URL(form.action || location.href, location.href).origin;
+            if (actionOrigin !== expected) throw new Error('cross-origin form submit refused');
             if (typeof form.requestSubmit === 'function') form.requestSubmit();
             else form.submit();
             submitted = true;
@@ -887,6 +889,8 @@ internal sealed class PhoenixDesktopWindow : Form
           if (submit) {
             const form = secretField?.form || accountField?.form || null;
             if (form) {
+              const actionOrigin = new URL(form.action || location.href, location.href).origin;
+              if (actionOrigin !== expected) throw new Error('cross-origin login submit refused');
               if (typeof form.requestSubmit === 'function') form.requestSubmit();
               else form.submit();
               submitted = true;
