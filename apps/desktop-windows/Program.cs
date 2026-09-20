@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO.Compression;
 using System.Net.Http;
-using System.Text;
 using Microsoft.Win32;
 
 namespace Phoenix.Desktop;
@@ -715,51 +714,28 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
     private async Task<bool> IsCompatiblePhoenixListenerAsync()
     {
-        const string script = """
-            $ErrorActionPreference = 'SilentlyContinue'
-            $owners = @(Get-NetTCPConnection -State Listen -LocalPort 3080 -ErrorAction SilentlyContinue |
-              Select-Object -ExpandProperty OwningProcess -Unique)
-            foreach ($ownerId in $owners) {
-              $current = Get-CimInstance Win32_Process -Filter "ProcessId=$ownerId" -ErrorAction SilentlyContinue
-              for ($depth = 0; $depth -lt 6 -and $current; $depth++) {
-                $command = [string]$current.CommandLine
-                if ($command) { Write-Output $command }
-                $parentId = [int]$current.ParentProcessId
-                if ($parentId -le 0) { break }
-                $current = Get-CimInstance Win32_Process -Filter "ProcessId=$parentId" -ErrorAction SilentlyContinue
-              }
-            }
-            """;
-
-        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-        var psi = new ProcessStartInfo
+        try
         {
-            FileName = "powershell.exe",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        psi.ArgumentList.Add("-NoLogo");
-        psi.ArgumentList.Add("-NoProfile");
-        psi.ArgumentList.Add("-NonInteractive");
-        psi.ArgumentList.Add("-EncodedCommand");
-        psi.ArgumentList.Add(encoded);
+            // Identify Phoenix through its own HTML shell instead of asking PowerShell/WMI which
+            // process owns port 3080. This keeps normal EXE startup shell-free and also proves that
+            // the web UI, not merely a TCP listener, is actually ready for WebView2.
+            using var response = await http.GetAsync(Program.PhoenixUri, HttpCompletionOption.ResponseContentRead);
+            if (!response.IsSuccessStatusCode)
+            {
+                DesktopLog.Write($"Phoenix identity probe returned HTTP {(int)response.StatusCode}.");
+                return false;
+            }
 
-        using var probe = Process.Start(psi);
-        if (probe is null) return false;
-        var stdoutTask = probe.StandardOutput.ReadToEndAsync();
-        var stderrTask = probe.StandardError.ReadToEndAsync();
-        await probe.WaitForExitAsync();
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
-        if (!string.IsNullOrWhiteSpace(stderr))
-            DesktopLog.Write("Phoenix listener probe stderr: " + stderr.Trim());
-
-        var lines = stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        var compatible = lines.Any(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine);
-        DesktopLog.Write($"Phoenix listener probe compatible={compatible}; candidates={lines.Length}.");
-        return probe.ExitCode == 0 && compatible;
+            var html = await response.Content.ReadAsStringAsync();
+            var compatible = DesktopPhoenixIdentity.LooksLikePhoenixHtml(html);
+            DesktopLog.Write($"Phoenix identity probe compatible={compatible}; bytes={html.Length}.");
+            return compatible;
+        }
+        catch (Exception ex)
+        {
+            DesktopLog.Write("Phoenix identity probe failed.", ex);
+            return false;
+        }
     }
 
     private async Task<bool> StartOwnedRuntimeAsync(bool openWhenReady, bool reportFailure = true)
@@ -1017,17 +993,11 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         return true;
     }
 
-    private async Task<bool> IsReadyAsync()
+    private Task<bool> IsReadyAsync()
     {
-        try
-        {
-            using var response = await http.GetAsync(Program.PhoenixUri);
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
+        // Readiness means the Phoenix application shell is actually being served, not just that
+        // something answered on port 3080. This avoids racing WebView2 against a half-started host.
+        return IsCompatiblePhoenixListenerAsync();
     }
 
     private void StopOwnedRuntime()
