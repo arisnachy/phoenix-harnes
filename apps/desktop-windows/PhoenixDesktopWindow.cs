@@ -296,6 +296,7 @@ internal sealed class PhoenixDesktopWindow : Form
                 startupAnimationTimer.Stop();
                 return;
             }
+
             startupAnimationFrame = (startupAnimationFrame + 1) % spinnerFrames.Length;
             startupSpinner.Text = spinnerFrames[startupAnimationFrame];
         };
