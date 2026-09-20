@@ -135,6 +135,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     private readonly EventWaitHandle showEvent;
     private readonly Thread showSignalThread;
     private Process? ownedRuntime;
+    private Task? startupTask;
     private string runtimeRoot = Program.RuntimeRoot;
     private bool sourceCheckoutRuntime;
     private bool externallyManaged;
@@ -160,7 +161,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         DesktopLog.Write($"Desktop browser control pipe ready: {browserControl.PipeName}");
 
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Abrir Phoenix", null, (_, _) => ShowWindow());
+        menu.Items.Add("Abrir Phoenix", null, (_, _) => ShowWindow(userEntry: true));
         restartItem = new ToolStripMenuItem("Reiniciar runtime administrado", null, async (_, _) => await RestartOwnedRuntimeAsync());
         menu.Items.Add(restartItem);
 
@@ -192,7 +193,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             Visible = true,
             ContextMenuStrip = menu,
         };
-        tray.DoubleClick += (_, _) => ShowWindow();
+        tray.DoubleClick += (_, _) => ShowWindow(userEntry: true);
 
         showSignalThread = new Thread(ListenForShowSignal)
         {
@@ -202,9 +203,8 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         showSignalThread.Start();
 
         window.SetStartupStatus(DesktopStartupContract.InitialStatus);
-        ShowWindow();
+        ShowWindow(userEntry: true);
         DesktopLog.Write("Desktop window shown before runtime readiness.");
-        _ = StartAsync();
     }
 
     private void ListenForShowSignal()
@@ -215,7 +215,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             {
                 showEvent.WaitOne();
                 if (shuttingDown) break;
-                ShowWindow();
+                ShowWindow(userEntry: true);
             }
         }
         catch (Exception ex)
@@ -224,16 +224,36 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         }
     }
 
-    private void ShowWindow()
+    private void ShowWindow(bool userEntry = false)
     {
         if (window.IsDisposed || shuttingDown) return;
         if (window.InvokeRequired)
         {
-            try { window.BeginInvoke((Action)ShowWindow); } catch { }
+            try { window.BeginInvoke((Action)(() => ShowWindow(userEntry))); } catch { }
             return;
         }
+
         window.ShowAndActivate();
-        window.RefreshPhoenixOnEntry();
+        if (userEntry)
+        {
+            window.PrepareForAppEntry();
+            EnsureStartupAttempt();
+        }
+        else
+        {
+            window.RefreshPhoenixOnEntry();
+        }
+    }
+
+    private void EnsureStartupAttempt()
+    {
+        if (shuttingDown || window.RuntimeReady)
+            return;
+        if (startupTask is { IsCompleted: false })
+            return;
+
+        DesktopLog.Write("Starting or retrying Phoenix desktop startup after app entry.");
+        startupTask = StartAsync();
     }
 
     private async Task StartAsync()
@@ -747,6 +767,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         if (ownedRuntime is { HasExited: false })
             return true;
 
+        window.MarkRuntimeUnavailable();
         window.SetStartupStatus("Iniciando Phoenix…");
         var launcher = Path.Combine(runtimeRoot, "scripts", "phoenix-windows-supervisor.mjs");
         if (!File.Exists(launcher))
@@ -935,6 +956,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     {
         if (externallyManaged)
             return;
+        window.MarkRuntimeUnavailable();
         StopOwnedRuntime();
         window.SetStartupStatus("Reiniciando Phoenix…");
         await Task.Delay(700);
@@ -966,6 +988,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
             if (ownedRuntime is { HasExited: false })
             {
+                window.MarkRuntimeUnavailable();
                 window.SetStartupStatus(enabled
                     ? "Reiniciando Phoenix con consola de desarrollo…"
                     : "Reiniciando Phoenix en segundo plano…");
