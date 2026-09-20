@@ -34,6 +34,11 @@ Equal(null, BrowserNavigation.NormalizeAddress("javascript:alert(1)")?.ToString(
 Equal(null, BrowserNavigation.NormalizeAddress("data:text/html,boom")?.ToString(), "data scheme rejected", failures);
 Equal(null, BrowserNavigation.NormalizeAddress("file:///C:/Windows/System32")?.ToString(), "file scheme rejected", failures);
 
+Equal("https://example.com", BrowserNavigation.NormalizeCredentialOrigin("https://Example.com/login?next=1"), "credential origin canonicalizes https", failures);
+Equal("http://localhost:3080", BrowserNavigation.NormalizeCredentialOrigin("http://localhost:3080/login"), "credential origin allows loopback http", failures);
+Equal(null, BrowserNavigation.NormalizeCredentialOrigin("http://example.com/login"), "credential origin rejects remote http", failures);
+Equal(null, BrowserNavigation.NormalizeCredentialOrigin("https://user@example.com/login"), "credential origin rejects user info", failures);
+
 True(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"https://example.com\"}", out var open), "open command parses", failures);
 Equal("phoenix.browser.open", open.Type, "open command type", failures);
 Equal("https://example.com", open.Url, "open command url", failures);
@@ -51,6 +56,53 @@ False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"java
 
 False(BrowserCommand.TryParse("{\"type\":\"unknown\"}", out _), "unknown command rejected", failures);
 
+False(
+    BrowserCommand.TryParse("{\"type\":\"phoenix.browser.inspect\"}", out _),
+    "web bridge cannot invoke automation commands",
+    failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.inspect\"}",
+        out var inspect,
+        allowAutomation: true),
+    "runtime pipe admits browser inspection",
+    failures);
+Equal("phoenix.browser.inspect", inspect.Type, "inspection command type", failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.fill-form\",\"origin\":\"https://example.com/form\",\"fields\":[{\"field\":0,\"value\":\"synthetic-value\"}],\"submit\":true}",
+        out var fill,
+        allowAutomation: true),
+    "runtime pipe admits origin-bound form filling",
+    failures);
+Equal("https://example.com", fill.Origin, "form origin canonicalized", failures);
+True(fill.Submit, "form submit preserved", failures);
+EqualInt(1, fill.Fields?.Count ?? 0, "form field count preserved", failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.click-text\",\"origin\":\"https://example.com\",\"text\":\"Continue\"}",
+        out var clickText,
+        allowAutomation: true),
+    "runtime pipe admits origin-bound text click",
+    failures);
+Equal("Continue", clickText.Text, "click text preserved", failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com/login\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",
+        out var loginCommand,
+        allowAutomation: true),
+    "runtime pipe admits origin-bound login",
+    failures);
+Equal("https://example.com", loginCommand.Origin, "login origin canonicalized", failures);
+True(loginCommand.Submit, "login submits by default", failures);
+False(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"http://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",
+        out _,
+        allowAutomation: true),
+    "runtime pipe rejects insecure remote login origin",
+    failures);
+
 // The model/runtime must control the embedded WebView through a direct current-user named pipe.
 // This prevents browser_open from falling back to global Ctrl+L/type/Enter input.
 var controlDescriptorPath = Path.Combine(Path.GetTempPath(), $"phoenix-desktop-control-{Guid.NewGuid():N}.json");
@@ -59,7 +111,7 @@ using (var control = new DesktopBrowserControlServer(
     command =>
     {
         receivedControlCommand = command;
-        return Task.CompletedTask;
+        return Task.FromResult<string?>(null);
     },
     controlDescriptorPath))
 {
