@@ -2,10 +2,11 @@
  * Provider-aware real-raster image-generation bridge.
  *
  * OpenAI Codex callers use the locally installed Codex CLI and its authenticated
- * built-in image tool. Non-Codex callers use a configured Hugging Face free-tier
- * image route. The bridge never falls back to SVG/HTML/CSS/canvas artwork and
- * never forwards an OPENAI_API_KEY or silently crosses into separately billed
- * OpenAI API usage.
+ * built-in image tool. Fallbacks prefer a configured local endpoint with no
+ * hosted quota, then configured allocation-backed providers (Cloudflare Workers
+ * AI before Hugging Face). The bridge never falls back to SVG/HTML/CSS/canvas
+ * artwork and never forwards an OPENAI_API_KEY or silently crosses into
+ * separately billed OpenAI API usage.
  * @module dsh-llm-pi-ai/image-generation
  */
 
@@ -100,7 +101,7 @@ type ImageSize = 'auto' | '1024x1024' | '1536x1024' | '1024x1536'
 type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
 type ImageBackground = 'auto' | 'opaque' | 'transparent'
 export type ImageGenerationBackend = 'auto' | 'codex' | 'local' | 'free'
-export type ImageGenerationProvider = 'codex' | 'local' | 'huggingface'
+export type ImageGenerationProvider = 'codex' | 'local' | 'cloudflare' | 'huggingface'
 
 interface ImageGenerationArgs {
   readonly prompt: string
@@ -125,7 +126,7 @@ interface ImageGenerationValue {
 export const imageGenerationToolDescription =
   'Generate one actual, high-quality raster image with PHOENIX. Never satisfy an image, photo, hero, logo, banner, poster, cover, illustration, mockup, thumbnail, or visual-asset request with SVG, HTML, CSS, canvas drawing, emoji, ASCII art, a placeholder, or an anthropomorphic mascot unless the user explicitly requested that style. '
   + 'Use this whenever the user explicitly asks to create, draw, design, render, visualize, or generate an image, and when a project materially requires real imagery. '
-  + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint with no hosted quota, then the configured Hugging Face free-tier raster provider. '
+  + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint with no hosted quota, then configured allocation-backed providers: Cloudflare Workers AI first and Hugging Face free credits second. '
   + 'Do not claim that only an external connector such as Higgsfield is available until image_generation itself has actually been attempted. Do not silently switch to a separately billed OpenAI API. '
   + 'If a real raster backend is unavailable, fail loudly instead of fabricating a vector/HTML substitute. '
   + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, generate type-appropriate imagery when it materially improves the requested result and wire the generated attachment into the final artifact when the format permits it; keep data charts and tables on structured visualization surfaces rather than inventing them as image content. '
@@ -225,8 +226,12 @@ function codexHome(): string {
   return configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.codex')
 }
 
+const DEFAULT_CLOUDFLARE_IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell'
 const DEFAULT_FREE_IMAGE_MODEL = 'stabilityai/stable-diffusion-3-medium-diffusers'
 const MAX_FREE_IMAGE_BYTES = 32 * 1024 * 1024
+
+/** Hosted zero-upfront-cost providers, in the order PHOENIX tries them. */
+export const freeImageProviderOrder = ['cloudflare', 'huggingface'] as const
 
 /** Resolve the backend attempt order without coupling image generation to the text route. */
 export function imageGenerationBackendOrder(
@@ -291,17 +296,21 @@ function imageExtension(mediaType: ImageMediaType): string {
   }
 }
 
-async function huggingFaceToken(ctx: Context): Promise<string | undefined> {
+async function credentialOrEnvironment(ctx: Context, name: string): Promise<string | undefined> {
   try {
     const credentials = ctx.get('credentials')
-    const stored = await credentials?.resolve(credentialRef('HF_TOKEN'))
+    const stored = await credentials?.resolve(credentialRef(name))
     const value = stored?.value.trim()
     if (value !== undefined && value.length > 0) return value
   } catch {
     // A composition without a credential service still gets environment fallback below.
   }
-  const fromEnvironment = process.env.HF_TOKEN?.trim()
+  const fromEnvironment = process.env[name]?.trim()
   return fromEnvironment === undefined || fromEnvironment.length === 0 ? undefined : fromEnvironment
+}
+
+async function huggingFaceToken(ctx: Context): Promise<string | undefined> {
+  return credentialOrEnvironment(ctx, 'HF_TOKEN')
 }
 
 interface LocalImageEndpoint {
@@ -404,7 +413,103 @@ async function generateWithLocalProvider(
   }
 }
 
-async function generateWithFreeProvider(
+async function generateWithCloudflareProvider(
+  ctx: Context,
+  args: ImageGenerationArgs,
+  prompt: string,
+  signal: AbortSignal,
+): Promise<ImageGenerationValue> {
+  const accountId = await credentialOrEnvironment(ctx, 'CLOUDFLARE_ACCOUNT_ID')
+  const token = await credentialOrEnvironment(ctx, 'CLOUDFLARE_API_TOKEN')
+  if (accountId === undefined || token === undefined) {
+    throw new Error(
+      'image_generation: Cloudflare Workers AI requires CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in the Phoenix credential vault or environment',
+    )
+  }
+
+  const model = process.env.PHOENIX_IMAGE_CLOUDFLARE_MODEL?.trim() || DEFAULT_CLOUDFLARE_IMAGE_MODEL
+  const quality = args.quality ?? 'auto'
+  const steps = quality === 'high' ? 8 : quality === 'low' ? 2 : 4
+  const fullPrompt = highQualityPrompt(prompt)
+  // FLUX.1-schnell currently accepts at most 2048 prompt characters.
+  const providerPrompt = fullPrompt.length <= 2048 ? fullPrompt : fullPrompt.slice(0, 2048)
+
+  let response: Response
+  try {
+    response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt: providerPrompt, steps }),
+        signal,
+      },
+    )
+  } catch (error) {
+    signal.throwIfAborted()
+    throw new Error(
+      `image_generation: Cloudflare Workers AI failed to connect: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  if (!response.ok) {
+    const diagnostic = (await response.text()).trim().slice(0, 1600)
+    const suffix = diagnostic.length === 0 ? '' : `: ${diagnostic}`
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`image_generation: Cloudflare rejected the configured Workers AI credentials${suffix}`)
+    }
+    if (response.status === 402 || response.status === 429) {
+      throw new Error(`image_generation: Cloudflare Workers AI free allocation/rate limit is unavailable${suffix}`)
+    }
+    throw new Error(`image_generation: Cloudflare Workers AI failed with HTTP ${response.status}${suffix}`)
+  }
+
+  const payload = await response.json() as {
+    readonly result?: { readonly image?: string }
+    readonly image?: string
+    readonly errors?: ReadonlyArray<{ readonly message?: string }>
+  }
+  const encoded = payload.result?.image ?? payload.image
+  if (typeof encoded !== 'string' || encoded.length === 0) {
+    const detail = payload.errors?.map(error => error.message).filter(Boolean).join('; ')
+    throw new Error(
+      `image_generation: Cloudflare Workers AI returned no image${detail ? `: ${detail}` : ''}`,
+    )
+  }
+
+  const data = Buffer.from(encoded, 'base64')
+  if (data.length === 0) throw new Error('image_generation: Cloudflare Workers AI returned an empty image')
+  if (data.length > MAX_FREE_IMAGE_BYTES) {
+    throw new Error(
+      `image_generation: Cloudflare Workers AI returned ${data.length} bytes, exceeding the ${MAX_FREE_IMAGE_BYTES}-byte safety bound`,
+    )
+  }
+  const mediaType = imageMediaTypeFromBytes(data)
+  if (mediaType === undefined) {
+    throw new Error('image_generation: Cloudflare Workers AI returned an unsupported non-raster payload')
+  }
+
+  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
+  await mkdir(generatedRoot, { recursive: true })
+  const path = join(generatedRoot, `cf-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
+  await writeFile(path, data, { flag: 'wx' })
+  const attachment = await servicesOf(ctx).attachments.saveImage({
+    data,
+    mediaType,
+    name: basename(path),
+  })
+  return {
+    provider: 'cloudflare',
+    model,
+    path,
+    attachment,
+  }
+}
+
+async function generateWithHuggingFaceProvider(
   ctx: Context,
   args: ImageGenerationArgs,
   prompt: string,
@@ -483,6 +588,27 @@ async function generateWithFreeProvider(
     path,
     attachment,
   }
+}
+
+async function generateWithFreeProvider(
+  ctx: Context,
+  args: ImageGenerationArgs,
+  prompt: string,
+  signal: AbortSignal,
+): Promise<ImageGenerationValue> {
+  const failures: string[] = []
+  for (const provider of freeImageProviderOrder) {
+    try {
+      if (provider === 'cloudflare') {
+        return await generateWithCloudflareProvider(ctx, args, prompt, signal)
+      }
+      return await generateWithHuggingFaceProvider(ctx, args, prompt, signal)
+    } catch (error) {
+      signal.throwIfAborted()
+      failures.push(`${provider}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  throw new Error(`image_generation: no configured free-allocation raster provider succeeded. ${failures.join(' | ')}`)
 }
 
 async function listGeneratedImages(root: string): Promise<GeneratedImageCandidate[]> {
@@ -774,7 +900,7 @@ export function installCodexImageGeneration(ctx: Context): void {
         backend: {
           type: 'string',
           enum: ['auto', 'codex', 'local', 'free'],
-          description: 'Image backend. Prefer auto: Codex/ChatGPT first regardless of the text model, then a configured local endpoint, then Hugging Face free tier. Explicit values disable fallback.',
+          description: 'Image backend. Prefer auto: Codex/ChatGPT first regardless of the text model, then a configured local endpoint, then Cloudflare Workers AI free allocation and Hugging Face free credits. Explicit values disable fallback.',
         },
       },
     },
@@ -783,7 +909,7 @@ export function installCodexImageGeneration(ctx: Context): void {
         type: 'object',
         additionalProperties: false,
         properties: {
-          provider: { type: 'string', enum: ['codex', 'local', 'huggingface'] },
+          provider: { type: 'string', enum: ['codex', 'local', 'cloudflare', 'huggingface'] },
           model: { type: 'string' },
           path: { type: 'string' },
           attachment: {
@@ -807,7 +933,7 @@ export function installCodexImageGeneration(ctx: Context): void {
         return [
           {
             type: 'text',
-            text: `Generated image with ${result.provider === 'codex' ? 'Codex' : result.provider === 'local' ? 'Local image backend' : 'Hugging Face'} (${result.attachment.width}×${result.attachment.height}, ${result.attachment.mediaType}).\n<path>${result.path}</path>`,
+            text: `Generated image with ${result.provider === 'codex' ? 'Codex' : result.provider === 'local' ? 'Local image backend' : result.provider === 'cloudflare' ? 'Cloudflare Workers AI' : 'Hugging Face'} (${result.attachment.width}×${result.attachment.height}, ${result.attachment.mediaType}).\n<path>${result.path}</path>`,
           },
           { type: 'image', attachment: result.attachment },
         ]
