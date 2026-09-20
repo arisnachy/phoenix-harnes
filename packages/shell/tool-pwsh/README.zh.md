@@ -26,6 +26,12 @@
 
 `command`、`workdir` 与 `timeoutMs` 在执行前经 `ctx.shell.resolve()` 按执行器配置默认值解析。workdir 默认值在工具层于 `resolve()` 之前从调用 agent 的 `session.header.cwd` 取得——每次会话的 cwd 必须来自 `exec.agent`，因为 N 个会话共享一个执行器；仅当没有会话 cwd 时执行器才回退到自己的配置 / `process.cwd()`。
 
+### `computer`（Windows）
+
+Windows 组合还会注册受保护的 `computer` 工具。在 Phoenix Desktop 中，其结构化浏览器动作直接操作内嵌 WebView2：`browser_inspect` 返回可见文字、字段元数据与按钮，但不会返回字段当前值；`browser_fill_form` 填写已检查的非机密字段；`browser_click_text` 按可见文字点击按钮/链接；`browser_login` 则在内部从 `ctx.credentials` 解析按 origin 绑定的登录信息。
+
+用户只需一次执行 `/secret login-set https://example.com ACCOUNT SECRET` 即可授权该站点。之后这个精确的规范化 origin 会拥有 `autonomous` 授权，用于无人值守的打开、登录、填表与点击，因此重复任务不必在每一步再次请求 workspace-write 批准。账户机密不会成为模型参数、工具结果、prompt token 或检查结果。TypeScript broker 与 WebView 脚本都会再次核对 origin；远程授权必须使用 HTTPS（回环地址 HTTP 例外）。其他 Computer Use 动作仍遵守原有 sandbox/审批策略。
+
 ### Managed shell environment
 
 每次前台与后台模型 pwsh 调用都会通过共享的 [`dsh-shell-env`](../shell-env/) 注册表收到一份新收集的受信任 `DSH_*` 环境：`DSH_HOME`（Harness 主目录绝对路径）、`DSH_SHELL=1`、agent 的 `DSH_SESSION_ID`，以及活跃持久化后端定位到 JSONL 时的 `DSH_SESSION_JSONL`。向 `ctx.shellEnv` 贡献 `DSH_*` 事实的插件对 pwsh 调用与 bash 调用一视同仁。快照通过专用的 `ShellExecRequest.dshEnv` 通道传递；`process.env` 永不被修改。描述只教授通用的 `$env:DSH_*` 约定，而不是点名持久化相关的变量。
