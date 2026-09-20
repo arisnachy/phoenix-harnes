@@ -12,7 +12,7 @@ const VISUAL_TYPES = ['chart', 'table', 'metrics', 'timeline', 'cards', 'progres
 export function createPhoenixVisualizerTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_visualize',
-    description: 'Present structured information as a rich inline Phoenix visual when a chart, metric panel, table, timeline, card grid, or progress view materially improves the answer. Prefer this over ASCII charts or dumping visualization JSON into prose. The visual is declarative and presentation-only.',
+    description: 'Present structured information as a rich inline Phoenix visual when a chart, metric panel, table, timeline, card grid, or progress view materially improves the answer. Prefer this over ASCII charts or dumping visualization JSON into prose. This tool is for data/structure only: never use it to imitate a requested photo, illustration, logo, hero, banner, or generated image with shapes or SVG-like artwork; use image_generation for real raster imagery. The visual is declarative and presentation-only.',
     parameters: {
       title: {
         type: 'string',
