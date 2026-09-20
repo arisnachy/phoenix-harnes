@@ -123,6 +123,11 @@ interface RuntimeServiceTelemetry {
     readonly events: null
     readonly availability: null
   }
+  readonly phoenix: {
+    readonly plugins: readonly Record<string, unknown>[]
+    readonly update: Record<string, unknown> | null
+    readonly localModel: Record<string, unknown> | null
+  }
 }
 
 export interface RealitySnapshot {
@@ -499,7 +504,10 @@ async function probeRuntimeServices(ctx: Context): Promise<RuntimeServiceTelemet
   }
 
   const accountLimits = accounts
-    .filter(account => account.primaryLimit !== null || account.secondaryLimit !== null || account.credits !== null || account.usage !== null)
+    .filter(account => account.primaryLimit !== undefined
+      || account.secondaryLimit !== undefined
+      || account.credits !== undefined
+      || account.usage !== undefined)
     .map(account => ({
       key: account.key,
       provider: account.provider ?? null,
@@ -508,6 +516,19 @@ async function probeRuntimeServices(ctx: Context): Promise<RuntimeServiceTelemet
       credits: account.credits ?? null,
       usage: account.usage ?? null,
     }))
+
+  const pluginInventory = get.call(ctx, 'pluginInventory')
+  const pluginList = method<() => { readonly entries: readonly Record<string, unknown>[] }>(pluginInventory, 'list')
+  const updateState = method<() => Record<string, unknown>>(pluginInventory, 'updateState')
+  const localModelState = method<() => Promise<Record<string, unknown>>>(pluginInventory, 'localModelState')
+  let localModel: Record<string, unknown> | null = null
+  if (localModelState !== undefined) {
+    try {
+      localModel = await localModelState()
+    } catch {
+      localModel = null
+    }
+  }
 
   return {
     authorization: { accounts, mcp },
@@ -532,6 +553,16 @@ async function probeRuntimeServices(ctx: Context): Promise<RuntimeServiceTelemet
       connectorCandidates: calendarCandidates(accounts, mcp),
       events: null,
       availability: null,
+    },
+    phoenix: {
+      plugins: pluginList?.().entries.map(entry => ({
+        entryId: entry.entryId ?? null,
+        moduleName: entry.moduleName ?? null,
+        enabled: entry.enabled ?? null,
+        fiberPhase: entry.fiberPhase ?? null,
+      })) ?? [],
+      update: updateState?.() ?? null,
+      localModel,
     },
   }
 }
@@ -773,8 +804,19 @@ export class RealityContextEngine {
         channel: process.env.PHOENIX_CHANNEL ?? process.env.PHOENIX_UPDATE_CHANNEL ?? null,
         commit: process.env.PHOENIX_RUNTIME_SHA ?? process.env.GIT_COMMIT ?? null,
         version: process.env.npm_package_version ?? null,
-        updateState: process.env.PHOENIX_UPDATE_STATE ?? null,
+        update: runtimeValue?.phoenix.update ?? (
+          process.env.PHOENIX_UPDATE_STATE === undefined
+            ? null
+            : { status: process.env.PHOENIX_UPDATE_STATE, source: 'environment' }
+        ),
         supervisor: process.env.PHOENIX_SUPERVISOR === '1' ? 'active' : 'unknown',
+        plugins: runtimeValue?.phoenix.plugins ?? [],
+        degradedPlugins: (runtimeValue?.phoenix.plugins ?? [])
+          .filter(plugin => plugin.fiberPhase === 'failed'),
+        localModel: runtimeValue?.phoenix.localModel ?? null,
+        observedAt: runtimeServices.observedAt,
+        expiresAt: runtimeServices.expiresAt,
+        stale: runtimeServices.stale,
       },
       ai: {
         status: runtimeValue === null ? 'unknown' : 'available',
