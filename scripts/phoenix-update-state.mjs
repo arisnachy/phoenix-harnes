@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
 const REPLACE_ATTEMPTS = 4
@@ -50,6 +50,8 @@ function readActiveRuntimeTarget(controlDirectory) {
   try {
     const value = JSON.parse(readFileSync(path, 'utf8'))
     if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
+    if (typeof value.path !== 'string' || value.path.trim().length === 0) return undefined
+    if (!existsSync(resolve(value.path))) return undefined
     return value.target
   } catch {
     return undefined
