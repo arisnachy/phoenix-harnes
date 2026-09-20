@@ -8,9 +8,10 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, resolve } from 'node:path'
+import { homedir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import {
@@ -133,6 +134,30 @@ export function codexAppServerArgv(): string[] {
   return [process.execPath, CODEX_PACKAGE_BIN, 'app-server', '--stdio']
 }
 
+/**
+ * Preserve the real Codex home while giving Phoenix-owned Codex subagents their
+ * own SQLite state. Explicit CODEX_SQLITE_HOME remains authoritative.
+ */
+export function codexSubagentEnvironment(
+  explicit: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const configuredHome = explicit.CODEX_HOME?.trim() ?? process.env.CODEX_HOME?.trim()
+  const home = configuredHome && configuredHome.length > 0
+    ? resolve(configuredHome)
+    : join(homedir(), '.codex')
+  const configuredSqlite = explicit.CODEX_SQLITE_HOME?.trim()
+    ?? process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
+  const sqliteHome = configuredSqlite && configuredSqlite.length > 0
+    ? resolve(configuredSqlite)
+    : join(home, 'phoenix-runtime', 'sqlite', 'subagent')
+  mkdirSync(sqliteHome, { recursive: true })
+  return {
+    ...explicit,
+    CODEX_HOME: home,
+    CODEX_SQLITE_HOME: sqliteHome,
+  }
+}
+
 /** Fully resolved inputs for one Codex app-server run. */
 export interface CodexRunSpec {
   /** Parent Session workspace, also supplied to `thread/start`. */
@@ -238,7 +263,7 @@ export async function startCodexRun(
       cwd: spec.cwd,
       stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
       graceMs: spec.disposeGraceMs,
-      env: spec.env,
+      env: codexSubagentEnvironment(spec.env),
     })
   } catch (error: unknown) {
     throw new CodexRunFailure({
