@@ -406,9 +406,12 @@ export class PiAiAdapter extends LlmAdapter {
         'AUTH',
       )
     }
+    const providerWireModel = options.provider === 'deepseek' && model.id === 'deepseek-v4.1-flash'
+      ? { ...model, id: 'deepseek-flash' }
+      : model
     const wireModel = platformKeyFallback
       ? codexPlatformFallbackModel(model, profile.baseURL)
-      : model
+      : providerWireModel
 
     const consumer = new AbortController()
     const upstream = options.signal === undefined
@@ -476,7 +479,7 @@ export class PiAiAdapter extends LlmAdapter {
         // matter what a model object says, so the fallback calls the platform
         // Responses implementation directly.
         ? openAIResponsesApi().streamSimple(wireModel, providerContext, streamOptions)
-        : snapshot.models.streamSimple(model, providerContext, streamOptions)
+        : snapshot.models.streamSimple(wireModel, providerContext, streamOptions)
       const iterator = toStreamChunks(
         events,
         model.contextWindow,
