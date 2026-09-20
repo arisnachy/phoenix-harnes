@@ -1699,6 +1699,33 @@ describe('plugin registration and config', () => {
     expect(JSON.stringify(server.requests[0])).toContain('"type":"image_url"')
   })
 
+  it('repairs legacy persisted empty inputModalities before plugin boot', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmDeepSeek, {
+      baseURL: 'http://127.0.0.1:1',
+      models: [
+        { id: 'deepseek-flash', inputModalities: [] },
+        { id: 'deepseek-v4-pro', inputModalities: [] },
+      ],
+    })
+
+    await expect(ctx.llm.listModels('deepseek-official')).resolves.toEqual([
+      {
+        provider: 'deepseek-official',
+        id: 'deepseek-flash',
+        name: 'deepseek-flash',
+        inputModalities: ['text', 'image'],
+      },
+      {
+        provider: 'deepseek-official',
+        id: 'deepseek-v4-pro',
+        name: 'deepseek-v4-pro',
+        inputModalities: ['text'],
+      },
+    ])
+  })
+
   it('defaults an adapter-supplied catalog entry to text input', async () => {
     const connection = resolveAdapterOptions({ models: [] })
     const adapter = new DeepSeekAdapter({
