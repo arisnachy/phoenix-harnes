@@ -10,6 +10,8 @@ on:
     paths:
       - 'apps/desktop-windows/**'
       - 'installer/windows/**'
+      - 'scripts/phoenix-windows-supervisor.mjs'
+      - 'scripts/build-windows-runtime-seed.mjs'
       - 'apps/web/public/favicon.png'
       - 'apps/web/public/favicon.svg'
       - '.github/workflows/phoenix-windows-desktop.yml'
@@ -18,6 +20,8 @@ on:
     paths:
       - 'apps/desktop-windows/**'
       - 'installer/windows/**'
+      - 'scripts/phoenix-windows-supervisor.mjs'
+      - 'scripts/build-windows-runtime-seed.mjs'
       - '.github/workflows/phoenix-windows-desktop.yml'
   workflow_dispatch:
 
@@ -27,7 +31,7 @@ permissions:
 jobs:
   windows-desktop:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,6 +40,32 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+
+      - name: Enable pinned pnpm
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.7.0 --activate
+          pnpm --version
+
+      - name: Install Phoenix workspace
+        shell: pwsh
+        run: |
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Phoenix production runtime
+        shell: pwsh
+        run: |
+          pnpm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/build-windows-runtime-seed.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Validate bootstrap syntax
         shell: pwsh
@@ -70,6 +100,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item apps/desktop-windows/phoenix.ico dist/phoenix-desktop/phoenix.ico
           Copy-Item installer/windows/bootstrap-runtime.ps1 dist/phoenix-desktop/bootstrap-runtime.ps1
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $seed = (Resolve-Path dist/windows-runtime-seed).Path
+          $seedZip = Join-Path (Resolve-Path dist/phoenix-desktop).Path 'runtime-seed.zip'
+          Remove-Item $seedZip -Force -ErrorAction SilentlyContinue
+          [System.IO.Compression.ZipFile]::CreateFromDirectory(
+            $seed,
+            $seedZip,
+            [System.IO.Compression.CompressionLevel]::Optimal,
+            $false)
+          if (-not (Test-Path $seedZip)) { throw 'Prebuilt Phoenix runtime seed archive is missing' }
 
       - name: Bundle managed runtime toolchain
         shell: pwsh
@@ -129,6 +170,25 @@ jobs:
           }
           if (-not (Test-Path dist/phoenix-desktop/runtime-tools/git/cmd/git.exe)) {
             throw 'Installer payload is missing bundled MinGit'
+          }
+          if (-not (Test-Path dist/phoenix-desktop/runtime-seed.zip)) {
+            throw 'Installer payload is missing the prebuilt production runtime seed'
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $seedArchive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path dist/phoenix-desktop/runtime-seed.zip).Path)
+          try {
+            $seedEntries = @($seedArchive.Entries | ForEach-Object { $_.FullName.Replace('\\', '/') })
+            if (-not ($seedEntries -contains 'runtime-app/lib/bin.js')) {
+              throw 'Runtime seed is missing compiled runtime-app/lib/bin.js'
+            }
+            if (-not ($seedEntries -contains '.phoenix-managed-install')) {
+              throw 'Runtime seed is missing managed-ready marker'
+            }
+            if (-not ($seedEntries -contains '.git/HEAD')) {
+              throw 'Runtime seed is missing Git metadata required by the safe stable updater'
+            }
+          } finally {
+            $seedArchive.Dispose()
           }
           if ($iss -match '(?m)^Filename:\s*"powershell\.exe".*bootstrap-runtime\.ps1') {
             throw 'Installer must not hide first-run runtime bootstrap; Phoenix.exe owns visible bootstrap now'
