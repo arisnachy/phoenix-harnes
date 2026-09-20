@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import process from 'node:process'
@@ -51,7 +52,15 @@ function readActiveRuntimeTarget(controlDirectory) {
     const value = JSON.parse(readFileSync(path, 'utf8'))
     if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
     if (typeof value.path !== 'string' || value.path.trim().length === 0) return undefined
-    if (!existsSync(resolve(value.path))) return undefined
+    const runtimePath = resolve(value.path)
+    if (!existsSync(runtimePath)) return undefined
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], {
+      cwd: runtimePath,
+      encoding: 'utf8',
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    if (head.status !== 0 || head.stdout?.trim() !== value.target) return undefined
     return value.target
   } catch {
     return undefined
