@@ -1,0 +1,53 @@
+name: KIRA Green Repair
+
+on:
+  push:
+    branches: [kira/green-gate-20260919]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kira-green-repair
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: kira/green-gate-20260919
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate authoritative repository artifacts
+        run: |
+          set -euo pipefail
+          pnpm run prepare:change
+          pnpm run gen-cordis-api
+          pnpm run gen-tool-catalog
+
+      - name: Commit deterministic repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && [[ -z "$(git status --porcelain --untracked-files=all)" ]]; then
+            echo "Generated artifacts are already current."
+            exit 0
+          fi
+          git config user.name "kira-green-gate"
+          git config user.email "kira-green-gate@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(gates): refresh generated repository artifacts"
+          git push origin HEAD:kira/green-gate-20260919
