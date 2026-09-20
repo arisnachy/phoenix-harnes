@@ -27,6 +27,7 @@ internal sealed class PhoenixDesktopWindow : Form
     private bool applyingBrowserLayout;
     private int? browserWidthOverride;
     private Task? browserInitializationTask;
+    private Task? phoenixInitializationTask;
     private DateTimeOffset lastPhoenixNavigationAt = DateTimeOffset.MinValue;
     private int phoenixNavigationRetryCount;
     private bool phoenixNavigationRetryScheduled;
@@ -80,7 +81,13 @@ internal sealed class PhoenixDesktopWindow : Form
             if (width > 0) browserWidthOverride = width;
         };
         if (initializeWebViewsOnShow)
-            Shown += async (_, _) => await InitializeAsync();
+        {
+            Shown += (_, _) =>
+            {
+                if (runtimeReady)
+                    _ = EnsurePhoenixInitializedAsync();
+            };
+        }
         KeyDown += OnWindowKeyDown;
     }
 
@@ -183,9 +190,8 @@ internal sealed class PhoenixDesktopWindow : Form
         runtimeReady = true;
         phoenixNavigationRetryCount = 0;
         phoenixNavigationRetryScheduled = false;
-        SetStartupStatus("Abriendo Phoenix…");
-        if (phoenixView.CoreWebView2 is not null)
-            _ = NavigatePhoenixFreshAsync();
+        SetStartupStatus("Backend estable · preparando la interfaz…");
+        _ = EnsurePhoenixInitializedAsync();
     }
 
     private async Task NavigatePhoenixFreshAsync()
@@ -382,6 +388,12 @@ internal sealed class PhoenixDesktopWindow : Form
         toolbar.Items.Add(go);
         toolbar.Items.Add(close);
         return toolbar;
+    }
+
+    private Task EnsurePhoenixInitializedAsync()
+    {
+        phoenixInitializationTask ??= InitializeAsync();
+        return phoenixInitializationTask;
     }
 
     private async Task InitializeAsync()
