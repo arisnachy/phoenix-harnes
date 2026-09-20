@@ -1550,10 +1550,10 @@ describe('plugin registration and config', () => {
     await ctx.plugin(LlmDeepSeek, { baseURL: 'http://127.0.0.1:1' })
     expect(ctx.llm.listProviders()).toEqual([{ id: 'deepseek-official', name: 'DeepSeek' }])
     await expect(ctx.llm.listModels('deepseek-official')).resolves.toEqual([
-      { provider: 'deepseek-official', id: 'deepseek-v4.1-flash', name: 'DeepSeek-V4.1-Flash', inputModalities: ['text'] },
-      { provider: 'deepseek-official', id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', inputModalities: ['text'] },
+      { provider: 'deepseek-official', id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash', inputModalities: ['text', 'image'] },
+      { provider: 'deepseek-official', id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash (legacy alias)', inputModalities: ['text', 'image'] },
       { provider: 'deepseek-official', id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', inputModalities: ['text'] },
-      { provider: 'deepseek-official', id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek-V4-Flash-Vision-Exp', inputModalities: ['text', 'image'] },
+      { provider: 'deepseek-official', id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek-V4-Flash-Vision-Exp (legacy alias)', inputModalities: ['text', 'image'] },
     ])
     await expect(ctx.llm.resolveModelInfo('deepseek-official', 'deepseek-v4-flash'))
       .resolves.toMatchObject({
@@ -1658,11 +1658,45 @@ describe('plugin registration and config', () => {
     await ctx.plugin(LlmRuntime)
     LlmDeepSeek.apply(ctx, { baseURL: 'http://127.0.0.1:1' })
     await expect(ctx.llm.listModels('deepseek-official')).resolves.toEqual([
-      { provider: 'deepseek-official', id: 'deepseek-v4.1-flash', name: 'DeepSeek-V4.1-Flash', inputModalities: ['text'] },
-      { provider: 'deepseek-official', id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', inputModalities: ['text'] },
+      { provider: 'deepseek-official', id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash', inputModalities: ['text', 'image'] },
+      { provider: 'deepseek-official', id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash (legacy alias)', inputModalities: ['text', 'image'] },
       { provider: 'deepseek-official', id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', inputModalities: ['text'] },
-      { provider: 'deepseek-official', id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek-V4-Flash-Vision-Exp', inputModalities: ['text', 'image'] },
+      { provider: 'deepseek-official', id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek-V4-Flash-Vision-Exp (legacy alias)', inputModalities: ['text', 'image'] },
     ])
+  })
+
+  it('keeps the old PHOENIX V4.1 selector as a hidden compatibility alias and dispatches canonical Flash', async () => {
+    const server = await mockServer([{ kind: 'sse', events: textEvents }])
+    const ctx = await harness(server.url)
+
+    await expect(ctx.llm.resolveModelInfo('deepseek-official', 'deepseek-v4.1-flash'))
+      .resolves.toMatchObject({
+        id: 'deepseek-v4.1-flash',
+        name: 'DeepSeek-V4.1-Flash',
+        inputModalities: ['text', 'image'],
+      })
+
+    await assemble(ctx, { model: 'deepseek-v4.1-flash', messages: [] })
+    expect(server.requests[0]).toMatchObject({ model: 'deepseek-flash' })
+  })
+
+  it('accepts image input on canonical DeepSeek Flash without the legacy vision-only selector', async () => {
+    const server = await mockServer([{ kind: 'sse', events: textEvents }])
+    const attachments = attachmentStoreOf(ref => Promise.resolve(requestImage(ref))).store
+    const files = fileStoreOf(() => Promise.reject(new LlmError('Files unavailable', 'TRANSPORT')))
+    const adapter = adapterOf({ baseURL: server.url }, attachments, files.store)
+
+    await drain(adapter.stream({
+      provider: 'deepseek-official',
+      model: 'deepseek-flash',
+      messages: [createUserMessage({
+        content: [{ type: 'image', attachment: imageRef }],
+        source: { kind: 'plugin', plugin: 'test' },
+      })],
+    }))
+
+    expect(JSON.stringify(server.requests[0])).toContain('"model":"deepseek-flash"')
+    expect(JSON.stringify(server.requests[0])).toContain('"type":"image_url"')
   })
 
   it('defaults an adapter-supplied catalog entry to text input', async () => {
@@ -1945,7 +1979,7 @@ describe('plugin registration and config', () => {
     // First-boot onboarding: the route registers so models stay discoverable;
     // only the request itself needs a key.
     expect(ctx.llm.listProviders()).toEqual([{ id: 'deepseek-official', name: 'DeepSeek' }])
-    await expect(ctx.llm.listModels('deepseek-official')).resolves.toHaveLength(3)
+    await expect(ctx.llm.listModels('deepseek-official')).resolves.toHaveLength(4)
     const first = await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
     expect(first.finish).toMatchObject({ kind: 'error', failure: { code: 'MISSING_CREDENTIAL' } })
     // The guidance leads with the managed credential store.
@@ -2033,7 +2067,7 @@ describe('plugin registration and config', () => {
     expect(adapter).toBeInstanceOf(DeepSeekAdapter)
     // Direct embedding shares the plugin's one resolve step, so it advertises
     // the same default catalog instead of a divergent empty one.
-    await expect(adapter.listModels('deepseek-official')).resolves.toHaveLength(3)
+    await expect(adapter.listModels('deepseek-official')).resolves.toHaveLength(4)
   })
 
   it('resolves connection facts and the credential exactly once per stream call', async () => {
