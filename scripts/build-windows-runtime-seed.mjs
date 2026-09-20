@@ -120,7 +120,7 @@ function deployRuntimeApp() {
 
   run(process.execPath, [entry, '--version'], { cwd: runtimeApp })
   run(process.execPath, [entry, 'web', '--dump-config'], {
-    cwd: runtimeApp,
+    cwd: seedRoot,
     env: {
       ...process.env,
       PHOENIX_AUTO_UPDATE: '0',
