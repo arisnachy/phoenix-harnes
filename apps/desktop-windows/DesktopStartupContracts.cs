@@ -14,6 +14,8 @@ internal static class DesktopStartupContract
 internal static class DesktopRuntimeLaunchContract
 {
     internal const int DesktopPort = 3080;
+    internal const int SourceStartupWaitSeconds = 300;
+    internal const int ManagedStartupWaitSeconds = 120;
     internal const string PowerShellExecutable = "powershell.exe";
 
     internal static ProcessStartInfo CreateOwnedRuntimeStartInfo(
@@ -56,6 +58,8 @@ internal static class DesktopRuntimeLaunchContract
         startInfo.Environment["PHOENIX_DESKTOP_CONSOLE"] = showDeveloperConsole ? "1" : "0";
         startInfo.Environment["PHOENIX_BROWSER_AUTOSTART"] = "true";
         startInfo.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"] = "chrome";
+        // Hidden first-run launches must never wait for an invisible Corepack confirmation.
+        startInfo.Environment["COREPACK_ENABLE_DOWNLOAD_PROMPT"] = "0";
         return startInfo;
     }
 
@@ -128,11 +132,11 @@ internal static class DesktopSourceCheckout
         try
         {
             var full = Path.GetFullPath(root);
+            var gitMarker = Path.Combine(full, ".git");
             return Directory.Exists(full)
-                && Directory.Exists(Path.Combine(full, ".git"))
+                && (Directory.Exists(gitMarker) || File.Exists(gitMarker))
                 && File.Exists(Path.Combine(full, "package.json"))
-                && File.Exists(Path.Combine(full, "phoenix-windows.cmd"))
-                && Directory.Exists(Path.Combine(full, "node_modules", ".pnpm"));
+                && File.Exists(Path.Combine(full, "phoenix-windows.cmd"));
         }
         catch
         {
