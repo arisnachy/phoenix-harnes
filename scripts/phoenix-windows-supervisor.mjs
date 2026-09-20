@@ -1038,13 +1038,13 @@ while (true) {
     }
   }
 
-  if (earlyCrash && runtimeRoot !== root) {
+  if (runtimeRoot !== root) {
     const failedRuntime = runtimeRoot
     runtimeRoot = root
     clearActiveRuntime()
     console.error(
-      `[PHOENIX RECOVERY] isolated runtime ${failedRuntime} exited before its health checkpoint; `
-      + 'retired its active marker and falling back to the source checkout.',
+      `[PHOENIX RECOVERY] isolated runtime ${failedRuntime} exited unexpectedly; `
+      + 'retired its active marker and falling back to the source checkout instead of relaunching a broken update.',
     )
     continue
   }
