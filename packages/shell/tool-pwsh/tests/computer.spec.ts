@@ -34,6 +34,8 @@ describe('Computer Use permissions', () => {
     expect(computerActionNeedsApproval('danger-full-access', 'browser_reload')).toBe(false)
     expect(computerActionNeedsApproval('workspace-write', 'click')).toBe(true)
     expect(computerActionNeedsApproval('workspace-write', 'browser_open')).toBe(true)
+    expect(computerActionNeedsApproval('workspace-write', 'browser_inspect')).toBe(false)
+    expect(computerActionNeedsApproval('workspace-write', 'browser_login')).toBe(true)
     expect(computerActionNeedsApproval('read-only', 'click')).toBe(false)
   })
 })
@@ -55,6 +57,12 @@ describe('Computer Use argument contract', () => {
     expect(() => validateComputerArgs({ action: 'browser_reload' })).not.toThrow()
     expect(() => validateComputerArgs({ action: 'browser_close' })).not.toThrow()
     expect(() => validateComputerArgs({ action: 'browser_focus' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_inspect' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_fill_form', origin: 'https://example.com', fields: [{ field: 0, value: 'synthetic' }] })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_fill_form', origin: 'https://example.com' })).toThrow(/field/i)
+    expect(() => validateComputerArgs({ action: 'browser_click_text', origin: 'https://example.com', text: 'Continue' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_login', origin: 'https://example.com/login' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_login', origin: 'http://example.com/login' })).toThrow(/HTTPS/i)
   })
 
   it('keeps model text and window selectors out of the PowerShell command line', () => {
@@ -100,6 +108,10 @@ describe('Computer Use argument contract', () => {
     expect(shouldCaptureAfterAction('browser_reload')).toBe(true)
     expect(shouldCaptureAfterAction('browser_close')).toBe(true)
     expect(shouldCaptureAfterAction('browser_focus')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_inspect')).toBe(false)
+    expect(shouldCaptureAfterAction('browser_fill_form')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_click_text')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_login')).toBe(true)
     expect(shouldCaptureAfterAction('move')).toBe(false)
     expect(shouldCaptureAfterAction('windows')).toBe(false)
   })
@@ -112,6 +124,35 @@ describe('Computer Use argument contract', () => {
     expect(browserCommandForAction({ action: 'browser_reload' })).toEqual({ type: 'phoenix.browser.reload' })
     expect(browserCommandForAction({ action: 'browser_close' })).toEqual({ type: 'phoenix.browser.close' })
     expect(browserCommandForAction({ action: 'browser_focus' })).toEqual({ type: 'phoenix.browser.focus' })
+    expect(browserCommandForAction({ action: 'browser_inspect' })).toEqual({ type: 'phoenix.browser.inspect' })
+    expect(browserCommandForAction({
+      action: 'browser_fill_form',
+      origin: 'https://Example.com/form',
+      fields: [{ field: 2, value: 'synthetic' }],
+      submit: true,
+    })).toEqual({
+      type: 'phoenix.browser.fill-form',
+      origin: 'https://example.com',
+      fields: [{ field: 2, value: 'synthetic' }],
+      submit: true,
+    })
+    expect(browserCommandForAction({
+      action: 'browser_click_text',
+      origin: 'https://example.com/path',
+      text: 'Continue',
+    })).toEqual({
+      type: 'phoenix.browser.click-text',
+      origin: 'https://example.com',
+      text: 'Continue',
+    })
+    expect(browserCommandForAction({
+      action: 'browser_login',
+      origin: 'https://example.com/sign-in',
+    })).toEqual({
+      type: 'phoenix.browser.login',
+      origin: 'https://example.com',
+      submit: true,
+    })
     expect(() => windowsComputerInvocation({ action: 'browser_open', url: 'https://example.com' }))
       .toThrow(/desktop control channel/i)
   })

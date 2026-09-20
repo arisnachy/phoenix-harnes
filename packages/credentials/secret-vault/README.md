@@ -2,9 +2,9 @@
 
 English | [中文](README.zh.md)
 
-The secret vault adds the human-only `/secret` command over `ctx.credentials`. Use `/secret set NAME VALUE`, `/secret status NAME`, or `/secret delete NAME` from the composer. The value is passed directly to the credential provider, while `command/run` omits its raw input and the acknowledgement contains only redacted status. The command is never sent to the model.
+The secret vault adds the human-only `/secret` command over `ctx.credentials`. Use `/secret set NAME VALUE`, `/secret status NAME`, or `/secret delete NAME` from the composer. For unattended browser work, `/secret login-set https://example.com ACCOUNT SECRET` stores one origin-bound login plus a one-time autonomous-use grant; `login-status` and `login-delete` inspect or remove that binding. The value is passed directly to the credential provider, while `command/run` omits its raw input and the acknowledgement contains only redacted status. The command is never sent to the model.
 
-Consumers such as LLM adapters still resolve the named `CredentialRef` internally for a provider operation. The vault does not expose a secret-reading tool or put secret values in model context.
+Consumers such as LLM adapters still resolve the named `CredentialRef` internally for a provider operation. The Windows browser broker derives login refs from the canonical page origin, verifies the live origin again immediately before DOM injection, and receives login values only inside the trusted execution path. The vault does not expose a secret-reading tool or put secret values in model context.
 
 The default local provider stores the value in its owner-only credentials document. On Windows, filesystem ACL protection remains the responsibility of the account and deployment; this package's guarantee is that the command value is not included in the model request or durable command input.
 

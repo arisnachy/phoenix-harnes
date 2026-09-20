@@ -22,7 +22,7 @@ The key is `<scope>/<id>`, where `scope` is the **owning plugin's registered nam
 
 ```ts
 import type { Context } from '@phoenix-ai/cordis'
-import { credentialKey, credentialRef } from '@phoenix-ai/dsh-credentials'
+import { credentialKey, credentialRef, originCredentialRef } from '@phoenix-ai/dsh-credentials'
 
 declare const ctx: Context
 
@@ -38,6 +38,8 @@ await ctx.credentials.describeRecord(key)                // { configured, kind?,
 await ctx.credentials.listRecords()                      // [{ key, kind }] — never values
 await ctx.credentials.modifyRecord(key, async () => ({ kind: 'grant', payload: { token: '…' } }))
 await ctx.credentials.deleteRecord(key)                  // no-op when absent
+
+const loginRef = originCredentialRef('https://example.com/login', 'secret')
 ```
 
 `modifyRecord` is the only write path because a correct write depends on the current value: a token refresh is read-decide-replace, and the mutation must see the record as it stands at the moment the write is exclusive. Exclusion holds across processes, which is what stops two of them rotating one refresh token and losing whichever wrote first. Returning `undefined` from the mutation leaves the entry untouched and announces nothing.
@@ -49,6 +51,10 @@ A `grant` record's `payload` is opaque: the seam never reads, validates, or resh
 `credentials/reference-updated (ref)` fires after a committed change to a provider-managed source — a `set`, an `unset`, or an external edit observed in storage. Ambient process-environment changes are not observable and never emit. Consumers do not need the event (they re-resolve per operation); it exists for configuration UIs refreshing a "configured" badge. Its declaration lives in the client-safe `./types` subpath export together with the `CredentialRef` type it names (the package root re-exports the type), so a consumer outside the Host compilation face reads the very signature the Host emits instead of restating it.
 
 The shadowing rule on `set`/`unset` is deliberate fail-loud: when a read-only source (the live process environment, in the local provider) currently supplies the reference, a write would appear to succeed while resolution keeps returning the shadowing value — the seam rejects instead, and `describe().writable` lets a UI render the reference read-only up front.
+
+## Origin-bound browser references
+
+`normalizeCredentialOrigin()` canonicalizes an HTTPS origin (or loopback HTTP), while `originCredentialRef(origin, slot)` deterministically derives a credential reference without exposing the origin text in the reference. Phoenix uses these references for unattended browser `account`, `secret`, and `autonomous` slots. The model never needs the resolved value; only the trusted browser consumer resolves it for an authorized operation.
 
 ## Providers
 

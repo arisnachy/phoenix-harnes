@@ -43,6 +43,66 @@ export function isCredentialRefName(value: string): boolean {
   return REF_PATTERN.test(value)
 }
 
+const ORIGIN_CREDENTIAL_SLOT_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/
+
+/** Whether a web credential may use plaintext HTTP without leaving the local machine. */
+function isLoopbackCredentialHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase()
+  return normalized === 'localhost'
+    || normalized === '[::1]'
+    || normalized === '::1'
+    || normalized.startsWith('127.')
+}
+
+/**
+ * Canonicalize the web origin used to bind unattended credentials.
+ *
+ * Remote credentials require HTTPS. Plain HTTP is accepted only for loopback
+ * origins so local development remains usable without turning a network login
+ * into a cleartext credential target. Paths, queries, and fragments are
+ * intentionally discarded: the browser broker authorizes an origin, never an
+ * arbitrary URL prefix.
+ * @param value - Absolute HTTP(S) URL or origin to canonicalize.
+ * @returns Canonical `scheme://host[:port]` origin.
+ */
+export function normalizeCredentialOrigin(value: string): string {
+  let url: URL
+  try {
+    url = new URL(value.trim())
+  } catch {
+    throw new TypeError('credential origin must be an absolute HTTP(S) URL')
+  }
+  if (url.username.length > 0 || url.password.length > 0) {
+    throw new TypeError('credential origin must not contain embedded user information')
+  }
+  const secure = url.protocol === 'https:'
+  const localHttp = url.protocol === 'http:' && isLoopbackCredentialHost(url.hostname)
+  if (!secure && !localHttp) {
+    throw new TypeError('credential origin must use HTTPS unless it is loopback HTTP')
+  }
+  return url.origin
+}
+
+/**
+ * Derive a deterministic environment-shaped reference bound to one web origin
+ * and one private slot. The origin is encoded rather than sanitized, so
+ * distinct origins cannot collapse onto the same reference.
+ * @param origin - Absolute HTTP(S) URL or origin accepted by {@link normalizeCredentialOrigin}.
+ * @param slot - Stable private slot name such as `account`, `secret`, or `autonomous`.
+ * @returns Branded origin-bound credential reference.
+ */
+export function originCredentialRef(origin: string, slot: string): CredentialRef {
+  if (!ORIGIN_CREDENTIAL_SLOT_PATTERN.test(slot)) {
+    throw new TypeError(`credential origin slot "${slot}" must match ${String(ORIGIN_CREDENTIAL_SLOT_PATTERN)}`)
+  }
+  const canonical = normalizeCredentialOrigin(origin)
+  const encoded = Array.from(
+    new TextEncoder().encode(canonical),
+    byte => byte.toString(16).padStart(2, '0'),
+  ).join('').toUpperCase()
+  return credentialRef(`PHOENIX_WEB_${encoded}_${slot.toUpperCase()}`)
+}
+
 /**
  * Whether a raw string could be a {@link credentialKey} segment at all.
  * Consumers whose addressing units come from somewhere else — a settings dict

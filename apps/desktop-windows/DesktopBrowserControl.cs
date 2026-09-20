@@ -61,7 +61,7 @@ internal sealed record DesktopBrowserControlDescriptor(
 /// </summary>
 internal sealed class DesktopBrowserControlServer : IDisposable
 {
-    private readonly Func<BrowserCommand, Task> dispatch;
+    private readonly Func<BrowserCommand, Task<string?>> dispatch;
     private readonly CancellationTokenSource stopping = new();
     private readonly Task serverTask;
     private bool disposed;
@@ -70,7 +70,7 @@ internal sealed class DesktopBrowserControlServer : IDisposable
     internal string DescriptorPath { get; }
 
     internal DesktopBrowserControlServer(
-        Func<BrowserCommand, Task> dispatch,
+        Func<BrowserCommand, Task<string?>> dispatch,
         string descriptorPath)
     {
         this.dispatch = dispatch;
@@ -113,7 +113,7 @@ internal sealed class DesktopBrowserControlServer : IDisposable
                 using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
                 var line = await reader.ReadLineAsync(stopping.Token);
 
-                if (line is null || !BrowserCommand.TryParse(line, out var command))
+                if (line is null || !BrowserCommand.TryParse(line, out var command, allowAutomation: true))
                 {
                     await writer.WriteLineAsync("{\"ok\":false,\"error\":\"invalid browser command\"}");
                     continue;
@@ -121,8 +121,11 @@ internal sealed class DesktopBrowserControlServer : IDisposable
 
                 try
                 {
-                    await dispatch(command);
-                    await writer.WriteLineAsync("{\"ok\":true}");
+                    var details = await dispatch(command);
+                    if (details is null)
+                        await writer.WriteLineAsync("{\"ok\":true}");
+                    else
+                        await writer.WriteLineAsync(JsonSerializer.Serialize(new { ok = true, details }));
                 }
                 catch (Exception ex)
                 {

@@ -26,7 +26,7 @@
 
 ```ts
 import type { Context } from '@phoenix-ai/cordis'
-import { credentialKey, credentialRef } from '@phoenix-ai/dsh-credentials'
+import { credentialKey, credentialRef, originCredentialRef } from '@phoenix-ai/dsh-credentials'
 
 declare const ctx: Context
 
@@ -42,6 +42,8 @@ await ctx.credentials.describeRecord(key)                // { configured, kind?,
 await ctx.credentials.listRecords()                      // [{ key, kind }] — never values
 await ctx.credentials.modifyRecord(key, async () => ({ kind: 'grant', payload: { token: '…' } }))
 await ctx.credentials.deleteRecord(key)                  // no-op when absent
+
+const loginRef = originCredentialRef('https://example.com/login', 'secret')
 ```
 
 `modifyRecord` 是唯一写路径，因为正确的写入依赖当前值：刷新 token 是「读—决定—替换」，变更函数必须看到写入取得独占那一刻的记录。独占跨进程成立，这正是防止两个进程同时轮换同一个 refresh token、丢掉先写那一个的机制。变更函数返回 `undefined` 表示保持原状，不写盘也不发通知。
@@ -53,6 +55,10 @@ await ctx.credentials.deleteRecord(key)                  // no-op when absent
 `credentials/reference-updated (ref)` 在提供方管理的来源发生已提交变更后触发——`set`、`unset` 或在存储中观察到的外部编辑。进程环境变量的变化不可观测，永不触发。消费方不需要该事件（它们按操作重新解析）；它服务于配置界面刷新「已配置」徽标。它的声明住在 client-safe 的 `./types` 子路径出口，与其点名的 `CredentialRef` 类型同处一处（包根继续 re-export 该类型），于是 Host 编译面之外的消费方读到的正是 Host 发射的那一份签名，而不必再写一遍。
 
 `set`/`unset` 的遮蔽规则有意采用明确报错的方式：当只读来源（本地提供方中即当前进程环境）正在提供该引用时，写入会表面成功而解析仍返回遮蔽值——seam 选择直接拒绝，并通过 `describe().writable` 让界面提前把该引用渲染为只读。
+
+## 按 origin 绑定的浏览器引用
+
+`normalizeCredentialOrigin()` 会规范化 HTTPS origin（或回环地址 HTTP），`originCredentialRef(origin, slot)` 则确定性地产生凭据引用，同时不在引用中暴露 origin 文本。Phoenix 用这些引用保存无人值守浏览器的 `account`、`secret` 与 `autonomous` 槽。模型无需获得解析后的值；只有受信任浏览器消费方会在已授权操作中解析它。
 
 ## 提供方
 

@@ -43,7 +43,8 @@
     "@phoenix-ai/dsh-jobs": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/dsh-user-approval": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^"
   },
   "dependencies": {
     "@phoenix-ai/schemastery": "workspace:^"
@@ -65,6 +66,7 @@
     "@phoenix-ai/dsh-tool-jobs": "workspace:^",
     "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/dsh-user-approval": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^"
   }
 }
