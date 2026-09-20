@@ -8,7 +8,7 @@
 [Setup]
 AppId={{B4E91D88-7B14-4DA0-A63D-4E61B648AE1F}
 AppName=Phoenix
-AppVersion=1.0.9
+AppVersion=1.0.10
 AppPublisher=Phoenix AI
 DefaultDirName={localappdata}\Programs\Phoenix
 DefaultGroupName=Phoenix
@@ -38,6 +38,10 @@ Name: "autostart"; Description: "Iniciar Phoenix con Windows"; GroupDescription:
 [Icons]
 Name: "{group}\Phoenix"; Filename: "{app}\Phoenix.exe"
 Name: "{autodesktop}\Phoenix"; Filename: "{app}\Phoenix.exe"; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "Software\Phoenix AI\Phoenix"; ValueType: string; ValueName: "InstallLocation"; ValueData: "{app}"; Flags: uninsdeletekeyifempty
+Root: HKCU; Subkey: "Software\Phoenix AI\Phoenix"; ValueType: string; ValueName: "ExecutablePath"; ValueData: "{app}\Phoenix.exe"; Flags: uninsdeletekeyifempty
 
 [Run]
 ; Runtime preparation belongs to Phoenix.exe so first launch is visible, logged and repairable.
