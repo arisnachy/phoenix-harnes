@@ -25,6 +25,8 @@ const hostArgs = process.argv.slice(2)
 const desktopConsoleVisible = ['1', 'true', 'yes']
   .includes((process.env.PHOENIX_DESKTOP_CONSOLE ?? '').trim().toLowerCase())
 const hideRuntimeWindows = !desktopConsoleVisible
+const desktopFastStart = ['1', 'true', 'yes']
+  .includes((process.env.PHOENIX_DESKTOP_FAST_START ?? '').trim().toLowerCase())
 const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() || 'stable'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
@@ -380,7 +382,7 @@ function activeRuntimeIsSupersededByLiveCheckout(target) {
   return gitSucceeds(root, ['merge-base', '--is-ancestor', target, liveHead])
 }
 
-function restoreActiveRuntime() {
+function restoreActiveRuntime({ skipBootPreflight = false } = {}) {
   const markerPath = activeRuntimePath()
   if (markerPath === undefined || !existsSync(markerPath)) return
   try {
@@ -403,17 +405,22 @@ function restoreActiveRuntime() {
       clearActiveRuntime()
       return
     }
-    const bootPreflight = runtimeBootPreflight(candidate)
-    if (!bootPreflight.ok) {
-      clearActiveRuntime()
-      console.error(
-        `[PHOENIX RECOVERY] retired isolated runtime ${value.target.slice(0, 12)} because boot preflight failed: `
-        + (bootPreflight.detail || 'unknown error'),
-      )
-      return
+    if (!skipBootPreflight) {
+      const bootPreflight = runtimeBootPreflight(candidate)
+      if (!bootPreflight.ok) {
+        clearActiveRuntime()
+        console.error(
+          `[PHOENIX RECOVERY] retired isolated runtime ${value.target.slice(0, 12)} because boot preflight failed: `
+          + (bootPreflight.detail || 'unknown error'),
+        )
+        return
+      }
     }
     runtimeRoot = candidate
-    console.error(`[PHOENIX UPDATE] restored verified isolated runtime ${value.target.slice(0, 12)}; source checkout remains untouched.`)
+    console.error(
+      `[PHOENIX UPDATE] restored verified isolated runtime ${value.target.slice(0, 12)}; `
+      + (skipBootPreflight ? 'desktop fast-start deferred boot preflight.' : 'source checkout remains untouched.'),
+    )
   } catch {
     clearActiveRuntime()
   }
@@ -621,12 +628,17 @@ async function stopWatcher(watcher) {
 }
 
 function startHost() {
-  return spawn(process.execPath, [
-    '--import', 'tsx/esm',
-    'apps/cli/src/bin.ts',
-    'web', '--',
-    ...hostArgs,
-  ], {
+  const builtCli = join(runtimeRoot, 'apps', 'cli', 'lib', 'bin.js')
+  const useBuiltCli = desktopFastStart && existsSync(builtCli)
+  const args = useBuiltCli
+    ? [builtCli, 'web', '--', ...hostArgs]
+    : ['--import', 'tsx/esm', 'apps/cli/src/bin.ts', 'web', '--', ...hostArgs]
+
+  if (useBuiltCli) {
+    console.error('[PHOENIX DESKTOP] fast-start: launching the prebuilt CLI before background maintenance.')
+  }
+
+  return spawn(process.execPath, args, {
     cwd: runtimeRoot,
     stdio: 'inherit',
     windowsHide: hideRuntimeWindows,
@@ -698,7 +710,13 @@ function superviseWatcher(host) {
     })
   }
 
-  start()
+  if (desktopFastStart) {
+    console.error('[PHOENIX DESKTOP] fast-start: deferring update watcher until the Host has had time to become responsive.')
+    restartTimer = setTimeout(start, HOST_STABLE_MS)
+    restartTimer.unref?.()
+  } else {
+    start()
+  }
 
   return {
     async stop() {
@@ -801,8 +819,12 @@ process.once('SIGINT', requestShutdown)
 process.once('SIGTERM', requestShutdown)
 
 recoverStaleStagingIndexLock()
-restoreActiveRuntime()
-recoverConfigurationBeforeFirstBoot()
+restoreActiveRuntime({ skipBootPreflight: desktopFastStart })
+if (desktopFastStart) {
+  console.error('[PHOENIX DESKTOP] fast-start: starting Host before expensive configuration preflight.')
+} else {
+  recoverConfigurationBeforeFirstBoot()
+}
 
 let finalCode = 0
 while (true) {
@@ -931,6 +953,10 @@ while (true) {
   if (plannedHostRestart) continue
 
   const earlyCrash = !healthyCheckpointWritten && (Date.now() - startedAt) < HOST_STABLE_MS
+  if (desktopFastStart && earlyCrash) {
+    console.error('[PHOENIX DESKTOP] fast-start Host exited early; running the full recovery preflight before relaunch.')
+    recoverConfigurationBeforeFirstBoot()
+  }
   if (earlyCrash && configurationChangedSinceLastKnownGood()) {
     console.error('[PHOENIX RECOVERY] configuration changed since the last healthy boot and the new Host exited before its health checkpoint.')
     if (restoreLastKnownGoodConfiguration()) {
