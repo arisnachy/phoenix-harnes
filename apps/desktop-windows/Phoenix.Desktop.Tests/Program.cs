@@ -161,7 +161,16 @@ EqualInt(3, DesktopRuntimeLaunchContract.MaxUnexpectedBackendRestarts, "desktop 
 EqualInt(12, DesktopRuntimeLaunchContract.ManagedBootstrapTimeoutMinutes, "managed bootstrap has a bounded timeout", failures);
 True(DesktopNavigationRecovery.IsTransient("ConnectionAborted"), "connection-aborted WebView startup failure is retried", failures);
 True(DesktopNavigationRecovery.IsTransient("ConnectionReset"), "connection-reset WebView startup failure is retried", failures);
+True(DesktopNavigationRecovery.IsTransient("Unknown"), "WebView unknown startup race is retried within the bounded budget", failures);
 False(DesktopNavigationRecovery.IsTransient("CertificateIsInvalid"), "non-transient WebView failures are not retried blindly", failures);
+True(
+    DesktopPhoenixIdentity.LooksLikePhoenixHtml("<!doctype html><html><head><title>PHOENIX HARDNESS</title></head><body><div id=\"root\"></div></body></html>"),
+    "Phoenix readiness accepts the real application shell",
+    failures);
+False(
+    DesktopPhoenixIdentity.LooksLikePhoenixHtml("<html><body>unrelated server</body></html>"),
+    "Phoenix readiness rejects an unrelated listener on port 3080",
+    failures);
 True(DesktopNavigationRecovery.RetryDelayMilliseconds(1) < DesktopNavigationRecovery.RetryDelayMilliseconds(4), "WebView retry backoff increases", failures);
 
 var toolchainEntries = DesktopBundledToolchain.CandidatePathEntries(@"C:\Program Files\Phoenix");
@@ -253,7 +262,7 @@ try
     True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "bootstrappable Phoenix source is recognized without node_modules or .git", failures);
     Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", null);
     False(DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible: false), "normal installed desktop does not auto-boot a discovered source checkout", failures);
-    True(DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible: true), "developer console explicitly enables local source mode", failures);
+    False(DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible: true), "developer console does not switch the installed EXE into source mode", failures);
 
     // Explicit/configured source roots are candidates, but discovery alone must not persist
     // them as the trusted backend until the runtime stability handshake succeeds.
