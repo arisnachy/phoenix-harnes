@@ -9,6 +9,7 @@ namespace Phoenix.Desktop;
 internal static class Program
 {
     internal static readonly Uri PhoenixUri = new($"http://127.0.0.1:{DesktopRuntimeLaunchContract.DesktopPort}/");
+    internal static readonly string ApplicationRoot = Path.GetFullPath(AppContext.BaseDirectory);
     internal static readonly string InstallRoot = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Phoenix");
     internal static readonly string RuntimeRoot = Path.Combine(InstallRoot, "runtime");
@@ -46,6 +47,8 @@ internal static class Program
     private static void MainCore(string[] args)
     {
         DesktopLog.Write($"Phoenix.exe starting. Args: {string.Join(' ', args)}");
+        DesktopInstallationState.RememberApplicationRoot(InstallRoot, ApplicationRoot);
+        DesktopLog.Write($"Phoenix application root: {ApplicationRoot}");
         var bundledToolchainActive = DesktopBundledToolchain.Activate(AppContext.BaseDirectory);
         DesktopLog.Write($"Bundled runtime toolchain active={bundledToolchainActive}; root={DesktopBundledToolchain.ToolchainRoot(AppContext.BaseDirectory)}");
 
@@ -236,7 +239,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         try
         {
             window.SetStartupStatus("Buscando Phoenix local…");
-            if (await IsReadyAsync())
+            if (await IsStableReadyAsync())
             {
                 if (await IsCompatiblePhoenixListenerAsync())
                 {
@@ -613,23 +616,42 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         tray.Text = "Phoenix · iniciando";
         DesktopLog.Write($"Phoenix runtime process started with PID {ownedRuntime.Id} from {runtimeRoot}.");
 
-        var maxAttempts = sourceCheckoutRuntime
+        var maxWait = TimeSpan.FromSeconds(sourceCheckoutRuntime
             ? DesktopRuntimeLaunchContract.SourceStartupWaitSeconds
-            : DesktopRuntimeLaunchContract.ManagedStartupWaitSeconds;
-        for (var attempt = 0; attempt < maxAttempts && !shuttingDown; attempt++)
+            : DesktopRuntimeLaunchContract.ManagedStartupWaitSeconds);
+        var wait = Stopwatch.StartNew();
+        var consecutiveReady = 0;
+
+        while (wait.Elapsed < maxWait && !shuttingDown)
         {
             if (await IsReadyAsync())
             {
-                tray.Text = "Phoenix · activo";
-                window.MarkRuntimeReady();
-                if (openWhenReady)
-                    ShowWindow();
-                DesktopLog.Write($"Phoenix runtime is ready from {runtimeRoot}; desktop WebView is navigating to Phoenix.");
-                return true;
+                consecutiveReady++;
+                if (consecutiveReady >= DesktopRuntimeLaunchContract.ReadyConsecutiveSamples)
+                {
+                    if (sourceCheckoutRuntime)
+                    {
+                        DesktopSourceCheckout.RememberVerified(Program.InstallRoot, runtimeRoot);
+                        DesktopLog.Write($"Verified backend root persisted: {runtimeRoot}");
+                    }
+
+                    tray.Text = "Phoenix · activo";
+                    window.MarkRuntimeReady();
+                    if (openWhenReady)
+                        ShowWindow();
+                    DesktopLog.Write($"Phoenix runtime is stable and ready from {runtimeRoot}; desktop WebView is navigating to Phoenix.");
+                    return true;
+                }
             }
+            else
+            {
+                consecutiveReady = 0;
+            }
+
             if (ownedRuntime.HasExited)
                 break;
-            await Task.Delay(1000);
+
+            await Task.Delay(DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds);
         }
 
         if (!shuttingDown)
@@ -701,6 +723,19 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         }
     }
 
+
+    private async Task<bool> IsStableReadyAsync()
+    {
+        for (var sample = 0; sample < DesktopRuntimeLaunchContract.ReadyConsecutiveSamples; sample++)
+        {
+            if (!await IsReadyAsync())
+                return false;
+
+            if (sample + 1 < DesktopRuntimeLaunchContract.ReadyConsecutiveSamples)
+                await Task.Delay(DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds);
+        }
+        return true;
+    }
 
     private async Task<bool> IsReadyAsync()
     {

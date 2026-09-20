@@ -16,6 +16,8 @@ internal static class DesktopRuntimeLaunchContract
     internal const int DesktopPort = 3080;
     internal const int SourceStartupWaitSeconds = 300;
     internal const int ManagedStartupWaitSeconds = 120;
+    internal const int ReadyConsecutiveSamples = 3;
+    internal const int ReadySampleDelayMilliseconds = 700;
     internal const string PowerShellExecutable = "powershell.exe";
 
     internal static ProcessStartInfo CreateOwnedRuntimeStartInfo(
@@ -119,12 +121,37 @@ internal static class DesktopDeveloperConsole
     }
 }
 
+internal static class DesktopInstallationState
+{
+    internal const string AppRootFileName = "app-root.txt";
+
+    internal static string AppRootPath(string stateRoot) =>
+        Path.Combine(stateRoot, AppRootFileName);
+
+    internal static void RememberApplicationRoot(string stateRoot, string applicationRoot)
+    {
+        try
+        {
+            Directory.CreateDirectory(stateRoot);
+            File.WriteAllText(AppRootPath(stateRoot), Path.GetFullPath(applicationRoot));
+        }
+        catch
+        {
+            // The executable already knows its live AppContext path; persistence is recovery metadata.
+        }
+    }
+}
+
 internal static class DesktopSourceCheckout
 {
-    internal const string PointerFileName = "source-root.txt";
+    internal const string VerifiedPointerFileName = "backend-root.txt";
+    internal const string LegacyPointerFileName = "source-root.txt";
 
-    internal static string PointerPath(string installRoot) =>
-        Path.Combine(installRoot, PointerFileName);
+    internal static string VerifiedPointerPath(string stateRoot) =>
+        Path.Combine(stateRoot, VerifiedPointerFileName);
+
+    internal static string LegacyPointerPath(string stateRoot) =>
+        Path.Combine(stateRoot, LegacyPointerFileName);
 
     internal static bool IsRunnable(string? root)
     {
@@ -147,27 +174,37 @@ internal static class DesktopSourceCheckout
         }
     }
 
-    internal static IReadOnlyList<string> CandidateRoots(string installRoot)
+    private static string? ReadPointer(string path)
+    {
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var value = File.ReadAllText(path).Trim();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static IReadOnlyList<string> CandidateRoots(string stateRoot)
     {
         var values = new List<string>();
         var configured = Environment.GetEnvironmentVariable("PHOENIX_SOURCE_ROOT");
         if (!string.IsNullOrWhiteSpace(configured))
             values.Add(configured);
 
-        var pointer = PointerPath(installRoot);
-        if (File.Exists(pointer))
-        {
-            try
-            {
-                var remembered = File.ReadAllText(pointer).Trim();
-                if (!string.IsNullOrWhiteSpace(remembered))
-                    values.Add(remembered);
-            }
-            catch
-            {
-                // A stale pointer must never block discovery.
-            }
-        }
+        // A backend that successfully completed the desktop stability handshake wins over
+        // heuristic path discovery on all later launches.
+        var verified = ReadPointer(VerifiedPointerPath(stateRoot));
+        if (!string.IsNullOrWhiteSpace(verified))
+            values.Add(verified);
+
+        // Keep reading the legacy pointer so upgrades from 1.0.5-1.0.9 retain their hint.
+        var legacy = ReadPointer(LegacyPointerPath(stateRoot));
+        if (!string.IsNullOrWhiteSpace(legacy))
+            values.Add(legacy);
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         if (!string.IsNullOrWhiteSpace(home))
@@ -190,28 +227,52 @@ internal static class DesktopSourceCheckout
             .ToArray();
     }
 
-    internal static string? Resolve(string installRoot)
+    internal static string? Resolve(string stateRoot)
     {
-        foreach (var candidate in CandidateRoots(installRoot))
+        foreach (var candidate in CandidateRoots(stateRoot))
         {
-            if (!IsRunnable(candidate)) continue;
-            Remember(installRoot, candidate);
-            return candidate;
+            if (IsRunnable(candidate))
+                return candidate;
         }
         return null;
     }
 
-    internal static void Remember(string installRoot, string root)
+    internal static void RememberVerified(string stateRoot, string root)
     {
         try
         {
-            Directory.CreateDirectory(installRoot);
-            File.WriteAllText(PointerPath(installRoot), Path.GetFullPath(root));
+            Directory.CreateDirectory(stateRoot);
+            var full = Path.GetFullPath(root);
+            File.WriteAllText(VerifiedPointerPath(stateRoot), full);
+            // Keep the old pointer synchronized for downgrade/backward compatibility.
+            File.WriteAllText(LegacyPointerPath(stateRoot), full);
         }
         catch
         {
-            // Discovery still succeeded; persistence is only a convenience.
+            // Successful startup remains valid even if persistence is temporarily unavailable.
         }
+    }
+}
+
+internal static class DesktopNavigationRecovery
+{
+    internal const int MaxRetries = 8;
+
+    internal static bool IsTransient(string? webErrorStatus)
+    {
+        return webErrorStatus is
+            "ConnectionAborted" or
+            "ConnectionReset" or
+            "CannotConnect" or
+            "Disconnected" or
+            "Timeout" or
+            "OperationCanceled";
+    }
+
+    internal static int RetryDelayMilliseconds(int attempt)
+    {
+        var normalized = Math.Clamp(attempt, 1, MaxRetries);
+        return Math.Min(3_500, 500 + (normalized * 350));
     }
 }
 
