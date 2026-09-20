@@ -8,7 +8,7 @@
 [Setup]
 AppId={{B4E91D88-7B14-4DA0-A63D-4E61B648AE1F}
 AppName=Phoenix
-AppVersion=1.0.14
+AppVersion=1.0.15
 AppPublisher=Phoenix AI
 DefaultDirName={localappdata}\Programs\Phoenix
 DefaultGroupName=Phoenix
@@ -56,4 +56,22 @@ Filename: "{app}\Phoenix.exe"; Parameters: "--disable-autostart"; Flags: runhidd
 function InitializeSetup(): Boolean;
 begin
   Result := True;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  { Phoenix intentionally hides to tray on a normal close. During upgrades, guarantee that }
+  { the old native shell and its Node child tree are gone before replacing the payload, so }
+  { the post-install launch cannot signal a stale single-instance mutex owner. }
+  Exec(
+    ExpandConstant('{sys}\taskkill.exe'),
+    '/IM "Phoenix.exe" /T /F',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode);
+  Sleep(300);
+  Result := '';
 end;

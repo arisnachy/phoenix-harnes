@@ -98,6 +98,8 @@ EqualInt(960, BrowserLayout.PreferredBrowserWidth(2400), "wide window preserves 
 // contract for the installed EXE appearing to do nothing on first launch.
 True(DesktopStartupContract.ShowWindowBeforeRuntimeReady, "desktop window is shown before runtime readiness", failures);
 True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch signals existing window", failures);
+True(DesktopStartupContract.ReentryCollapsesBrowser, "re-entering Phoenix returns to a chat-first surface", failures);
+True(DesktopStartupContract.ReentryRetriesFailedStartup, "re-entering Phoenix retries a completed failed startup", failures);
 True(DesktopStartupContract.EmbeddedBrowserStartsLazy, "embedded browser does not delay chat startup", failures);
 True(DesktopStartupContract.UserCloseHidesToTray, "user close hides Phoenix to tray instead of stopping runtime", failures);
 Equal("Iniciando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);

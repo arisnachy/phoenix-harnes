@@ -19,6 +19,15 @@ describe('PHOENIX managed Windows installation', () => {
     expect(launcher).not.toMatch(/^pnpm\s/mu)
   })
 
+  it('forces upgrade takeover from a stale tray instance before replacing the payload', () => {
+    const iss = read('installer/windows/Phoenix.iss')
+    expect(iss).toContain('CloseApplications=force')
+    expect(iss).toContain('PrepareToInstall')
+    expect(iss).toContain('taskkill.exe')
+    expect(iss).toContain('/IM "Phoenix.exe" /T /F')
+    expect(iss).toContain('RestartApplications=no')
+  })
+
   it('delegates safe automatic checks to the managed stable updater', () => {
     const updater = read('update-phoenix.ps1')
     expect(updater).toContain("'.phoenix-managed-install'")
