@@ -79,7 +79,11 @@ function renderThrown(value: unknown): string {
   return value instanceof Error ? value.message : String(value)
 }
 
-/** Provider quota cannot be repaired by another automatic goal round. */
+/**
+ * Provider quota cannot be repaired by another automatic goal round.
+ * @param error - Unknown provider or harness error to classify.
+ * @returns Whether the error represents a terminal provider quota condition.
+ */
 export function isTerminalGoalQuota(error: unknown): boolean {
   return isHarnessError(error) && error.code === QUOTA_EXCEEDED_CODE
 }
