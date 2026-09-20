@@ -265,6 +265,8 @@ function serviceCapabilities(ctx: Context): string[] {
     'web',
     'authorization',
     'mcpConnectors',
+    'llm',
+    'agentDefaultModel',
     'subagents',
     'codeRuntime',
     'pythonCodeRuntime',
