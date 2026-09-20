@@ -12,7 +12,7 @@ describe('phoenix_reality_now tool', () => {
 
     const result = await tool.execute({ mode: 'full' }, { agent } as never)
 
-    expect(refreshNow).toHaveBeenCalledWith(ctx, true)
+    expect(refreshNow).toHaveBeenCalledWith(ctx, true, { agent })
     expect(snapshot).toHaveBeenCalledWith(ctx, expect.any(Date), { agent })
     expect(result).toBe(expected)
   })
@@ -25,6 +25,6 @@ describe('phoenix_reality_now tool', () => {
 
     await tool.execute({}, {} as never)
 
-    expect(refreshNow).toHaveBeenCalledWith(ctx, false)
+    expect(refreshNow).toHaveBeenCalledWith(ctx, false, undefined)
   })
 })

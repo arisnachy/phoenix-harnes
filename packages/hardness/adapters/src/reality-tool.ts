@@ -26,11 +26,12 @@ export function createRealitySnapshotTool(
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args, exec) {
-      await engine.refreshNow(ctx, args.mode === 'full')
+      const assembly = exec.agent === undefined ? undefined : { agent: exec.agent }
+      await engine.refreshNow(ctx, args.mode === 'full', assembly)
       const snapshot = engine.snapshot(
         ctx,
         new Date(),
-        exec.agent === undefined ? undefined : { agent: exec.agent },
+        assembly,
       )
       return JSON.parse(JSON.stringify(snapshot)) as Record<string, JsonValue>
     },
