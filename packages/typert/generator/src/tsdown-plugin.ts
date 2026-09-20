@@ -81,6 +81,10 @@ function decoratorTransformHook(): DecoratorTransformHook {
   }
 }
 
+/**
+ * Create the lightweight decorator-lowering plugin used by ordinary workspace bundles.
+ * @returns A rolldown-compatible transform plugin that lowers supported TypeScript decorators.
+ */
 export function decoratorLoweringPlugin(): DecoratorLoweringPlugin {
   return {
     name: 'dsh-decorator-lowering',
