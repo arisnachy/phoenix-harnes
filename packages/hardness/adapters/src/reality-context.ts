@@ -87,6 +87,7 @@ interface InternetProbePayload {
 
 interface UserActivityPayload {
   readonly idleSeconds: number
+  readonly screenLocked: boolean | null
 }
 
 interface AuthorizationEntryLike {
@@ -528,6 +529,7 @@ async function probeUserActivity(): Promise<{ value: UserActivityPayload | null;
   if (platform() !== 'win32') return { value: null, source: `unsupported-platform:${platform()}`, confidence: 0 }
   const source = String.raw`
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 public static class PhoenixLastInput {
   [StructLayout(LayoutKind.Sequential)]
@@ -539,6 +541,16 @@ public static class PhoenixLastInput {
   private static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
   [DllImport("kernel32.dll")]
   private static extern ulong GetTickCount64();
+  [DllImport("wtsapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+  private static extern bool WTSQuerySessionInformation(
+    IntPtr hServer,
+    int sessionId,
+    int infoClass,
+    out IntPtr buffer,
+    out int bytesReturned);
+  [DllImport("wtsapi32.dll")]
+  private static extern void WTSFreeMemory(IntPtr buffer);
+
   public static long IdleMilliseconds() {
     var info = new LASTINPUTINFO();
     info.cbSize = (uint)Marshal.SizeOf(info);
@@ -550,6 +562,31 @@ public static class PhoenixLastInput {
       : 0x100000000UL + currentLow - last;
     return (long)elapsed;
   }
+
+  public static int SessionLockFlag() {
+    IntPtr buffer = IntPtr.Zero;
+    try {
+      int bytesReturned;
+      int sessionId = Process.GetCurrentProcess().SessionId;
+      const int WTSSessionInfoEx = 25;
+      if (!WTSQuerySessionInformation(
+        IntPtr.Zero,
+        sessionId,
+        WTSSessionInfoEx,
+        out buffer,
+        out bytesReturned) || buffer == IntPtr.Zero) return -1;
+      int dataOffset = IntPtr.Size == 8 ? 8 : 4;
+      if (bytesReturned < dataOffset + 12) return -1;
+      if (Marshal.ReadInt32(buffer, 0) != 1) return -1;
+      int flag = Marshal.ReadInt32(buffer, dataOffset + 8);
+      if (flag != 0 && flag != 1) return -1;
+      Version version = Environment.OSVersion.Version;
+      if (version.Major == 6 && version.Minor == 1) flag = 1 - flag;
+      return flag;
+    } finally {
+      if (buffer != IntPtr.Zero) WTSFreeMemory(buffer);
+    }
+  }
 }`
   const encodedSource = Buffer.from(source, 'utf8').toString('base64')
   const script = [
@@ -558,7 +595,9 @@ public static class PhoenixLastInput {
     'Add-Type -TypeDefinition $source -Language CSharp',
     '$milliseconds = [PhoenixLastInput]::IdleMilliseconds()',
     'if ($milliseconds -lt 0) { throw "GetLastInputInfo failed" }',
-    '[pscustomobject]@{ idleSeconds = [math]::Round($milliseconds / 1000.0, 1) } | ConvertTo-Json -Compress',
+    '$lockFlag = [PhoenixLastInput]::SessionLockFlag()',
+    '$screenLocked = if ($lockFlag -eq 0) { $true } elseif ($lockFlag -eq 1) { $false } else { $null }',
+    '[pscustomobject]@{ idleSeconds = [math]::Round($milliseconds / 1000.0, 1); screenLocked = $screenLocked } | ConvertTo-Json -Compress',
   ].join('; ')
   try {
     const { stdout } = await execFileAsync('powershell.exe', [
@@ -574,12 +613,13 @@ public static class PhoenixLastInput {
     })
     const record = asRecord(JSON.parse(String(stdout).trim()))
     const idleSeconds = numericValue(record?.idleSeconds)
+    const screenLocked = typeof record?.screenLocked === 'boolean' ? record.screenLocked : null
     if (idleSeconds === null || idleSeconds < 0) {
       return { value: null, source: 'windows-user32:GetLastInputInfo-invalid', confidence: 0 }
     }
     return {
-      value: { idleSeconds },
-      source: 'windows-user32:GetLastInputInfo',
+      value: { idleSeconds, screenLocked },
+      source: 'windows-user32:GetLastInputInfo+wtsapi32:WTSSessionInfoEx',
       confidence: 0.98,
     }
   } catch {
@@ -600,9 +640,16 @@ function presenceFromActivity(activity: RealitySignal<UserActivityPayload>): Rec
     confidence: activity.confidence,
     stale: activity.stale,
     screenLocked: {
-      value: null,
-      source: 'not-authoritatively-probed',
-      stale: true,
+      value: activity.value?.screenLocked ?? null,
+      source: activity.value?.screenLocked === null || activity.value?.screenLocked === undefined
+        ? 'wtsapi32:WTSSessionInfoEx-unavailable'
+        : 'wtsapi32:WTSSessionInfoEx',
+      observedAt: activity.observedAt,
+      expiresAt: activity.expiresAt,
+      confidence: activity.value?.screenLocked === null || activity.value?.screenLocked === undefined
+        ? 0
+        : activity.confidence,
+      stale: activity.stale,
     },
     doNotDisturb: {
       value: null,
@@ -1385,6 +1432,25 @@ export class RealityContextEngine {
           source: 'not-authoritatively-exposed-by-current-host-adapter',
           stale: true,
           rule: 'do not infer thermals from load, fan noise, GPU status, or battery state',
+        },
+        powerState: {
+          suspended: false,
+          state: 'awake',
+          source: 'current-process-execution',
+          observedAt: now.toISOString(),
+          precision: 'current sample only; Phoenix cannot execute a probe while the operating system is suspended',
+        },
+        screenLocked: {
+          value: userActivity.value?.screenLocked ?? null,
+          source: userActivity.value?.screenLocked === null || userActivity.value?.screenLocked === undefined
+            ? 'wtsapi32:WTSSessionInfoEx-unavailable'
+            : 'wtsapi32:WTSSessionInfoEx',
+          observedAt: userActivity.observedAt,
+          expiresAt: userActivity.expiresAt,
+          confidence: userActivity.value?.screenLocked === null || userActivity.value?.screenLocked === undefined
+            ? 0
+            : userActivity.confidence,
+          stale: userActivity.stale,
         },
       },
       network: {
