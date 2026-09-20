@@ -89,7 +89,8 @@ function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntime
     `Task: ${input.task.title}`,
     `Occurrence: ${input.scheduledFor}`,
     `Idempotency key: ${input.idempotencyKey}`,
-    `Instruction: ${input.instruction}`,\n    'Execution-time reality: use the current Phoenix Reality Context. Re-check any stale or missing time, timezone, calendar, location, weather/daylight, network, device-resource, connector-auth, provider/quota, or update-state fact that materially affects this task before acting.',
+    `Instruction: ${input.instruction}`,
+    'Execution-time reality: use the current Phoenix Reality Context. Re-check any stale or missing time, timezone, calendar, location, weather/daylight, network, device-resource, connector-auth, provider/quota, or update-state fact that materially affects this task before acting.',
   ]
   if (input.preparationResult !== undefined) lines.push(`Prepared result: ${input.preparationResult}`)
   if (conditionEvidence !== undefined) lines.push(`Condition verified true: ${conditionEvidence}`)
