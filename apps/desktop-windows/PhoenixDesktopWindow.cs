@@ -19,6 +19,9 @@ internal sealed class PhoenixDesktopWindow : Form
     private readonly ToolStripButton forwardButton = new("→");
     private readonly Panel startupOverlay = new();
     private readonly Label startupStatus = new();
+    private readonly Label startupSpinner = new();
+    private readonly System.Windows.Forms.Timer startupAnimationTimer = new() { Interval = 120 };
+    private int startupAnimationFrame;
     private bool initialized;
     private bool runtimeReady;
     private bool applyingBrowserLayout;
@@ -161,8 +164,11 @@ internal sealed class PhoenixDesktopWindow : Form
 
         startupStatus.Text = text;
         startupStatus.ForeColor = isError ? Color.Firebrick : SystemColors.ControlText;
+        startupSpinner.ForeColor = isError ? Color.Firebrick : SystemColors.ControlText;
         startupOverlay.Visible = true;
         startupOverlay.BringToFront();
+        if (!startupAnimationTimer.Enabled)
+            startupAnimationTimer.Start();
     }
 
     internal void MarkRuntimeReady()
@@ -282,6 +288,18 @@ internal sealed class PhoenixDesktopWindow : Form
         startupOverlay.Dock = DockStyle.Fill;
         startupOverlay.BackColor = SystemColors.Window;
 
+        var spinnerFrames = new[] { "◐", "◓", "◑", "◒" };
+        startupAnimationTimer.Tick += (_, _) =>
+        {
+            if (!startupOverlay.Visible)
+            {
+                startupAnimationTimer.Stop();
+                return;
+            }
+            startupAnimationFrame = (startupAnimationFrame + 1) % spinnerFrames.Length;
+            startupSpinner.Text = spinnerFrames[startupAnimationFrame];
+        };
+
         var title = new Label
         {
             AutoSize = true,
@@ -291,21 +309,30 @@ internal sealed class PhoenixDesktopWindow : Form
             Anchor = AnchorStyles.None,
         };
 
+        startupSpinner.AutoSize = true;
+        startupSpinner.Text = spinnerFrames[0];
+        startupSpinner.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 20, FontStyle.Regular);
+        startupSpinner.ForeColor = SystemColors.ControlText;
+
         startupStatus.AutoSize = false;
         startupStatus.TextAlign = ContentAlignment.MiddleCenter;
         startupStatus.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 12, FontStyle.Regular);
         startupStatus.ForeColor = SystemColors.ControlText;
         startupStatus.Dock = DockStyle.Fill;
-        startupStatus.Padding = new Padding(30, 90, 30, 30);
+        startupStatus.Padding = new Padding(30, 125, 30, 30);
         startupStatus.Text = DesktopStartupContract.InitialStatus;
 
         startupOverlay.Controls.Add(startupStatus);
+        startupOverlay.Controls.Add(startupSpinner);
         startupOverlay.Controls.Add(title);
         startupOverlay.Resize += (_, _) =>
         {
             title.Left = Math.Max(16, (startupOverlay.ClientSize.Width - title.Width) / 2);
-            title.Top = Math.Max(32, (startupOverlay.ClientSize.Height / 2) - 90);
+            title.Top = Math.Max(32, (startupOverlay.ClientSize.Height / 2) - 105);
+            startupSpinner.Left = Math.Max(16, (startupOverlay.ClientSize.Width - startupSpinner.Width) / 2);
+            startupSpinner.Top = Math.Max(80, (startupOverlay.ClientSize.Height / 2) - 18);
         };
+        startupAnimationTimer.Start();
     }
 
     private ToolStrip BuildBrowserToolbar()
@@ -395,6 +422,7 @@ internal sealed class PhoenixDesktopWindow : Form
                     phoenixNavigationRetryCount = 0;
                     phoenixNavigationRetryScheduled = false;
                     startupOverlay.Visible = false;
+                    startupAnimationTimer.Stop();
                     return;
                 }
 
@@ -650,6 +678,13 @@ internal sealed class PhoenixDesktopWindow : Form
             address.SelectAll();
             e.SuppressKeyPress = true;
         }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            startupAnimationTimer.Dispose();
+        base.Dispose(disposing);
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
