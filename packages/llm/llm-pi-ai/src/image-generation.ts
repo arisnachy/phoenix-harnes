@@ -1,19 +1,21 @@
 /**
- * Codex/ChatGPT-authenticated image-generation bridge.
+ * Provider-aware real-raster image-generation bridge.
  *
- * The active text model is deliberately irrelevant: a free OpenRouter model,
- * DeepSeek, or another route may still ask this tool for a visual. The bridge
- * delegates the raster work to the locally installed Codex CLI, which owns the
- * ChatGPT subscription authentication and the hosted image-generation tool.
- * It never forwards an OPENAI_API_KEY or another separately billed credential.
+ * OpenAI Codex callers use the locally installed Codex CLI and its authenticated
+ * built-in image tool. Non-Codex callers use a configured Hugging Face free-tier
+ * image route. The bridge never falls back to SVG/HTML/CSS/canvas artwork and
+ * never forwards an OPENAI_API_KEY or silently crosses into separately billed
+ * OpenAI API usage.
  * @module dsh-llm-pi-ai/image-generation
  */
 
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, extname, join, resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
+import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 
 /** Stable failure classes used by the image bridge's diagnostics and tests. */
@@ -62,6 +64,15 @@ interface ImageSubprocessService {
   }): ImageSubprocessHandle
 }
 
+interface ImageExecutionContext {
+  readonly signal: AbortSignal
+  readonly agent?: {
+    readonly options: {
+      readonly provider?: string
+    }
+  }
+}
+
 interface ImageToolDefinition {
   readonly name: string
   readonly description: string
@@ -72,7 +83,7 @@ interface ImageToolDefinition {
     presentationMeta?(args: unknown, value: unknown): Record<string, unknown>
   }
   readonly timeoutMs: number
-  execute(args: unknown, exec: { readonly signal: AbortSignal }): Promise<unknown>
+  execute(args: unknown, exec: ImageExecutionContext): Promise<unknown>
 }
 
 interface ImageToolRegistry {
@@ -88,16 +99,19 @@ interface ImageRuntimeContext {
 type ImageSize = 'auto' | '1024x1024' | '1536x1024' | '1024x1536'
 type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
 type ImageBackground = 'auto' | 'opaque' | 'transparent'
+export type ImageGenerationBackend = 'auto' | 'codex' | 'free'
+export type ImageGenerationProvider = 'codex' | 'huggingface'
 
 interface ImageGenerationArgs {
   readonly prompt: string
   readonly size?: ImageSize
   readonly quality?: ImageQuality
   readonly background?: ImageBackground
+  readonly backend?: ImageGenerationBackend
 }
 
 interface ImageGenerationValue {
-  readonly provider: 'codex'
+  readonly provider: ImageGenerationProvider
   readonly model: string
   /** Absolute local path the next tool call can reopen with `read_image`. */
   readonly path: string
@@ -109,16 +123,14 @@ interface ImageGenerationValue {
  * the capability visible to every model that sees the normal tool catalog.
  */
 export const imageGenerationToolDescription =
-  'Generate an actual image with PHOENIX using the user\'s locally authenticated Codex/ChatGPT image capability. '
-  + 'Use this whenever the user explicitly asks to create, draw, design, render, visualize, or generate an image, logo, banner, poster, cover, illustration, mockup, UI concept, diagram, thumbnail, or other visual asset. '
-  + 'Also use it when completing a project whose required deliverables materially include visual assets such as branding, a hero image, application/web artwork, presentation graphics, or marketing creative. '
-  + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, include type-appropriate imagery when it materially improves the requested result: for example a hero image for a landing page, product or subject imagery for a catalog, or charts and diagrams for a report when supported by real data. '
-  + 'When the artifact format can embed governed image attachments, wire the generated asset into the final artifact; otherwise return the image as a governed visual artifact and do not pretend that a text-only page contains it. Do not invent data, add unrelated decoration, or rely on arbitrary external image URLs. '
-  + 'The successful result includes both a durable attachment and the absolute local path of the generated raster; reuse that path with read_image when the image must be inspected or embedded in a later deliverable. '
-  + 'Pass the complete visual request in prompt. Governed HARDNESS recovery may supply the same request as brief or objective; PHOENIX normalizes those aliases before invoking Codex. '
-  + 'Do not return only an image prompt when the user asked for the actual image and this tool is available. '
-  + 'The image backend is independent of the active text model, so use it even when the current language model is OpenRouter/free, DeepSeek, or another non-Codex route. '
-  + 'Generate one distinct final visual per call. Do not create decorative images that are irrelevant to the requested deliverable.'
+  'Generate one actual, high-quality raster image with PHOENIX. Never satisfy an image, photo, hero, logo, banner, poster, cover, illustration, mockup, thumbnail, or visual-asset request with SVG, HTML, CSS, canvas drawing, emoji, ASCII art, a placeholder, or an anthropomorphic mascot unless the user explicitly requested that style. '
+  + 'Use this whenever the user explicitly asks to create, draw, design, render, visualize, or generate an image, and when a project materially requires real imagery. '
+  + 'When the active route is OpenAI Codex, set backend=codex so PHOENIX uses the locally authenticated Codex/ChatGPT built-in image generator. For a non-Codex model, set backend=free so PHOENIX uses the configured free-tier raster provider; never silently switch to a separately billed OpenAI API. '
+  + 'If a real raster backend is unavailable, fail loudly instead of fabricating a vector/HTML substitute. '
+  + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, generate type-appropriate imagery when it materially improves the requested result and wire the generated attachment into the final artifact when the format permits it; keep data charts and tables on structured visualization surfaces rather than inventing them as image content. '
+  + 'For ordinary real-world subjects, prefer natural, professional, coherent imagery and do not turn objects into living characters or mascots unless the user asks for that. '
+  + 'The successful result includes both a durable attachment and an absolute local path; reuse that path with read_image when the image must be inspected or embedded later. '
+  + 'Pass the complete visual request in prompt. Governed HARDNESS recovery may supply the same request as brief or objective. Generate one distinct final visual per call.'
 
 /**
  * Recognize a known Codex doctor posture for diagnostics. Doctor output is not
@@ -212,6 +224,158 @@ function codexHome(): string {
   return configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.codex')
 }
 
+const DEFAULT_FREE_IMAGE_MODEL = 'stabilityai/stable-diffusion-3-medium-diffusers'
+const MAX_FREE_IMAGE_BYTES = 32 * 1024 * 1024
+
+/** Select the concrete image backend without silently crossing billing domains. */
+export function selectImageGenerationBackend(
+  requested: ImageGenerationBackend | undefined,
+  activeProvider: string | undefined,
+): Exclude<ImageGenerationBackend, 'auto'> {
+  if (requested === 'codex' || requested === 'free') return requested
+  return activeProvider === undefined || activeProvider === 'openai-codex' ? 'codex' : 'free'
+}
+
+function highQualityPrompt(prompt: string): string {
+  return [
+    prompt,
+    '',
+    'Production-quality constraints: create a polished, coherent raster image suitable for the final deliverable.',
+    'Keep real-world subjects natural and geometrically coherent. Do not turn ordinary objects into living characters, mascots, emoji-like figures, or placeholder art unless the request explicitly asks for that style.',
+  ].join('\n')
+}
+
+function freeImageDimensions(size: ImageSize | undefined): { readonly width: number; readonly height: number } {
+  switch (size) {
+    case '1536x1024': return { width: 1344, height: 896 }
+    case '1024x1536': return { width: 896, height: 1344 }
+    default: return { width: 1024, height: 1024 }
+  }
+}
+
+function imageMediaTypeFromHeader(value: string | null): ImageMediaType | undefined {
+  const mime = value?.split(';', 1)[0]?.trim().toLowerCase()
+  switch (mime) {
+    case 'image/png': return 'image/png'
+    case 'image/jpeg':
+    case 'image/jpg': return 'image/jpeg'
+    case 'image/webp': return 'image/webp'
+    case 'image/gif': return 'image/gif'
+    default: return undefined
+  }
+}
+
+function imageMediaTypeFromBytes(data: Buffer): ImageMediaType | undefined {
+  if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'image/png'
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg'
+  if (data.length >= 12 && data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP') return 'image/webp'
+  if (data.length >= 6 && (data.toString('ascii', 0, 6) === 'GIF87a' || data.toString('ascii', 0, 6) === 'GIF89a')) return 'image/gif'
+  return undefined
+}
+
+function imageExtension(mediaType: ImageMediaType): string {
+  switch (mediaType) {
+    case 'image/png': return '.png'
+    case 'image/jpeg': return '.jpg'
+    case 'image/webp': return '.webp'
+    case 'image/gif': return '.gif'
+  }
+}
+
+async function huggingFaceToken(ctx: Context): Promise<string | undefined> {
+  try {
+    const credentials = ctx.get('credentials')
+    const stored = await credentials?.resolve(credentialRef('HF_TOKEN'))
+    const value = stored?.value.trim()
+    if (value !== undefined && value.length > 0) return value
+  } catch {
+    // A composition without a credential service still gets environment fallback below.
+  }
+  const fromEnvironment = process.env.HF_TOKEN?.trim()
+  return fromEnvironment === undefined || fromEnvironment.length === 0 ? undefined : fromEnvironment
+}
+
+async function generateWithFreeProvider(
+  ctx: Context,
+  args: ImageGenerationArgs,
+  prompt: string,
+  signal: AbortSignal,
+): Promise<ImageGenerationValue> {
+  const token = await huggingFaceToken(ctx)
+  if (token === undefined) {
+    throw new Error(
+      'image_generation: non-Codex image generation requires a Hugging Face free-tier token in the Phoenix credential vault or HF_TOKEN. PHOENIX will not fabricate SVG/HTML art and will not silently use a paid OpenAI API.',
+    )
+  }
+
+  const model = process.env.PHOENIX_IMAGE_FREE_MODEL?.trim() || DEFAULT_FREE_IMAGE_MODEL
+  const encodedModel = model.split('/').map(segment => encodeURIComponent(segment)).join('/')
+  const { width, height } = freeImageDimensions(args.size)
+  const quality = args.quality ?? 'auto'
+  const steps = quality === 'high' ? 36 : quality === 'low' ? 20 : 28
+
+  let response: Response
+  try {
+    response = await fetch(`https://router.huggingface.co/hf-inference/models/${encodedModel}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'image/*',
+      },
+      body: JSON.stringify({
+        inputs: highQualityPrompt(prompt),
+        parameters: {
+          width,
+          height,
+          num_inference_steps: steps,
+          guidance_scale: 6,
+        },
+      }),
+      signal,
+    })
+  } catch (error) {
+    signal.throwIfAborted()
+    throw new Error(`image_generation: free Hugging Face image backend failed to connect: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  if (!response.ok) {
+    const diagnostic = (await response.text()).trim().slice(0, 1600)
+    const suffix = diagnostic.length === 0 ? '' : `: ${diagnostic}`
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`image_generation: Hugging Face rejected HF_TOKEN; store a token with Inference Providers permission and retry${suffix}`)
+    }
+    if (response.status === 402 || response.status === 429) {
+      throw new Error(`image_generation: Hugging Face free-tier credits/rate limit are unavailable. No paid OpenAI fallback was attempted${suffix}`)
+    }
+    throw new Error(`image_generation: Hugging Face image generation failed with HTTP ${response.status}${suffix}`)
+  }
+
+  const data = Buffer.from(await response.arrayBuffer())
+  if (data.length === 0) throw new Error('image_generation: Hugging Face returned an empty image')
+  if (data.length > MAX_FREE_IMAGE_BYTES) {
+    throw new Error(`image_generation: Hugging Face returned ${data.length} bytes, exceeding the ${MAX_FREE_IMAGE_BYTES}-byte safety bound`)
+  }
+  const mediaType = imageMediaTypeFromHeader(response.headers.get('content-type')) ?? imageMediaTypeFromBytes(data)
+  if (mediaType === undefined) throw new Error('image_generation: Hugging Face returned an unsupported non-raster payload')
+
+  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
+  await mkdir(generatedRoot, { recursive: true })
+  const path = join(generatedRoot, `hf-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
+  await writeFile(path, data, { flag: 'wx' })
+  const attachment = await servicesOf(ctx).attachments.saveImage({
+    data,
+    mediaType,
+    name: basename(path),
+  })
+  return {
+    provider: 'huggingface',
+    model,
+    path,
+    attachment,
+  }
+}
+
 async function listGeneratedImages(root: string): Promise<GeneratedImageCandidate[]> {
   const found: GeneratedImageCandidate[] = []
   const pending = [root]
@@ -297,7 +461,7 @@ function generationPrompt(
     `Requested size/aspect guidance: ${size}.`,
     `Requested quality guidance: ${quality}.`,
     `Requested background guidance: ${background}.`,
-    `Image request: ${prompt}`,
+    `Image request: ${highQualityPrompt(prompt)}`,
     'After the image tool finishes, end the task.',
   ].join('\n')
 }
@@ -336,6 +500,7 @@ function imageGenerationArgs(args: unknown): ImageGenerationArgs {
     ...(typeof value.size === 'string' ? { size: value.size as ImageSize } : {}),
     ...(typeof value.quality === 'string' ? { quality: value.quality as ImageQuality } : {}),
     ...(typeof value.background === 'string' ? { background: value.background as ImageBackground } : {}),
+    ...(typeof value.backend === 'string' ? { backend: value.backend as ImageGenerationBackend } : {}),
   }
 }
 
@@ -432,6 +597,11 @@ export function installCodexImageGeneration(ctx: Context): void {
           enum: ['auto', 'opaque', 'transparent'],
           description: 'Requested background guidance. Omit for auto.',
         },
+        backend: {
+          type: 'string',
+          enum: ['auto', 'codex', 'free'],
+          description: 'Image backend. Use codex for OpenAI Codex routes and free for non-Codex routes. Auto infers from the calling agent provider.',
+        },
       },
     },
     output: {
@@ -439,7 +609,7 @@ export function installCodexImageGeneration(ctx: Context): void {
         type: 'object',
         additionalProperties: false,
         properties: {
-          provider: { type: 'string', const: 'codex' },
+          provider: { type: 'string', enum: ['codex', 'huggingface'] },
           model: { type: 'string' },
           path: { type: 'string' },
           attachment: {
@@ -463,7 +633,7 @@ export function installCodexImageGeneration(ctx: Context): void {
         return [
           {
             type: 'text',
-            text: `Generated image with Codex (${result.attachment.width}×${result.attachment.height}, ${result.attachment.mediaType}).\n<path>${result.path}</path>`,
+            text: `Generated image with ${result.provider === 'codex' ? 'Codex' : 'Hugging Face'} (${result.attachment.width}×${result.attachment.height}, ${result.attachment.mediaType}).\n<path>${result.path}</path>`,
           },
           { type: 'image', attachment: result.attachment },
         ]
@@ -476,6 +646,11 @@ export function installCodexImageGeneration(ctx: Context): void {
       const prompt = args.prompt.trim()
       if (prompt.length === 0) throw new Error('image_generation: prompt must not be empty')
       if (prompt.length > 32_000) throw new Error('image_generation: prompt exceeds the 32,000-character safety bound')
+
+      const backend = selectImageGenerationBackend(args.backend, exec.agent?.options.provider)
+      if (backend === 'free') {
+        return generateWithFreeProvider(ctx, args, prompt, exec.signal)
+      }
 
       await probeCodexImagePosture(ctx, exec.signal)
       const generatedRoot = join(codexHome(), 'generated_images')

@@ -49,6 +49,7 @@ describe('phoenix_visualize tool', () => {
     const tool = createPhoenixVisualizerTool()
     expect(tool.name).toBe('phoenix_visualize')
     expect(tool.description).toContain('rich inline Phoenix visual')
+    expect(tool.description).toContain('use image_generation for real raster imagery')
     expect(tool.parameters).toEqual(expect.objectContaining({
       type: 'object',
       required: ['title', 'visual'],
