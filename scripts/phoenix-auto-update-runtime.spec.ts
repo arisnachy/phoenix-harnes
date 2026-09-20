@@ -25,6 +25,15 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).toContain('Restart PHOENIX to reconcile the runtime')
   })
 
+  it('uses a verified active isolated runtime as the effective update baseline', () => {
+    expect(updater).toContain('function validatedActiveRuntime(root)')
+    expect(updater).toContain('function effectiveCurrentCommit(root)')
+    expect(updater).toContain('const activeRuntime = validatedActiveRuntime(root)')
+    expect(updater).toContain('const current = activeRuntime?.target ?? sourceCurrent')
+    expect(updater).toContain('prepared.base !== effectiveCurrentCommit(root)')
+    expect(updater).toContain('already active in the verified isolated runtime; no update action is required')
+  })
+
   it('allows the supervisor to stage stable while the source checkout stays on a development branch', () => {
     expect(updater).toContain("isolatedRuntime: process.env.PHOENIX_UPDATE_SUPERVISED === '1'")
     expect(updater).toContain("case 'isolate':")
