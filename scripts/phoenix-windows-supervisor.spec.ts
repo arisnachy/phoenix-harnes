@@ -201,12 +201,12 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('clean managed checkout is newer')
   })
 
-  it('retires an isolated runtime that crashes before its health checkpoint', () => {
-    expect(source).toContain('if (earlyCrash && runtimeRoot !== root)')
+  it('retires an isolated runtime after any unexpected Host exit instead of relaunching it forever', () => {
+    expect(source).toContain('if (runtimeRoot !== root)')
     expect(source).toContain('const failedRuntime = runtimeRoot')
     expect(source).toContain('runtimeRoot = root')
     expect(source).toContain('clearActiveRuntime()')
-    expect(source).toContain('falling back to the source checkout')
+    expect(source).toContain('instead of relaunching a broken update')
   })
 
 })
