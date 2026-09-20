@@ -1064,10 +1064,13 @@ export class RealityContextEngine {
   private gpu = cache<GpuPayload>(null, 'not-probed', 1, 0)
   private clockSync = cache<boolean>(null, 'not-probed', 1, 0)
   private weather = cache<WeatherPayload>(null, 'not-configured', 1, 0)
+  private browserWeather = cache<WeatherPayload>(null, 'not-probed', 1, 0)
+  private browserWeatherKey: string | undefined
   private runtimeServices = cache<RuntimeServiceTelemetry>(null, 'not-probed', 1, 0)
   private timer: ReturnType<typeof setInterval> | undefined
   private refreshJob: Promise<void> | undefined
   private runtimeRefreshJob: Promise<void> | undefined
+  private browserWeatherJob: Promise<void> | undefined
 
   constructor(readonly config: RealityContextConfig) {}
 
@@ -1174,6 +1177,41 @@ export class RealityContextEngine {
     }
   }
 
+  private async refreshBrowserWeather(
+    ctx: Context,
+    assembly: RealityAssemblyContext | undefined,
+    force = false,
+  ): Promise<void> {
+    const location = effectiveLocation(ctx, this.config, assembly)
+    if (location?.kind !== 'browser') return
+    const key = locationKey(location)
+    if (this.browserWeatherJob !== undefined) {
+      await this.browserWeatherJob
+      if (!force && this.browserWeatherKey === key && Date.now() <= this.browserWeather.expiresAt) return
+    }
+    if (!force && this.browserWeatherKey === key && Date.now() <= this.browserWeather.expiresAt) return
+
+    const job = (async () => {
+      try {
+        const value = await fetchWeatherAt(location.latitude, location.longitude)
+        this.browserWeatherKey = key
+        this.browserWeather = cache(value, 'open-meteo:browser-location', 10 * 60_000, 0.95)
+      } catch {
+        this.browserWeatherKey = key
+        this.browserWeather = cache<WeatherPayload>(
+          null,
+          'open-meteo:browser-location-unavailable',
+          60_000,
+          0,
+        )
+      }
+    })().finally(() => {
+      if (this.browserWeatherJob === job) this.browserWeatherJob = undefined
+    })
+    this.browserWeatherJob = job
+    await job
+  }
+
   /**
    * Wait for a usable Reality Context refresh. Full mode deliberately expires
    * cached probes first; ordinary mode respects per-signal TTLs and only waits
@@ -1181,11 +1219,16 @@ export class RealityContextEngine {
    * @param ctx - Cordis scope supplying live Phoenix runtime services.
    * @param full - Whether to invalidate every configured probe before refreshing.
    */
-  async refreshNow(ctx: Context, full = false): Promise<void> {
+  async refreshNow(
+    ctx: Context,
+    full = false,
+    assembly?: RealityAssemblyContext,
+  ): Promise<void> {
     if (full) {
       await Promise.all([
         this.refreshJob ?? Promise.resolve(),
         this.runtimeRefreshJob ?? Promise.resolve(),
+        this.browserWeatherJob ?? Promise.resolve(),
       ])
       for (const entry of [
         this.internet,
@@ -1194,6 +1237,7 @@ export class RealityContextEngine {
         this.gpu,
         this.clockSync,
         this.weather,
+        this.browserWeather,
         this.runtimeServices,
       ]) {
         entry.expiresAt = 0
@@ -1202,6 +1246,7 @@ export class RealityContextEngine {
     await Promise.all([
       this.refresh(),
       this.refreshRuntimeServices(ctx),
+      this.refreshBrowserWeather(ctx, assembly, full),
     ])
   }
 
@@ -1215,8 +1260,20 @@ export class RealityContextEngine {
     const intl = new Intl.DateTimeFormat().resolvedOptions()
     const timezone = intl.timeZone || 'UTC'
     const dst = daylightSavings(now)
-    const weather = signal(this.weather, epoch)
-    const locationConfigured = this.config.latitude !== undefined && this.config.longitude !== undefined
+    const location = effectiveLocation(ctx, this.config, assembly)
+    if (location?.kind === 'browser') void this.refreshBrowserWeather(ctx, assembly)
+    const weather = location?.kind === 'browser'
+      ? this.browserWeatherKey === locationKey(location)
+        ? signal(this.browserWeather, epoch)
+        : {
+            value: null,
+            source: 'not-probed',
+            observedAt: now.toISOString(),
+            expiresAt: now.toISOString(),
+            confidence: 0,
+            stale: true,
+          }
+      : signal(this.weather, epoch)
     const weatherValue = weather.value
     const sunrise = weatherValue?.sunrise ?? null
     const sunset = weatherValue?.sunset ?? null
@@ -1246,22 +1303,39 @@ export class RealityContextEngine {
         processUptimeSeconds: Math.round(uptime()),
         ntpSynchronized: signal(this.clockSync, epoch),
       },
-      location: locationConfigured
+      location: location === undefined
         ? {
-            status: 'authorized-configured',
-            label: this.config.locationLabel ?? null,
-            latitude: this.config.latitude,
-            longitude: this.config.longitude,
-            accuracyMeters: this.config.accuracyMeters ?? null,
-            source: 'explicit PHOENIX_REALITY_* configuration',
+            status: 'unknown',
+            country: null,
+            region: null,
+            city: null,
+            reason: 'precise coordinates were not explicitly configured and no non-expired browser geolocation permission sample is available',
+            source: 'none',
           }
         : {
-            status: 'unknown',
-            reason: 'precise coordinates were not explicitly authorized/configured',
-            source: 'none',
+            status: location.kind === 'configured' ? 'authorized-configured' : 'authorized-browser',
+            country: null,
+            region: null,
+            city: null,
+            label: location.label,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            accuracyMeters: location.accuracyMeters,
+            source: location.source,
+            observedAt: location.observedAt === null ? null : new Date(location.observedAt).toISOString(),
+            expiresAt: location.expiresAt === null ? null : new Date(location.expiresAt).toISOString(),
+            retention: location.kind === 'browser' ? 'ephemeral-host-cache' : 'configuration',
+            rule: location.kind === 'browser'
+              ? 'browser coordinates exist only because geolocation permission was already granted; do not infer city/region/country or persist the coordinates as memory'
+              : 'configured coordinates are explicit host configuration',
           },
-      weather: locationConfigured
+      weather: location === undefined
         ? {
+            status: 'unknown',
+            reason: 'weather is not queried without authorized coordinates',
+            source: 'none',
+          }
+        : {
             status: weather.value === null ? 'unavailable' : 'available',
             signal: weather,
             alerts: {
@@ -1269,11 +1343,6 @@ export class RealityContextEngine {
               source: 'not-provided-by-current-weather-adapter',
               stale: true,
             },
-          }
-        : {
-            status: 'unknown',
-            reason: 'weather is not queried without authorized coordinates',
-            source: 'none',
           },
       daylight: daylightKnown
         ? {
