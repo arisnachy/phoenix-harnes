@@ -526,7 +526,10 @@ async function runCodex(
   const subprocess = servicesOf(ctx).subprocess
   const executable = await subprocess.resolveExecutable('codex', undefined, signal)
   const handle = subprocess.spawn({
-    argv: [executable, ...argvTail],
+    // Phoenix image work is ephemeral and does not need Codex's SQLite thread/log
+    // state. Disabling it keeps the user's authenticated CODEX_HOME but avoids
+    // contention/corruption in state_5.sqlite and logs_2.sqlite.
+    argv: [executable, '--disable', 'sqlite', ...argvTail],
     cwd: process.cwd(),
     stdio: {
       stdin: stdin === undefined ? 'ignore' : { data: stdin },
