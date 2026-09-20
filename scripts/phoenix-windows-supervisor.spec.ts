@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
+const restartBridgeSource = readFileSync(resolve('scripts/phoenix-prepared-restart-bridge.mjs'), 'utf8')
 const activatorSource = readFileSync(resolve('scripts/phoenix-activate-prepared.mjs'), 'utf8')
 const cliSource = readFileSync(resolve('apps/cli/src/bin.ts'), 'utf8')
 const acpPackage = JSON.parse(readFileSync(resolve('packages/examples/acp-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
@@ -80,6 +81,24 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(cliSource).toContain("import { preparePhoenixWebRuntime } from './phoenix-runtime-freshness.ts'")
     expect(cliSource).toContain('preparePhoenixWebRuntime(runtimeSourceRoot)')
     expect(cliSource).toContain("const runtimeSourceRoot = resolve(supervisor, '..', '..')")
+  })
+
+  it('keeps the current Host online until the replacement runtime is fully prewarmed', () => {
+    expect(source).toContain('warming replacement runtime while current Host remains online')
+    expect(source).toContain('const runtime = activatePreparedRuntime(updateTarget)')
+    expect(source).toContain("kind: 'safe-update-handoff'")
+    expect(source).toContain('replacement runtime is fully ready; handing off from the current Host')
+
+    const warm = source.indexOf('warming replacement runtime while current Host remains online')
+    const kill = source.indexOf('if (host.exitCode === null) host.kill()', warm)
+    expect(warm).toBeGreaterThan(-1)
+    expect(kill).toBeGreaterThan(warm)
+  })
+
+  it('does not let the prepared bridge request a Host shutdown for supervised updates', () => {
+    expect(restartBridgeSource).toContain('writeJsonAtomic(join(controlDir, UPDATE_RESTART_FILE)')
+    expect(restartBridgeSource).not.toContain('writeJsonAtomic(join(controlDir, HOST_RESTART_FILE)')
+    expect(restartBridgeSource).not.toContain("const HOST_RESTART_FILE = 'phoenix-host-restart-request.json'")
   })
 
   it('routes dirty live checkouts through the verified isolated runtime', () => {

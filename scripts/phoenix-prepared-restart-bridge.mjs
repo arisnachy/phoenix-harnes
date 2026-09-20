@@ -3,9 +3,10 @@
  * Bridge verified prepared updates into the Windows supervisor restart contract.
  *
  * The stable updater itself never owns the Host lifecycle. This helper converts
- * a verified prepared marker into the two durable requests the external
- * supervisor understands: activate this exact update target, then restart the
- * Host safely. `--arm-staging` also bootstraps legacy unsupervised Windows Hosts
+ * a verified prepared marker into a durable activation request. The external
+ * supervisor keeps the current Host serving while it builds and boot-preflights
+ * the replacement runtime, then performs the shortest possible handoff.
+ * `--arm-staging` also bootstraps legacy unsupervised Windows Hosts
  * so an update that introduces/fixes the supervisor can activate itself instead
  * of waiting forever for a manual Host exit.
  */
@@ -18,7 +19,6 @@ import process from 'node:process'
 
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const UPDATE_RESTART_FILE = 'phoenix-update-restart-request.json'
-const HOST_RESTART_FILE = 'phoenix-host-restart-request.json'
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
 const POLL_MS = 250
 const scriptPath = fileURLToPath(import.meta.url)
@@ -83,13 +83,6 @@ function requestActivation(controlDir, target) {
     target,
     requestedAt: now,
     requestedByPid: process.pid,
-  })
-  writeJsonAtomic(join(controlDir, HOST_RESTART_FILE), {
-    schema: 1,
-    kind: 'host-restart',
-    requestedAt: now,
-    requestedByPid: process.pid,
-    reason: `verified stable update ${target.slice(0, 12)} prepared; activate and restart`,
   })
 }
 
