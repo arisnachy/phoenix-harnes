@@ -1729,6 +1729,26 @@ Explicitly delete Phoenix’s durable relationship to one creation and detach it
 
 Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
 
+### `living_get_connector_kit`
+
+Return the provisioned Phoenix control descriptor plus drop-in JavaScript and Python sidecar modules for one non-static creation. Keep the bearer token in a local/server-side secret; never commit it or ship it in a public browser bundle.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
 ### `living_inspect_creation`
 
 Inspect one remembered creation and verify its live provider achieved the target integration level before delivery.
@@ -1802,7 +1822,6 @@ Remember any user-facing artifact or runnable system Phoenix creates or material
     "target_level": {
       "type": "string",
       "enum": [
-        "static",
         "connected",
         "reactive",
         "controllable",
@@ -2360,7 +2379,7 @@ The five read-only tools hide provider cursors and authorize every result from t
 
 ### `subagent`
 
-Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.
+Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`. Presupuesto Phoenix de subagentes: usa 1 como norma. Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, marcando hard_parallelism=true. Abre un tercero solo en un caso extremo donde tres frentes independientes sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, el contexto, la identidad y la síntesis final en el agente principal.
 
 ```json
 {
@@ -2373,6 +2392,14 @@ Orquestar una tarea independiente con un subagente en contexto limpio para desca
     "prompt": {
       "type": "string",
       "description": "Describe en español la tarea autónoma del subagente, con archivos relevantes, límites y evidencia esperada. Devuelve solo el resultado verificable."
+    },
+    "hard_parallelism": {
+      "type": "boolean",
+      "description": "Second active slot only. Set true ONLY when one subagent is insufficient and the task has two genuinely independent difficult workstreams."
+    },
+    "extreme_parallelism": {
+      "type": "boolean",
+      "description": "Third active slot only. Set true ONLY in an extreme case that truly requires three independent workstreams. It never permits a fourth child."
     },
     "run_in_background": {
       "type": "boolean",

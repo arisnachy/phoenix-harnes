@@ -381,6 +381,8 @@ export interface Config {
   graceMs?: number
   /** Explicit bash executable; Windows otherwise prefers a native Git Bash installation. */
   bashPath?: string
+  /** Maximum duration of the Windows Git Bash startup health check. */
+  healthCheckTimeoutMs?: number
 }
 ```
 
@@ -772,16 +774,28 @@ Source: [`packages/goal/goal/src/index.ts:130`](../packages/goal/goal/src/index.
 Requires: `hardness` · `tools` · `skills` · `agents` · `approval` · `systemPrompt` · `authorization`
 
 ```ts config-catalog
-/** HARDNESS mission completion judge configuration. */
+/** HARDNESS mission and durable proactivity configuration. */
 export interface Config {
   /** Structured subagent provider used for independent completion review. */
   judgeProvider?: string
   /** Register model-facing HARDNESS tools in this scope. */
   modelTools?: boolean
+  /** Durable proactive-task ledger. Empty/omitted uses ~/.dsh/phoenix-tasks.json; :memory: is test-only. */
+  taskLedgerPath?: string
+  /** How often the host checks for due scheduled work. */
+  taskPollMs?: number
+  /** One-shot subagent provider used for private preparation and scheduled office work. */
+  privateWorkProvider?: string
+  /** Maximum retained characters from one private preparation result. */
+  privateWorkResultChars?: number
+  /** Configured mail identity reference used for office mail sent on the user's behalf. */
+  userMailIdentity?: string
+  /** Configured mail identity reference Phoenix uses when communicating as itself. */
+  harnessMailIdentity?: string
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:89`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:119`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
@@ -1036,7 +1050,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/living-local/src/index.ts:27`](../packages/core/living-local/src/index.ts)
+Source: [`packages/core/living-local/src/index.ts:28`](../packages/core/living-local/src/index.ts)
 
 <a id="phoenix-aidsh-llm-deepseek"></a>
 
@@ -1066,7 +1080,7 @@ export interface Config {
   maxTokens?: number
   /** Positive context capacity used when the selected model has no exact value (default 1,000,000). */
   defaultContextWindow?: number
-  /** Advisory models shown by discovery consumers; defaults to V4 Flash, V4 Pro, and V4 Flash Vision Exp. */
+  /** Advisory models shown by discovery consumers; defaults to V4.1 Flash, V4 Flash, V4 Pro, and V4 Flash Vision Exp. */
   models?: DeepSeekCatalogModel[]
   /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
   streamIdleTimeoutMs?: number
@@ -1121,13 +1135,13 @@ export interface DeepSeekCatalogModel {
 
 Depends on: [`ModelModality`](../packages/llm/llm/src/index.ts) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
 
-Source: [`packages/llm/llm-deepseek/src/index.ts:108`](../packages/llm/llm-deepseek/src/index.ts)
+Source: [`packages/llm/llm-deepseek/src/index.ts:109`](../packages/llm/llm-deepseek/src/index.ts)
 
 <a id="phoenix-aidsh-llm-pi-ai"></a>
 
 ## `@phoenix-ai/dsh-llm-pi-ai`
 
-Requires: `llm` · `tools` · `subprocess` · `attachments`
+Requires: `llm`
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
@@ -1537,6 +1551,8 @@ export interface StdioConfig {
   env: Record<string, string>
   /** Working directory for the child process. */
   cwd: string
+  /** Host platforms on which this stdio server may run; omission is cross-platform unless Phoenix knows the server is platform-bound. */
+  supportedPlatforms?: SupportedPlatform[]
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -1573,6 +1589,9 @@ export interface StreamableHttpConfig {
   reconnect?: ReconnectConfig
 }
 
+/** One supported host platform identifier. */
+export type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number]
+
 /** Automatic reconnect policy for one MCP server connection. */
 export interface ReconnectConfig {
   /** Reconnect automatically after a lost connection (default true). */
@@ -1586,7 +1605,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:111`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:116`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 
@@ -1910,7 +1929,7 @@ export interface Config {
 export type JsonlCompression = 'zstd' | 'none'
 ```
 
-Source: [`packages/session/session-persistence-jsonl/src/index.ts:60`](../packages/session/session-persistence-jsonl/src/index.ts)
+Source: [`packages/session/session-persistence-jsonl/src/index.ts:69`](../packages/session/session-persistence-jsonl/src/index.ts)
 
 <a id="phoenix-aidsh-session-persistence-sqlite"></a>
 
@@ -2967,7 +2986,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/session-learning/tool-session-learning/src/index.ts:21`](../packages/session-learning/tool-session-learning/src/index.ts)
+Source: [`packages/session-learning/tool-session-learning/src/index.ts:25`](../packages/session-learning/tool-session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-tool-session-query"></a>
 
@@ -3107,7 +3126,7 @@ type ConfiguredAgentOptions = Omit<AgentOptions, 'reasoningEffort'> & {
 
 Depends on: [`AgentOptions`](subsystems/core.md)
 
-Source: [`packages/subagent/tool-subagent/src/index.ts:35`](../packages/subagent/tool-subagent/src/index.ts)
+Source: [`packages/subagent/tool-subagent/src/index.ts:107`](../packages/subagent/tool-subagent/src/index.ts)
 
 <a id="phoenix-aidsh-tool-subagent-report"></a>
 
@@ -3251,7 +3270,7 @@ export interface Config {
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:655`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:752`](../packages/core/tools/src/index.ts)
 
 <a id="phoenix-aidsh-typert-loader"></a>
 

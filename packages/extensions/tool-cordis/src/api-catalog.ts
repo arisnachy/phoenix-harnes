@@ -1474,7 +1474,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. HARDNESS protection then clamps the result: the live runtime/data roots are never writable through model-controlled capabilities, and unconfined access becomes workspace-confined while protection is active.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A deliberate danger-full-access result is returned unchanged. HARDNESS protection applies only to restricted modes, redirecting workspace-write away from the live runtime/data roots when necessary.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
         returns: 'the fully resolved per-call mode and absolute workspace root.',
       },
@@ -5768,7 +5768,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'UserProfileUpdate',
-    declaration: 'export interface UserProfileUpdate {\n    assistantName?: string | null;\n    assistantGender?: AssistantGender | null;\n    modelProviderOrder?: string[] | null;\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
+    declaration: 'export interface UserProfileUpdate {\n    assistantName?: string | null;\n    assistantGender?: AssistantGender | null;\n    assistantGenderSource?: AssistantGenderSource | null;\n    modelProviderOrder?: string[] | null;\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
   },
   {
     name: 'UserProfileView',
