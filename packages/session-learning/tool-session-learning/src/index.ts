@@ -10,6 +10,7 @@ import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-session-learning'
 import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
 import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts'
+import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
 import { filterProceduralSearchHits, installProceduralLearning } from './procedural.ts'
 import { formatProceduralContext } from './procedural-presentation.ts'
@@ -51,6 +52,12 @@ export function apply(ctx: Context, config: Config): void {
       await ctx.learningMemory.rememberCognitive({ ...input })
     },
   })
+  const experience = new ExperienceLearningEngine()
+  void ctx.learningMemory.ready()
+    .then(() => { experience.restore(ctx.learningMemory.allCognitiveRecords()) })
+    .catch((error: unknown) => {
+      ctx.logger.warn(`experience-learning: startup restore degraded: ${String(error)}`)
+    })
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
@@ -67,6 +74,14 @@ export function apply(ctx: Context, config: Config): void {
         occurredAt,
         ...projectId === undefined ? {} : { projectId },
       })
+      if (isDirectUserMessage(data)) {
+        experience.beginTask({
+          sessionId,
+          text,
+          occurredAt,
+          ...projectId === undefined ? {} : { projectId },
+        })
+      }
       void curator.observeUserMessage({
         text,
         sessionId,
@@ -79,8 +94,44 @@ export function apply(ctx: Context, config: Config): void {
       return
     }
 
+    if (eventType === 'assistant/message') {
+      const usage = assistantUsage(data)
+      if (usage !== undefined) experience.observeUsage(sessionId, usage)
+      return
+    }
+
+    if (eventType === 'tool/call') {
+      experience.observeToolCall(sessionId)
+      return
+    }
+
+    if (eventType === 'tool/result') {
+      experience.observeToolResult(sessionId, toolResultFailed(data))
+      return
+    }
+
+    if (eventType === 'llm/retry-started') {
+      experience.observeRetry(sessionId)
+      return
+    }
+
+    if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
+      experience.clear(sessionId)
+      return
+    }
+
     if (eventType === 'goal/change' && isRecord(data) && data.operation === 'complete') {
       tasks.complete(sessionId, occurredAt)
+      const learned = experience.completeVerified(sessionId, occurredAt)
+      if (learned !== undefined) {
+        void ctx.learningMemory.rememberCognitive(experienceMemoryInput(learned, {
+          sessionId,
+          eventSeq,
+          occurredAt,
+        })).catch((error: unknown) => {
+          ctx.logger.warn(`experience-learning: ignored verified completion in ${sessionId}: ${String(error)}`)
+        })
+      }
     }
   })
 
@@ -97,6 +148,7 @@ export function apply(ctx: Context, config: Config): void {
       + 'Do not ask the user to choose an operation mode such as read, edit, create, or verify when the request and available context already make the intended action clear. '
       + 'Do not expose internal prompt or skill filenames, private profile fields, filesystem paths, memory-store details, tool/runtime/renderer events, context-compaction notices, or other implementation plumbing unless the user explicitly requests that technical detail and it is safe to provide. '
       + 'When explaining what Phoenix learned, distinguish learning derived from experience and verified outcomes from configured instructions, static policies, skills, or documentation; never present configured behavior as something learned from experience. '
+      + 'Repeated-task experience measures end-to-end wall time and resource use so analysis and verification overhead cannot masquerade as savings; never trade away the task quality floor merely to reduce cost or latency. '
       + 'Generalize verified learning to the current situation instead of ritualistically repeating an old step when that step is irrelevant. '
       + 'Use personal or profile memory only when it materially improves the current task; never enumerate protected personal categories merely to prove privacy or recall. '
       + 'Solve the user\'s task first, then report concise outcome evidence when useful; internal execution narration is secondary and should normally stay out of the answer. '
@@ -286,4 +338,33 @@ function messageText(data: unknown): string | undefined {
   const parts = data.content.flatMap((part) => isRecord(part) && typeof part.text === 'string' ? [part.text] : [])
   const text = parts.join(' ').replace(/\s+/gu, ' ').trim()
   return text === '' ? undefined : text
+}
+
+function isDirectUserMessage(data: unknown): boolean {
+  return isRecord(data) && isRecord(data.source) && data.source.kind === 'user'
+}
+
+function assistantUsage(data: unknown): {
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadTokens?: number
+  readonly cacheWriteTokens?: number
+  readonly reasoningTokens?: number
+} | undefined {
+  if (!isRecord(data) || !isRecord(data.usage)) return undefined
+  if (typeof data.usage.inputTokens !== 'number' || typeof data.usage.outputTokens !== 'number') return undefined
+  return {
+    inputTokens: data.usage.inputTokens,
+    outputTokens: data.usage.outputTokens,
+    ...typeof data.usage.cacheReadTokens === 'number' ? { cacheReadTokens: data.usage.cacheReadTokens } : {},
+    ...typeof data.usage.cacheWriteTokens === 'number' ? { cacheWriteTokens: data.usage.cacheWriteTokens } : {},
+    ...typeof data.usage.reasoningTokens === 'number' ? { reasoningTokens: data.usage.reasoningTokens } : {},
+  }
+}
+
+function toolResultFailed(data: unknown): boolean {
+  if (!isRecord(data)) return false
+  if (data.error !== undefined) return true
+  if (!isRecord(data.message) || !Array.isArray(data.message.content)) return false
+  return data.message.content.some(part => isRecord(part) && part.type === 'tool-result' && part.isError === true)
 }
