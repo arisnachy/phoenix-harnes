@@ -125,6 +125,8 @@ Equal("desktop", runtimeLaunch.Environment["PHOENIX_SURFACE"], "runtime knows it
 Equal("1", runtimeLaunch.Environment["PHOENIX_DESKTOP_SHELL"], "desktop shell marker reaches runtime", failures);
 Equal("true", runtimeLaunch.Environment["PHOENIX_BROWSER_AUTOSTART"], "desktop automation browser may start on demand", failures);
 Equal("chrome", runtimeLaunch.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"], "desktop prefers Chrome automation", failures);
+Equal("0", runtimeLaunch.Environment["COREPACK_ENABLE_DOWNLOAD_PROMPT"], "hidden first-run bootstrap cannot block on an invisible Corepack prompt", failures);
+EqualInt(300, DesktopRuntimeLaunchContract.SourceStartupWaitSeconds, "source bootstrap gets enough time to install/build on first run", failures);
 Equal("0", runtimeLaunch.Environment["PHOENIX_DESKTOP_CONSOLE"], "normal users get a hidden runtime console", failures);
 True(runtimeLaunch.CreateNoWindow, "normal runtime creates no PowerShell window", failures);
 True(runtimeLaunch.RedirectStandardOutput, "hidden runtime stdout is captured to desktop log", failures);
@@ -176,16 +178,19 @@ var sourceInstallRoot = Path.Combine(Path.GetTempPath(), $"phoenix-install-test-
 try
 {
     Directory.CreateDirectory(Path.Combine(sourceTestRoot, ".git"));
-    Directory.CreateDirectory(Path.Combine(sourceTestRoot, "node_modules", ".pnpm"));
     File.WriteAllText(Path.Combine(sourceTestRoot, "package.json"), "{}");
     File.WriteAllText(Path.Combine(sourceTestRoot, "phoenix-windows.cmd"), "@echo off");
-    True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "working source checkout is recognized", failures);
+    True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "bootstrappable source checkout is recognized before node_modules exists", failures);
 
     DesktopSourceCheckout.Remember(sourceInstallRoot, sourceTestRoot);
-    Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "remembered working source checkout resolves before managed bootstrap", failures);
+    Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "remembered bootstrappable source checkout resolves before managed bootstrap", failures);
 
-    Directory.Delete(Path.Combine(sourceTestRoot, "node_modules"), recursive: true);
-    False(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "checkout without installed dependencies is not preferred", failures);
+    Directory.Delete(Path.Combine(sourceTestRoot, ".git"), recursive: true);
+    File.WriteAllText(Path.Combine(sourceTestRoot, ".git"), "gitdir: C:\\worktrees\\phoenix");
+    True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "Git worktree checkout with a .git file is recognized", failures);
+
+    File.Delete(Path.Combine(sourceTestRoot, "phoenix-windows.cmd"));
+    False(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "checkout without the Phoenix launcher is rejected", failures);
 }
 finally
 {
