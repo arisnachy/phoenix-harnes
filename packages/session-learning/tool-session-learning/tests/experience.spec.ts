@@ -115,6 +115,28 @@ describe('ExperienceLearningEngine', () => {
     expect(completeRuns(5).maturity).toBe('habitual')
   })
 
+  it('matches prior repeated-task experience by task similarity and project scope', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({
+      sessionId: 's1',
+      text: 'Fill monthly clinic survey',
+      occurredAt: 10,
+      projectId: 'clinic-a',
+    })
+    const learned = engine.completeVerified('s1', 20)
+    expect(learned).toBeDefined()
+
+    const matched = engine.matchTask('Complete the monthly survey for the clinic', 'clinic-a')
+    expect(matched?.key).toBe(learned?.key)
+    expect(engine.matchTask('Complete the monthly survey for the clinic', 'clinic-b')).toBeUndefined()
+    expect(engine.matchTask('a y de la', 'clinic-a')).toBeUndefined()
+
+    if (matched !== undefined) {
+      ;(matched as { runs: number }).runs = 99
+    }
+    expect(engine.matchTask('Complete the monthly survey for the clinic', 'clinic-a')?.runs).toBe(1)
+  })
+
   it('aggregates paraphrased repeated tasks while keeping projects isolated', () => {
     const engine = new ExperienceLearningEngine()
     engine.beginTask({
