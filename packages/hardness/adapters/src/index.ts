@@ -20,6 +20,9 @@ import { installHumanPresenceProtocol } from './presence-protocol.ts'
 import { installConnectorProtocol } from './connector-protocol.ts'
 import { installCapabilityOperatingProtocol } from './capability-protocol.ts'
 import { acquireProactivityEngine } from './proactivity-registry.ts'
+import { acquireRealityContext } from './reality-registry.ts'
+import { installRealityProtocol } from './reality-protocol.ts'
+import { installRealityContextProjection, realityConfigFromEnvironment, type RealityPromptRegistrar } from './reality-context.ts'
 import { createProactivityExecutor, installProactivityRuntime } from './proactivity-runtime.ts'
 import { createProactivityTools } from './proactivity-tools.ts'
 import { createHardnessTool } from './hardness-tool.ts'
@@ -110,6 +113,9 @@ export type { HardnessPromptRegistrar } from './protocol.ts'
 export { CONNECTOR_OPERATING_PROTOCOL, installConnectorProtocol } from './connector-protocol.ts'
 export { HUMAN_PRESENCE_PROTOCOL, installHumanPresenceProtocol } from './presence-protocol.ts'
 export { CAPABILITY_OPERATING_PROTOCOL, installCapabilityOperatingProtocol } from './capability-protocol.ts'
+export { REALITY_OPERATING_PROTOCOL, installRealityProtocol } from './reality-protocol.ts'
+export { RealityContextEngine, installRealityContextProjection, realityConfigFromEnvironment } from './reality-context.ts'
+export type { RealityContextConfig, RealityPromptRegistrar, RealitySignal, RealitySnapshot } from './reality-context.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -197,10 +203,18 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   const disposers: Disposer[] = []
   const proactivity = acquireProactivityEngine(taskLedgerPath(config))
   disposers.push(() => proactivity.release())
+  const reality = acquireRealityContext(realityConfigFromEnvironment())
+  disposers.push(() => reality.release())
 
   try {
     disposers.push(installHardnessProtocol(systemPrompt))
+    disposers.push(installRealityContextProjection(
+      systemPrompt as HardnessPromptRegistrar & RealityPromptRegistrar,
+      reality.engine,
+      ctx,
+    ))
     if (modelTools) {
+      disposers.push(installRealityProtocol(systemPrompt))
       disposers.push(installProactivityProtocol(systemPrompt))
       disposers.push(installHumanPresenceProtocol(systemPrompt))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
