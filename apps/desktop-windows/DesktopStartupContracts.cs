@@ -16,24 +16,22 @@ internal static class DesktopRuntimeLaunchContract
     internal const int DesktopPort = 3080;
     internal const int SourceStartupWaitSeconds = 300;
     internal const int ManagedStartupWaitSeconds = 120;
-    internal const int ReadyConsecutiveSamples = 3;
-    internal const int ReadySampleDelayMilliseconds = 700;
+    internal const int ReadyConsecutiveSamples = 2;
+    internal const int ReadySampleDelayMilliseconds = 250;
     internal const int MaxUnexpectedBackendRestarts = 3;
     internal const int ManagedBootstrapTimeoutMinutes = 12;
-    internal const string PowerShellExecutable = "powershell.exe";
 
     internal static ProcessStartInfo CreateOwnedRuntimeStartInfo(
+        string applicationBaseDirectory,
         string runtimeRoot,
         string controlDescriptorPath,
         bool managedRuntime = true,
         bool showDeveloperConsole = false)
     {
-        var launcher = Path.Combine(runtimeRoot, "phoenix-windows.cmd");
-        var escapedLauncher = launcher.Replace("'", "''");
-
+        var supervisor = Path.Combine(runtimeRoot, "scripts", "phoenix-windows-supervisor.mjs");
         var startInfo = new ProcessStartInfo
         {
-            FileName = PowerShellExecutable,
+            FileName = DesktopBundledToolchain.NodeExecutable(applicationBaseDirectory),
             WorkingDirectory = runtimeRoot,
             UseShellExecute = false,
             CreateNoWindow = !showDeveloperConsole,
@@ -42,15 +40,10 @@ internal static class DesktopRuntimeLaunchContract
             WindowStyle = showDeveloperConsole ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden,
         };
 
-        startInfo.ArgumentList.Add("-NoLogo");
-        startInfo.ArgumentList.Add("-NoProfile");
-        startInfo.ArgumentList.Add("-NonInteractive");
-        startInfo.ArgumentList.Add("-ExecutionPolicy");
-        startInfo.ArgumentList.Add("Bypass");
-        startInfo.ArgumentList.Add("-Command");
-        // Use the same normal Phoenix launch contract as PowerShell. The desktop shell owns the
-        // window, not a second application runtime, so do not force a private alternate port.
-        startInfo.ArgumentList.Add($"& '{escapedLauncher}' --no-open; exit $LASTEXITCODE");
+        // Production startup is deliberately independent from PowerShell, cmd.exe, Corepack,
+        // pnpm and tsx. The native shell supervises the bundled Node runtime directly.
+        startInfo.ArgumentList.Add(supervisor);
+        startInfo.ArgumentList.Add("--no-open");
 
         if (managedRuntime)
             startInfo.Environment["PHOENIX_DESKTOP_MANAGED"] = "1";
@@ -72,6 +65,7 @@ internal static class DesktopRuntimeLaunchContract
         if (string.IsNullOrWhiteSpace(commandLine)) return false;
         return commandLine.Contains("phoenix-windows-supervisor.mjs", StringComparison.OrdinalIgnoreCase)
             || commandLine.Contains("phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains(@"runtime-app\lib\bin.js", StringComparison.OrdinalIgnoreCase)
             || commandLine.Contains("phoenix-harnes", StringComparison.OrdinalIgnoreCase)
             || commandLine.Contains(@"apps\cli\", StringComparison.OrdinalIgnoreCase)
             || commandLine.Contains("apps/cli/", StringComparison.OrdinalIgnoreCase)
