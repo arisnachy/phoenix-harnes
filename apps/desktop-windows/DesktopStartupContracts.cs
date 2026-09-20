@@ -8,7 +8,7 @@ internal static class DesktopStartupContract
     internal const bool SecondLaunchSignalsExistingWindow = true;
     internal const bool EmbeddedBrowserStartsLazy = true;
     internal const bool UserCloseHidesToTray = true;
-    internal const string InitialStatus = "Iniciando Phoenix…";
+    internal const string InitialStatus = "Preparando el arranque local de Phoenix…";
 }
 
 internal static class DesktopRuntimeLaunchContract
