@@ -45,7 +45,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
 
   it('does not reject a prepared source candidate merely because Host build output is absent', () => {
     const start = source.indexOf('function preparedStageForTarget')
-    const end = source.indexOf('function runtimeIsHealthy', start)
+    const end = source.indexOf('function compiledRuntimeEntrypoint', start)
     const preparedStageSource = source.slice(start, end)
 
     expect(preparedStageSource).toContain("join(stage, 'scripts', 'phoenix-activate-prepared.mjs')")
@@ -81,6 +81,16 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(cliSource).toContain("import { preparePhoenixWebRuntime } from './phoenix-runtime-freshness.ts'")
     expect(cliSource).toContain('preparePhoenixWebRuntime(runtimeSourceRoot)')
     expect(cliSource).toContain("const runtimeSourceRoot = resolve(supervisor, '..', '..')")
+  })
+
+  it('consumes duplicate activation requests when the requested SHA is already active', () => {
+    expect(source).toContain('function readActiveRuntimeRecord()')
+    expect(source).toContain('function healthyRuntimeForTarget(target)')
+    expect(source).toContain('is already active and healthy; reusing it without rebuilding')
+    expect(source).toContain('ignored stale activation request')
+    expect(source).toContain('consumed duplicate post-exit activation request')
+    expect(source).toContain('clearRestartRequest()')
+    expect(source).toContain('clearPreparedRecord()')
   })
 
   it('keeps the current Host online until the replacement runtime is fully prewarmed', () => {

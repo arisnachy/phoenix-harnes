@@ -1,5 +1,6 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
@@ -59,6 +60,51 @@ describe('PHOENIX updater state persistence', () => {
       schema: 1,
       kind: 'host-restart',
     })
+  })
+
+  it('suppresses and clears duplicate restart requests when the same SHA is already active', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-update-already-active-'))
+    roots.push(root)
+    const path = join(root, 'phoenix-update-state.json')
+    process.env.PHOENIX_UPDATE_SUPERVISED = '1'
+    process.env.PHOENIX_AUTO_UPDATE = '1'
+    process.env.PHOENIX_UPDATE_MODE = 'auto'
+
+    const git = (...args: string[]) => spawnSync('git', args, { cwd: root, encoding: 'utf8' })
+    expect(git('init').status).toBe(0)
+    expect(git('config', 'user.email', 'phoenix-test@example.invalid').status).toBe(0)
+    expect(git('config', 'user.name', 'Phoenix Test').status).toBe(0)
+    writeFileSync(join(root, 'README.md'), 'active runtime\n', 'utf8')
+    expect(git('add', 'README.md').status).toBe(0)
+    expect(git('commit', '-m', 'active runtime').status).toBe(0)
+    const activeTarget = git('rev-parse', 'HEAD').stdout.trim()
+
+    writeFileSync(join(root, 'phoenix-active-runtime.json'), JSON.stringify({
+      schema: 1,
+      target: activeTarget,
+      path: root,
+    }), 'utf8')
+    writeFileSync(join(root, 'phoenix-update-restart-request.json'), JSON.stringify({
+      schema: 1,
+      target: activeTarget,
+    }), 'utf8')
+    writeFileSync(join(root, 'phoenix-host-restart-request.json'), JSON.stringify({
+      schema: 1,
+      kind: 'host-restart',
+      reason: `verified stable update ${activeTarget.slice(0, 12)} ready; activate and restart`,
+    }), 'utf8')
+
+    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target: activeTarget })
+
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
+      schema: 1,
+      status: 'current',
+      phase: 'idle',
+      current: activeTarget,
+      target: activeTarget,
+    })
+    expect(existsSync(join(root, 'phoenix-update-restart-request.json'))).toBe(false)
+    expect(existsSync(join(root, 'phoenix-host-restart-request.json'))).toBe(false)
   })
 
   it('does not request an automatic restart in notify-only mode', () => {
