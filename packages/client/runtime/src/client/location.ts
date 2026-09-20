@@ -49,39 +49,43 @@ function samplePosition(signal?: AbortSignal): Promise<BrowserClientLocation | u
     }
     const onAbort = (): void => { finish(undefined) }
     signal?.addEventListener('abort', onAbort, { once: true })
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords
-        if (!Number.isFinite(latitude)
-          || !Number.isFinite(longitude)
-          || !Number.isFinite(accuracy)
-          || latitude < -90
-          || latitude > 90
-          || longitude < -180
-          || longitude > 180
-          || accuracy <= 0) {
-          finish(undefined)
-          return
-        }
-        const timestamp = Number.isFinite(position.timestamp) && position.timestamp > 0
-          ? Math.round(position.timestamp)
-          : Date.now()
-        const value: BrowserClientLocation = {
-          latitude,
-          longitude,
-          accuracyMeters: accuracy,
-          observedAt: timestamp,
-        }
-        cached = value
-        finish(value)
-      },
-      () => { finish(undefined) },
-      {
-        enableHighAccuracy: false,
-        maximumAge: CACHE_MAX_AGE_MS,
-        timeout: GEOLOCATION_TIMEOUT_MS,
-      },
-    )
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords
+          if (!Number.isFinite(latitude)
+            || !Number.isFinite(longitude)
+            || !Number.isFinite(accuracy)
+            || latitude < -90
+            || latitude > 90
+            || longitude < -180
+            || longitude > 180
+            || accuracy <= 0) {
+            finish(undefined)
+            return
+          }
+          const timestamp = Number.isFinite(position.timestamp) && position.timestamp > 0
+            ? Math.round(position.timestamp)
+            : Date.now()
+          const value: BrowserClientLocation = {
+            latitude,
+            longitude,
+            accuracyMeters: accuracy,
+            observedAt: timestamp,
+          }
+          cached = value
+          finish(value)
+        },
+        () => { finish(undefined) },
+        {
+          enableHighAccuracy: false,
+          maximumAge: CACHE_MAX_AGE_MS,
+          timeout: GEOLOCATION_TIMEOUT_MS,
+        },
+      )
+    } catch {
+      finish(undefined)
+    }
   })
 }
 
