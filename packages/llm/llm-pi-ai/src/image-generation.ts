@@ -1,11 +1,11 @@
 /**
- * Codex/ChatGPT-authenticated image-generation bridge.
+ * Provider-aware real-raster image-generation bridge.
  *
- * The active text model is deliberately irrelevant: a free OpenRouter model,
- * DeepSeek, or another route may still ask this tool for a visual. The bridge
- * delegates the raster work to the locally installed Codex CLI, which owns the
- * ChatGPT subscription authentication and the hosted image-generation tool.
- * It never forwards an OPENAI_API_KEY or another separately billed credential.
+ * OpenAI Codex callers use the locally installed Codex CLI and its authenticated
+ * built-in image tool. Non-Codex callers use a configured Hugging Face free-tier
+ * image route. The bridge never falls back to SVG/HTML/CSS/canvas artwork and
+ * never forwards an OPENAI_API_KEY or silently crosses into separately billed
+ * OpenAI API usage.
  * @module dsh-llm-pi-ai/image-generation
  */
 
@@ -127,7 +127,7 @@ export const imageGenerationToolDescription =
   + 'Use this whenever the user explicitly asks to create, draw, design, render, visualize, or generate an image, and when a project materially requires real imagery. '
   + 'When the active route is OpenAI Codex, set backend=codex so PHOENIX uses the locally authenticated Codex/ChatGPT built-in image generator. For a non-Codex model, set backend=free so PHOENIX uses the configured free-tier raster provider; never silently switch to a separately billed OpenAI API. '
   + 'If a real raster backend is unavailable, fail loudly instead of fabricating a vector/HTML substitute. '
-  + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, generate type-appropriate imagery when it materially improves the requested result and wire the generated attachment into the final artifact when the format permits it. '
+  + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, generate type-appropriate imagery when it materially improves the requested result and wire the generated attachment into the final artifact when the format permits it; keep data charts and tables on structured visualization surfaces rather than inventing them as image content. '
   + 'For ordinary real-world subjects, prefer natural, professional, coherent imagery and do not turn objects into living characters or mascots unless the user asks for that. '
   + 'The successful result includes both a durable attachment and an absolute local path; reuse that path with read_image when the image must be inspected or embedded later. '
   + 'Pass the complete visual request in prompt. Governed HARDNESS recovery may supply the same request as brief or objective. Generate one distinct final visual per call.'
