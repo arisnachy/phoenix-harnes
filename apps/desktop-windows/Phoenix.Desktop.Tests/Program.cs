@@ -100,13 +100,17 @@ True(DesktopStartupContract.ShowWindowBeforeRuntimeReady, "desktop window is sho
 True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch signals existing window", failures);
 True(DesktopStartupContract.EmbeddedBrowserStartsLazy, "embedded browser does not delay chat startup", failures);
 True(DesktopStartupContract.UserCloseHidesToTray, "user close hides Phoenix to tray instead of stopping runtime", failures);
-Equal("Iniciando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
+Equal("Preparando el arranque local de Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
 EqualInt(3, DesktopRuntimeLaunchContract.ReadyConsecutiveSamples, "desktop waits for multiple stable backend probes", failures);
 EqualInt(700, DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds, "stable backend probes are spaced out", failures);
 True(DesktopNavigationRecovery.IsTransient("ConnectionAborted"), "connection-aborted WebView startup failure is retried", failures);
 True(DesktopNavigationRecovery.IsTransient("ConnectionReset"), "connection-reset WebView startup failure is retried", failures);
 False(DesktopNavigationRecovery.IsTransient("CertificateIsInvalid"), "non-transient WebView failures are not retried blindly", failures);
 True(DesktopNavigationRecovery.RetryDelayMilliseconds(1) < DesktopNavigationRecovery.RetryDelayMilliseconds(4), "WebView retry backoff increases", failures);
+
+Equal("Preparando componentes de Phoenix…", DesktopStartupProgress.FromRuntimeLine("Preparing PHOENIX dependencies..."), "dependency install produces visible progress", failures);
+Equal("Terminando la preparación de Phoenix…", DesktopStartupProgress.FromRuntimeLine("Building PHOENIX for the first run..."), "first build produces visible progress", failures);
+True(DesktopStartupProgress.WaitingMessage(TimeSpan.FromSeconds(30)).Contains("sigue trabajando", StringComparison.OrdinalIgnoreCase), "long startup explains that Phoenix is still working", failures);
 
 var toolchainEntries = DesktopBundledToolchain.CandidatePathEntries(@"C:\Program Files\Phoenix");
 True(toolchainEntries.Any(path => path.EndsWith(@"runtime-tools\node", StringComparison.OrdinalIgnoreCase)), "bundled Node path is declared", failures);
@@ -134,6 +138,7 @@ Equal("chrome", runtimeLaunch.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"], "
 Equal("0", runtimeLaunch.Environment["COREPACK_ENABLE_DOWNLOAD_PROMPT"], "hidden first-run bootstrap cannot block on an invisible Corepack prompt", failures);
 EqualInt(300, DesktopRuntimeLaunchContract.SourceStartupWaitSeconds, "source bootstrap gets enough time to install/build on first run", failures);
 Equal("0", runtimeLaunch.Environment["PHOENIX_DESKTOP_CONSOLE"], "normal users get a hidden runtime console", failures);
+Equal("1", runtimeLaunch.Environment["PHOENIX_DESKTOP_FAST_START"], "normal desktop launches prioritize prebuilt Host startup", failures);
 True(runtimeLaunch.CreateNoWindow, "normal runtime creates no PowerShell window", failures);
 True(runtimeLaunch.RedirectStandardOutput, "hidden runtime stdout is captured to desktop log", failures);
 True(runtimeLaunch.RedirectStandardError, "hidden runtime stderr is captured to desktop log", failures);
@@ -144,6 +149,7 @@ var developerLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
     managedRuntime: true,
     showDeveloperConsole: true);
 Equal("1", developerLaunch.Environment["PHOENIX_DESKTOP_CONSOLE"], "developer mode exposes runtime console", failures);
+Equal("0", developerLaunch.Environment["PHOENIX_DESKTOP_FAST_START"], "developer console keeps full source/preflight diagnostics", failures);
 False(developerLaunch.CreateNoWindow, "developer mode allows a PowerShell window", failures);
 False(developerLaunch.RedirectStandardOutput, "developer stdout stays attached to visible console", failures);
 False(developerLaunch.RedirectStandardError, "developer stderr stays attached to visible console", failures);
