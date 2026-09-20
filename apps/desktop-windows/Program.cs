@@ -141,6 +141,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     private bool changingDeveloperConsole;
     private bool shuttingDown;
     private bool signingOut;
+    private int observedUnexpectedBackendRestarts;
 
     internal PhoenixApplicationContext(EventWaitHandle showEvent, bool developerConsoleVisible)
     {
@@ -306,7 +307,14 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         DesktopLog.Write($"Managed runtime state: {state}");
 
         if (state == ManagedRuntimeState.Ready)
-            return await RefreshManagedRuntimeAsync();
+        {
+            // A verified runtime should boot immediately. The Windows supervisor already owns
+            // background stable updates after the Host is healthy, so doing a network/update
+            // check here only makes every desktop launch slower and can strand the shell on a
+            // blank startup screen when GitHub or the updater is slow.
+            DesktopLog.Write("Managed runtime is ready; launching immediately and leaving stable updates to the supervised background watcher.");
+            return true;
+        }
 
         var script = Path.Combine(AppContext.BaseDirectory, "bootstrap-runtime.ps1");
         if (!File.Exists(script))
@@ -587,6 +595,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             showDeveloperConsole: developerConsoleVisible);
         DesktopLog.Write($"Launching Phoenix runtime from {runtimeRoot} through PowerShell supervisor: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
 
+        Interlocked.Exchange(ref observedUnexpectedBackendRestarts, 0);
         ownedRuntime = Process.Start(psi);
         if (ownedRuntime is null)
         {
@@ -658,6 +667,12 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 consecutiveReady = 0;
             }
 
+            if (Volatile.Read(ref observedUnexpectedBackendRestarts) >= DesktopRuntimeLaunchContract.MaxUnexpectedBackendRestarts)
+            {
+                DesktopLog.Write($"Detected backend crash loop after {Volatile.Read(ref observedUnexpectedBackendRestarts)} unexpected restarts; stopping the desktop wait early.");
+                break;
+            }
+
             if (ownedRuntime.HasExited)
                 break;
 
@@ -666,20 +681,29 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
         if (!shuttingDown)
         {
+            var crashLoopDetected = Volatile.Read(ref observedUnexpectedBackendRestarts) >= DesktopRuntimeLaunchContract.MaxUnexpectedBackendRestarts;
             var exit = ownedRuntime.HasExited ? $" El proceso terminó con código {ownedRuntime.ExitCode}." : string.Empty;
-            DesktopLog.Write($"Runtime from {runtimeRoot} did not become ready within the startup window." + exit);
+            DesktopLog.Write(crashLoopDetected
+                ? $"Runtime from {runtimeRoot} entered a backend crash loop."
+                : $"Runtime from {runtimeRoot} did not become ready within the startup window." + exit);
+
             if (reportFailure)
             {
                 tray.Text = "Phoenix · error de inicio";
                 var subject = sourceCheckoutRuntime ? "Tu Phoenix local" : "Phoenix";
-                var detail = ownedRuntime.HasExited
-                    ? $"{subject} no pudo completar el arranque.{exit}"
-                    : $"{subject} sigue sin responder en 127.0.0.1:3080 después del tiempo de preparación.";
+                var detail = crashLoopDetected
+                    ? $"{subject} se reinició varias veces seguidas y Phoenix detuvo la espera para no dejarte atrapado en una pantalla de carga."
+                    : ownedRuntime.HasExited
+                        ? $"{subject} no pudo completar el arranque.{exit}"
+                        : $"{subject} sigue sin responder en 127.0.0.1:3080 después del tiempo de preparación.";
                 window.SetStartupStatus($"{detail}\n\nRevisa: {Program.LogPath}", isError: true);
                 MessageBox.Show(
                     $"{detail}\n\nDiagnóstico: {Program.LogPath}",
                     "Phoenix", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+
+            if (crashLoopDetected)
+                StopOwnedRuntime();
         }
         return false;
     }
@@ -707,6 +731,9 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             tray.Text = "Phoenix · verificando";
             return;
         }
+
+        if (line.Contains("host exited unexpectedly", StringComparison.OrdinalIgnoreCase))
+            Interlocked.Increment(ref observedUnexpectedBackendRestarts);
 
         if (line.Contains("host exited unexpectedly", StringComparison.OrdinalIgnoreCase)
             || line.Contains("relaunch", StringComparison.OrdinalIgnoreCase)
