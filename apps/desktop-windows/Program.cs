@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.IO.Compression;
 using System.Net.Http;
 using System.Text;
 using Microsoft.Win32;
@@ -167,7 +168,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         {
             Checked = developerConsoleVisible,
             CheckOnClick = true,
-            ToolTipText = "Muestra PowerShell y los logs del runtime. Desactivado por defecto para usuarios normales.",
+            ToolTipText = "Muestra la consola y los logs del runtime. Desactivado por defecto para usuarios normales.",
         };
         developerConsoleItem.CheckedChanged += async (_, _) => await ChangeDeveloperConsoleAsync(developerConsoleItem.Checked);
         menu.Items.Add(developerConsoleItem);
@@ -331,6 +332,13 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return true;
         }
 
+        // New installers carry a production runtime that was already installed and built in CI.
+        // Extracting that immutable seed is local I/O only: no PowerShell, Git clone, pnpm install
+        // or TypeScript build belongs on the user's first-launch critical path.
+        if (TryInstallBundledRuntimeSeed(state))
+            return true;
+
+        // Compatibility fallback for older installers that predate runtime-seed.zip.
         var script = Path.Combine(AppContext.BaseDirectory, "bootstrap-runtime.ps1");
         if (!File.Exists(script))
         {
@@ -377,6 +385,76 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
         ShowRuntimePreparationFailure();
         return false;
+    }
+
+    private bool TryInstallBundledRuntimeSeed(ManagedRuntimeState currentState)
+    {
+        var seed = Path.Combine(AppContext.BaseDirectory, "runtime-seed.zip");
+        if (!File.Exists(seed))
+        {
+            DesktopLog.Write("No bundled runtime seed is present; legacy bootstrap fallback remains available.");
+            return false;
+        }
+
+        var staging = $"{Program.RuntimeRoot}.installing-{Guid.NewGuid():N}";
+        try
+        {
+            if (currentState != ManagedRuntimeState.Missing && Directory.Exists(Program.RuntimeRoot))
+            {
+                window.SetStartupStatus("Reparando el runtime local de Phoenix…");
+                tray.Text = "Phoenix · reparando";
+                if (!ResetManagedRuntimeDirectoryForRepair($"replacing {currentState} runtime with bundled production seed"))
+                    return false;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(Program.RuntimeRoot)!);
+            Directory.Delete(staging, recursive: true);
+            Directory.CreateDirectory(staging);
+
+            window.SetStartupStatus("Preparando Phoenix…");
+            tray.Text = "Phoenix · preparando";
+            DesktopLog.Write($"Extracting bundled production runtime seed: {seed} -> {staging}");
+            ZipFile.ExtractToDirectory(seed, staging, overwriteFiles: true);
+
+            var marker = Path.Combine(staging, ManagedRuntimeMarker.ReadyMarkerName);
+            if (!File.Exists(marker))
+            {
+                File.WriteAllLines(marker, new[]
+                {
+                    "schema=1",
+                    "state=ready",
+                    "channel=stable",
+                    $"installedAt={DateTimeOffset.UtcNow:o}",
+                    "source=bundled-runtime-seed",
+                });
+            }
+
+            var stagedState = ManagedRuntimeMarker.Inspect(staging);
+            if (stagedState != ManagedRuntimeState.Ready)
+                throw new InvalidOperationException($"Bundled runtime seed is not ready after extraction: {stagedState}");
+
+            Directory.Move(staging, Program.RuntimeRoot);
+            var installedState = ManagedRuntimeMarker.Inspect(Program.RuntimeRoot);
+            if (installedState != ManagedRuntimeState.Ready)
+                throw new InvalidOperationException($"Installed bundled runtime failed readiness validation: {installedState}");
+
+            DesktopLog.Write("Bundled production runtime seed installed successfully.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            DesktopLog.Write("Bundled production runtime seed installation failed", ex);
+            try
+            {
+                if (Directory.Exists(staging))
+                    Directory.Delete(staging, recursive: true);
+            }
+            catch (Exception cleanupEx)
+            {
+                DesktopLog.Write("Could not remove failed runtime-seed staging directory", cleanupEx);
+            }
+            return false;
+        }
     }
 
     private async Task<int> RunBootstrapAsync(string script, int attempt)
@@ -669,15 +747,15 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return true;
 
         window.SetStartupStatus("Iniciando Phoenix…");
-        var launcher = Path.Combine(runtimeRoot, "phoenix-windows.cmd");
+        var launcher = Path.Combine(runtimeRoot, "scripts", "phoenix-windows-supervisor.mjs");
         if (!File.Exists(launcher))
         {
-            DesktopLog.Write($"Phoenix runtime launcher is missing: {launcher}");
+            DesktopLog.Write($"Phoenix runtime supervisor is missing: {launcher}");
             if (reportFailure)
             {
                 window.SetStartupStatus("Phoenix no encontró su supervisor de Windows.", isError: true);
                 MessageBox.Show(
-                    $"Falta el supervisor de Windows de Phoenix.\n\n{launcher}\n\nDiagnóstico: {Program.LogPath}",
+                    $"Falta el supervisor de runtime de Phoenix.\n\n{launcher}\n\nDiagnóstico: {Program.LogPath}",
                     "Phoenix · error de inicio",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
@@ -686,11 +764,12 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         }
 
         var psi = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
+            AppContext.BaseDirectory,
             runtimeRoot,
             browserControl.DescriptorPath,
             managedRuntime: !sourceCheckoutRuntime,
             showDeveloperConsole: developerConsoleVisible);
-        DesktopLog.Write($"Launching Phoenix runtime from {runtimeRoot} through PowerShell supervisor: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
+        DesktopLog.Write($"Launching Phoenix runtime directly from {runtimeRoot}: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
 
         Interlocked.Exchange(ref observedUnexpectedBackendRestarts, 0);
         ownedRuntime = Process.Start(psi);
