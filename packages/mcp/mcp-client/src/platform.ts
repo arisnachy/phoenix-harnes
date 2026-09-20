@@ -8,9 +8,12 @@
  * @module
  */
 
+/** Host platform identifiers accepted by MCP stdio compatibility metadata. */
 export const SUPPORTED_PLATFORMS = ['darwin', 'linux', 'win32'] as const
+/** One supported host platform identifier. */
 export type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number]
 
+/** Stdio MCP server fields used to resolve host-platform compatibility. */
 export interface StdioPlatformDescriptor {
   serverName: string
   command: string
@@ -18,6 +21,7 @@ export interface StdioPlatformDescriptor {
   supportedPlatforms?: readonly string[]
 }
 
+/** Result of evaluating one stdio server against a host platform. */
 export interface PlatformCompatibility {
   compatible: boolean
   platform: NodeJS.Platform
@@ -39,6 +43,8 @@ function normalizedSignature(config: StdioPlatformDescriptor): string {
  *
  * Explicit metadata is authoritative. A narrow compatibility fallback handles
  * XcodeBuildMCP configurations created before Phoenix exposed platform metadata.
+ * @param config - Stdio server descriptor and optional explicit platform metadata.
+ * @returns Allowed host platforms, or undefined when the server is platform-neutral.
  */
 export function resolveSupportedPlatforms(config: StdioPlatformDescriptor): readonly SupportedPlatform[] | undefined {
   const explicit = config.supportedPlatforms ?? []
@@ -59,7 +65,12 @@ export function resolveSupportedPlatforms(config: StdioPlatformDescriptor): read
   return undefined
 }
 
-/** Return whether this stdio MCP server may be started on the current host. */
+/**
+ * Return whether this stdio MCP server may be started on the selected host.
+ * @param config - Stdio server descriptor and optional explicit platform metadata.
+ * @param platform - Host platform to evaluate; defaults to the current process platform.
+ * @returns Compatibility decision with the normalized allowed-platform set when constrained.
+ */
 export function checkPlatformCompatibility(
   config: StdioPlatformDescriptor,
   platform: NodeJS.Platform = process.platform,
