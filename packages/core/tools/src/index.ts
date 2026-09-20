@@ -966,11 +966,16 @@ export class ToolRuntime extends Service {
     ctx.on('agent/inbox/claimed', ({ agent, message }) => {
       if (explicitlyRequestsImageGeneration(message)) this.nativeImageFirst.add(agent)
     })
-    // One real native attempt is enough to release the catalog. The
-    // image_generation tool owns its own Codex -> local -> free fallback chain;
-    // after it settles, external connectors may be considered if needed.
-    ctx.on('tools/result', (exec) => {
-      if (exec.name === NATIVE_IMAGE_GENERATION_TOOL && exec.agent !== undefined) {
+    // image_generation owns Codex -> local -> free. External image
+    // connectors become visible only if that complete first-party chain fails.
+    // A successful image keeps the gate armed until the turn goes idle, which
+    // prevents a redundant second generator call after success.
+    ctx.on('tools/result', (exec, result) => {
+      if (
+        exec.name === NATIVE_IMAGE_GENERATION_TOOL
+        && exec.agent !== undefined
+        && result.isError
+      ) {
         this.nativeImageFirst.delete(exec.agent)
       }
     })
