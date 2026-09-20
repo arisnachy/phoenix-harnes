@@ -83,6 +83,16 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(cliSource).toContain("const runtimeSourceRoot = resolve(supervisor, '..', '..')")
   })
 
+  it('consumes duplicate activation requests when the requested SHA is already active', () => {
+    expect(source).toContain('function readActiveRuntimeRecord()')
+    expect(source).toContain('function healthyRuntimeForTarget(target)')
+    expect(source).toContain('runtime is already active and healthy; reusing it without rebuilding')
+    expect(source).toContain('ignored stale activation request')
+    expect(source).toContain('consumed duplicate post-exit activation request')
+    expect(source).toContain('clearRestartRequest()')
+    expect(source).toContain('clearPreparedRecord()')
+  })
+
   it('keeps the current Host online until the replacement runtime is fully prewarmed', () => {
     expect(source).toContain('warming replacement runtime while current Host remains online')
     expect(source).toContain('const runtime = activatePreparedRuntime(updateTarget)')
