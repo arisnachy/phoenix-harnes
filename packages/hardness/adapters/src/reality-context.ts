@@ -177,6 +177,18 @@ export interface RealitySnapshot {
   readonly userState: Record<string, unknown>
 }
 
+interface RealityAssemblyContext {
+  readonly agent?: {
+    readonly options: {
+      readonly provider?: string
+      readonly model?: string
+      readonly maxTokens?: number
+      readonly reasoningEffort?: unknown
+    }
+    readonly session: unknown
+  }
+}
+
 function finiteNumber(value: string | undefined): number | undefined {
   if (value === undefined || value.trim() === '') return undefined
   const parsed = Number(value)
@@ -558,6 +570,101 @@ function method<T>(
   return typeof candidate === 'function' ? candidate.bind(value) as T : undefined
 }
 
+function sameModel(
+  left: Record<string, unknown> | null,
+  right: Record<string, unknown> | null,
+): boolean {
+  return left !== null
+    && right !== null
+    && typeof left.provider === 'string'
+    && typeof left.model === 'string'
+    && left.provider === right.provider
+    && left.model === right.model
+}
+
+function sessionAiSnapshot(
+  ctx: Context,
+  assembly: RealityAssemblyContext | undefined,
+  runtimeAi: RuntimeServiceTelemetry['ai'] | undefined,
+): Record<string, unknown> {
+  const agent = assembly?.agent
+  const provider = agent?.options.provider
+  const model = agent?.options.model
+  const activeModel = typeof provider === 'string'
+    && provider.length > 0
+    && typeof model === 'string'
+    && model.length > 0
+    ? {
+        provider,
+        model,
+        ...(agent?.options.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: String(agent.options.reasoningEffort) }),
+      }
+    : null
+  const defaultModel = runtimeAi?.activeModel ?? null
+  const modelMatchesCachedMetadata = sameModel(activeModel, defaultModel)
+  const contextWindowTokens = modelMatchesCachedMetadata
+    ? runtimeAi?.contextWindowTokens ?? null
+    : null
+
+  let currentContextTokens: number | null = null
+  let tokenMeasurement: Record<string, unknown> | null = null
+  if (agent !== undefined) {
+    const get = ctx.get as unknown as (name: string) => unknown
+    const meter = get.call(ctx, 'tokenMeter')
+    const measure = method<(session: unknown) => Record<string, unknown>>(meter, 'measure')
+    if (measure !== undefined) {
+      try {
+        const measured = measure(agent.session)
+        const total = numericValue(measured.totalTokens)
+        if (total !== null && total >= 0) currentContextTokens = total
+        const baseline = asRecord(measured.baseline)
+        tokenMeasurement = {
+          source: 'tokenMeter.measure(active-session)',
+          logRevision: numericValue(measured.logRevision),
+          baselineKind: typeof baseline?.kind === 'string' ? baseline.kind : null,
+          surfaceTokens: numericValue(measured.surfaceTokens),
+        }
+      } catch {
+        tokenMeasurement = {
+          source: 'tokenMeter.measure(active-session)',
+          error: 'measurement-unavailable',
+        }
+      }
+    }
+  }
+
+  const outputReservation = agent?.options.maxTokens
+  const outputReservationTokens = typeof outputReservation === 'number'
+    && Number.isSafeInteger(outputReservation)
+    && outputReservation > 0
+    ? outputReservation
+    : null
+  const remainingContextTokens = contextWindowTokens !== null && currentContextTokens !== null
+    ? Math.max(0, contextWindowTokens - currentContextTokens)
+    : null
+  const inputHeadroomAfterOutputReserveTokens = remainingContextTokens !== null && outputReservationTokens !== null
+    ? Math.max(0, remainingContextTokens - outputReservationTokens)
+    : null
+
+  return {
+    activeModel,
+    defaultModel,
+    selectionSource: activeModel === null ? 'no-active-agent-model' : 'active-agent',
+    contextWindowTokens,
+    contextWindowSource: contextWindowTokens === null
+      ? 'unavailable-for-active-model'
+      : 'cached-exact-model-metadata',
+    currentContextTokens,
+    remainingContextTokens,
+    outputReservationTokens,
+    inputHeadroomAfterOutputReserveTokens,
+    tokenMeasurement,
+    precision: 'remainingContextTokens = contextWindowTokens - currentContextTokens; inputHeadroomAfterOutputReserveTokens additionally subtracts the agent maxTokens reservation when explicitly configured',
+  }
+}
+
 function authorizationAccountView(
   entry: AuthorizationEntryLike,
   telemetry: AuthorizationTelemetryLike | undefined,
@@ -887,7 +994,11 @@ export class RealityContextEngine {
     }
   }
 
-  snapshot(ctx: Context, now = new Date()): RealitySnapshot {
+  snapshot(
+    ctx: Context,
+    now = new Date(),
+    assembly?: RealityAssemblyContext,
+  ): RealitySnapshot {
     void this.refreshRuntimeServices(ctx)
     const epoch = now.getTime()
     const intl = new Intl.DateTimeFormat().resolvedOptions()
@@ -906,6 +1017,7 @@ export class RealityContextEngine {
     const internet = signal(this.internet, epoch)
     const battery = signal(this.battery, epoch)
     const gpu = signal(this.gpu, epoch)
+    const sessionAi = sessionAiSnapshot(ctx, assembly, runtimeValue?.ai)
 
     return {
       schema: 1,
@@ -1070,18 +1182,16 @@ export class RealityContextEngine {
       },
       ai: {
         status: runtimeValue === null ? 'unknown' : 'available',
-        activeModel: runtimeValue?.ai.activeModel ?? null,
+        ...sessionAi,
         registeredProviders: runtimeValue?.ai.registeredProviders ?? [],
         configurableProviders: runtimeValue?.ai.configurableProviders ?? [],
-        contextWindowTokens: runtimeValue?.ai.contextWindowTokens ?? null,
-        remainingContextTokens: runtimeValue?.ai.remainingContextTokens ?? null,
         accumulatedCost: runtimeValue?.ai.accumulatedCost ?? null,
         accountLimits: runtimeValue?.ai.accountLimits ?? [],
         tokenMeterAvailable: serviceCapabilities(ctx).includes('tokenMeter'),
         observedAt: runtimeServices.observedAt,
         expiresAt: runtimeServices.expiresAt,
         stale: runtimeServices.stale,
-        rule: 'registered provider is not the same as healthy provider. Remaining context requires the active session token meter; accumulated cost remains unknown unless a provider exposes it.',
+        rule: 'activeModel and token pressure are scoped to the agent assembling this prompt. Registered provider is not the same as healthy provider. Context headroom is reported only when the active model matches exact cached model metadata; accumulated cost remains unknown unless a provider exposes it.',
       },
       region: {
         locale: intl.locale,
@@ -1098,11 +1208,11 @@ export class RealityContextEngine {
     }
   }
 
-  render(ctx: Context): string {
+  render(ctx: Context, assembly?: RealityAssemblyContext): string {
     return [
       '<phoenix_reality_context>',
       'This is a fresh/best-effort machine snapshot. Every field carries its own provenance or an explicit unknown state. Treat stale/unknown fields as unavailable and verify them before environment-sensitive action.',
-      JSON.stringify(this.snapshot(ctx)),
+      JSON.stringify(this.snapshot(ctx, new Date(), assembly)),
       '</phoenix_reality_context>',
     ].join('\n')
   }
@@ -1112,7 +1222,7 @@ export interface RealityPromptRegistrar {
   context: (context: {
     readonly name: string
     readonly order: number
-    readonly text: string | (() => string)
+    readonly text: string | ((context: RealityAssemblyContext) => string)
     readonly interpolateVariables?: boolean
   }) => () => void
 }
@@ -1125,7 +1235,7 @@ export function installRealityContextProjection(
   return systemPrompt.context({
     name: 'hardness:reality-context',
     order: 20,
-    text: () => engine.render(ctx),
+    text: context => engine.render(ctx, context),
     interpolateVariables: false,
   })
 }
