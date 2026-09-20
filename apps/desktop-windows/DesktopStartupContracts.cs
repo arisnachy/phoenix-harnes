@@ -8,7 +8,7 @@ internal static class DesktopStartupContract
     internal const bool SecondLaunchSignalsExistingWindow = true;
     internal const bool EmbeddedBrowserStartsLazy = true;
     internal const bool UserCloseHidesToTray = true;
-    internal const string InitialStatus = "Iniciando Phoenix…";
+    internal const string InitialStatus = "Preparando el arranque local de Phoenix…";
 }
 
 internal static class DesktopRuntimeLaunchContract
@@ -58,6 +58,7 @@ internal static class DesktopRuntimeLaunchContract
         startInfo.Environment["PHOENIX_SURFACE"] = "desktop";
         startInfo.Environment["PHOENIX_DESKTOP_SHELL"] = "1";
         startInfo.Environment["PHOENIX_DESKTOP_CONSOLE"] = showDeveloperConsole ? "1" : "0";
+        startInfo.Environment["PHOENIX_DESKTOP_FAST_START"] = showDeveloperConsole ? "0" : "1";
         startInfo.Environment["PHOENIX_BROWSER_AUTOSTART"] = "true";
         startInfo.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"] = "chrome";
         // Hidden first-run launches must never wait for an invisible Corepack confirmation.
@@ -79,6 +80,49 @@ internal static class DesktopRuntimeLaunchContract
 }
 
 
+
+internal static class DesktopStartupProgress
+{
+    internal static string? FromRuntimeLine(string? line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return null;
+        var value = line.Trim();
+
+        if (value.Contains("Preparing PHOENIX dependencies", StringComparison.OrdinalIgnoreCase))
+            return "Preparando componentes de Phoenix…";
+        if (value.Contains("Building PHOENIX", StringComparison.OrdinalIgnoreCase))
+            return "Terminando la preparación de Phoenix…";
+        if (value.Contains("configuration preflight", StringComparison.OrdinalIgnoreCase))
+            return "Verificando la configuración de Phoenix…";
+        if (value.Contains("restored verified isolated runtime", StringComparison.OrdinalIgnoreCase))
+            return "Recuperando el último runtime estable…";
+        if (value.Contains("fast-start", StringComparison.OrdinalIgnoreCase)
+            && value.Contains("prebuilt CLI", StringComparison.OrdinalIgnoreCase))
+            return "Backend localizado · levantando servicios…";
+        if (value.Contains("host launch failed", StringComparison.OrdinalIgnoreCase))
+            return "Phoenix encontró un problema al levantar el backend…";
+        if (value.Contains("healthy Host checkpoint", StringComparison.OrdinalIgnoreCase))
+            return "Phoenix está listo. Abriendo la interfaz…";
+        if (value.Contains("127.0.0.1:3080", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("listening", StringComparison.OrdinalIgnoreCase)
+            || (value.Contains("server", StringComparison.OrdinalIgnoreCase)
+                && value.Contains("ready", StringComparison.OrdinalIgnoreCase)))
+            return "Servidor local listo. Abriendo Phoenix…";
+
+        return null;
+    }
+
+    internal static string WaitingMessage(TimeSpan elapsed)
+    {
+        if (elapsed < TimeSpan.FromSeconds(8))
+            return "Arrancando el motor de Phoenix…";
+        if (elapsed < TimeSpan.FromSeconds(25))
+            return "Phoenix está preparando sus servicios locales…";
+        if (elapsed < TimeSpan.FromSeconds(60))
+            return "Phoenix sigue trabajando; el primer arranque puede tardar un poco más…";
+        return $"Phoenix continúa preparando el entorno local ({Math.Max(1, (int)elapsed.TotalSeconds)} s)…";
+    }
+}
 
 internal static class DesktopDeveloperConsole
 {
