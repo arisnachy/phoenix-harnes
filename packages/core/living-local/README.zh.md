@@ -12,10 +12,23 @@
 
 对于进程外创建物，内置 `phoenix-living-http-v1` bridge 只绑定 loopback，每个创建物使用独立 bearer secret 认证，连接时验证运行时声明的 state/actions/events/actors 是否完全匹配，接收状态与 telemetry/event 更新，并把 Phoenix 动作排队直到运行时返回结果。心跳过期或主动断开只会移除实时 provider；持久 manifest 仍保留，等待重连。
 
-## Model Experience
+## 模型体验
 
-模型不直接调用本包。挂载 `@phoenix-ai/dsh-tool-living` 后，每个非静态创建物都会获得控制描述符和 connector kit。生成的运行时连接后，普通的 `living_read_state`、`living_act`、检查与验证都通过同一个 `ctx.living` seam 工作。
+### 本地 Living provider
 
-## Known Limitations and Deferred Work
+#### 模型看到的内容
 
-内置 bridge 有意只绑定 loopback，适用于 owner-local 运行时或受信任的服务端 sidecar。纯公共浏览器 bundle 无法安全保存 bearer secret；这类部署需要服务端连接器或另一个 `LivingRegistry` 传输实现。
+模型不直接调用本包。挂载 `@phoenix-ai/dsh-tool-living` 后，非静态创建物会获得控制描述符和 connector kit；生成的运行时连接后，同一组 `living_read_state`、`living_act`、检查与验证工具都通过 `ctx.living` 工作。
+
+#### Token 影响
+
+Provider 本身不增加常驻提示词文本。只有显式 living 工具调用才把有界的创建物元数据、状态或动作结果返回给模型。
+
+#### KV Cache 影响
+
+Provider 的连接状态变化不会重写可复用提示词前缀。后续 living 工具结果会作为普通工具 transcript 中的新动态内容追加。
+
+## 已知限制与暂缓事项
+
+- 内置 bridge 有意只绑定 loopback，适用于 owner-local 运行时或受信任的服务端 sidecar。
+- 纯公共浏览器 bundle 无法安全保存 bearer secret；这类部署需要服务端连接器或另一个 `LivingRegistry` 传输实现。
