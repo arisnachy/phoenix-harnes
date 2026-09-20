@@ -313,6 +313,48 @@ describe('Phoenix reality context', () => {
     })
   })
 
+  it('uses non-expired browser geolocation without inventing civic labels', () => {
+    const now = Date.parse('2026-09-20T15:00:00.000Z')
+    const engine = new RealityContextEngine({ refreshMs: 30_000 })
+    const fakeContext = {
+      get(name: string) {
+        if (name !== 'clientReality') return undefined
+        return {
+          locationFor: (id: string) => id === 'session-geo'
+            ? {
+                latitude: 19.451,
+                longitude: -70.697,
+                accuracyMeters: 24,
+                observedAt: now - 2_000,
+                receivedAt: now - 1_500,
+                expiresAt: now + 120_000,
+                source: 'browser-geolocation',
+              }
+            : undefined,
+        }
+      },
+    } as never
+    const snapshot = engine.snapshot(fakeContext, new Date(now), {
+      agent: {
+        id: 'session-geo',
+        options: {},
+        session: {},
+      },
+    })
+
+    expect(snapshot.location).toMatchObject({
+      status: 'authorized-browser',
+      country: null,
+      region: null,
+      city: null,
+      latitude: 19.451,
+      longitude: -70.697,
+      accuracyMeters: 24,
+      source: 'browser-geolocation',
+      retention: 'ephemeral-host-cache',
+    })
+  })
+
   it('marks configured coordinates as explicitly authorized/configured without inferring accuracy', () => {
     const engine = new RealityContextEngine({
       refreshMs: 30_000,
