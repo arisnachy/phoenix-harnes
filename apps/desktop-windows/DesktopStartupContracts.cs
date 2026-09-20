@@ -132,11 +132,14 @@ internal static class DesktopSourceCheckout
         try
         {
             var full = Path.GetFullPath(root);
-            var gitMarker = Path.Combine(full, ".git");
+            // Desktop startup cares whether this folder can boot Phoenix, not whether it is
+            // currently a Git checkout. Users may move/copy a known-good checkout or use a
+            // worktree/OneDrive location where .git metadata is absent or temporarily offline.
             return Directory.Exists(full)
-                && (Directory.Exists(gitMarker) || File.Exists(gitMarker))
                 && File.Exists(Path.Combine(full, "package.json"))
-                && File.Exists(Path.Combine(full, "phoenix-windows.cmd"));
+                && File.Exists(Path.Combine(full, "phoenix-windows.cmd"))
+                && File.Exists(Path.Combine(full, "scripts", "phoenix-windows-supervisor.mjs"))
+                && Directory.Exists(Path.Combine(full, "apps", "cli"));
         }
         catch
         {
