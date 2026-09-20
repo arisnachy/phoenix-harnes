@@ -12,13 +12,14 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isAbsolute, resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const UPDATE_RESTART_FILE = 'phoenix-update-restart-request.json'
+const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
 const POLL_MS = 250
 const scriptPath = fileURLToPath(import.meta.url)
@@ -70,6 +71,37 @@ function readPrepared(controlDir) {
   }
 }
 
+function readActiveRuntime(controlDir) {
+  const path = join(controlDir, ACTIVE_RUNTIME_FILE)
+  if (!existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
+    if (typeof value.path !== 'string' || value.path.trim().length === 0) return undefined
+    return value
+  } catch {
+    return undefined
+  }
+}
+
+function targetAlreadyActive(controlDir, target) {
+  const active = readActiveRuntime(controlDir)
+  if (active?.target !== target) return false
+  const activePath = resolve(active.path)
+  return existsSync(activePath) && currentTarget(activePath) === target
+}
+
+function clearDuplicateRestartRequest(controlDir, target) {
+  const path = join(controlDir, UPDATE_RESTART_FILE)
+  if (!existsSync(path)) return
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema === 1 && value.target === target) unlinkSync(path)
+  } catch {
+    // A malformed request is left for the supervisor's fail-closed parser.
+  }
+}
+
 function writeJsonAtomic(path, value) {
   const temporary = `${path}.${String(process.pid)}.tmp`
   writeFileSync(temporary, JSON.stringify(value, undefined, 2) + '\n', 'utf8')
@@ -77,6 +109,12 @@ function writeJsonAtomic(path, value) {
 }
 
 function requestActivation(controlDir, target) {
+  if (targetAlreadyActive(controlDir, target)) {
+    clearDuplicateRestartRequest(controlDir, target)
+    console.error(`[PHOENIX UPDATE] activation request for ${target.slice(0, 12)} suppressed because that verified runtime is already active.`)
+    return false
+  }
+
   const now = new Date().toISOString()
   writeJsonAtomic(join(controlDir, UPDATE_RESTART_FILE), {
     schema: 1,
@@ -84,6 +122,7 @@ function requestActivation(controlDir, target) {
     requestedAt: now,
     requestedByPid: process.pid,
   })
+  return true
 }
 
 function parentAlive(pid) {
@@ -153,8 +192,8 @@ async function waitForTarget(controlDir, target, timeoutMs, parentPid, shutdownP
   while (Date.now() <= deadline && (parentPid === undefined || parentAlive(parentPid))) {
     const prepared = readPrepared(controlDir)
     if (prepared?.target === target) {
-      requestActivation(controlDir, target)
-      if (shutdownParentPid !== undefined) requestLegacyHostShutdown(shutdownParentPid)
+      const requested = requestActivation(controlDir, target)
+      if (requested && shutdownParentPid !== undefined) requestLegacyHostShutdown(shutdownParentPid)
       return true
     }
     await sleep(POLL_MS)
@@ -182,6 +221,11 @@ function armFromStaging() {
   if (controlDir === undefined || gitDir === undefined || target === undefined) return 0
   if (controlDir.toLowerCase() === gitDir.toLowerCase()) return 0
   if (!/^[0-9a-f]{40}$/iu.test(target)) return 0
+  if (targetAlreadyActive(controlDir, target)) {
+    clearDuplicateRestartRequest(controlDir, target)
+    console.error(`[PHOENIX UPDATE] staging bridge skipped ${target.slice(0, 12)} because that verified runtime is already active.`)
+    return 0
+  }
 
   const supervised = process.env.PHOENIX_UPDATE_SUPERVISED === '1'
   const unsupervisedHostPid = supervised ? undefined : discoverUnsupervisedHostPid()
