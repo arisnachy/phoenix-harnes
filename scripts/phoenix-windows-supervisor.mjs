@@ -199,6 +199,19 @@ function activeRuntimePath() {
   return gitControlPath(ACTIVE_RUNTIME_FILE)
 }
 
+function readActiveRuntimeRecord() {
+  const path = activeRuntimePath()
+  if (path === undefined || !existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target)) return undefined
+    if (typeof value.path !== 'string' || value.path.trim().length === 0) return undefined
+    return value
+  } catch {
+    return undefined
+  }
+}
+
 function readPreparedRecord() {
   const path = preparedPath()
   if (path === undefined || !existsSync(path)) return undefined
@@ -302,6 +315,16 @@ function runtimeIsHealthy(path, target) {
     && compiledRuntimeEntrypoint(path) !== undefined
 }
 
+function healthyRuntimeForTarget(target) {
+  if (runtimeIsHealthy(runtimeRoot, target)) return { target, path: runtimeRoot }
+
+  const active = readActiveRuntimeRecord()
+  if (active?.target !== target) return undefined
+  const candidate = resolve(active.path)
+  if (!runtimeIsHealthy(candidate, target)) return undefined
+  return { target, path: candidate }
+}
+
 function runtimeBootPreflight(path) {
   const result = spawnSync(process.execPath, runtimeNodeArgs(path, [
     'web', '--dump-config',
@@ -350,6 +373,12 @@ function clearActiveRuntime() {
 }
 
 function activatePreparedRuntime(target) {
+  const alreadyActive = healthyRuntimeForTarget(target)
+  if (alreadyActive !== undefined) {
+    console.error(`[PHOENIX UPDATE] runtime ${target.slice(0, 12)} is already active and healthy; reusing it without rebuilding.`)
+    return alreadyActive
+  }
+
   const stage = preparedStageForTarget(target)
   if (stage === undefined) throw new Error(`prepared staging candidate ${target.slice(0, 12)} is missing or no longer valid`)
 
@@ -397,8 +426,8 @@ function restoreActiveRuntime() {
   const markerPath = activeRuntimePath()
   if (markerPath === undefined || !existsSync(markerPath)) return
   try {
-    const value = JSON.parse(readFileSync(markerPath, 'utf8'))
-    if (value?.schema !== 1 || typeof value.target !== 'string' || !/^[0-9a-f]{40}$/iu.test(value.target) || typeof value.path !== 'string') {
+    const value = readActiveRuntimeRecord()
+    if (value === undefined) {
       clearActiveRuntime()
       return
     }
@@ -789,6 +818,18 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
 
     const updateTarget = restartRequestTarget()
     if (updateTarget !== undefined) {
+      const alreadyActive = healthyRuntimeForTarget(updateTarget)
+      if (alreadyActive !== undefined) {
+        runtimeRoot = alreadyActive.path
+        clearPreparedRecord()
+        clearRestartRequest()
+        clearHostRestartRequest()
+        console.error(
+          `[PHOENIX UPDATE] ignored stale activation request for ${updateTarget.slice(0, 12)} because that runtime is already active and healthy.`,
+        )
+        continue
+      }
+
       try {
         console.error(
           `[PHOENIX UPDATE] prepared ${updateTarget.slice(0, 12)} is ready; warming replacement runtime while current Host remains online...`,
@@ -903,6 +944,18 @@ while (true) {
 
   const requestedTarget = restartRequestTarget()
   if (requestedTarget !== undefined) {
+    const alreadyActive = healthyRuntimeForTarget(requestedTarget)
+    if (alreadyActive !== undefined) {
+      runtimeRoot = alreadyActive.path
+      clearPreparedRecord()
+      clearRestartRequest()
+      clearHostRestartRequest()
+      console.error(
+        `[PHOENIX UPDATE] consumed duplicate post-exit activation request for already-active runtime ${requestedTarget.slice(0, 12)}.`,
+      )
+      continue
+    }
+
     const liveStatus = gitStatus(root)
     if (!liveStatus.ok) {
       clearRestartRequest()
