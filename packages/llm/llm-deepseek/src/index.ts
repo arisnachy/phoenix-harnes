@@ -178,9 +178,10 @@ const catalogModel: z<DeepSeekCatalogModel> = z.object({
   description: z.string(),
   contextWindow: z.number().step(1).min(1),
   maxTokens: z.number().step(1).min(1),
-  // No schema default: the resolver owns vendor-aware modality defaults so a
-  // newly multimodal model cannot be silently materialized as text-only.
-  inputModalities: z.array(z.union(MODEL_MODALITIES)).min(1),
+  // Accept an empty legacy array at the schema boundary. Older persisted PHOENIX
+  // catalogs used [] for "capability not declared"; resolveModels repairs that
+  // sentinel with vendor-aware defaults before the adapter can observe it.
+  inputModalities: z.array(z.union(MODEL_MODALITIES)),
   imagePixelBudget: z.number().step(1).min(1),
   imageMaxBytes: z.number().step(1).min(1),
   imageDetail: z.union(['auto', 'low']),
@@ -243,11 +244,11 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
         `llm-deepseek: catalog model "${model.id}" maxTokens must be a positive integer`,
       )
     }
-    const inputModalities: ModelModality[] = model.inputModalities
-      ?? (DEEPSEEK_FLASH_VISION_MODEL_IDS.has(model.id) ? ['text', 'image'] : ['text'])
-    if (inputModalities.length === 0) {
-      throw new Error(`llm-deepseek: catalog model "${model.id}" inputModalities must not be empty`)
-    }
+    const declaredInputModalities = model.inputModalities
+    const inputModalities: ModelModality[] = declaredInputModalities === undefined
+      || declaredInputModalities.length === 0
+      ? (DEEPSEEK_FLASH_VISION_MODEL_IDS.has(model.id) ? ['text', 'image'] : ['text'])
+      : declaredInputModalities
     if (inputModalities.some(modality => !MODEL_MODALITIES.includes(modality))) {
       throw new Error(
         `llm-deepseek: catalog model "${model.id}" inputModalities must contain only "text" and "image"`,
