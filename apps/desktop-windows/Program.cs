@@ -239,7 +239,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     {
         try
         {
-            window.SetStartupStatus("Buscando Phoenix local…");
+            window.SetStartupStatus("Iniciando Phoenix…");
             if (await IsStableReadyAsync())
             {
                 if (await IsCompatiblePhoenixListenerAsync())
@@ -262,7 +262,14 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 return;
             }
 
-            var sourceRoot = DesktopSourceCheckout.Resolve(Program.InstallRoot);
+            // Installed Phoenix is a product runtime, not an implicit developer checkout.
+            // Source mode is opt-in through the developer console or PHOENIX_SOURCE_ROOT.
+            // This prevents a stale/dirty local repository from hijacking normal EXE startup.
+            var allowSourceCheckout = DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible);
+            var sourceRoot = allowSourceCheckout
+                ? DesktopSourceCheckout.Resolve(Program.InstallRoot, includeConventional: developerConsoleVisible)
+                : null;
+
             if (sourceRoot is not null)
             {
                 runtimeRoot = sourceRoot;
@@ -270,13 +277,21 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 restartItem.Text = "Reiniciar Phoenix";
                 tray.Text = "Phoenix · iniciando checkout local";
                 window.SetStartupStatus("Iniciando tu Phoenix local…");
-                DesktopLog.Write($"Using bootstrappable local Phoenix checkout as source of truth: {runtimeRoot}");
+                DesktopLog.Write($"Explicit developer/source mode selected local Phoenix checkout: {runtimeRoot}");
 
-                // A discovered source checkout already contains Phoenix's own bootstrap launcher.
-                // Let that launcher install/build what is missing instead of silently switching to
-                // a second AppData checkout when first-run preparation takes longer than expected.
-                await StartOwnedRuntimeAsync(openWhenReady: true, reportFailure: true);
-                return;
+                // A development checkout is useful, but it must never brick the installed app.
+                // If it crashes, times out, or fails its readiness handshake, silently fall back
+                // to the isolated managed stable runtime owned by the desktop installation.
+                if (await StartOwnedRuntimeAsync(openWhenReady: true, reportFailure: false))
+                    return;
+
+                StopOwnedRuntime();
+                if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PHOENIX_SOURCE_ROOT")))
+                    DesktopSourceCheckout.ForgetVerified(Program.InstallRoot);
+
+                DesktopLog.Write($"Local Phoenix checkout failed startup; falling back to managed stable runtime: {sourceRoot}");
+                window.SetStartupStatus("Tu Phoenix local no pudo iniciar. Recuperando la versión estable…");
+                tray.Text = "Phoenix · recuperando estable";
             }
 
             runtimeRoot = Program.RuntimeRoot;
