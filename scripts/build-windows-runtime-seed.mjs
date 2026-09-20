@@ -185,11 +185,31 @@ function mergeVerifiedSdkClosure() {
     throw new Error('SDK runtime deploy produced no node_modules closure')
   }
   mkdirSync(destinationNodeModules, { recursive: true })
-  cpSync(sourceNodeModules, destinationNodeModules, {
-    recursive: true,
-    dereference: true,
-    force: true,
-  })
+
+  // Merge only packages that the CLI deploy does not already contain. Overwriting
+  // an existing hoisted package tree is both unnecessary and brittle on Windows:
+  // antivirus/indexing can briefly hold files open after lifecycle scripts finish.
+  // The SDK closure is used strictly to fill missing runtime peers.
+  for (const entry of readdirSync(sourceNodeModules, { withFileTypes: true })) {
+    if (entry.name === '.bin' || entry.name === '.pnpm') continue
+    const source = join(sourceNodeModules, entry.name)
+    const destination = join(destinationNodeModules, entry.name)
+
+    if (entry.name.startsWith('@') && entry.isDirectory()) {
+      mkdirSync(destination, { recursive: true })
+      for (const scopedEntry of readdirSync(source, { withFileTypes: true })) {
+        const scopedSource = join(source, scopedEntry.name)
+        const scopedDestination = join(destination, scopedEntry.name)
+        if (existsSync(scopedDestination)) continue
+        cpSync(scopedSource, scopedDestination, { recursive: true, dereference: true })
+      }
+      continue
+    }
+
+    if (existsSync(destination)) continue
+    cpSync(source, destination, { recursive: true, dereference: true })
+  }
+
   rmSync(sdkClosureRoot, { recursive: true, force: true })
   materializeRuntimeLinks(runtimeApp)
 }
