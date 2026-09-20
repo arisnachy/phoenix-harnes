@@ -31,7 +31,6 @@ internal static class DesktopRuntimeLaunchContract
         var supervisor = Path.Combine(runtimeRoot, "scripts", "phoenix-windows-supervisor.mjs");
         var startInfo = new ProcessStartInfo
         {
-            FileName = DesktopBundledToolchain.NodeExecutable(applicationBaseDirectory),
             WorkingDirectory = runtimeRoot,
             UseShellExecute = false,
             CreateNoWindow = !showDeveloperConsole,
@@ -40,10 +39,25 @@ internal static class DesktopRuntimeLaunchContract
             WindowStyle = showDeveloperConsole ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden,
         };
 
-        // Production startup is deliberately independent from PowerShell, cmd.exe, Corepack,
-        // pnpm and tsx. The native shell supervises the bundled Node runtime directly.
-        startInfo.ArgumentList.Add(supervisor);
-        startInfo.ArgumentList.Add("--no-open");
+        if (managedRuntime)
+        {
+            // Production startup is deliberately independent from PowerShell, cmd.exe, Corepack,
+            // pnpm and tsx. The native shell supervises the bundled Node runtime directly.
+            startInfo.FileName = DesktopBundledToolchain.NodeExecutable(applicationBaseDirectory);
+            startInfo.ArgumentList.Add(supervisor);
+            startInfo.ArgumentList.Add("--no-open");
+        }
+        else
+        {
+            // Explicit source/developer mode keeps the historical bootstrapping wrapper so an
+            // unbuilt checkout can still install/build itself. It is never used by normal users.
+            var sourceLauncher = Path.Combine(runtimeRoot, "phoenix-windows.cmd");
+            startInfo.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
+            startInfo.ArgumentList.Add("/d");
+            startInfo.ArgumentList.Add("/s");
+            startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add($"call \"{sourceLauncher}\" --no-open");
+        }
 
         if (managedRuntime)
             startInfo.Environment["PHOENIX_DESKTOP_MANAGED"] = "1";
