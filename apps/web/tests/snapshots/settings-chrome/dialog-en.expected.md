@@ -43,6 +43,6 @@
     - img
     - text: System
   - text: Enter behavior while busy Busy only; Cmd/Ctrl+Enter uses the other behavior
-  - button "Queue":
-    - text: Queue
+  - button "Steer":
+    - text: Steer
     - img

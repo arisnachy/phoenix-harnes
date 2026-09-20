@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
-  ConversationTimelineSnapshot, UserMessageNode,
+  ConversationTimelineSnapshot, SteeringMessageNode, UserMessageNode,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
@@ -114,7 +114,7 @@ function runningTurnStartTime(timeline: ConversationTimelineSnapshot): number | 
 }
 
 /** Plain-text projection used only to disambiguate Host/browser clock jitter during optimistic handoff. */
-function userMessageText(node: UserMessageNode): string {
+function userMessageText(node: UserMessageNode | SteeringMessageNode): string {
   return node.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
 }
 
@@ -199,17 +199,24 @@ export function ChatView({
     if (pendingSubmit === undefined) return false
     const floor = pendingSubmit.startedAt - 1_000
     return chatNodes.some((node) => {
-      if (node.kind !== 'user') return false
-      const user = node.data as UserMessageNode
+      if (node.kind !== 'user' && node.kind !== 'steering') return false
+      const message = node.data as UserMessageNode | SteeringMessageNode
       const expectedText = pendingSubmit.modelText ?? pendingSubmit.text
-      return user.time >= floor && userMessageText(user) === expectedText
+      return message.time >= floor && userMessageText(message) === expectedText
     })
   }, [chatNodes, pendingSubmit])
+  const pendingSubmitMirroredAsSteering = useMemo(() => {
+    if (pendingSubmit?.mode !== 'steer') return false
+    const expectedText = pendingSubmit.modelText ?? pendingSubmit.text
+    return pendingSteering.some(item =>
+      item.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('') === expectedText)
+  }, [pendingSteering, pendingSubmit])
   const optimisticSubmit = useMemo(() => (
-    pendingSubmit !== undefined && !pendingSubmitDurable && pendingSubmit.text !== ''
+    pendingSubmit !== undefined && !pendingSubmitDurable && !pendingSubmitMirroredAsSteering
+      && pendingSubmit.text !== ''
       ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt }
       : undefined
-  ), [pendingSubmit, pendingSubmitDurable])
+  ), [pendingSubmit, pendingSubmitDurable, pendingSubmitMirroredAsSteering])
 
   useEffect(() => {
     const finished = previousRunning.current && !running
