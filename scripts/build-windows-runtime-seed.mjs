@@ -27,6 +27,7 @@ import { dirname, join, resolve, sep } from 'node:path'
 const root = resolve(import.meta.dirname, '..')
 const seedRoot = resolve(root, 'dist', 'windows-runtime-seed')
 const runtimeApp = join(seedRoot, 'runtime-app')
+const sdkClosureRoot = resolve(root, 'dist', 'windows-runtime-sdk-closure')
 const markerName = '.phoenix-managed-install'
 
 function run(bin, args, options = {}) {
@@ -119,8 +120,8 @@ function findLink(directory) {
   return undefined
 }
 
-function materializeRuntimeLinks() {
-  const nodeModules = join(runtimeApp, 'node_modules')
+function materializeRuntimeLinks(stagingRoot = runtimeApp) {
+  const nodeModules = join(stagingRoot, 'node_modules')
   let link = findLink(nodeModules)
   while (link !== undefined) {
     const segments = link.slice(nodeModules.length + 1).split(sep)
@@ -143,6 +144,56 @@ function materializeRuntimeLinks() {
   }
 }
 
+function restoreSdkLegacyHoists() {
+  const manifest = JSON.parse(readFileSync(join(sdkClosureRoot, 'package.json'), 'utf8'))
+  const sourceNodeModules = resolve(root, 'python', 'sdk-runtime', 'node_modules')
+  for (const dependency of Object.keys(manifest.dependencies ?? {}).sort()) {
+    const destination = join(sdkClosureRoot, 'node_modules', dependency)
+    if (existsSync(destination)) continue
+    const source = join(sourceNodeModules, dependency)
+    if (!existsSync(source)) {
+      throw new Error(`SDK runtime dependency ${dependency} is missing from both deploy output and ${source}`)
+    }
+    mkdirSync(dirname(destination), { recursive: true })
+    const nestedNodeModules = join(source, 'node_modules')
+    cpSync(source, destination, {
+      recursive: true,
+      dereference: true,
+      filter: path => path !== nestedNodeModules && !path.startsWith(nestedNodeModules + sep),
+    })
+  }
+}
+
+function mergeVerifiedSdkClosure() {
+  rmSync(sdkClosureRoot, { recursive: true, force: true })
+  runPnpm([
+    '--filter', 'dsh-jsonrpc-agent-pkg',
+    'deploy',
+    '--legacy',
+    '--prod',
+    '--config.node-linker=hoisted',
+    '--config.auto-install-peers=false',
+    '--config.link-workspace-packages=true',
+    sdkClosureRoot,
+  ])
+  restoreSdkLegacyHoists()
+  materializeRuntimeLinks(sdkClosureRoot)
+
+  const sourceNodeModules = join(sdkClosureRoot, 'node_modules')
+  const destinationNodeModules = join(runtimeApp, 'node_modules')
+  if (!existsSync(sourceNodeModules)) {
+    throw new Error('SDK runtime deploy produced no node_modules closure')
+  }
+  mkdirSync(destinationNodeModules, { recursive: true })
+  cpSync(sourceNodeModules, destinationNodeModules, {
+    recursive: true,
+    dereference: true,
+    force: true,
+  })
+  rmSync(sdkClosureRoot, { recursive: true, force: true })
+  materializeRuntimeLinks(runtimeApp)
+}
+
 function deployRuntimeApp() {
   runPnpm([
     '--filter', '@phoenix-ai/dsh',
@@ -153,6 +204,7 @@ function deployRuntimeApp() {
     runtimeApp,
   ])
   materializeRuntimeLinks()
+  mergeVerifiedSdkClosure()
 
   const entry = join(runtimeApp, 'lib', 'bin.js')
   if (!existsSync(entry)) throw new Error(`deployed Phoenix CLI entrypoint is missing: ${entry}`)
@@ -204,6 +256,7 @@ function preserveUpdaterCleanliness() {
 }
 
 rmSync(seedRoot, { recursive: true, force: true })
+rmSync(sdkClosureRoot, { recursive: true, force: true })
 mkdirSync(seedRoot, { recursive: true })
 copyTrackedSource()
 deployRuntimeApp()
