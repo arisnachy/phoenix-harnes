@@ -62,6 +62,8 @@ function isLoopbackCredentialHost(hostname: string): boolean {
  * into a cleartext credential target. Paths, queries, and fragments are
  * intentionally discarded: the browser broker authorizes an origin, never an
  * arbitrary URL prefix.
+ * @param value - Absolute HTTP(S) URL or origin to canonicalize.
+ * @returns Canonical `scheme://host[:port]` origin.
  */
 export function normalizeCredentialOrigin(value: string): string {
   let url: URL
@@ -85,6 +87,9 @@ export function normalizeCredentialOrigin(value: string): string {
  * Derive a deterministic environment-shaped reference bound to one web origin
  * and one private slot. The origin is encoded rather than sanitized, so
  * distinct origins cannot collapse onto the same reference.
+ * @param origin - Absolute HTTP(S) URL or origin accepted by {@link normalizeCredentialOrigin}.
+ * @param slot - Stable private slot name such as `account`, `secret`, or `autonomous`.
+ * @returns Branded origin-bound credential reference.
  */
 export function originCredentialRef(origin: string, slot: string): CredentialRef {
   if (!ORIGIN_CREDENTIAL_SLOT_PATTERN.test(slot)) {
