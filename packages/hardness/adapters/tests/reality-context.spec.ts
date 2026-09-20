@@ -35,8 +35,25 @@ describe('Phoenix reality context', () => {
       activeServices: ['tools', 'authorization'],
     })
     expect(snapshot.authentication).toMatchObject({
-      status: 'requires-live-connector-check',
+      status: 'unknown',
       authorizationServiceAvailable: true,
+    })
+    expect(snapshot.device).toMatchObject({
+      battery: expect.objectContaining({ value: null, source: 'not-probed' }),
+      gpu: expect.objectContaining({ value: null, source: 'not-probed' }),
+    })
+    expect(snapshot.network).toMatchObject({
+      internetReachable: expect.objectContaining({ value: null, source: 'not-probed' }),
+      latencyMs: expect.objectContaining({
+        value: null,
+        source: 'not-probed',
+        precision: 'HTTPS HEAD round trip to example.com after DNS resolution; not ICMP ping',
+      }),
+      bandwidthMbps: {
+        value: null,
+        source: 'not-measured-to-avoid-bulk-background-traffic',
+        stale: true,
+      },
     })
   })
 
