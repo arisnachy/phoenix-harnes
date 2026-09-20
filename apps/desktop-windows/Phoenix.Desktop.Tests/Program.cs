@@ -159,7 +159,8 @@ var sourceLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
     @"C:\Phoenix\desktop-control.json",
     managedRuntime: false);
 False(sourceLaunch.Environment.ContainsKey("PHOENIX_DESKTOP_MANAGED"), "source checkout is not mislabeled as desktop-managed", failures);
-True(sourceLaunch.ArgumentList.Any(value => value.Contains(@"C:\Working Phoenix\scripts\phoenix-windows-supervisor.mjs", StringComparison.OrdinalIgnoreCase)), "source checkout supervisor is used directly", failures);
+True(sourceLaunch.FileName.EndsWith("cmd.exe", StringComparison.OrdinalIgnoreCase), "source checkout may use cmd bootstrap outside the production path", failures);
+True(sourceLaunch.ArgumentList.Any(value => value.Contains(@"C:\Working Phoenix\phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)), "source checkout keeps its bootstrapping wrapper", failures);
 
 True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node scripts\phoenix-windows-supervisor.mjs"), "supervisor listener is recognized as Phoenix", failures);
 True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node C:\Users\me\Phoenix\phoenix-harnes\apps\cli\lib\bin.js web"), "source checkout listener is recognized as Phoenix", failures);
