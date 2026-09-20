@@ -275,6 +275,79 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
 
+  // Optional Codex reserves are a terminal recovery layer, not another static
+  // catalog. Normal provider retry policy gets first refusal; only after it
+  // delegates do we move to the next user-enabled reserve that Codex still
+  // advertises. This keeps retired ids out of both normal selection and failover.
+  const reserveFailures = new Set(['QUOTA', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT', 'EMPTY_RESPONSE', 'UNKNOWN_MODEL'])
+  const reserveState = new WeakMap<object, {
+    originalModel: string
+    activeModel: string
+    attempted: Set<string>
+  }>()
+  const lastCodexModel = new WeakMap<object, string>()
+
+  ctx.on('agent/request', async ({ agent }, next) => {
+    const resolved = await next()
+    if (resolved.provider !== CODEX_PROVIDER) {
+      reserveState.delete(agent)
+      return resolved
+    }
+
+    const state = reserveState.get(agent)
+    if (state === undefined) {
+      lastCodexModel.set(agent, resolved.model)
+      return resolved
+    }
+
+    const enabled = current().providers?.[CODEX_PROVIDER]?.reserveModels ?? []
+    const visible = codexCatalog.visibleIds()
+    const userChangedModel = resolved.model !== state.originalModel && resolved.model !== state.activeModel
+    if (userChangedModel || !enabled.includes(state.activeModel) || visible === undefined || !visible.includes(state.activeModel)) {
+      reserveState.delete(agent)
+      lastCodexModel.set(agent, resolved.model)
+      return resolved
+    }
+
+    const { reasoningEffort: _primaryEffort, ...withoutPrimaryEffort } = resolved
+    lastCodexModel.set(agent, state.activeModel)
+    return {
+      ...withoutPrimaryEffort,
+      provider: CODEX_PROVIDER,
+      model: state.activeModel,
+    }
+  })
+
+  ctx.on('agent/request-error', async ({ agent, provider, failure, signal }, next) => {
+    const downstream = await next()
+    if (downstream !== undefined || signal.aborted || provider !== CODEX_PROVIDER || !reserveFailures.has(failure.code)) {
+      return downstream
+    }
+
+    const reserves = current().providers?.[CODEX_PROVIDER]?.reserveModels ?? []
+    const visible = codexCatalog.visibleIds()
+    const currentModel = lastCodexModel.get(agent)
+    if (reserves.length === 0 || visible === undefined || currentModel === undefined) return undefined
+
+    const prior = reserveState.get(agent)
+    const attempted = new Set(prior?.attempted)
+    attempted.add(currentModel)
+    const visibleSet = new Set(visible)
+    const nextReserve = reserves.find(model => visibleSet.has(model) && !attempted.has(model))
+    if (nextReserve === undefined) return undefined
+
+    attempted.add(nextReserve)
+    reserveState.set(agent, {
+      originalModel: prior?.originalModel ?? currentModel,
+      activeModel: nextReserve,
+      attempted,
+    })
+    ctx.logger.warn(
+      `llm-pi-ai: Codex request failed with ${failure.code}; retrying on enabled reserve model "${nextReserve}"`,
+    )
+    return { kind: 'retry' }
+  })
+
   ctx.inject(['authorization'], (authorized) => { registerPiAiFlows(authorized, auth) })
 
   let directory: DirectoryRegistrationHandle | undefined
