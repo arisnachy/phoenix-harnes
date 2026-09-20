@@ -8,7 +8,7 @@ import { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'
 import type { CodeRunRequest, CodeRunResult } from '@phoenix-ai/dsh-code-runtime'
 import ToolRuntime, { CodeRunFailedError, RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH, defineContentToolFixture, defineTool } from '@phoenix-ai/dsh-tools'
 import type { Config, JsonSchemaNode, PostToolDecision, ToolExecutionResult } from '@phoenix-ai/dsh-tools'
-import type { Agent } from '@phoenix-ai/dsh-agent'
+import { emitAgentEvent, type Agent } from '@phoenix-ai/dsh-agent'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
 import type { JsonValue, SessionEventMap } from '@phoenix-ai/dsh-session'
 
@@ -116,6 +116,80 @@ async function runCode(
 }
 
 describe('mode-aware wire contribution', () => {
+  it("forces the native image tool ahead of Higgsfield for an explicit image request, then restores the catalog after the attempt", async () => {
+    const { ctx, systemPrompt } = await setup({ mode: 'native', runtime: false })
+    registerEcho(ctx, 'image_generation')
+    registerEcho(ctx, 'mcp__higgsfield-higgsfield__models_explore')
+    const { agent } = await mintAgentScope(ctx, 'image-first-native')
+
+    emitAgentEvent(ctx, agent, 'agent/inbox/claimed', {
+      message: createUserMessage({
+        content: [{
+          type: 'text',
+          text: 'Genera una imagen fotorrealista de una cabaña de madera junto a un lago al atardecer.',
+        }],
+        source: { kind: 'user' },
+      }),
+      turn: 1,
+    })
+
+    const gated = await systemPrompt.assemble({ scope: agent, agent })
+    expect(gated.tools.map(tool => tool.name)).toEqual(['image_generation'])
+
+    await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('image-first-attempt'),
+      name: 'image_generation',
+      arguments: { value: 'cabin' },
+      agent,
+    })
+
+    const restored = await systemPrompt.assemble({ scope: agent, agent })
+    expect(restored.tools.map(tool => tool.name)).toEqual([
+      'image_generation',
+      'mcp__higgsfield-higgsfield__models_explore',
+    ])
+  })
+
+  it("keeps Code Mode's run_code transport but exposes only image_generation in its SDK on the first image step", async () => {
+    const { ctx, systemPrompt } = await setup({ mode: 'code' })
+    registerEcho(ctx, 'image_generation')
+    registerEcho(ctx, 'mcp__higgsfield-higgsfield__models_explore')
+    const { agent } = await mintAgentScope(ctx, 'image-first-code')
+
+    emitAgentEvent(ctx, agent, 'agent/inbox/claimed', {
+      message: createUserMessage({
+        content: [{ type: 'text', text: 'Create a photorealistic image of a cabin beside a lake.' }],
+        source: { kind: 'user' },
+      }),
+      turn: 1,
+    })
+
+    const gated = await systemPrompt.assemble({ scope: agent, agent })
+    expect(gated.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
+    const sdk = gated.sections.find(section => section.name === 'tools:sdk')?.text
+    expect(sdk).toContain('image_generation:')
+    expect(sdk).not.toContain('mcp__higgsfield-higgsfield__models_explore:')
+  })
+
+  it('does not gate the tool catalog when the user only asks to inspect an existing image', async () => {
+    const { ctx, systemPrompt } = await setup({ mode: 'native', runtime: false })
+    registerEcho(ctx, 'image_generation')
+    registerEcho(ctx, 'read_image')
+    const { agent } = await mintAgentScope(ctx, 'image-read-only')
+
+    emitAgentEvent(ctx, agent, 'agent/inbox/claimed', {
+      message: createUserMessage({
+        content: [{ type: 'text', text: 'Analiza esta imagen y dime qué ves.' }],
+        source: { kind: 'user' },
+      }),
+      turn: 1,
+    })
+
+    const assembly = await systemPrompt.assemble({ scope: agent, agent })
+    expect(assembly.tools.map(tool => tool.name)).toEqual(['image_generation', 'read_image'])
+  })
+
   it("mode 'native' contributes every schema, no run_code, no SDK section — and needs no runtime", async () => {
     const { ctx, systemPrompt } = await setup({ mode: 'native', runtime: false })
     registerEcho(ctx)
