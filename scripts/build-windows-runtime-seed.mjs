@@ -90,20 +90,20 @@ function sanitizeCopiedGitMetadata() {
 }
 
 function copyTrackedSource() {
-  const listed = run('git', ['ls-files', '-z'], { stdio: ['ignore', 'pipe', 'pipe'] }).stdout ?? ''
-  for (const relative of listed.split('\0').filter(Boolean)) {
-    const source = join(root, relative)
-    const destination = join(seedRoot, relative)
-    mkdirSync(dirname(destination), { recursive: true })
-    cpSync(source, destination, { recursive: true, dereference: true })
-  }
-
   const gitMetadata = join(root, '.git')
   if (!existsSync(gitMetadata) || !lstatSync(gitMetadata).isDirectory()) {
     throw new Error('Windows runtime seed requires a normal Git checkout with a .git directory')
   }
+
+  // Copy the repository database first, then let Git itself materialize the
+  // worktree. Copying tracked paths with fs.cp({ dereference: true }) turns
+  // tracked symlinks into regular files/directories on Windows, making the seed
+  // appear dirty before it ever starts. A hard reset reproduces the exact
+  // checkout semantics of the target machine and keeps the updater worktree clean.
   cpSync(gitMetadata, join(seedRoot, '.git'), { recursive: true, dereference: true })
   sanitizeCopiedGitMetadata()
+  run('git', ['reset', '--hard', 'HEAD'], { cwd: seedRoot })
+  run('git', ['clean', '-fdx'], { cwd: seedRoot })
 }
 
 function findLink(directory) {
