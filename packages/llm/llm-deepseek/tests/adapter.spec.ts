@@ -1699,6 +1699,26 @@ describe('plugin registration and config', () => {
     expect(JSON.stringify(server.requests[0])).toContain('"type":"image_url"')
   })
 
+  it('overrides stale text-only Flash metadata with the authoritative multimodal capability', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmDeepSeek, {
+      baseURL: 'http://127.0.0.1:1',
+      models: [
+        { id: 'deepseek-v4-flash', inputModalities: ['text'] },
+        { id: 'deepseek-v4.1-flash', inputModalities: ['text'] },
+        { id: 'deepseek-v4-pro', inputModalities: ['text'] },
+      ],
+    })
+
+    await expect(ctx.llm.resolveModelInfo('deepseek-official', 'deepseek-v4-flash'))
+      .resolves.toMatchObject({ inputModalities: ['text', 'image'] })
+    await expect(ctx.llm.resolveModelInfo('deepseek-official', 'deepseek-v4.1-flash'))
+      .resolves.toMatchObject({ inputModalities: ['text', 'image'] })
+    await expect(ctx.llm.resolveModelInfo('deepseek-official', 'deepseek-v4-pro'))
+      .resolves.toMatchObject({ inputModalities: ['text'] })
+  })
+
   it('repairs legacy persisted empty inputModalities before plugin boot', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
