@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
-import { credentialRef, isCredentialKeySegment } from '../src/index.ts'
+import { credentialRef, isCredentialKeySegment, normalizeCredentialOrigin, originCredentialRef } from '../src/index.ts'
 import type { CredentialRef } from '../src/index.ts'
 import { MemoryCredentials } from './memory.ts'
 
@@ -23,6 +23,28 @@ describe('credentialRef', () => {
     for (const invalid of ['', '9LEADING', 'WITH-DASH', 'WITH SPACE', 'ns:key']) {
       expect(() => credentialRef(invalid)).toThrow(TypeError)
     }
+  })
+})
+
+describe('origin-bound web credentials', () => {
+  it('canonicalizes secure remote origins and loopback HTTP only', () => {
+    expect(normalizeCredentialOrigin('https://Example.com/login?next=1')).toBe('https://example.com')
+    expect(normalizeCredentialOrigin('http://localhost:3080/sign-in')).toBe('http://localhost:3080')
+    expect(normalizeCredentialOrigin('http://127.0.0.1:8080/')).toBe('http://127.0.0.1:8080')
+    expect(() => normalizeCredentialOrigin('http://example.com/login')).toThrow(/HTTPS/)
+    expect(() => normalizeCredentialOrigin('file:///tmp/secret')).toThrow(/HTTPS/)
+    expect(() => normalizeCredentialOrigin('https://embedded-user@example.com')).toThrow(/user information/)
+  })
+
+  it('derives collision-free environment-shaped references', () => {
+    const secretRef = originCredentialRef('https://example.com/login', 'secret')
+    const accountRef = originCredentialRef('https://example.com', 'account')
+    expect(secretRef).toMatch(/^PHOENIX_WEB_[0-9A-F]+_SECRET$/)
+    expect(accountRef).toMatch(/^PHOENIX_WEB_[0-9A-F]+_ACCOUNT$/)
+    expect(secretRef).not.toContain('example.com')
+    expect(secretRef).not.toBe(accountRef)
+    expect(originCredentialRef('https://example.com/a', 'secret')).toBe(secretRef)
+    expect(originCredentialRef('https://example.com:444/a', 'secret')).not.toBe(secretRef)
   })
 })
 
