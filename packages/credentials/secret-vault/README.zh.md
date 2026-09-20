@@ -2,9 +2,9 @@
 
 [English](README.md) | 中文
 
-secret vault 在 `ctx.credentials` 之上提供仅供人工使用的 `/secret` 命令。可在编辑器中使用 `/secret set NAME VALUE`、`/secret status NAME` 或 `/secret delete NAME`。值会直接交给凭据提供方；`command/run` 会省略原始输入，确认消息只包含脱敏状态。命令不会发送给模型。
+secret vault 在 `ctx.credentials` 之上提供仅供人工使用的 `/secret` 命令。可在编辑器中使用 `/secret set NAME VALUE`、`/secret status NAME` 或 `/secret delete NAME`。对于无人值守浏览器工作，`/secret login-set https://example.com ACCOUNT SECRET` 会保存按 origin 绑定的登录信息和一次性自主使用授权；`login-status` 与 `login-delete` 用于检查或删除该绑定。值会直接交给凭据提供方；`command/run` 会省略原始输入，确认消息只包含脱敏状态。命令不会发送给模型。
 
-像 LLM 适配器这样的消费者仍会在提供方操作内部解析指定的 `CredentialRef`。vault 不提供读取秘密的工具，也不会把秘密值放入模型上下文。
+像 LLM 适配器这样的消费者仍会在提供方操作内部解析指定的 `CredentialRef`。Windows 浏览器 broker 会根据规范化页面 origin 派生登录引用，在 DOM 注入前再次核对实时 origin，并且登录值只进入受信任执行路径。vault 不提供读取秘密的工具，也不会把秘密值放入模型上下文。
 
 默认本地提供方把值存储在仅所有者可访问的凭据文档中。在 Windows 上，文件系统 ACL 仍由账户和部署负责；本包保证命令值不会进入模型请求或持久化命令输入。
 
