@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -39,6 +39,50 @@ describe('prepared update auto-activation bridge', () => {
       expect(hostRequest.reason).toContain(target.slice(0, 12))
     } finally {
       rmSync(control, { recursive: true, force: true })
+    }
+  })
+
+  it('does not re-arm an activation request when the same verified SHA is already active', () => {
+    const control = mkdtempSync(join(tmpdir(), 'phoenix-prepared-bridge-active-'))
+    const runtime = mkdtempSync(join(tmpdir(), 'phoenix-prepared-runtime-active-'))
+    try {
+      const git = (...args: string[]) => spawnSync('git', args, { cwd: runtime, encoding: 'utf8' })
+      expect(git('init').status).toBe(0)
+      expect(git('config', 'user.email', 'phoenix-test@example.invalid').status).toBe(0)
+      expect(git('config', 'user.name', 'Phoenix Test').status).toBe(0)
+      writeFileSync(join(runtime, 'README.md'), 'active runtime\n', 'utf8')
+      expect(git('add', 'README.md').status).toBe(0)
+      expect(git('commit', '-m', 'active runtime').status).toBe(0)
+      const activeTarget = git('rev-parse', 'HEAD').stdout.trim()
+
+      writeFileSync(join(control, 'phoenix-update-prepared.json'), JSON.stringify({
+        schema: 1,
+        target: activeTarget,
+        base: 'b'.repeat(40),
+        mode: 'full',
+      }), 'utf8')
+      writeFileSync(join(control, 'phoenix-active-runtime.json'), JSON.stringify({
+        schema: 1,
+        target: activeTarget,
+        path: runtime,
+      }), 'utf8')
+
+      const result = spawnSync(process.execPath, [
+        resolve('scripts/phoenix-prepared-restart-bridge.mjs'),
+        '--wait-target', activeTarget,
+        '--common-dir', control,
+        '--timeout-ms', '1000',
+      ], {
+        encoding: 'utf8',
+        env: { ...process.env, PHOENIX_UPDATE_SUPERVISED: '1' },
+      })
+
+      expect(result.status, result.stderr).toBe(0)
+      expect(existsSync(join(control, 'phoenix-update-restart-request.json'))).toBe(false)
+      expect(result.stderr).toContain('already active')
+    } finally {
+      rmSync(control, { recursive: true, force: true })
+      rmSync(runtime, { recursive: true, force: true })
     }
   })
 
