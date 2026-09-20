@@ -103,6 +103,7 @@ True(DesktopStartupContract.UserCloseHidesToTray, "user close hides Phoenix to t
 Equal("Iniciando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
 EqualInt(3, DesktopRuntimeLaunchContract.ReadyConsecutiveSamples, "desktop waits for multiple stable backend probes", failures);
 EqualInt(700, DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds, "stable backend probes are spaced out", failures);
+EqualInt(3, DesktopRuntimeLaunchContract.MaxUnexpectedBackendRestarts, "desktop stops waiting after a short backend crash loop", failures);
 True(DesktopNavigationRecovery.IsTransient("ConnectionAborted"), "connection-aborted WebView startup failure is retried", failures);
 True(DesktopNavigationRecovery.IsTransient("ConnectionReset"), "connection-reset WebView startup failure is retried", failures);
 False(DesktopNavigationRecovery.IsTransient("CertificateIsInvalid"), "non-transient WebView failures are not retried blindly", failures);
@@ -200,6 +201,12 @@ try
     DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
     Equal(Path.GetFullPath(sourceTestRoot), File.ReadAllText(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)).Trim(), "verified backend root is persisted", failures);
     Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "verified backend root resolves first on later launches", failures);
+
+    var conventionalRoots = DesktopSourceCheckout.ConventionalRoots(@"C:\Users\arisn");
+    True(
+        conventionalRoots.Any(path => path.EndsWith(@"OneDrive\Documentos\ChatGPT\Fenix-evolution\phoenix-harnes\phoenix-harnes", StringComparison.OrdinalIgnoreCase)),
+        "desktop discovers the nested Fenix-evolution checkout used by local Phoenix installs",
+        failures);
 
     DesktopInstallationState.RememberApplicationRoot(sourceInstallRoot, @"C:\Program Files\Phoenix");
     Equal(@"C:\Program Files\Phoenix", File.ReadAllText(DesktopInstallationState.AppRootPath(sourceInstallRoot)).Trim(), "installed application root is persisted separately from backend root", failures);
