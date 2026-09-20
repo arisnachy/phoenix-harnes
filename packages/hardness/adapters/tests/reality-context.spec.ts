@@ -177,6 +177,12 @@ describe('Phoenix reality context', () => {
       availability: null,
     })
     expect(snapshot.phoenix).toMatchObject({
+      pluginSummary: {
+        total: 2,
+        enabled: 2,
+        active: 1,
+        failed: 1,
+      },
       update: {
         status: 'ready',
         current: 'abc123',
