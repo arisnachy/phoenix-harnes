@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -59,6 +59,43 @@ describe('PHOENIX updater state persistence', () => {
       schema: 1,
       kind: 'host-restart',
     })
+  })
+
+  it('suppresses and clears duplicate restart requests when the same SHA is already active', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-update-already-active-'))
+    roots.push(root)
+    const path = join(root, 'phoenix-update-state.json')
+    const target = 'd'.repeat(40)
+    process.env.PHOENIX_UPDATE_SUPERVISED = '1'
+    process.env.PHOENIX_AUTO_UPDATE = '1'
+    process.env.PHOENIX_UPDATE_MODE = 'auto'
+
+    writeFileSync(join(root, 'phoenix-active-runtime.json'), JSON.stringify({
+      schema: 1,
+      target,
+      path: 'C:\\Phoenix\\runtime',
+    }), 'utf8')
+    writeFileSync(join(root, 'phoenix-update-restart-request.json'), JSON.stringify({
+      schema: 1,
+      target,
+    }), 'utf8')
+    writeFileSync(join(root, 'phoenix-host-restart-request.json'), JSON.stringify({
+      schema: 1,
+      kind: 'host-restart',
+      reason: `verified stable update ${target.slice(0, 12)} ready; activate and restart`,
+    }), 'utf8')
+
+    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target })
+
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
+      schema: 1,
+      status: 'current',
+      phase: 'idle',
+      current: target,
+      target,
+    })
+    expect(existsSync(join(root, 'phoenix-update-restart-request.json'))).toBe(false)
+    expect(existsSync(join(root, 'phoenix-host-restart-request.json'))).toBe(false)
   })
 
   it('does not request an automatic restart in notify-only mode', () => {
