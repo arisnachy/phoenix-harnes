@@ -37,6 +37,7 @@ jobs:
           pnpm run prepare:change
           pnpm run gen-cordis-api
           pnpm run gen-tool-catalog
+          pnpm run verify-translation-pairing --write --all
 
       - name: Commit deterministic repairs
         shell: bash
