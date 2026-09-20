@@ -141,6 +141,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     private bool changingDeveloperConsole;
     private bool shuttingDown;
     private bool signingOut;
+    private DateTimeOffset lastRuntimeProgressAt = DateTimeOffset.MinValue;
 
     internal PhoenixApplicationContext(EventWaitHandle showEvent, bool developerConsoleVisible)
     {
@@ -563,7 +564,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         if (ownedRuntime is { HasExited: false })
             return true;
 
-        window.SetStartupStatus("Iniciando Phoenix…");
+        window.SetStartupStatus("Abriendo PowerShell y preparando Phoenix…");
         var launcher = Path.Combine(runtimeRoot, "phoenix-windows.cmd");
         if (!File.Exists(launcher))
         {
@@ -623,7 +624,9 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
         externallyManaged = false;
         restartItem.Enabled = true;
-        tray.Text = "Phoenix · iniciando";
+        lastRuntimeProgressAt = DateTimeOffset.UtcNow;
+        tray.Text = "Phoenix · arrancando backend";
+        window.SetStartupStatus("PowerShell listo · arrancando el backend de Phoenix…");
         DesktopLog.Write($"Phoenix runtime process started with PID {ownedRuntime.Id} from {runtimeRoot}.");
 
         var maxWait = TimeSpan.FromSeconds(sourceCheckoutRuntime
@@ -661,6 +664,12 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             if (ownedRuntime.HasExited)
                 break;
 
+            if (DateTimeOffset.UtcNow - lastRuntimeProgressAt > TimeSpan.FromSeconds(6))
+            {
+                window.SetStartupStatus(DesktopStartupProgress.WaitingMessage(wait.Elapsed));
+                lastRuntimeProgressAt = DateTimeOffset.UtcNow;
+            }
+
             await Task.Delay(DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds);
         }
 
@@ -686,44 +695,16 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
     private void ReportRuntimeProgress(string line)
     {
-        if (line.Contains("Preparing PHOENIX dependencies", StringComparison.OrdinalIgnoreCase))
-        {
-            window.SetStartupStatus("Preparando dependencias…");
-            tray.Text = "Phoenix · preparando";
-            return;
-        }
+        var message = DesktopStartupProgress.FromRuntimeLine(line);
+        if (message is null) return;
 
-        if (line.Contains("Building PHOENIX for the first run", StringComparison.OrdinalIgnoreCase))
-        {
-            window.SetStartupStatus("Construyendo Phoenix por primera vez…");
-            tray.Text = "Phoenix · construyendo";
-            return;
-        }
-
-        if (line.Contains("PHOENIX RECOVERY", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("configuration preflight", StringComparison.OrdinalIgnoreCase))
-        {
-            window.SetStartupStatus("Verificando Phoenix…");
-            tray.Text = "Phoenix · verificando";
-            return;
-        }
-
-        if (line.Contains("host exited unexpectedly", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("relaunch", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("restarting", StringComparison.OrdinalIgnoreCase))
-        {
-            window.SetStartupStatus("Reiniciando backend de Phoenix…");
-            tray.Text = "Phoenix · reiniciando";
-            return;
-        }
-
-        if (line.Contains("listening", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("127.0.0.1:3080", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("server", StringComparison.OrdinalIgnoreCase) && line.Contains("ready", StringComparison.OrdinalIgnoreCase))
-        {
-            window.SetStartupStatus("Backend listo. Cargando interfaz…");
-            tray.Text = "Phoenix · cargando interfaz";
-        }
+        lastRuntimeProgressAt = DateTimeOffset.UtcNow;
+        window.SetStartupStatus(message);
+        tray.Text = message.Contains("interfaz", StringComparison.OrdinalIgnoreCase)
+            ? "Phoenix · cargando interfaz"
+            : message.Contains("problema", StringComparison.OrdinalIgnoreCase)
+                ? "Phoenix · revisando backend"
+                : "Phoenix · preparando";
     }
 
     private async Task RestartOwnedRuntimeAsync()
