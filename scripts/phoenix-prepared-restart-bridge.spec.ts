@@ -11,7 +11,7 @@ function source(path: string): string {
 }
 
 describe('prepared update auto-activation bridge', () => {
-  it('turns a matching prepared marker into both update and Host restart requests', () => {
+  it('turns a matching prepared marker into an update activation request without forcing a supervised Host restart', () => {
     const control = mkdtempSync(join(tmpdir(), 'phoenix-prepared-bridge-'))
     try {
       writeFileSync(join(control, 'phoenix-update-prepared.json'), JSON.stringify({
@@ -33,10 +33,8 @@ describe('prepared update auto-activation bridge', () => {
 
       expect(result.status, result.stderr).toBe(0)
       const updateRequest = JSON.parse(readFileSync(join(control, 'phoenix-update-restart-request.json'), 'utf8'))
-      const hostRequest = JSON.parse(readFileSync(join(control, 'phoenix-host-restart-request.json'), 'utf8'))
       expect(updateRequest).toMatchObject({ schema: 1, target })
-      expect(hostRequest).toMatchObject({ schema: 1, kind: 'host-restart' })
-      expect(hostRequest.reason).toContain(target.slice(0, 12))
+      expect(existsSync(join(control, 'phoenix-host-restart-request.json'))).toBe(false)
     } finally {
       rmSync(control, { recursive: true, force: true })
     }
