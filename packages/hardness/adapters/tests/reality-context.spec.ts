@@ -41,6 +41,17 @@ describe('Phoenix reality context', () => {
     expect(snapshot.device).toMatchObject({
       battery: expect.objectContaining({ value: null, source: 'not-probed' }),
       gpu: expect.objectContaining({ value: null, source: 'not-probed' }),
+      powerState: {
+        suspended: false,
+        state: 'awake',
+        source: 'current-process-execution',
+        observedAt: '2026-09-20T13:58:00.000Z',
+        precision: 'current sample only; Phoenix cannot execute a probe while the operating system is suspended',
+      },
+      screenLocked: expect.objectContaining({
+        value: null,
+        source: 'wtsapi32:WTSSessionInfoEx-unavailable',
+      }),
     })
     expect(snapshot.network).toMatchObject({
       internetReachable: expect.objectContaining({ value: null, source: 'not-probed' }),
@@ -72,7 +83,7 @@ describe('Phoenix reality context', () => {
     const engine = new RealityContextEngine({ refreshMs: 30_000 })
     const internal = engine as unknown as {
       userActivity: {
-        value: { idleSeconds: number } | null
+        value: { idleSeconds: number; screenLocked: boolean | null } | null
         source: string
         observedAt: number
         expiresAt: number
@@ -81,7 +92,7 @@ describe('Phoenix reality context', () => {
     }
     const now = Date.parse('2026-09-20T15:00:00.000Z')
     internal.userActivity = {
-      value: { idleSeconds: 299.9 },
+      value: { idleSeconds: 299.9, screenLocked: false },
       source: 'test:last-input',
       observedAt: now - 1_000,
       expiresAt: now + 30_000,
@@ -94,10 +105,15 @@ describe('Phoenix reality context', () => {
       awayThresholdSeconds: 300,
       source: 'test:last-input',
       stale: false,
+      screenLocked: expect.objectContaining({
+        value: false,
+        source: 'wtsapi32:WTSSessionInfoEx',
+        stale: false,
+      }),
     })
 
     internal.userActivity = {
-      value: { idleSeconds: 300 },
+      value: { idleSeconds: 300, screenLocked: true },
       source: 'test:last-input',
       observedAt: now - 1_000,
       expiresAt: now + 30_000,
@@ -110,6 +126,25 @@ describe('Phoenix reality context', () => {
       awayThresholdSeconds: 300,
       source: 'test:last-input',
       stale: false,
+      screenLocked: expect.objectContaining({
+        value: true,
+        source: 'wtsapi32:WTSSessionInfoEx',
+        stale: false,
+      }),
+    })
+    expect(away.device).toMatchObject({
+      powerState: {
+        suspended: false,
+        state: 'awake',
+        source: 'current-process-execution',
+        observedAt: '2026-09-20T15:00:00.000Z',
+        precision: 'current sample only; Phoenix cannot execute a probe while the operating system is suspended',
+      },
+      screenLocked: expect.objectContaining({
+        value: true,
+        source: 'wtsapi32:WTSSessionInfoEx',
+        stale: false,
+      }),
     })
   })
 
