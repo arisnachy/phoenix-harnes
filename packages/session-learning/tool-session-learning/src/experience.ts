@@ -213,6 +213,14 @@ export class ExperienceLearningEngine {
     return next
   }
 
+  /** Find the best prior repeated-task experience for current model guidance. */
+  matchTask(text: string, projectId?: string): ExperienceAggregate | undefined {
+    const fingerprint = fingerprintTask(text)
+    if (fingerprint.tokens.length === 0) return undefined
+    const state = this.bestMatchingAggregate(fingerprint, projectId)
+    return state === undefined ? undefined : structuredClone(state)
+  }
+
   private bestMatchingAggregate(fingerprint: TaskFingerprint, projectId?: string): ExperienceAggregate | undefined {
     let best: ExperienceAggregate | undefined
     let bestScore = 0
