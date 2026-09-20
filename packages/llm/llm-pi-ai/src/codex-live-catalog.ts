@@ -30,7 +30,7 @@ const SUPPORTED_THINKING_LEVELS = new Set<string>(THINKING_LEVELS)
  * mean automatic; a non-empty list is an explicit human pin.
  *
  * @param profile - Provider settings currently active for the Codex route.
- * @returns True only when the route exists and does not pin a non-empty model list.
+ * @returns True whenever the Codex route exists; its catalog is always live-owned.
  */
 export function codexCatalogIsAutomatic(profile: PiAiProviderProfile | undefined): profile is PiAiProviderProfile {
   return profile !== undefined
