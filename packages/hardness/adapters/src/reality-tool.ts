@@ -32,9 +32,6 @@ export function createRealitySnapshotTool(
         new Date(),
         exec.agent === undefined ? undefined : { agent: exec.agent },
       )
-      // Tool results must satisfy the JSON-value contract. RealitySnapshot is
-      // deliberately modeled with typed records rather than an index signature,
-      // so round-trip through JSON at the tool boundary to enforce serializability.
       return JSON.parse(JSON.stringify(snapshot)) as Record<string, JsonValue>
     },
     presentCall(args) {
