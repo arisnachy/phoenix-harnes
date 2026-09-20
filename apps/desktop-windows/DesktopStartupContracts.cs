@@ -189,7 +189,13 @@ internal static class DesktopSourceCheckout
         }
     }
 
-    internal static IReadOnlyList<string> CandidateRoots(string stateRoot)
+    internal static bool ShouldUseSourceCheckout(bool developerConsoleVisible)
+    {
+        if (developerConsoleVisible) return true;
+        return !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PHOENIX_SOURCE_ROOT"));
+    }
+
+    internal static IReadOnlyList<string> CandidateRoots(string stateRoot, bool includeConventional = false)
     {
         var values = new List<string>();
         var configured = Environment.GetEnvironmentVariable("PHOENIX_SOURCE_ROOT");
@@ -207,9 +213,12 @@ internal static class DesktopSourceCheckout
         if (!string.IsNullOrWhiteSpace(legacy))
             values.Add(legacy);
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (!string.IsNullOrWhiteSpace(home))
-            values.AddRange(ConventionalRoots(home));
+        if (includeConventional)
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrWhiteSpace(home))
+                values.AddRange(ConventionalRoots(home));
+        }
 
         return values
             .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -257,9 +266,9 @@ internal static class DesktopSourceCheckout
             .ToArray();
     }
 
-    internal static string? Resolve(string stateRoot)
+    internal static string? Resolve(string stateRoot, bool includeConventional = false)
     {
-        foreach (var candidate in CandidateRoots(stateRoot))
+        foreach (var candidate in CandidateRoots(stateRoot, includeConventional))
         {
             if (IsRunnable(candidate))
                 return candidate;
@@ -280,6 +289,15 @@ internal static class DesktopSourceCheckout
         catch
         {
             // Successful startup remains valid even if persistence is temporarily unavailable.
+        }
+    }
+
+    internal static void ForgetVerified(string stateRoot)
+    {
+        foreach (var path in new[] { VerifiedPointerPath(stateRoot), LegacyPointerPath(stateRoot) })
+        {
+            try { File.Delete(path); }
+            catch { }
         }
     }
 }
