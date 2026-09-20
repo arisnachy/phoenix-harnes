@@ -10,13 +10,13 @@
 
 import { spawn } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Interface as ReadlineInterface } from 'node:readline'
 import { LlmError } from '@phoenix-ai/dsh-llm'
 import type { LlmDiscoveredModel } from '@phoenix-ai/dsh-llm'
-
-/** Codex model discovery is read-only and must not contend on the user's SQLite thread/log state. */
-export const CODEX_DISCOVERY_DISABLE_SQLITE = true
 
 const RPC_TIMEOUT_MS = 20_000
 const PAGE_LIMIT = 100
@@ -160,7 +160,7 @@ export function readCodexModelPage(result: unknown): {
 }
 
 /** Only the ambient facts Codex needs to find its install, config and network. */
-function codexEnvironment(): NodeJS.ProcessEnv {
+export function codexEnvironment(): NodeJS.ProcessEnv {
   const names = [
     'PATH', 'Path', 'PATHEXT', 'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
     'CODEX_HOME', 'XDG_CONFIG_HOME', 'SystemRoot', 'ComSpec', 'TEMP', 'TMP',
@@ -172,6 +172,17 @@ function codexEnvironment(): NodeJS.ProcessEnv {
     const value = process.env[name]
     if (value !== undefined) env[name] = value
   }
+  const configuredHome = process.env.CODEX_HOME?.trim()
+  const home = configuredHome && configuredHome.length > 0
+    ? resolve(configuredHome)
+    : join(homedir(), '.codex')
+  const configuredSqlite = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
+  const sqliteHome = configuredSqlite && configuredSqlite.length > 0
+    ? resolve(configuredSqlite)
+    : join(home, 'phoenix-runtime', 'sqlite', 'discovery')
+  mkdirSync(sqliteHome, { recursive: true })
+  env.CODEX_HOME = home
+  env.CODEX_SQLITE_HOME = sqliteHome
   return env
 }
 
@@ -198,11 +209,11 @@ function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
     // also handles npm's `codex.cmd` shim, which cannot be execFile'd directly.
     return finishProcessSetup(spawn(
       shell,
-      ['/d', '/s', '/c', 'codex --disable sqlite app-server --listen stdio://'],
+      ['/d', '/s', '/c', 'codex app-server --listen stdio://'],
       common,
     ))
   }
-  return finishProcessSetup(spawn('codex', ['--disable', 'sqlite', 'app-server', '--listen', 'stdio://'], common))
+  return finishProcessSetup(spawn('codex', ['app-server', '--listen', 'stdio://'], common))
 }
 
 function writeFrame(
