@@ -9,6 +9,7 @@ import {
   imageGenerationToolDescription,
   installCodexImageGeneration,
   selectFreshGeneratedImage,
+  selectImageGenerationBackend,
 } from '../src/image-generation.ts'
 
 type CapturedImageTool = {
@@ -74,6 +75,16 @@ describe('Codex image generation bridge', () => {
     expect(classifyCodexImageFailure('codex: command failed')).toBe('runtime')
   })
 
+  it('routes Codex callers to Codex and non-Codex callers to the free raster backend', () => {
+    expect(selectImageGenerationBackend(undefined, 'openai-codex')).toBe('codex')
+    expect(selectImageGenerationBackend('auto', 'openai-codex')).toBe('codex')
+    expect(selectImageGenerationBackend(undefined, 'deepseek-official')).toBe('free')
+    expect(selectImageGenerationBackend('auto', 'openrouter')).toBe('free')
+    expect(selectImageGenerationBackend('free', 'openai-codex')).toBe('free')
+    expect(selectImageGenerationBackend('codex', 'deepseek-official')).toBe('codex')
+    expect(selectImageGenerationBackend(undefined, undefined)).toBe('codex')
+  })
+
   it('selects only a new or changed generated image and prefers the newest', () => {
     const baseline = new Map([
       ['/cache/old.png', '10:100'],
@@ -87,7 +98,7 @@ describe('Codex image generation bridge', () => {
   })
 
   it('tells the model to use the tool for explicit images and project visual deliverables', () => {
-    expect(imageGenerationToolDescription).toContain('actual image')
+    expect(imageGenerationToolDescription).toContain('actual, high-quality raster image')
     expect(imageGenerationToolDescription).toContain('project')
     expect(imageGenerationToolDescription).toContain('logo')
     expect(imageGenerationToolDescription).toContain('webpage')
@@ -95,7 +106,9 @@ describe('Codex image generation bridge', () => {
     expect(imageGenerationToolDescription).toContain('type-appropriate')
     expect(imageGenerationToolDescription).toContain('hero')
     expect(imageGenerationToolDescription).toContain('charts')
-    expect(imageGenerationToolDescription).toContain('active text model')
+    expect(imageGenerationToolDescription).toContain('OpenAI Codex')
+    expect(imageGenerationToolDescription).toContain('backend=free')
+    expect(imageGenerationToolDescription).toContain('SVG, HTML, CSS, canvas')
     expect(imageGenerationToolDescription).toContain('brief or objective')
   })
 
