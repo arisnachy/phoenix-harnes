@@ -49,6 +49,20 @@ function run(bin, args, options = {}) {
   return result
 }
 
+function runPnpm(args) {
+  if (process.platform === 'win32') {
+    return run(process.env.ComSpec ?? 'cmd.exe', [
+      '/d',
+      '/s',
+      '/c',
+      'corepack.cmd',
+      'pnpm',
+      ...args,
+    ])
+  }
+  return run('pnpm', args)
+}
+
 function copyTrackedSource() {
   const listed = run('git', ['ls-files', '-z'], { stdio: ['ignore', 'pipe', 'pipe'] }).stdout ?? ''
   for (const relative of listed.split('\0').filter(Boolean)) {
@@ -104,8 +118,7 @@ function materializeRuntimeLinks() {
 }
 
 function deployRuntimeApp() {
-  const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
-  run(pnpm, [
+  runPnpm([
     '--filter', '@phoenix-ai/dsh',
     'deploy',
     '--legacy',
