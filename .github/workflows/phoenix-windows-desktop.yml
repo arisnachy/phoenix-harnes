@@ -245,3 +245,56 @@ jobs:
             dist/phoenix-desktop/Phoenix.exe
           if-no-files-found: error
           retention-days: 30
+
+  publish-stable-release:
+    name: publish-stable-release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
+    needs: windows-desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release metadata
+        uses: actions/checkout@v4
+
+      - name: Download tested Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Phoenix-Windows-Desktop-${{ github.sha }}
+          path: release-payload
+
+      - name: Publish stable Windows installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $match = Select-String -Path installer/windows/Phoenix.iss -Pattern '^AppVersion=(.+)$' | Select-Object -First 1
+          if (-not $match) { throw 'Could not determine Windows AppVersion from Phoenix.iss' }
+
+          $version = $match.Matches[0].Groups[1].Value.Trim()
+          $tag = "windows-v$version"
+          $source = Join-Path (Resolve-Path release-payload).Path 'installer/Phoenix-Windows-Setup.exe'
+          if (-not (Test-Path $source)) { throw "Tested installer missing from artifact: $source" }
+
+          $assetName = "Phoenix-Windows-Setup-$version.exe"
+          $asset = Join-Path $PWD $assetName
+          Copy-Item $source $asset -Force
+
+          $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksum = Join-Path $PWD "$assetName.sha256"
+          Set-Content -Path $checksum -Value "$hash  $assetName" -Encoding ascii
+
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+          if (-not $releaseExists) {
+            gh release create $tag $asset $checksum --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Phoenix Windows $version" --notes "Official Phoenix Windows installer built and tested from stable commit $env:GITHUB_SHA." --latest
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            gh release upload $tag $asset $checksum --clobber --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          Write-Host "Published $assetName"
+          Write-Host "SHA-256: $hash"
+          Write-Host "Download: https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$assetName"
