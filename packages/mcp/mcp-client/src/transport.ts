@@ -72,17 +72,18 @@ function validateHttpEndpoint(raw: string): URL {
   return url
 }
 
-/**
- * Create an MCP transport from the resolved plugin config.
- *
- * @param config - Resolved plugin config discriminated on `transport`.
- * @returns A connected-ready MCP Transport (stdio or Streamable HTTP).
- */
+/** Options used while constructing an MCP transport. */
 export interface TransportOptions {
   /** Optional OAuth provider used by Streamable HTTP servers. */
   authProvider?: OAuthClientProvider
 }
 
+/**
+ * Create an MCP transport from the resolved plugin config.
+ * @param config - Resolved plugin config discriminated on `transport`.
+ * @param options - Optional transport-specific runtime collaborators.
+ * @returns A connected-ready MCP transport for stdio or Streamable HTTP.
+ */
 export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
     case 'stdio':

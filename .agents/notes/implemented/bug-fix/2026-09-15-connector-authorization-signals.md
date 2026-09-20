@@ -24,6 +24,12 @@ Authorization required by a remote MCP connector is now visible in the connector
 
 The classification still depends on the failure reaching the supervisor as a rejection object; a transport that swallows its own 401 continues to report a connection failure. `UnauthorizedError` handling is unchanged and still covers the path where the transport holds an OAuth provider.
 
+## Alternatives considered
+
+- Read only `status` from transport failures. Rejected because the MCP SDK's Streamable HTTP error exposes the HTTP status through numeric `code`.
+- Treat every numeric `code` as an HTTP authorization signal. Rejected because only HTTP 401/403 are authorization outcomes; other HTTP status values and non-numeric Node network codes retain their existing failure semantics.
+- Mark a configured provider flow as connected without inspecting its credential record. Rejected because configuration proves availability of a flow, not that the user has completed authorization.
+
 ## Verification
 
 `packages/mcp/mcp-client/tests/apply.spec.ts` covers the SDK form of the rejection (`code: 401`) as `auth-required` and a non-numeric network code as `connection-failed`, alongside the existing `status: 401` case; the file passes with 24 tests.

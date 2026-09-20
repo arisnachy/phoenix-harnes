@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-15-connector-authorization-signals.md
-2026-09-15-connector-authorization-signals.md: f566bf33d9a4942e24bef85772e3302e8999deb3
-2026-09-15-connector-authorization-signals.zh.md: 318d04721986f083237e52408c60f04a46390b47
+2026-09-15-connector-authorization-signals.md: fad9876006f9f07167c73a3a073b0dc16d9243f7
+2026-09-15-connector-authorization-signals.zh.md: 399b566ade41bcd51f7cba842311fd440fded98f

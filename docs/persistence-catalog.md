@@ -511,7 +511,7 @@ Source: [`packages/hardness/adapters/src/artifact-runtime.ts:19`](../packages/ha
 'hardness/kernel': MissionKernelEvent
 ```
 
-Source: [`packages/hardness/adapters/src/mission-kernel.ts:201`](../packages/hardness/adapters/src/mission-kernel.ts)
+Source: [`packages/hardness/adapters/src/mission-kernel.ts:239`](../packages/hardness/adapters/src/mission-kernel.ts)
 
 <a id="hardnessmission--log-only"></a>
 

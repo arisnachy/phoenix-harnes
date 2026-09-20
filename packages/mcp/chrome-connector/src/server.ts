@@ -41,7 +41,12 @@ function isLoopback(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
 }
 
-/** Build Chrome/Edge flags for PHOENIX's isolated CDP browser. */
+/**
+ * Build Chrome/Edge flags for PHOENIX's isolated CDP browser.
+ * @param profileDir - Dedicated browser profile directory.
+ * @param headless - Whether to launch Chromium in headless mode.
+ * @returns Browser argv for the isolated PHOENIX CDP session.
+ */
 export function buildDedicatedBrowserArgs(profileDir: string, headless = false): string[] {
   return [
     '--remote-debugging-port=0',

@@ -12,8 +12,21 @@ Service Definition for Phoenix's universal operational relationship with things 
 
 ## Model Experience
 
-This package exposes no model tools by itself. `@phoenix-ai/dsh-tool-living` owns the standing creation rule and model controls. In-process plugins may still use `ctx.living.attach()` directly; the default local implementation also supplies an authenticated bridge for generated out-of-process runtimes.
+### Living creation service
+
+#### What the model sees
+
+This package adds no tool or prompt text by itself. When `@phoenix-ai/dsh-tool-living` is composed, that consumer exposes the standing creation policy and the model-facing living tools over this service. Direct in-process callers may attach a provider without changing model context.
+
+#### Token effect
+
+The Service Definition adds zero tokens on its own. Model-visible tokens come only from consumers such as `@phoenix-ai/dsh-tool-living` and from their tool results.
+
+#### KV Cache effect
+
+None on its own. Provider attachment and live creation state stay outside the model request until a consumer explicitly projects them.
 
 ## Known Limitations and Deferred Work
 
-The Service Definition deliberately owns neither storage nor one mandatory transport implementation. Concrete providers decide persistence and connection mechanics. The built-in local provider uses an owner-local HTTP bridge; remote/cloud deployments can replace that transport while preserving the same `ctx.living` contract.
+- The Service Definition deliberately owns neither storage nor one mandatory transport implementation; concrete providers decide persistence and connection mechanics.
+- The built-in local provider uses an owner-local HTTP bridge. Remote or cloud deployments need another provider or transport while preserving the same `ctx.living` contract.

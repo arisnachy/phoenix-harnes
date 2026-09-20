@@ -35,7 +35,7 @@
 
 Register the tool with the existing test context and invoke its `output.render()` with a canonical result. Assert the exact content shape:
 
-```ts
+```ts ignore-check
 expect(tool.output.render({}, value)).toEqual([
   { type: 'text', text: expect.stringContaining('<path>') },
   { type: 'image', attachment: value.attachment },

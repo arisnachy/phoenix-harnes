@@ -24,6 +24,12 @@ MCP 客户端中的 `httpStatus` 先读取数字型 `status`，再回退到数�
 
 该分类仍取决于失败以拒绝对象的形式到达监督器；自行吞掉 401 的传输仍会报告连接失败。`UnauthorizedError` 处理未变，仍覆盖传输持有 OAuth 提供方的路径。
 
+## 考虑过的替代方案
+
+- 只读取 transport failure 的 `status`。拒绝，因为 MCP SDK 的 Streamable HTTP error 通过数字型 `code` 暴露 HTTP status。
+- 把所有数字型 `code` 都视为 HTTP 授权信号。拒绝，因为只有 HTTP 401/403 属于授权结果；其他 HTTP 状态值和非数字 Node network code 保持既有失败语义。
+- 不检查 credential record 就把已配置 provider flow 标记为 connected。拒绝，因为配置只能证明 flow 可用，不能证明用户已完成授权。
+
 ## 验证
 
 `packages/mcp/mcp-client/tests/apply.spec.ts` 覆盖 SDK 形式的拒绝（`code: 401`）应为 `auth-required`，以及非数字网络码应为 `connection-failed`，并与既有 `status: 401` 用例并列；该文件以 24 个测试通过。

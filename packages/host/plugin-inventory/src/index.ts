@@ -169,6 +169,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * Search the public Official MCP Registry from the Host. The browser never
    * calls the registry directly, avoiding cross-origin failures and centralizing
    * timeout, cache, and provenance policy.
+   * @param request - Bounded official-registry search request from Settings.
+   * @returns Sanitized registry search snapshot for the browser.
    */
   @Remote('searchMcpRegistry')
   async searchMcpRegistry(request: McpRegistrySearchRequest): Promise<McpRegistrySearchSnapshot> {
