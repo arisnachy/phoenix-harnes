@@ -3,8 +3,9 @@
  *
  * Codex app-server is authoritative for what the account should see in a
  * selector. Phoenix keeps a separate dispatch superset so a model disappearing
- * from the picker cannot invalidate an already-selected session. Explicit
- * non-empty settings lists remain human-owned and are never overlaid.
+ * from the picker cannot invalidate an already-selected session. The Codex
+ * route is always live-owned: legacy/manual `models` arrays are ignored for
+ * selector visibility so stale settings cannot freeze additions or removals.
  *
  * @module dsh-llm-pi-ai/codex-live-catalog
  */
@@ -32,7 +33,7 @@ const SUPPORTED_THINKING_LEVELS = new Set<string>(THINKING_LEVELS)
  * @returns True only when the route exists and does not pin a non-empty model list.
  */
 export function codexCatalogIsAutomatic(profile: PiAiProviderProfile | undefined): profile is PiAiProviderProfile {
-  return profile !== undefined && (profile.models === undefined || profile.models.length === 0)
+  return profile !== undefined
 }
 
 /**
@@ -131,12 +132,19 @@ export class CodexLiveCatalog {
     providers: Readonly<Record<string, PiAiProviderProfile>>,
   ): Readonly<Record<string, PiAiProviderProfile>> {
     const profile = providers[CODEX_PROVIDER]
-    if (this.dispatch === undefined || !codexCatalogIsAutomatic(profile)) return providers
+    if (!codexCatalogIsAutomatic(profile)) return providers
+
+    // Codex app-server owns this route's catalog. Drop any legacy/user-pinned
+    // list before resolution so a settings file written by an older PHOENIX
+    // build cannot freeze the selector. Once a live refresh succeeds, the
+    // dispatch superset keeps already-selected sessions serviceable without
+    // leaking retired models back into listModels(), which filters by visibleIds().
+    const { models: _legacyModels, ...liveProfile } = profile
     return {
       ...providers,
       [CODEX_PROVIDER]: {
-        ...profile,
-        models: this.dispatch,
+        ...liveProfile,
+        ...this.dispatch === undefined ? {} : { models: this.dispatch },
       },
     }
   }
