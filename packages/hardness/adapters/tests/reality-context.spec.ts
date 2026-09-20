@@ -124,7 +124,18 @@ describe('Phoenix reality context', () => {
             }),
           }
         }
-        if (name === 'tokenMeter') return {}
+        if (name === 'tokenMeter') {
+          return {
+            measure: () => ({
+              logRevision: 17,
+              baseline: { kind: 'usage', tokens: 30_000 },
+              surfaceDeltaTokens: 2_000,
+              totalTokens: 32_000,
+              surfaceTokens: 8_000,
+              nodes: [],
+            }),
+          }
+        }
         if (name === 'pluginInventory') {
           return {
             list: () => ({
@@ -152,7 +163,18 @@ describe('Phoenix reality context', () => {
     } as never
 
     await engine.refreshRuntimeServices(fakeContext)
-    const snapshot = engine.snapshot(fakeContext)
+    const activeSession = { id: 'session-1' }
+    const snapshot = engine.snapshot(fakeContext, new Date('2026-09-20T15:00:00.000Z'), {
+      agent: {
+        options: {
+          provider: 'openai',
+          model: 'gpt-test',
+          reasoningEffort: 'high',
+          maxTokens: 4_096,
+        },
+        session: activeSession,
+      },
+    })
 
     expect(snapshot.authentication).toMatchObject({
       status: 'available',
@@ -175,7 +197,23 @@ describe('Phoenix reality context', () => {
         model: 'gpt-test',
         reasoningEffort: 'high',
       },
+      defaultModel: {
+        provider: 'openai',
+        model: 'gpt-test',
+        reasoningEffort: 'high',
+      },
+      selectionSource: 'active-agent',
       contextWindowTokens: 128000,
+      currentContextTokens: 32000,
+      remainingContextTokens: 96000,
+      outputReservationTokens: 4096,
+      inputHeadroomAfterOutputReserveTokens: 91904,
+      tokenMeasurement: {
+        source: 'tokenMeter.measure(active-session)',
+        logRevision: 17,
+        baselineKind: 'usage',
+        surfaceTokens: 8000,
+      },
       tokenMeterAvailable: true,
       registeredProviders: [{ id: 'openai', name: 'OpenAI', health: 'registered-not-probed' }],
       accountLimits: [{
