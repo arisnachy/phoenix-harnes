@@ -11,6 +11,7 @@ import type {} from '@phoenix-ai/dsh-session-learning'
 import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
 import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts'
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
+import { assessHabitExperience, formatHabitGuidance } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
 import { filterProceduralSearchHits, installProceduralLearning } from './procedural.ts'
 import { formatProceduralContext } from './procedural-presentation.ts'
@@ -210,6 +211,18 @@ export function apply(ctx: Context, config: Config): void {
         ...projectId === undefined ? {} : { projectId },
         ...taskContext === undefined ? {} : { taskContext },
       }))
+    },
+    interpolateVariables: false,
+  })
+  ctx.systemPrompt.context({
+    name: 'context:habit-guidance',
+    order: 121,
+    text: () => {
+      const taskContext = tasks.currentTask()
+      if (taskContext === undefined) return ''
+      const projectId = ctx.learningMemory.currentProjectId()
+      const matched = experience.matchTask(taskContext, projectId)
+      return matched === undefined ? '' : formatHabitGuidance(assessHabitExperience(matched))
     },
     interpolateVariables: false,
   })
