@@ -46,7 +46,10 @@ export function isolateBuildCodexHome(
   root: string,
   environment: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
-  const sqliteHome = resolve(root, '.cache', 'phoenix', 'build-codex-sqlite')
+  const configuredPhoenixSqlite = environment.PHOENIX_CODEX_SQLITE_HOME?.trim()
+  const sqliteHome = configuredPhoenixSqlite && configuredPhoenixSqlite.length > 0
+    ? resolve(configuredPhoenixSqlite, 'build')
+    : resolve(root, '.cache', 'phoenix', 'build-codex-sqlite')
   mkdirSync(sqliteHome, { recursive: true })
   return {
     ...environment,
