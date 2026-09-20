@@ -63,6 +63,31 @@ function runPnpm(args) {
   return run('pnpm', args)
 }
 
+function sanitizeCopiedGitMetadata() {
+  const keys = [
+    'http.https://github.com/.extraheader',
+    'core.sshCommand',
+  ]
+  for (const key of keys) {
+    const result = spawnSync('git', ['config', '--local', '--unset-all', key], {
+      cwd: seedRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    // git-config returns 5 when the key does not exist.
+    if (result.error !== undefined) throw result.error
+    if (result.status !== 0 && result.status !== 5) {
+      throw new Error(`could not sanitize copied Git config key ${key}: ${result.stderr?.trim() ?? ''}`)
+    }
+  }
+
+  const config = readFileSync(join(seedRoot, '.git', 'config'), 'utf8')
+  if (/extraheader|authorization\s*:/iu.test(config)) {
+    throw new Error('Windows runtime seed Git config still contains authentication material')
+  }
+}
+
 function copyTrackedSource() {
   const listed = run('git', ['ls-files', '-z'], { stdio: ['ignore', 'pipe', 'pipe'] }).stdout ?? ''
   for (const relative of listed.split('\0').filter(Boolean)) {
@@ -77,6 +102,7 @@ function copyTrackedSource() {
     throw new Error('Windows runtime seed requires a normal Git checkout with a .git directory')
   }
   cpSync(gitMetadata, join(seedRoot, '.git'), { recursive: true, dereference: true })
+  sanitizeCopiedGitMetadata()
 }
 
 function findLink(directory) {
