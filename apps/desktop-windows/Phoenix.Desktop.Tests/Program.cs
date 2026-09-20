@@ -101,8 +101,8 @@ True(DesktopStartupContract.SecondLaunchSignalsExistingWindow, "second launch si
 True(DesktopStartupContract.EmbeddedBrowserStartsLazy, "embedded browser does not delay chat startup", failures);
 True(DesktopStartupContract.UserCloseHidesToTray, "user close hides Phoenix to tray instead of stopping runtime", failures);
 Equal("Iniciando Phoenix…", DesktopStartupContract.InitialStatus, "startup status is explicit", failures);
-EqualInt(3, DesktopRuntimeLaunchContract.ReadyConsecutiveSamples, "desktop waits for multiple stable backend probes", failures);
-EqualInt(700, DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds, "stable backend probes are spaced out", failures);
+EqualInt(2, DesktopRuntimeLaunchContract.ReadyConsecutiveSamples, "desktop waits for a stable backend confirmation", failures);
+EqualInt(250, DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds, "stable backend confirmation avoids artificial startup delay", failures);
 EqualInt(3, DesktopRuntimeLaunchContract.MaxUnexpectedBackendRestarts, "desktop stops waiting after a short backend crash loop", failures);
 EqualInt(12, DesktopRuntimeLaunchContract.ManagedBootstrapTimeoutMinutes, "managed bootstrap has a bounded timeout", failures);
 True(DesktopNavigationRecovery.IsTransient("ConnectionAborted"), "connection-aborted WebView startup failure is retried", failures);
@@ -114,16 +114,18 @@ var toolchainEntries = DesktopBundledToolchain.CandidatePathEntries(@"C:\Program
 True(toolchainEntries.Any(path => path.EndsWith(@"runtime-tools\node", StringComparison.OrdinalIgnoreCase)), "bundled Node path is declared", failures);
 True(toolchainEntries.Any(path => path.EndsWith(@"runtime-tools\git\cmd", StringComparison.OrdinalIgnoreCase)), "bundled Git path is declared", failures);
 Equal(@"C:\Program Files\Phoenix\runtime-tools", DesktopBundledToolchain.ToolchainRoot(@"C:\Program Files\Phoenix"), "toolchain root is app-local", failures);
+Equal(@"C:\Program Files\Phoenix\runtime-tools\node\node.exe", DesktopBundledToolchain.NodeExecutable(@"C:\Program Files\Phoenix"), "bundled Node executable is app-local", failures);
 
 var runtimeLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
+    @"C:\Program Files\Phoenix",
     @"C:\Phoenix Runtime",
     @"C:\Phoenix\desktop-control.json");
-Equal("powershell.exe", runtimeLaunch.FileName, "desktop runtime uses PowerShell", failures);
-True(runtimeLaunch.CreateNoWindow, "PowerShell backend stays out of the chat surface", failures);
-False(runtimeLaunch.UseShellExecute, "PowerShell runtime is directly supervised", failures);
-True(runtimeLaunch.ArgumentList.Contains("-NoProfile"), "PowerShell disables user profile side effects", failures);
-True(runtimeLaunch.ArgumentList.Contains("-NonInteractive"), "PowerShell runtime is non-interactive", failures);
-True(runtimeLaunch.ArgumentList.Any(value => value.Contains("phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)), "PowerShell invokes Windows supervisor launcher", failures);
+Equal(@"C:\Program Files\Phoenix\runtime-tools\node\node.exe", runtimeLaunch.FileName, "desktop runtime uses bundled Node directly", failures);
+True(runtimeLaunch.CreateNoWindow, "runtime backend stays out of the chat surface", failures);
+False(runtimeLaunch.UseShellExecute, "Node runtime is directly supervised", failures);
+True(runtimeLaunch.ArgumentList.Any(value => value.EndsWith(@"scripts\phoenix-windows-supervisor.mjs", StringComparison.OrdinalIgnoreCase)), "Node invokes the Phoenix supervisor directly", failures);
+False(runtimeLaunch.ArgumentList.Any(value => value.Contains("phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)), "normal desktop launch bypasses cmd wrapper", failures);
+False(runtimeLaunch.ArgumentList.Any(value => value.Contains("powershell", StringComparison.OrdinalIgnoreCase)), "normal desktop launch has no PowerShell hop", failures);
 EqualInt(3080, DesktopRuntimeLaunchContract.DesktopPort, "desktop shell uses the normal Phoenix port", failures);
 False(runtimeLaunch.ArgumentList.Any(value => value.Contains("--port 3081", StringComparison.Ordinal)), "desktop launcher never forces the old private 3081 port", failures);
 True(runtimeLaunch.ArgumentList.Any(value => value.Contains("--no-open", StringComparison.Ordinal)), "desktop runtime never opens an external browser", failures);
@@ -136,26 +138,28 @@ Equal("chrome", runtimeLaunch.Environment["PHOENIX_BROWSER_PREFERRED_ENGINE"], "
 Equal("0", runtimeLaunch.Environment["COREPACK_ENABLE_DOWNLOAD_PROMPT"], "hidden first-run bootstrap cannot block on an invisible Corepack prompt", failures);
 EqualInt(300, DesktopRuntimeLaunchContract.SourceStartupWaitSeconds, "source bootstrap gets enough time to install/build on first run", failures);
 Equal("0", runtimeLaunch.Environment["PHOENIX_DESKTOP_CONSOLE"], "normal users get a hidden runtime console", failures);
-True(runtimeLaunch.CreateNoWindow, "normal runtime creates no PowerShell window", failures);
+True(runtimeLaunch.CreateNoWindow, "normal runtime creates no console window", failures);
 True(runtimeLaunch.RedirectStandardOutput, "hidden runtime stdout is captured to desktop log", failures);
 True(runtimeLaunch.RedirectStandardError, "hidden runtime stderr is captured to desktop log", failures);
 
 var developerLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
+    @"C:\Program Files\Phoenix",
     @"C:\Phoenix Runtime",
     @"C:\Phoenix\desktop-control.json",
     managedRuntime: true,
     showDeveloperConsole: true);
 Equal("1", developerLaunch.Environment["PHOENIX_DESKTOP_CONSOLE"], "developer mode exposes runtime console", failures);
-False(developerLaunch.CreateNoWindow, "developer mode allows a PowerShell window", failures);
+False(developerLaunch.CreateNoWindow, "developer mode allows the runtime console", failures);
 False(developerLaunch.RedirectStandardOutput, "developer stdout stays attached to visible console", failures);
 False(developerLaunch.RedirectStandardError, "developer stderr stays attached to visible console", failures);
 
 var sourceLaunch = DesktopRuntimeLaunchContract.CreateOwnedRuntimeStartInfo(
+    @"C:\Program Files\Phoenix",
     @"C:\Working Phoenix",
     @"C:\Phoenix\desktop-control.json",
     managedRuntime: false);
 False(sourceLaunch.Environment.ContainsKey("PHOENIX_DESKTOP_MANAGED"), "source checkout is not mislabeled as desktop-managed", failures);
-True(sourceLaunch.ArgumentList.Any(value => value.Contains(@"C:\Working Phoenix\phoenix-windows.cmd", StringComparison.OrdinalIgnoreCase)), "source checkout launcher is used directly", failures);
+True(sourceLaunch.ArgumentList.Any(value => value.Contains(@"C:\Working Phoenix\scripts\phoenix-windows-supervisor.mjs", StringComparison.OrdinalIgnoreCase)), "source checkout supervisor is used directly", failures);
 
 True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node scripts\phoenix-windows-supervisor.mjs"), "supervisor listener is recognized as Phoenix", failures);
 True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node C:\Users\me\Phoenix\phoenix-harnes\apps\cli\lib\bin.js web"), "source checkout listener is recognized as Phoenix", failures);
