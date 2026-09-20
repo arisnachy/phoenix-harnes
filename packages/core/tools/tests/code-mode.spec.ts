@@ -118,7 +118,18 @@ async function runCode(
 describe('mode-aware wire contribution', () => {
   it("forces the native image tool ahead of Higgsfield for an explicit image request, then restores the catalog after the attempt", async () => {
     const { ctx, systemPrompt } = await setup({ mode: 'native', runtime: false })
-    registerEcho(ctx, 'image_generation')
+    ctx.tools.register(defineTool({
+      name: 'image_generation',
+      description: 'Native image generation test fixture.',
+      parameters: { value: { type: 'string', required: true } },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
+      execute() {
+        throw new Error('all native image backends unavailable')
+      },
+    }))
     registerEcho(ctx, 'mcp__higgsfield-higgsfield__models_explore')
     const { agent } = await mintAgentScope(ctx, 'image-first-native')
 
