@@ -176,10 +176,13 @@ export function codexEnvironment(): NodeJS.ProcessEnv {
   const home = configuredHome && configuredHome.length > 0
     ? resolve(configuredHome)
     : join(homedir(), '.codex')
-  const configuredSqlite = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
-  const sqliteHome = configuredSqlite && configuredSqlite.length > 0
-    ? resolve(configuredSqlite)
-    : join(home, 'phoenix-runtime', 'sqlite', 'discovery')
+  const explicitPhoenix = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
+  const explicitCodex = process.env.CODEX_SQLITE_HOME?.trim()
+  const sqliteHome = explicitPhoenix && explicitPhoenix.length > 0
+    ? resolve(explicitPhoenix, 'discovery')
+    : explicitCodex && explicitCodex.length > 0
+      ? resolve(explicitCodex, 'phoenix-runtime', 'discovery')
+      : join(home, 'phoenix-runtime', 'sqlite', 'discovery')
   mkdirSync(sqliteHome, { recursive: true })
   env.CODEX_HOME = home
   env.CODEX_SQLITE_HOME = sqliteHome
