@@ -279,20 +279,33 @@ function preparedStageForTarget(target, { diagnose = false } = {}) {
   return stage
 }
 
+function compiledRuntimeEntrypoint(path) {
+  const deployed = join(path, 'runtime-app', 'lib', 'bin.js')
+  if (existsSync(deployed)) return deployed
+  const workspaceBuild = join(path, 'apps', 'cli', 'lib', 'bin.js')
+  return existsSync(workspaceBuild) ? workspaceBuild : undefined
+}
+
+function runtimeNodeArgs(path, args) {
+  const compiled = compiledRuntimeEntrypoint(path)
+  if (compiled !== undefined) return [compiled, ...args]
+  // Developer/source fallback only. Installed production runtimes are required
+  // to carry a compiled entrypoint and never need tsx on their startup path.
+  return ['--import', 'tsx/esm', 'apps/cli/src/bin.ts', ...args]
+}
+
 function runtimeIsHealthy(path, target) {
   return existsSync(path)
     && sameRepository(path)
     && gitClean(path)
     && gitValue(path, ['rev-parse', 'HEAD']) === target
-    && existsSync(join(path, 'apps', 'cli', 'lib', 'bin.js'))
+    && compiledRuntimeEntrypoint(path) !== undefined
 }
 
 function runtimeBootPreflight(path) {
-  const result = spawnSync(process.execPath, [
-    '--import', 'tsx/esm',
-    'apps/cli/src/bin.ts',
+  const result = spawnSync(process.execPath, runtimeNodeArgs(path, [
     'web', '--dump-config',
-  ], {
+  ]), {
     cwd: path,
     env: {
       ...hydratePhoenixEnvironment(process.env),
@@ -621,12 +634,10 @@ async function stopWatcher(watcher) {
 }
 
 function startHost() {
-  return spawn(process.execPath, [
-    '--import', 'tsx/esm',
-    'apps/cli/src/bin.ts',
+  return spawn(process.execPath, runtimeNodeArgs(runtimeRoot, [
     'web', '--',
     ...hostArgs,
-  ], {
+  ]), {
     cwd: runtimeRoot,
     stdio: 'inherit',
     windowsHide: hideRuntimeWindows,
