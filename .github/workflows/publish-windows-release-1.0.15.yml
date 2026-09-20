@@ -1,0 +1,60 @@
+name: Publish Windows 1.0.15 Release
+
+on:
+  push:
+    branches:
+      - stable
+    paths:
+      - '.github/workflows/publish-windows-release-1.0.15.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download verified stable Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35518162697
+          name: Phoenix-Windows-Desktop-a5ab63298d3b0d4e0a3318d67bd8e1c92d0b5396
+          path: release-payload
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '1.0.15'
+          $tag = "windows-v$version"
+          $source = Join-Path (Resolve-Path release-payload).Path 'installer/Phoenix-Windows-Setup.exe'
+          if (-not (Test-Path $source)) { throw "Installer not found in verified artifact: $source" }
+
+          $assetName = "Phoenix-Windows-Setup-$version.exe"
+          $asset = Join-Path $PWD $assetName
+          Copy-Item $source $asset -Force
+
+          $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksum = Join-Path $PWD "$assetName.sha256"
+          Set-Content -Path $checksum -Value "$hash  $assetName" -Encoding ascii
+
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $asset $checksum --clobber --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $tag $asset $checksum --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Phoenix Windows $version" --notes "Official Phoenix Windows 1.0.15 installer from verified stable workflow run 35518162697." --latest
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Write-Host "Published $assetName"
+          Write-Host "SHA-256: $hash"
+          Write-Host "Download: https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$assetName"
