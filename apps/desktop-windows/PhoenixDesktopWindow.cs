@@ -522,28 +522,25 @@ internal sealed class PhoenixDesktopWindow : Form
 
     /// <summary>
     /// Execute the same typed browser command whether it came from the Phoenix WebView bridge or
-    /// from the model/runtime named-pipe control channel.
+    /// from the model/runtime named-pipe control channel. Only the latter can parse automation
+    /// command types; this method still re-checks the live page origin before every DOM mutation.
     /// </summary>
-    internal Task ExecuteBrowserCommandAsync(BrowserCommand command)
+    internal Task<string?> ExecuteBrowserCommandAsync(BrowserCommand command)
     {
         if (IsDisposed)
-            return Task.FromException(new ObjectDisposedException(nameof(PhoenixDesktopWindow)));
+            return Task.FromException<string?>(new ObjectDisposedException(nameof(PhoenixDesktopWindow)));
 
         if (!InvokeRequired)
-        {
-            ExecuteBrowserCommand(command);
-            return Task.CompletedTask;
-        }
+            return ExecuteBrowserCommandCoreAsync(command);
 
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completion = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
-            BeginInvoke((Action)(() =>
+            BeginInvoke((Action)(async () =>
             {
                 try
                 {
-                    ExecuteBrowserCommand(command);
-                    completion.SetResult();
+                    completion.SetResult(await ExecuteBrowserCommandCoreAsync(command));
                 }
                 catch (Exception ex)
                 {
@@ -556,6 +553,24 @@ internal sealed class PhoenixDesktopWindow : Form
             completion.SetException(ex);
         }
         return completion.Task;
+    }
+
+    private async Task<string?> ExecuteBrowserCommandCoreAsync(BrowserCommand command)
+    {
+        switch (command.Type)
+        {
+            case "phoenix.browser.inspect":
+                return await InspectBrowserAsync();
+            case "phoenix.browser.fill-form":
+                return await FillBrowserFormAsync(command);
+            case "phoenix.browser.click-text":
+                return await ClickBrowserTextAsync(command);
+            case "phoenix.browser.login":
+                return await LoginBrowserAsync(command);
+            default:
+                ExecuteBrowserCommand(command);
+                return null;
+        }
     }
 
     private void ExecuteBrowserCommand(BrowserCommand command)
@@ -593,6 +608,294 @@ internal sealed class PhoenixDesktopWindow : Form
                 throw new InvalidOperationException($"Unsupported browser command: {command.Type}");
         }
     }
+
+    private async Task<CoreWebView2> RequireBrowserForOriginAsync(string? rawOrigin)
+    {
+        var expected = BrowserNavigation.NormalizeCredentialOrigin(rawOrigin)
+            ?? throw new InvalidOperationException("Browser automation requires a secure origin.");
+        await EnsureBrowserInitializedAsync();
+        var core = browserView.CoreWebView2
+            ?? throw new InvalidOperationException("Embedded browser is unavailable.");
+        var live = BrowserNavigation.NormalizeCredentialOrigin(browserView.Source?.ToString());
+        if (!string.Equals(expected, live, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Embedded browser origin changed; refusing origin-bound automation.");
+        return core;
+    }
+
+    private static string DecodeScriptJson(string raw)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<string>(raw) ?? "{}";
+        }
+        catch (JsonException)
+        {
+            return "{}";
+        }
+    }
+
+    private async Task<string> InspectBrowserAsync()
+    {
+        await EnsureBrowserInitializedAsync();
+        var core = browserView.CoreWebView2
+            ?? throw new InvalidOperationException("Embedded browser is unavailable.");
+        var raw = await core.ExecuteScriptAsync(BrowserInspectScript);
+        return DecodeScriptJson(raw);
+    }
+
+    private async Task<string> FillBrowserFormAsync(BrowserCommand command)
+    {
+        var core = await RequireBrowserForOriginAsync(command.Origin);
+        var fields = command.Fields ?? throw new InvalidOperationException("Browser form fields are missing.");
+        var fieldPayload = fields.Select(field => new
+        {
+            field = field.Field,
+            value = field.Value,
+            @checked = field.Checked,
+        });
+        var script = BrowserFillScript
+            .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
+            .Replace("__FIELDS__", JsonSerializer.Serialize(fieldPayload), StringComparison.Ordinal)
+            .Replace("__SUBMIT__", command.Submit ? "true" : "false", StringComparison.Ordinal);
+        var raw = await core.ExecuteScriptAsync(script);
+        return DecodeScriptJson(raw);
+    }
+
+    private async Task<string> ClickBrowserTextAsync(BrowserCommand command)
+    {
+        var core = await RequireBrowserForOriginAsync(command.Origin);
+        var script = BrowserClickTextScript
+            .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
+            .Replace("__TEXT__", JsonSerializer.Serialize(command.Text ?? string.Empty), StringComparison.Ordinal);
+        var raw = await core.ExecuteScriptAsync(script);
+        return DecodeScriptJson(raw);
+    }
+
+    private async Task<string> LoginBrowserAsync(BrowserCommand command)
+    {
+        var core = await RequireBrowserForOriginAsync(command.Origin);
+        if (string.IsNullOrEmpty(command.Account) || string.IsNullOrEmpty(command.Secret))
+            throw new InvalidOperationException("Origin-bound login is incomplete.");
+        var script = BrowserLoginScript
+            .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
+            .Replace("__ACCOUNT__", JsonSerializer.Serialize(command.Account), StringComparison.Ordinal)
+            .Replace("__SECRET__", JsonSerializer.Serialize(command.Secret), StringComparison.Ordinal)
+            .Replace("__SUBMIT__", command.Submit ? "true" : "false", StringComparison.Ordinal);
+        var raw = await core.ExecuteScriptAsync(script);
+        return DecodeScriptJson(raw);
+    }
+
+    private const string BrowserInspectScript = """
+        (() => {
+          const visible = (el) => {
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+          };
+          const label = (el) => {
+            const aria = el.getAttribute('aria-label');
+            if (aria) return aria.slice(0, 300);
+            if (el.id) {
+              const bound = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+              if (bound?.innerText) return bound.innerText.trim().slice(0, 300);
+            }
+            const parent = el.closest('label');
+            return (parent?.innerText || '').trim().slice(0, 300);
+          };
+          const nodes = Array.from(document.querySelectorAll('input,textarea,select'))
+            .filter((el) => visible(el) && (el.getAttribute('type') || '').toLowerCase() !== 'hidden');
+          const fields = nodes.map((el, index) => {
+            const tag = el.tagName.toLowerCase();
+            const type = (el.getAttribute('type') || tag).toLowerCase();
+            const item = {
+              field: index,
+              tag,
+              type,
+              name: (el.getAttribute('name') || '').slice(0, 200),
+              id: (el.id || '').slice(0, 200),
+              label: label(el),
+              placeholder: (el.getAttribute('placeholder') || '').slice(0, 300),
+              autocomplete: (el.getAttribute('autocomplete') || '').slice(0, 100),
+              required: !!el.required
+            };
+            if (tag === 'select') {
+              item.options = Array.from(el.options).slice(0, 100).map((option) => ({
+                text: (option.text || '').trim().slice(0, 200),
+                value: String(option.value || '').slice(0, 200)
+              }));
+            }
+            return item;
+          });
+          const buttons = Array.from(document.querySelectorAll('button,a,[role="button"],input[type="submit"],input[type="button"]'))
+            .filter(visible)
+            .slice(0, 100)
+            .map((el) => ({
+              text: String(el.innerText || el.value || el.getAttribute('aria-label') || '').trim().slice(0, 300),
+              tag: el.tagName.toLowerCase(),
+              type: String(el.getAttribute('type') || '').toLowerCase()
+            }));
+          return JSON.stringify({
+            origin: location.origin,
+            url: location.href.slice(0, 4096),
+            title: document.title.slice(0, 500),
+            text: String(document.body?.innerText || '').slice(0, 12000),
+            fields,
+            buttons
+          });
+        })()
+        """;
+
+    private const string BrowserFillScript = """
+        (() => {
+          const expected = __ORIGIN__;
+          if (location.origin !== expected) throw new Error('origin mismatch');
+          const changes = __FIELDS__;
+          const submit = __SUBMIT__;
+          const visible = (el) => {
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+          };
+          const nodes = Array.from(document.querySelectorAll('input,textarea,select'))
+            .filter((el) => visible(el) && (el.getAttribute('type') || '').toLowerCase() !== 'hidden');
+          const setValue = (el, value) => {
+            const tag = el.tagName.toLowerCase();
+            if (tag === 'select') {
+              el.value = value;
+            } else {
+              const proto = tag === 'textarea' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+              const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+              if (descriptor?.set) descriptor.set.call(el, value);
+              else el.value = value;
+            }
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+          const touchedForms = new Set();
+          let filled = 0;
+          const missing = [];
+          const protectedFields = [];
+          for (const change of changes) {
+            const el = nodes[change.field];
+            if (!el) {
+              missing.push(change.field);
+              continue;
+            }
+            const type = (el.getAttribute('type') || '').toLowerCase();
+            if (type === 'password' || type === 'file') {
+              protectedFields.push(change.field);
+              continue;
+            }
+            if (change.checked !== null && change.checked !== undefined) {
+              if (type !== 'checkbox' && type !== 'radio') {
+                missing.push(change.field);
+                continue;
+              }
+              el.checked = !!change.checked;
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            } else {
+              setValue(el, String(change.value ?? ''));
+            }
+            if (el.form) touchedForms.add(el.form);
+            filled++;
+          }
+          if (protectedFields.length) {
+            throw new Error('protected credential/file fields must use their dedicated broker');
+          }
+          let submitted = false;
+          if (submit) {
+            if (touchedForms.size !== 1) throw new Error('submit requires all changed fields to belong to one form');
+            const form = Array.from(touchedForms)[0];
+            if (typeof form.requestSubmit === 'function') form.requestSubmit();
+            else form.submit();
+            submitted = true;
+          }
+          return JSON.stringify({ origin: location.origin, filled, missing, submitted });
+        })()
+        """;
+
+    private const string BrowserClickTextScript = """
+        (() => {
+          const expected = __ORIGIN__;
+          if (location.origin !== expected) throw new Error('origin mismatch');
+          const wanted = String(__TEXT__).trim().replace(/\s+/g, ' ').toLowerCase();
+          const visible = (el) => {
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+          };
+          const candidates = Array.from(document.querySelectorAll('button,a,[role="button"],input[type="submit"],input[type="button"]'))
+            .filter(visible);
+          const textOf = (el) => String(el.innerText || el.value || el.getAttribute('aria-label') || '')
+            .trim().replace(/\s+/g, ' ');
+          let match = candidates.find((el) => textOf(el).toLowerCase() === wanted);
+          if (!match) match = candidates.find((el) => textOf(el).toLowerCase().includes(wanted));
+          if (!match) return JSON.stringify({ origin: location.origin, clicked: false });
+          const label = textOf(match).slice(0, 300);
+          match.click();
+          return JSON.stringify({ origin: location.origin, clicked: true, text: label });
+        })()
+        """;
+
+    private const string BrowserLoginScript = """
+        (() => {
+          const expected = __ORIGIN__;
+          if (location.origin !== expected) throw new Error('origin mismatch');
+          const account = __ACCOUNT__;
+          const secret = __SECRET__;
+          const submit = __SUBMIT__;
+          const visible = (el) => {
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+          };
+          const inputs = Array.from(document.querySelectorAll('input')).filter(visible);
+          const scoreAccount = (el) => {
+            const type = (el.type || '').toLowerCase();
+            if (type === 'password' || type === 'hidden' || type === 'file') return -1000;
+            const ac = (el.autocomplete || '').toLowerCase();
+            const identity = ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.placeholder || '')).toLowerCase();
+            let score = 0;
+            if (ac === 'username') score += 100;
+            if (type === 'email') score += 80;
+            if (/user|email|login|account/.test(identity)) score += 50;
+            if (type === 'text' || type === 'email' || type === 'tel' || !type) score += 10;
+            return score;
+          };
+          const secretFields = inputs.filter((el) => (el.type || '').toLowerCase() === 'password');
+          const accountFields = inputs.filter((el) => scoreAccount(el) >= 0).sort((a, b) => scoreAccount(b) - scoreAccount(a));
+          const accountField = accountFields[0] || null;
+          const secretField = secretFields.find((el) => (el.autocomplete || '').toLowerCase() === 'current-password')
+            || secretFields[0]
+            || null;
+          const setValue = (el, value) => {
+            const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+            if (descriptor?.set) descriptor.set.call(el, value);
+            else el.value = value;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+          if (!accountField && !secretField)
+            return JSON.stringify({ origin: location.origin, phase: 'fields-not-found', submitted: false });
+
+          if (accountField) setValue(accountField, account);
+          if (secretField) setValue(secretField, secret);
+
+          let submitted = false;
+          let phase = secretField ? 'credentials-filled' : 'account-filled';
+          if (submit) {
+            const form = secretField?.form || accountField?.form || null;
+            if (form) {
+              if (typeof form.requestSubmit === 'function') form.requestSubmit();
+              else form.submit();
+              submitted = true;
+              phase = secretField ? 'credentials-submitted' : 'account-submitted';
+            }
+          }
+          return JSON.stringify({ origin: location.origin, phase, submitted });
+        })()
+        """;
 
     private void OpenBrowser(string? value)
     {
