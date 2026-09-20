@@ -1202,6 +1202,15 @@ describe('provider profile lifecycle', () => {
     })
   })
 
+  it('dispatches the old PHOENIX V4.1 Flash selector with DeepSeek\'s canonical wire id', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url, { models: [{ id: 'deepseek-v4.1-flash' }] })
+
+    await assemble(ctx, { model: 'deepseek-v4.1-flash', messages: [] })
+
+    expect(server.requests[0]).toMatchObject({ model: 'deepseek-flash' })
+  })
+
   it('rejects genuinely unsupported or unresolved image input before provider I/O', async () => {
     const adapter = adapterOf({ openai: {}, deepseek: {} })
     const drain = async (options: Parameters<PiAiAdapter['stream']>[0]): Promise<void> => {
