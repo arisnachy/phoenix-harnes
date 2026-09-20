@@ -1186,20 +1186,37 @@ describe('provider profile lifecycle', () => {
     expect(new LlmError('x', 'X')).toBeInstanceOf(Error)
   })
 
-  it('rejects unsupported or unresolved image input before provider I/O', async () => {
+  it('advertises current DeepSeek Flash aliases as vision-capable before provider I/O', async () => {
+    const adapter = adapterOf({ deepseek: {} })
+    await expect(adapter.resolveModel('deepseek', 'deepseek-flash')).resolves.toMatchObject({
+      id: 'deepseek-flash',
+      inputModalities: ['text', 'image'],
+    })
+    await expect(adapter.resolveModel('deepseek', 'deepseek-v4-flash')).resolves.toMatchObject({
+      id: 'deepseek-v4-flash',
+      inputModalities: ['text', 'image'],
+    })
+    await expect(adapter.resolveModel('deepseek', 'deepseek-v4-flash-vision-exp')).resolves.toMatchObject({
+      id: 'deepseek-v4-flash-vision-exp',
+      inputModalities: ['text', 'image'],
+    })
+  })
+
+  it('dispatches the old PHOENIX V4.1 Flash selector with DeepSeek\'s canonical wire id', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url, { models: [{ id: 'deepseek-v4.1-flash' }] })
+
+    await assemble(ctx, { model: 'deepseek-v4.1-flash', messages: [] })
+
+    expect(server.requests[0]).toMatchObject({ model: 'deepseek-flash' })
+  })
+
+  it('rejects genuinely unsupported or unresolved image input before provider I/O', async () => {
     const adapter = adapterOf({ openai: {}, deepseek: {} })
     const drain = async (options: Parameters<PiAiAdapter['stream']>[0]): Promise<void> => {
       for await (const _chunk of adapter.stream(options)) { /* drain */ }
     }
 
-    await expect(drain({
-      provider: 'deepseek',
-      model: 'deepseek-v4-flash',
-      messages: [createUserMessage({
-        content: [{ type: 'image', attachment: IMAGE_REF }],
-        source: { kind: 'plugin', plugin: 'test' },
-      })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
     await expect(drain({
       provider: 'openai',
       model: 'gpt-4.1',
