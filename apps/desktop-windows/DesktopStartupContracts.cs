@@ -19,6 +19,7 @@ internal static class DesktopRuntimeLaunchContract
     internal const int ReadyConsecutiveSamples = 3;
     internal const int ReadySampleDelayMilliseconds = 700;
     internal const int MaxUnexpectedBackendRestarts = 3;
+    internal const int ManagedBootstrapTimeoutMinutes = 12;
     internal const string PowerShellExecutable = "powershell.exe";
 
     internal static ProcessStartInfo CreateOwnedRuntimeStartInfo(
@@ -334,6 +335,9 @@ internal enum ManagedRuntimeState
 
 internal static class ManagedRuntimeMarker
 {
+    internal static bool RequiresCleanBootstrap(ManagedRuntimeState state) =>
+        state is ManagedRuntimeState.Recoverable or ManagedRuntimeState.Unmanaged;
+
     internal const string ReadyMarkerName = ".phoenix-managed-install";
     internal const string InstallingMarkerName = ".phoenix-managed-installing";
 
