@@ -7,6 +7,9 @@ internal static class DesktopBundledToolchain
     internal static string ToolchainRoot(string applicationBaseDirectory) =>
         Path.Combine(applicationBaseDirectory, ToolchainDirectoryName);
 
+    internal static string NodeExecutable(string applicationBaseDirectory) =>
+        Path.Combine(ToolchainRoot(applicationBaseDirectory), "node", "node.exe");
+
     internal static IReadOnlyList<string> CandidatePathEntries(string applicationBaseDirectory)
     {
         var root = ToolchainRoot(applicationBaseDirectory);
