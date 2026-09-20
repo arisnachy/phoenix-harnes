@@ -181,6 +181,7 @@ finally
 
 var sourceTestRoot = Path.Combine(Path.GetTempPath(), $"phoenix-source-test-{Guid.NewGuid():N}");
 var sourceInstallRoot = Path.Combine(Path.GetTempPath(), $"phoenix-install-test-{Guid.NewGuid():N}");
+var previousSourceRoot = Environment.GetEnvironmentVariable("PHOENIX_SOURCE_ROOT");
 try
 {
     Directory.CreateDirectory(Path.Combine(sourceTestRoot, "apps", "cli"));
@@ -190,8 +191,10 @@ try
     File.WriteAllText(Path.Combine(sourceTestRoot, "scripts", "phoenix-windows-supervisor.mjs"), "// supervisor");
     True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "bootstrappable Phoenix source is recognized without node_modules or .git", failures);
 
-    // Discovery alone must not persist an unverified backend.
-    Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "bootstrappable source resolves before managed bootstrap", failures);
+    // Explicit/configured source roots are candidates, but discovery alone must not persist
+    // them as the trusted backend until the runtime stability handshake succeeds.
+    Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", sourceTestRoot);
+    Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "configured bootstrappable source resolves before managed bootstrap", failures);
     False(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)), "unverified source is not persisted as the backend of record", failures);
 
     DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
@@ -213,8 +216,11 @@ try
 }
 finally
 {
-    Directory.Delete(sourceTestRoot, recursive: true);
-    Directory.Delete(sourceInstallRoot, recursive: true);
+    Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", previousSourceRoot);
+    if (Directory.Exists(sourceTestRoot))
+        Directory.Delete(sourceTestRoot, recursive: true);
+    if (Directory.Exists(sourceInstallRoot))
+        Directory.Delete(sourceInstallRoot, recursive: true);
 }
 
 // A managed runtime is healthy only after install/build completed. Old desktop builds could leave
