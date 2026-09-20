@@ -90,7 +90,7 @@ function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntime
     `Occurrence: ${input.scheduledFor}`,
     `Idempotency key: ${input.idempotencyKey}`,
     `Instruction: ${input.instruction}`,
-    'Execution-time reality: use the current Phoenix Reality Context. Re-check any stale or missing time, timezone, calendar, location, weather/daylight, network, device-resource, connector-auth, provider/quota, or update-state fact that materially affects this task before acting.',
+    'Execution-time reality: use the current Phoenix Reality Context. Re-check any stale or missing time, timezone, calendar, location, weather/daylight, network, device-resource, connector-auth, provider/quota, or update-state fact that materially affects this task before acting. When phoenix_reality_now is available, use it for synchronized refresh rather than guessing.',
   ]
   if (input.preparationResult !== undefined) lines.push(`Prepared result: ${input.preparationResult}`)
   if (conditionEvidence !== undefined) lines.push(`Condition verified true: ${conditionEvidence}`)
@@ -118,7 +118,7 @@ const CONDITION_WATCH_OUTPUT_SCHEMA: ObjectJsonSchema = {
 }
 
 const CONDITION_WATCH_READ_ONLY_TOOLS: ToolRestriction = {
-  allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'],
+  allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch', 'phoenix_reality_now'],
 }
 
 interface ConditionWatchDecision {
@@ -147,7 +147,7 @@ function conditionWatchPrompt(input: ProactivityExecution): ContentBlock[] {
       + `Scheduled check: ${input.scheduledFor}\n`
       + `Condition: ${input.task.condition}\n`
       + `Recent checks: ${JSON.stringify(recent)}\n\n`
-      + 'Evaluate the condition against current evidence. Use the current Phoenix Reality Context and refresh any stale or missing fact that materially affects the condition. Use only the available read-only tools. '
+      + 'Evaluate the condition against current evidence. Use the current Phoenix Reality Context and call phoenix_reality_now when available if a relevant signal is stale or missing. Use only the available read-only tools. '
       + 'Do not send messages, edit state, install connectors, schedule work, or perform side effects. '
       + 'Return met=true only when current evidence clearly satisfies the condition. '
       + 'If evidence is missing, stale, ambiguous, or the condition is not yet true, return met=false. '
