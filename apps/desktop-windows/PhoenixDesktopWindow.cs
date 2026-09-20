@@ -30,6 +30,7 @@ internal sealed class PhoenixDesktopWindow : Form
     private DateTimeOffset lastPhoenixNavigationAt = DateTimeOffset.MinValue;
     private int phoenixNavigationRetryCount;
     private bool phoenixNavigationRetryScheduled;
+    private bool phoenixNavigationInFlight;
 
     // Exposed to the native smoke test so CI verifies the real SplitContainer state,
     // not only the pure layout contract.
@@ -166,7 +167,10 @@ internal sealed class PhoenixDesktopWindow : Form
 
         // MarkRuntimeReady may have navigated moments before ShowWindow runs. Avoid a duplicate
         // first-load request while still guaranteeing that later tray/second-launch entries refresh.
-        if (DateTimeOffset.UtcNow - lastPhoenixNavigationAt < TimeSpan.FromSeconds(1))
+        // A WebView navigation can also take longer than the debounce window, so never overlap an
+        // in-flight loopback load with another Navigate() call.
+        if (phoenixNavigationInFlight
+            || DateTimeOffset.UtcNow - lastPhoenixNavigationAt < TimeSpan.FromSeconds(1))
             return;
 
         _ = NavigatePhoenixFreshAsync();
@@ -219,27 +223,34 @@ internal sealed class PhoenixDesktopWindow : Form
             _ = NavigatePhoenixFreshAsync();
     }
 
-    private async Task NavigatePhoenixFreshAsync()
+    private Task NavigatePhoenixFreshAsync()
     {
         var core = phoenixView.CoreWebView2;
-        if (core is null) return;
+        if (core is null || phoenixNavigationInFlight)
+            return Task.CompletedTask;
 
         var launchUri = new UriBuilder(phoenixUri);
         var existingQuery = launchUri.Query.TrimStart('?');
         var prefix = string.IsNullOrWhiteSpace(existingQuery) ? string.Empty : existingQuery + "&";
         launchUri.Query = $"{prefix}surface=desktop&shellVersion={Uri.EscapeDataString(Application.ProductVersion)}&launch={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
 
+        // The launch query already cache-busts the HTML shell. Clearing the entire Chromium cache
+        // here made every entry slower and, more importantly, inserted an await between deciding
+        // to navigate and recording that navigation. MarkRuntimeReady + ShowWindow could therefore
+        // issue two competing Navigate() calls and WebView2 sometimes surfaced the loser as Unknown.
+        lastPhoenixNavigationAt = DateTimeOffset.UtcNow;
+        phoenixNavigationInFlight = true;
         try
         {
-            await core.CallDevToolsProtocolMethodAsync("Network.clearBrowserCache", "{}");
+            core.Navigate(launchUri.Uri.ToString());
         }
-        catch (Exception ex)
+        catch
         {
-            DesktopLog.Write("Phoenix shell cache clear was unavailable; continuing with cache-busted navigation.", ex);
+            phoenixNavigationInFlight = false;
+            throw;
         }
 
-        lastPhoenixNavigationAt = DateTimeOffset.UtcNow;
-        core.Navigate(launchUri.Uri.ToString());
+        return Task.CompletedTask;
     }
 
     private async Task RetryPhoenixNavigationAsync(int attempt)
@@ -448,6 +459,9 @@ internal sealed class PhoenixDesktopWindow : Form
             };
             phoenixView.CoreWebView2.NavigationCompleted += (_, e) =>
             {
+                // Release the single-flight gate for every completion, including completions that
+                // arrive while the runtime is being restarted.
+                phoenixNavigationInFlight = false;
                 if (!runtimeReady) return;
                 if (e.IsSuccess)
                 {

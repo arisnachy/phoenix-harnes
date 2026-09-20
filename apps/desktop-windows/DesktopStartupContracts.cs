@@ -202,7 +202,11 @@ internal static class DesktopSourceCheckout
 
     internal static bool ShouldUseSourceCheckout(bool developerConsoleVisible)
     {
-        if (developerConsoleVisible) return true;
+        // Showing the developer console is only a diagnostics preference. It must never switch
+        // the installed product into a source checkout, because that reintroduces cmd/PowerShell
+        // bootstrapping and makes normal EXE startup depend on a local repository. Source mode is
+        // explicit through PHOENIX_SOURCE_ROOT only.
+        _ = developerConsoleVisible;
         return !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PHOENIX_SOURCE_ROOT"));
     }
 
@@ -325,13 +329,29 @@ internal static class DesktopNavigationRecovery
             "CannotConnect" or
             "Disconnected" or
             "Timeout" or
-            "OperationCanceled";
+            "OperationCanceled" or
+            // WebView2 can report Unknown while a loopback navigation is superseded or the
+            // renderer reconnects during startup. Treat it as transient, but keep the bounded
+            // retry budget so real failures still surface instead of looping forever.
+            "Unknown";
     }
 
     internal static int RetryDelayMilliseconds(int attempt)
     {
         var normalized = Math.Clamp(attempt, 1, MaxRetries);
         return Math.Min(3_500, 500 + (normalized * 350));
+    }
+}
+
+internal static class DesktopPhoenixIdentity
+{
+    internal const string HtmlMarker = "PHOENIX HARDNESS";
+
+    internal static bool LooksLikePhoenixHtml(string? html)
+    {
+        return !string.IsNullOrWhiteSpace(html)
+            && html.Contains(HtmlMarker, StringComparison.OrdinalIgnoreCase)
+            && html.Contains("<div id=\"root\">", StringComparison.OrdinalIgnoreCase);
     }
 }
 
