@@ -108,6 +108,28 @@ describe('Phoenix reality context', () => {
           }
         }
         if (name === 'tokenMeter') return {}
+        if (name === 'pluginInventory') {
+          return {
+            list: () => ({
+              entries: [
+                { entryId: 'tools', moduleName: '@phoenix-ai/dsh-tools', enabled: true, fiberPhase: 'active' },
+                { entryId: 'broken', moduleName: '@phoenix-ai/broken', enabled: true, fiberPhase: 'failed' },
+              ],
+            }),
+            updateState: () => ({
+              status: 'ready',
+              current: 'abc123',
+              target: 'def456',
+            }),
+            localModelState: async () => ({
+              mode: 'on-demand',
+              selectedModelId: 'phoenix-mini',
+              installedModelIds: ['phoenix-mini'],
+              phase: 'ready',
+              catalog: [],
+            }),
+          }
+        }
         return undefined
       },
     } as never
@@ -153,6 +175,24 @@ describe('Phoenix reality context', () => {
       ]),
       events: null,
       availability: null,
+    })
+    expect(snapshot.phoenix).toMatchObject({
+      update: {
+        status: 'ready',
+        current: 'abc123',
+        target: 'def456',
+      },
+      degradedPlugins: [{
+        entryId: 'broken',
+        moduleName: '@phoenix-ai/broken',
+        enabled: true,
+        fiberPhase: 'failed',
+      }],
+      localModel: {
+        mode: 'on-demand',
+        selectedModelId: 'phoenix-mini',
+        phase: 'ready',
+      },
     })
   })
 
