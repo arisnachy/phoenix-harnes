@@ -124,7 +124,8 @@ interface RuntimeServiceTelemetry {
     readonly availability: null
   }
   readonly phoenix: {
-    readonly plugins: readonly Record<string, unknown>[]
+    readonly pluginSummary: Record<string, unknown>
+    readonly degradedPlugins: readonly Record<string, unknown>[]
     readonly update: Record<string, unknown> | null
     readonly localModel: Record<string, unknown> | null
   }
@@ -399,7 +400,6 @@ function authorizationAccountView(
     ...(telemetry === undefined ? {} : {
       provider: telemetry.provider,
       accountType: telemetry.accountType ?? null,
-      email: telemetry.email ?? null,
       plan: telemetry.plan ?? null,
       primaryLimit: telemetry.primaryLimit ?? null,
       secondaryLimit: telemetry.secondaryLimit ?? null,
@@ -521,10 +521,39 @@ async function probeRuntimeServices(ctx: Context): Promise<RuntimeServiceTelemet
   const pluginList = method<() => { readonly entries: readonly Record<string, unknown>[] }>(pluginInventory, 'list')
   const updateState = method<() => Record<string, unknown>>(pluginInventory, 'updateState')
   const localModelState = method<() => Promise<Record<string, unknown>>>(pluginInventory, 'localModelState')
+  const pluginEntries = pluginList?.().entries ?? []
+  const countPhase = (phase: string): number =>
+    pluginEntries.filter(entry => entry.fiberPhase === phase).length
+  const pluginSummary = {
+    total: pluginEntries.length,
+    enabled: pluginEntries.filter(entry => entry.enabled === true).length,
+    active: countPhase('active'),
+    loading: countPhase('loading'),
+    pending: countPhase('pending'),
+    failed: countPhase('failed'),
+    unloading: countPhase('unloading'),
+  }
+  const degradedPlugins = pluginEntries
+    .filter(entry => entry.fiberPhase === 'failed')
+    .slice(0, 20)
+    .map(entry => ({
+      entryId: entry.entryId ?? null,
+      moduleName: entry.moduleName ?? null,
+      enabled: entry.enabled ?? null,
+      fiberPhase: entry.fiberPhase ?? null,
+    }))
   let localModel: Record<string, unknown> | null = null
   if (localModelState !== undefined) {
     try {
-      localModel = await localModelState()
+      const raw = await localModelState()
+      localModel = {
+        mode: raw.mode ?? null,
+        selectedModelId: raw.selectedModelId ?? null,
+        installedModelIds: Array.isArray(raw.installedModelIds) ? [...raw.installedModelIds] : [],
+        phase: raw.phase ?? null,
+        progress: raw.progress ?? null,
+        error: raw.error ?? null,
+      }
     } catch {
       localModel = null
     }
@@ -555,12 +584,8 @@ async function probeRuntimeServices(ctx: Context): Promise<RuntimeServiceTelemet
       availability: null,
     },
     phoenix: {
-      plugins: pluginList?.().entries.map(entry => ({
-        entryId: entry.entryId ?? null,
-        moduleName: entry.moduleName ?? null,
-        enabled: entry.enabled ?? null,
-        fiberPhase: entry.fiberPhase ?? null,
-      })) ?? [],
+      pluginSummary,
+      degradedPlugins,
       update: updateState?.() ?? null,
       localModel,
     },
@@ -810,9 +835,16 @@ export class RealityContextEngine {
             : { status: process.env.PHOENIX_UPDATE_STATE, source: 'environment' }
         ),
         supervisor: process.env.PHOENIX_SUPERVISOR === '1' ? 'active' : 'unknown',
-        plugins: runtimeValue?.phoenix.plugins ?? [],
-        degradedPlugins: (runtimeValue?.phoenix.plugins ?? [])
-          .filter(plugin => plugin.fiberPhase === 'failed'),
+        pluginSummary: runtimeValue?.phoenix.pluginSummary ?? {
+          total: null,
+          enabled: null,
+          active: null,
+          loading: null,
+          pending: null,
+          failed: null,
+          unloading: null,
+        },
+        degradedPlugins: runtimeValue?.phoenix.degradedPlugins ?? [],
         localModel: runtimeValue?.phoenix.localModel ?? null,
         observedAt: runtimeServices.observedAt,
         expiresAt: runtimeServices.expiresAt,
