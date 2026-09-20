@@ -3,22 +3,24 @@ name: KIRA Green Repair
 on:
   push:
     branches: [kira/green-gate-20260919]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
 
 concurrency:
-  group: kira-green-repair
+  group: kira-green-repair-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   regenerate:
-    if: github.actor != 'github-actions[bot]'
+    if: (github.event_name == 'push' || github.head_ref == 'kira/green-gate-20260919') && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: kira/green-gate-20260919
+          ref: ${{ github.head_ref || github.ref_name }}
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
@@ -28,7 +30,7 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Install immutable workspace
+      - name: Install mutable repair workspace
         run: pnpm install --no-frozen-lockfile
 
       - name: Regenerate authoritative repository artifacts
@@ -41,6 +43,8 @@ jobs:
 
       - name: Commit deterministic repairs
         shell: bash
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
           if git diff --quiet && [[ -z "$(git status --porcelain --untracked-files=all)" ]]; then
@@ -51,4 +55,4 @@ jobs:
           git config user.email "kira-green-gate@users.noreply.github.com"
           git add -A
           git commit -m "chore(gates): refresh generated repository artifacts"
-          git push origin HEAD:kira/green-gate-20260919
+          git push origin "HEAD:$TARGET_BRANCH"
