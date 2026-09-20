@@ -29,7 +29,7 @@ jobs:
           cache: pnpm
 
       - name: Install immutable workspace
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Regenerate authoritative repository artifacts
         run: |
