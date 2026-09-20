@@ -73,7 +73,7 @@ describe('PHOENIX updater state persistence', () => {
     writeFileSync(join(root, 'phoenix-active-runtime.json'), JSON.stringify({
       schema: 1,
       target,
-      path: 'C:\\Phoenix\\runtime',
+      path: root,
     }), 'utf8')
     writeFileSync(join(root, 'phoenix-update-restart-request.json'), JSON.stringify({
       schema: 1,
