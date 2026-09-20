@@ -376,7 +376,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined
 }
 
-function method<T extends (...args: never[]) => unknown>(
+function method<T>(
   value: unknown,
   name: string,
 ): T | undefined {
