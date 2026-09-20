@@ -104,6 +104,7 @@ Equal("Iniciando Phoenix…", DesktopStartupContract.InitialStatus, "startup sta
 EqualInt(3, DesktopRuntimeLaunchContract.ReadyConsecutiveSamples, "desktop waits for multiple stable backend probes", failures);
 EqualInt(700, DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds, "stable backend probes are spaced out", failures);
 EqualInt(3, DesktopRuntimeLaunchContract.MaxUnexpectedBackendRestarts, "desktop stops waiting after a short backend crash loop", failures);
+EqualInt(12, DesktopRuntimeLaunchContract.ManagedBootstrapTimeoutMinutes, "managed bootstrap has a bounded timeout", failures);
 True(DesktopNavigationRecovery.IsTransient("ConnectionAborted"), "connection-aborted WebView startup failure is retried", failures);
 True(DesktopNavigationRecovery.IsTransient("ConnectionReset"), "connection-reset WebView startup failure is retried", failures);
 False(DesktopNavigationRecovery.IsTransient("CertificateIsInvalid"), "non-transient WebView failures are not retried blindly", failures);
@@ -244,6 +245,10 @@ finally
 True(ManagedRuntimeMarker.IsReadyContent("schema=1\nstate=ready\ninstalledAt=2026-09-17T00:00:00Z"), "completed runtime marker accepted", failures);
 False(ManagedRuntimeMarker.IsReadyContent(""), "empty legacy marker rejected", failures);
 False(ManagedRuntimeMarker.IsReadyContent("schema=1\ninstalledAt=2026-09-17T00:00:00Z"), "marker without ready state rejected", failures);
+True(ManagedRuntimeMarker.RequiresCleanBootstrap(ManagedRuntimeState.Recoverable), "recoverable managed runtime is rebuilt cleanly instead of resumed", failures);
+True(ManagedRuntimeMarker.RequiresCleanBootstrap(ManagedRuntimeState.Unmanaged), "unmanaged desktop runtime is rebuilt cleanly", failures);
+False(ManagedRuntimeMarker.RequiresCleanBootstrap(ManagedRuntimeState.Missing), "missing runtime proceeds directly to clean bootstrap", failures);
+False(ManagedRuntimeMarker.RequiresCleanBootstrap(ManagedRuntimeState.Ready), "verified runtime is never rebuilt during normal startup", failures);
 
 if (failures.Count == 0)
 {
