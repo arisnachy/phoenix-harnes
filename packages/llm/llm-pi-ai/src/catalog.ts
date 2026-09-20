@@ -146,6 +146,39 @@ const CHAT_TEMPLATE_VAR_GATE: Record<PiAiChatTemplateVar, true> = {
 /** The request-state placeholders a profile may name. */
 export const CHAT_TEMPLATE_VARS = Object.keys(CHAT_TEMPLATE_VAR_GATE) as readonly PiAiChatTemplateVar[]
 
+const DEEPSEEK_CANONICAL_FLASH_ID = 'deepseek-flash'
+const DEEPSEEK_FLASH_VISION_IDS = new Set([
+  DEEPSEEK_CANONICAL_FLASH_ID,
+  'deepseek-v4-flash',
+  'deepseek-v4-flash-vision-exp',
+  // Compatibility with PHOENIX's pre-release selector spelling.
+  'deepseek-v4.1-flash',
+])
+
+function documentedVendorInput(provider: string, modelId: string): Model<Api>['input'] | undefined {
+  return provider === 'deepseek' && DEEPSEEK_FLASH_VISION_IDS.has(modelId)
+    ? ['text', 'image']
+    : undefined
+}
+
+function normalizeVendorCatalog(provider: string, models: Model<Api>[]): Model<Api>[] {
+  if (provider !== 'deepseek') return models
+  const normalized = models.map(model => ({
+    ...model,
+    ...(DEEPSEEK_FLASH_VISION_IDS.has(model.id) ? { input: ['text', 'image'] as Model<Api>['input'] } : {}),
+  }))
+  if (normalized.some(model => model.id === DEEPSEEK_CANONICAL_FLASH_ID)) return normalized
+  const source = normalized.find(model => model.id === 'deepseek-v4-flash')
+    ?? normalized.find(model => model.id === 'deepseek-v4-flash-vision-exp')
+  if (source === undefined) return normalized
+  return [{
+    ...source,
+    id: DEEPSEEK_CANONICAL_FLASH_ID,
+    name: 'DeepSeek V4.1 Flash',
+    input: ['text', 'image'],
+  }, ...normalized]
+}
+
 let providerIndex: Map<string, Provider> | undefined
 
 /**
@@ -183,7 +216,10 @@ export function catalogProviderIds(): readonly string[] {
  */
 export function catalogModels(provider: string): Map<string, Model<Api>> {
   if (!catalogProviders().has(provider)) return new Map()
-  const models = getBuiltinModels(provider as BuiltinProvider) as Model<Api>[]
+  const models = normalizeVendorCatalog(
+    provider,
+    getBuiltinModels(provider as BuiltinProvider) as Model<Api>[],
+  )
   return new Map(models.map(model => [model.id, model]))
 }
 
@@ -907,7 +943,10 @@ export function resolveRouteModels(request: RouteCatalogRequest): RouteCatalog {
       api,
       provider,
       baseUrl,
-      input: declaredInput(entry.input) ?? base?.input ?? [...request.defaultInput],
+      input: declaredInput(entry.input)
+        ?? documentedVendorInput(provider, entry.id)
+        ?? base?.input
+        ?? [...request.defaultInput],
       cost: base?.cost ?? NO_COST,
       contextWindow,
       maxTokens,

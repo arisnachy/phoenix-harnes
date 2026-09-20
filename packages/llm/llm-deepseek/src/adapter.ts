@@ -180,6 +180,25 @@ const OFF_ONLY_REASONING_EFFORTS = [
   { id: OFF_REASONING_EFFORT, name: 'Off' },
 ] as const
 
+const DEEPSEEK_FLASH_CANONICAL_MODEL = 'deepseek-flash'
+const PHOENIX_LEGACY_V41_FLASH_MODEL = 'deepseek-v4.1-flash'
+
+/** Map PHOENIX's old pre-release selector spelling to DeepSeek's public API id. */
+function deepSeekWireModelId(model: string): string {
+  return model === PHOENIX_LEGACY_V41_FLASH_MODEL ? DEEPSEEK_FLASH_CANONICAL_MODEL : model
+}
+
+/** Resolve a configured model, including the hidden compatibility selector. */
+function catalogModelFor(
+  connection: DeepSeekConnectionOptions,
+  requestedModel: string,
+): DeepSeekCatalogModel | undefined {
+  const exact = connection.models.find(entry => entry.id === requestedModel)
+  if (exact !== undefined) return exact
+  if (requestedModel !== PHOENIX_LEGACY_V41_FLASH_MODEL) return undefined
+  return connection.models.find(entry => entry.id === DEEPSEEK_FLASH_CANONICAL_MODEL)
+}
+
 /** Marks a failed file-id resolution that may be retried as an inline request. */
 class FileResolutionFailure extends Error {
   constructor(cause: unknown) {
@@ -410,16 +429,15 @@ export class DeepSeekAdapter extends LlmAdapter {
     provider: string,
     model: string,
   ): LlmResolvedModelInfo {
-    const configured = connection.models.find(entry => entry.id === model)
+    const configured = catalogModelFor(connection, model)
     const contextWindow = configured?.contextWindow
       ?? connection.defaultContextWindow
     return {
-      // An uncatalogued endpoint is safely treated as text-only. Declaring an
-      // unverified image capability would let the host persist input that the
-      // endpoint may reject on every later turn.
+      // An uncatalogued endpoint is safely treated as text-only. The one hidden
+      // compatibility id above deliberately resolves through canonical Flash.
       ...configured === undefined
         ? { provider, id: model, name: model, inputModalities: ['text' as const] }
-        : modelInfo(provider, configured),
+        : { ...modelInfo(provider, configured), id: model },
       context: { contextWindow },
       defaultMaxTokens: configured?.maxTokens ?? connection.maxTokens,
       ...connection.defaults.thinking === 'disabled'
@@ -469,7 +487,7 @@ export class DeepSeekAdapter extends LlmAdapter {
     const hasFiles = options.messages.some(message => contentHasFile(message.content))
     let attachments: AttachmentStore | undefined
     if (hasImages || hasFiles) {
-      const model = connection.models.find(entry => entry.id === options.model)
+      const model = catalogModelFor(connection, options.model)
       if (hasImages && model?.inputModalities?.includes('image') !== true) {
         throw new LlmError(
           `DeepSeek model "${options.model}" does not accept image input.`,
@@ -559,9 +577,11 @@ export class DeepSeekAdapter extends LlmAdapter {
     }
 
     const fileConnection = { baseURL: connection.baseURL, apiKey }
-    const model = connection.models.find(entry => entry.id === options.model)
+    const model = catalogModelFor(connection, options.model)
     const policy = model === undefined ? undefined : resolveRequestImagePolicy(model)
-    const requestMessages = policy === undefined ? options.messages : offloadRequestImagesWithPolicy(options.messages, {
+    const wireModel = deepSeekWireModelId(options.model)
+    const wireOptions = wireModel === options.model ? options : { ...options, model: wireModel }
+    const requestMessages = policy === undefined ? wireOptions.messages : offloadRequestImagesWithPolicy(wireOptions.messages, {
       representation: 'raw',
       maxBytes: connection.maxRequestFilesBytes,
       maxImages: connection.maxImagesPerRequest,
@@ -569,7 +589,9 @@ export class DeepSeekAdapter extends LlmAdapter {
       countQuantum: connection.imageOffloadCountQuantum,
       byteLength: ref => Math.min(ref.bytes, policy.maxBytes),
     })
-    const requestOptions = requestMessages === options.messages ? options : { ...options, messages: [...requestMessages] }
+    const requestOptions = requestMessages === wireOptions.messages
+      ? wireOptions
+      : { ...wireOptions, messages: [...requestMessages] }
     const hasFiles = requestOptions.messages.some(message => contentHasFile(message.content))
     const requestImages = attachments === undefined || model === undefined
       ? new Map<AttachmentId, RequestImageAttachment>()
