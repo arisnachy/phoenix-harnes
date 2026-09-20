@@ -177,20 +177,25 @@ var sourceTestRoot = Path.Combine(Path.GetTempPath(), $"phoenix-source-test-{Gui
 var sourceInstallRoot = Path.Combine(Path.GetTempPath(), $"phoenix-install-test-{Guid.NewGuid():N}");
 try
 {
-    Directory.CreateDirectory(Path.Combine(sourceTestRoot, ".git"));
+    Directory.CreateDirectory(Path.Combine(sourceTestRoot, "apps", "cli"));
+    Directory.CreateDirectory(Path.Combine(sourceTestRoot, "scripts"));
     File.WriteAllText(Path.Combine(sourceTestRoot, "package.json"), "{}");
     File.WriteAllText(Path.Combine(sourceTestRoot, "phoenix-windows.cmd"), "@echo off");
-    True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "bootstrappable source checkout is recognized before node_modules exists", failures);
+    File.WriteAllText(Path.Combine(sourceTestRoot, "scripts", "phoenix-windows-supervisor.mjs"), "// supervisor");
+    True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "bootstrappable Phoenix source is recognized without node_modules or .git", failures);
 
     DesktopSourceCheckout.Remember(sourceInstallRoot, sourceTestRoot);
-    Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "remembered bootstrappable source checkout resolves before managed bootstrap", failures);
+    Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "remembered bootstrappable source resolves before managed bootstrap", failures);
+
+    Directory.CreateDirectory(Path.Combine(sourceTestRoot, ".git"));
+    True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "normal Git checkout remains recognized", failures);
 
     Directory.Delete(Path.Combine(sourceTestRoot, ".git"), recursive: true);
     File.WriteAllText(Path.Combine(sourceTestRoot, ".git"), "gitdir: C:\\worktrees\\phoenix");
-    True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "Git worktree checkout with a .git file is recognized", failures);
+    True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "Git worktree metadata does not affect bootability", failures);
 
-    File.Delete(Path.Combine(sourceTestRoot, "phoenix-windows.cmd"));
-    False(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "checkout without the Phoenix launcher is rejected", failures);
+    File.Delete(Path.Combine(sourceTestRoot, "scripts", "phoenix-windows-supervisor.mjs"));
+    False(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "folder without the Phoenix supervisor is rejected", failures);
 }
 finally
 {
