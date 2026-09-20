@@ -183,6 +183,7 @@ export interface RealitySnapshot {
 
 interface RealityAssemblyContext {
   readonly agent?: {
+    readonly id?: unknown
     readonly options: {
       readonly provider?: string
       readonly model?: string
@@ -324,6 +325,7 @@ function serviceCapabilities(ctx: Context): string[] {
     'tokenMeter',
     'userProfile',
     'homeGateway',
+    'clientReality',
   ]
   return services.filter(name => get.call(ctx, name) !== undefined)
 }
@@ -363,13 +365,10 @@ function numberField(record: Record<string, unknown>, key: string): number | nul
 }
 
 
-async function fetchWeather(config: RealityContextConfig): Promise<WeatherPayload> {
-  if (config.latitude === undefined || config.longitude === undefined) {
-    throw new Error('precise location is not configured')
-  }
+async function fetchWeatherAt(latitude: number, longitude: number): Promise<WeatherPayload> {
   const query = new URLSearchParams({
-    latitude: String(config.latitude),
-    longitude: String(config.longitude),
+    latitude: String(latitude),
+    longitude: String(longitude),
     current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,rain,weather_code,wind_speed_10m',
     hourly: 'precipitation_probability',
     daily: 'sunrise,sunset',
@@ -661,6 +660,73 @@ function method<T>(
   const record = asRecord(value)
   const candidate = record?.[name]
   return typeof candidate === 'function' ? candidate.bind(value) as T : undefined
+}
+
+interface EffectiveLocation {
+  readonly kind: 'configured' | 'browser'
+  readonly latitude: number
+  readonly longitude: number
+  readonly accuracyMeters: number | null
+  readonly label: string | null
+  readonly source: string
+  readonly observedAt: number | null
+  readonly expiresAt: number | null
+}
+
+function transientClientLocation(
+  ctx: Context,
+  assembly: RealityAssemblyContext | undefined,
+): EffectiveLocation | undefined {
+  const sessionId = assembly?.agent?.id
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined
+  const get = ctx.get as unknown as (name: string) => unknown
+  const service = get.call(ctx, 'clientReality')
+  const locationFor = method<(id: unknown) => unknown>(service, 'locationFor')
+  const raw = asRecord(locationFor?.(sessionId))
+  if (raw === undefined) return undefined
+  const latitude = numericValue(raw.latitude)
+  const longitude = numericValue(raw.longitude)
+  const accuracyMeters = numericValue(raw.accuracyMeters)
+  const observedAt = numericValue(raw.observedAt)
+  const expiresAt = numericValue(raw.expiresAt)
+  if (latitude === null || latitude < -90 || latitude > 90
+    || longitude === null || longitude < -180 || longitude > 180
+    || accuracyMeters === null || accuracyMeters <= 0
+    || observedAt === null || expiresAt === null || expiresAt <= Date.now()) return undefined
+  return {
+    kind: 'browser',
+    latitude,
+    longitude,
+    accuracyMeters,
+    label: null,
+    source: 'browser-geolocation',
+    observedAt,
+    expiresAt,
+  }
+}
+
+function effectiveLocation(
+  ctx: Context,
+  config: RealityContextConfig,
+  assembly: RealityAssemblyContext | undefined,
+): EffectiveLocation | undefined {
+  if (config.latitude !== undefined && config.longitude !== undefined) {
+    return {
+      kind: 'configured',
+      latitude: config.latitude,
+      longitude: config.longitude,
+      accuracyMeters: config.accuracyMeters ?? null,
+      label: config.locationLabel ?? null,
+      source: 'explicit PHOENIX_REALITY_* configuration',
+      observedAt: null,
+      expiresAt: null,
+    }
+  }
+  return transientClientLocation(ctx, assembly)
+}
+
+function locationKey(location: EffectiveLocation): string {
+  return `${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`
 }
 
 function sameModel(
@@ -1068,7 +1134,12 @@ export class RealityContextEngine {
       && this.config.longitude !== undefined
       && now > this.weather.expiresAt) {
       try {
-        this.weather = cache(await fetchWeather(this.config), 'open-meteo', 10 * 60_000, 0.95)
+        this.weather = cache(
+          await fetchWeatherAt(this.config.latitude, this.config.longitude),
+          'open-meteo',
+          10 * 60_000,
+          0.95,
+        )
       } catch {
         this.weather = cache<WeatherPayload>(null, 'open-meteo-unavailable', 60_000, 0)
       }
