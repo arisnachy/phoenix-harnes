@@ -16,6 +16,7 @@ import { Context, Service } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-agent-default-model'
 import type { ApiProxy } from './api/index.ts'
+import { ClientRealityService } from './client-reality.ts'
 import { createApiProxy, DEFAULT_COLD_BLANK_PROBE_MAX_BYTES } from './api-proxy.ts'
 import {
   DEFAULT_SESSION_LOG_COMPRESSION_LEVEL,
@@ -29,6 +30,8 @@ export { AbstractApiClient, InProcessApiClient } from './fetch/client.ts'
 export type { IApiClient } from './fetch/client.ts'
 export { createApiProxy } from './api-proxy.ts'
 export type { ApiProxyDefaults } from './api-proxy.ts'
+export { ClientRealityService } from './client-reality.ts'
+export type { ObservedClientLocation } from './client-reality.ts'
 
 declare module '@phoenix-ai/cordis' {
   interface Context {
@@ -101,6 +104,7 @@ export class ApiProxyService extends Service implements ApiProxy {
     })]),
   })
 
+  readonly clientReality: ClientRealityService
   readonly sessions: ApiProxy['sessions']
   readonly subagents: ApiProxy['subagents']
   readonly workspace: ApiProxy['workspace']
@@ -118,6 +122,7 @@ export class ApiProxyService extends Service implements ApiProxy {
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'apiProxy')
+    this.clientReality = new ClientRealityService(ctx)
     const api = createApiProxy(ctx, {
       defaultModelSelection: () => ctx.agentDefaultModel.currentSelection(),
       saveDefaultModelSelection: selection => ctx.agentDefaultModel.saveSelection(selection),
