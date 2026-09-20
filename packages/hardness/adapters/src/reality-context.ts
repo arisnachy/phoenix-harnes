@@ -85,6 +85,10 @@ interface InternetProbePayload {
   readonly httpStatus: number | null
 }
 
+interface UserActivityPayload {
+  readonly idleSeconds: number
+}
+
 interface AuthorizationEntryLike {
   readonly key: string
   readonly label: string
@@ -521,6 +525,93 @@ async function probeGpu(): Promise<{ value: GpuPayload | null; source: string; c
   }
 }
 
+async function probeUserActivity(): Promise<{ value: UserActivityPayload | null; source: string; confidence: number }> {
+  if (platform() !== 'win32') return { value: null, source: `unsupported-platform:${platform()}`, confidence: 0 }
+  const source = String.raw`
+using System;
+using System.Runtime.InteropServices;
+public static class PhoenixLastInput {
+  [StructLayout(LayoutKind.Sequential)]
+  private struct LASTINPUTINFO {
+    public uint cbSize;
+    public uint dwTime;
+  }
+  [DllImport("user32.dll")]
+  private static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+  [DllImport("kernel32.dll")]
+  private static extern ulong GetTickCount64();
+  public static long IdleMilliseconds() {
+    var info = new LASTINPUTINFO();
+    info.cbSize = (uint)Marshal.SizeOf(info);
+    if (!GetLastInputInfo(ref info)) return -1;
+    ulong currentLow = GetTickCount64() & 0xffffffffUL;
+    ulong last = info.dwTime;
+    ulong elapsed = currentLow >= last
+      ? currentLow - last
+      : 0x100000000UL + currentLow - last;
+    return (long)elapsed;
+  }
+}`
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    `Add-Type -TypeDefinition ${JSON.stringify(source)} -Language CSharp`,
+    '$milliseconds = [PhoenixLastInput]::IdleMilliseconds()',
+    'if ($milliseconds -lt 0) { throw "GetLastInputInfo failed" }',
+    '[pscustomobject]@{ idleSeconds = [math]::Round($milliseconds / 1000.0, 1) } | ConvertTo-Json -Compress',
+  ].join('; ')
+  try {
+    const { stdout } = await execFileAsync('powershell.exe', [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      script,
+    ], {
+      timeout: 4_000,
+      windowsHide: true,
+      maxBuffer: 64 * 1024,
+    })
+    const record = asRecord(JSON.parse(String(stdout).trim()))
+    const idleSeconds = numericValue(record?.idleSeconds)
+    if (idleSeconds === null || idleSeconds < 0) {
+      return { value: null, source: 'windows-user32:GetLastInputInfo-invalid', confidence: 0 }
+    }
+    return {
+      value: { idleSeconds },
+      source: 'windows-user32:GetLastInputInfo',
+      confidence: 0.98,
+    }
+  } catch {
+    return { value: null, source: 'windows-user32:GetLastInputInfo-unavailable', confidence: 0 }
+  }
+}
+
+function presenceFromActivity(activity: RealitySignal<UserActivityPayload>): Record<string, unknown> {
+  const idleSeconds = activity.value?.idleSeconds ?? null
+  const awayThresholdSeconds = 300
+  return {
+    status: idleSeconds === null ? 'unknown' : idleSeconds >= awayThresholdSeconds ? 'away' : 'active',
+    idleSeconds,
+    awayThresholdSeconds,
+    source: activity.source,
+    observedAt: activity.observedAt,
+    expiresAt: activity.expiresAt,
+    confidence: activity.confidence,
+    stale: activity.stale,
+    screenLocked: {
+      value: null,
+      source: 'not-authoritatively-probed',
+      stale: true,
+    },
+    doNotDisturb: {
+      value: null,
+      source: 'not-authoritatively-probed',
+      stale: true,
+    },
+    rule: 'active/away is derived only from host idle time using the explicit 300-second threshold; it is not a claim about attention, emotion, location, or availability',
+  }
+}
+
 async function probeInternet(): Promise<{ value: InternetProbePayload; source: string; confidence: number }> {
   const target = 'https://example.com/'
   const dnsStarted = performance.now()
@@ -900,6 +991,7 @@ async function probeClockSync(): Promise<{ value: boolean | null; source: string
 
 export class RealityContextEngine {
   private internet = cache<InternetProbePayload>(null, 'not-probed', 1, 0)
+  private userActivity = cache<UserActivityPayload>(null, 'not-probed', 1, 0)
   private battery = cache<BatteryPayload>(null, 'not-probed', 1, 0)
   private gpu = cache<GpuPayload>(null, 'not-probed', 1, 0)
   private clockSync = cache<boolean>(null, 'not-probed', 1, 0)
@@ -951,6 +1043,12 @@ export class RealityContextEngine {
         hostProbes.push((async () => {
           const probe = await probeGpu()
           this.gpu = cache(probe.value, probe.source, 10 * 60_000, probe.confidence)
+        })())
+      }
+      if (now > this.userActivity.expiresAt) {
+        hostProbes.push((async () => {
+          const probe = await probeUserActivity()
+          this.userActivity = cache(probe.value, probe.source, this.config.refreshMs, probe.confidence)
         })())
       }
       await Promise.all(hostProbes)
@@ -1017,6 +1115,7 @@ export class RealityContextEngine {
     const internet = signal(this.internet, epoch)
     const battery = signal(this.battery, epoch)
     const gpu = signal(this.gpu, epoch)
+    const userActivity = signal(this.userActivity, epoch)
     const sessionAi = sessionAiSnapshot(ctx, assembly, runtimeValue?.ai)
 
     return {
@@ -1202,8 +1301,12 @@ export class RealityContextEngine {
         dateAmbiguityRule: 'use ISO dates internally and include month names or YYYY-MM-DD when user-facing numeric dates could be ambiguous',
       },
       userState: {
-        status: 'unknown-unless-observed',
-        rule: 'use only explicit activity, DND, schedule, or preference signals; never infer emotional or physical state as fact',
+        ...presenceFromActivity(userActivity),
+        workSchedule: {
+          value: null,
+          source: 'requires-explicit-preference-or-authorized-calendar',
+          stale: true,
+        },
       },
     }
   }
