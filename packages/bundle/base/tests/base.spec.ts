@@ -57,7 +57,9 @@ describe('dsh-base bundle', () => {
     expect(rows.some(row => row.id === 'agent-loop')).toBe(true)
     expect(rows.some(row => row.id === 'hardness')).toBe(true)
     expect(rows.some(row => row.id === 'hardness-adapters')).toBe(true)
-    expect(rows.find(row => row.id === 'hardness-adapters')?.disabled).toBe(true)
+    const hardnessAdapters = rows.find(row => row.id === 'hardness-adapters')
+    expect(hardnessAdapters?.disabled).toBeUndefined()
+    expect(hardnessAdapters?.config).toMatchObject({ modelTools: false })
     expect(rows.find(row => row.id === 'session-telemetry-otel')?.config?.['mode']).toEqual({
       __jsExpr: "process.env.DSH_TELEMETRY_MODE || 'DISABLED'",
     })
