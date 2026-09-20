@@ -340,14 +340,14 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return false;
         }
 
-        if (state == ManagedRuntimeState.Unmanaged)
+        if (ManagedRuntimeMarker.RequiresCleanBootstrap(state))
         {
-            // %LOCALAPPDATA%\Phoenix\runtime belongs exclusively to the installed desktop shell.
-            // A half-created folder from an interrupted install must be replaced, not treated as
-            // immutable user data. The user's source checkout lives elsewhere and is never touched.
-            window.SetStartupStatus("Reparando el runtime local de Phoenix…");
+            // Never resume a half-installed managed runtime. Interrupted pnpm/build state can
+            // leave the bootstrap looking frozen for minutes or poison every later launch.
+            // The managed runtime is disposable, so replace it atomically and start clean.
+            window.SetStartupStatus("Limpiando una instalación incompleta de Phoenix…");
             tray.Text = "Phoenix · reparando";
-            if (!ResetManagedRuntimeDirectoryForRepair("runtime exists without a valid Phoenix managed marker/Git state"))
+            if (!ResetManagedRuntimeDirectoryForRepair($"managed runtime requires clean bootstrap: {state}"))
             {
                 ShowRuntimePreparationFailure();
                 return false;
@@ -357,10 +357,10 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
         for (var attempt = 1; attempt <= 2; attempt++)
         {
-            window.SetStartupStatus(state == ManagedRuntimeState.Recoverable || attempt > 1
-                ? "Reparando una instalación incompleta de Phoenix…"
+            window.SetStartupStatus(attempt > 1
+                ? "Reintentando la preparación de Phoenix desde cero…"
                 : "Preparando Phoenix por primera vez…");
-            tray.Text = state == ManagedRuntimeState.Recoverable || attempt > 1 ? "Phoenix · reparando" : "Phoenix · instalando";
+            tray.Text = attempt > 1 ? "Phoenix · reintentando" : "Phoenix · instalando";
 
             var exitCode = await RunBootstrapAsync(script, attempt);
             if (exitCode == 0 && ManagedRuntimeMarker.Inspect(Program.RuntimeRoot) == ManagedRuntimeState.Ready)
@@ -392,6 +392,10 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             RedirectStandardError = true,
         };
 
+        psi.Environment["CI"] = "1";
+        psi.Environment["NO_COLOR"] = "1";
+        psi.Environment["COREPACK_ENABLE_DOWNLOAD_PROMPT"] = "0";
+
         DesktopLog.Write($"Starting managed runtime bootstrap attempt {attempt}: {psi.FileName} {psi.Arguments}");
         using var bootstrap = Process.Start(psi);
         if (bootstrap is null)
@@ -400,15 +404,93 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             return -1;
         }
 
-        var stdoutTask = bootstrap.StandardOutput.ReadToEndAsync();
-        var stderrTask = bootstrap.StandardError.ReadToEndAsync();
-        await bootstrap.WaitForExitAsync();
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
-        if (!string.IsNullOrWhiteSpace(stdout)) DesktopLog.Write($"bootstrap attempt {attempt} stdout:\n" + stdout.Trim());
-        if (!string.IsNullOrWhiteSpace(stderr)) DesktopLog.Write($"bootstrap attempt {attempt} stderr:\n" + stderr.Trim());
+        bootstrap.OutputDataReceived += (_, e) =>
+        {
+            if (string.IsNullOrWhiteSpace(e.Data)) return;
+            DesktopLog.Write($"bootstrap {attempt}: {e.Data}");
+            ReportBootstrapProgress(e.Data);
+        };
+        bootstrap.ErrorDataReceived += (_, e) =>
+        {
+            if (string.IsNullOrWhiteSpace(e.Data)) return;
+            DesktopLog.Write($"bootstrap {attempt} stderr: {e.Data}");
+            ReportBootstrapProgress(e.Data);
+        };
+        bootstrap.BeginOutputReadLine();
+        bootstrap.BeginErrorReadLine();
+
+        using var timeout = new CancellationTokenSource(
+            TimeSpan.FromMinutes(DesktopRuntimeLaunchContract.ManagedBootstrapTimeoutMinutes));
+        try
+        {
+            await bootstrap.WaitForExitAsync(timeout.Token);
+            // Flush asynchronous output callbacks before inspecting the final exit code.
+            bootstrap.WaitForExit();
+        }
+        catch (OperationCanceledException)
+        {
+            DesktopLog.Write($"Bootstrap attempt {attempt} exceeded {DesktopRuntimeLaunchContract.ManagedBootstrapTimeoutMinutes} minutes; terminating its process tree.");
+            window.SetStartupStatus("La preparación tardó demasiado. Phoenix la reiniciará desde cero…");
+            tray.Text = "Phoenix · recuperando";
+            try
+            {
+                if (!bootstrap.HasExited)
+                    bootstrap.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex)
+            {
+                DesktopLog.Write("Could not terminate timed-out bootstrap process tree", ex);
+            }
+            return -2;
+        }
+
         DesktopLog.Write($"Bootstrap attempt {attempt} exited with code {bootstrap.ExitCode}.");
         return bootstrap.ExitCode;
+    }
+
+
+    private void ReportBootstrapProgress(string line)
+    {
+        if (line.Contains("[PHOENIX BOOTSTRAP] cloning", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("Cloning into", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("Receiving objects", StringComparison.OrdinalIgnoreCase))
+        {
+            window.SetStartupStatus("Descargando el runtime estable de Phoenix…");
+            tray.Text = "Phoenix · descargando";
+            return;
+        }
+
+        if (line.Contains("[PHOENIX BOOTSTRAP] syncing", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("Resolving deltas", StringComparison.OrdinalIgnoreCase))
+        {
+            window.SetStartupStatus("Verificando archivos de Phoenix…");
+            tray.Text = "Phoenix · verificando";
+            return;
+        }
+
+        if (line.Contains("[PHOENIX BOOTSTRAP] installing", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("Progress: resolved", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("Lockfile is up to date", StringComparison.OrdinalIgnoreCase))
+        {
+            window.SetStartupStatus("Instalando componentes de Phoenix…");
+            tray.Text = "Phoenix · instalando";
+            return;
+        }
+
+        if (line.Contains("[PHOENIX BOOTSTRAP] building", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("Building PHOENIX", StringComparison.OrdinalIgnoreCase))
+        {
+            window.SetStartupStatus("Construyendo Phoenix…");
+            tray.Text = "Phoenix · construyendo";
+            return;
+        }
+
+        if (line.Contains("[PHOENIX BOOTSTRAP] ready", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("Phoenix managed runtime ready", StringComparison.OrdinalIgnoreCase))
+        {
+            window.SetStartupStatus("Phoenix está listo. Iniciando…");
+            tray.Text = "Phoenix · iniciando";
+        }
     }
 
     private bool ResetManagedRuntimeDirectoryForRepair(string reason)
