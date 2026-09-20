@@ -245,10 +245,15 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
       )
     }
     const declaredInputModalities = model.inputModalities
-    const inputModalities: ModelModality[] = declaredInputModalities === undefined
-      || declaredInputModalities.length === 0
-      ? (DEEPSEEK_FLASH_VISION_MODEL_IDS.has(model.id) ? ['text', 'image'] : ['text'])
-      : declaredInputModalities
+    // DeepSeek Flash's documented capability is authoritative. Older PHOENIX
+    // configs persisted both [] and ['text'] while Flash vision support was
+    // still hidden, so merely accepting the legacy value would keep the Host
+    // rejecting images even after the catalog was fixed.
+    const inputModalities: ModelModality[] = DEEPSEEK_FLASH_VISION_MODEL_IDS.has(model.id)
+      ? ['text', 'image']
+      : declaredInputModalities === undefined || declaredInputModalities.length === 0
+        ? ['text']
+        : declaredInputModalities
     if (inputModalities.some(modality => !MODEL_MODALITIES.includes(modality))) {
       throw new Error(
         `llm-deepseek: catalog model "${model.id}" inputModalities must contain only "text" and "image"`,
