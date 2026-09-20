@@ -602,12 +602,22 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
         if (psi.RedirectStandardOutput)
         {
-            ownedRuntime.OutputDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) DesktopLog.Write("runtime: " + e.Data); };
+            ownedRuntime.OutputDataReceived += (_, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(e.Data)) return;
+                DesktopLog.Write("runtime: " + e.Data);
+                ReportRuntimeProgress(e.Data);
+            };
             ownedRuntime.BeginOutputReadLine();
         }
         if (psi.RedirectStandardError)
         {
-            ownedRuntime.ErrorDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) DesktopLog.Write("runtime stderr: " + e.Data); };
+            ownedRuntime.ErrorDataReceived += (_, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(e.Data)) return;
+                DesktopLog.Write("runtime stderr: " + e.Data);
+                ReportRuntimeProgress(e.Data);
+            };
             ownedRuntime.BeginErrorReadLine();
         }
 
@@ -672,6 +682,49 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             }
         }
         return false;
+    }
+
+    private void ReportRuntimeProgress(string line)
+    {
+        if (line.Contains("Preparing PHOENIX dependencies", StringComparison.OrdinalIgnoreCase))
+        {
+            window.SetStartupStatus("Preparando dependencias…");
+            tray.Text = "Phoenix · preparando";
+            return;
+        }
+
+        if (line.Contains("Building PHOENIX for the first run", StringComparison.OrdinalIgnoreCase))
+        {
+            window.SetStartupStatus("Construyendo Phoenix por primera vez…");
+            tray.Text = "Phoenix · construyendo";
+            return;
+        }
+
+        if (line.Contains("PHOENIX RECOVERY", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("configuration preflight", StringComparison.OrdinalIgnoreCase))
+        {
+            window.SetStartupStatus("Verificando Phoenix…");
+            tray.Text = "Phoenix · verificando";
+            return;
+        }
+
+        if (line.Contains("host exited unexpectedly", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("relaunch", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("restarting", StringComparison.OrdinalIgnoreCase))
+        {
+            window.SetStartupStatus("Reiniciando backend de Phoenix…");
+            tray.Text = "Phoenix · reiniciando";
+            return;
+        }
+
+        if (line.Contains("127.0.0.1:3080", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("listening", StringComparison.OrdinalIgnoreCase)
+            || (line.Contains("server", StringComparison.OrdinalIgnoreCase)
+                && line.Contains("ready", StringComparison.OrdinalIgnoreCase)))
+        {
+            window.SetStartupStatus("Backend listo. Cargando interfaz…");
+            tray.Text = "Phoenix · cargando interfaz";
+        }
     }
 
     private async Task RestartOwnedRuntimeAsync()
