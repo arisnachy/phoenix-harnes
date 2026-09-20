@@ -594,10 +594,10 @@
 
     - id: hardness-adapters
       name: '@phoenix-ai/dsh-hardness-adapters'
-      # HARDNESS projections that become model-facing tools belong to an
-      # agent preset. Keep the host declaration available for overlays without
-      # leaking those tools into every agent, including `minimal`.
-      disabled: true
+      # Keep the host runtime active even though model-facing HARDNESS tools
+      # belong to agent presets. modelTools=false mounts the durable proactivity
+      # pump/recovery/RPC and shared capability runtime without leaking those
+      # tools into every agent, including `minimal`.
       config:
         judgeProvider: spawn
         modelTools: false
