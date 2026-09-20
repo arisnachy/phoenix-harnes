@@ -61,7 +61,7 @@ import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoen
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
-import { CodexLiveCatalog } from './codex-live-catalog.ts'
+import { CODEX_MODEL_REFRESH_INTERVAL_MS, CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
 import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
@@ -313,6 +313,39 @@ export function apply(ctx: Context, config: Config): void {
     registeredFacts = facts
   }
   ensureRegistrationFacts()
+
+  // Codex owns an account-scoped, moving model catalog. Refresh it in the
+  // background as well as on picker reads so additions/removals propagate to
+  // already-mounted selectors without a manual "fetch models" action.
+  void ctx.effect(async () => {
+    const refresh = async (force = false): Promise<void> => {
+      const previousRevision = codexCatalog.revision
+      await codexCatalog.refresh(
+        CODEX_PROVIDER,
+        current().providers?.[CODEX_PROVIDER],
+        force,
+      )
+      if (codexCatalog.revision === previousRevision) return
+
+      // A changed catalog must invalidate profile memoization. Replacing the
+      // registration with the same route set is intentional: LlmRuntime emits
+      // llm/adapters-updated, and browser model directories reload themselves.
+      memoized = undefined
+      try {
+        const routes = [...profiles().keys()]
+        if (registration === undefined) ensureRegistrationFacts()
+        else registration.replace(routes)
+      } catch (error) {
+        ctx.logger.error('llm-pi-ai: refreshed Codex catalog could not be announced; keeping previous routes')
+        ctx.logger.error(error)
+      }
+    }
+
+    await refresh(true)
+    const timer = setInterval(() => { void refresh() }, CODEX_MODEL_REFRESH_INTERVAL_MS)
+    timer.unref()
+    return () => { clearInterval(timer) }
+  }, 'Codex live model catalog')
 
   // The bridge is loopback-only. It gives pi-ai the local Authorization marker
   // it requires, then strips that marker before the request leaves Phoenix.
