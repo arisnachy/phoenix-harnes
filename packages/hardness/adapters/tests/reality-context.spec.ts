@@ -40,6 +40,122 @@ describe('Phoenix reality context', () => {
     })
   })
 
+  it('projects sanitized authorization, MCP, active-model, and provider quota telemetry', async () => {
+    const engine = new RealityContextEngine({ refreshMs: 30_000 })
+    const fakeContext = {
+      get(name: string) {
+        if (name === 'authorization') {
+          return {
+            list: () => [{
+              key: 'openai',
+              label: 'OpenAI',
+              inFlight: false,
+              methods: [{ id: 'oauth', label: 'OAuth' }],
+            }],
+            inspect: async () => ({
+              kind: 'account',
+              provider: 'openai',
+              accountType: 'chatgpt',
+              plan: 'plus',
+              primaryLimit: { usedPercent: 42, windowDurationMins: 300 },
+              credits: { hasCredits: true, unlimited: false, balance: '12.34' },
+              usage: { lifetimeTokens: 12345 },
+              connectors: [{
+                id: 'calendar',
+                name: 'Calendar',
+                category: 'productivity',
+                accessible: true,
+                enabled: true,
+                installed: true,
+                callable: true,
+              }],
+            }),
+          }
+        }
+        if (name === 'mcpConnectors') {
+          return {
+            list: () => [{
+              serverName: 'workspace',
+              status: 'ready',
+              transport: 'stdio',
+              toolNames: ['calendar_events_list', 'mail_search'],
+            }],
+          }
+        }
+        if (name === 'llm') {
+          return {
+            listProviders: () => [{ id: 'openai', name: 'OpenAI' }],
+            listConfigurableProviders: () => [{
+              provider: 'openai',
+              displayName: 'OpenAI',
+              settingsNs: 'llm-openai',
+            }],
+            resolveModelInfo: async () => ({
+              provider: 'openai',
+              id: 'gpt-test',
+              name: 'GPT Test',
+              context: { contextWindow: 128000 },
+            }),
+          }
+        }
+        if (name === 'agentDefaultModel') {
+          return {
+            currentSelection: () => ({
+              provider: 'openai',
+              model: 'gpt-test',
+              reasoningEffort: 'high',
+            }),
+          }
+        }
+        if (name === 'tokenMeter') return {}
+        return undefined
+      },
+    } as never
+
+    await engine.refreshRuntimeServices(fakeContext)
+    const snapshot = engine.snapshot(fakeContext)
+
+    expect(snapshot.authentication).toMatchObject({
+      status: 'available',
+      accounts: [{
+        key: 'openai',
+        credentialState: 'valid',
+        expiryState: 'unreported',
+        provider: 'openai',
+        plan: 'plus',
+      }],
+      mcp: [{
+        serverName: 'workspace',
+        status: 'ready',
+      }],
+    })
+    expect(snapshot.ai).toMatchObject({
+      status: 'available',
+      activeModel: {
+        provider: 'openai',
+        model: 'gpt-test',
+        reasoningEffort: 'high',
+      },
+      contextWindowTokens: 128000,
+      tokenMeterAvailable: true,
+      registeredProviders: [{ id: 'openai', name: 'OpenAI', health: 'registered-not-probed' }],
+      accountLimits: [{
+        key: 'openai',
+        provider: 'openai',
+        primaryLimit: { usedPercent: 42, windowDurationMins: 300 },
+      }],
+    })
+    expect(snapshot.calendar).toMatchObject({
+      status: 'connector-state-known',
+      connectorCandidates: expect.arrayContaining([
+        expect.objectContaining({ source: 'authorization', id: 'calendar' }),
+        expect.objectContaining({ source: 'mcp', serverName: 'workspace' }),
+      ]),
+      events: null,
+      availability: null,
+    })
+  })
+
   it('marks configured coordinates as explicitly authorized/configured without inferring accuracy', () => {
     const engine = new RealityContextEngine({
       refreshMs: 30_000,
