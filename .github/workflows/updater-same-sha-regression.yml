@@ -1,0 +1,34 @@
+name: Updater Same-SHA Regression
+
+on:
+  push:
+    branches:
+      - fix/update-same-sha-loop
+
+permissions:
+  contents: read
+
+jobs:
+  updater-same-sha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.7.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Run updater same-SHA regression suite
+        run: |
+          pnpm exec vitest run \
+            scripts/phoenix-update-state.spec.ts \
+            scripts/phoenix-prepared-restart-bridge.spec.ts \
+            scripts/phoenix-auto-update-runtime.spec.ts \
+            scripts/phoenix-windows-supervisor.spec.ts
