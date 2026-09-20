@@ -191,16 +191,25 @@ try
     File.WriteAllText(Path.Combine(sourceTestRoot, "phoenix-windows.cmd"), "@echo off");
     File.WriteAllText(Path.Combine(sourceTestRoot, "scripts", "phoenix-windows-supervisor.mjs"), "// supervisor");
     True(DesktopSourceCheckout.IsRunnable(sourceTestRoot), "bootstrappable Phoenix source is recognized without node_modules or .git", failures);
+    Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", null);
+    False(DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible: false), "normal installed desktop does not auto-boot a discovered source checkout", failures);
+    True(DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible: true), "developer console explicitly enables local source mode", failures);
 
     // Explicit/configured source roots are candidates, but discovery alone must not persist
     // them as the trusted backend until the runtime stability handshake succeeds.
     Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", sourceTestRoot);
+    True(DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible: false), "PHOENIX_SOURCE_ROOT explicitly enables source mode", failures);
     Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "configured bootstrappable source resolves before managed bootstrap", failures);
     False(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)), "unverified source is not persisted as the backend of record", failures);
 
     DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
     Equal(Path.GetFullPath(sourceTestRoot), File.ReadAllText(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)).Trim(), "verified backend root is persisted", failures);
     Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "verified backend root resolves first on later launches", failures);
+
+    DesktopSourceCheckout.ForgetVerified(sourceInstallRoot);
+    False(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)), "failed source fallback clears verified backend pointer", failures);
+    False(File.Exists(DesktopSourceCheckout.LegacyPointerPath(sourceInstallRoot)), "failed source fallback clears legacy backend pointer", failures);
+    DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
 
     var conventionalRoots = DesktopSourceCheckout.ConventionalRoots(@"C:\Users\arisn");
     True(
