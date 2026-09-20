@@ -210,19 +210,24 @@ function serviceCapabilities(ctx: Context): string[] {
   return services.filter(name => get.call(ctx, name) !== undefined)
 }
 
-function nearestProbability(payload: Record<string, unknown>, currentTime: string | undefined): number | null {
+function nearestProbability(payload: Record<string, unknown>, currentEpochSeconds: number | undefined): number | null {
   const hourly = payload.hourly
   if (hourly === null || typeof hourly !== 'object' || Array.isArray(hourly)) return null
   const record = hourly as Record<string, unknown>
   if (!Array.isArray(record.time) || !Array.isArray(record.precipitation_probability)) return null
-  const times = record.time.filter((value): value is string => typeof value === 'string')
+  const times = record.time
   const values = record.precipitation_probability
   if (times.length === 0 || values.length === 0) return null
-  const target = currentTime === undefined ? Date.now() : Date.parse(currentTime)
+  const target = currentEpochSeconds === undefined ? Date.now() : currentEpochSeconds * 1000
   let best = -1
   let distance = Number.POSITIVE_INFINITY
   for (let index = 0; index < times.length; index += 1) {
-    const parsed = Date.parse(times[index]!)
+    const raw = times[index]
+    const parsed = typeof raw === 'number'
+      ? raw * 1000
+      : typeof raw === 'string'
+        ? Date.parse(raw)
+        : Number.NaN
     if (!Number.isFinite(parsed)) continue
     const nextDistance = Math.abs(parsed - target)
     if (nextDistance < distance) {
@@ -256,6 +261,7 @@ async function fetchWeather(config: RealityContextConfig): Promise<WeatherPayloa
     daily: 'sunrise,sunset',
     forecast_days: '1',
     timezone: 'auto',
+    timeformat: 'unixtime',
   })
   const response = await fetch(`https://api.open-meteo.com/v1/forecast?${query.toString()}`, {
     signal: AbortSignal.timeout(5_000),
@@ -270,20 +276,25 @@ async function fetchWeather(config: RealityContextConfig): Promise<WeatherPayloa
   const daily = dailyRaw !== null && typeof dailyRaw === 'object' && !Array.isArray(dailyRaw)
     ? dailyRaw as Record<string, unknown>
     : {}
-  const first = (value: unknown): string | null =>
-    Array.isArray(value) && typeof value[0] === 'string' ? value[0] : null
-  const currentTime = stringField(current, 'time') ?? undefined
+  const firstEpochIso = (value: unknown): string | null => {
+    if (!Array.isArray(value)) return null
+    const first = value[0]
+    if (typeof first === 'number' && Number.isFinite(first)) return new Date(first * 1000).toISOString()
+    if (typeof first === 'string' && first.length > 0) return first
+    return null
+  }
+  const currentEpochSeconds = numberField(current, 'time') ?? undefined
   return {
     temperatureC: numberField(current, 'temperature_2m'),
     apparentTemperatureC: numberField(current, 'apparent_temperature'),
     humidityPercent: numberField(current, 'relative_humidity_2m'),
     precipitationMm: numberField(current, 'precipitation'),
     rainMm: numberField(current, 'rain'),
-    precipitationProbabilityPercent: nearestProbability(payload, currentTime),
+    precipitationProbabilityPercent: nearestProbability(payload, currentEpochSeconds),
     windKph: numberField(current, 'wind_speed_10m'),
     weatherCode: numberField(current, 'weather_code'),
-    sunrise: first(daily.sunrise),
-    sunset: first(daily.sunset),
+    sunrise: firstEpochIso(daily.sunrise),
+    sunset: firstEpochIso(daily.sunset),
     timezone: typeof payload.timezone === 'string' ? payload.timezone : null,
   }
 }
