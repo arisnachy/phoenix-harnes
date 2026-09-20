@@ -53,24 +53,27 @@ if ($nodeMajor -lt 22 -or ($nodeMajor -eq 22 -and $nodeMinor -lt 19)) {
   throw "Phoenix requires Node.js 22.19+ (found $nodeVersion)."
 }
 
+$freshInstall = $false
 if (Test-Path $RuntimeRoot) {
   if (-not (Test-Path (Join-Path $RuntimeRoot '.git'))) {
     throw "Refusing to modify runtime without Git metadata: $RuntimeRoot"
   }
 
-  # Older desktop builds created the ready marker before pnpm install/build finished.
-  # If the marker is incomplete, treat the directory as an interrupted managed install
-  # and resume instead of declaring it healthy or refusing to repair it.
+  # Desktop 1.0.13+ never resumes an incomplete managed install. If this script
+  # sees one anyway, fail fast so the native launcher can quarantine it and retry
+  # from a clean directory instead of spending minutes inside stale pnpm/build state.
   if (-not (Test-ReadyMarker)) {
-    New-Item -ItemType File -Force -Path $installingMarker | Out-Null
+    throw 'Managed runtime is incomplete; recreate it from a clean bootstrap.'
   }
 } else {
+  $freshInstall = $true
   $parent = Split-Path -Parent $RuntimeRoot
   New-Item -ItemType Directory -Force -Path $parent | Out-Null
   $staging = "$RuntimeRoot.installing-$PID"
   Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
   try {
-    & git clone --branch $Channel --single-branch $Repository $staging
+    Write-Host '[PHOENIX BOOTSTRAP] cloning'
+    & git clone --filter=blob:none --branch $Channel --single-branch $Repository $staging
     if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
     New-Item -ItemType File -Force -Path (Join-Path $staging '.phoenix-managed-installing') | Out-Null
     Move-Item -Path $staging -Destination $RuntimeRoot
@@ -91,22 +94,25 @@ try {
     throw 'Managed runtime contains local changes; desktop self-heal will recreate it.'
   }
 
-  # A recoverable runtime may come from an older interrupted install. Always move it to the
-  # current promoted channel before dependencies/build so a repair never resurrects stale code.
-  & git fetch origin $Channel
-  if ($LASTEXITCODE -ne 0) { throw 'git fetch of the current Phoenix channel failed' }
+  if (-not $freshInstall) {
+    Write-Host '[PHOENIX BOOTSTRAP] syncing'
+    & git fetch origin $Channel
+    if ($LASTEXITCODE -ne 0) { throw 'git fetch of the current Phoenix channel failed' }
 
-  & git checkout $Channel
-  if ($LASTEXITCODE -ne 0) { throw 'git checkout of the Phoenix channel failed' }
+    & git checkout $Channel
+    if ($LASTEXITCODE -ne 0) { throw 'git checkout of the Phoenix channel failed' }
 
-  & git reset --hard "origin/$Channel"
-  if ($LASTEXITCODE -ne 0) { throw 'git reset to the promoted Phoenix channel failed' }
+    & git reset --hard "origin/$Channel"
+    if ($LASTEXITCODE -ne 0) { throw 'git reset to the promoted Phoenix channel failed' }
+  }
 
   New-Item -ItemType File -Force -Path $installingMarker | Out-Null
 
-  & corepack pnpm install --frozen-lockfile
+  Write-Host '[PHOENIX BOOTSTRAP] installing'
+  & corepack pnpm install --frozen-lockfile --prefer-offline --reporter=append-only
   if ($LASTEXITCODE -ne 0) { throw 'pnpm install failed' }
 
+  Write-Host '[PHOENIX BOOTSTRAP] building'
   & corepack pnpm run build
   if ($LASTEXITCODE -ne 0) { throw 'Phoenix build failed' }
 
@@ -117,6 +123,7 @@ try {
     "installedAt=$([DateTimeOffset]::UtcNow.ToString('o'))"
   ) -Encoding UTF8
   Remove-Item -Force $installingMarker -ErrorAction SilentlyContinue
+  Write-Host '[PHOENIX BOOTSTRAP] ready'
 } finally {
   Pop-Location
 }
