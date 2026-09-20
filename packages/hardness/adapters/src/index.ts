@@ -23,6 +23,7 @@ import { acquireProactivityEngine } from './proactivity-registry.ts'
 import { acquireRealityContext } from './reality-registry.ts'
 import { installRealityProtocol } from './reality-protocol.ts'
 import { installRealityContextProjection, realityConfigFromEnvironment, type RealityPromptRegistrar } from './reality-context.ts'
+import { createRealitySnapshotTool } from './reality-tool.ts'
 import { createProactivityExecutor, installProactivityRuntime } from './proactivity-runtime.ts'
 import { createProactivityTools } from './proactivity-tools.ts'
 import { createHardnessTool } from './hardness-tool.ts'
@@ -115,6 +116,7 @@ export { HUMAN_PRESENCE_PROTOCOL, installHumanPresenceProtocol } from './presenc
 export { CAPABILITY_OPERATING_PROTOCOL, installCapabilityOperatingProtocol } from './capability-protocol.ts'
 export { REALITY_OPERATING_PROTOCOL, installRealityProtocol } from './reality-protocol.ts'
 export { RealityContextEngine, installRealityContextProjection, realityConfigFromEnvironment } from './reality-context.ts'
+export { createRealitySnapshotTool } from './reality-tool.ts'
 export type { RealityContextConfig, RealityPromptRegistrar, RealitySignal, RealitySnapshot } from './reality-context.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
@@ -255,6 +257,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
       disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
+      disposers.push(ctx.tools.register(createRealitySnapshotTool(reality.engine, ctx)))
       for (const tool of createProactivityTools(proactivity.engine)) {
         disposers.push(ctx.tools.register(tool))
       }
