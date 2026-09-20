@@ -1,5 +1,7 @@
 # Blender Lab MCP for PHOENIX
 
+English | [中文](README.zh.md)
+
 This is PHOENIX's checked-in integration for the **official Blender Lab MCP server** from Blender Foundation. It does not use the unrelated third-party PyPI package that is also named `blender-mcp`.
 
 ## Requirements
