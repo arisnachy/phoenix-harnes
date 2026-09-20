@@ -146,6 +146,33 @@ describe('ExperienceLearningEngine', () => {
     expect(isolated?.projectId).toBe('clinic-b')
   })
 
+  it('skips weak same-project history after a stronger task match is known', () => {
+    const strong = aggregateWith('repeated', {
+      taskFingerprint: fingerprintTask('Fill monthly clinic quality survey'),
+      taskSummary: 'Fill monthly clinic quality survey',
+      projectId: 'clinic',
+      lastObservedAt: 30,
+    })
+    const weak = aggregateWith('novel', {
+      key: fingerprintKey(fingerprintTask('Compile TypeScript package')),
+      taskFingerprint: fingerprintTask('Compile TypeScript package'),
+      taskSummary: 'Compile TypeScript package',
+      projectId: 'clinic',
+      lastObservedAt: 20,
+    })
+    const engine = new ExperienceLearningEngine()
+    engine.restore([recordFor(strong), recordFor(weak)])
+    engine.beginTask({
+      sessionId: 's',
+      text: 'Fill the monthly clinic quality survey',
+      occurredAt: 100,
+      projectId: 'clinic',
+    })
+    const state = engine.completeVerified('s', 150)
+    expect(state?.key).toBe(strong.key)
+    expect(state?.runs).toBe(2)
+  })
+
   it('can retain candidate maturity when repetition exists without enough verified success', () => {
     const seed = aggregateWith('repeated', {
       runs: 2,
@@ -250,6 +277,11 @@ describe('ExperienceLearningEngine', () => {
     expect(importance.get('habitual')).toBe(0.96)
     expect(importance.get('validated')).toBe(0.9)
     expect(importance.get('novel')).toBe(0.76)
+
+    const projectState = aggregateWith('novel', { projectId: 'clinic' })
+    const projectInput = experienceMemoryInput(projectState, { sessionId: 's', eventSeq: 4, occurredAt: 120 })
+    expect(projectInput.projectId).toBe('clinic')
+    expect(decodeExperienceAggregate(recordFor(projectState))?.projectId).toBe('clinic')
   })
 
   it('supports zero-run diagnostic serialization without division artifacts', () => {
@@ -306,6 +338,7 @@ describe('ExperienceLearningEngine', () => {
       { ...valid, value: JSON.stringify({ ...aggregateWith('novel'), recentRuns: 'bad' }) },
       { ...valid, value: JSON.stringify({ ...aggregateWith('novel'), recentRuns: Array.from({ length: 13 }, () => aggregateWith('novel').recentRuns[0]) }) },
       { ...valid, value: JSON.stringify({ ...aggregateWith('novel'), recentRuns: [{}] }) },
+      { ...valid, value: JSON.stringify({ ...aggregateWith('novel'), recentRuns: [null] }) },
     ]
     const validRun = aggregateWith('novel').recentRuns[0]!
     for (const field of ['occurredAt', 'wallTimeMs', 'totalTokens', 'toolCalls', 'failedToolCalls', 'retries', 'userInterventions'] as const) {
