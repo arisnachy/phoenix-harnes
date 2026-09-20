@@ -89,7 +89,7 @@ function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntime
     `Task: ${input.task.title}`,
     `Occurrence: ${input.scheduledFor}`,
     `Idempotency key: ${input.idempotencyKey}`,
-    `Instruction: ${input.instruction}`,
+    `Instruction: ${input.instruction}`,\n    'Execution-time reality: use the current Phoenix Reality Context. Re-check any stale or missing time, timezone, calendar, location, weather/daylight, network, device-resource, connector-auth, provider/quota, or update-state fact that materially affects this task before acting.',
   ]
   if (input.preparationResult !== undefined) lines.push(`Prepared result: ${input.preparationResult}`)
   if (conditionEvidence !== undefined) lines.push(`Condition verified true: ${conditionEvidence}`)
@@ -146,7 +146,7 @@ function conditionWatchPrompt(input: ProactivityExecution): ContentBlock[] {
       + `Scheduled check: ${input.scheduledFor}\n`
       + `Condition: ${input.task.condition}\n`
       + `Recent checks: ${JSON.stringify(recent)}\n\n`
-      + 'Evaluate the condition against current evidence. Use only the available read-only tools. '
+      + 'Evaluate the condition against current evidence. Use the current Phoenix Reality Context and refresh any stale or missing fact that materially affects the condition. Use only the available read-only tools. '
       + 'Do not send messages, edit state, install connectors, schedule work, or perform side effects. '
       + 'Return met=true only when current evidence clearly satisfies the condition. '
       + 'If evidence is missing, stale, ambiguous, or the condition is not yet true, return met=false. '
