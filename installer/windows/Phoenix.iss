@@ -57,3 +57,21 @@ function InitializeSetup(): Boolean;
 begin
   Result := True;
 end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  { Phoenix intentionally hides to tray on a normal close. During upgrades, guarantee that }
+  { the old native shell and its Node child tree are gone before replacing the payload, so }
+  { the post-install launch cannot signal a stale single-instance mutex owner. }
+  Exec(
+    ExpandConstant('{sys}\taskkill.exe'),
+    '/IM "Phoenix.exe" /T /F',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode);
+  Sleep(300);
+  Result := '';
+end;
