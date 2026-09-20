@@ -62,6 +62,7 @@ interface ImageSubprocessService {
     }
     graceMs: number
     signal?: AbortSignal
+    env?: NodeJS.ProcessEnv
   }): ImageSubprocessHandle
 }
 
@@ -224,6 +225,21 @@ function mediaTypeOf(path: string): ImageMediaType | undefined {
 function codexHome(): string {
   const configured = process.env.CODEX_HOME?.trim()
   return configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.codex')
+}
+
+/**
+ * Phoenix shares the user's real Codex home (auth/config/sessions) but keeps
+ * transactional SQLite state in a Phoenix-owned directory. CODEX_SQLITE_HOME
+ * is the public Codex seam for exactly this split-state layout.
+ */
+export async function phoenixCodexSqliteHome(purpose = 'image'): Promise<string> {
+  const configured = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
+  const root = configured && configured.length > 0
+    ? resolve(configured)
+    : join(codexHome(), 'phoenix-runtime', 'sqlite')
+  const directory = join(root, purpose)
+  await mkdir(directory, { recursive: true })
+  return directory
 }
 
 const DEFAULT_CLOUDFLARE_IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell'
@@ -650,12 +666,14 @@ async function runCodex(
   signal: AbortSignal,
 ): Promise<ProcessResult> {
   const subprocess = servicesOf(ctx).subprocess
-  const executable = await subprocess.resolveExecutable('codex', undefined, signal)
+  const home = codexHome()
+  const sqliteHome = await phoenixCodexSqliteHome('image')
+  const executable = await subprocess.resolveExecutable('codex', {
+    CODEX_HOME: home,
+    CODEX_SQLITE_HOME: sqliteHome,
+  }, signal)
   const handle = subprocess.spawn({
-    // Phoenix image work is ephemeral and does not need Codex's SQLite thread/log
-    // state. Disabling it keeps the user's authenticated CODEX_HOME but avoids
-    // contention/corruption in state_5.sqlite and logs_2.sqlite.
-    argv: [executable, '--disable', 'sqlite', ...argvTail],
+    argv: [executable, ...argvTail],
     cwd: process.cwd(),
     stdio: {
       stdin: stdin === undefined ? 'ignore' : { data: stdin },
@@ -664,6 +682,10 @@ async function runCodex(
     },
     graceMs: 2_000,
     signal,
+    env: {
+      CODEX_HOME: home,
+      CODEX_SQLITE_HOME: sqliteHome,
+    },
   })
   const outcome = await handle.done
   return {
