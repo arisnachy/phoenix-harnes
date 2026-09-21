@@ -322,6 +322,53 @@ internal static class DesktopSourceCheckout
     }
 }
 
+internal static class DesktopPhoenixLoopback
+{
+    internal const string ShellBrowserArguments = "--no-proxy-server";
+    internal const string ShellProfileGeneration = "shell-v2";
+
+    internal static string ShellProfilePath(string installRoot) =>
+        Path.Combine(installRoot, "webview", ShellProfileGeneration);
+
+    internal static bool IsPhoenixOrigin(Uri target, Uri canonical)
+    {
+        if (!target.Scheme.Equals(canonical.Scheme, StringComparison.OrdinalIgnoreCase)
+            || target.Port != canonical.Port)
+            return false;
+
+        return IsLoopbackHost(target.Host);
+    }
+
+    internal static bool IsLoopbackHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return false;
+
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var normalizedHost = host.Trim('[', ']');
+        if (System.Net.IPAddress.TryParse(normalizedHost, out var address))
+            return System.Net.IPAddress.IsLoopback(address);
+
+        return false;
+    }
+
+    internal static Uri NavigationBase(Uri canonical, int retryCount)
+    {
+        // Start with the explicit IPv4 loopback address. If Chromium reports repeated transient
+        // navigation failures, alternate through localhost so Windows/proxy/VPN policies that
+        // special-case one spelling cannot strand the desktop shell.
+        if (retryCount >= 2 && retryCount % 2 == 1)
+        {
+            var builder = new UriBuilder(canonical) { Host = "localhost" };
+            return builder.Uri;
+        }
+
+        return canonical;
+    }
+}
+
 internal static class DesktopNavigationRecovery
 {
     internal const int MaxRetries = 8;
