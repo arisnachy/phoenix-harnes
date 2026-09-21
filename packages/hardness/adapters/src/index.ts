@@ -134,8 +134,6 @@ export interface Config {
   modelTools?: boolean
   /** Independently review verified substantive ordinary mutations before turn completion. */
   judgeOrdinaryMutations?: boolean
-  /** Maximum independent ordinary-task judge passes; pass two is only for repair/rejudge. */
-  maxOrdinaryJudgePasses?: number
   /** Durable proactive-task ledger. Empty/omitted uses ~/.dsh/phoenix-tasks.json; :memory: is test-only. */
   taskLedgerPath?: string
   /** How often the host checks for due scheduled work. */
@@ -155,7 +153,6 @@ export const Config: z<Config> = z.object({
   judgeProvider: z.string().default('spawn'),
   modelTools: z.boolean().default(true),
   judgeOrdinaryMutations: z.boolean().default(true),
-  maxOrdinaryJudgePasses: z.number().step(1).min(1).max(3).default(2),
   taskLedgerPath: z.string().default(''),
   taskPollMs: z.number().default(15_000),
   privateWorkProvider: z.string().default('spawn'),
@@ -267,7 +264,6 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         disposers.push(installOrdinaryCompletionJudgeBridge(ctx, {
           subagents,
           provider: config.judgeProvider?.trim() || 'spawn',
-          maxPasses: config.maxOrdinaryJudgePasses ?? 2,
         }))
       }
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
