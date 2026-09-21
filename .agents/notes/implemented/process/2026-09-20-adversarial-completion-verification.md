@@ -14,7 +14,7 @@ The fixed harness identity now makes completion evidence adversarial and entrypo
 
 Broad input spaces should use property, fuzz, or metamorphic checks when those provide better coverage than a short example list. A directly observed failure overrides a green suite. User-controlled input must end in a valid result or a domain-classified failure; implementation exceptions, raw tracebacks, partial writes, and silent corruption do not cross the user-facing boundary. Internal diagnostics remain detailed.
 
-Every discovered failure requires three things before completion: repair the root cause, add a regression test that would have caught it, and rerun the affected real entrypoint. Substantial deliverables use an independent verifier or fresh subagent when available so the author is not the sole judge of its own tests.
+Every discovered failure requires three things before completion: repair the root cause, add a regression test that would have caught it, and rerun the affected real entrypoint. Substantial multi-step deliverables use a durable goal and its independent completion judge when available; otherwise they use a fresh independent verifier so the author is not the sole judge of its own tests.
 
 The repository AGENTS rule mirrors the runtime contract so coding agents follow the same standard while changing PHOENIX itself. The system-prompt test pins the critical language so weakening the contract is an explicit reviewed change.
 
