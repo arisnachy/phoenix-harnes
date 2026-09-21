@@ -60,7 +60,7 @@ export interface SpeechOutput {
   dispose(): void
 }
 
-interface PlannedSpeechSegment {
+export interface PlannedSpeechSegment {
   readonly text: string
   readonly end: number
 }
@@ -124,7 +124,7 @@ function resolveScope(scope: SpeechOutputScope | undefined): SpeechOutputScope |
 }
 
 /** Find the next safe semantic boundary in a growing transcript. */
-function nextSpeechSegment(text: string, from: number, final: boolean): PlannedSpeechSegment | undefined {
+export function nextStreamingSpeechSegment(text: string, from: number, final: boolean): PlannedSpeechSegment | undefined {
   let start = from
   while (start < text.length && /\s/u.test(text[start] ?? '')) start += 1
   if (start >= text.length) return undefined
@@ -263,7 +263,7 @@ export function createSpeechOutput(
     transcript = next
 
     while (true) {
-      const planned = nextSpeechSegment(transcript, queuedThrough, final)
+      const planned = nextStreamingSpeechSegment(transcript, queuedThrough, final)
       if (planned === undefined) break
       queuedThrough = planned.end
       enqueue(planned.text)
@@ -290,7 +290,7 @@ export function createSpeechOutput(
       clear(false)
       transcript = normalized
       while (true) {
-        const planned = nextSpeechSegment(transcript, queuedThrough, true)
+        const planned = nextStreamingSpeechSegment(transcript, queuedThrough, true)
         if (planned === undefined) break
         queuedThrough = planned.end
         enqueue(planned.text)
