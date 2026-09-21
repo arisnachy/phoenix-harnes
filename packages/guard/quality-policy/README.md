@@ -77,7 +77,7 @@ The correction is appended as new next-step context after the reusable prefix. I
 
 ## Known Limitations and Deferred Work
 
-- Classification is intentionally heuristic and local. A novel mutating MCP tool whose name and arguments match none of the current patterns may not invalidate evidence until its adapter declares quality metadata.
+- Classification is intentionally heuristic and local. Transport/provider namespaces such as `mcp__GitHub__update_file`, `github.update_file`, and `shell:bash` are normalized before classification, but a novel mutating operation whose operation name and arguments match none of the current patterns may still require adapter-declared quality metadata.
 - Freshness is generation-based, not content-hash-based. It is conservative and O(1); content-addressed evidence is deferred until the filesystem/tool metadata seam can expose authoritative changed-input hashes without extra I/O.
 - The policy tracks one direct-human task per agent, not a cross-session global failure-learning database. Durable tool/session history still preserves failures for the model; a compact cross-task failure index belongs in the learning subsystem rather than this guard.
 - Visual quality still needs the browser/rendering capability to produce evidence; this guard only decides whether observed evidence is fresh enough to finish.
