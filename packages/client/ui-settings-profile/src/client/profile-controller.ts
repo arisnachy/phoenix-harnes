@@ -251,7 +251,7 @@ export class UserProfileForm {
       ok = false
     }
     try {
-      await this.scope.set('connectorMode', values.connectorMode)
+      await this.scope.set('connectorMode', this.draft.connectorMode)
     } catch {
       ok = false
     }
