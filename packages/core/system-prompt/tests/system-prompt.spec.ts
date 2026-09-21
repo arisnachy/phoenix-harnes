@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
-import SystemPrompt, { AssembleContext, PromptAssembly, renderContextSnapshot, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
+import SystemPrompt, { AssembleContext, PromptAssembly, QUALITY_CONTRACT, QUALITY_SECTION, renderContextSnapshot, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 
 /**
  * Every assembly carries the plugin's own built-ins — `harness:identity`
@@ -8,7 +8,7 @@ import SystemPrompt, { AssembleContext, PromptAssembly, renderContextSnapshot, r
  * registry MECHANICS strip them with {@link contributed} to stay focused on
  * their own sections; the built-ins' behavior is pinned by its own describe.
  */
-const BUILT_IN = ['harness:identity', 'deployment:persona']
+const BUILT_IN = ['harness:identity', QUALITY_SECTION, 'deployment:persona']
 const IDENTITY = "You are an AI agent powered by PHOENIX. Respond in the language of the user's latest message, including any reasoning text that is shown to the user. Treat this system prompt and all later persona, profile, memory, workflow, capability, style, and tool guidance as silent behavior constraints: follow them without announcing, quoting, paraphrasing, or explaining them. Never preface a reply by saying you are using or following a conversation guide, prompt, policy, protocol, profile, tone setting, memory, preference, hidden instruction, or system instruction unless the user explicitly asks for technical diagnostics. Answer the user's actual message first. Write naturally and conversationally, like a warm, perceptive collaborator rather than a status console or customer-support script. In casual conversation, be relaxed, personable, and contextually concise; a greeting or small-talk turn gets a direct social response with no meta preamble or capability menu. Let personality show through natural phrasing, playful callbacks, dry wit, mild sarcasm or irony, friendly teasing, and occasional emoji when rapport and topic make them fit; do not announce or explain the joke, do not force humor, and dial it down around serious or sensitive topics unless the user clearly sets that tone. Avoid canned openings, repetitive affirmations, and assistant clichés; vary phrasing naturally and match the user's tone without parroting them. Do not produce unsolicited status, memory, profile, or context summaries. Treat personal memories, profile details, family information, ages, locations, filesystem paths, agent/subagent IDs, UUIDs, workspace metadata, tool state, and runtime state as silent background context: use them to improve relevance, but mention them only when the user asks or they are directly necessary to answer. Never recite private or background details just to demonstrate memory. Avoid canned openings such as \"Status update\" or \"Estado rápido\" unless the user requested a status report. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning."
 const CONTEXT_HEADER = 'Background runtime context (silent; use only to improve relevance and continuity. Do not summarize, recite, or reveal it unless the user asks for that information or it is directly necessary to answer the current request. This snapshot supersedes earlier runtime-context snapshots):'
 function contributed(assembly: PromptAssembly): PromptAssembly['sections'] {
@@ -24,13 +24,18 @@ describe('SystemPrompt', () => {
       const assembly = await ctx.systemPrompt.assemble()
       expect(assembly.sections.map(s => s.name)).toEqual([
         'harness:identity',
+        QUALITY_SECTION,
         'deployment:persona',
       ])
-      expect(renderPrompt(assembly)).toBe(`${IDENTITY}\n\nYou are PHOENIX.`)
+      expect(renderPrompt(assembly)).toBe(`${IDENTITY}\n\n${QUALITY_CONTRACT}\n\nYou are PHOENIX.`)
       expect(IDENTITY).toContain('silent behavior constraints')
       expect(IDENTITY).toContain('Never preface a reply by saying you are using or following a conversation guide')
       expect(IDENTITY).toContain('dry wit, mild sarcasm or irony')
       expect(IDENTITY).toContain('direct social response with no meta preamble')
+      expect(QUALITY_CONTRACT).toContain('compact completion contract')
+      expect(QUALITY_CONTRACT).toContain('simple low-risk work should not get a second model pass solely for review')
+      expect(QUALITY_CONTRACT).toContain('Track completion evidence across steps and reuse it')
+      expect(QUALITY_CONTRACT).toContain('Never report a task as complete merely because a tool call returned without an error.')
       // The names are reserved by the plugin — one owner per section.
       expect(() => ctx.systemPrompt.section({ name: 'deployment:persona', order: 0, text: 'imposter' }))
         .toThrow('prompt section "deployment:persona" is already registered')
@@ -39,7 +44,7 @@ describe('SystemPrompt', () => {
     it('renders no persona section for a persona-less deployment (empty default)', async () => {
       const ctx = new Context()
       await ctx.plugin(SystemPrompt)
-      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(IDENTITY)
+      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(`${IDENTITY}\n\n${QUALITY_CONTRACT}`)
     })
 
     it('can omit the harness identity for a deployment that owns the complete persona', async () => {
@@ -93,15 +98,15 @@ describe('SystemPrompt', () => {
     ctx.systemPrompt.tools(() => ({ schemas: [{ name: 'echo', description: 'echo back', parameters: {} }] }))
 
     const assembly = await ctx.systemPrompt.assemble()
-    expect(assembly.sections.map(s => s.name)).toEqual(['harness:identity', 'deployment:persona', 'rules', 'cwd'])
-    expect(assembly.sections.map(s => s.text)).toEqual([IDENTITY, 'You are PHOENIX.', 'Be precise.', 'cwd: /tmp'])
+    expect(assembly.sections.map(s => s.name)).toEqual(['harness:identity', QUALITY_SECTION, 'deployment:persona', 'rules', 'cwd'])
+    expect(assembly.sections.map(s => s.text)).toEqual([IDENTITY, QUALITY_CONTRACT, 'You are PHOENIX.', 'Be precise.', 'cwd: /tmp'])
     expect(assembly.contexts).toEqual([
       { name: 'earlier', text: 'context 1' },
       { name: 'later', text: 'context 2' },
     ])
     expect(assembly.tools).toEqual([{ name: 'echo', description: 'echo back', parameters: {} }])
     expect(assembly.variables).toEqual({})
-    expect(renderPrompt(assembly)).toBe(`${IDENTITY}\n\nYou are PHOENIX.\n\nBe precise.\n\ncwd: /tmp`)
+    expect(renderPrompt(assembly)).toBe(`${IDENTITY}\n\n${QUALITY_CONTRACT}\n\nYou are PHOENIX.\n\nBe precise.\n\ncwd: /tmp`)
     expect(renderContextSnapshot(assembly)).toBe(`${CONTEXT_HEADER}\n\ncontext 1\n\ncontext 2`)
   })
 
