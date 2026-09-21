@@ -434,6 +434,13 @@ internal sealed class PhoenixDesktopWindow : Form
         if (initialized) return;
         initialized = true;
 
+        // CoreWebView2Environment.CreateAsync can spend several seconds in synchronous native
+        // startup before returning an incomplete Task on a cold profile. Yield once so the Shown
+        // event can finish and Windows can paint the Phoenix startup surface before WebView2 does
+        // any cold-start work. The installer pre-warms this profile, but portable/direct EXE
+        // launches must remain visibly responsive too.
+        await Task.Yield();
+
         try
         {
             var shellProfile = DesktopPhoenixLoopback.ShellProfilePath(Program.InstallRoot);
