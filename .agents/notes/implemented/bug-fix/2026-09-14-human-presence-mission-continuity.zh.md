@@ -14,13 +14,15 @@ PHOENIX 已经获得更强的工作流、任务、记忆和工具基础设施，
 
 普通对话不再把实现仪式当作对话内容。人性化存在感契约禁止主动宣布技能名称、系统提示片段、隐藏推理、子代理数量、路由、压缩、内部目录、上下文窗口维护或原始工具标记，除非用户明确要求技术诊断。HARDNESS 在任务层重复这一要求，并按目标和交付物理解请求，而不是只按孤立的字面命令执行。一个回合结束、自动压缩、重启、模型切换或更新都只是连续性事件，而不是任务完成；活动任务必须从持久化目标和已验证状态继续，直到请求的结果得到验证，或真正的外部依赖阻止继续。
 
+基础 `dsh-system-prompt` 组装现在还在 `harness:identity` 之后固定加入 `harness:quality` 段。它要求模型形成紧凑的完成契约，复用已经取得的证据，选择成本最低且可靠的执行路径，并根据复杂度、不确定性、后果和可逆性调整验证强度；简单低风险任务不得为了复核而强制增加第二次模型调用。发生失败后应改变策略，并尽可能在真正能够观察正确性的原生表面验证产物。它还明确规定：工具调用没有报错本身并不足以证明任务完成。该机制保持为提示词指导而不是 agent loop 逻辑，因此可以跨供应商生效，同时不会无条件增加模型调用，也不会修改核心循环。
+
 所有完整的内置 Agent preset 都暴露相同的学习记忆消费者：`standard`、`code` 和 `cordis` 都挂载 `@phoenix-ai/dsh-tool-session-learning`，因此在这些模式之间切换时会保留自动连续性上下文、记忆检索工具以及自主偏好/纠正整理。刻意受限的 `minimal` preset 仍保持仅两个工具并抑制运行时上下文，因此不挂载记忆工具。
 
 自动压缩仍保留在会话节点模型中，用于历史、重放和诊断，但其 `visibility` 设为 `hidden`，因此不再把类似 `Context compacted` 的技术行插入人类对话流。显式 `/compact` 仍保持可见，因为这是用户直接请求的操作。
 
 ## 验证
 
-`packages/profile/user-profile/tests/user-profile.spec.ts` 固定验证已配置的女性呈现不会被无关配置更新重置，并固定自然对话指导、克制讽刺以及记忆检索时基于证据的实体归属。`apps/cli/tests/full-preset-memory-parity.spec.ts` 固定验证 `standard`、`code` 和 `cordis` 挂载学习记忆消费者，同时 `minimal` 保持不挂载。`packages/hardness/adapters/tests/protocol.spec.ts` 固定验证静默编排、面向目标的执行，以及跨回合、压缩、重启、模型切换和更新的任务继续。`packages/client/ui-conversation/tests/automatic-compaction-visibility.client.spec.ts` 固定验证自动压缩保留为技术状态，但在聊天中不可见。
+`packages/profile/user-profile/tests/user-profile.spec.ts` 固定验证已配置的女性呈现不会被无关配置更新重置，并固定自然对话指导、克制讽刺以及记忆检索时基于证据的实体归属。`apps/cli/tests/full-preset-memory-parity.spec.ts` 固定验证 `standard`、`code` 和 `cordis` 挂载学习记忆消费者，同时 `minimal` 保持不挂载。`packages/hardness/adapters/tests/protocol.spec.ts` 固定验证静默编排、面向目标的执行，以及跨回合、压缩、重启、模型切换和更新的任务继续。`packages/core/system-prompt/tests/system-prompt.spec.ts` 固定验证 `identity → quality → persona` 顺序、证据复用指导、低风险单次执行快速路径，以及“工具调用成功本身不能作为完成证据”的规则。`packages/client/ui-conversation/tests/automatic-compaction-visibility.client.spec.ts` 固定验证自动压缩保留为技术状态，但在聊天中不可见。
 
 ## 备选方案
 
@@ -36,4 +38,4 @@ PHOENIX 已经获得更强的工作流、任务、记忆和工具基础设施，
 
 ## 影响
 
-模型提示增加一个有边界、稳定的人性化存在感区块以及任务连续性规则，代价是轻微增加提示长度，换来跨供应商的一致身份和交互行为。自动压缩在正常聊天中不可见，但仍保留在内部投影以及显式手动压缩中。三个完整的内置 preset 具备相同的记忆能力，因此在它们之间切换不会再丢失记忆上下文；受限的 `minimal` preset 继续保持更小的能力范围。记忆、多模态感知、学习和自动化仍取决于实际挂载的能力，记忆证据不确定时必须明确保留不确定性，而不能转化为虚构的个人事实。
+模型提示增加一个有边界、稳定的人性化存在感区块、任务连续性规则和紧凑的执行质量契约，代价是轻微增加提示长度，换来跨供应商的一致身份、交互行为和完成纪律，同时不会无条件增加复核模型调用。自动压缩在正常聊天中不可见，但仍保留在内部投影以及显式手动压缩中。三个完整的内置 preset 具备相同的记忆能力，因此在它们之间切换不会再丢失记忆上下文；受限的 `minimal` preset 继续保持更小的能力范围。记忆、多模态感知、学习和自动化仍取决于实际挂载的能力，记忆证据不确定时必须明确保留不确定性，而不能转化为虚构的个人事实。
