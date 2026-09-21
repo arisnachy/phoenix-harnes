@@ -42,8 +42,10 @@ export interface ReconnectConfig {
 export const RECONNECT_DEFAULTS: Required<ReconnectConfig> = Object.freeze({
   enabled: true,
   initialDelayMs: 500,
-  maxDelayMs: 30_000,
-  maxAttempts: 10,
+  maxDelayMs: 5_000,
+  // Optional infrastructure gets one automatic retry. A connector that still
+  // cannot recover must fail open so it cannot consume the primary mission.
+  maxAttempts: 1,
 })
 
 // The SDK's stdio transport owns two two-second termination grace periods.
