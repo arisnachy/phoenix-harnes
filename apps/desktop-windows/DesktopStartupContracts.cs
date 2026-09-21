@@ -347,7 +347,8 @@ internal static class DesktopPhoenixLoopback
         if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (System.Net.IPAddress.TryParse(host, out var address))
+        var normalizedHost = host.Trim('[', ']');
+        if (System.Net.IPAddress.TryParse(normalizedHost, out var address))
             return System.Net.IPAddress.IsLoopback(address);
 
         return false;
