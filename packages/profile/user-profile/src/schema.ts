@@ -83,7 +83,7 @@ export function validateUserProfile(profile: UserProfileSettings): void {
     throw new TypeError(`user profile assistantGenderSource must be one of ${ASSISTANT_GENDER_SOURCES.join(', ')}`)
   }
   validateProviderOrder(profile.modelProviderOrder)
-  if (!CONNECTOR_MODES.includes(profile.connectorMode)) {
+  if (profile.connectorMode !== undefined && !CONNECTOR_MODES.includes(profile.connectorMode)) {
     throw new TypeError(`user profile connectorMode must be one of ${CONNECTOR_MODES.join(', ')}`)
   }
   if (profile.dateOfBirth !== undefined) validateDateOfBirth(profile.dateOfBirth)
@@ -154,7 +154,7 @@ function clearProfileField(profile: UserProfileSettings, field: typeof PROFILE_U
     case 'assistantGender': profile.assistantGender = DEFAULT_ASSISTANT_GENDER; break
     case 'assistantGenderSource': delete profile.assistantGenderSource; break
     case 'modelProviderOrder': delete profile.modelProviderOrder; break
-    case 'connectorMode': profile.connectorMode = DEFAULT_CONNECTOR_MODE; break
+    case 'connectorMode': delete profile.connectorMode; break
     case 'preferredName': delete profile.preferredName; break
     case 'dateOfBirth': delete profile.dateOfBirth; break
     case 'gender': delete profile.gender; break
