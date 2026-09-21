@@ -24,21 +24,31 @@ export interface Config {
   providerName: string
   /** Isolate one-shot children in Git worktrees when the parent cwd is a repository. */
   worktreeIsolation?: boolean
+  /** Replace the inherited prompt/runtime context with a compact review-only surface. */
+  reviewIsolation?: boolean
 }
 
 export const Config: z<Config> = z.object({
   providerName: z.string().default('spawn'),
   worktreeIsolation: z.boolean().default(true),
+  reviewIsolation: z.boolean().default(false),
 })
 
 class SpawnInProcessProvider implements SubagentProvider {
   readonly capabilities: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true }
   readonly inheritsParentContext = false
 
-  constructor(readonly name: string, private readonly worktreeIsolation: boolean) {}
+  constructor(
+    readonly name: string,
+    private readonly worktreeIsolation: boolean,
+    private readonly reviewIsolation: boolean,
+  ) {}
 
   start(request: ResolvedSubagentStartRequest) {
-    return startInProcessRun(request, { worktreeIsolation: this.worktreeIsolation })
+    return startInProcessRun(request, {
+      worktreeIsolation: this.worktreeIsolation,
+      reviewIsolation: this.reviewIsolation,
+    })
   }
 
   prepareContinuable(): Promise<ContinuableCreateSpec> {
@@ -47,5 +57,9 @@ class SpawnInProcessProvider implements SubagentProvider {
 }
 
 export function apply(ctx: Context, config: Config): void {
-  ctx.subagents.registerProvider(new SpawnInProcessProvider(config.providerName, config.worktreeIsolation ?? true))
+  ctx.subagents.registerProvider(new SpawnInProcessProvider(
+    config.providerName,
+    config.worktreeIsolation ?? true,
+    config.reviewIsolation ?? false,
+  ))
 }
