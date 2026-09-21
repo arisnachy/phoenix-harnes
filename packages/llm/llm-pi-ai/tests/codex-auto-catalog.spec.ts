@@ -8,11 +8,11 @@ import {
 import type { CodexDiscoveredModel } from '../src/codex-discovery.ts'
 
 describe('Codex automatic live catalog policy', () => {
-  it('respects a non-empty human-pinned model list', () => {
+  it('keeps Codex live-owned even when older settings contain a pinned list', () => {
     expect(codexCatalogIsAutomatic(undefined)).toBe(false)
     expect(codexCatalogIsAutomatic({})).toBe(true)
     expect(codexCatalogIsAutomatic({ models: [] })).toBe(true)
-    expect(codexCatalogIsAutomatic({ models: [{ id: 'pinned-model' }] })).toBe(false)
+    expect(codexCatalogIsAutomatic({ models: [{ id: 'legacy-pinned-model' }] })).toBe(true)
   })
 
   it('projects optional metadata and ignores unsupported future effort levels safely', () => {
@@ -63,16 +63,17 @@ describe('Codex automatic live catalog policy', () => {
     const pinned = { [CODEX_PROVIDER]: { models: [{ id: 'pinned-model' }] } }
 
     expect(catalog.overlayProviders(automatic)).toBe(automatic)
+    expect(catalog.overlayProviders(pinned)[CODEX_PROVIDER]?.models).toBeUndefined()
     expect(await catalog.refresh('not-codex', {})).toBeUndefined()
-    expect(await catalog.refresh(CODEX_PROVIDER, pinned[CODEX_PROVIDER])).toBeUndefined()
     expect(list).not.toHaveBeenCalled()
 
-    await expect(catalog.refresh(CODEX_PROVIDER, automatic[CODEX_PROVIDER]))
+    await expect(catalog.refresh(CODEX_PROVIDER, pinned[CODEX_PROVIDER]))
       .resolves.toEqual(['new-live-model', 'second-live-model'])
     expect(catalog.revision).toBe(1)
     expect(catalog.overlayProviders(automatic)[CODEX_PROVIDER]?.models?.map(model => model.id))
       .toEqual(['installed-only', 'new-live-model', 'second-live-model'])
-    expect(catalog.overlayProviders(pinned)).toBe(pinned)
+    expect(catalog.overlayProviders(pinned)[CODEX_PROVIDER]?.models?.map(model => model.id))
+      .toEqual(['installed-only', 'new-live-model', 'second-live-model'])
 
     now = 5
     await catalog.refresh(CODEX_PROVIDER, automatic[CODEX_PROVIDER])

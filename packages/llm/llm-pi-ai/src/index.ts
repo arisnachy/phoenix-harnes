@@ -54,6 +54,7 @@
  */
 
 import type { Context } from '@phoenix-ai/cordis'
+import type { Agent, RequestErrorAction } from '@phoenix-ai/dsh-agent'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError } from '@phoenix-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@phoenix-ai/dsh-llm'
@@ -61,7 +62,7 @@ import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoen
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
-import { CodexLiveCatalog } from './codex-live-catalog.ts'
+import { CODEX_MODEL_REFRESH_INTERVAL_MS, CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
 import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
@@ -275,6 +276,79 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
 
+  // Optional Codex reserves are a terminal recovery layer, not another static
+  // catalog. Normal provider retry policy gets first refusal; only after it
+  // delegates do we move to the next user-enabled reserve that Codex still
+  // advertises. This keeps retired ids out of both normal selection and failover.
+  const reserveFailures = new Set(['QUOTA', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT', 'EMPTY_RESPONSE', 'UNKNOWN_MODEL'])
+  const reserveState = new WeakMap<Agent, {
+    originalModel: string
+    activeModel: string
+    attempted: Set<string>
+  }>()
+  const lastCodexModel = new WeakMap<Agent, string>()
+
+  ctx.on('agent/request', async ({ agent }, next) => {
+    const resolved = await next()
+    if (resolved.provider !== CODEX_PROVIDER) {
+      reserveState.delete(agent)
+      return resolved
+    }
+
+    const state = reserveState.get(agent)
+    if (state === undefined) {
+      lastCodexModel.set(agent, resolved.model)
+      return resolved
+    }
+
+    const enabled = current().providers?.[CODEX_PROVIDER]?.reserveModels ?? []
+    const visible = codexCatalog.visibleIds()
+    const userChangedModel = resolved.model !== state.originalModel && resolved.model !== state.activeModel
+    if (userChangedModel || !enabled.includes(state.activeModel) || visible === undefined || !visible.includes(state.activeModel)) {
+      reserveState.delete(agent)
+      lastCodexModel.set(agent, resolved.model)
+      return resolved
+    }
+
+    const { reasoningEffort: _primaryEffort, ...withoutPrimaryEffort } = resolved
+    lastCodexModel.set(agent, state.activeModel)
+    return {
+      ...withoutPrimaryEffort,
+      provider: CODEX_PROVIDER,
+      model: state.activeModel,
+    }
+  })
+
+  ctx.on('agent/request-error', async ({ agent, provider, failure, signal }, next): Promise<RequestErrorAction> => {
+    const downstream = await next()
+    if (downstream !== undefined || signal.aborted || provider !== CODEX_PROVIDER || !reserveFailures.has(failure.code)) {
+      return downstream
+    }
+
+    const reserves = current().providers?.[CODEX_PROVIDER]?.reserveModels ?? []
+    const visible = codexCatalog.visibleIds()
+    const currentModel = lastCodexModel.get(agent)
+    if (reserves.length === 0 || visible === undefined || currentModel === undefined) return undefined
+
+    const prior = reserveState.get(agent)
+    const attempted = new Set(prior?.attempted)
+    attempted.add(currentModel)
+    const visibleSet = new Set(visible)
+    const nextReserve = reserves.find(model => visibleSet.has(model) && !attempted.has(model))
+    if (nextReserve === undefined) return undefined
+
+    attempted.add(nextReserve)
+    reserveState.set(agent, {
+      originalModel: prior?.originalModel ?? currentModel,
+      activeModel: nextReserve,
+      attempted,
+    })
+    ctx.logger.warn(
+      `llm-pi-ai: Codex request failed with ${failure.code}; retrying on enabled reserve model "${nextReserve}"`,
+    )
+    return { kind: 'retry' }
+  })
+
   ctx.inject(['authorization'], (authorized) => { registerPiAiFlows(authorized, auth) })
 
   let directory: DirectoryRegistrationHandle | undefined
@@ -313,6 +387,39 @@ export function apply(ctx: Context, config: Config): void {
     registeredFacts = facts
   }
   ensureRegistrationFacts()
+
+  // Codex owns an account-scoped, moving model catalog. Refresh it in the
+  // background as well as on picker reads so additions/removals propagate to
+  // already-mounted selectors without a manual "fetch models" action.
+  void ctx.effect(async () => {
+    const refresh = async (force = false): Promise<void> => {
+      const previousRevision = codexCatalog.revision
+      await codexCatalog.refresh(
+        CODEX_PROVIDER,
+        current().providers?.[CODEX_PROVIDER],
+        force,
+      )
+      if (codexCatalog.revision === previousRevision) return
+
+      // A changed catalog must invalidate profile memoization. Replacing the
+      // registration with the same route set is intentional: LlmRuntime emits
+      // llm/adapters-updated, and browser model directories reload themselves.
+      memoized = undefined
+      try {
+        const routes = [...profiles().keys()]
+        if (registration === undefined) ensureRegistrationFacts()
+        else registration.replace(routes)
+      } catch (error) {
+        ctx.logger.error('llm-pi-ai: refreshed Codex catalog could not be announced; keeping previous routes')
+        ctx.logger.error(error)
+      }
+    }
+
+    await refresh(true)
+    const timer = setInterval(() => { void refresh() }, CODEX_MODEL_REFRESH_INTERVAL_MS)
+    timer.unref()
+    return () => { clearInterval(timer) }
+  }, 'Codex live model catalog')
 
   // The bridge is loopback-only. It gives pi-ai the local Authorization marker
   // it requires, then strips that marker before the request leaves Phoenix.

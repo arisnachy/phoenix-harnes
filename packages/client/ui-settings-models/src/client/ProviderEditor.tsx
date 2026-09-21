@@ -32,6 +32,7 @@ import {
 } from './DeepSeekModelsEditor.tsx'
 import { apiKeyFailure } from './apiKey.ts'
 import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
+import { CodexReserveModelsEditor } from './CodexReserveModelsEditor.tsx'
 import { EditorFooter } from './EditorFooter.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
 import { deriveKeyRef, messageOf, protocolChoices } from './store.ts'
@@ -46,6 +47,8 @@ type EditorLayout = 'deepseek' | 'pi-ai' | 'unknown'
 const DEEPSEEK_PUBLIC_BASE_URL = 'https://api.deepseek.com'
 /** Stable route id for the local ChatGPT Web tunnel. */
 const CHATGPT_WEB_PROVIDER = 'chatgpt-web'
+/** Stable live-owned OpenAI Codex route. */
+const CODEX_PROVIDER = 'openai-codex'
 /** Default endpoint exposed by the local ChatGPT Web tunnel. */
 const CHATGPT_WEB_DEFAULT_BASE_URL = 'http://127.0.0.1:17841/v1'
 
@@ -255,7 +258,9 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
 
   // The model list is validated by the same per-row checker for both families,
   // so a bad row is named by its position rather than by a blanket message.
-  const modelFailure = validateDeepSeekModels(schema.getPath(draft, ['models']))
+  const modelFailure = props.provider === CODEX_PROVIDER
+    ? undefined
+    : validateDeepSeekModels(schema.getPath(draft, ['models']))
   const keyFailure = apiKeyFailure(keyDraft)
   // What a probe or a write must carry: the typed key with paste whitespace
   // removed. A blank field yields an empty string, which both call sites read
@@ -290,16 +295,24 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     const ns = namespace.ns
     // A pi-ai profile names the conventional reference only when this page is
     // about to store a key. Otherwise the provider keeps its native auth path.
-    const next = layout === 'pi-ai' && stringAt(draft, 'apiKeyEnv') === undefined
+    let next = layout === 'pi-ai' && stringAt(draft, 'apiKeyEnv') === undefined
       && stringAt(fallback, 'apiKeyEnv') === undefined && keyValue.length > 0
       ? schema.setPath(draft, ['apiKeyEnv'], keyRef)
       : draft
+
+    // Codex app-server owns this catalog. Applying any Codex edit also removes
+    // legacy manual model pins so old settings cannot freeze future additions
+    // or keep retired ids in the selector.
+    if (props.provider === CODEX_PROVIDER) next = schema.deletePath(next, ['models'])
+
     if (props.credentialOnly !== true) {
       // The same checker gates the submit button, so a card cannot reach this
       // with a bad row; it stays because the schema check below would refuse
       // the write with a message naming a path instead of the row, and because
       // nothing but this function decides what is written.
-      const failure = validateDeepSeekModels(schema.getPath(next, ['models']))
+      const failure = props.provider === CODEX_PROVIDER
+        ? undefined
+        : validateDeepSeekModels(schema.getPath(next, ['models']))
       /* v8 ignore next 3 -- unreachable from the card: the same failure disables submit */
       if (failure !== undefined) {
         return `${t('model')} ${String(failure.index + 1)}: ${t(failure.key)}`
@@ -391,6 +404,10 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     const customModels = schema.getPath(draft, ['models'])
     const modelsOverridden = schema.hasPath(draft, ['models'])
     const models = modelDrafts(modelsOverridden ? customModels : inheritedModels())
+    const rawReserveModels = schema.getPath(draft, ['reserveModels'])
+    const reserveModels = Array.isArray(rawReserveModels)
+      ? rawReserveModels.filter((value): value is string => typeof value === 'string')
+      : []
     const defaultContextWindow = schema.getPath(fallback, ['defaultContextWindow'])
     const defaultMaxTokens = schema.getPath(fallback, ['maxTokens'])
     const keyPlaceholder = keyLocked
@@ -481,6 +498,20 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             {shownKeyFailure === undefined ? null : <p className={styles['error']}>{t(shownKeyFailure)}</p>}
           </div>
         )}
+        {props.credentialOnly === true || props.provider !== CODEX_PROVIDER ? null : (
+          <CodexReserveModelsEditor
+            reserveModels={reserveModels}
+            onChange={(next) => {
+              setDraft(current => next.length === 0
+                ? schema.deletePath(current, ['reserveModels'])
+                : schema.setPath(current, ['reserveModels'], next))
+            }}
+            probe={probe}
+            api={api}
+            t={t}
+            disabled={disabled}
+          />
+        )}
         {props.credentialOnly === true ? null : <details className={styles['customized']}>
           <summary className={styles['customizedSummary']}>{t('customized')}</summary>
           <div className={styles['customizedBody']}>
@@ -565,7 +596,9 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                   defaultMaxTokens={typeof defaultMaxTokens === 'number' ? defaultMaxTokens : undefined}
                 />
               )
-              : <ModelListEditor {...catalogProps} probe={probe} probeBlocked={keyFailure} api={api} />}
+              : props.provider === CODEX_PROVIDER
+                ? null
+                : <ModelListEditor {...catalogProps} probe={probe} probeBlocked={keyFailure} api={api} />}
           </div>
         </details>}
       </>

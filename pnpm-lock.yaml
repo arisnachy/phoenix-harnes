@@ -5947,6 +5947,9 @@ importers:
       '@phoenix-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
       '@phoenix-ai/dsh-attachment':
         specifier: workspace:^
         version: link:../../attachment/attachment

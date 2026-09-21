@@ -148,6 +148,12 @@ export interface PiAiProviderProfile {
    */
   models?: PiAiModelProfile[]
   /**
+   * Ordered backup model ids for the OpenAI Codex route. These do not pin the
+   * live selector catalog: PHOENIX only attempts a reserve while Codex still
+   * advertises that id, and skips it automatically once upstream retires it.
+   */
+  reserveModels?: string[]
+  /**
    * Installed-catalog customizations by model id: each entry reshapes that
    * one model with the same fields a {@link models} entry takes, while the
    * rest of the catalog keeps serving untouched. Only meaningful on a catalog
@@ -364,6 +370,7 @@ const profile = z.object({
   api: z.union(supportedProtocols()),
   baseURL: z.string(),
   models: z.array(modelProfile),
+  reserveModels: z.array(z.string()),
   modelOverrides: z.dict(modelOverride),
   compat: compatProfile,
   defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW),
@@ -462,6 +469,15 @@ export function resolveProfiles(
     }
     if (source.displayName !== undefined && source.displayName.length === 0) {
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
+    }
+    if (source.reserveModels !== undefined) {
+      const reserves = source.reserveModels
+      if (reserves.some(id => id.trim().length === 0)) {
+        throw new Error(`llm-pi-ai: provider "${provider}" reserveModels must contain non-empty model ids`)
+      }
+      if (new Set(reserves).size !== reserves.length) {
+        throw new Error(`llm-pi-ai: provider "${provider}" reserveModels must not contain duplicates`)
+      }
     }
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
