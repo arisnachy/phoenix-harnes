@@ -77,7 +77,7 @@ This task has successful mutations after its latest accepted verification. Befor
 
 ## 已知限制与暂缓事项
 
-- 分类刻意采用本地启发式。新的可修改 MCP 工具如果名称和参数都不匹配当前模式，在其适配器声明质量元数据前可能不会使证据失效。
+- 分类刻意采用本地启发式。`mcp__GitHub__update_file`、`github.update_file`、`shell:bash` 这类传输层或供应商 namespace 会在分类前被规范化；但如果新的可修改操作在去除 namespace 后的操作名和参数仍不匹配当前模式，仍可能需要由适配器声明质量元数据。
 - 新鲜度按 generation 管理，而不是内容 hash。这样保守且 O(1)；等文件系统和工具元数据 seam 能在不增加 I/O 的情况下提供权威输入 hash 后，再引入内容寻址证据。
 - 策略按 agent 跟踪一个直接用户任务，而不是跨 session 的全局失败学习数据库。持久工具和 session 历史仍保存失败供模型使用；紧凑的跨任务失败索引应属于 learning 子系统，而不是这个 guard。
 - 视觉质量仍需要浏览器或渲染能力产生证据；本 guard 只判断观察到的证据是否足够新鲜。
