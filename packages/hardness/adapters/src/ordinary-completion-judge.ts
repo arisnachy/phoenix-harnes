@@ -31,16 +31,7 @@ const OUTPUT_SCHEMA: ObjectJsonSchema = {
   required: ['verdict', 'summary', 'evidence', 'required_changes'],
 }
 
-const READ_ONLY_TOOLS = [
-  'read',
-  'read_image',
-  'glob',
-  'grep',
-  'session_search',
-  'session_event_search',
-  'web_search',
-  'web_fetch',
-] as const
+const READ_ONLY_TOOLS = ['read', 'read_image', 'glob', 'grep'] as const
 
 const MUTATION = /^(?:write|edit|str_replace_editor|apply_patch|create_file|update_file|delete_file|move_file|rename_file|upload(?:_.*)?|deploy(?:_.*)?|publish(?:_.*)?)$/
 const VERIFY = /^(?:verify(?:_.*)?|check(?:_.*)?|test(?:_.*)?|lint(?:_.*)?|typecheck(?:_.*)?|build(?:_.*)?|smoke(?:_.*)?)$/
@@ -48,6 +39,9 @@ const SHELL = /^(?:bash|pwsh|run_code)$/
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest|benchmark|tracemalloc)\b/i
 const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch)|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
 const SUBSTANTIVE = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|c|cc|cpp|h|hpp|cs|php|rb|swift|html?|css|scss|sass|less|vue|svelte|ya?ml|toml|json)\b/i
+const JUDGE_RISK = /\b(?:audit|independent review|security|permission|credential|secret|auth(?:entication|orization)?|payment|billing|migration|data loss|production|deploy|release|public api|breaking change|concurren(?:cy|t)|race condition|performance|latency|throughput|memory|scal(?:e|ing|ability)|complexity|benchmark|stress|load|cycleerror|exception|error message|error contract|robust|high quality)\b/i
+const LARGE_CARDINALITY = /\b(?:\d{1,3}(?:[,_]\d{3})+|\d{4,}|10k|100k|million)\b/i
+const TARGET_KEYS = /^(?:path|file|file_path|filepath|filename|target|destination_path)$/i
 
 /** Structured outcome returned by one ordinary-task independent completion review. */
 export interface OrdinaryCompletionJudgeDecision {
@@ -66,7 +60,11 @@ interface BridgeState {
   judgePasses: number
   request: string
   mutations: string[]
+  mutationTargets: string[]
   verifications: string[]
+  sawRelevantFailure: boolean
+  needsRejudge: boolean
+  judgeInfrastructureBlocked: boolean
 }
 
 function operationName(toolName: string): string {
@@ -95,7 +93,46 @@ function requestText(message: UserMessage): string {
     .filter((block): block is Extract<UserMessage['content'][number], { type: 'text' }> => block.type === 'text')
     .map(block => block.text)
     .join(' ')
-    .slice(0, 12_000)
+    .slice(0, 6_000)
+}
+
+function mutationTargets(value: unknown, limit = 8): string[] {
+  const found: string[] = []
+  const visit = (current: unknown, depth: number): void => {
+    if (found.length >= limit || depth > 3 || current === null || typeof current !== 'object') return
+    if (Array.isArray(current)) {
+      for (const item of current) visit(item, depth + 1)
+      return
+    }
+    for (const [key, item] of Object.entries(current as Record<string, unknown>)) {
+      if (found.length >= limit) return
+      if (TARGET_KEYS.test(key) && typeof item === 'string' && item.length > 0) {
+        const target = item.slice(0, 240)
+        if (!found.includes(target)) found.push(target)
+        continue
+      }
+      visit(item, depth + 1)
+    }
+  }
+  visit(value, 0)
+  return found
+}
+
+function compactVerification(name: string, args: unknown): string {
+  const text = argumentText(args).replace(/\s+/g, ' ').slice(0, 160)
+  return `${operationName(name)}:${text}`
+}
+
+export function ordinaryJudgeRequired(input: {
+  readonly request: string
+  readonly generation: number
+  readonly mutationTargets: readonly string[]
+  readonly sawRelevantFailure: boolean
+  readonly needsRejudge: boolean
+}): boolean {
+  if (input.needsRejudge || input.sawRelevantFailure) return true
+  if (JUDGE_RISK.test(input.request) || LARGE_CARDINALITY.test(input.request)) return true
+  return input.generation >= 4 || input.mutationTargets.length >= 4
 }
 
 function validText(value: unknown): value is string {
@@ -132,6 +169,7 @@ export async function reviewOrdinaryCompletion(input: {
   readonly parent: Agent
   readonly request: string
   readonly mutations: readonly string[]
+  readonly mutationTargets: readonly string[]
   readonly verifications: readonly string[]
   readonly signal: AbortSignal
 }): Promise<OrdinaryCompletionJudgeDecision> {
@@ -156,14 +194,12 @@ export async function reviewOrdinaryCompletion(input: {
         type: 'text',
         text: '<phoenix_ordinary_completion_judge>\n'
           + 'Original request: ' + JSON.stringify(input.request) + '\n'
-          + 'Observed mutation tools: ' + JSON.stringify(input.mutations) + '\n'
-          + 'Observed verification tools: ' + JSON.stringify(input.verifications) + '\n\n'
-          + 'Act as a fresh, read-only completion judge. Inspect the actual changed artifact and durable session evidence. '
-          + 'Map every explicit mandatory requirement in the original request to concrete evidence; passing tests are evidence, not blanket proof. '
-          + 'For public errors/exceptions verify the observable type and every required message field, identifier, collection, or diagnostic detail. '
-          + 'When scale, large cardinality, performance, latency, depth, concurrency, or memory matters, require evidence that checks growth/resource behavior and inspect for avoidable superlinear time or space. '
-          + 'Check the real user/production entrypoint and relevant boundary/failure cases. Do not edit files or run commands. '
-          + 'Return pass only with concrete evidence for all material requirements. Return needs_changes with a precise repair list for fixable gaps; blocked only for an external evaluation blocker.\n'
+          + 'Changed targets: ' + JSON.stringify(input.mutationTargets) + '\n'
+          + 'Verification receipts: ' + JSON.stringify(input.verifications) + '\n\n'
+          + 'Fresh read-only review. Inspect changed targets directly. Map mandatory requirements to concrete evidence; tests are evidence, not blanket proof. '
+          + 'Check observable error contracts and scale/resource behavior only when requested. Check the real entrypoint and material failure cases. '
+          + 'Do not rerun tests, browse the web, search session history, edit files, or execute commands. '
+          + 'Pass only with concrete evidence. For fixable gaps return needs_changes with a short repair list; use blocked only for unavailable evidence/infrastructure.\n'
           + '</phoenix_ordinary_completion_judge>',
       }],
     })
@@ -219,7 +255,11 @@ export function installOrdinaryCompletionJudgeBridge(
       judgePasses: 0,
       request: requestText(message),
       mutations: [],
+      mutationTargets: [],
       verifications: [],
+      sawRelevantFailure: false,
+      needsRejudge: false,
+      judgeInfrastructureBlocked: false,
     })
   }))
 
@@ -229,21 +269,30 @@ export function installOrdinaryCompletionJudgeBridge(
     next,
   ): Promise<PostToolDecision> => {
     const downstream = await next()
-    if (exec.agent === undefined || result.isError || downstream.kind === 'block') return downstream
+    if (exec.agent === undefined) return downstream
     const state = states.get(exec.agent)
     if (state === undefined) return downstream
 
-    if (isSubstantiveMutation(exec.name, exec.arguments)) {
+    const mutates = isSubstantiveMutation(exec.name, exec.arguments)
+    const verifies = isVerification(exec.name, exec.arguments)
+    if (result.isError || downstream.kind === 'block') {
+      if (mutates || verifies) state.sawRelevantFailure = true
+      return downstream
+    }
+
+    if (mutates) {
       state.generation += 1
       state.mutations.push(operationName(exec.name))
-      state.mutations = state.mutations.slice(-12)
-    } else if (state.generation > 0 && isVerification(exec.name, exec.arguments)) {
+      state.mutations = state.mutations.slice(-8)
+      for (const target of mutationTargets(exec.arguments)) {
+        if (!state.mutationTargets.includes(target)) state.mutationTargets.push(target)
+      }
+      state.mutationTargets = state.mutationTargets.slice(-8)
+    } else if (state.generation > 0 && verifies) {
       state.verifiedGeneration = state.generation
-      // A judge may ask only for missing evidence. New deterministic evidence
-      // must therefore reopen this unchanged generation for a fresh review.
-      if (state.judgedGeneration === state.generation) state.judgedGeneration = 0
-      state.verifications.push(operationName(exec.name) + ':' + argumentText(exec.arguments).slice(0, 300))
-      state.verifications = state.verifications.slice(-12)
+      if (state.needsRejudge && state.judgedGeneration === state.generation) state.judgedGeneration = 0
+      state.verifications.push(compactVerification(exec.name, exec.arguments))
+      state.verifications = state.verifications.slice(-6)
     }
     return downstream
   }))
@@ -252,7 +301,14 @@ export function installOrdinaryCompletionJudgeBridge(
     const state = states.get(agent)
     if (state === undefined || state.generation === 0) return
     if (state.verifiedGeneration !== state.generation || state.judgedGeneration === state.generation) return
-    if (state.judgePasses >= maxPasses) return
+    if (state.judgeInfrastructureBlocked || state.judgePasses >= maxPasses) return
+    if (!ordinaryJudgeRequired({
+      request: state.request,
+      generation: state.generation,
+      mutationTargets: state.mutationTargets,
+      sawRelevantFailure: state.sawRelevantFailure,
+      needsRejudge: state.needsRejudge,
+    })) return
 
     state.judgePasses += 1
     const decision = await reviewOrdinaryCompletion({
@@ -261,11 +317,25 @@ export function installOrdinaryCompletionJudgeBridge(
       parent: agent,
       request: state.request,
       mutations: state.mutations,
+      mutationTargets: state.mutationTargets,
       verifications: state.verifications,
       signal,
     })
     state.judgedGeneration = state.generation
-    if (decision.verdict !== 'pass') agent.steer(judgeNotice(decision))
+    if (decision.verdict === 'pass') {
+      state.needsRejudge = false
+      return
+    }
+    if (decision.verdict === 'blocked') {
+      // Ordinary semantic review is an optional quality accelerator. When its
+      // infrastructure is unavailable, deterministic gates remain authoritative
+      // and this task does not spend another model round retrying the same route.
+      state.judgeInfrastructureBlocked = true
+      state.needsRejudge = false
+      return
+    }
+    state.needsRejudge = true
+    agent.steer(judgeNotice(decision))
   }))
 
   disposers.push(ctx.on('agent/disposed', ({ agent }) => {
