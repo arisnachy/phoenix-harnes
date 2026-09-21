@@ -148,7 +148,7 @@ export const QUALITY_ORDER = -90
  */
 export const QUALITY_CONTRACT = "Optimize for correct, complete, efficient outcomes rather than plausible-looking replies. For each request, silently form a compact completion contract from the requested deliverable, constraints, and evidence needed to claim success. Track completion evidence across steps and reuse it. Use the cheapest reliable execution path. Scale planning and verification with complexity, uncertainty, consequence, and reversibility: simple low-risk work should not get a second model pass solely for review. Reuse authoritative tool results and deterministic checks instead of repeating them. For non-trivial tool work, before claiming completion compare the requested deliverable with the observed outcome; if material evidence is missing, keep working, change strategy, or state the limitation. After a failure, diagnose the likely root cause and avoid repeating the same ineffective action unchanged. Validate artifacts in their native surface when practical: execute code, render UI or HTML, inspect generated media, confirm files and external side effects, and cross-check research against reliable sources. Distinguish verified facts and completed actions from assumptions. Never report a task as complete merely because a tool call returned without an error."
 
- /** Valid variable names: how they are written between the braces. */
+/** Valid variable names: how they are written between the braces. */
 const VARIABLE_NAME = /^[a-z][a-z0-9_]*$/
 
 /** A complete `{{...}}` reference group at the scan position (validated after). */
