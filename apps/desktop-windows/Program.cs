@@ -4,6 +4,8 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Win32;
 
 namespace Phoenix.Desktop;
@@ -66,6 +68,12 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--prepare-webview", StringComparer.OrdinalIgnoreCase))
+        {
+            PreparePhoenixWebViewProfile();
+            return;
+        }
+
         if (args.Contains("--enable-autostart", StringComparer.OrdinalIgnoreCase))
         {
             StartupRegistration.SetEnabled(true);
@@ -101,6 +109,60 @@ internal static class Program
         DesktopLog.Write($"Developer console requested={developerConsoleVisible}.");
         ApplicationConfiguration.Initialize();
         Application.Run(new PhoenixApplicationContext(showEvent, developerConsoleVisible));
+    }
+
+    private static void PreparePhoenixWebViewProfile()
+    {
+        DesktopLog.Write("Pre-warming Phoenix WebView2 shell profile.");
+        ApplicationConfiguration.Initialize();
+
+        Exception? failure = null;
+        var completed = false;
+        using var host = new Form
+        {
+            ShowInTaskbar = false,
+            FormBorderStyle = FormBorderStyle.None,
+            StartPosition = FormStartPosition.Manual,
+            Location = new Point(-32000, -32000),
+            Size = new Size(16, 16),
+            Text = "Phoenix WebView Prewarm",
+        };
+        using var webView = new WebView2 { Dock = DockStyle.Fill };
+        host.Controls.Add(webView);
+
+        host.Shown += async (_, _) =>
+        {
+            try
+            {
+                var shellProfile = DesktopPhoenixLoopback.ShellProfilePath(InstallRoot);
+                Directory.CreateDirectory(shellProfile);
+                var options = new CoreWebView2EnvironmentOptions
+                {
+                    AdditionalBrowserArguments = DesktopPhoenixLoopback.ShellBrowserArguments,
+                };
+                var environment = await CoreWebView2Environment.CreateAsync(null, shellProfile, options);
+                await webView.EnsureCoreWebView2Async(environment);
+                completed = webView.CoreWebView2 is not null;
+                DesktopLog.Write($"Phoenix WebView2 profile pre-warm completed={completed}; profile={shellProfile}.");
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+                DesktopLog.Write("Phoenix WebView2 profile pre-warm failed.", ex);
+            }
+            finally
+            {
+                host.Dispose();
+                Application.ExitThread();
+            }
+        };
+
+        Application.Run(host);
+
+        if (failure is not null)
+            throw new InvalidOperationException("Phoenix could not pre-warm its WebView2 shell profile.", failure);
+        if (!completed)
+            throw new InvalidOperationException("Phoenix WebView2 shell profile pre-warm did not complete.");
     }
 
     private static void RunLoopbackWebViewSmokeTest()
