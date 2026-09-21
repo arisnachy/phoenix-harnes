@@ -315,7 +315,7 @@ export function installOrdinaryCompletionJudgeBridge(
   disposers.push(ctx.on('agent/inbox/claimed', ({ agent, message }) => {
     // Durable goal rounds already own an independent completion judge. Disable
     // the ordinary bridge for that round so one generation never pays twice.
-    if (message.source.kind === 'goal') {
+    if ((message.source as { kind: string }).kind === 'goal') {
       states.delete(agent)
       return
     }
