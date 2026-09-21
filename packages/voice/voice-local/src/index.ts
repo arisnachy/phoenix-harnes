@@ -7,6 +7,7 @@
  */
 
 import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
@@ -148,6 +149,8 @@ export function createLocalSpeechToTextProvider(options: LocalSttProviderOptions
 
 /** Local voice plugin configuration. */
 export interface Config {
+  /** Use the packaged CosyVoice daemon with the platform Python executable. */
+  readonly naturalBundledCosyVoice?: boolean
   /** Persistent neural speech daemon; absence leaves PHOENIX Natural unavailable. */
   readonly naturalCommand?: string
   /** Arguments for the persistent neural daemon. */
@@ -174,6 +177,7 @@ export interface Config {
 
 /** Schemastery schema for the local voice provider plugin. */
 export const Config: z<Config> = z.object({
+  naturalBundledCosyVoice: z.boolean().default(false),
   naturalCommand: z.string(),
   naturalArgs: z.array(z.string()).default([]),
   naturalPrewarm: z.boolean().default(true),
@@ -190,11 +194,22 @@ export const Config: z<Config> = z.object({
 /** Register configured local TTS and STT adapters into `ctx.voice`. */
 export function apply(ctx: Context, config: Config): void {
   const voice = ctx.voice
-  const naturalCommand = config.naturalCommand?.trim()
+  const explicitNaturalCommand = config.naturalCommand?.trim()
+  const bundledNatural = config.naturalBundledCosyVoice === true
+  const naturalCommand = explicitNaturalCommand !== undefined && explicitNaturalCommand !== ''
+    ? explicitNaturalCommand
+    : bundledNatural
+      ? process.platform === 'win32' ? 'python.exe' : 'python3'
+      : undefined
+  const naturalArgs = explicitNaturalCommand !== undefined && explicitNaturalCommand !== ''
+    ? config.naturalArgs ?? []
+    : bundledNatural
+      ? [fileURLToPath(new URL('../runtime/cosyvoice3-daemon.py', import.meta.url))]
+      : []
   if (naturalCommand !== undefined && naturalCommand !== '') {
     const natural = createNaturalTextToSpeechProvider({
       command: naturalCommand,
-      args: config.naturalArgs ?? [],
+      args: naturalArgs,
       startupTimeoutMs: config.naturalStartupTimeoutMs ?? 45_000,
       requestTimeoutMs: config.naturalRequestTimeoutMs ?? 120_000,
       maxChunkChars: config.naturalMaxChunkChars ?? 180,
