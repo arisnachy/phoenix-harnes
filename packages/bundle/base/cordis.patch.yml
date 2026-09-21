@@ -418,6 +418,14 @@
       config:
         providerName: spawn
 
+    # Ordinary completion review is read-only, so it does not need the cost of
+    # creating and deleting a dedicated Git worktree for every judge pass.
+    - id: subagent-spawn-judge
+      name: '@phoenix-ai/dsh-subagent-spawn-in-process'
+      config:
+        providerName: judge-spawn
+        worktreeIsolation: false
+
     - id: subagent-fork-in-process
       name: '@phoenix-ai/dsh-subagent-fork-in-process'
       config:
