@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-09-21-adaptive-judge-token-efficiency.zh.md)
+
 ## Problem
 
 A follow-up external benchmark showed that PHOENIX moved ahead of the comparison harness by about 1.5 points, but consumed roughly twice as many model tokens. The quality gain was real, yet the cost profile was not acceptable.
