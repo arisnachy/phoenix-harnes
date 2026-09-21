@@ -391,13 +391,26 @@ export class VoiceRuntime extends Service {
         const item = this.queue.shift()
         if (item === undefined) continue
         if (item.event.dedupeKey !== undefined) this.pendingKeys.delete(item.event.dedupeKey)
-        const provider = this.selectTtsProvider()
-        if (provider === undefined) continue
+        const providers = orderedProviders(this.ttsProviders, this.config.ttsProvider)
+        if (providers.length === 0) continue
         this.current = item
         try {
-          await provider.speak({ text: item.text, language: item.event.language ?? this.config.language, signal: item.controller.signal })
-        } catch (error) {
-          if (!item.controller.signal.aborted) this.ctx.logger('voice').warn(`voice provider "${provider.id}" failed: ${String(error)}`)
+          for (const provider of providers) {
+            if (item.controller.signal.aborted) break
+            try {
+              await provider.speak({
+                text: item.text,
+                language: item.event.language ?? this.config.language,
+                signal: item.controller.signal,
+              })
+              break
+            } catch (error) {
+              if (item.controller.signal.aborted) break
+              this.ctx.logger('voice').warn(
+                `voice provider "${provider.id}" failed; trying fallback: ${String(error)}`,
+              )
+            }
+          }
         } finally {
           this.current = undefined
         }
@@ -408,17 +421,24 @@ export class VoiceRuntime extends Service {
   }
 }
 
+function orderedProviders<P extends { readonly id: string; readonly priority: number; available(): boolean }>(
+  providers: ReadonlyMap<string, P>,
+  configuredId: string | undefined,
+): P[] {
+  const available = [...providers.values()]
+    .filter(provider => provider.available())
+    .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))
+  if (configuredId === undefined) return available
+  const configured = available.find(provider => provider.id === configuredId)
+  if (configured === undefined) return available
+  return [configured, ...available.filter(provider => provider !== configured)]
+}
+
 function selectProvider<P extends { readonly id: string; readonly priority: number; available(): boolean }>(
   providers: ReadonlyMap<string, P>,
   configuredId: string | undefined,
 ): P | undefined {
-  if (configuredId !== undefined) {
-    const configured = providers.get(configuredId)
-    if (configured?.available() === true) return configured
-  }
-  return [...providers.values()]
-    .filter(provider => provider.available())
-    .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))[0]
+  return orderedProviders(providers, configuredId)[0]
 }
 
 function isVoiceEventKind(value: string): value is VoiceEventKind {
