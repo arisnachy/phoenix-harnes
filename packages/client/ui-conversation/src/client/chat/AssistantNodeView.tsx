@@ -1,12 +1,24 @@
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo } from 'react'
 import type { ChatNodeViewProps, TurnTailOwnerProps } from '../contract/slots.ts'
 import { AssistantMarkdown } from './AssistantMarkdown.tsx'
+import { assistantText } from './turn-assistant.ts'
+import { streamVoiceAssistantResponse } from '../voice.ts'
 
 /** Streaming, settled, and interrupted Assistant states share one keyed renderer instance. */
 export const AssistantNodeView = memo(function AssistantNodeView({
   node, useTurnData, cwd, openFile, renderMessageImages, fileMentions, workspaceFileMentions, t,
 }: ChatNodeViewProps<'assistant-step'>) {
   const data = node.data
+  const responseText = useMemo(() => assistantText(data.blocks), [data.blocks])
+  useEffect(() => {
+    if (responseText === '') return
+    streamVoiceAssistantResponse(
+      `assistant:${data.turn}:${data.step}`,
+      responseText,
+      data.time,
+      data.status !== 'running',
+    )
+  }, [data.status, data.step, data.time, data.turn, responseText])
   const turn = node.location.kind === 'turn' || node.location.kind === 'step'
     ? node.location.turn
     : undefined
