@@ -107,7 +107,7 @@ export class UserProfileService extends Service {
     ctx.systemPrompt.context({
       name: 'user-profile:connector-policy',
       order: -48,
-      text: () => renderConnectorPolicy(this.scope.get().connectorMode),
+      text: () => renderConnectorPolicy(this.scope.get().connectorMode ?? 'ask'),
     })
     const rawProfile = ctx.settings.describe().find(entry => entry.ns === USER_PROFILE_NAMESPACE)?.user
     this.legacyAssistantGenderManual = hasLegacyAssistantGenderOverride(rawProfile)
