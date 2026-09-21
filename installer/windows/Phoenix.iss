@@ -8,7 +8,7 @@
 [Setup]
 AppId={{B4E91D88-7B14-4DA0-A63D-4E61B648AE1F}
 AppName=Phoenix
-AppVersion=1.0.18
+AppVersion=1.0.20
 AppPublisher=Phoenix AI
 DefaultDirName={localappdata}\Programs\Phoenix
 DefaultGroupName=Phoenix
@@ -47,6 +47,9 @@ Root: HKCU; Subkey: "Software\Phoenix AI\Phoenix"; ValueType: string; ValueName:
 ; Pre-warm the immutable runtime during installation so the first interactive EXE launch does not
 ; spend its critical path expanding hundreds of MB. This is native Phoenix.exe work: no PowerShell.
 Filename: "{app}\Phoenix.exe"; Parameters: "--prepare-runtime"; Flags: runhidden waituntilterminated skipifsilent
+; Pre-warm the dedicated Phoenix WebView2 shell profile during installation. This keeps the first
+; interactive double-click out of Chromium's cold profile-creation path.
+Filename: "{app}\Phoenix.exe"; Parameters: "--prepare-webview"; Flags: runhidden waituntilterminated skipifsilent
 ; Runtime ownership belongs to Phoenix.exe; Node.js, Corepack and MinGit are bundled.
 Filename: "{app}\Phoenix.exe"; Parameters: "--enable-autostart"; Flags: runhidden waituntilterminated skipifsilent; Tasks: autostart
 Filename: "{app}\Phoenix.exe"; Description: "Abrir Phoenix"; Flags: nowait postinstall skipifsilent
