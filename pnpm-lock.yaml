@@ -928,6 +928,9 @@ importers:
       '@phoenix-ai/dsh-typert-registry':
         specifier: workspace:^
         version: link:../../typert/registry
+      '@phoenix-ai/dsh-voice':
+        specifier: workspace:^
+        version: link:../../voice/voice
 
   packages/attachment/attachment:
     dependencies:
@@ -8875,6 +8878,9 @@ importers:
       '@phoenix-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@phoenix-ai/dsh-typert-protocol':
+        specifier: workspace:^
+        version: link:../../typert/protocol
 
   packages/voice/voice-local:
     dependencies:

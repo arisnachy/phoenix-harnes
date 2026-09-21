@@ -60,9 +60,33 @@ describe('speech output adapter', () => {
     const utterance = speak.mock.calls[0]?.[0]
     expect(utterance?.text).toBe('Hola Phoenix. Abre el panel')
     expect(utterance?.voice?.name).toBe('Natural Spanish')
-    expect(utterance?.rate).toBe(0.96)
-    expect(utterance?.pitch).toBe(1.02)
+    expect(utterance?.rate).toBe(0.97)
+    expect(utterance?.pitch).toBe(1)
     expect(utterance?.volume).toBe(0.98)
+  })
+
+  it('starts a growing response at the first stable sentence and flushes the final tail', () => {
+    const { value, speak, cancel } = scope()
+    const states: string[] = []
+    const output = createSpeechOutput((state) => { states.push(state) }, 'es-DO', value)
+
+    output.update('Encontré el problema')
+    expect(speak).not.toHaveBeenCalled()
+
+    output.update('Encontré el problema. Ahora voy a corregirlo')
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(speak).toHaveBeenCalledTimes(1)
+    expect(speak.mock.calls[0]?.[0].text).toBe('Encontré el problema.')
+
+    output.update('Encontré el problema. Ahora voy a corregirlo.', true)
+    expect(speak).toHaveBeenCalledTimes(2)
+    expect(speak.mock.calls[1]?.[0].text).toBe('Ahora voy a corregirlo.')
+    expect(states).toEqual(['speaking'])
+
+    speak.mock.calls[0]?.[0].onend?.()
+    expect(states).toEqual(['speaking'])
+    speak.mock.calls[1]?.[0].onend?.()
+    expect(states).toEqual(['speaking', 'idle'])
   })
 
   it('redacts bearer credentials before sending text to speech', () => {

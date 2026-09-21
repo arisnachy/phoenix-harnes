@@ -2,9 +2,43 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createKokoroTextToSpeechProvider,
   createLocalSpeechToTextProvider,
+  createNaturalTextToSpeechProvider,
   createSystemTextToSpeechProvider,
+  naturalVoiceStyle,
+  semanticSpeechChunks,
   type VoiceCommandRunner,
 } from '../src/index.ts'
+
+describe('natural voice planning', () => {
+  it('splits long speech at semantic boundaries instead of arbitrary character offsets', () => {
+    const chunks = semanticSpeechChunks(
+      'Encontré el problema. El worker está activo, pero no está consumiendo la cola. Ahora puedo corregirlo sin bloquear Phoenix.',
+      58,
+    )
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(chunks.join(' ')).toContain('Encontré el problema.')
+    expect(chunks.every(chunk => chunk.length <= 58)).toBe(true)
+  })
+
+  it('derives expressive hints without a second model request', () => {
+    expect(naturalVoiceStyle('¿Quieres que lo aplique ahora?')).toMatchObject({
+      pace: 'conversational',
+      interrogative: true,
+    })
+    expect(naturalVoiceStyle('¡Alerta urgente!')).toMatchObject({
+      pace: 'brisk',
+    })
+  })
+
+  it('keeps the natural engine optional but gives it highest local priority when configured', () => {
+    expect(createNaturalTextToSpeechProvider({}).available()).toBe(false)
+    const provider = createNaturalTextToSpeechProvider({ command: 'python', args: ['natural.py'] })
+    expect(provider.available()).toBe(true)
+    expect(provider.id).toBe('phoenix-natural')
+    expect(provider.priority).toBeGreaterThan(100)
+    provider.close()
+  })
+})
 
 describe('local voice providers', () => {
   it('keeps Kokoro optional and sends only normalized text to its configured command', async () => {

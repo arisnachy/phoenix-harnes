@@ -23,7 +23,7 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   const responseText = closing === null ? '' : assistantText(closing.blocks)
   useEffect(() => {
     if (closing === null || responseText === '') return
-    speakVoiceAssistantResponse(`${node.key}:${closing.finalNode.seq}`, responseText, closing.time)
+    speakVoiceAssistantResponse(`assistant:${closing.turn}:${closing.step}`, responseText, closing.time)
   }, [closing, node.key, responseText])
   if (turn === undefined) return null
   const owner: TurnTailOwnerProps = { turn, seq: closing?.finalNode.seq ?? data.seq, openFile }
