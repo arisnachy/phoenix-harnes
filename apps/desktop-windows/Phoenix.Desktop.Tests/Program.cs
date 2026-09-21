@@ -172,6 +172,14 @@ False(
     DesktopPhoenixIdentity.LooksLikePhoenixHtml("<html><body>unrelated server</body></html>"),
     "Phoenix readiness rejects an unrelated listener on port 3080",
     failures);
+True(DesktopPhoenixLoopback.IsPhoenixOrigin(new Uri("http://127.0.0.1:3080/chat"), new Uri("http://127.0.0.1:3080/")), "IPv4 loopback is a trusted Phoenix origin", failures);
+True(DesktopPhoenixLoopback.IsPhoenixOrigin(new Uri("http://localhost:3080/chat"), new Uri("http://127.0.0.1:3080/")), "localhost redirect remains inside Phoenix", failures);
+True(DesktopPhoenixLoopback.IsPhoenixOrigin(new Uri("http://[::1]:3080/chat"), new Uri("http://127.0.0.1:3080/")), "IPv6 loopback redirect remains inside Phoenix", failures);
+False(DesktopPhoenixLoopback.IsPhoenixOrigin(new Uri("http://example.com:3080/chat"), new Uri("http://127.0.0.1:3080/")), "external host on Phoenix port is rejected", failures);
+Equal("127.0.0.1", DesktopPhoenixLoopback.NavigationBase(new Uri("http://127.0.0.1:3080/"), 0).Host, "first WebView navigation uses explicit IPv4 loopback", failures);
+Equal("localhost", DesktopPhoenixLoopback.NavigationBase(new Uri("http://127.0.0.1:3080/"), 3).Host, "repeated WebView failure alternates through localhost", failures);
+Equal("--no-proxy-server", DesktopPhoenixLoopback.ShellBrowserArguments, "Phoenix shell bypasses system proxies for loopback traffic", failures);
+True(DesktopPhoenixLoopback.ShellProfilePath(@"C:\Phoenix").EndsWith(@"webview\shell-v2", StringComparison.OrdinalIgnoreCase), "Phoenix shell uses a fresh recovery profile generation", failures);
 True(DesktopNavigationRecovery.RetryDelayMilliseconds(1) < DesktopNavigationRecovery.RetryDelayMilliseconds(4), "WebView retry backoff increases", failures);
 
 var toolchainEntries = DesktopBundledToolchain.CandidatePathEntries(@"C:\Program Files\Phoenix");
