@@ -40,7 +40,10 @@ function redactProfile(profile: UserProfileSettings): UserProfileRedacted {
 }
 
 /** Render only explicitly consented profile fields for the dynamic context snapshot. */
-/** Render the user's durable external-connector policy for model execution. */
+/** Render the user's durable external-connector policy for model execution.
+ * @param mode - persisted connector-use preference.
+ * @returns model-facing execution policy for external connectors.
+ */
 export function renderConnectorPolicy(mode: ConnectorMode): string {
   const instruction = mode === 'disabled'
     ? 'External connectors are disabled. Do not call them unless the direct current user request explicitly overrides this setting; use local or built-in fallbacks instead.'
