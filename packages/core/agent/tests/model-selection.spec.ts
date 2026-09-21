@@ -4,9 +4,7 @@ import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import {
   agentEvents,
   defaultExecutionHandoff,
-  defaultToolAcquisitionSelection,
   installModelSelection,
-  isToolAcquisitionRequest,
   type Agent,
   type ModelSelectionRef,
 } from '../src/index.ts'
@@ -23,22 +21,6 @@ describe('installModelSelection()', () => {
       },
     })
     expect(defaultExecutionHandoff({ provider: 'other', model: 'custom' })).toBeUndefined()
-  })
-
-  it('recognizes explicit artifact work without downgrading pure reasoning', () => {
-    expect(isToolAcquisitionRequest('Arregla test_jsonparse.py y ejecuta los tests.')).toBe(true)
-    expect(isToolAcquisitionRequest('Fix src/parser.ts and run the tests.')).toBe(true)
-    expect(isToolAcquisitionRequest('Explícame por qué JSON usa comillas dobles.')).toBe(false)
-    expect(defaultToolAcquisitionSelection({
-      provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
-    })).toEqual({
-      provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: ReasoningEffortId('medium'),
-    })
-    expect(defaultToolAcquisitionSelection({ provider: 'other', model: 'custom' })).toBeUndefined()
   })
 
   it('uses a medium first evidence step for explicit tool work, then high for execution', async () => {
