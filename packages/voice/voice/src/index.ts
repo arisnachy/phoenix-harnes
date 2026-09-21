@@ -279,7 +279,10 @@ export class VoiceRuntime extends TypertRemoteService {
     ctx.effect(() => () => { this.stop() }, 'voice queue teardown')
   }
 
-  /** Report whether the local Client can route conversation speech through neural TTS. */
+  /**
+   * Report whether the local Client can route conversation speech through neural TTS.
+   * @returns Current conversational voice availability and selected provider.
+   */
   @Remote('conversationStatus')
   async conversationStatus(): Promise<VoiceConversationStatus> {
     const provider = this.selectTtsProvider()
@@ -290,7 +293,11 @@ export class VoiceRuntime extends TypertRemoteService {
     }
   }
 
-  /** Play one stable semantic segment on the Host without blocking the browser thread. */
+  /**
+   * Play one stable semantic segment on the Host without blocking the browser thread.
+   * @param request - Message identity, ordering, text, language, and final-segment metadata.
+   * @returns Admission/playback receipt for the selected neural provider.
+   */
   @Remote('conversationSpeak')
   async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt> {
     if (!this.config.enabled) return { accepted: false, reason: 'disabled' }
@@ -344,7 +351,11 @@ export class VoiceRuntime extends TypertRemoteService {
     return { accepted: true, provider: provider.id }
   }
 
-  /** Abort queued/active speech for one growing assistant response. */
+  /**
+   * Abort queued or active speech for one growing assistant response.
+   * @param request - Stable assistant-response key whose speech should be cancelled.
+   * @returns Number of in-flight segment controllers aborted for the response.
+   */
   @Remote('conversationCancel')
   async conversationCancel(request: VoiceConversationCancelRequest): Promise<VoiceConversationCancelReceipt> {
     const key = request.key.trim()
