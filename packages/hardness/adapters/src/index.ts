@@ -136,6 +136,12 @@ export interface Config {
   judgeOrdinaryMutations?: boolean
   /** Maximum independent ordinary-task judge passes before deterministic gates take over. */
   maxOrdinaryJudgePasses?: number
+  /** Fresh read-only provider used only for adaptive ordinary-task review. */
+  ordinaryJudgeProvider?: string
+  /** Local risk score required before paying for a separate judge model. Zero restores always-judge behavior. */
+  ordinaryJudgeMinRiskScore?: number
+  /** Output/reasoning token ceiling for the compact ordinary-task judge child. */
+  ordinaryJudgeMaxTokens?: number
   /** Durable proactive-task ledger. Empty/omitted uses ~/.dsh/phoenix-tasks.json; :memory: is test-only. */
   taskLedgerPath?: string
   /** How often the host checks for due scheduled work. */
@@ -156,6 +162,9 @@ export const Config: z<Config> = z.object({
   modelTools: z.boolean().default(true),
   judgeOrdinaryMutations: z.boolean().default(true),
   maxOrdinaryJudgePasses: z.number().step(1).min(1).max(3).default(2),
+  ordinaryJudgeProvider: z.string().default('judge-spawn'),
+  ordinaryJudgeMinRiskScore: z.number().step(1).min(0).max(20).default(4),
+  ordinaryJudgeMaxTokens: z.number().step(1).min(512).max(8192).default(2048),
   taskLedgerPath: z.string().default(''),
   taskPollMs: z.number().default(15_000),
   privateWorkProvider: z.string().default('spawn'),
@@ -266,8 +275,10 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       if (subagents !== undefined && (config.judgeOrdinaryMutations ?? true)) {
         disposers.push(installOrdinaryCompletionJudgeBridge(ctx, {
           subagents,
-          provider: config.judgeProvider?.trim() || 'spawn',
+          provider: config.ordinaryJudgeProvider?.trim() || config.judgeProvider?.trim() || 'judge-spawn',
           maxPasses: config.maxOrdinaryJudgePasses ?? 2,
+          minRiskScore: config.ordinaryJudgeMinRiskScore ?? 4,
+          maxTokens: config.ordinaryJudgeMaxTokens ?? 2048,
         }))
       }
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
