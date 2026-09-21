@@ -15,7 +15,7 @@ import SubagentRuntime, {
 import type { Config as ToolConfig, ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
 import { defineContentToolFixture, RUN_CODE_NAME } from '@phoenix-ai/dsh-tools'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
-import { startInProcessRun } from '../src/index.ts'
+import { REVIEW_ISOLATED_SYSTEM_PROMPT, startInProcessRun } from '../src/index.ts'
 import {
   STRUCTURED_OUTPUT_INSTRUCTION,
   STRUCTURED_OUTPUT_TOOL,
@@ -39,6 +39,7 @@ interface CodeRunRequestLike {
 interface SetupOptions {
   toolMode?: ToolConfig['mode']
   codeRun?: (request: CodeRunRequestLike) => Promise<{ logs: never[]; value?: unknown }>
+  reviewIsolation?: boolean
 }
 
 const SCHEMA: ObjectJsonSchema = {
@@ -72,7 +73,9 @@ async function setup(script: Script, options: SetupOptions = {}) {
     name: 'spawn',
     capabilities: { outputSchema: true, depthLimit: true, toolFilter: false, persona: false },
     inheritsParentContext: false,
-    start: (request: ResolvedSubagentStartRequest) => startInProcessRun(request, {}),
+    start: (request: ResolvedSubagentStartRequest) => startInProcessRun(request, {
+      reviewIsolation: options.reviewIsolation ?? false,
+    }),
   })
   ctx.llm.registerAdapter(['mock'], adapter)
   const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
@@ -379,6 +382,25 @@ describe('in-process structured output', () => {
     expect(childRequest.system).toContain('You are a counter.')
     expect(childRequest.system!.endsWith(STRUCTURED_OUTPUT_INSTRUCTION)).toBe(true)
     expect(childRequest.system!.indexOf(STRUCTURED_OUTPUT_INSTRUCTION)).toBeGreaterThan(0)
+    await run.dispose()
+  })
+
+  it('review isolation sends only the compact judge prompt and suppresses runtime context', async () => {
+    const { ctx, parent, adapter } = await setup([
+      toolCallResponse('c1', STRUCTURED_OUTPUT_TOOL, { answer: 1 }),
+    ], { reviewIsolation: true })
+    ctx.systemPrompt.section({ name: 'test:large-persona', order: 10, text: 'FULL-PHOENIX-PERSONA-MUST-NOT-LEAK' })
+    ctx.systemPrompt.context({ name: 'test:runtime-context', order: 10, text: 'RUNTIME-CONTEXT-MUST-NOT-LEAK' })
+
+    const run = await ctx.subagents.start('spawn', structuredRequest(parent))
+    const result = await run.result
+
+    expect(result.structured).toEqual({ answer: 1 })
+    const request = adapter.requests[0]!
+    expect(request.system).toBe(REVIEW_ISOLATED_SYSTEM_PROMPT)
+    expect(request.system).not.toContain('FULL-PHOENIX-PERSONA-MUST-NOT-LEAK')
+    expect(JSON.stringify(request.messages)).not.toContain('RUNTIME-CONTEXT-MUST-NOT-LEAK')
+    expect(toolNames(request)).toContain(STRUCTURED_OUTPUT_TOOL)
     await run.dispose()
   })
 
