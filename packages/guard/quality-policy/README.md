@@ -37,13 +37,43 @@ The artifact domain is inferred from touched paths: code, web, docs, data, confi
 
 ### Post-mutation context
 
-After the first mutation that makes previously fresh evidence stale, the model receives a short notice saying that evidence is stale, selecting a domain-specific high-signal check, asking it to reuse still-fresh evidence, prefer cheap deterministic checks before a judge, and batch independent checks.
+#### What the model sees
 
-No new request is created for this notice; it rides the existing tool result additionalContexts.
+The first successful mutation that makes previously fresh evidence stale appends the source-attributed notice below to the next request that already follows that tool result. A second mutation while evidence is already stale adds no duplicate notice.
+
+##### Freshness notice
+
+```markdown
+Fresh verification evidence is now stale because the artifact changed. <domain-specific hint> Reuse still-fresh evidence for unchanged inputs, choose cheap deterministic checks before a model judge, and batch independent checks in one command or run them in parallel when possible.
+```
+
+#### Token effect
+
+Zero tokens before a mutation. One bounded notice is appended only on a fresh-to-dirty transition and is retained in that session history; repeated mutations while dirty add no extra notice.
+
+#### KV Cache effect
+
+Append-only after the already-cached request prefix. It does not change the stable system prompt or tool schemas, so prior prefix cache entries remain reusable.
 
 ### Turn-stop correction
 
-If the turn tries to close while mutations remain newer than accepted evidence, the agent receives one bounded steer by default asking for the smallest meaningful proof at the real consumer boundary. If no automated proof exists, it may inspect the final artifact and report the verification limit rather than looping.
+#### What the model sees
+
+If a turn attempts to stop while successful mutations are newer than accepted evidence, PHOENIX may steer the bounded notice below. The default budget is one stop correction per direct human task; fresh verification suppresses it completely.
+
+##### Stop notice
+
+```markdown
+This task has successful mutations after its latest accepted verification. Before presenting it as complete, <domain-specific hint> Prefer the existing production/user entrypoint and the smallest high-signal check; do not rerun evidence that is still fresh. If no meaningful automated check exists, inspect the final artifact and state the verification limit.
+```
+
+#### Token effect
+
+Zero tokens on the compliant path. A premature dirty stop pays at most the configured maxStopNudges notices; the shipped base config is one.
+
+#### KV Cache effect
+
+The correction is appended as new next-step context after the reusable prefix. It does not rewrite earlier prompt or tool-schema tokens.
 
 ## Known Limitations and Deferred Work
 
