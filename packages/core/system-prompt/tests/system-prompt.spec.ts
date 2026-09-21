@@ -4,7 +4,8 @@ import SystemPrompt, { AssembleContext, PromptAssembly, QUALITY_CONTRACT, QUALIT
 
 /**
  * Every assembly carries the plugin's own built-ins — `harness:identity`
- * (order −100) and `deployment:persona` (order 0, from config). Tests about
+ * (order −100), `harness:quality` (order −90), and `deployment:persona`
+ * (order 0, from config). Tests about
  * registry MECHANICS strip them with {@link contributed} to stay focused on
  * their own sections; the built-ins' behavior is pinned by its own describe.
  */
@@ -83,7 +84,7 @@ describe('SystemPrompt', () => {
       // skips the schema, so the ctor's `?? ''` narrowing is what fires.
       const ctx = new Context()
       const service = new SystemPrompt(ctx, {})
-      expect(renderPrompt(await service.assemble())).toBe(IDENTITY)
+      expect(renderPrompt(await service.assemble())).toBe(`${IDENTITY}\n\n${QUALITY_CONTRACT}`)
     })
   })
 
@@ -275,8 +276,8 @@ describe('SystemPrompt', () => {
 
     const passed: AssembleContext = {}
     const assembly = await ctx.systemPrompt.assemble(passed)
-    expect(seen).toEqual([['harness:identity', 'deployment:persona', 'base', 'from-a']])
-    expect(assembly.sections.map(s => s.name)).toEqual(['harness:identity', 'deployment:persona', 'base', 'from-a'])
+    expect(seen).toEqual([['harness:identity', QUALITY_SECTION, 'deployment:persona', 'base', 'from-a']])
+    expect(assembly.sections.map(s => s.name)).toEqual(['harness:identity', QUALITY_SECTION, 'deployment:persona', 'base', 'from-a'])
     expect(contexts[0]).toBe(passed) // the caller's context reaches listeners
   })
 
@@ -336,7 +337,7 @@ describe('SystemPrompt', () => {
     firstParameters.properties['leak'] = { type: 'string' }
 
     const second = await ctx.systemPrompt.assemble()
-    expect(second.sections.map(section => section.name)).toEqual(['harness:identity', 'deployment:persona', 'base'])
+    expect(second.sections.map(section => section.name)).toEqual(['harness:identity', QUALITY_SECTION, 'deployment:persona', 'base'])
     expect(second.sections[0]!.text).toBe(IDENTITY)
     expect(second.contexts).toEqual([])
     expect(second.tools).toEqual([{ name: 't', description: 'tool', parameters: { type: 'object', properties: {} } }])
