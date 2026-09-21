@@ -2,6 +2,8 @@
 
 Status: implemented
 
+[English](2026-09-20-execution-efficiency-quality-bridge.md) | 中文
+
 ## Problem
 
 外部 A/B 运行暴露出一个共同问题：PHOENIX 在流程性开销上消耗了过多时间，同时仍可能把不完整的证据当作任务已完成。
