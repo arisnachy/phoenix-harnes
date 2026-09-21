@@ -60,6 +60,7 @@ export interface SpeechOutput {
   dispose(): void
 }
 
+/** One stable fragment and the transcript offset consumed by it. */
 export interface PlannedSpeechSegment {
   readonly text: string
   readonly end: number
@@ -123,7 +124,13 @@ function resolveScope(scope: SpeechOutputScope | undefined): SpeechOutputScope |
   return scope ?? defaultScope()
 }
 
-/** Find the next safe semantic boundary in a growing transcript. */
+/**
+ * Find the next safe semantic boundary in a growing transcript.
+ * @param text - Normalized growing assistant transcript.
+ * @param from - Character offset already queued for speech.
+ * @param final - Whether no more transcript text will arrive.
+ * @returns The next speakable segment, or undefined until a safe boundary exists.
+ */
 export function nextStreamingSpeechSegment(text: string, from: number, final: boolean): PlannedSpeechSegment | undefined {
   let start = from
   while (start < text.length && /\s/u.test(text[start] ?? '')) start += 1
