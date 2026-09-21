@@ -304,6 +304,7 @@
     { "path": "./packages/preset/agent-presets" },
     { "path": "./packages/preset/persona" },
     { "path": "./packages/profile/user-profile" },
+    { "path": "./packages/guard/quality-policy" },
     { "path": "./packages/guard/repeat-tool-reminder" },
     { "path": "./packages/extensions/cordis-host-runner" },
     { "path": "./packages/extensions/tool-cordis" },
