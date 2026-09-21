@@ -220,6 +220,28 @@ jobs:
           if (-not $smokeLog.Contains('Visible smoke: BrowserCollapsed=True.')) { throw 'Phoenix EXE opened with the embedded browser pane visible instead of chat-first' }
           if (-not $smokeLog.Contains('Visible desktop window smoke test passed')) { throw 'Phoenix native window did not complete its visible smoke lifecycle' }
 
+      - name: Pre-warm WebView2 shell profile smoke test
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:LOCALAPPDATA 'Phoenix\logs\desktop.log'
+          $profile = Join-Path $env:LOCALAPPDATA 'Phoenix\webview\shell-v2'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          Remove-Item $profile -Recurse -Force -ErrorAction SilentlyContinue
+          $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--prepare-webview' -PassThru
+          if (-not $process.WaitForExit(45000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Write-Host '--- Phoenix desktop.log ---'
+            if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } } else { Write-Host '(desktop.log missing)' }
+            throw 'Phoenix WebView2 profile pre-warm did not finish within 45 seconds'
+          }
+          Write-Host '--- Phoenix desktop.log ---'
+          if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } }
+          if ($process.ExitCode -ne 0) { throw "Phoenix WebView2 profile pre-warm failed: $($process.ExitCode)" }
+          $prewarmLog = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+          if (-not $prewarmLog.Contains('profile pre-warm completed=True')) {
+            throw 'Phoenix WebView2 profile was not verified as initialized'
+          }
+
       - name: Loopback WebView2 navigation smoke test
         shell: pwsh
         run: |
