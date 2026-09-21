@@ -16,7 +16,7 @@
  * checkout cannot stand in for a missing file here.
  */
 
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -66,6 +66,35 @@ function packedDependencies(directories: readonly string[]): Map<string, { url: 
   return dependencies
 }
 
+/**
+ * Import every published Typert host export from the installed consumer tree.
+ * This proves generated reflection code carries all runtime dependencies instead
+ * of succeeding only inside the workspace's hoisted dependency graph.
+ * @param consumerRoot - throwaway installed consumer root.
+ * @param packed - installed package map keyed by package name.
+ * @param environment - sanitized child environment.
+ */
+function verifyInstalledTypertExports(
+  consumerRoot: string,
+  packed: ReadonlyMap<string, { url: string; version: string }>,
+  environment: NodeJS.ProcessEnv,
+): void {
+  for (const packageName of packed.keys()) {
+    const manifestPath = join(consumerRoot, 'node_modules', ...packageName.split('/'), 'package.json')
+    if (!existsSync(manifestPath)) continue
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      readonly exports?: Readonly<Record<string, unknown>>
+    }
+    if (manifest.exports === undefined || !Object.hasOwn(manifest.exports, './typert')) continue
+    capture(process.execPath, [
+      '--input-type=module',
+      '--eval',
+      `await import(${JSON.stringify(`${packageName}/typert`)})`,
+    ], { cwd: consumerRoot, env: environment })
+    console.log(`release verify-packed-install: imported ${packageName}/typert`)
+  }
+}
+
 /** Install every tarball under `--from` and drive the `--family` entry. */
 function main(): void {
   const { values } = parseArgs({
@@ -106,6 +135,8 @@ function main(): void {
     // its tarball is supplied through --from.
     capture('npm', ['install', '--no-audit', '--no-fund', '--package-lock=false', '--omit=optional'],
       { cwd: consumerRoot, env: environment })
+
+    verifyInstalledTypertExports(consumerRoot, packed, environment)
 
     const bin = join(consumerRoot, 'node_modules', ...entry.packageName.split('/'), entry.binPath)
     const version = capture(process.execPath, [bin, '--version'], { cwd: consumerRoot, env: environment })
