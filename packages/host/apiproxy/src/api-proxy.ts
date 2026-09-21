@@ -1216,7 +1216,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
       assembled: undefined,
     }
-    installModelSelection(agent.ctx, selection, defaultExecutionHandoff(selection.current))
+    installModelSelection(agent.ctx, selection, defaultExecutionHandoff)
     selections.set(agent, selection)
     return selection
   }

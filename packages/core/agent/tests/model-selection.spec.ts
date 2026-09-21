@@ -13,7 +13,7 @@ import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 describe('installModelSelection()', () => {
   it('only provides the default Luna handoff for OpenAI Codex', () => {
     expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-5.6-sol' })).toEqual({
-      afterStep: 0,
+      afterStep: 1,
       selection: {
         provider: 'openai-codex',
         model: 'gpt-5.6-luna',
@@ -21,6 +21,99 @@ describe('installModelSelection()', () => {
       },
     })
     expect(defaultExecutionHandoff({ provider: 'other', model: 'custom' })).toBeUndefined()
+  })
+
+  it('uses a medium first evidence step for explicit tool work, then high for execution', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'read', description: 'read a file', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: ReasoningEffortId('max') },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const agent = {
+      session: {
+        events: [
+          { type: 'turn/start', data: { turn: 1 } },
+          {
+            type: 'user/message',
+            data: {
+              source: { kind: 'user' },
+              content: [{ type: 'text', text: 'Arregla test_jsonparse.py y ejecuta los tests.' }],
+            },
+          },
+        ],
+      },
+    } as unknown as Agent
+    const seed: LlmCallConfig = {
+      provider: 'openai-codex',
+      model: 'gpt-5.6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    }
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-5.6-luna',
+      reasoningEffort: ReasoningEffortId('medium'),
+    })
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-5.6-luna',
+      reasoningEffort: ReasoningEffortId('high'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('keeps the selected Max effort for a non-operational first step even when tools exist', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'read', description: 'read a file', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: ReasoningEffortId('max') },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const agent = {
+      session: {
+        events: [
+          { type: 'turn/start', data: { turn: 1 } },
+          {
+            type: 'user/message',
+            data: {
+              source: { kind: 'user' },
+              content: [{ type: 'text', text: 'Explícame por qué JSON usa comillas dobles.' }],
+            },
+          },
+        ],
+      },
+    } as unknown as Agent
+    const seed: LlmCallConfig = {
+      provider: 'openai-codex',
+      model: 'gpt-5.6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    }
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(seed)
+
+    dispose()
+    await ctx.fiber.dispose()
   })
 
   it('snapshots prompt variables and request routing together, then disposes both listeners', async () => {
@@ -80,7 +173,7 @@ describe('installModelSelection()', () => {
       assembled: undefined,
     }
     const dispose = installModelSelection(ctx, selection, {
-      afterStep: 0,
+      afterStep: 1,
       selection: { provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: ReasoningEffortId('high') },
     })
     const agent = {} as Agent
@@ -89,17 +182,17 @@ describe('installModelSelection()', () => {
     await ctx.systemPrompt.assemble()
 
     await expect(agentEvents(ctx, agent).waterfall(
-      'agent/request', { turn: 1, step: 0, signal }, () => Promise.resolve(seed),
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual(seed)
     await expect(agentEvents(ctx, agent).waterfall(
-      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-5.6-luna',
       reasoningEffort: ReasoningEffortId('high'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
-      'agent/request', { turn: 1, step: 0, signal }, () => Promise.resolve(seed),
+      'agent/request', { turn: 2, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual(seed)
 
     dispose()
