@@ -132,8 +132,11 @@ describe('quality-policy evidence freshness', () => {
     await waitForIdle(ctx, agent)
 
     const pluginMessages = [...agent.session.events]
-      .filter((event): event is SessionEvent<'user/message'> => event.type === 'user/message' && event.data.source.kind === 'plugin')
-    expect(pluginMessages.some(event => event.data.source.plugin === 'test-quality')).toBe(true)
+      .filter((event): event is SessionEvent<'user/message'> => event.type === 'user/message')
+    expect(pluginMessages.some((event) => {
+      const source = event.data.source
+      return source.kind === 'plugin' && source.plugin === 'test-quality'
+    })).toBe(true)
     expect(notices(agent)).toHaveLength(1)
   })
 
