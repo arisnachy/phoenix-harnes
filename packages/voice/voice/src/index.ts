@@ -6,9 +6,19 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { Context, Service } from '@phoenix-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
+import { Remote, TypertRemoteService } from '@phoenix-ai/dsh-typert-protocol'
 import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-session'
+import type {
+  VoiceConversationCancelReceipt,
+  VoiceConversationCancelRequest,
+  VoiceConversationSpeakReceipt,
+  VoiceConversationSpeakRequest,
+  VoiceConversationStatus,
+} from './types.ts'
+
+export type * from './types.ts'
 
 /** Events that are useful to hear without narrating ordinary execution. */
 export type VoiceEventKind = 'mission-completed' | 'discovery' | 'blocked' | 'help' | 'authorization'
@@ -142,6 +152,12 @@ interface QueuedAnnouncement {
   readonly controller: AbortController
 }
 
+interface ConversationSpeechChannel {
+  lastSequence: number
+  readonly controllers: Set<AbortController>
+  tail: Promise<void>
+}
+
 interface UnknownRecord {
   readonly [key: string]: unknown
 }
@@ -226,7 +242,7 @@ export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | 
 }
 
 /** Provider registry and non-blocking important-event announcement queue. */
-export class VoiceRuntime extends Service {
+export class VoiceRuntime extends TypertRemoteService {
   static Config: z<VoiceRuntimeConfig> = z.object({
     enabled: z.boolean().default(true),
     language: z.string().default('en-US'),
@@ -243,6 +259,7 @@ export class VoiceRuntime extends Service {
   private readonly pendingKeys = new Set<string>()
   private current: QueuedAnnouncement | undefined
   private draining = false
+  private readonly conversationSpeech = new Map<string, ConversationSpeechChannel>()
 
   constructor(ctx: Context, config: VoiceRuntimeConfig = {}) {
     super(ctx, 'voice')
@@ -260,6 +277,78 @@ export class VoiceRuntime extends Service {
       if (important !== undefined) void this.announce(important)
     })
     ctx.effect(() => () => { this.stop() }, 'voice queue teardown')
+  }
+
+  /** Report whether the local Client can route conversation speech through neural TTS. */
+  @Remote('conversationStatus')
+  async conversationStatus(): Promise<VoiceConversationStatus> {
+    const provider = this.selectTtsProvider()
+    return {
+      enabled: this.config.enabled,
+      natural: this.config.enabled && provider?.id === 'phoenix-natural',
+      ...(provider === undefined ? {} : { provider: provider.id }),
+    }
+  }
+
+  /** Admit one stable semantic segment for asynchronous Host playback. */
+  @Remote('conversationSpeak')
+  async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt> {
+    if (!this.config.enabled) return { accepted: false, reason: 'disabled' }
+    const provider = this.selectTtsProvider()
+    if (provider?.id !== 'phoenix-natural') {
+      return { accepted: false, reason: 'natural-unavailable', ...(provider === undefined ? {} : { provider: provider.id }) }
+    }
+    const key = request.key.trim()
+    if (key === '' || key.length > 256 || !Number.isSafeInteger(request.sequence) || request.sequence < 0) {
+      return { accepted: false, reason: 'invalid', provider: provider.id }
+    }
+    const text = displayOutputToVoiceText(request.text, Math.min(this.config.maxChars, 360))
+    if (text === '') return { accepted: false, reason: 'empty', provider: provider.id }
+
+    let channel = this.conversationSpeech.get(key)
+    if (channel === undefined) {
+      channel = { lastSequence: -1, controllers: new Set(), tail: Promise.resolve() }
+      this.conversationSpeech.set(key, channel)
+    }
+    if (request.sequence <= channel.lastSequence) {
+      return { accepted: false, reason: 'duplicate', provider: provider.id }
+    }
+    channel.lastSequence = request.sequence
+    const controller = new AbortController()
+    channel.controllers.add(controller)
+    const language = request.language?.trim() || this.config.language
+    const final = request.final === true
+    const currentChannel = channel
+    channel.tail = channel.tail
+      .catch(() => {})
+      .then(async () => {
+        if (controller.signal.aborted) return
+        await this.speakThroughProviders(text, language, controller.signal)
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          this.ctx.logger('voice').warn(`conversation voice failed: ${String(error)}`)
+        }
+      })
+      .finally(() => {
+        currentChannel.controllers.delete(controller)
+        if (final && currentChannel.controllers.size === 0 && this.conversationSpeech.get(key) === currentChannel) {
+          this.conversationSpeech.delete(key)
+        }
+      })
+    return { accepted: true, provider: provider.id }
+  }
+
+  /** Abort queued/active speech for one growing assistant response. */
+  @Remote('conversationCancel')
+  async conversationCancel(request: VoiceConversationCancelRequest): Promise<VoiceConversationCancelReceipt> {
+    const key = request.key.trim()
+    const channel = this.conversationSpeech.get(key)
+    if (channel === undefined) return { cancelled: 0 }
+    this.conversationSpeech.delete(key)
+    const controllers = [...channel.controllers]
+    for (const controller of controllers) controller.abort('conversation speech cancelled')
+    return { cancelled: controllers.length }
   }
 
   /**
@@ -336,6 +425,10 @@ export class VoiceRuntime extends Service {
     this.queue.length = 0
     this.pendingKeys.clear()
     this.current?.controller.abort('voice stopped')
+    for (const channel of this.conversationSpeech.values()) {
+      for (const controller of channel.controllers) controller.abort('voice stopped')
+    }
+    this.conversationSpeech.clear()
   }
 
   /**
@@ -359,7 +452,8 @@ export class VoiceRuntime extends Service {
     return {
       enabled: this.config.enabled,
       queued: this.queue.length,
-      speaking: this.current !== undefined,
+      speaking: this.current !== undefined
+        || [...this.conversationSpeech.values()].some(channel => channel.controllers.size > 0),
       ...ttsProvider === undefined ? {} : { ttsProvider: ttsProvider.id },
       ...sttProvider === undefined ? {} : { sttProvider: sttProvider.id },
     }
@@ -395,22 +489,12 @@ export class VoiceRuntime extends Service {
         if (providers.length === 0) continue
         this.current = item
         try {
-          for (const provider of providers) {
-            if (item.controller.signal.aborted) break
-            try {
-              await provider.speak({
-                text: item.text,
-                language: item.event.language ?? this.config.language,
-                signal: item.controller.signal,
-              })
-              break
-            } catch (error) {
-              if (item.controller.signal.aborted) break
-              this.ctx.logger('voice').warn(
-                `voice provider "${provider.id}" failed; trying fallback: ${String(error)}`,
-              )
-            }
-          }
+          await this.speakThroughProviders(
+            item.text,
+            item.event.language ?? this.config.language,
+            item.controller.signal,
+            providers,
+          )
         } finally {
           this.current = undefined
         }
@@ -418,6 +502,29 @@ export class VoiceRuntime extends Service {
     } finally {
       this.draining = false
     }
+  }
+
+  private async speakThroughProviders(
+    text: string,
+    language: string,
+    signal: AbortSignal,
+    candidates = orderedProviders(this.ttsProviders, this.config.ttsProvider),
+  ): Promise<void> {
+    let lastError: unknown
+    for (const provider of candidates) {
+      if (signal.aborted) return
+      try {
+        await provider.speak({ text, language, signal })
+        return
+      } catch (error) {
+        lastError = error
+        if (signal.aborted) return
+        this.ctx.logger('voice').warn(
+          `voice provider "${provider.id}" failed; trying fallback: ${String(error)}`,
+        )
+      }
+    }
+    if (lastError !== undefined) throw lastError
   }
 }
 
