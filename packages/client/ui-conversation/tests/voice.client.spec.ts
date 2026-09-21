@@ -140,11 +140,17 @@ describe('browser voice adapter', () => {
       ok: true as const,
       value: { enabled: true, natural: true, provider: 'phoenix-natural' },
     }))
-    const speak = vi.fn(async () => ({
+    const speak = vi.fn(async (_request: {
+      readonly key: string
+      readonly sequence: number
+      readonly text: string
+      readonly language?: string
+      readonly final?: boolean
+    }) => ({
       ok: true as const,
       value: { accepted: true, provider: 'phoenix-natural' },
     }))
-    const cancel = vi.fn(async () => ({
+    const cancel = vi.fn(async (_request: { readonly key: string }) => ({
       ok: true as const,
       value: { cancelled: 1 },
     }))
