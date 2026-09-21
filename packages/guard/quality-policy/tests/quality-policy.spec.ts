@@ -90,7 +90,6 @@ describe('quality-policy evidence freshness', () => {
     const ctx = await harness()
     ctx.llm.registerAdapter(['mock'], new MockAdapter([
       toolCallResponse('w1', 'write', { path: 'src/a.ts' }),
-      toolCallResponse('f1', 'check_failed', {}),
       toolCallResponse('v1', 'verify', {}),
       textResponse('done'),
     ]))
@@ -243,6 +242,7 @@ describe('quality-policy evidence freshness', () => {
       toolCallResponse('u1', 'update_file', {}),
       toolCallResponse('p1', 'probe', {}),
       toolCallResponse('w1', 'write', { path: 'src/a.ts' }),
+      toolCallResponse('f1', 'check_failed', {}),
       toolCallResponse('v1', 'verify', {}),
       toolCallResponse('v2', 'verify', {}),
       textResponse('done'),
