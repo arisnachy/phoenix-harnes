@@ -1738,6 +1738,25 @@ Depends on: [`LocalConfig`](#phoenix-aidsh-pwsh-local)
 
 Source: [`packages/shell/pwsh-sandbox/src/index.ts:40`](../packages/shell/pwsh-sandbox/src/index.ts)
 
+<a id="phoenix-aidsh-quality-policy"></a>
+
+## `@phoenix-ai/dsh-quality-policy`
+
+Requires: `tools`
+
+```ts config-catalog
+/** Deployment policy. */
+export interface Config {
+  /**
+   * Maximum turn-stop corrective nudges for one direct human task.
+   * Zero disables the stop nudge while retaining in-band post-mutation context.
+   */
+  maxStopNudges?: number
+}
+```
+
+Source: [`packages/guard/quality-policy/src/index.ts:30`](../packages/guard/quality-policy/src/index.ts)
+
 <a id="phoenix-aidsh-repeat-tool-reminder"></a>
 
 ## `@phoenix-ai/dsh-repeat-tool-reminder`
