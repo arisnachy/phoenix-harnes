@@ -228,17 +228,23 @@ export function apply(ctx: Context): void {
     if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') return
     checkpoint(state, goal, 'active', 'continue')
     if (goal.roundsStarted >= goal.maxGoalRounds) {
-      // The round cap is a global autonomy budget, not a license to open
-      // another window forever. Preserve the unfinished mission, stop
-      // automatic work, and require an explicit human resume/edit before more
-      // budget is spent. This prevents verifier/connector/admin loops from
-      // consuming the primary task indefinitely.
-      const message = `Automatic execution budget exhausted after ${goal.maxGoalRounds} rounds; explicit resume is required.`
-      checkpoint(state, goal, 'awaiting-human', 'resume', message)
-      ctx.goals.block(agent, goalRef(goal), {
-        code: 'execution-budget-exhausted',
-        message,
-      })
+      // One fresh execution window is enough to recover from a bad strategy.
+      // A second exhausted window is a hard autonomy budget: preserve the
+      // mission and wait for the user instead of rotating revisions forever.
+      const priorWindows = agent.session.events.filter(event =>
+        event.type === 'goal/continuation' && event.data.goalId === goal.id).length
+      if (priorWindows >= 1) {
+        const message = `Automatic execution budget exhausted after ${priorWindows + 1} windows; explicit resume is required.`
+        checkpoint(state, goal, 'awaiting-human', 'resume', message)
+        ctx.goals.block(agent, goalRef(goal), {
+          code: 'execution-budget-exhausted',
+          message,
+        })
+        return
+      }
+      checkpoint(state, goal, 'retrying', 'continue',
+        `Execution window reached ${goal.maxGoalRounds} rounds; opening one final recovery window.`)
+      ctx.goals.continueWindow(agent, goalRef(goal))
       return
     }
 
