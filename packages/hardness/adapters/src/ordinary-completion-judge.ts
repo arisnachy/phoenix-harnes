@@ -57,7 +57,6 @@ interface BridgeState {
   generation: number
   verifiedGeneration: number
   judgedGeneration: number
-  judgePasses: number
   request: string
   mutations: string[]
   mutationTargets: string[]
@@ -65,6 +64,7 @@ interface BridgeState {
   sawRelevantFailure: boolean
   needsRejudge: boolean
   judgeInfrastructureBlocked: boolean
+  lastJudgedEvidenceKey: string
 }
 
 function operationName(toolName: string): string {
@@ -243,10 +243,8 @@ export function installOrdinaryCompletionJudgeBridge(
   input: {
     readonly subagents: JudgeRuntime
     readonly provider: string
-    readonly maxPasses?: number
   },
 ): () => void {
-  const maxPasses = input.maxPasses ?? 2
   const states = new WeakMap<Agent, BridgeState>()
   const disposers: (() => void)[] = []
 
@@ -256,7 +254,6 @@ export function installOrdinaryCompletionJudgeBridge(
       generation: 0,
       verifiedGeneration: 0,
       judgedGeneration: 0,
-      judgePasses: 0,
       request: requestText(message),
       mutations: [],
       mutationTargets: [],
@@ -264,6 +261,7 @@ export function installOrdinaryCompletionJudgeBridge(
       sawRelevantFailure: false,
       needsRejudge: false,
       judgeInfrastructureBlocked: false,
+      lastJudgedEvidenceKey: '',
     })
   }))
 
@@ -294,9 +292,13 @@ export function installOrdinaryCompletionJudgeBridge(
       state.mutationTargets = state.mutationTargets.slice(-8)
     } else if (state.generation > 0 && verifies) {
       state.verifiedGeneration = state.generation
-      if (state.needsRejudge && state.judgedGeneration === state.generation) state.judgedGeneration = 0
-      state.verifications.push(compactVerification(exec.name, exec.arguments))
-      state.verifications = state.verifications.slice(-6)
+      const receipt = compactVerification(exec.name, exec.arguments)
+      const isNewEvidence = !state.verifications.includes(receipt)
+      if (isNewEvidence) {
+        state.verifications.push(receipt)
+        state.verifications = state.verifications.slice(-6)
+        if (state.needsRejudge && state.judgedGeneration === state.generation) state.judgedGeneration = 0
+      }
     }
     return downstream
   }))
@@ -305,7 +307,7 @@ export function installOrdinaryCompletionJudgeBridge(
     const state = states.get(agent)
     if (state === undefined || state.generation === 0) return
     if (state.verifiedGeneration !== state.generation || state.judgedGeneration === state.generation) return
-    if (state.judgeInfrastructureBlocked || state.judgePasses >= maxPasses) return
+    if (state.judgeInfrastructureBlocked) return
     if (!ordinaryJudgeRequired({
       request: state.request,
       generation: state.generation,
@@ -314,7 +316,14 @@ export function installOrdinaryCompletionJudgeBridge(
       needsRejudge: state.needsRejudge,
     })) return
 
-    state.judgePasses += 1
+    const evidenceKey = JSON.stringify({
+      generation: state.generation,
+      targets: state.mutationTargets,
+      verifications: state.verifications,
+    })
+    if (evidenceKey === state.lastJudgedEvidenceKey) return
+    state.lastJudgedEvidenceKey = evidenceKey
+
     const decision = await reviewOrdinaryCompletion({
       subagents: input.subagents,
       provider: input.provider,
