@@ -12,9 +12,9 @@ export interface SpeechSynthesisUtteranceLike {
   onend: (() => void) | null
   /** Called when the browser cannot synthesize the utterance. */
   onerror: (() => void) | null
-  /** Browser speech rate; a slightly slower cadence sounds less mechanical. */
+  /** Browser speech rate. */
   rate?: number
-  /** Browser pitch; a small lift keeps the voice conversational. */
+  /** Browser pitch. */
   pitch?: number
   /** Browser output volume. */
   volume?: number
@@ -47,12 +47,22 @@ export interface SpeechOutputScope {
 
 /** Handle returned to the UI for one assistant speech-output control. */
 export interface SpeechOutput {
-  /** Read one non-empty transcript, replacing any queued utterance. */
+  /** Read one complete transcript, replacing any queued utterance. */
   speak(text: string): void
+  /**
+   * Feed a growing assistant transcript. Stable semantic chunks are queued as
+   * soon as they are speakable; final flushes the remaining tail.
+   */
+  update(text: string, final?: boolean): void
   /** Cancel the current utterance and return to the idle state. */
   stop(): void
   /** Release the current utterance when the owning message unmounts. */
   dispose(): void
+}
+
+export interface PlannedSpeechSegment {
+  readonly text: string
+  readonly end: number
 }
 
 function defaultScope(): SpeechOutputScope | undefined {
@@ -86,7 +96,7 @@ export function conversationalSpeechText(text: string): string {
     .trim()
 }
 
-/** Choose the closest installed voice, preferring language and local natural voices. */
+/** Choose the closest installed voice, strongly preferring neural/natural voices. */
 function bestVoice(synthesis: SpeechSynthesisLike, language: string): SpeechSynthesisVoiceLike | undefined {
   const voices = synthesis.getVoices?.() ?? []
   const target = language.toLowerCase()
@@ -96,12 +106,14 @@ function bestVoice(synthesis: SpeechSynthesisLike, language: string): SpeechSynt
     const voiceLanguage = voice.lang.toLowerCase()
     const voiceBase = voiceLanguage.split('-')[0]
     if (voiceBase !== base) continue
-    const natural = /natural|neural|premium|enhanced/i.test(voice.name) ? 4 : 0
+    const natural = /natural|neural|premium|enhanced/i.test(voice.name) ? 60 : 0
     const feminine = [
       'aria', 'samantha', 'sofia', 'sofía', 'jenny', 'sabina', 'zira', 'karen', 'susan',
       'helena', 'luciana', 'marisol', 'paulina', 'ava', 'emma', 'laura', 'female', 'feminine', 'mujer',
-    ].some(name => voice.name.toLowerCase().includes(name)) ? 12 : 0
-    const score = feminine * 100 + (voiceLanguage === target ? 18 : 10) + (voice.localService === true ? 3 : 0) + natural
+    ].some(name => voice.name.toLowerCase().includes(name)) ? 50 : 0
+    const score = natural + feminine
+      + (voiceLanguage === target ? 18 : 10)
+      + (voice.localService === true ? 3 : 0)
     if (best === undefined || score > best.score) best = { voice, score }
   }
   return best?.voice
@@ -109,6 +121,54 @@ function bestVoice(synthesis: SpeechSynthesisLike, language: string): SpeechSynt
 
 function resolveScope(scope: SpeechOutputScope | undefined): SpeechOutputScope | undefined {
   return scope ?? defaultScope()
+}
+
+/** Find the next safe semantic boundary in a growing transcript. */
+export function nextStreamingSpeechSegment(text: string, from: number, final: boolean): PlannedSpeechSegment | undefined {
+  let start = from
+  while (start < text.length && /\s/u.test(text[start] ?? '')) start += 1
+  if (start >= text.length) return undefined
+  const remaining = text.slice(start)
+  const maxChars = 180
+  const eagerChars = 96
+  const hardStartChars = 124
+
+  const sentence = /[.!?…][”"'»)]?(?=\s|$)/gu
+  const sentenceMatch = sentence.exec(remaining)
+  if (sentenceMatch !== null) {
+    const end = (sentenceMatch.index ?? 0) + sentenceMatch[0].length
+    if (end <= maxChars) {
+      return { text: remaining.slice(0, end).trim(), end: start + end }
+    }
+  }
+
+  const window = remaining.slice(0, Math.min(maxChars, remaining.length))
+  let clauseEnd = -1
+  for (const match of window.matchAll(/[,;:](?=\s|$)/gu)) {
+    const end = (match.index ?? 0) + match[0].length
+    if (end >= 48) clauseEnd = end
+  }
+  if (clauseEnd > 0 && (final || remaining.length >= eagerChars)) {
+    return { text: remaining.slice(0, clauseEnd).trim(), end: start + clauseEnd }
+  }
+
+  if (!final && remaining.length < hardStartChars) return undefined
+  if (final && remaining.length <= maxChars) {
+    return { text: remaining.trim(), end: text.length }
+  }
+
+  const target = Math.min(maxChars, remaining.length)
+  const whitespace = remaining.lastIndexOf(' ', target)
+  const cut = whitespace >= 64 ? whitespace : target
+  return { text: remaining.slice(0, cut).trim(), end: start + cut }
+}
+
+function configureProsody(utterance: SpeechSynthesisUtteranceLike, text: string): void {
+  const question = /[?¿]\s*$/u.test(text)
+  const energetic = /!\s*$/u.test(text)
+  utterance.rate = text.length > 150 ? 0.95 : energetic ? 0.99 : 0.97
+  utterance.pitch = question ? 1.01 : 1
+  utterance.volume = 0.98
 }
 
 /**
@@ -122,7 +182,7 @@ export function hasSpeechOutput(scope?: SpeechOutputScope): boolean {
 }
 
 /**
- * Construct a cancellable local speech-output adapter.
+ * Construct a cancellable, streaming local speech-output adapter.
  * @param onState - Receives only durable UI states for this control.
  * @param language - Optional BCP 47 language tag; defaults to browser language.
  * @param scope - Optional browser-like scope for tests or an embedded client.
@@ -136,58 +196,110 @@ export function createSpeechOutput(
   const resolved = resolveScope(scope)
   const synthesis = resolved?.speechSynthesis
   const Utterance = resolved?.SpeechSynthesisUtterance
+  const selectedLanguage = language?.trim() || defaultLanguage()
   let epoch = 0
   let active = false
+  let transcript = ''
+  let queuedThrough = 0
+  let pending = 0
 
-  const finish = (current: number): void => {
+  const setSpeaking = (): void => {
+    if (active) return
+    active = true
+    onState('speaking')
+  }
+
+  const finishOne = (current: number): void => {
     if (current !== epoch) return
+    pending = Math.max(0, pending - 1)
+    if (pending !== 0) return
     active = false
     onState('idle')
   }
 
-  const stop = (): void => {
+  const clear = (notify: boolean): void => {
     epoch += 1
+    synthesis?.cancel()
+    transcript = ''
+    queuedThrough = 0
+    pending = 0
+    if (active) {
+      active = false
+      if (notify) onState('idle')
+    }
+  }
+
+  const enqueue = (segment: string): void => {
+    if (synthesis === undefined || Utterance === undefined || segment === '') return
+    const current = epoch
+    const utterance = new Utterance(segment)
+    utterance.lang = selectedLanguage
+    configureProsody(utterance, segment)
+    const voice = bestVoice(synthesis, selectedLanguage)
+    if (voice !== undefined) utterance.voice = voice
+    utterance.onend = () => { finishOne(current) }
+    utterance.onerror = () => { finishOne(current) }
+    pending += 1
+    setSpeaking()
+    synthesis.speak(utterance)
+  }
+
+  const update = (text: string, final = false): void => {
+    const next = conversationalSpeechText(text)
+    if (next === '') return
+    if (synthesis === undefined || Utterance === undefined) {
+      onState('unsupported')
+      return
+    }
+
+    if (transcript === '') {
+      // Claim the browser speech queue only once for this growing response.
+      synthesis.cancel()
+    } else if (!next.startsWith(transcript)) {
+      // Retry/rewrite changed already-observed text. Fence old callbacks and
+      // restart from the corrected transcript rather than speaking stale prose.
+      clear(false)
+    }
+    transcript = next
+
+    while (true) {
+      const planned = nextStreamingSpeechSegment(transcript, queuedThrough, final)
+      if (planned === undefined) break
+      queuedThrough = planned.end
+      enqueue(planned.text)
+    }
+  }
+
+  const stop = (): void => {
     if (synthesis === undefined) {
       active = false
       onState('unsupported')
       return
     }
-    synthesis.cancel()
-    if (active) {
-      active = false
-      onState('idle')
-    }
+    clear(true)
   }
 
   return {
     speak(text: string): void {
-      const transcript = conversationalSpeechText(text)
-      if (transcript === '') return
+      const normalized = conversationalSpeechText(text)
+      if (normalized === '') return
       if (synthesis === undefined || Utterance === undefined) {
         onState('unsupported')
         return
       }
-      const current = ++epoch
-      synthesis.cancel()
-      const utterance = new Utterance(transcript)
-      const selectedLanguage = language?.trim() || defaultLanguage()
-      utterance.lang = selectedLanguage
-      utterance.rate = 0.96
-      utterance.pitch = 1.02
-      utterance.volume = 0.98
-      const voice = bestVoice(synthesis, selectedLanguage)
-      if (voice !== undefined) utterance.voice = voice
-      utterance.onend = () => { finish(current) }
-      utterance.onerror = () => { finish(current) }
-      active = true
-      onState('speaking')
-      synthesis.speak(utterance)
+      clear(false)
+      transcript = normalized
+      while (true) {
+        const planned = nextStreamingSpeechSegment(transcript, queuedThrough, true)
+        if (planned === undefined) break
+        queuedThrough = planned.end
+        enqueue(planned.text)
+      }
     },
+    update,
     stop,
     dispose(): void {
-      epoch += 1
-      synthesis?.cancel()
-      active = false
+      clear(false)
     },
   }
 }

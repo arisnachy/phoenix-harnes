@@ -185,10 +185,22 @@
         language: !!js process.env.PHOENIX_VOICE_LANGUAGE ?? 'es-DO'
         maxQueue: 3
         maxChars: 480
-        ttsProvider: kokoro
+        # Prefer the resident zero-cost neural engine. VoiceRuntime now walks
+        # available fallbacks if a configured engine fails during synthesis.
+        ttsProvider: phoenix-natural
     - id: voice-local
       name: '@phoenix-ai/dsh-voice-local'
       config:
+        # An explicit command wins. Otherwise a fully declared local CosyVoice
+        # installation activates the shipped daemon without delaying Host boot:
+        # warmup starts asynchronously and failures fall through to Kokoro/system.
+        naturalBundledCosyVoice: !!js !!(process.env.PHOENIX_COSYVOICE_HOME && process.env.PHOENIX_COSYVOICE_MODEL_DIR && process.env.PHOENIX_VOICE_REFERENCE)
+        naturalCommand: !!js process.env.PHOENIX_NATURAL_VOICE_COMMAND
+        naturalArgs: !!js process.env.PHOENIX_NATURAL_VOICE_ARGS ? JSON.parse(process.env.PHOENIX_NATURAL_VOICE_ARGS) : []
+        naturalPrewarm: !!js process.env.PHOENIX_NATURAL_VOICE_PREWARM !== '0'
+        naturalStartupTimeoutMs: 45000
+        naturalRequestTimeoutMs: 120000
+        naturalMaxChunkChars: 180
         kokoroCommand: !!js process.env.PHOENIX_KOKORO_COMMAND
         kokoroArgs: []
         sttCommand: !!js process.env.PHOENIX_STT_COMMAND

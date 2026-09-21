@@ -95,6 +95,23 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     expect(kokoro).toHaveBeenCalled()
     expect(system).not.toHaveBeenCalled()
   })
+
+  it('falls back when the preferred provider fails during synthesis', async () => {
+    const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural' })
+    const natural = vi.fn(() => Promise.reject(new Error('engine warming failed')))
+    const kokoro = vi.fn(() => Promise.resolve())
+    const system = vi.fn(() => Promise.resolve())
+    voice.registerTextToSpeechProvider(provider('system', system, 10))
+    voice.registerTextToSpeechProvider(provider('kokoro', kokoro, 100))
+    voice.registerTextToSpeechProvider(provider('phoenix-natural', natural, 300))
+
+    voice.announce({ kind: 'discovery', displayOutput: 'Encontré la causa.' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(natural).toHaveBeenCalledTimes(1)
+    expect(kokoro).toHaveBeenCalledTimes(1)
+    expect(system).not.toHaveBeenCalled()
+  })
 })
 
 describe('session-event voice mapping', () => {

@@ -1,6 +1,15 @@
 /** Browser-native voice input adapter used by the conversation composer. */
 
-import { createSpeechOutput, hasSpeechOutput, type SpeechOutput } from './speech-output.ts'
+import type {
+  VoiceConversationCancelReceipt,
+  VoiceConversationSpeakReceipt,
+  VoiceConversationSpeakRequest,
+  VoiceConversationStatus,
+} from '@phoenix-ai/dsh-api-remotes/client'
+import {
+  conversationalSpeechText, createSpeechOutput, hasSpeechOutput, nextStreamingSpeechSegment,
+  type SpeechOutput,
+} from './speech-output.ts'
 
 /** States exposed by the short-lived browser recognition session. */
 export type VoiceInputState = 'idle' | 'listening' | 'unsupported' | 'permission-denied' | 'error'
@@ -16,6 +25,29 @@ export interface VoiceAssistantSnapshot {
   readonly activatedAt: number
 }
 
+
+/** Minimal generated Remote envelope used without importing Host code. */
+type VoiceRemoteResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } }
+
+/** Host voice namespace mounted by @phoenix-ai/dsh-api-remotes. */
+export interface VoiceAssistantRemote {
+  conversationStatus(): Promise<VoiceRemoteResult<VoiceConversationStatus>>
+  conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceRemoteResult<VoiceConversationSpeakReceipt>>
+  conversationCancel(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationCancelReceipt>>
+}
+
+interface RemoteSpeechState {
+  readonly key: string
+  generation: number
+  transcript: string
+  through: number
+  sequence: number
+  pending: number
+  final: boolean
+}
+
 const INACTIVE_VOICE_ASSISTANT: VoiceAssistantSnapshot = Object.freeze({
   active: false,
   phase: 'inactive',
@@ -25,10 +57,160 @@ let voiceAssistantSnapshot: VoiceAssistantSnapshot = INACTIVE_VOICE_ASSISTANT
 const voiceAssistantListeners = new Set<() => void>()
 const spokenAssistantMessages = new Set<string>()
 let voiceAssistantSpeech: SpeechOutput | undefined
+let voiceAssistantSpeechKey: string | undefined
+let voiceAssistantMicListening = false
+let voiceAssistantSpokenText = ''
+let voiceAssistantRemote: VoiceAssistantRemote | undefined
+let voiceAssistantRemoteNatural = false
+let voiceAssistantRemoteEpoch = 0
+let remoteSpeech: RemoteSpeechState | undefined
 
 function publishVoiceAssistant(next: VoiceAssistantSnapshot): void {
   voiceAssistantSnapshot = next
   for (const listener of voiceAssistantListeners) listener()
+}
+
+
+function publishVoiceIdle(): void {
+  if (!voiceAssistantSnapshot.active) return
+  publishVoiceAssistant({
+    ...voiceAssistantSnapshot,
+    phase: voiceAssistantMicListening ? 'listening' : 'paused',
+  })
+}
+
+function resetRemoteSpeech(cancel = false): void {
+  const current = remoteSpeech
+  remoteSpeech = undefined
+  if (cancel && current !== undefined && voiceAssistantRemote !== undefined) {
+    void voiceAssistantRemote.conversationCancel({ key: current.key }).catch(() => {})
+  }
+}
+
+function browserSpeech(messageKey: string, text: string, final: boolean): void {
+  if (!hasSpeechOutput()) return
+  if (voiceAssistantSpeech === undefined || voiceAssistantSpeechKey !== messageKey) {
+    voiceAssistantSpeech?.dispose()
+    voiceAssistantSpeechKey = messageKey
+    voiceAssistantSpeech = createSpeechOutput((state) => {
+      if (!voiceAssistantSnapshot.active || voiceAssistantSpeechKey !== messageKey) return
+      if (state === 'speaking') publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
+      else publishVoiceIdle()
+    })
+  }
+  voiceAssistantSpeech.update(text, final)
+}
+
+function remoteSpeechFinished(state: RemoteSpeechState, generation: number): void {
+  if (remoteSpeech !== state || state.generation !== generation) return
+  state.pending = Math.max(0, state.pending - 1)
+  if (state.pending === 0) {
+    if (state.final) remoteSpeech = undefined
+    publishVoiceIdle()
+  }
+}
+
+function streamRemoteSpeech(messageKey: string, text: string, final: boolean): boolean {
+  const remote = voiceAssistantRemote
+  if (!voiceAssistantRemoteNatural || remote === undefined) return false
+  const transcript = conversationalSpeechText(text)
+  if (transcript === '') return true
+
+  let state = remoteSpeech
+  if (state === undefined || state.key !== messageKey || !transcript.startsWith(state.transcript)) {
+    resetRemoteSpeech(state !== undefined)
+    state = {
+      key: messageKey,
+      generation: (state?.generation ?? 0) + 1,
+      transcript: '',
+      through: 0,
+      sequence: 0,
+      pending: 0,
+      final: false,
+    }
+    remoteSpeech = state
+  }
+  state.transcript = transcript
+  state.final = final
+
+  let queued = false
+  while (true) {
+    const planned = nextStreamingSpeechSegment(state.transcript, state.through, final)
+    if (planned === undefined) break
+    state.through = planned.end
+    const sequence = state.sequence++
+    const generation = state.generation
+    const isFinalSegment = final && state.through >= state.transcript.length
+    state.pending += 1
+    queued = true
+    publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
+    void remote.conversationSpeak({
+      key: messageKey,
+      sequence,
+      text: planned.text,
+      final: isFinalSegment,
+    }).then((result) => {
+      if (remoteSpeech !== state || state.generation !== generation) return
+      if (!result.ok || !result.value.accepted) {
+        // Host lost the neural route after the capability probe. Disable it
+        // until the next explicit refresh and preserve audible output locally.
+        voiceAssistantRemoteNatural = false
+        resetRemoteSpeech(true)
+        browserSpeech(messageKey, text, final)
+        return
+      }
+      remoteSpeechFinished(state, generation)
+    }, () => {
+      if (remoteSpeech !== state || state.generation !== generation) return
+      voiceAssistantRemoteNatural = false
+      resetRemoteSpeech(true)
+      browserSpeech(messageKey, text, final)
+    })
+  }
+
+  if (final && !queued && state.pending === 0) {
+    remoteSpeech = undefined
+    publishVoiceIdle()
+  }
+  return true
+}
+
+/**
+ * Attach the generated Host voice namespace. Capability probing is asynchronous
+ * and never blocks rendering; browser speech remains the fallback until ready.
+ */
+export function configureVoiceAssistantRemote(remote: VoiceAssistantRemote): () => void {
+  voiceAssistantRemote = remote
+  const epoch = ++voiceAssistantRemoteEpoch
+  void refreshVoiceAssistantRemote()
+  return () => {
+    if (voiceAssistantRemote !== remote || epoch !== voiceAssistantRemoteEpoch) return
+    resetRemoteSpeech(true)
+    voiceAssistantRemote = undefined
+    voiceAssistantRemoteNatural = false
+    voiceAssistantRemoteEpoch += 1
+  }
+}
+
+/** Re-probe the Host voice route after initial mount or connection reset. */
+export async function refreshVoiceAssistantRemote(): Promise<boolean> {
+  const remote = voiceAssistantRemote
+  if (remote === undefined) {
+    voiceAssistantRemoteNatural = false
+    return false
+  }
+  const epoch = voiceAssistantRemoteEpoch
+  try {
+    const result = await remote.conversationStatus()
+    if (epoch !== voiceAssistantRemoteEpoch || voiceAssistantRemote !== remote) return false
+    voiceAssistantRemoteNatural = result.ok && result.value.enabled && result.value.natural
+    return voiceAssistantRemoteNatural
+  } catch {
+    if (epoch === voiceAssistantRemoteEpoch && voiceAssistantRemote === remote) {
+      voiceAssistantRemoteNatural = false
+    }
+    return false
+  }
 }
 
 /**
@@ -55,9 +237,12 @@ export function getVoiceAssistantSnapshot(): VoiceAssistantSnapshot {
  */
 export function setVoiceAssistantActive(active: boolean): void {
   if (!active) {
-    voiceAssistantSpeech?.stop()
     voiceAssistantSpeech?.dispose()
     voiceAssistantSpeech = undefined
+    voiceAssistantSpeechKey = undefined
+    resetRemoteSpeech(true)
+    voiceAssistantMicListening = false
+    voiceAssistantSpokenText = ''
     spokenAssistantMessages.clear()
     if (voiceAssistantSnapshot.active) publishVoiceAssistant(INACTIVE_VOICE_ASSISTANT)
     return
@@ -72,11 +257,41 @@ export function setVoiceAssistantActive(active: boolean): void {
  * @param listening - Whether the browser recognizer has an active segment.
  */
 export function setVoiceAssistantListening(listening: boolean): void {
+  voiceAssistantMicListening = listening
   if (!voiceAssistantSnapshot.active || voiceAssistantSnapshot.phase === 'speaking') return
   publishVoiceAssistant({
     ...voiceAssistantSnapshot,
     phase: listening ? 'listening' : 'paused',
   })
+}
+
+/** Cancel current assistant speech after non-echo human speech is detected. */
+export function interruptVoiceAssistantSpeech(): boolean {
+  if (!voiceAssistantSnapshot.active) return false
+  const hadBrowserSpeech = voiceAssistantSpeech !== undefined
+  const hadRemoteSpeech = remoteSpeech !== undefined
+  voiceAssistantSpeech?.dispose()
+  voiceAssistantSpeech = undefined
+  voiceAssistantSpeechKey = undefined
+  resetRemoteSpeech(true)
+  if (hadBrowserSpeech || hadRemoteSpeech) publishVoiceIdle()
+  return hadBrowserSpeech || hadRemoteSpeech
+}
+
+/**
+ * Suppress recognizer feedback when the microphone transcribes Phoenix's own
+ * loudspeaker output. Short human interjections stay intentionally exempt.
+ */
+export function isLikelyVoiceAssistantEcho(text: string): boolean {
+  const heard = normalizeEchoText(text)
+  const spoken = normalizeEchoText(voiceAssistantSpokenText)
+  if (heard.length < 8 || spoken === '') return false
+  if (spoken.includes(heard)) return true
+  const heardTokens = heard.split(' ').filter(token => token.length >= 3)
+  if (heardTokens.length < 3) return false
+  const spokenTokens = new Set(spoken.split(' ').filter(token => token.length >= 3))
+  const overlap = heardTokens.filter(token => spokenTokens.has(token)).length
+  return overlap / heardTokens.length >= 0.8
 }
 
 /**
@@ -87,22 +302,39 @@ export function setVoiceAssistantListening(listening: boolean): void {
  * @param text - finalized assistant prose.
  * @param messageTime - durable event time in Unix milliseconds.
  */
-export function speakVoiceAssistantResponse(messageKey: string, text: string, messageTime: number): void {
+export function streamVoiceAssistantResponse(
+  messageKey: string,
+  text: string,
+  messageTime: number,
+  final = false,
+): void {
   if (!voiceAssistantSnapshot.active || text.trim() === '' || messageTime < voiceAssistantSnapshot.activatedAt - 1_000) return
   if (spokenAssistantMessages.has(messageKey)) return
-  if (!hasSpeechOutput()) return
-  spokenAssistantMessages.add(messageKey)
-  if (voiceAssistantSpeech === undefined) {
-    voiceAssistantSpeech = createSpeechOutput((state) => {
-      if (!voiceAssistantSnapshot.active) return
-      if (state === 'speaking') {
-        publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
-      } else {
-        publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'paused' })
-      }
-    })
+  voiceAssistantSpokenText = text
+
+  if (streamRemoteSpeech(messageKey, text, final)) {
+    voiceAssistantSpeech?.dispose()
+    voiceAssistantSpeech = undefined
+    voiceAssistantSpeechKey = undefined
+  } else {
+    browserSpeech(messageKey, text, final)
   }
-  voiceAssistantSpeech.speak(text)
+  if (final) spokenAssistantMessages.add(messageKey)
+}
+
+/** Speak one completed response; streaming callers should use the growing-text API above. */
+export function speakVoiceAssistantResponse(messageKey: string, text: string, messageTime: number): void {
+  streamVoiceAssistantResponse(messageKey, text, messageTime, true)
+}
+
+function normalizeEchoText(text: string): string {
+  return conversationalSpeechText(text)
+    .toLocaleLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^\p{Letter}\p{Number}\s]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
 }
 
 /** Minimal result event needed from SpeechRecognition across browser vendors. */
