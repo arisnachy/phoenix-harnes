@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-21-adaptive-judge-token-efficiency.md
-2026-09-21-adaptive-judge-token-efficiency.md: 903b05b1ef0a3a84005017f8be07475c90f722ac
-2026-09-21-adaptive-judge-token-efficiency.zh.md: b462e7f2ffb98768d9e361889506dc642a15c53d
+2026-09-21-adaptive-judge-token-efficiency.md: 279d6797045be5ae7584847983fa27aaab2a7296
+2026-09-21-adaptive-judge-token-efficiency.zh.md: ce107c7e7232d4d306446645586ef792b232ce4a
