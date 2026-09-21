@@ -171,6 +171,7 @@ export async function reviewOrdinaryCompletion(input: {
   readonly mutations: readonly string[]
   readonly mutationTargets: readonly string[]
   readonly verifications: readonly string[]
+  readonly maxTokens?: number
   readonly signal: AbortSignal
 }): Promise<OrdinaryCompletionJudgeDecision> {
   const resolved = resolveStructuredProvider({
@@ -188,6 +189,7 @@ export async function reviewOrdinaryCompletion(input: {
       label: 'ordinary-completion-judge',
       parent: input.parent,
       signal: input.signal,
+      agentOptions: { maxTokens: input.maxTokens ?? 1_200 },
       outputSchema: OUTPUT_SCHEMA,
       toolFilter,
       prompt: [{
@@ -240,7 +242,12 @@ function judgeNotice(decision: OrdinaryCompletionJudgeDecision): UserMessage {
  */
 export function installOrdinaryCompletionJudgeBridge(
   ctx: Context,
-  input: { readonly subagents: JudgeRuntime; readonly provider: string; readonly maxPasses?: number },
+  input: {
+    readonly subagents: JudgeRuntime
+    readonly provider: string
+    readonly maxPasses?: number
+    readonly maxTokens?: number
+  },
 ): () => void {
   const maxPasses = input.maxPasses ?? 2
   const states = new WeakMap<Agent, BridgeState>()
@@ -319,6 +326,7 @@ export function installOrdinaryCompletionJudgeBridge(
       mutations: state.mutations,
       mutationTargets: state.mutationTargets,
       verifications: state.verifications,
+      maxTokens: input.maxTokens,
       signal,
     })
     state.judgedGeneration = state.generation
