@@ -397,7 +397,7 @@ export function installOrdinaryCompletionJudgeBridge(
       mutations: state.mutations,
       verifications: state.verifications,
       signal,
-      maxTokens: input.maxTokens,
+      ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
     })
     state.judgedGeneration = state.generation
     state.forceRejudge = decision.verdict === 'needs_changes'
