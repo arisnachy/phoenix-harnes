@@ -169,9 +169,9 @@ class NaturalVoiceDaemon {
   }
 
   async speak(request: VoiceSynthesisRequest): Promise<void> {
-    if (request.signal?.aborted === true) throw abortError()
+    throwIfAborted(request.signal)
     await this.ensureStarted()
-    if (request.signal?.aborted === true) throw abortError()
+    throwIfAborted(request.signal)
 
     const chunks = semanticSpeechChunks(request.text, this.options.maxChunkChars)
     if (chunks.length === 0) return
@@ -346,6 +346,10 @@ function positiveInteger(value: number, field: string): number {
     throw new Error(`voice-local: ${field} must be a positive integer`)
   }
   return value
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) throw abortError()
 }
 
 function abortError(): Error {
