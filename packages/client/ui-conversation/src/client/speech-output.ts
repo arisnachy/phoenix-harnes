@@ -259,7 +259,6 @@ export function createSpeechOutput(
       // Retry/rewrite changed already-observed text. Fence old callbacks and
       // restart from the corrected transcript rather than speaking stale prose.
       clear(false)
-      synthesis.cancel()
     }
     transcript = next
 
@@ -289,7 +288,13 @@ export function createSpeechOutput(
         return
       }
       clear(false)
-      update(normalized, true)
+      transcript = normalized
+      while (true) {
+        const planned = nextSpeechSegment(transcript, queuedThrough, true)
+        if (planned === undefined) break
+        queuedThrough = planned.end
+        enqueue(planned.text)
+      }
     },
     update,
     stop,
