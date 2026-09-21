@@ -45,14 +45,14 @@ const VERIFICATION_NAME = /^(?:verify(?:_.*)?|check(?:_.*)?|test(?:_.*)?|lint(?:
 const INSPECTION_NAME = /^(?:read|grep|glob|search|find|fetch|web_fetch|screenshot(?:_.*)?)$/
 const SHELL_NAME = /^(?:bash|pwsh|run_code)$/
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest)\b/i
-const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch)|npm\s+(?:install|i)|pnpm\s+(?:install|add|remove)|pip\s+install)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
+const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch)|npm\s+(?:install|i)|pnpm\s+(?:install|add|remove)|pip\s+install|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
 
 const DOMAIN_PATTERNS: ReadonlyArray<readonly [QualityDomain, RegExp]> = [
   ['web', /\.(?:html?|css|scss|sass|less|tsx|jsx|vue|svelte)\b/i],
   ['code', /\.(?:ts|js|mjs|cjs|py|rs|go|java|kt|kts|c|cc|cpp|h|hpp|cs|php|rb|swift)\b/i],
   ['docs', /\.(?:md|mdx|txt|rst|docx|pdf|pptx)\b/i],
   ['data', /\.(?:csv|tsv|xlsx|xls|parquet|arrow|sql|sqlite|db)\b/i],
-  ['config', /(?:^|[\\/])(?:package\.json|tsconfig[^\\/]*\.json|[^\\/]+\.(?:ya?ml|toml|ini|env))\b/i],
+  ['config', /(?:^|[\\/"])(?:package\.json|tsconfig[^\\/\"]*\.json|\.env|[^\\/\"]+\.(?:ya?ml|toml|ini|env))\b/i],
 ]
 
 const AUTOMATED_EVIDENCE_DOMAINS = new Set<QualityDomain>(['code', 'web', 'config'])
