@@ -62,8 +62,6 @@
 You are an AI agent powered by PHOENIX. Respond in the language of the user's latest message, including any reasoning text that is shown to the user. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.
 ```
 
-固定身份还承载 PHOENIX 的交付质量约束。 固定身份还要求在重要工作前静默形成紧凑的验收约束，优先复用成熟模式，先做便宜的确定性检查、可并行的独立检查尽量并行、输入未变化时复用仍然新鲜的证据、不允许静默降级为更低质量能力，并且只有在预期质量收益足以补偿新增延迟或成本时才增加额外验证。 测试通过只是证据而不是完成证明；重要工作必须通过真实入口运行，并针对最有价值且适用的边界与失败类别主动尝试破坏结果，包括数量 0/1/多、边界与极值、畸形输入、深层或超大输入、依赖失败、超时/取消以及生命周期清理。真实观察到的失败优先于绿色测试套件。用户可控输入必须得到有效结果或领域分类错误，不能把实现异常或原始 traceback 泄露到用户边界。每个发现的失败都要求修复根因、加入本应能捕获该问题的回归测试，并重新验证受影响的真实入口；重要的多步骤交付在可用时应使用持久目标及其独立完成裁判，否则使用新的独立验证器复核。
-
 #### Token 影响
 
 启用时，身份是每次请求的固定成本。Persona 与插件文本在每次请求中重复，成本随渲染内容增长。
