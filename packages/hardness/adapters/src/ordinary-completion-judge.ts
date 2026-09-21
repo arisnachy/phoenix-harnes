@@ -1,10 +1,11 @@
 /**
- * Independent completion judge bridge for ordinary mutation tasks.
+ * Adaptive independent completion judge bridge for ordinary mutation tasks.
  *
- * Successful substantive mutations must first have deterministic verification.
- * The bridge then performs a bounded read-only semantic review before the turn
- * settles. A needs_changes verdict steers the original worker; the judge never
- * edits files or executes commands.
+ * Deterministic verification and one in-band worker self-review are the cheap
+ * default. A fresh read-only subagent is reserved for cases where independence
+ * is likely to add information: explicit review requests, high-impact work,
+ * failed verification/recovery, unusually broad changes, or a mandatory
+ * re-review after a previous judge requested repairs.
  */
 import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
@@ -31,16 +32,15 @@ const OUTPUT_SCHEMA: ObjectJsonSchema = {
   required: ['verdict', 'summary', 'evidence', 'required_changes'],
 }
 
-const READ_ONLY_TOOLS = [
+const BASE_READ_ONLY_TOOLS = [
   'read',
-  'read_image',
   'glob',
   'grep',
   'session_search',
   'session_event_search',
-  'web_search',
-  'web_fetch',
 ] as const
+const VISUAL_READ_ONLY_TOOLS = ['read_image'] as const
+const WEB_READ_ONLY_TOOLS = ['web_search', 'web_fetch'] as const
 
 const MUTATION = /^(?:write|edit|str_replace_editor|apply_patch|create_file|update_file|delete_file|move_file|rename_file|upload(?:_.*)?|deploy(?:_.*)?|publish(?:_.*)?)$/
 const VERIFY = /^(?:verify(?:_.*)?|check(?:_.*)?|test(?:_.*)?|lint(?:_.*)?|typecheck(?:_.*)?|build(?:_.*)?|smoke(?:_.*)?)$/
@@ -48,6 +48,12 @@ const SHELL = /^(?:bash|pwsh|run_code)$/
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest|benchmark|tracemalloc)\b/i
 const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch)|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
 const SUBSTANTIVE = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|c|cc|cpp|h|hpp|cs|php|rb|swift|html?|css|scss|sass|less|vue|svelte|ya?ml|toml|json)\b/i
+const ERROR_EVIDENCE = /\b(?:error|exception|cycle|missing|message|diagnostic|failure|invalid|traceback)\b/i
+const SCALE_EVIDENCE = /\b(?:benchmark|bench|perf|performance|memory|tracemalloc|scal|stress|load|10_?000|10000|30_?000|30000|big[- ]?o|latency|throughput)\b/i
+const EXPLICIT_INDEPENDENT = /\b(?:independent|independiente|judge|juez|critic|cr[ií]tic[oa]|audit|auditor[ií]a|second opinion|segunda opini[oó]n)\b/i
+const HIGH_IMPACT = /\b(?:security|seguridad|auth(?:entication|orization)?|autenticaci[oó]n|credential|credencial|password|contrase[nñ]a|payment|pago|billing|facturaci[oó]n|production|producci[oó]n|deploy|deployment|migration|migraci[oó]n|database schema|esquema de base de datos|destructive|destructiv[oa]|encryption|cifrado|privacy|privacidad|permission|permiso|sandbox|updater|actualizador|installer|instalador|scheduler|planificador|race condition|condici[oó]n de carrera)\b/i
+const VISUAL_REVIEW = /\b(?:ui|ux|visual|render|screenshot|captura|image|imagen|layout|dise[nñ]o|website|web page|p[aá]gina web)\b/i
+const EXTERNAL_REVIEW = /\b(?:current|latest|today|web|online|competitor|competition|market|benchmark against|compare with|actual|hoy|internet|competidor|competencia|mercado|comparar con)\b/i
 
 /** Structured outcome returned by one ordinary-task independent completion review. */
 export interface OrdinaryCompletionJudgeDecision {
@@ -57,14 +63,39 @@ export interface OrdinaryCompletionJudgeDecision {
   readonly requiredChanges: readonly string[]
 }
 
+/** Request features used by the zero-model-cost judge escalation policy. */
+export interface OrdinaryJudgeSignals {
+  readonly explicitIndependent: boolean
+  readonly highImpact: boolean
+  readonly errorContract: boolean
+  readonly scale: boolean
+  readonly visual: boolean
+  readonly external: boolean
+}
+
+/** Inputs to the deterministic judge escalation score. */
+export interface OrdinaryJudgeRiskInput {
+  readonly signals: OrdinaryJudgeSignals
+  readonly mutationCount: number
+  readonly failedToolCount: number
+  readonly failedVerificationCount: number
+  readonly forceRejudge: boolean
+}
+
 type JudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'> & Partial<Pick<SubagentRuntime, 'list'>>
 
 interface BridgeState {
   generation: number
   verifiedGeneration: number
+  errorContractVerifiedGeneration: number
+  scaleVerifiedGeneration: number
   judgedGeneration: number
   judgePasses: number
+  failedToolCount: number
+  failedVerificationCount: number
+  forceRejudge: boolean
   request: string
+  signals: OrdinaryJudgeSignals
   mutations: string[]
   verifications: string[]
 }
@@ -95,7 +126,62 @@ function requestText(message: UserMessage): string {
     .filter((block): block is Extract<UserMessage['content'][number], { type: 'text' }> => block.type === 'text')
     .map(block => block.text)
     .join(' ')
-    .slice(0, 12_000)
+    .slice(0, 8_000)
+}
+
+/** Infer escalation features locally without another model/tool call. */
+export function inferOrdinaryJudgeSignals(request: string): OrdinaryJudgeSignals {
+  const lower = request.toLowerCase()
+  const errorSubject = /\b(?:error|exception|throw|failure|cycle|missing dependency|missing dependencies|traceback)\b/u.test(lower)
+  const errorObservable = /\b(?:message|include|contain|list|identify|show|detail|field|code|which|exact|mensaje|inclu|lista|identific|detalle|campo|exact)\b/u.test(lower)
+  const scale = /\b(?:performance|memory|latency|throughput|scal(?:e|ing|ability)|complexity|big[- ]?o|benchmark|stress|load|depth|concurren(?:cy|t)|10k|100k|million|rendimiento|memoria|latencia|escalabilidad|complejidad|carga|profundidad|concurrencia|mill[oó]n)\b/u.test(lower)
+    || /\b(?:\d{1,3}(?:[,_]\d{3})+|\d{4,})\b/u.test(lower)
+  return {
+    explicitIndependent: EXPLICIT_INDEPENDENT.test(request),
+    highImpact: HIGH_IMPACT.test(request),
+    errorContract: errorSubject && errorObservable,
+    scale,
+    visual: VISUAL_REVIEW.test(request),
+    external: EXTERNAL_REVIEW.test(request),
+  }
+}
+
+/**
+ * Score whether a separate model is likely to add enough information to justify
+ * its token/time cost. Error-contract and scale requests alone deliberately stay
+ * below the default threshold because deterministic evidence + worker self-review
+ * are cheaper and stronger first-line gates.
+ */
+export function ordinaryJudgeRiskScore(input: OrdinaryJudgeRiskInput): number {
+  if (input.forceRejudge) return 100
+  let score = 0
+  if (input.signals.explicitIndependent) score += 5
+  if (input.signals.highImpact) score += 5
+  if (input.failedVerificationCount > 0) score += 3
+  else if (input.failedToolCount > 0) score += 1
+  if (input.mutationCount >= 8) score += 2
+  else if (input.mutationCount >= 4) score += 1
+  if (input.signals.errorContract) score += 1
+  if (input.signals.scale) score += 1
+  if (input.signals.external) score += 1
+  return score
+}
+
+/** True when the local verification ledger is complete enough to justify semantic review. */
+function deterministicEvidenceReady(state: BridgeState): boolean {
+  if (state.generation === 0 || state.verifiedGeneration !== state.generation) return false
+  if (state.signals.errorContract && state.errorContractVerifiedGeneration !== state.generation) return false
+  if (state.signals.scale && state.scaleVerifiedGeneration !== state.generation) return false
+  return true
+}
+
+function judgeTools(signals: OrdinaryJudgeSignals): ToolRestriction {
+  const allow = [
+    ...BASE_READ_ONLY_TOOLS,
+    ...(signals.visual ? VISUAL_READ_ONLY_TOOLS : []),
+    ...(signals.external ? WEB_READ_ONLY_TOOLS : []),
+  ]
+  return { allow: [...new Set(allow)] }
 }
 
 function validText(value: unknown): value is string {
@@ -123,7 +209,7 @@ function parseDecision(value: unknown): OrdinaryCompletionJudgeDecision | undefi
 
 /**
  * Run one fresh read-only semantic completion review.
- * @param input - judge runtime, provider, parent task, evidence summary, and cancellation signal.
+ * @param input - judge runtime, compact evidence capsule, route, and token cap.
  * @returns validated independent verdict; malformed or unavailable review fails closed as blocked.
  */
 export async function reviewOrdinaryCompletion(input: {
@@ -134,6 +220,7 @@ export async function reviewOrdinaryCompletion(input: {
   readonly mutations: readonly string[]
   readonly verifications: readonly string[]
   readonly signal: AbortSignal
+  readonly maxTokens?: number
 }): Promise<OrdinaryCompletionJudgeDecision> {
   const resolved = resolveStructuredProvider({
     getProvider: name => input.subagents.getProvider(name),
@@ -143,7 +230,11 @@ export async function reviewOrdinaryCompletion(input: {
     return { verdict: 'blocked', summary: 'Independent completion judge is unavailable.', evidence: [], requiredChanges: [] }
   }
 
-  const toolFilter: ToolRestriction = { allow: [...READ_ONLY_TOOLS] }
+  const signals = inferOrdinaryJudgeSignals(input.request)
+  const toolFilter = judgeTools(signals)
+  const configuredMax = input.maxTokens ?? 2_048
+  const parentMax = input.parent.options?.maxTokens
+  const maxTokens = Math.min(parentMax ?? configuredMax, configuredMax)
   let run: Awaited<ReturnType<JudgeRuntime['start']>> | undefined
   try {
     run = await input.subagents.start(resolved.name, {
@@ -152,18 +243,22 @@ export async function reviewOrdinaryCompletion(input: {
       signal: input.signal,
       outputSchema: OUTPUT_SCHEMA,
       toolFilter,
+      ...(resolved.provider.capabilities.persona
+        ? { persona: 'You are a concise, skeptical, read-only completion judge. Inspect only what is needed to decide the stated requirements.' }
+        : {}),
+      ...(resolved.name === 'spawn' || resolved.name === 'judge-spawn' ? { agentOptions: { maxTokens } } : {}),
       prompt: [{
         type: 'text',
         text: '<phoenix_ordinary_completion_judge>\n'
-          + 'Original request: ' + JSON.stringify(input.request) + '\n'
-          + 'Observed mutation tools: ' + JSON.stringify(input.mutations) + '\n'
-          + 'Observed verification tools: ' + JSON.stringify(input.verifications) + '\n\n'
-          + 'Act as a fresh, read-only completion judge. Inspect the actual changed artifact and durable session evidence. '
-          + 'Map every explicit mandatory requirement in the original request to concrete evidence; passing tests are evidence, not blanket proof. '
-          + 'For public errors/exceptions verify the observable type and every required message field, identifier, collection, or diagnostic detail. '
-          + 'When scale, large cardinality, performance, latency, depth, concurrency, or memory matters, require evidence that checks growth/resource behavior and inspect for avoidable superlinear time or space. '
-          + 'Check the real user/production entrypoint and relevant boundary/failure cases. Do not edit files or run commands. '
-          + 'Return pass only with concrete evidence for all material requirements. Return needs_changes with a precise repair list for fixable gaps; blocked only for an external evaluation blocker.\n'
+          + 'Original request: ' + JSON.stringify(input.request.slice(0, 8_000)) + '\n'
+          + 'Mutation summary: ' + JSON.stringify(input.mutations.slice(-8)) + '\n'
+          + 'Verification summary: ' + JSON.stringify(input.verifications.slice(-6)) + '\n\n'
+          + 'Perform a concise independent review only for material gaps that deterministic checks may miss. '
+          + 'Map explicit mandatory requirements to concrete evidence. Passing tests are evidence, not blanket proof. '
+          + 'For public errors/exceptions verify observable type and required message/details. '
+          + 'When scale/performance/memory matters, require bounded growth/resource evidence and inspect for avoidable superlinear behavior. '
+          + 'Use read-only tools only as needed; do not rediscover known paths, rerun commands, edit files, or call agents. '
+          + 'Return pass with concrete evidence, needs_changes with only actionable material repairs, or blocked only for a real external evaluation blocker.\n'
           + '</phoenix_ordinary_completion_judge>',
       }],
     })
@@ -188,36 +283,50 @@ function judgeNotice(decision: OrdinaryCompletionJudgeDecision): UserMessage {
     content: [{
       type: 'text',
       text: decision.verdict === 'needs_changes'
-        ? 'Independent completion review found fixable gaps. Do not present the task as complete yet.' + repairs
+        ? 'Independent completion review found material fixable gaps. Repair only these gaps, rerun the smallest affected checks, then continue.' + repairs
         : 'Independent completion review could not verify completion: ' + decision.summary
-          + ' Continue with the cheapest deterministic inspection/verification that resolves the blocker; do not claim completion without evidence.',
+          + ' Resolve the concrete blocker with the cheapest available evidence; do not repeat already-fresh checks.',
     }],
-    source: { kind: 'plugin', plugin: 'ordinary-completion-judge', form: 'notice', summary: 'independent completion review' },
+    source: { kind: 'plugin', plugin: 'ordinary-completion-judge', form: 'notice', summary: 'adaptive independent completion review' },
   })
 }
 
 /**
- * Install bounded independent review for verified substantive ordinary mutations.
+ * Install adaptive independent review for verified substantive ordinary mutations.
  * @param ctx - scoped Cordis context whose agent/tool events are observed.
- * @param input - structured subagent runtime, provider route, and review-pass bound.
+ * @param input - structured subagent route plus deterministic escalation budgets.
  * @returns disposer that removes every bridge listener.
  */
 export function installOrdinaryCompletionJudgeBridge(
   ctx: Context,
-  input: { readonly subagents: JudgeRuntime; readonly provider: string; readonly maxPasses?: number },
+  input: {
+    readonly subagents: JudgeRuntime
+    readonly provider: string
+    readonly maxPasses?: number
+    readonly minRiskScore?: number
+    readonly maxTokens?: number
+  },
 ): () => void {
   const maxPasses = input.maxPasses ?? 2
+  const minRiskScore = input.minRiskScore ?? 4
   const states = new WeakMap<Agent, BridgeState>()
   const disposers: (() => void)[] = []
 
   disposers.push(ctx.on('agent/inbox/claimed', ({ agent, message }) => {
     if (message.source.kind !== 'user') return
+    const request = requestText(message)
     states.set(agent, {
       generation: 0,
       verifiedGeneration: 0,
+      errorContractVerifiedGeneration: 0,
+      scaleVerifiedGeneration: 0,
       judgedGeneration: 0,
       judgePasses: 0,
-      request: requestText(message),
+      failedToolCount: 0,
+      failedVerificationCount: 0,
+      forceRejudge: false,
+      request,
+      signals: inferOrdinaryJudgeSignals(request),
       mutations: [],
       verifications: [],
     })
@@ -229,30 +338,55 @@ export function installOrdinaryCompletionJudgeBridge(
     next,
   ): Promise<PostToolDecision> => {
     const downstream = await next()
-    if (exec.agent === undefined || result.isError || downstream.kind === 'block') return downstream
+    if (exec.agent === undefined) return downstream
     const state = states.get(exec.agent)
     if (state === undefined) return downstream
 
-    if (isSubstantiveMutation(exec.name, exec.arguments)) {
+    const mutation = isSubstantiveMutation(exec.name, exec.arguments)
+    const verification = isVerification(exec.name, exec.arguments)
+    if (result.isError || downstream.kind === 'block') {
+      if (state.generation > 0) state.failedToolCount += 1
+      if (verification) state.failedVerificationCount += 1
+      return downstream
+    }
+
+    if (mutation) {
       state.generation += 1
-      state.mutations.push(operationName(exec.name))
-      state.mutations = state.mutations.slice(-12)
-    } else if (state.generation > 0 && isVerification(exec.name, exec.arguments)) {
+      state.mutations.push(operationName(exec.name) + ':' + argumentText(exec.arguments).slice(0, 180))
+      state.mutations = state.mutations.slice(-8)
+      return downstream
+    }
+
+    if (state.generation > 0 && verification) {
       state.verifiedGeneration = state.generation
-      // A judge may ask only for missing evidence. New deterministic evidence
-      // must therefore reopen this unchanged generation for a fresh review.
+      const evidenceText = argumentText(exec.arguments)
+      if (ERROR_EVIDENCE.test(evidenceText)) state.errorContractVerifiedGeneration = state.generation
+      if (SCALE_EVIDENCE.test(evidenceText)) state.scaleVerifiedGeneration = state.generation
       if (state.judgedGeneration === state.generation) state.judgedGeneration = 0
-      state.verifications.push(operationName(exec.name) + ':' + argumentText(exec.arguments).slice(0, 300))
-      state.verifications = state.verifications.slice(-12)
+      state.verifications.push(operationName(exec.name) + ':' + evidenceText.slice(0, 220))
+      state.verifications = state.verifications.slice(-6)
     }
     return downstream
   }))
 
   disposers.push(ctx.on('agent/turn-stopping', async ({ agent, signal }) => {
     const state = states.get(agent)
-    if (state === undefined || state.generation === 0) return
-    if (state.verifiedGeneration !== state.generation || state.judgedGeneration === state.generation) return
-    if (state.judgePasses >= maxPasses) return
+    if (state === undefined || !deterministicEvidenceReady(state)) return
+    if (state.judgedGeneration === state.generation || state.judgePasses >= maxPasses) return
+
+    const risk = ordinaryJudgeRiskScore({
+      signals: state.signals,
+      mutationCount: state.mutations.length,
+      failedToolCount: state.failedToolCount,
+      failedVerificationCount: state.failedVerificationCount,
+      forceRejudge: state.forceRejudge,
+    })
+    if (risk < minRiskScore) {
+      // Same-worker self-review + deterministic evidence is the completion path
+      // for low-risk work. Remember the decision for this unchanged generation.
+      state.judgedGeneration = state.generation
+      return
+    }
 
     state.judgePasses += 1
     const decision = await reviewOrdinaryCompletion({
@@ -263,8 +397,10 @@ export function installOrdinaryCompletionJudgeBridge(
       mutations: state.mutations,
       verifications: state.verifications,
       signal,
+      maxTokens: input.maxTokens,
     })
     state.judgedGeneration = state.generation
+    state.forceRejudge = decision.verdict === 'needs_changes'
     if (decision.verdict !== 'pass') agent.steer(judgeNotice(decision))
   }))
 
