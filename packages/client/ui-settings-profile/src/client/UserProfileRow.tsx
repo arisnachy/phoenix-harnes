@@ -2,7 +2,7 @@
 
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { UserProfileRowFace } from './profile-controller.ts'
-import type { AssistantGender } from './types.ts'
+import type { AssistantGender, ConnectorMode } from './types.ts'
 import css from './UserProfileRow.module.css'
 import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 
@@ -66,6 +66,24 @@ export function UserProfileRow(props: UserProfileRowProps) {
             </button>
           ) : null}
         </div>
+      </div>
+
+      <div className={css.group}>
+        <h3 className={css.groupTitle}>{t('connectorSection')}</h3>
+        <p className={css.hint}>{t('connectorSectionHint')}</p>
+        <label className={css.label} htmlFor="profile-connector-mode">{t('connectorMode')}</label>
+        <select
+          id="profile-connector-mode"
+          className={css.input}
+          value={state.connectorMode}
+          disabled={disabled}
+          onChange={(event) => { props.setConnectorMode(event.target.value as ConnectorMode) }}
+        >
+          <option value="ask">{t('connectorModeAsk')}</option>
+          <option value="approved">{t('connectorModeApproved')}</option>
+          <option value="disabled">{t('connectorModeDisabled')}</option>
+        </select>
+        <p className={css.hint}>{t('connectorModeHint')}</p>
       </div>
 
       <div className={css.group}>
