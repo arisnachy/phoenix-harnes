@@ -37,13 +37,43 @@ guard 只根据工具名称和 JSON 参数在本地分类。原生文件修改�
 
 ### 修改后的上下文
 
-第一次修改使已有证据失效时，模型会收到一条短 notice：说明证据已过期，选择领域相关的高信号检查，要求复用仍然新鲜的证据、优先便宜的确定性检查，并尽可能合并或并行独立检查。
+#### 模型看到的内容
 
-该 notice 不创建新请求，而是随现有工具结果的 additionalContexts 进入下一步。
+第一次成功修改使此前的新鲜证据失效时，会把下面这条带来源 notice 附加到本来就会跟随该工具结果的下一次请求。证据已经失效期间继续修改，不会重复追加 notice。
+
+##### 新鲜度 notice
+
+```markdown
+Fresh verification evidence is now stale because the artifact changed. <domain-specific hint> Reuse still-fresh evidence for unchanged inputs, choose cheap deterministic checks before a model judge, and batch independent checks in one command or run them in parallel when possible.
+```
+
+#### Token 影响
+
+修改前为零 token。只有从“新鲜”变为“脏”的一次转换会追加一条有界 notice，并保留在该 session 历史中；持续处于脏状态的后续修改不会增加 notice。
+
+#### KV Cache 影响
+
+内容只追加在已经可缓存的请求前缀之后。它不改变稳定 system prompt 或工具 schema，因此既有前缀缓存仍可复用。
 
 ### 轮次停止纠正
 
-如果轮次准备结束，但仍存在比已接受验证更新的修改，agent 默认会收到一次有界 steer，要求在真实消费边界选择最小但有意义的证明。如果不存在有意义的自动化证明，可以检查最终产物并明确验证限制，而不是无限循环。
+#### 模型看到的内容
+
+如果轮次准备结束，但成功修改比已接受证据更新，PHOENIX 可以 steer 下面的有界 notice。默认每个直接用户任务最多纠正一次；存在新鲜验证时完全不会触发。
+
+##### 停止 notice
+
+```markdown
+This task has successful mutations after its latest accepted verification. Before presenting it as complete, <domain-specific hint> Prefer the existing production/user entrypoint and the smallest high-signal check; do not rerun evidence that is still fresh. If no meaningful automated check exists, inspect the final artifact and state the verification limit.
+```
+
+#### Token 影响
+
+合规路径为零 token。只有过早在脏状态结束时才付出最多 maxStopNudges 条 notice 的成本；base 默认配置为一次。
+
+#### KV Cache 影响
+
+纠正作为新的 next-step context 追加在可复用前缀之后，不会重写更早的 prompt 或工具 schema token。
 
 ## 已知限制与暂缓事项
 
