@@ -114,24 +114,60 @@ export function inferQualityDomains(argumentsValue: unknown): QualityDomain[] {
   return domains.length === 0 ? ['generic'] : [...new Set(domains)]
 }
 
+interface QualitySignals {
+  errorContract: boolean
+  scale: boolean
+}
+
 interface QualityState {
   generation: number
   verifiedGeneration: number
+  errorContractVerifiedGeneration: number
+  scaleVerifiedGeneration: number
   nudgedGeneration: number
   stopNudges: number
   domains: Set<QualityDomain>
+  signals: QualitySignals
+}
+
+function messageText(message: UserMessage): string {
+  return message.content
+    .filter((block): block is Extract<UserMessage['content'][number], { type: 'text' }> => block.type === 'text')
+    .map(block => block.text)
+    .join(' ')
+}
+
+/**
+ * Infer task-local evidence obligations from the direct human request.
+ * @param text - user request text for the current task.
+ * @returns requirement signals that need targeted post-mutation evidence.
+ */
+export function inferQualitySignals(text: string): QualitySignals {
+  const normalized = text.toLowerCase()
+  const errorSubject = /\b(?:error|exception|throw|failure|cycle|missing dependency|missing dependencies|traceback)\b/u.test(normalized)
+  const errorObservable = /\b(?:message|include|contain|list|identify|show|detail|field|code|which|exact)\b/u.test(normalized)
+  const scale = /\b(?:performance|memory|latency|throughput|scal(?:e|ing|ability)|complexity|big[- ]?o|benchmark|stress|load|depth|concurren(?:cy|t)|10k|100k|million)\b/u.test(normalized)
+    || /\b(?:\d{1,3}(?:[,_]\d{3})+|\d{4,})\b/u.test(normalized)
+  return { errorContract: errorSubject && errorObservable, scale }
+}
+
+function newState(signals: QualitySignals = { errorContract: false, scale: false }): QualityState {
+  return {
+    generation: 0,
+    verifiedGeneration: 0,
+    errorContractVerifiedGeneration: 0,
+    scaleVerifiedGeneration: 0,
+    nudgedGeneration: 0,
+    stopNudges: 0,
+    domains: new Set<QualityDomain>(),
+    signals,
+  }
 }
 
 function stateFor(states: WeakMap<Agent, QualityState>, agent: Agent): QualityState {
   let state = states.get(agent)
   if (state !== undefined) return state
-  state = {
-    generation: 0,
-    verifiedGeneration: 0,
-    nudgedGeneration: 0,
-    stopNudges: 0,
-    domains: new Set<QualityDomain>(),
-  }
+  state = newState()
   states.set(agent, state)
   return state
 }
@@ -168,13 +204,25 @@ function mutationReminder(domains: ReadonlySet<QualityDomain>): UserMessage {
   )
 }
 
-function stopReminder(domains: ReadonlySet<QualityDomain>): UserMessage {
+function missingSignalHint(state: QualityState): string {
+  const missing: string[] = []
+  if (state.signals.errorContract && state.errorContractVerifiedGeneration !== state.generation) {
+    missing.push('Run a targeted check for the observable error contract: type plus required message/fields/details.')
+  }
+  if (state.signals.scale && state.scaleVerifiedGeneration !== state.generation) {
+    missing.push('Run a bounded scale/resource check (time and/or memory as applicable) and inspect for avoidable superlinear growth.')
+  }
+  return missing.join(' ')
+}
+
+function stopReminder(state: QualityState): UserMessage {
   return pluginMessage(
     'This task has successful mutations after its latest accepted verification. Before presenting it as complete, '
-      + qualityHint(domains)
+      + qualityHint(state.domains)
+      + ' ' + missingSignalHint(state)
       + ' Prefer the existing production/user entrypoint and the smallest high-signal check; do not rerun evidence '
       + 'that is still fresh. If no meaningful automated check exists, inspect the final artifact and state the verification limit.',
-    'fresh verification needed',
+    'fresh requirement-aware verification needed',
   )
 }
 
@@ -185,10 +233,28 @@ function markMutation(state: QualityState, argumentsValue: unknown): boolean {
   return wasFresh
 }
 
-function markEvidence(state: QualityState, activity: Extract<QualityActivity, 'verification' | 'inspection'>): void {
-  if (activity === 'verification' || !needsAutomatedEvidence(state.domains)) {
-    state.verifiedGeneration = state.generation
+function markEvidence(
+  state: QualityState,
+  activity: Extract<QualityActivity, 'verification' | 'inspection'>,
+  argumentsValue: unknown,
+): void {
+  if (activity !== 'verification' && needsAutomatedEvidence(state.domains)) return
+  state.verifiedGeneration = state.generation
+  if (activity !== 'verification') return
+  const text = argumentText(argumentsValue).toLowerCase()
+  if (/\b(?:error|exception|cycle|missing|message|diagnostic|failure|invalid)\b/u.test(text)) {
+    state.errorContractVerifiedGeneration = state.generation
   }
+  if (/\b(?:benchmark|bench|perf|performance|memory|tracemalloc|scal|stress|load|10_?000|10000|30_?000|30000|big[- ]?o)\b/u.test(text)) {
+    state.scaleVerifiedGeneration = state.generation
+  }
+}
+
+function evidenceFresh(state: QualityState): boolean {
+  if (state.generation !== state.verifiedGeneration) return false
+  if (state.signals.errorContract && state.errorContractVerifiedGeneration !== state.generation) return false
+  if (state.signals.scale && state.scaleVerifiedGeneration !== state.generation) return false
+  return true
 }
 
 /**
@@ -205,7 +271,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   const states = new WeakMap<Agent, QualityState>()
 
   ctx.on('agent/inbox/claimed', ({ agent, message }) => {
-    if (message.source.kind === 'user') states.delete(agent)
+    if (message.source.kind === 'user') states.set(agent, newState(inferQualitySignals(messageText(message))))
   })
 
   ctx.on('tools/post-execute', async (exec: ToolExecution, result: Readonly<ToolExecutionResult>, next): Promise<PostToolDecision> => {
@@ -224,18 +290,18 @@ export function apply(ctx: Context, config: Config = {}): void {
     }
 
     if (result.isError || downstream.kind === 'block') return downstream
-    markEvidence(state, activity)
+    markEvidence(state, activity, exec.arguments)
     return downstream
   })
 
   ctx.on('agent/turn-stopping', ({ agent }) => {
     if (maxStopNudges === 0) return
     const state = states.get(agent)
-    if (state === undefined || state.generation === state.verifiedGeneration) return
+    if (state === undefined || evidenceFresh(state)) return
     if (state.stopNudges >= maxStopNudges || state.nudgedGeneration === state.generation) return
     state.stopNudges += 1
     state.nudgedGeneration = state.generation
-    agent.steer(stopReminder(state.domains))
+    agent.steer(stopReminder(state))
   })
 
   ctx.on('agent/disposed', ({ agent }) => {

@@ -242,9 +242,12 @@ describe('registration', () => {
     expect(prompt).toContain('Use the glob tool')
     expect(prompt).toContain('Use the grep tool')
     expect(prompt).toContain('sampled across top-level entries')
+    expect(prompt).toContain('Do not use a workspace-wide basename glob')
     expect(prompt).not.toContain('sampled across top-level directories')
     const glob = ctx.tools.schemas().find(schema => schema.name === 'glob')
     expect(glob?.description).toContain('sampled across top-level entries')
+    expect(ctx.tools.executionMode({ callId: CallId('mode-glob'), name: 'glob', arguments: { pattern: '*.ts' }, signal: testToolSignal })).toEqual({ kind: 'parallel' })
+    expect(ctx.tools.executionMode({ callId: CallId('mode-grep'), name: 'grep', arguments: { pattern: 'x' }, signal: testToolSignal })).toEqual({ kind: 'parallel' })
   })
 
   it('stays pending until ctx.subprocess exists (inject)', async () => {
