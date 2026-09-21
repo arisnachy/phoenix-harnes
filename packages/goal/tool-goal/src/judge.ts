@@ -347,9 +347,7 @@ export async function judgeGoalCompletion(input: {
   if (mayReuseSettledPass(settled, gate)) return settled.result
   if (gateIsInfrastructureOnlyBlocked(gate)) return unavailable()
   const provider = reviewProvider(subagents, input.provider, input.parent)
-  if (provider === undefined) {
-    return mayReuseSettledPass(settled, gate) ? settled.result : enforceGate(unavailable(), gate)
-  }
+  if (provider === undefined) return enforceGate(unavailable(), gate)
   const history = durableMissionReviewHistory(input.parent, input.objective)
 
   const prompt: ContentBlock[] = [{
@@ -395,7 +393,6 @@ export async function judgeGoalCompletion(input: {
   } finally {
     if (run !== undefined) await run.dispose()
   }
-  if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) return settled.result
   return enforceGate(judged, gate)
 }
 
