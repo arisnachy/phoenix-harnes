@@ -1,7 +1,7 @@
 /** Staged browser form over the Host's user-profile settings namespace. */
 
 import { createSnapshotStore, type SettingsScope, type SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
-import type { AssistantGender, AssistantGenderMode, UserProfileConsent, UserProfileFamilyMember, UserProfileRowState, UserProfileSettings } from './types.ts'
+import type { AssistantGender, AssistantGenderMode, ConnectorMode, UserProfileConsent, UserProfileFamilyMember, UserProfileRowState, UserProfileSettings } from './types.ts'
 
 /** Settings namespace join key; it intentionally does not import the Host package. */
 export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile'
@@ -15,6 +15,7 @@ export interface UserProfileRowActions {
   edit: (field: TextField | 'family', text: string) => void
   setAssistantGender: (value: AssistantGender) => void
   setAssistantGenderAutomatic: () => void
+  setConnectorMode: (value: ConnectorMode) => void
   setConsent: (field: ConsentField, value: boolean) => void
   save: () => void
   discard: () => void
@@ -30,6 +31,7 @@ interface Draft {
   assistantName: string
   assistantGender: AssistantGender
   assistantGenderSource: AssistantGenderMode
+  connectorMode: ConnectorMode
   preferredName: string
   dateOfBirth: string
   gender: string
@@ -50,7 +52,7 @@ const EMPTY_CONSENT: UserProfileConsent = {
 
 function emptyDraft(): Draft {
   return {
-    assistantName: 'KIRA', assistantGender: 'feminine', assistantGenderSource: 'auto',
+    assistantName: 'KIRA', assistantGender: 'feminine', assistantGenderSource: 'auto', connectorMode: 'ask',
     preferredName: '', dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '',
     consent: { ...EMPTY_CONSENT },
   }
@@ -66,6 +68,7 @@ function toDraft(value: UserProfileSettings | undefined): Draft {
     assistantName: textValue(value.assistantName) || 'KIRA',
     assistantGender: value.assistantGender ?? 'feminine',
     assistantGenderSource: value.assistantGenderSource ?? 'auto',
+    connectorMode: value.connectorMode ?? 'ask',
     preferredName: textValue(value.preferredName),
     dateOfBirth: textValue(value.dateOfBirth),
     gender: textValue(value.gender),
@@ -131,6 +134,7 @@ export class UserProfileForm {
       edit: (field, text) => { this.edit(field, text) },
       setAssistantGender: (value) => { this.setAssistantGender(value) },
       setAssistantGenderAutomatic: () => { this.setAssistantGenderAutomatic() },
+      setConnectorMode: (value) => { this.setConnectorMode(value) },
       setConsent: (field, value) => { this.setConsent(field, value) },
       save: () => { void this.save() },
       discard: () => { this.discard() },
@@ -168,6 +172,13 @@ export class UserProfileForm {
     this.publish()
   }
 
+  private setConnectorMode(value: ConnectorMode): void {
+    this.draft.connectorMode = value
+    this.failed = false
+    this.saved = false
+    this.publish()
+  }
+
   private setConsent(field: ConsentField, value: boolean): void {
     this.draft.consent = { ...this.draft.consent, [field]: value }
     this.failed = false
@@ -190,7 +201,7 @@ export class UserProfileForm {
     this.saved = false
     this.publish()
     let ok = true
-    for (const field of [...FIELDS, 'assistantGender' as const, 'assistantGenderSource' as const, 'family' as const, 'consent' as const]) {
+    for (const field of [...FIELDS, 'assistantGender' as const, 'assistantGenderSource' as const, 'connectorMode' as const, 'family' as const, 'consent' as const]) {
       try {
         await this.scope.unset(field)
       } catch {
@@ -224,6 +235,7 @@ export class UserProfileForm {
       tone: this.draft.tone.trim(),
       assistantGender: this.draft.assistantGender,
       assistantGenderSource: this.draft.assistantGenderSource,
+      connectorMode: this.draft.connectorMode,
       family: parseFamily(this.draft.family),
       consent: this.draft.consent,
     }
@@ -235,6 +247,11 @@ export class UserProfileForm {
         await this.scope.set('assistantGenderSource', values.assistantGenderSource)
         await this.scope.set('assistantGender', values.assistantGender)
       }
+    } catch {
+      ok = false
+    }
+    try {
+      await this.scope.set('connectorMode', values.connectorMode)
     } catch {
       ok = false
     }
@@ -275,6 +292,7 @@ export class UserProfileForm {
     return this.draft.assistantName.trim() !== textValue(value.assistantName)
       || this.draft.assistantGender !== value.assistantGender
       || this.draft.assistantGenderSource !== (value.assistantGenderSource ?? 'auto')
+      || this.draft.connectorMode !== (value.connectorMode ?? 'ask')
       || this.draft.dateOfBirth.trim() !== textValue(value.dateOfBirth)
       || this.draft.family.trim() !== (value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '')
   }
@@ -286,6 +304,7 @@ export class UserProfileForm {
       || this.draft.family.trim() !== next.family.trim()
       || this.draft.assistantGender !== next.assistantGender
       || this.draft.assistantGenderSource !== next.assistantGenderSource
+      || this.draft.connectorMode !== next.connectorMode
       || (Object.keys(EMPTY_CONSENT) as ConsentField[]).some(field => this.draft.consent[field] !== next.consent[field])
   }
 
@@ -301,6 +320,7 @@ export class UserProfileForm {
       assistantName: fieldState(this.draft.assistantName),
       assistantGender: this.draft.assistantGender,
       assistantGenderSource: this.draft.assistantGenderSource,
+      connectorMode: this.draft.connectorMode,
       preferredName: fieldState(this.draft.preferredName),
       dateOfBirth: fieldState(this.draft.dateOfBirth, this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())),
       gender: fieldState(this.draft.gender),
