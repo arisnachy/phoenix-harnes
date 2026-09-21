@@ -51,14 +51,19 @@ internal static class DesktopRuntimeLaunchContract
         }
         else
         {
-            // Explicit source/developer mode keeps the historical bootstrapping wrapper so an
-            // unbuilt checkout can still install/build itself. It is never used by normal users.
-            var sourceLauncher = Path.Combine(runtimeRoot, "phoenix-windows.cmd");
-            startInfo.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
-            startInfo.ArgumentList.Add("/d");
-            startInfo.ArgumentList.Add("/s");
-            startInfo.ArgumentList.Add("/c");
-            startInfo.ArgumentList.Add($"call \"{sourceLauncher}\" --no-open");
+            // When a real Phoenix source checkout is present, the desktop EXE owns the exact
+            // startup sequence the user would otherwise run manually: open PowerShell in the
+            // checkout and execute "pnpm phoenix -- --no-open". The shell stays hidden for normal
+            // users and can be shown through the developer-console preference.
+            startInfo.FileName = "powershell.exe";
+            startInfo.ArgumentList.Add("-NoLogo");
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-ExecutionPolicy");
+            startInfo.ArgumentList.Add("Bypass");
+            if (!showDeveloperConsole)
+                startInfo.ArgumentList.Add("-NonInteractive");
+            startInfo.ArgumentList.Add("-Command");
+            startInfo.ArgumentList.Add("$ErrorActionPreference='Stop'; pnpm phoenix -- --no-open");
         }
 
         if (managedRuntime)
