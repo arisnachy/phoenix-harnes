@@ -178,6 +178,8 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
 /**
  * Attach the generated Host voice namespace. Capability probing is asynchronous
  * and never blocks rendering; browser speech remains the fallback until ready.
+ * @param remote - Generated Host voice Remote namespace.
+ * @returns Disposer that detaches the Remote and cancels in-flight Host speech.
  */
 export function configureVoiceAssistantRemote(remote: VoiceAssistantRemote): () => void {
   voiceAssistantRemote = remote
@@ -192,7 +194,10 @@ export function configureVoiceAssistantRemote(remote: VoiceAssistantRemote): () 
   }
 }
 
-/** Re-probe the Host voice route after initial mount or connection reset. */
+/**
+ * Re-probe the Host voice route after initial mount or connection reset.
+ * @returns Whether the Host currently exposes the natural neural route.
+ */
 export async function refreshVoiceAssistantRemote(): Promise<boolean> {
   const remote = voiceAssistantRemote
   if (remote === undefined) {
@@ -265,7 +270,10 @@ export function setVoiceAssistantListening(listening: boolean): void {
   })
 }
 
-/** Cancel current assistant speech after non-echo human speech is detected. */
+/**
+ * Cancel current assistant speech after non-echo human speech is detected.
+ * @returns Whether any browser or Host speech was active and cancelled.
+ */
 export function interruptVoiceAssistantSpeech(): boolean {
   if (!voiceAssistantSnapshot.active) return false
   const hadBrowserSpeech = voiceAssistantSpeech !== undefined
@@ -281,6 +289,8 @@ export function interruptVoiceAssistantSpeech(): boolean {
 /**
  * Suppress recognizer feedback when the microphone transcribes Phoenix's own
  * loudspeaker output. Short human interjections stay intentionally exempt.
+ * @param text - Final recognizer transcript to compare with current assistant speech.
+ * @returns Whether the transcript is likely loudspeaker echo.
  */
 export function isLikelyVoiceAssistantEcho(text: string): boolean {
   const heard = normalizeEchoText(text)
@@ -301,6 +311,7 @@ export function isLikelyVoiceAssistantEcho(text: string): boolean {
  * @param messageKey - stable conversation identity of the assistant message.
  * @param text - finalized assistant prose.
  * @param messageTime - durable event time in Unix milliseconds.
+ * @param final - Whether this is the final transcript update for the message.
  */
 export function streamVoiceAssistantResponse(
   messageKey: string,
@@ -322,7 +333,12 @@ export function streamVoiceAssistantResponse(
   if (final) spokenAssistantMessages.add(messageKey)
 }
 
-/** Speak one completed response; streaming callers should use the growing-text API above. */
+/**
+ * Speak one completed response; streaming callers should use the growing-text API above.
+ * @param messageKey - Stable conversation identity of the assistant message.
+ * @param text - Final assistant prose.
+ * @param messageTime - Durable event time in Unix milliseconds.
+ */
 export function speakVoiceAssistantResponse(messageKey: string, text: string, messageTime: number): void {
   streamVoiceAssistantResponse(messageKey, text, messageTime, true)
 }
