@@ -80,6 +80,7 @@ describe('ordinary completion judge', () => {
     expect(options?.toolFilter).toEqual({
       allow: ['read', 'read_image', 'glob', 'grep'],
     })
+    expect(options?.agentOptions).toEqual({ maxTokens: 1_200 })
     const prompt = options?.prompt?.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n') ?? ''
     expect(prompt).toMatch(/tests are evidence, not blanket proof/i)
     expect(prompt).toMatch(/scale\/resource behavior/i)
