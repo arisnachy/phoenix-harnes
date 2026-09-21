@@ -2,7 +2,7 @@
  * Independent completion judge bridge for ordinary mutation tasks.
  *
  * Successful substantive mutations must first have deterministic verification.
- * The bridge then performs a bounded read-only semantic review before the turn
+ * The bridge then performs a progress-gated read-only semantic review before the turn
  * settles. A needs_changes verdict steers the original worker; the judge never
  * edits files or executes commands.
  */
@@ -233,9 +233,9 @@ function judgeNotice(decision: OrdinaryCompletionJudgeDecision): UserMessage {
 }
 
 /**
- * Install bounded independent review for verified substantive ordinary mutations.
+ * Install progress-gated independent review for verified substantive ordinary mutations.
  * @param ctx - scoped Cordis context whose agent/tool events are observed.
- * @param input - structured subagent runtime, provider route, and review-pass bound.
+ * @param input - structured subagent runtime and provider route.
  * @returns disposer that removes every bridge listener.
  */
 export function installOrdinaryCompletionJudgeBridge(
