@@ -293,13 +293,14 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 return;
             }
 
-            // Installed Phoenix is a product runtime, not an implicit developer checkout.
-            // Source mode is opt-in through the developer console or PHOENIX_SOURCE_ROOT.
-            // This prevents a stale/dirty local repository from hijacking normal EXE startup.
-            var allowSourceCheckout = DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible);
-            var sourceRoot = allowSourceCheckout
-                ? DesktopSourceCheckout.Resolve(Program.InstallRoot, includeConventional: developerConsoleVisible)
-                : null;
+            // Phoenix.exe is the desktop supervisor. If the user has a real Phoenix source
+            // checkout, prefer it automatically so double-clicking the EXE performs the same startup
+            // they currently have to do by hand in PowerShell. Verified/configured roots win first;
+            // conventional ChatGPT/Phoenix locations are then probed. If no checkout is runnable,
+            // fall back to the bundled managed runtime.
+            var sourceRoot = DesktopSourceCheckout.Resolve(
+                Program.InstallRoot,
+                includeConventional: true);
 
             if (sourceRoot is not null)
             {
@@ -308,7 +309,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 restartItem.Text = "Reiniciar Phoenix";
                 tray.Text = "Phoenix · iniciando checkout local";
                 window.SetStartupStatus("Iniciando tu Phoenix local…");
-                DesktopLog.Write($"Explicit developer/source mode selected local Phoenix checkout: {runtimeRoot}");
+                DesktopLog.Write($"Desktop EXE selected local Phoenix checkout for automatic PowerShell/pnpm startup: {runtimeRoot}");
 
                 // A development checkout is useful, but it must never brick the installed app.
                 // If it crashes, times out, or fails its readiness handshake, silently fall back
