@@ -29,7 +29,7 @@ const MAX_EVIDENCE_CHARS = 1_200
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 8
 
-const REPAIR_ACTION_SCHEMA = {
+const REPAIR_ACTION_SCHEMA: ObjectJsonSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -39,7 +39,7 @@ const REPAIR_ACTION_SCHEMA = {
     verification: { type: 'string' },
   },
   required: ['path', 'issue', 'change', 'verification'],
-} as const
+}
 
 const OUTPUT_SCHEMA: ObjectJsonSchema = {
   type: 'object',
@@ -425,7 +425,7 @@ export function installOrdinaryCompletionJudgeBridge(
       priorEvidence: state.priorEvidence,
       priorRequiredChanges: state.priorRequiredChanges,
       priorRepairActions: state.priorRepairActions,
-      maxTokens: input.maxTokens,
+      ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
       signal,
     })
 
