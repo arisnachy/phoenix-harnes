@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
+using System.Text;
 using Microsoft.Win32;
 
 namespace Phoenix.Desktop;
@@ -73,6 +76,12 @@ internal static class Program
             StartupRegistration.SetEnabled(false);
             return;
         }
+        if (args.Contains("--smoke-webview-loopback", StringComparer.OrdinalIgnoreCase))
+        {
+            RunLoopbackWebViewSmokeTest();
+            return;
+        }
+
         if (args.Contains("--smoke-window", StringComparer.OrdinalIgnoreCase))
         {
             RunVisibleWindowSmokeTest();
@@ -92,6 +101,103 @@ internal static class Program
         DesktopLog.Write($"Developer console requested={developerConsoleVisible}.");
         ApplicationConfiguration.Initialize();
         Application.Run(new PhoenixApplicationContext(showEvent, developerConsoleVisible));
+    }
+
+    private static void RunLoopbackWebViewSmokeTest()
+    {
+        DesktopLog.Write("Loopback WebView smoke: starting local HTTP server.");
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        using var cancellation = new CancellationTokenSource();
+
+        var serverTask = Task.Run(async () =>
+        {
+            var body = "<!doctype html><html><head><title>PHOENIX HARDNESS</title></head><body><div id=\"root\">loopback-smoke</div></body></html>";
+            var bodyBytes = Encoding.UTF8.GetBytes(body);
+            var headers = Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {bodyBytes.Length}\r\nConnection: close\r\n\r\n");
+
+            while (!cancellation.IsCancellationRequested)
+            {
+                TcpClient? client = null;
+                try
+                {
+                    client = await listener.AcceptTcpClientAsync(cancellation.Token);
+                    using (client)
+                    using (var stream = client.GetStream())
+                    {
+                        var request = new byte[8192];
+                        _ = await stream.ReadAsync(request, cancellation.Token);
+                        await stream.WriteAsync(headers, cancellation.Token);
+                        await stream.WriteAsync(bodyBytes, cancellation.Token);
+                        await stream.FlushAsync(cancellation.Token);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    client?.Dispose();
+                    break;
+                }
+                catch (ObjectDisposedException)
+                {
+                    client?.Dispose();
+                    break;
+                }
+            }
+        });
+
+        var loaded = false;
+        try
+        {
+            ApplicationConfiguration.Initialize();
+            using var window = new PhoenixDesktopWindow(new Uri($"http://127.0.0.1:{port}/"))
+            {
+                WindowState = FormWindowState.Normal,
+                Size = new Size(1100, 760),
+            };
+            using var poll = new System.Windows.Forms.Timer { Interval = 100 };
+            using var timeout = new System.Windows.Forms.Timer { Interval = 15000 };
+
+            window.Shown += (_, _) =>
+            {
+                DesktopLog.Write($"Loopback WebView smoke: native window shown; port={port}.");
+                window.MarkRuntimeReady();
+                poll.Start();
+                timeout.Start();
+            };
+            poll.Tick += (_, _) =>
+            {
+                if (window.IsStartupOverlayVisible)
+                    return;
+
+                loaded = true;
+                poll.Stop();
+                timeout.Stop();
+                DesktopLog.Write("Loopback WebView smoke passed: WebView2 loaded the local Phoenix shell.");
+                window.Dispose();
+                Application.ExitThread();
+            };
+            timeout.Tick += (_, _) =>
+            {
+                poll.Stop();
+                timeout.Stop();
+                DesktopLog.Write("Loopback WebView smoke timed out before NavigationCompleted success.");
+                window.Dispose();
+                Application.ExitThread();
+            };
+
+            Application.Run(window);
+        }
+        finally
+        {
+            cancellation.Cancel();
+            listener.Stop();
+            try { serverTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        }
+
+        if (!loaded)
+            throw new InvalidOperationException("WebView2 could not load a healthy local Phoenix loopback page.");
     }
 
     private static void RunVisibleWindowSmokeTest()
