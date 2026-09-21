@@ -33,7 +33,7 @@ export interface UserProfileSettings {
   /** Provider route order shown by model selectors; absent means directory order. */
   modelProviderOrder?: string[]
   /** External connector policy; ask is the safe default. */
-  connectorMode: ConnectorMode
+  connectorMode?: ConnectorMode
   preferredName?: string
   dateOfBirth?: string
   gender?: string
