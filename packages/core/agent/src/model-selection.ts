@@ -35,7 +35,7 @@ export interface ModelSelectionHandoff {
 }
 
 /** Re-resolve the execution handoff from the model currently selected for this step. */
-export type ModelSelectionHandoffResolver = (selection: ModelSelection | undefined) => ModelSelectionHandoff | undefined
+type ModelSelectionHandoffResolver = (selection: ModelSelection | undefined) => ModelSelectionHandoff | undefined
 
 
 /**
@@ -67,7 +67,7 @@ const TOOL_ARTIFACT = /(?:\b(?:file|files|archivo|archivos|code|c[oó]digo|repo|
  * real-world/tool evidence. This is deliberately deterministic and narrow:
  * pure questions keep the user's selected reasoning effort.
  */
-export function isToolAcquisitionRequest(text: string): boolean {
+function isToolAcquisitionRequest(text: string): boolean {
   return TOOL_ACTION.test(text) && TOOL_ARTIFACT.test(text)
 }
 
@@ -76,7 +76,7 @@ export function isToolAcquisitionRequest(text: string): boolean {
  * evidence-gathering step uses Luna/medium; after a tool result the ordinary
  * execution handoff raises the worker to Luna/high.
  */
-export function defaultToolAcquisitionSelection(selection: ModelSelection | undefined): ModelSelection | undefined {
+function defaultToolAcquisitionSelection(selection: ModelSelection | undefined): ModelSelection | undefined {
   if (selection?.provider !== 'openai-codex') return undefined
   return {
     provider: 'openai-codex',
