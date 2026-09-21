@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Drawing;
-using System.IO.Compression;
 using System.Net.Http;
 using Microsoft.Win32;
 
@@ -51,6 +50,18 @@ internal static class Program
         DesktopLog.Write($"Phoenix application root: {ApplicationRoot}");
         var bundledToolchainActive = DesktopBundledToolchain.Activate(AppContext.BaseDirectory);
         DesktopLog.Write($"Bundled runtime toolchain active={bundledToolchainActive}; root={DesktopBundledToolchain.ToolchainRoot(AppContext.BaseDirectory)}");
+
+        if (args.Contains("--prepare-runtime", StringComparer.OrdinalIgnoreCase))
+        {
+            DesktopLog.Write("Preparing bundled Phoenix runtime before interactive launch.");
+            var prepared = DesktopRuntimeSeedInstaller.EnsureInstalled(
+                ApplicationRoot,
+                RuntimeRoot,
+                message => DesktopLog.Write(message));
+            if (!prepared)
+                throw new InvalidOperationException("Phoenix could not pre-install its bundled runtime seed.");
+            return;
+        }
 
         if (args.Contains("--enable-autostart", StringComparer.OrdinalIgnoreCase))
         {
@@ -352,10 +363,22 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         }
 
         // New installers carry a production runtime that was already installed and built in CI.
-        // Extracting that immutable seed is local I/O only: no PowerShell, Git clone, pnpm install
-        // or TypeScript build belongs on the user's first-launch critical path.
-        if (TryInstallBundledRuntimeSeed(state))
-            return true;
+        // Runtime-seed extraction can involve hundreds of MB and thousands of files, so it must
+        // never execute on the WinForms thread. The installer normally pre-warms this path; this
+        // worker-thread fallback keeps direct EXE launches responsive too.
+        var bundledSeed = DesktopRuntimeSeedInstaller.ArchivePath(AppContext.BaseDirectory);
+        if (File.Exists(bundledSeed))
+        {
+            window.SetStartupStatus("Preparando el runtime de Phoenix…");
+            tray.Text = "Phoenix · preparando";
+            DesktopLog.Write($"Installing bundled runtime seed without blocking the UI: {bundledSeed}");
+            var installed = await Task.Run(() => DesktopRuntimeSeedInstaller.EnsureInstalled(
+                AppContext.BaseDirectory,
+                Program.RuntimeRoot,
+                message => DesktopLog.Write(message)));
+            if (installed)
+                return true;
+        }
 
         // Compatibility fallback for older installers that predate runtime-seed.zip.
         var script = Path.Combine(AppContext.BaseDirectory, "bootstrap-runtime.ps1");
@@ -404,77 +427,6 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
         ShowRuntimePreparationFailure();
         return false;
-    }
-
-    private bool TryInstallBundledRuntimeSeed(ManagedRuntimeState currentState)
-    {
-        var seed = Path.Combine(AppContext.BaseDirectory, "runtime-seed.zip");
-        if (!File.Exists(seed))
-        {
-            DesktopLog.Write("No bundled runtime seed is present; legacy bootstrap fallback remains available.");
-            return false;
-        }
-
-        var staging = $"{Program.RuntimeRoot}.installing-{Guid.NewGuid():N}";
-        try
-        {
-            if (currentState != ManagedRuntimeState.Missing && Directory.Exists(Program.RuntimeRoot))
-            {
-                window.SetStartupStatus("Reparando el runtime local de Phoenix…");
-                tray.Text = "Phoenix · reparando";
-                if (!ResetManagedRuntimeDirectoryForRepair($"replacing {currentState} runtime with bundled production seed"))
-                    return false;
-            }
-
-            Directory.CreateDirectory(Path.GetDirectoryName(Program.RuntimeRoot)!);
-            if (Directory.Exists(staging))
-                Directory.Delete(staging, recursive: true);
-            Directory.CreateDirectory(staging);
-
-            window.SetStartupStatus("Preparando Phoenix…");
-            tray.Text = "Phoenix · preparando";
-            DesktopLog.Write($"Extracting bundled production runtime seed: {seed} -> {staging}");
-            ZipFile.ExtractToDirectory(seed, staging, overwriteFiles: true);
-
-            var marker = Path.Combine(staging, ManagedRuntimeMarker.ReadyMarkerName);
-            if (!File.Exists(marker))
-            {
-                File.WriteAllLines(marker, new[]
-                {
-                    "schema=1",
-                    "state=ready",
-                    "channel=stable",
-                    $"installedAt={DateTimeOffset.UtcNow:o}",
-                    "source=bundled-runtime-seed",
-                });
-            }
-
-            var stagedState = ManagedRuntimeMarker.Inspect(staging);
-            if (stagedState != ManagedRuntimeState.Ready)
-                throw new InvalidOperationException($"Bundled runtime seed is not ready after extraction: {stagedState}");
-
-            Directory.Move(staging, Program.RuntimeRoot);
-            var installedState = ManagedRuntimeMarker.Inspect(Program.RuntimeRoot);
-            if (installedState != ManagedRuntimeState.Ready)
-                throw new InvalidOperationException($"Installed bundled runtime failed readiness validation: {installedState}");
-
-            DesktopLog.Write("Bundled production runtime seed installed successfully.");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            DesktopLog.Write("Bundled production runtime seed installation failed", ex);
-            try
-            {
-                if (Directory.Exists(staging))
-                    Directory.Delete(staging, recursive: true);
-            }
-            catch (Exception cleanupEx)
-            {
-                DesktopLog.Write("Could not remove failed runtime-seed staging directory", cleanupEx);
-            }
-            return false;
-        }
     }
 
     private async Task<int> RunBootstrapAsync(string script, int attempt)
