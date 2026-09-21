@@ -42,7 +42,7 @@ function projectWorkflowPlan(plan: CognitiveWorkflowPlan) {
 export function createCognitiveWorkflowTool(): ToolDefinition {
   return defineTool({
     name: 'hardness_workflow',
-    description: 'Select the deterministic HARDNESS cognitive workflow before execution planning. Use it for non-trivial missions and again when bounded evidence changes the mission. It returns execution depth, ordered flows, reasons, and quality gates; it does not execute tools or grant permissions.',
+    description: 'Materialize or adapt the deterministic HARDNESS cognitive workflow when an inspectable serialized plan is useful or bounded evidence changes the mission. Ordinary routing is applied directly from the HARDNESS rubric without requiring this tool call. Returns execution depth, ordered flows, reasons, and quality gates; it does not execute tools or grant permissions.',
     parameters: {
       profile: {
         type: 'object',

@@ -11,6 +11,9 @@ describe('qualityRequirementsForNeed', () => {
     expect(requirements.join(' ')).toMatch(/test|verification/i)
     expect(requirements.join(' ')).toMatch(/error|failure|robust/i)
     expect(requirements.join(' ')).toMatch(/security|unsafe|permission/i)
+    expect(requirements.join(' ')).toMatch(/error.*type|message field|diagnostic/i)
+    expect(requirements.join(' ')).toMatch(/scale|performance|memory|superlinear/i)
+    expect(requirements.join(' ')).toMatch(/acceptance criterion|aggregate suite/i)
   })
 
   it('requires visual, responsive, and accessibility evidence for UI work', () => {

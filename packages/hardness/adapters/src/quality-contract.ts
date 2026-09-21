@@ -1,16 +1,19 @@
 /** Task-specific quality requirements layered on HARDNESS completion. */
 
-const MAX_REQUIREMENTS = 8
+const MAX_REQUIREMENTS = 12
 
 const GENERAL_REQUIREMENTS = [
   'The final result is complete, internally consistent, and usable without unfinished placeholders, scaffolds, mocks, or partial substitutes.',
   'Every critical behavior or conclusion is supported by reproducible evidence, deterministic verification, or independently inspectable output.',
   'Relevant failure modes, assumptions, edge cases, and limitations are checked rather than silently ignored.',
+  'Every explicit mandatory acceptance criterion is mapped to concrete evidence that exercises that criterion; a green aggregate suite alone never closes an untested requirement.',
 ] as const
 
 const SOFTWARE_REQUIREMENTS = [
   'Critical software behavior is covered by executable tests, type checks, or equivalent deterministic verification.',
   'Error handling, recovery paths, and important failure conditions are exercised and shown to behave robustly.',
+  'Public error contracts are verified at the observable boundary: error/exception type plus every required message field, identifier, collection, or diagnostic detail.',
+  'When scale, performance, memory, latency, depth, concurrency, or large cardinalities are material, bounded measurements and implementation inspection rule out avoidable superlinear time or space growth rather than merely showing one large input completes.',
   'Security boundaries, permissions, unsafe inputs, credentials, and externally controlled data are handled without avoidable exposure or unsafe defaults.',
 ] as const
 
