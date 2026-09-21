@@ -72,13 +72,24 @@ function argumentText(argumentsValue: unknown): string {
 }
 
 /**
+ * Strip transport/provider namespaces while preserving the operation name.
+ * Examples: `mcp__GitHub__update_file` -> `update_file`,
+ * `github.update_file` -> `update_file`, and `shell:bash` -> `bash`.
+ */
+function operationName(toolName: string): string {
+  const normalized = toolName.toLowerCase().replaceAll('-', '_')
+  const parts = normalized.split(/(?:__|[.:/])/)
+  return parts.at(-1) || normalized
+}
+
+/**
  * Classify one tool call without network, filesystem, or model work.
  * @param toolName - registered tool name.
  * @param argumentsValue - already-materialized tool arguments.
  * @returns the quality-relevant activity class.
  */
 export function classifyQualityActivity(toolName: string, argumentsValue: unknown): QualityActivity {
-  const normalized = toolName.toLowerCase()
+  const normalized = operationName(toolName)
   if (MUTATION_NAME.test(normalized)) return 'mutation'
   if (VERIFICATION_NAME.test(normalized)) return 'verification'
   if (INSPECTION_NAME.test(normalized)) return 'inspection'
