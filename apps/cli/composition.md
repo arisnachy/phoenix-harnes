@@ -172,6 +172,8 @@ flowchart LR
   cfg --> plugin_dsh_base_tool_str_replace_editor
   plugin_dsh_base_repeat_tool_reminder["repeat-tool-reminder<br/>@phoenix-ai/dsh-repeat-tool-reminder"]
   cfg --> plugin_dsh_base_repeat_tool_reminder
+  plugin_dsh_base_quality_policy["quality-policy<br/>@phoenix-ai/dsh-quality-policy"]
+  cfg --> plugin_dsh_base_quality_policy
   plugin_dsh_base_web["web<br/>@phoenix-ai/dsh-web"]
   cfg --> plugin_dsh_base_web
   plugin_dsh_base_web_search_openrouter["web-search-openrouter<br/>@phoenix-ai/dsh-web-search-openrouter"]
@@ -282,6 +284,7 @@ flowchart LR
 | `tool-ralph` | `@phoenix-ai/dsh-tool-ralph` |
 | `tool-str-replace-editor` | `@phoenix-ai/dsh-tool-str-replace-editor` |
 | `repeat-tool-reminder` | `@phoenix-ai/dsh-repeat-tool-reminder` |
+| `quality-policy` | `@phoenix-ai/dsh-quality-policy` |
 | `web` | `@phoenix-ai/dsh-web` |
 | `web-search-openrouter` | `@phoenix-ai/dsh-web-search-openrouter` |
 | `web-search-free` | `@phoenix-ai/dsh-web-search-free` |
