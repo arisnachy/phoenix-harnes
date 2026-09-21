@@ -7,7 +7,7 @@ import { CallId, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'
 import { defineContentToolFixture } from '@phoenix-ai/dsh-tools'
 import * as QualityPolicy from '@phoenix-ai/dsh-quality-policy'
-import { classifyQualityActivity, inferQualityDomains } from '@phoenix-ai/dsh-quality-policy'
+import { classifyQualityActivity, inferQualityDomains, inferQualitySignals } from '@phoenix-ai/dsh-quality-policy'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
@@ -80,6 +80,12 @@ describe('classification', () => {
     expect(classifyQualityActivity('tools/verify_ci', {})).toBe('verification')
     expect(classifyQualityActivity('fs/read', { path: 'README.md' })).toBe('inspection')
     expect(classifyQualityActivity('shell:bash', { command: 'pnpm run test' })).toBe('verification')
+  })
+
+  it('infers requirement signals that need targeted evidence', () => {
+    expect(inferQualitySignals('CycleError must include the exact cycle in its message')).toEqual({ errorContract: true, scale: false })
+    expect(inferQualitySignals('Support 10,000 tasks without excessive memory growth')).toEqual({ errorContract: false, scale: true })
+    expect(inferQualitySignals('ordinary refactor')).toEqual({ errorContract: false, scale: false })
   })
 
   it('infers supported domains and generic fallback', () => {
