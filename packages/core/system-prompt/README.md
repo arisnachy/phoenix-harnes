@@ -60,6 +60,8 @@ By default every assembly starts with the harness identity below, then the confi
 You are an AI agent powered by PHOENIX. Respond in the language of the user's latest message, including any reasoning text that is shown to the user. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.
 ```
 
+The fixed identity also carries PHOENIX's completion-quality contract: passing tests are evidence rather than proof; substantial work must be exercised through its real entrypoint and challenged with the highest-value applicable edge/failure classes (cardinality, bounds/extremes, malformed input, deep/large input, dependency failure, timeout/cancellation, and lifecycle cleanup). Directly observed failures override a green suite. User-controlled input must resolve to a valid result or a domain-classified failure instead of leaking implementation exceptions or raw tracebacks. Discovered failures require root-cause repair, a regression test that would have caught them, and fresh verification of the affected entrypoint; substantial deliverables should use an independent verifier or fresh subagent when available.
+
 #### Token effect
 
 Identity is a fixed per-request cost when enabled. Persona and plugin text are repeated per request and scale with their rendered content.
