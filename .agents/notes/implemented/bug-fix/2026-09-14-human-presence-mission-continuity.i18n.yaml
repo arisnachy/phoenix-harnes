@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-14-human-presence-mission-continuity.md
-2026-09-14-human-presence-mission-continuity.md: 80c7bdb33cbb0bd5471f32ca6abaab21a1d4a741
-2026-09-14-human-presence-mission-continuity.zh.md: 27c1ba102a0c431f4f888ff1ea2ec212489249a9
+2026-09-14-human-presence-mission-continuity.md: f8de5e48aaa0f5dec46af8663da54cf03760926d
+2026-09-14-human-presence-mission-continuity.zh.md: 42e35337307e143de75f7e3f1563111e1af2387c
