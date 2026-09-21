@@ -1,6 +1,6 @@
 # `@phoenix-ai/dsh-base`
 
-English | [中文](README.zh.md)
+English | [中文](README.zh.md) The base also mounts the low-latency [`quality-policy`](../../guard/quality-policy/README.md), which keeps verification evidence fresh across mutations without adding a model round on the compliant path.
 
 The shared dsh core as a profile bundle: [`cordis.patch.yml`](cordis.patch.yml) inserts every base plugin row — model adapters, the shared [`agent-default-model`](../../core/agent-default-model/README.md) selection, tools, persistence, policy, settings/credentials, telemetry, and the core spawn/fork subagent providers — over the empty profile root, as the first layer of every profile's `dsh.profile.bundles` list. The optional Codex and Claude Code providers stay outside this package and its production dependency closure; a Profile installs either [product provider Bundle](../../subagent/README.md) only when needed. The default `@phoenix-ai/dsh` production closure therefore includes neither product provider, the Claude Agent SDK, nor the Codex wrapper and platform payloads. Later bundle layers (e.g. [`dsh-web-app`](../web-app/README.md)) and the user's profile `cordis.patch.yml` override these rows by id; a patch replaces a row's whole `config`, so mode-specific values live in mode bundles, not here. The package has no runtime API; the profile composer resolves the patch through the `dsh.bundle.patch` manifest field, never through code.
 
