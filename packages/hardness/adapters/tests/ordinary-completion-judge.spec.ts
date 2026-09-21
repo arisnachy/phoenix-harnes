@@ -85,7 +85,7 @@ describe('ordinary completion judge', () => {
     expect(prompt).toMatch(/scale\/resource behavior/i)
     expect(prompt).toMatch(/observable error contracts/i)
     expect(prompt).toContain('task_graph.py')
-    expect(prompt).not.toMatch(/browse the web/i)
+    expect(prompt).toMatch(/do not rerun tests, browse the web/i)
     expect(dispose).toHaveBeenCalledOnce()
   })
 
