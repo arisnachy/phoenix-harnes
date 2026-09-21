@@ -442,9 +442,14 @@ export function installOrdinaryCompletionJudgeBridge(
       return
     }
     if (decision.verdict === 'needs_changes') {
-      state.priorEvidence = [...decision.evidence]
-      state.priorRequiredChanges = [...decision.requiredChanges]
-      state.priorRepairActions = [...decision.repairActions]
+      state.priorEvidence = decision.evidence.slice(0, 6).map(item => compactText(item, 600))
+      state.priorRequiredChanges = decision.requiredChanges.slice(0, 6).map(item => compactText(item, 700))
+      state.priorRepairActions = decision.repairActions.slice(0, 6).map(repair => ({
+        path: compactText(repair.path, 512),
+        issue: compactText(repair.issue, 600),
+        change: compactText(repair.change, 700),
+        verification: compactText(repair.verification, 600),
+      }))
     }
     agent.steer(judgeNotice(decision))
   }))
