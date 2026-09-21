@@ -20,6 +20,8 @@ export interface UserProfileFamilyMember {
 export type AssistantGender = 'masculine' | 'feminine' | 'neutral'
 export type AssistantGenderSource = 'inferred' | 'manual'
 export type AssistantGenderMode = 'auto' | AssistantGenderSource
+/** External connector-use preference mirrored from the durable profile. */
+export type ConnectorMode = 'ask' | 'approved' | 'disabled'
 
 /** Browser-local settings values mirrored from the Host profile namespace. */
 export interface UserProfileSettings {
@@ -27,6 +29,7 @@ export interface UserProfileSettings {
   assistantGender: AssistantGender
   assistantGenderSource?: AssistantGenderSource
   modelProviderOrder?: string[]
+  connectorMode?: ConnectorMode
   preferredName?: string
   dateOfBirth?: string
   gender?: string
@@ -61,5 +64,6 @@ export interface UserProfileRowState {
   assistantName: UserProfileFieldState
   assistantGender: AssistantGender
   assistantGenderSource: AssistantGenderMode
+  connectorMode: ConnectorMode
   consent: UserProfileConsent
 }
