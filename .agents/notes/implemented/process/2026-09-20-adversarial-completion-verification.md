@@ -20,6 +20,14 @@ PHOENIX also mounts `@phoenix-ai/dsh-quality-policy` in the base bundle as a mec
 
 The repository AGENTS rule mirrors the runtime contract so coding agents follow the same standard while changing PHOENIX itself. The system-prompt test pins the critical language so weakening the contract is an explicit reviewed change.
 
+## Alternatives considered
+
+**Rely on prompt guidance alone.** This adds no runtime machinery, but the benchmark failure showed that self-authored checks can still leave stale or incomplete evidence unchallenged.
+
+**Run an independent model judge after every task.** This would strengthen review but adds latency and token cost even when deterministic evidence is already fresh. The shipped policy reserves model judging for substantial work and uses a local O(1) freshness ledger on the normal path.
+
+**Hash every changed artifact after each tool call.** Content-addressed evidence is precise, but unconditional filesystem reads add I/O and couple the guard to storage semantics. Generation freshness is conservative, cheap, and provider-neutral; authoritative hashes can replace it later when mutation tools expose them without extra reads.
+
 ## Consequences
 
 - A green unit suite can no longer justify completion when the actual CLI, UI, API, executable, or other production entrypoint still fails.
