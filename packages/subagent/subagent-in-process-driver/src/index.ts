@@ -13,6 +13,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@phoenix-ai/cordis'
+import type {} from '@phoenix-ai/dsh-system-prompt'
 import { foldConsumedWork } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentHandle } from '@phoenix-ai/dsh-agent'
 import { SessionId, type SessionEvent, type TurnEndReason } from '@phoenix-ai/dsh-session'
@@ -70,6 +71,28 @@ export interface InProcessRunOptions {
   readonly seed?: SessionEvent[]
   /** Give this one-shot child its own Git worktree when the parent cwd belongs to Git. */
   readonly worktreeIsolation?: boolean
+  /** Run a fresh read-only reviewer with a compact complete prompt and no dynamic runtime context. */
+  readonly reviewIsolation?: boolean
+}
+
+export const REVIEW_ISOLATED_SYSTEM_PROMPT = [
+  'You are an independent PHOENIX completion judge, not the worker.',
+  'Evaluate the supplied request, changed targets, and evidence packet against explicit requirements.',
+  'Reuse supplied evidence first. Do not re-plan the task or rediscover the workspace.',
+  'Use read-only tools only when a material claim cannot be decided from the packet; prefer direct reads of exact target paths and avoid broad searches.',
+  'Passing tests are evidence, not blanket proof. Check observable error contracts and scaling/resource claims when requested.',
+  'For a repairable gap, return the smallest concrete repair needed and how to verify it.',
+  'Be concise. When structured_output is available, finish only by calling it with the required schema; do not answer in prose.',
+].join(' ')
+
+function applyReviewIsolation(childCtx: Context): void {
+  childCtx.systemPrompt.section({
+    name: 'subagent:review-isolation',
+    order: -1_000,
+    text: REVIEW_ISOLATED_SYSTEM_PROMPT,
+    complete: true,
+  })
+  childCtx.systemPrompt.suppressRuntimeContext()
 }
 
 /** Error used when cancellation wins before the child publication boundary. */
@@ -127,6 +150,7 @@ export async function startInProcessRun(
       persona: request.persona,
       toolFilter: request.toolFilter,
     })
+    if (options.reviewIsolation === true) applyReviewIsolation(childCtx)
     if (request.outputSchema !== undefined) {
       structured = attachStructuredRuntime(childCtx, request.outputSchema)
     }
