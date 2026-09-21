@@ -22,6 +22,8 @@ Status: implemented
 
 `needs_changes` 仍只把具体修复项交回原 worker。修复并重新获得确定性验证之后，会强制再进行一次新的 judge 审查，因此 judge 永远不会自行修改后又自行认证。
 
+Durable goal round 已经由自己的独立 completion judge 负责，因此 ordinary bridge 在收到 `goal` 来源的 round 时会清除任务级状态。这样每一代工作只保留一个最终审查 owner，不会为同一份工作重复支付两个 judge。
+
 ## Verification
 
 回归测试固定了风险策略，包括：错误契约加规模要求走低成本路径；明确独立审查/高影响工作/恢复后的验证失败会升级；judge 要求修复后强制复审；紧凑工具面；按需 visual/web 工具；以及 judge token 上限。base bundle 测试固定 `judge-spawn` 的 `worktreeIsolation: false`。
