@@ -228,12 +228,17 @@ export function apply(ctx: Context): void {
     if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') return
     checkpoint(state, goal, 'active', 'continue')
     if (goal.roundsStarted >= goal.maxGoalRounds) {
-      // The cap bounds one execution window, never the mission. Rotate the
-      // durable revision so stale prompts cannot re-enter and start a fresh
-      // window with the strategy selector forced to change approach.
-      checkpoint(state, goal, 'retrying', 'continue',
-        `Execution window reached ${goal.maxGoalRounds} rounds; opening a new window.`)
-      ctx.goals.continueWindow(agent, goalRef(goal))
+      // The round cap is a global autonomy budget, not a license to open
+      // another window forever. Preserve the unfinished mission, stop
+      // automatic work, and require an explicit human resume/edit before more
+      // budget is spent. This prevents verifier/connector/admin loops from
+      // consuming the primary task indefinitely.
+      const message = `Automatic execution budget exhausted after ${goal.maxGoalRounds} rounds; explicit resume is required.`
+      checkpoint(state, goal, 'awaiting-human', 'resume', message)
+      ctx.goals.block(agent, goalRef(goal), {
+        code: 'execution-budget-exhausted',
+        message,
+      })
       return
     }
 
