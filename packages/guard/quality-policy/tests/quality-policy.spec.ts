@@ -72,6 +72,7 @@ describe('classification', () => {
     expect(classifyQualityActivity('probe', {})).toBe('other')
     expect(classifyQualityActivity('bash', { command: 'pnpm run test' })).toBe('verification')
     expect(classifyQualityActivity('bash', { command: 'rm -rf dist' })).toBe('mutation')
+    expect(classifyQualityActivity('pwsh', { command: 'Set-Content -Path a.txt -Value x' })).toBe('mutation')
     expect(classifyQualityActivity('run_code', { code: 'return 1' })).toBe('other')
     expect(classifyQualityActivity('run_code', undefined)).toBe('other')
   })
@@ -81,6 +82,8 @@ describe('classification', () => {
     expect(inferQualityDomains({ path: 'README.md' })).toEqual(['docs'])
     expect(inferQualityDomains({ path: 'data/report.csv' })).toEqual(['data'])
     expect(inferQualityDomains({ path: 'config/app.yaml' })).toEqual(['config'])
+    expect(inferQualityDomains({ path: 'package.json' })).toEqual(['config'])
+    expect(inferQualityDomains({ path: '.env' })).toEqual(['config'])
     expect(inferQualityDomains({ value: 1 })).toEqual(['generic'])
   })
 })
@@ -115,6 +118,7 @@ describe('quality-policy evidence freshness', () => {
             content: [{ type: 'text', text: 'downstream context' }],
             source: { kind: 'plugin', plugin: 'test-quality' },
           }),
+          ...downstream.additionalContexts ?? [],
         ],
       }
     })
