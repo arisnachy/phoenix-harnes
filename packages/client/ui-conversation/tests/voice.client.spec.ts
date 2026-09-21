@@ -5,6 +5,8 @@ import {
   createVoiceRecognition,
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
+  interruptVoiceAssistantSpeech,
+  isLikelyVoiceAssistantEcho,
   setVoiceAssistantActive,
   setVoiceAssistantListening,
   speakVoiceAssistantResponse,
@@ -108,7 +110,15 @@ describe('browser voice adapter', () => {
       expect(speak.mock.calls[0]?.[0].text).toBe('Encontré el problema.')
       expect(getVoiceAssistantSnapshot().phase).toBe('speaking')
 
+      expect(isLikelyVoiceAssistantEcho('Encontré el problema.')).toBe(true)
+      expect(isLikelyVoiceAssistantEcho('para, tengo una pregunta')).toBe(false)
+
+      // Starting the recognizer alone must not cancel speech; only an accepted
+      // non-echo transcript triggers the interruption.
       setVoiceAssistantListening(true)
+      expect(cancel).toHaveBeenCalledTimes(1)
+      expect(getVoiceAssistantSnapshot().phase).toBe('speaking')
+      expect(interruptVoiceAssistantSpeech()).toBe(true)
       expect(cancel).toHaveBeenCalledTimes(2)
       expect(getVoiceAssistantSnapshot().phase).toBe('listening')
 
