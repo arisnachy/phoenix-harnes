@@ -75,6 +75,11 @@ describe('classification', () => {
     expect(classifyQualityActivity('pwsh', { command: 'Set-Content -Path a.txt -Value x' })).toBe('mutation')
     expect(classifyQualityActivity('run_code', { code: 'return 1' })).toBe('other')
     expect(classifyQualityActivity('run_code', undefined)).toBe('other')
+    expect(classifyQualityActivity('mcp__GitHub__update_file', { path: 'a.ts' })).toBe('mutation')
+    expect(classifyQualityActivity('github.update_file', { path: 'a.ts' })).toBe('mutation')
+    expect(classifyQualityActivity('tools/verify_ci', {})).toBe('verification')
+    expect(classifyQualityActivity('fs/read', { path: 'README.md' })).toBe('inspection')
+    expect(classifyQualityActivity('shell:bash', { command: 'pnpm run test' })).toBe('verification')
   })
 
   it('infers supported domains and generic fallback', () => {
