@@ -25,6 +25,7 @@ let voiceAssistantSnapshot: VoiceAssistantSnapshot = INACTIVE_VOICE_ASSISTANT
 const voiceAssistantListeners = new Set<() => void>()
 const spokenAssistantMessages = new Set<string>()
 let voiceAssistantSpeech: SpeechOutput | undefined
+let voiceAssistantSpeechKey: string | undefined
 
 function publishVoiceAssistant(next: VoiceAssistantSnapshot): void {
   voiceAssistantSnapshot = next
@@ -58,6 +59,7 @@ export function setVoiceAssistantActive(active: boolean): void {
     voiceAssistantSpeech?.stop()
     voiceAssistantSpeech?.dispose()
     voiceAssistantSpeech = undefined
+    voiceAssistantSpeechKey = undefined
     spokenAssistantMessages.clear()
     if (voiceAssistantSnapshot.active) publishVoiceAssistant(INACTIVE_VOICE_ASSISTANT)
     return
@@ -72,7 +74,18 @@ export function setVoiceAssistantActive(active: boolean): void {
  * @param listening - Whether the browser recognizer has an active segment.
  */
 export function setVoiceAssistantListening(listening: boolean): void {
-  if (!voiceAssistantSnapshot.active || voiceAssistantSnapshot.phase === 'speaking') return
+  if (!voiceAssistantSnapshot.active) return
+  if (listening && voiceAssistantSnapshot.phase === 'speaking') {
+    // Barge-in: human speech always wins. Fence queued browser callbacks before
+    // the recognizer becomes authoritative again.
+    voiceAssistantSpeech?.stop()
+    voiceAssistantSpeech?.dispose()
+    voiceAssistantSpeech = undefined
+    voiceAssistantSpeechKey = undefined
+    publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'listening' })
+    return
+  }
+  if (voiceAssistantSnapshot.phase === 'speaking') return
   publishVoiceAssistant({
     ...voiceAssistantSnapshot,
     phase: listening ? 'listening' : 'paused',
@@ -87,14 +100,21 @@ export function setVoiceAssistantListening(listening: boolean): void {
  * @param text - finalized assistant prose.
  * @param messageTime - durable event time in Unix milliseconds.
  */
-export function speakVoiceAssistantResponse(messageKey: string, text: string, messageTime: number): void {
+export function streamVoiceAssistantResponse(
+  messageKey: string,
+  text: string,
+  messageTime: number,
+  final = false,
+): void {
   if (!voiceAssistantSnapshot.active || text.trim() === '' || messageTime < voiceAssistantSnapshot.activatedAt - 1_000) return
   if (spokenAssistantMessages.has(messageKey)) return
   if (!hasSpeechOutput()) return
-  spokenAssistantMessages.add(messageKey)
-  if (voiceAssistantSpeech === undefined) {
+
+  if (voiceAssistantSpeech === undefined || voiceAssistantSpeechKey !== messageKey) {
+    voiceAssistantSpeech?.dispose()
+    voiceAssistantSpeechKey = messageKey
     voiceAssistantSpeech = createSpeechOutput((state) => {
-      if (!voiceAssistantSnapshot.active) return
+      if (!voiceAssistantSnapshot.active || voiceAssistantSpeechKey !== messageKey) return
       if (state === 'speaking') {
         publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
       } else {
@@ -102,7 +122,13 @@ export function speakVoiceAssistantResponse(messageKey: string, text: string, me
       }
     })
   }
-  voiceAssistantSpeech.speak(text)
+  voiceAssistantSpeech.update(text, final)
+  if (final) spokenAssistantMessages.add(messageKey)
+}
+
+/** Speak one completed response; streaming callers should use the growing-text API above. */
+export function speakVoiceAssistantResponse(messageKey: string, text: string, messageTime: number): void {
+  streamVoiceAssistantResponse(messageKey, text, messageTime, true)
 }
 
 /** Minimal result event needed from SpeechRecognition across browser vendors. */
