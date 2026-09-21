@@ -864,9 +864,6 @@ importers:
       '@phoenix-ai/dsh-typert-registry':
         specifier: workspace:^
         version: link:../../typert/registry
-      '@phoenix-ai/dsh-voice':
-        specifier: workspace:^
-        version: link:../../voice/voice
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -931,6 +928,9 @@ importers:
       '@phoenix-ai/dsh-typert-registry':
         specifier: workspace:^
         version: link:../../typert/registry
+      '@phoenix-ai/dsh-voice':
+        specifier: workspace:^
+        version: link:../../voice/voice
 
   packages/attachment/attachment:
     dependencies:
