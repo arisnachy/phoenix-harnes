@@ -15,7 +15,7 @@ External benchmarking showed that the independent completion judge improved PHOE
 4. Ordinary completion review receives a compact evidence packet:
    - original request,
    - exact changed targets,
-   - bounded mutation summaries,
+   - bounded mutation/diff summaries,
    - bounded deterministic verification output.
 5. The judge decides from the packet first. Read-only tools are fallback evidence acquisition, not the default path. Ordinary review exposes only `read`, `read_image`, `glob`, and `grep`.
 6. `needs_changes` may return structured `repair_actions` containing path, issue, smallest requested change, and targeted verification. The original worker performs those repairs.
