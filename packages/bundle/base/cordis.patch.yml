@@ -545,6 +545,13 @@
         thresholds: [3, 5, 8]
         argumentsPreviewChars: 500
 
+    # Local O(1) quality ledger: mutations invalidate prior evidence; compliant
+    # tasks add no model round, while premature completion gets one bounded steer.
+    - id: quality-policy
+      name: '@phoenix-ai/dsh-quality-policy'
+      config:
+        maxStopNudges: 1
+
     # Every mode enables the stable model-facing web_search tool. OpenRouter
     # search resolves the same OPENROUTER_API_KEY managed by Settings -> Models
     # and uses the provider's current server-tool contract. Fetch stays disabled
