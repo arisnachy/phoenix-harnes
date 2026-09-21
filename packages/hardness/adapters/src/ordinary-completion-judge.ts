@@ -157,9 +157,9 @@ export function ordinaryJudgeRiskScore(input: OrdinaryJudgeRiskInput): number {
   let score = 0
   if (input.signals.explicitIndependent) score += 5
   if (input.signals.highImpact) score += 5
-  if (input.failedVerificationCount > 0) score += 3
+  if (input.failedVerificationCount > 0) score += 4
   else if (input.failedToolCount > 0) score += 1
-  if (input.mutationCount >= 8) score += 2
+  if (input.mutationCount >= 8) score += 4
   else if (input.mutationCount >= 4) score += 1
   if (input.signals.errorContract) score += 1
   if (input.signals.scale) score += 1
