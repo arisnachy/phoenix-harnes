@@ -301,7 +301,7 @@ export function applyGlobTool(ctx: Context, caps: GlobToolCaps): void {
   ctx.systemPrompt.section({
     name: 'tool:glob',
     order: 103,
-    text: 'Use the glob tool — not shell find — to discover files by path pattern. A pattern with no "/" matches basenames at any depth, so "*" matches every file in the tree rather than its top level. '
+    text: 'Use the glob tool — not shell find — to discover files by path pattern. Do not use a workspace-wide basename glob such as "*" merely to confirm the workspace, orient one directory, or check files whose exact paths are already known; read known paths directly and scope discovery to the narrowest directory first. A pattern with no "/" matches basenames at any depth, so "*" matches every file in the tree rather than its top level. '
       + `Results are files only, never directories, and include hidden and ignored files: a result that fits comes back in modification-time order, ${overCapGuidance}`,
   })
 
@@ -339,6 +339,7 @@ export function applyGlobTool(ctx: Context, caps: GlobToolCaps): void {
         return globSearchMeta({ items: page.items, truncated: page.truncated, seen: value.paths.length }, caps.maxMetaBytes)
       },
     },
+    isConcurrencySafe: () => true,
     async execute(args, exec) {
       const input = parseGlobArgs(args)
       const run = await runRipgrep(ctx, exec, 'glob', buildGlobCommand(input), caps.rawOutputMaxBytes, caps.graceMs, caps.stderrMaxBytes)
