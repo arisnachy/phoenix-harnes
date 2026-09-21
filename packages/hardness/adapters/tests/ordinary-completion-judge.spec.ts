@@ -51,6 +51,13 @@ describe('ordinary completion judge policy', () => {
       failedVerificationCount: 1,
       forceRejudge: false,
     })).toBeGreaterThanOrEqual(4)
+    expect(ordinaryJudgeRiskScore({
+      signals: ordinary,
+      mutationCount: 8,
+      failedToolCount: 0,
+      failedVerificationCount: 0,
+      forceRejudge: false,
+    })).toBeGreaterThanOrEqual(4)
   })
 
   it('forces one fresh judge after a previous independent judge requested repairs', () => {
