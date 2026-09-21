@@ -36,6 +36,7 @@ internal sealed class PhoenixDesktopWindow : Form
     // not only the pure layout contract.
     internal bool IsBrowserPaneVisible => !split.Panel2Collapsed;
     internal bool RuntimeReady => runtimeReady;
+    internal bool IsStartupOverlayVisible => startupOverlay.Visible;
 
     internal event EventHandler? LogoutRequested;
 
