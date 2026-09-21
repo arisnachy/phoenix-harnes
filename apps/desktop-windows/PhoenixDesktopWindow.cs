@@ -229,7 +229,8 @@ internal sealed class PhoenixDesktopWindow : Form
         if (core is null || phoenixNavigationInFlight)
             return Task.CompletedTask;
 
-        var launchUri = new UriBuilder(phoenixUri);
+        var navigationBase = DesktopPhoenixLoopback.NavigationBase(phoenixUri, phoenixNavigationRetryCount);
+        var launchUri = new UriBuilder(navigationBase);
         var existingQuery = launchUri.Query.TrimStart('?');
         var prefix = string.IsNullOrWhiteSpace(existingQuery) ? string.Empty : existingQuery + "&";
         launchUri.Query = $"{prefix}surface=desktop&shellVersion={Uri.EscapeDataString(Application.ProductVersion)}&launch={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
@@ -242,6 +243,7 @@ internal sealed class PhoenixDesktopWindow : Form
         phoenixNavigationInFlight = true;
         try
         {
+            DesktopLog.Write($"Phoenix WebView navigating to {launchUri.Uri} (retry={phoenixNavigationRetryCount}).");
             core.Navigate(launchUri.Uri.ToString());
         }
         catch
@@ -433,9 +435,18 @@ internal sealed class PhoenixDesktopWindow : Form
 
         try
         {
-            var shellProfile = Path.Combine(Program.InstallRoot, "webview", "shell");
+            var shellProfile = DesktopPhoenixLoopback.ShellProfilePath(Program.InstallRoot);
             Directory.CreateDirectory(shellProfile);
-            var shellEnvironment = await CoreWebView2Environment.CreateAsync(null, shellProfile);
+            var shellOptions = new CoreWebView2EnvironmentOptions
+            {
+                // The Phoenix shell only talks to the local runtime. Bypass Windows/VPN/system
+                // proxies here so a proxy cannot turn a healthy 127.0.0.1 server into WebView2
+                // "Unknown" navigation failures. The separate user browser WebView keeps normal
+                // system proxy behavior.
+                AdditionalBrowserArguments = DesktopPhoenixLoopback.ShellBrowserArguments,
+            };
+            DesktopLog.Write($"Initializing Phoenix WebView profile at {shellProfile} with {DesktopPhoenixLoopback.ShellBrowserArguments}.");
+            var shellEnvironment = await CoreWebView2Environment.CreateAsync(null, shellProfile, shellOptions);
             await phoenixView.EnsureCoreWebView2Async(shellEnvironment);
             ConfigureWebView(phoenixView.CoreWebView2, isPhoenixSurface: true);
             phoenixView.CoreWebView2.WebMessageReceived += (_, e) => HandlePhoenixMessage(e.WebMessageAsJson);
@@ -455,7 +466,7 @@ internal sealed class PhoenixDesktopWindow : Form
                 if (e.IsUserInitiated)
                     OpenBrowser(target.ToString());
                 else
-                    DesktopLog.Write($"Blocked background external navigation from the Phoenix shell: {target}");
+                    DesktopLog.Write($"Blocked background external navigation from the Phoenix shell: {target}; canonical={phoenixUri}.");
             };
             phoenixView.CoreWebView2.NavigationCompleted += (_, e) =>
             {
@@ -483,8 +494,9 @@ internal sealed class PhoenixDesktopWindow : Form
                     return;
                 }
 
-                SetStartupStatus($"Phoenix está activo, pero la interfaz no pudo cargarse ({status}).\n\nDiagnóstico: {Program.LogPath}", isError: true);
-                DesktopLog.Write($"Phoenix WebView navigation failed after retries: {status}");
+                var failedSource = phoenixView.Source?.ToString() ?? "(sin URL)";
+                SetStartupStatus($"Phoenix está activo, pero la interfaz no pudo cargarse ({status}).\n\nPhoenix intentó reparar la conexión local automáticamente.\n\nDiagnóstico: {Program.LogPath}", isError: true);
+                DesktopLog.Write($"Phoenix WebView navigation failed after retries: status={status}; source={failedSource}; retryCount={phoenixNavigationRetryCount}; profile={DesktopPhoenixLoopback.ShellProfilePath(Program.InstallRoot)}");
             };
             await phoenixView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(BridgeScript);
 
@@ -991,9 +1003,9 @@ internal sealed class PhoenixDesktopWindow : Form
 
     private bool IsPhoenixUri(Uri target)
     {
-        return target.Scheme.Equals(phoenixUri.Scheme, StringComparison.OrdinalIgnoreCase)
-            && target.Host.Equals(phoenixUri.Host, StringComparison.OrdinalIgnoreCase)
-            && target.Port == phoenixUri.Port;
+        // The local runtime may legitimately redirect between 127.0.0.1, localhost and ::1.
+        // Treat all loopback aliases on Phoenix's port as the same trusted local origin.
+        return DesktopPhoenixLoopback.IsPhoenixOrigin(target, phoenixUri);
     }
 
     private void PublishBrowserState()
