@@ -75,6 +75,9 @@ export interface NaturalTextToSpeechProvider extends VoiceTextToSpeechProvider {
 /**
  * Split prose at semantic boundaries while keeping chunks small enough for
  * streaming neural synthesis.
+ * @param text - Source prose to normalize and split.
+ * @param maxChars - Maximum characters allowed in one semantic chunk.
+ * @returns Ordered speakable chunks with normalized whitespace.
  */
 export function semanticSpeechChunks(text: string, maxChars = 180): string[] {
   const normalized = text.replace(/\s+/gu, ' ').trim()
@@ -105,7 +108,11 @@ export function semanticSpeechChunks(text: string, maxChars = 180): string[] {
   return chunks
 }
 
-/** Derive expressive hints locally without spending another model request. */
+/**
+ * Derive expressive hints locally without spending another model request.
+ * @param text - Speakable text used to infer lightweight delivery hints.
+ * @returns Frozen local style hints for the neural engine.
+ */
 export function naturalVoiceStyle(text: string): NaturalVoiceStyle {
   const trimmed = text.trim()
   const interrogative = /[?¿]\s*$/u.test(trimmed)
@@ -119,7 +126,11 @@ export function naturalVoiceStyle(text: string): NaturalVoiceStyle {
   })
 }
 
-/** Create one persistent local neural TTS provider. */
+/**
+ * Create one persistent local neural TTS provider.
+ * @param options - Resident process, timeout, and semantic chunking configuration.
+ * @returns Provider that warms, speaks, cancels, and closes the local engine.
+ */
 export function createNaturalTextToSpeechProvider(
   options: NaturalVoiceProviderOptions,
 ): NaturalTextToSpeechProvider {
