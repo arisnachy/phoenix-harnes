@@ -2,11 +2,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  configureVoiceAssistantRemote,
   createVoiceRecognition,
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
   interruptVoiceAssistantSpeech,
   isLikelyVoiceAssistantEcho,
+  refreshVoiceAssistantRemote,
   setVoiceAssistantActive,
   setVoiceAssistantListening,
   speakVoiceAssistantResponse,
@@ -130,6 +132,51 @@ describe('browser voice adapter', () => {
       else Object.defineProperty(window, 'speechSynthesis', synthesisDescriptor)
       if (utteranceDescriptor === undefined) Reflect.deleteProperty(window, 'SpeechSynthesisUtterance')
       else Object.defineProperty(window, 'SpeechSynthesisUtterance', utteranceDescriptor)
+    }
+  })
+
+  it('routes streaming speech to the Host neural voice and cancels it on barge-in', async () => {
+    const status = vi.fn(async () => ({
+      ok: true as const,
+      value: { enabled: true, natural: true, provider: 'phoenix-natural' },
+    }))
+    const speak = vi.fn(async () => ({
+      ok: true as const,
+      value: { accepted: true, provider: 'phoenix-natural' },
+    }))
+    const cancel = vi.fn(async () => ({
+      ok: true as const,
+      value: { cancelled: 1 },
+    }))
+    const dispose = configureVoiceAssistantRemote({
+      conversationStatus: status,
+      conversationSpeak: speak,
+      conversationCancel: cancel,
+    })
+    try {
+      expect(await refreshVoiceAssistantRemote()).toBe(true)
+      setVoiceAssistantActive(true)
+      const activatedAt = getVoiceAssistantSnapshot().activatedAt
+
+      streamVoiceAssistantResponse(
+        'assistant:2:1',
+        'Encontré el problema. Ahora sigo revisando el flujo',
+        activatedAt,
+      )
+      await Promise.resolve()
+      expect(speak).toHaveBeenCalledTimes(1)
+      expect(speak.mock.calls[0]?.[0]).toMatchObject({
+        key: 'assistant:2:1',
+        sequence: 0,
+        text: 'Encontré el problema.',
+      })
+
+      expect(interruptVoiceAssistantSpeech()).toBe(true)
+      await Promise.resolve()
+      expect(cancel).toHaveBeenCalledWith({ key: 'assistant:2:1' })
+    } finally {
+      setVoiceAssistantActive(false)
+      dispose()
     }
   })
 
