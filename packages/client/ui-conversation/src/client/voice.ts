@@ -1,6 +1,8 @@
 /** Browser-native voice input adapter used by the conversation composer. */
 
-import { createSpeechOutput, hasSpeechOutput, type SpeechOutput } from './speech-output.ts'
+import {
+  conversationalSpeechText, createSpeechOutput, hasSpeechOutput, type SpeechOutput,
+} from './speech-output.ts'
 
 /** States exposed by the short-lived browser recognition session. */
 export type VoiceInputState = 'idle' | 'listening' | 'unsupported' | 'permission-denied' | 'error'
@@ -26,6 +28,8 @@ const voiceAssistantListeners = new Set<() => void>()
 const spokenAssistantMessages = new Set<string>()
 let voiceAssistantSpeech: SpeechOutput | undefined
 let voiceAssistantSpeechKey: string | undefined
+let voiceAssistantMicListening = false
+let voiceAssistantSpokenText = ''
 
 function publishVoiceAssistant(next: VoiceAssistantSnapshot): void {
   voiceAssistantSnapshot = next
@@ -59,6 +63,8 @@ export function setVoiceAssistantActive(active: boolean): void {
     voiceAssistantSpeech?.dispose()
     voiceAssistantSpeech = undefined
     voiceAssistantSpeechKey = undefined
+    voiceAssistantMicListening = false
+    voiceAssistantSpokenText = ''
     spokenAssistantMessages.clear()
     if (voiceAssistantSnapshot.active) publishVoiceAssistant(INACTIVE_VOICE_ASSISTANT)
     return
@@ -73,22 +79,41 @@ export function setVoiceAssistantActive(active: boolean): void {
  * @param listening - Whether the browser recognizer has an active segment.
  */
 export function setVoiceAssistantListening(listening: boolean): void {
-  if (!voiceAssistantSnapshot.active) return
-  if (listening && voiceAssistantSnapshot.phase === 'speaking') {
-    // Barge-in: human speech always wins. Fence queued browser callbacks before
-    // the recognizer becomes authoritative again.
-    voiceAssistantSpeech?.stop()
-    voiceAssistantSpeech?.dispose()
-    voiceAssistantSpeech = undefined
-    voiceAssistantSpeechKey = undefined
-    publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'listening' })
-    return
-  }
-  if (voiceAssistantSnapshot.phase === 'speaking') return
+  voiceAssistantMicListening = listening
+  if (!voiceAssistantSnapshot.active || voiceAssistantSnapshot.phase === 'speaking') return
   publishVoiceAssistant({
     ...voiceAssistantSnapshot,
     phase: listening ? 'listening' : 'paused',
   })
+}
+
+/** Cancel current assistant speech after non-echo human speech is detected. */
+export function interruptVoiceAssistantSpeech(): boolean {
+  if (!voiceAssistantSnapshot.active || voiceAssistantSpeech === undefined) return false
+  voiceAssistantSpeech.dispose()
+  voiceAssistantSpeech = undefined
+  voiceAssistantSpeechKey = undefined
+  publishVoiceAssistant({
+    ...voiceAssistantSnapshot,
+    phase: voiceAssistantMicListening ? 'listening' : 'paused',
+  })
+  return true
+}
+
+/**
+ * Suppress recognizer feedback when the microphone transcribes Phoenix's own
+ * loudspeaker output. Short human interjections stay intentionally exempt.
+ */
+export function isLikelyVoiceAssistantEcho(text: string): boolean {
+  const heard = normalizeEchoText(text)
+  const spoken = normalizeEchoText(voiceAssistantSpokenText)
+  if (heard.length < 8 || spoken === '') return false
+  if (spoken.includes(heard)) return true
+  const heardTokens = heard.split(' ').filter(token => token.length >= 3)
+  if (heardTokens.length < 3) return false
+  const spokenTokens = new Set(spoken.split(' ').filter(token => token.length >= 3))
+  const overlap = heardTokens.filter(token => spokenTokens.has(token)).length
+  return overlap / heardTokens.length >= 0.8
 }
 
 /**
@@ -108,6 +133,7 @@ export function streamVoiceAssistantResponse(
   if (!voiceAssistantSnapshot.active || text.trim() === '' || messageTime < voiceAssistantSnapshot.activatedAt - 1_000) return
   if (spokenAssistantMessages.has(messageKey)) return
   if (!hasSpeechOutput()) return
+  voiceAssistantSpokenText = text
 
   if (voiceAssistantSpeech === undefined || voiceAssistantSpeechKey !== messageKey) {
     voiceAssistantSpeech?.dispose()
@@ -117,7 +143,10 @@ export function streamVoiceAssistantResponse(
       if (state === 'speaking') {
         publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
       } else {
-        publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'paused' })
+        publishVoiceAssistant({
+          ...voiceAssistantSnapshot,
+          phase: voiceAssistantMicListening ? 'listening' : 'paused',
+        })
       }
     })
   }
@@ -128,6 +157,16 @@ export function streamVoiceAssistantResponse(
 /** Speak one completed response; streaming callers should use the growing-text API above. */
 export function speakVoiceAssistantResponse(messageKey: string, text: string, messageTime: number): void {
   streamVoiceAssistantResponse(messageKey, text, messageTime, true)
+}
+
+function normalizeEchoText(text: string): string {
+  return conversationalSpeechText(text)
+    .toLocaleLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^\p{Letter}\p{Number}\s]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
 }
 
 /** Minimal result event needed from SpeechRecognition across browser vendors. */
