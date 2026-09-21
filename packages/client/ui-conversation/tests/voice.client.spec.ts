@@ -6,7 +6,9 @@ import {
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
   setVoiceAssistantActive,
+  setVoiceAssistantListening,
   speakVoiceAssistantResponse,
+  streamVoiceAssistantResponse,
   type VoiceRecognitionLike,
 } from '../src/client/voice.ts'
 
@@ -75,6 +77,50 @@ describe('browser voice adapter', () => {
     })
     recognition?.onerror?.({ error: 'network' })
     expect(states).toEqual(['error'])
+  })
+
+  it('streams a stable sentence before turn completion and yields immediately to barge-in', () => {
+    class FakeUtterance {
+      lang = ''
+      onend: (() => void) | null = null
+      onerror: (() => void) | null = null
+      constructor(readonly text: string) {}
+    }
+    const speak = vi.fn<(utterance: FakeUtterance) => void>()
+    const cancel = vi.fn()
+    const synthesis = { cancel, speak }
+    const synthesisDescriptor = Object.getOwnPropertyDescriptor(window, 'speechSynthesis')
+    const utteranceDescriptor = Object.getOwnPropertyDescriptor(window, 'SpeechSynthesisUtterance')
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: synthesis })
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { configurable: true, value: FakeUtterance })
+    try {
+      setVoiceAssistantActive(true)
+      const activatedAt = getVoiceAssistantSnapshot().activatedAt
+      streamVoiceAssistantResponse('assistant:1:1', 'Encontré el problema', activatedAt)
+      expect(speak).not.toHaveBeenCalled()
+
+      streamVoiceAssistantResponse(
+        'assistant:1:1',
+        'Encontré el problema. Ahora estoy corrigiéndolo',
+        activatedAt,
+      )
+      expect(speak).toHaveBeenCalledTimes(1)
+      expect(speak.mock.calls[0]?.[0].text).toBe('Encontré el problema.')
+      expect(getVoiceAssistantSnapshot().phase).toBe('speaking')
+
+      setVoiceAssistantListening(true)
+      expect(cancel).toHaveBeenCalledTimes(2)
+      expect(getVoiceAssistantSnapshot().phase).toBe('listening')
+
+      // A late browser callback from the cancelled utterance is epoch-fenced.
+      speak.mock.calls[0]?.[0].onend?.()
+      expect(getVoiceAssistantSnapshot().phase).toBe('listening')
+    } finally {
+      if (synthesisDescriptor === undefined) Reflect.deleteProperty(window, 'speechSynthesis')
+      else Object.defineProperty(window, 'speechSynthesis', synthesisDescriptor)
+      if (utteranceDescriptor === undefined) Reflect.deleteProperty(window, 'SpeechSynthesisUtterance')
+      else Object.defineProperty(window, 'SpeechSynthesisUtterance', utteranceDescriptor)
+    }
   })
 
   it('keeps an explicit assistant mode active and speaks only newly completed responses', () => {
