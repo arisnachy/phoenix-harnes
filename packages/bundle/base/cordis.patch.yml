@@ -196,7 +196,10 @@
         # warmup starts asynchronously and failures fall through to Kokoro/system.
         naturalBundledCosyVoice: !!js process.env.PHOENIX_COSYVOICE_HOME !== undefined && process.env.PHOENIX_COSYVOICE_HOME !== '' && process.env.PHOENIX_COSYVOICE_MODEL_DIR !== undefined && process.env.PHOENIX_COSYVOICE_MODEL_DIR !== '' && process.env.PHOENIX_VOICE_REFERENCE !== undefined && process.env.PHOENIX_VOICE_REFERENCE !== ''
         naturalCommand: !!js process.env.PHOENIX_NATURAL_VOICE_COMMAND
-        naturalArgs: !!js process.env.PHOENIX_NATURAL_VOICE_ARGS ? JSON.parse(process.env.PHOENIX_NATURAL_VOICE_ARGS) : []
+        # Keep loader input structurally typed. Bundled CosyVoice injects its
+        # daemon path inside voice-local; custom command arguments can be wired
+        # through plugin config without evaluating JSON inside Cordis YAML.
+        naturalArgs: []
         naturalPrewarm: !!js process.env.PHOENIX_NATURAL_VOICE_PREWARM !== '0'
         naturalStartupTimeoutMs: 45000
         naturalRequestTimeoutMs: 120000
