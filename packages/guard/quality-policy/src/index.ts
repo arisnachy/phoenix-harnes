@@ -55,6 +55,8 @@ const DOMAIN_PATTERNS: ReadonlyArray<readonly [QualityDomain, RegExp]> = [
   ['config', /(?:^|[\\/])(?:package\.json|tsconfig[^\\/]*\.json|[^\\/]+\.(?:ya?ml|toml|ini|env))\b/i],
 ]
 
+const AUTOMATED_EVIDENCE_DOMAINS = new Set<QualityDomain>(['code', 'web', 'config'])
+
 const DOMAIN_HINTS: Record<QualityDomain, string> = {
   code: 'Prefer one focused automated check that exercises the changed behavior; include boundary/error cases when material.',
   web: 'Prefer a build plus one real rendered/entrypoint smoke for the changed surface; do not accept console/runtime errors or broken assets.',
@@ -66,7 +68,7 @@ const DOMAIN_HINTS: Record<QualityDomain, string> = {
 
 /** Lossless JSON arguments have a stable enough textual projection for local classification. */
 function argumentText(argumentsValue: unknown): string {
-  return JSON.stringify(argumentsValue)
+  return JSON.stringify(argumentsValue) ?? 'null'
 }
 
 /**
@@ -104,7 +106,6 @@ export function inferQualityDomains(argumentsValue: unknown): QualityDomain[] {
 interface QualityState {
   generation: number
   verifiedGeneration: number
-  reminderGeneration: number
   nudgedGeneration: number
   stopNudges: number
   domains: Set<QualityDomain>
@@ -116,7 +117,6 @@ function stateFor(states: WeakMap<Agent, QualityState>, agent: Agent): QualitySt
   state = {
     generation: 0,
     verifiedGeneration: 0,
-    reminderGeneration: 0,
     nudgedGeneration: 0,
     stopNudges: 0,
     domains: new Set<QualityDomain>(),
@@ -126,7 +126,7 @@ function stateFor(states: WeakMap<Agent, QualityState>, agent: Agent): QualitySt
 }
 
 function needsAutomatedEvidence(domains: ReadonlySet<QualityDomain>): boolean {
-  return domains.has('code') || domains.has('web') || domains.has('config')
+  return [...domains].some(domain => AUTOMATED_EVIDENCE_DOMAINS.has(domain))
 }
 
 function qualityHint(domains: ReadonlySet<QualityDomain>): string {
@@ -144,18 +144,7 @@ function pluginMessage(text: string, summary: string): UserMessage {
 }
 
 function prependContext(context: UserMessage, decision: PostToolDecision): PostToolDecision {
-  const additionalContexts = [context, ...decision.additionalContexts ?? []]
-  if (decision.kind === 'block') {
-    return { kind: 'block', feedback: decision.feedback, additionalContexts }
-  }
-  if ('value' in decision) {
-    return { kind: 'accept', value: decision.value, additionalContexts }
-  }
-  return {
-    kind: 'accept',
-    ...decision.content === undefined ? {} : { content: decision.content },
-    additionalContexts,
-  }
+  return { ...decision, additionalContexts: [context, ...decision.additionalContexts ?? []] }
 }
 
 function mutationReminder(domains: ReadonlySet<QualityDomain>): UserMessage {
@@ -219,8 +208,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     if (activity === 'mutation') {
       if (result.isError) return downstream
       const wasFresh = markMutation(state, exec.arguments)
-      if (!wasFresh || state.reminderGeneration === state.generation) return downstream
-      state.reminderGeneration = state.generation
+      if (!wasFresh) return downstream
       return prependContext(mutationReminder(state.domains), downstream)
     }
 
