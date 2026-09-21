@@ -129,7 +129,11 @@ function requestText(message: UserMessage): string {
     .slice(0, 8_000)
 }
 
-/** Infer escalation features locally without another model/tool call. */
+/**
+ * Infer escalation features locally without another model/tool call.
+ * @param request - bounded original user request used only for deterministic signal detection.
+ * @returns local review-risk signals; no model or external work is performed.
+ */
 export function inferOrdinaryJudgeSignals(request: string): OrdinaryJudgeSignals {
   const lower = request.toLowerCase()
   const errorSubject = /\b(?:error|exception|throw|failure|cycle|missing dependency|missing dependencies|traceback)\b/u.test(lower)
@@ -151,6 +155,8 @@ export function inferOrdinaryJudgeSignals(request: string): OrdinaryJudgeSignals
  * its token/time cost. Error-contract and scale requests alone deliberately stay
  * below the default threshold because deterministic evidence + worker self-review
  * are cheaper and stronger first-line gates.
+ * @param input - local task signals and observed execution/recovery facts.
+ * @returns deterministic risk score used to decide whether a separate judge is worth its cost.
  */
 export function ordinaryJudgeRiskScore(input: OrdinaryJudgeRiskInput): number {
   if (input.forceRejudge) return 100
