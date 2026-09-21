@@ -220,6 +220,26 @@ jobs:
           if (-not $smokeLog.Contains('Visible smoke: BrowserCollapsed=True.')) { throw 'Phoenix EXE opened with the embedded browser pane visible instead of chat-first' }
           if (-not $smokeLog.Contains('Visible desktop window smoke test passed')) { throw 'Phoenix native window did not complete its visible smoke lifecycle' }
 
+      - name: Loopback WebView2 navigation smoke test
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:LOCALAPPDATA 'Phoenix\logs\desktop.log'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--smoke-webview-loopback' -PassThru
+          if (-not $process.WaitForExit(20000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Write-Host '--- Phoenix desktop.log ---'
+            if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } } else { Write-Host '(desktop.log missing)' }
+            throw 'Phoenix WebView2 loopback smoke did not finish within 20 seconds'
+          }
+          Write-Host '--- Phoenix desktop.log ---'
+          if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } }
+          if ($process.ExitCode -ne 0) { throw "Phoenix WebView2 loopback smoke failed: $($process.ExitCode)" }
+          $smokeLog = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+          if (-not $smokeLog.Contains('Loopback WebView smoke passed')) {
+            throw 'Phoenix native shell did not prove a successful WebView2 navigation to loopback'
+          }
+
       - name: Build installer
         shell: pwsh
         run: |
