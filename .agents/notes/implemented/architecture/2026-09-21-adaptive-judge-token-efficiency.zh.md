@@ -2,6 +2,8 @@
 
 Status: implemented
 
+[English](2026-09-21-adaptive-judge-token-efficiency.md) | 中文
+
 ## Problem
 
 后续外部基准显示，PHOENIX 比对比 harness 高约 1.5 分，但模型 token 消耗接近两倍。质量提升是真实的，但成本结构不可接受。
