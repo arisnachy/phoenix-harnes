@@ -290,7 +290,7 @@ export class VoiceRuntime extends TypertRemoteService {
     }
   }
 
-  /** Admit one stable semantic segment for asynchronous Host playback. */
+  /** Play one stable semantic segment on the Host without blocking the browser thread. */
   @Remote('conversationSpeak')
   async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt> {
     if (!this.config.enabled) return { accepted: false, reason: 'disabled' }
@@ -319,7 +319,7 @@ export class VoiceRuntime extends TypertRemoteService {
     const language = request.language?.trim() || this.config.language
     const final = request.final === true
     const currentChannel = channel
-    channel.tail = channel.tail
+    const task = channel.tail
       .catch(() => {})
       .then(async () => {
         if (controller.signal.aborted) return
@@ -336,6 +336,11 @@ export class VoiceRuntime extends TypertRemoteService {
           this.conversationSpeech.delete(key)
         }
       })
+    channel.tail = task
+    // Awaiting here keeps the RPC itself open until this segment finishes, but
+    // the Client never awaits it on its render path. The completion signal lets
+    // hands-free mode return from "speaking" to "listening" truthfully.
+    await task
     return { accepted: true, provider: provider.id }
   }
 
