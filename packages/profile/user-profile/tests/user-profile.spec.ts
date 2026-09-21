@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_ASSISTANT_GENDER,
   DEFAULT_ASSISTANT_NAME,
+  DEFAULT_CONNECTOR_MODE,
   DEFAULT_USER_PROFILE_CONSENT,
   deriveAge,
   inferAssistantGenderFromUserMessage,
   mergeUserProfile,
   renderAssistantIdentity,
+  renderConnectorPolicy,
   validateDateOfBirth,
   validateUserProfile,
   validateUserProfileUpdate,
@@ -17,6 +19,7 @@ function profile(overrides: Partial<UserProfileSettings> = {}): UserProfileSetti
   return {
     assistantName: DEFAULT_ASSISTANT_NAME,
     assistantGender: DEFAULT_ASSISTANT_GENDER,
+    connectorMode: DEFAULT_CONNECTOR_MODE,
     consent: { ...DEFAULT_USER_PROFILE_CONSENT },
     ...overrides,
   }
@@ -157,6 +160,17 @@ describe('user profile validation and projection helpers', () => {
     expect(text).toContain('When the user asks what is pending')
     expect(text).toContain('Never claim that nothing else is pending unless every authoritative source in the intended scope was actually checked')
     expect(text).toContain('Do not turn unrelated memories into a menu of suggested topics')
+  })
+
+  it('persists a safe connector policy and projects it into model context', () => {
+    expect(profile().connectorMode).toBe('ask')
+    const automatic = mergeUserProfile(profile(), { connectorMode: 'approved' })
+    expect(automatic.connectorMode).toBe('approved')
+    expect(renderConnectorPolicy(automatic.connectorMode)).toContain('Approved external connectors may be used automatically')
+
+    const disabled = mergeUserProfile(automatic, { connectorMode: 'disabled' })
+    expect(renderConnectorPolicy(disabled.connectorMode)).toContain('External connectors are disabled')
+    expect(() => { validateUserProfileUpdate({ connectorMode: 'always' as never }) }).toThrow('connectorMode')
   })
 
   it('rejects an assistant gender or provenance outside the supported presentation modes', () => {
