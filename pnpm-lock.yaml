@@ -1135,6 +1135,9 @@ importers:
       '@phoenix-ai/dsh-plan-mode':
         specifier: workspace:^
         version: link:../../plan/plan-mode
+      '@phoenix-ai/dsh-quality-policy':
+        specifier: workspace:^
+        version: link:../../guard/quality-policy
       '@phoenix-ai/dsh-pwsh-sandbox':
         specifier: workspace:^
         version: link:../../shell/pwsh-sandbox
@@ -5049,6 +5052,37 @@ importers:
       '@phoenix-ai/dsh-system-prompt':
         specifier: workspace:^
         version: link:../../core/system-prompt
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+
+  packages/guard/quality-policy:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@phoenix-ai/dsh-agent-loop':
+        specifier: workspace:^
+        version: link:../../core/agent-loop
+      '@phoenix-ai/dsh-agent-loop-testkit':
+        specifier: workspace:^
+        version: link:../../test-support/agent-loop-testkit
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
       '@phoenix-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../core/tools
