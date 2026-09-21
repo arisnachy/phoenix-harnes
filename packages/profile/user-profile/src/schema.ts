@@ -1,7 +1,7 @@
 /** Validation and projection helpers for the private user-profile namespace. */
 
 import z from '@phoenix-ai/schemastery'
-import type { AssistantGender, AssistantGenderSource, UserProfileConsent, UserProfileFamilyMember, UserProfileSettings, UserProfileUpdate } from './types.ts'
+import type { AssistantGender, AssistantGenderSource, ConnectorMode, UserProfileConsent, UserProfileFamilyMember, UserProfileSettings, UserProfileUpdate } from './types.ts'
 
 /** Settings namespace stored in the Harness-home settings document. */
 export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile' as const
@@ -14,6 +14,10 @@ export const DEFAULT_ASSISTANT_GENDER = 'feminine' as const
 export const ASSISTANT_GENDERS: readonly AssistantGender[] = ['masculine', 'feminine', 'neutral']
 /** Persisted provenance values; an absent source means inference is still open. */
 export const ASSISTANT_GENDER_SOURCES: readonly AssistantGenderSource[] = ['inferred', 'manual']
+/** Supported external-connector policies. */
+export const CONNECTOR_MODES: readonly ConnectorMode[] = ['ask', 'approved', 'disabled']
+/** Safe default: optional connectors require confirmation before first use. */
+export const DEFAULT_CONNECTOR_MODE: ConnectorMode = 'ask'
 
 /** Default policy: no profile field is model-visible without an explicit opt-in. */
 export const DEFAULT_USER_PROFILE_CONSENT: UserProfileConsent = Object.freeze({
@@ -39,6 +43,7 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
   assistantGender: z.union(['masculine', 'feminine', 'neutral']).default(DEFAULT_ASSISTANT_GENDER),
   assistantGenderSource: z.union(['inferred', 'manual']).required(false),
   modelProviderOrder: z.array(z.string()).required(false),
+  connectorMode: z.union(['ask', 'approved', 'disabled']).default(DEFAULT_CONNECTOR_MODE),
   preferredName: z.string().required(false),
   dateOfBirth: z.string().required(false),
   gender: z.string().required(false),
@@ -60,7 +65,7 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const PROFILE_TEXT_FIELDS = ['assistantName', 'preferredName', 'gender', 'pronouns', 'tone'] as const
-const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'assistantGender', 'assistantGenderSource', 'modelProviderOrder', 'dateOfBirth', 'family'] as const
+const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'assistantGender', 'assistantGenderSource', 'modelProviderOrder', 'connectorMode', 'dateOfBirth', 'family'] as const
 const CONSENT_FIELDS = ['preferredName', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'family'] as const
 
 /** Validate cross-field and bounded profile constraints.
@@ -78,6 +83,9 @@ export function validateUserProfile(profile: UserProfileSettings): void {
     throw new TypeError(`user profile assistantGenderSource must be one of ${ASSISTANT_GENDER_SOURCES.join(', ')}`)
   }
   validateProviderOrder(profile.modelProviderOrder)
+  if (!CONNECTOR_MODES.includes(profile.connectorMode)) {
+    throw new TypeError(`user profile connectorMode must be one of ${CONNECTOR_MODES.join(', ')}`)
+  }
   if (profile.dateOfBirth !== undefined) validateDateOfBirth(profile.dateOfBirth)
   if (profile.family !== undefined) {
     if (profile.family.length > USER_PROFILE_LIMITS.familyMembers) {
@@ -107,6 +115,10 @@ export function validateUserProfileUpdate(patch: unknown): asserts patch is User
     if (field === 'assistantGenderSource' && value !== null && value !== undefined
       && !ASSISTANT_GENDER_SOURCES.includes(value as AssistantGenderSource)) {
       throw new TypeError(`user profile update assistantGenderSource must be one of ${ASSISTANT_GENDER_SOURCES.join(', ')}`)
+    }
+    if (field === 'connectorMode' && value !== null && value !== undefined
+      && !CONNECTOR_MODES.includes(value as ConnectorMode)) {
+      throw new TypeError(`user profile update connectorMode must be one of ${CONNECTOR_MODES.join(', ')}`)
     }
     if (field === 'modelProviderOrder' && value !== null && value !== undefined && !Array.isArray(value)) {
       throw new TypeError('user profile update field "modelProviderOrder" must be an array or null')
@@ -142,6 +154,7 @@ function clearProfileField(profile: UserProfileSettings, field: typeof PROFILE_U
     case 'assistantGender': profile.assistantGender = DEFAULT_ASSISTANT_GENDER; break
     case 'assistantGenderSource': delete profile.assistantGenderSource; break
     case 'modelProviderOrder': delete profile.modelProviderOrder; break
+    case 'connectorMode': profile.connectorMode = DEFAULT_CONNECTOR_MODE; break
     case 'preferredName': delete profile.preferredName; break
     case 'dateOfBirth': delete profile.dateOfBirth; break
     case 'gender': delete profile.gender; break
