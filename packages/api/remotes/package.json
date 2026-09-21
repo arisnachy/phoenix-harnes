@@ -75,7 +75,8 @@
     "@phoenix-ai/dsh-session-reference": "workspace:^",
     "@phoenix-ai/dsh-settings": "workspace:^",
     "@phoenix-ai/dsh-typert-registry": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-voice": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
@@ -95,6 +96,7 @@
     "@phoenix-ai/dsh-session-reference": "workspace:^",
     "@phoenix-ai/dsh-settings": "workspace:^",
     "@phoenix-ai/dsh-typert-registry": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-voice": "workspace:^"
   }
 }

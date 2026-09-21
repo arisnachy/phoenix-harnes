@@ -8,6 +8,7 @@ import fileReferencesRemote from '@phoenix-ai/dsh-file-reference/remote'
 import pluginInventoryRemote from '@phoenix-ai/dsh-host-plugin-inventory/remote'
 import messageFeedbackRemote from '@phoenix-ai/dsh-message-feedback/remote'
 import sessionReferencesRemote from '@phoenix-ai/dsh-session-reference/remote'
+import voiceRemote from '@phoenix-ai/dsh-voice/remote'
 import type { TypertClientRemote } from '@phoenix-ai/dsh-typert-protocol'
 
 export type { TypertClientRemote as ClientRemote } from '@phoenix-ai/dsh-typert-protocol'
@@ -23,6 +24,7 @@ export type {} from '@phoenix-ai/dsh-goal/remote'
 export type {} from '@phoenix-ai/dsh-host-plugin-inventory/remote'
 export type {} from '@phoenix-ai/dsh-message-feedback/remote'
 export type {} from '@phoenix-ai/dsh-session-reference/remote'
+export type {} from '@phoenix-ai/dsh-voice/remote'
 // The forwarded-event allowlist's selection seat: without it in the consumer's
 // compilation face `TypertRemoteEvent` is `never` and every `$on` call fails.
 export type { ApiRemoteForwardedEvent } from '../types.ts'
@@ -99,6 +101,13 @@ export type { JsonValue } from '@phoenix-ai/dsh-session/types'
 // sessionReferenceResolver namespaces.
 export type { FileReferenceCandidate } from '@phoenix-ai/dsh-file-reference/types'
 export type { SessionReferenceMentionCandidate } from '@phoenix-ai/dsh-session-reference/types'
+export type {
+  VoiceConversationCancelReceipt,
+  VoiceConversationCancelRequest,
+  VoiceConversationSpeakReceipt,
+  VoiceConversationSpeakRequest,
+  VoiceConversationStatus,
+} from '@phoenix-ai/dsh-voice/types'
 
 declare module '@phoenix-ai/cordis' {
   interface Context {
@@ -120,7 +129,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   try {
     for (const contribution of [
       commandsRemote, goalsRemote, dynamicRemote, fileReferencesRemote,
-      pluginInventoryRemote, messageFeedbackRemote, sessionReferencesRemote,
+      pluginInventoryRemote, messageFeedbackRemote, sessionReferencesRemote, voiceRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

@@ -31,8 +31,8 @@ import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
-  createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, setVoiceAssistantActive,
-  setVoiceAssistantListening, subscribeVoiceAssistant,
+  createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, interruptVoiceAssistantSpeech,
+  isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
   type VoiceInputState, type VoiceRecognitionLike,
 } from '../voice.ts'
 import css from './InputBar.module.css'
@@ -205,6 +205,8 @@ export function InputBar({
   const voiceSubmitPendingRef = useRef(false)
   const appendVoiceText = useCallback((text: string): void => {
     if (keyboard === undefined || locked || machineBusy) return
+    if (isLikelyVoiceAssistantEcho(text)) return
+    interruptVoiceAssistantSpeech()
     const current = keyboard.snapshot.draft
     const separator = current !== '' && !/\s$/u.test(current) ? ' ' : ''
     const next = `${current}${separator}${text}`
@@ -219,7 +221,8 @@ export function InputBar({
   }, [keyboard, locked, machineBusy])
   const startVoiceRecognition = useCallback((): void => {
     const recognition = voiceRef.current
-    if (recognition === null || voiceState === 'listening' || locked || machineBusy || running) return
+    if (recognition === null || voiceState === 'listening' || locked || machineBusy
+      || (running && voiceAssistant.phase !== 'speaking')) return
     try {
       recognition.start()
     } catch {
@@ -227,7 +230,7 @@ export function InputBar({
       setVoiceAssistantActive(false)
       setVoiceState('error')
     }
-  }, [locked, machineBusy, running, voiceState])
+  }, [locked, machineBusy, running, voiceAssistant.phase, voiceState])
   useEffect(() => () => {
     setVoiceAssistantActive(false)
     voiceRef.current?.abort()
@@ -274,9 +277,14 @@ export function InputBar({
   // browser timeout. Restart only while the user explicitly enabled hands-free
   // mode, with a small delay that prevents an end/start busy loop.
   useEffect(() => {
-    if (!voiceAssistant.active || voiceAssistant.phase === 'speaking' || voiceState !== 'idle'
-      || locked || machineBusy || running || voiceSubmitPendingRef.current || voiceRef.current === null) return
-    const timer = window.setTimeout(startVoiceRecognition, 250)
+    const canListenDuringRun = !running || voiceAssistant.phase === 'speaking'
+    if (!voiceAssistant.active || voiceState !== 'idle'
+      || locked || machineBusy || !canListenDuringRun
+      || voiceSubmitPendingRef.current || voiceRef.current === null) return
+    // While Phoenix is speaking, restart the recognizer early enough for
+    // interruption. Echo-like transcripts are rejected before they can stop
+    // speech or enter the draft.
+    const timer = window.setTimeout(startVoiceRecognition, voiceAssistant.phase === 'speaking' ? 80 : 250)
     return () => { window.clearTimeout(timer) }
   }, [locked, machineBusy, running, startVoiceRecognition, voiceAssistant.active, voiceAssistant.phase, voiceState])
 
