@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.IO.Pipes;
 using System.Text;
 using Phoenix.Desktop;
@@ -317,6 +318,48 @@ True(ManagedRuntimeMarker.RequiresCleanBootstrap(ManagedRuntimeState.Recoverable
 True(ManagedRuntimeMarker.RequiresCleanBootstrap(ManagedRuntimeState.Unmanaged), "unmanaged desktop runtime is rebuilt cleanly", failures);
 False(ManagedRuntimeMarker.RequiresCleanBootstrap(ManagedRuntimeState.Missing), "missing runtime proceeds directly to clean bootstrap", failures);
 False(ManagedRuntimeMarker.RequiresCleanBootstrap(ManagedRuntimeState.Ready), "verified runtime is never rebuilt during normal startup", failures);
+
+// Runtime-seed installation is intentionally a pure worker/pre-warm operation. A tiny synthetic
+// seed proves the atomic installer without requiring the full production archive in this test.
+var seedAppRoot = Path.Combine(Path.GetTempPath(), $"phoenix-seed-app-{Guid.NewGuid():N}");
+var seedSourceRoot = Path.Combine(Path.GetTempPath(), $"phoenix-seed-source-{Guid.NewGuid():N}");
+var seedRuntimeRoot = Path.Combine(Path.GetTempPath(), $"phoenix-seed-runtime-{Guid.NewGuid():N}");
+try
+{
+    Directory.CreateDirectory(seedAppRoot);
+    Directory.CreateDirectory(Path.Combine(seedSourceRoot, ".git"));
+    File.WriteAllText(Path.Combine(seedSourceRoot, ".git", "HEAD"), "ref: refs/heads/stable\n");
+    File.WriteAllText(
+        Path.Combine(seedSourceRoot, ManagedRuntimeMarker.ReadyMarkerName),
+        "schema=1\nstate=ready\ninstalledAt=2026-09-20T00:00:00Z\n");
+    File.WriteAllText(Path.Combine(seedSourceRoot, "payload.txt"), "phoenix-runtime-seed");
+    ZipFile.CreateFromDirectory(
+        seedSourceRoot,
+        DesktopRuntimeSeedInstaller.ArchivePath(seedAppRoot),
+        CompressionLevel.Fastest,
+        includeBaseDirectory: false);
+
+    True(
+        DesktopRuntimeSeedInstaller.EnsureInstalled(seedAppRoot, seedRuntimeRoot),
+        "runtime seed installer prepares a missing managed runtime",
+        failures);
+    True(
+        File.Exists(Path.Combine(seedRuntimeRoot, "payload.txt")),
+        "runtime seed installer materializes the production payload",
+        failures);
+    True(
+        ManagedRuntimeMarker.Inspect(seedRuntimeRoot) == ManagedRuntimeState.Ready,
+        "runtime seed installer leaves a verified ready runtime",
+        failures);
+}
+finally
+{
+    foreach (var path in new[] { seedAppRoot, seedSourceRoot, seedRuntimeRoot })
+    {
+        if (Directory.Exists(path))
+            Directory.Delete(path, recursive: true);
+    }
+}
 
 if (failures.Count == 0)
 {
