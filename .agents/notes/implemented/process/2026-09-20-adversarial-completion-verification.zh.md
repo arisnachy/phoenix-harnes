@@ -16,7 +16,7 @@ PHOENIX 可能让自己编写的测试套件全部通过，但仍然交付测试
 
 每个被发现的失败在完成前都需要三件事：修复根因、加入本应能够捕获该问题的回归测试，并重新运行受影响的真实入口。重要的多步骤交付在可用时使用持久目标及其独立完成裁判；否则使用新的独立验证器，避免作者成为自己测试的唯一裁判。
 
-PHOENIX 还在 base bundle 中挂载 `@phoenix-ai/dsh-quality-policy`，作为机械化的低延迟证据新鲜度 guard。它为每个 agent 维护 O(1) 的任务账本：成功修改会推进 evidence generation；之后观察到的验证只让当前 generation 变为新鲜；后续修改会立即使它失效。第一次从“新鲜”变为“脏”时，只通过本来就在继续的工具结果 `additionalContexts` 附加一条短 notice，因此正常合规路径不会增加模型轮次。如果轮次仍试图在“脏”状态下结束，`agent/turn-stopping` 默认最多 steer 一次有界纠正。领域提示要求 code、web、config 使用自动化证据，而 docs、data、generic 可以使用最终检查。提醒明确要求先用确定性检查，再考虑模型评审；独立检查尽量并行；输入未变化时复用新鲜证据；优先真实消费入口；只有预期质量收益足以补偿延迟或成本时才增加验证。热路径刻意使用 generation 新鲜度而不是内容 hash，从而不增加额外文件系统 I/O；跨任务持久失败索引仍属于 learning 子系统。
+PHOENIX 还在 base bundle 中挂载 `@phoenix-ai/dsh-quality-policy`，作为机械化的低延迟证据新鲜度 guard。它为每个 agent 维护 O(1) 的任务账本：成功修改会推进 evidence generation；之后观察到的验证只让当前 generation 变为新鲜；后续修改会立即使它失效。第一次从“新鲜”变为“脏”时，只通过本来就在继续的工具结果 `additionalContexts` 附加一条短 notice，因此正常合规路径不会增加模型轮次。如果轮次仍试图在“脏”状态下结束，`agent/turn-stopping` 默认最多 steer 一次有界纠正。领域提示要求 code、web、config 使用自动化证据，而 docs、data、generic 可以使用最终检查。提醒明确要求先用确定性检查，再考虑模型评审；独立检查尽量并行；输入未变化时复用新鲜证据；优先真实消费入口；只有预期质量收益足以补偿延迟或成本时才增加验证。热路径刻意使用 generation 新鲜度而不是内容 hash，从而不增加额外文件系统 I/O；跨任务持久失败索引仍属于 learning 子系统。 工具活动分类会先去掉传输层或供应商 namespace 再匹配操作名，因此 `mcp__GitHub__update_file`、`github.update_file`、`shell:bash` 等包装工具无需专门别名也会进入同一个证据 ledger。
 
 仓库中的 AGENTS 规则与运行时约束保持一致，使修改 PHOENIX 自身的编码智能体遵循同一标准。system-prompt 测试固定关键措辞，因此削弱该约束必须成为显式、可审查的变更。
 
