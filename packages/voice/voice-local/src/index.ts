@@ -1,8 +1,8 @@
 /** Local process adapters for the PHOENIX voice capability.
  *
- * The package does not download a model or run a process during boot. Kokoro,
- * STT, and the platform speech engine are selected only when a request is
- * spoken or transcribed.
+ * The package does not download model weights. PHOENIX Natural may keep one
+ * configured neural engine resident and warm; Kokoro, STT, and the platform
+ * speech engine remain progressively lighter fallbacks.
  * @module @phoenix-ai/dsh-voice-local
  */
 
@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
+import { createNaturalTextToSpeechProvider } from './natural.ts'
 import type {
   VoiceSpeechToTextProvider,
   VoiceSynthesisRequest,
@@ -147,6 +148,18 @@ export function createLocalSpeechToTextProvider(options: LocalSttProviderOptions
 
 /** Local voice plugin configuration. */
 export interface Config {
+  /** Persistent neural speech daemon; absence leaves PHOENIX Natural unavailable. */
+  readonly naturalCommand?: string
+  /** Arguments for the persistent neural daemon. */
+  readonly naturalArgs?: string[]
+  /** Warm the configured neural engine asynchronously during host startup. */
+  readonly naturalPrewarm?: boolean
+  /** Maximum resident-engine startup time. */
+  readonly naturalStartupTimeoutMs?: number
+  /** Maximum time for one natural speech request. */
+  readonly naturalRequestTimeoutMs?: number
+  /** Maximum characters per semantic neural synthesis chunk. */
+  readonly naturalMaxChunkChars?: number
   /** Optional local Kokoro command; absence leaves Kokoro unavailable. */
   readonly kokoroCommand?: string
   /** Arguments for the Kokoro command. */
@@ -155,12 +168,18 @@ export interface Config {
   readonly sttCommand?: string
   /** Arguments for the STT command. */
   readonly sttArgs?: string[]
-  /** Whether to register the platform fallback after Kokoro. */
+  /** Whether to register the platform fallback after neural TTS and Kokoro. */
   readonly systemTts?: boolean
 }
 
 /** Schemastery schema for the local voice provider plugin. */
 export const Config: z<Config> = z.object({
+  naturalCommand: z.string(),
+  naturalArgs: z.array(z.string()).default([]),
+  naturalPrewarm: z.boolean().default(true),
+  naturalStartupTimeoutMs: z.number().default(45_000),
+  naturalRequestTimeoutMs: z.number().default(120_000),
+  naturalMaxChunkChars: z.number().default(180),
   kokoroCommand: z.string(),
   kokoroArgs: z.array(z.string()).default([]),
   sttCommand: z.string(),
@@ -171,6 +190,23 @@ export const Config: z<Config> = z.object({
 /** Register configured local TTS and STT adapters into `ctx.voice`. */
 export function apply(ctx: Context, config: Config): void {
   const voice = ctx.voice
+  const naturalCommand = config.naturalCommand?.trim()
+  if (naturalCommand !== undefined && naturalCommand !== '') {
+    const natural = createNaturalTextToSpeechProvider({
+      command: naturalCommand,
+      args: config.naturalArgs ?? [],
+      startupTimeoutMs: config.naturalStartupTimeoutMs ?? 45_000,
+      requestTimeoutMs: config.naturalRequestTimeoutMs ?? 120_000,
+      maxChunkChars: config.naturalMaxChunkChars ?? 180,
+    })
+    voice.registerTextToSpeechProvider(natural)
+    ctx.effect(() => () => { natural.close() }, 'natural voice daemon teardown')
+    if (config.naturalPrewarm !== false) {
+      void natural.warmup().catch((error: unknown) => {
+        ctx.logger('voice-local').warn(`natural voice prewarm failed; fallbacks remain available: ${String(error)}`)
+      })
+    }
+  }
   const kokoroCommand = config.kokoroCommand?.trim()
   if (kokoroCommand !== undefined && kokoroCommand !== '') {
     voice.registerTextToSpeechProvider(createKokoroTextToSpeechProvider({ command: kokoroCommand, args: config.kokoroArgs ?? [] }))
@@ -181,6 +217,17 @@ export function apply(ctx: Context, config: Config): void {
     voice.registerSpeechToTextProvider(createLocalSpeechToTextProvider({ command: sttCommand, args: config.sttArgs ?? [] }))
   }
 }
+
+export {
+  createNaturalTextToSpeechProvider,
+  naturalVoiceStyle,
+  semanticSpeechChunks,
+} from './natural.ts'
+export type {
+  NaturalTextToSpeechProvider,
+  NaturalVoiceProviderOptions,
+  NaturalVoiceStyle,
+} from './natural.ts'
 
 /** Package name used by the Cordis loader. */
 export const name = 'voice-local'
