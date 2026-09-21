@@ -123,6 +123,13 @@ function compactVerification(name: string, args: unknown): string {
   return `${operationName(name)}:${text}`
 }
 
+/**
+ * Decide whether an ordinary verified mutation warrants semantic review.
+ * Low-risk work closes on deterministic evidence; material risk, prior failure,
+ * repair re-review, or a broad mutation surface escalates to the independent judge.
+ * @param input - current request, mutation breadth, failure state, and re-review need.
+ * @returns true when the semantic judge adds material completion evidence.
+ */
 export function ordinaryJudgeRequired(input: {
   readonly request: string
   readonly generation: number
