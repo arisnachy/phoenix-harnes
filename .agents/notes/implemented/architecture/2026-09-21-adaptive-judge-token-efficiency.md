@@ -22,6 +22,8 @@ A dedicated `judge-spawn` provider disables Git worktree isolation because this 
 
 A `needs_changes` verdict still returns only concrete repairs to the original worker. After repair and fresh deterministic verification, one fresh judge pass is forced so the judge never certifies its own edits.
 
+Durable goal rounds already own their own independent completion judge, so the ordinary bridge drops task-local state when a `goal`-sourced round is claimed. This enforces one final-review owner per generation instead of paying two judges for the same work.
+
 ## Verification
 
 Regression tests pin the risk policy, including the cheap path for explicit error-contract plus scale requirements, escalation for explicit independent/high-impact work and recovered verification failures, forced re-review after judge-requested repairs, the compact tool surface, conditional visual/web tools, and the judge token cap. The base bundle test pins `judge-spawn` with `worktreeIsolation: false`.
