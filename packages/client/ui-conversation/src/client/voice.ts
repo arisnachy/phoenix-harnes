@@ -56,7 +56,6 @@ export function getVoiceAssistantSnapshot(): VoiceAssistantSnapshot {
  */
 export function setVoiceAssistantActive(active: boolean): void {
   if (!active) {
-    voiceAssistantSpeech?.stop()
     voiceAssistantSpeech?.dispose()
     voiceAssistantSpeech = undefined
     voiceAssistantSpeechKey = undefined
