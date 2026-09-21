@@ -175,10 +175,18 @@ function isVerification(name: string, args: unknown): boolean {
   return VERIFY.test(op) || (SHELL.test(op) && SHELL_VERIFY.test(argumentText(args)))
 }
 
-function mutationSummary(name: string, args: unknown, targets: readonly string[]): string {
+function mutationSummary(
+  name: string,
+  args: unknown,
+  targets: readonly string[],
+  content: readonly ContentBlock[],
+): string {
   const op = operationName(name)
-  if (targets.length > 0) return compactText(`${op}: ${targets.join(', ')}`, 800)
-  return compactText(`${op}: ${argumentText(args)}`, 800)
+  const subject = targets.length > 0
+    ? `${op}: ${targets.join(', ')}`
+    : `${op}: ${compactText(argumentText(args), 500)}`
+  const outcome = compactText(contentText(content), 900)
+  return compactText(outcome.length > 0 ? `${subject} => ${outcome}` : subject, 1_200)
 }
 
 function effectiveContent(result: Readonly<ToolExecutionResult>, decision: PostToolDecision): readonly ContentBlock[] {
@@ -382,7 +390,9 @@ export function installOrdinaryCompletionJudgeBridge(
       for (const target of targets) {
         if (!state.changedTargets.includes(target) && state.changedTargets.length < MAX_TARGETS) state.changedTargets.push(target)
       }
-      state.mutationSummaries.push(mutationSummary(exec.name, exec.arguments, targets))
+      state.mutationSummaries.push(
+        mutationSummary(exec.name, exec.arguments, targets, effectiveContent(result, downstream)),
+      )
       state.mutationSummaries = state.mutationSummaries.slice(-MAX_MUTATION_SUMMARIES)
     } else if (state.generation > 0 && isVerification(exec.name, exec.arguments)) {
       state.verifiedGeneration = state.generation
