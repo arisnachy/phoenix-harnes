@@ -87,7 +87,7 @@ export function defaultToolAcquisitionSelection(selection: ModelSelection | unde
 
 function directUserTextForTurn(agent: {
   readonly session: {
-    readonly events: readonly Array<{ readonly type: string; readonly data: unknown }>
+    readonly events: readonly { readonly type: string; readonly data: unknown }[]
   }
 }, turn: number): string {
   const fragments: string[] = []
@@ -99,7 +99,7 @@ function directUserTextForTurn(agent: {
     if (event.type !== 'user/message') continue
     const message = event.data as {
       readonly source?: { readonly kind?: string }
-      readonly content?: readonly Array<{ readonly type?: string; readonly text?: string }>
+      readonly content?: readonly { readonly type?: string; readonly text?: string }[]
     }
     if (message.source?.kind !== 'user') continue
     const text = message.content
