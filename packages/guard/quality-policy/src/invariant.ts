@@ -14,11 +14,9 @@ export const name = 'quality-policy-invariant'
 /** Service required before the companion can reserve package ownership. */
 export const inject = ['invariants']
 
-/**
- * No independent runtime invariant: freshness state is intentionally private,
- * agent-local, and derived from observed tool/agent events.
- */
-const install: InvariantInstaller = () => {}
+const install: InvariantInstaller = () => {
+  // No runtime invariant: freshness state is private, agent-local, and derived from observed events.
+}
 
 /**
  * Register this package's invariant companion.
