@@ -23,7 +23,7 @@ import queue
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 
 def emit(frame: dict[str, Any]) -> None:
@@ -113,18 +113,12 @@ def instruction(style: dict[str, Any]) -> str:
     return " ".join(pieces)
 
 
-def text_generator(text: str) -> Iterable[str]:
-    # CosyVoice supports iterable text input; each semantic PHOENIX chunk is
-    # already bounded, so a single yield avoids a second arbitrary splitter.
-    yield text
-
-
 def synthesize(text: str, style: dict[str, Any]):
     prompt = instruction(style)
     with contextlib.redirect_stdout(sys.stderr):
         if hasattr(model, "inference_instruct2"):
             return model.inference_instruct2(
-                text_generator(text),
+                text,
                 prompt,
                 str(REFERENCE_WAV),
                 stream=True,
