@@ -97,8 +97,6 @@ interface BridgeState {
   changedTargets: string[]
   mutationSummaries: string[]
   verificationEvidence: string[]
-  lastJudgeMutationCount: number
-  lastJudgeVerificationCount: number
   priorEvidence: string[]
   priorRequiredChanges: string[]
   priorRepairActions: OrdinaryRepairAction[]
@@ -362,8 +360,6 @@ export function installOrdinaryCompletionJudgeBridge(
       changedTargets: [],
       mutationSummaries: [],
       verificationEvidence: [],
-      lastJudgeMutationCount: 0,
-      lastJudgeVerificationCount: 0,
       priorEvidence: [],
       priorRequiredChanges: [],
       priorRepairActions: [],
@@ -406,8 +402,8 @@ export function installOrdinaryCompletionJudgeBridge(
     if (state.judgePasses >= maxPasses) return
 
     state.judgePasses += 1
-    const mutationDelta = state.mutationSummaries.slice(state.lastJudgeMutationCount)
-    const verificationDelta = state.verificationEvidence.slice(state.lastJudgeVerificationCount)
+    const mutationDelta = [...state.mutationSummaries]
+    const verificationDelta = [...state.verificationEvidence]
     const decision = await reviewOrdinaryCompletion({
       subagents: input.subagents,
       provider: input.provider,
@@ -424,8 +420,10 @@ export function installOrdinaryCompletionJudgeBridge(
     })
 
     state.judgedGeneration = state.generation
-    state.lastJudgeMutationCount = state.mutationSummaries.length
-    state.lastJudgeVerificationCount = state.verificationEvidence.length
+    // The next independent review receives only work performed after this
+    // verdict; accepted evidence is carried separately as a compact summary.
+    state.mutationSummaries = []
+    state.verificationEvidence = []
 
     if (decision.verdict === 'pass') {
       state.priorEvidence = []
