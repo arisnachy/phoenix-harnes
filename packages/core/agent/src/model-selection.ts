@@ -154,6 +154,33 @@ function isToolAcquisitionRequest(text: string): boolean {
   return TOOL_ACTION.test(text) && TOOL_ARTIFACT.test(text)
 }
 
+const FAST_SOCIAL_TURN = /^(?:[¡!¿?.,\s]*(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|gracias|thanks|thank\s+you|ok(?:ay)?|perfecto|dale|listo|entendido|bien|s[ií]|no)[¡!¿?.,\s]*)$/iu
+const FAST_RUNTIME_META = /^(?:[¡!¿?.,\s]*(?:(?:est[aá]s|estas|sigues)\s+(?:usando|utilizando)\s+jev|usas\s+jev|(?:se\s+)?est[aá]\s+usando\s+jev|qu[eé]\s+modelo\s+(?:est[aá]s|estas)\s+usando|cu[aá]l\s+modelo\s+(?:est[aá]s|estas)\s+usando)[¡!¿?.,\s]*)$/iu
+
+/**
+ * Very narrow low-latency conversational classifier.
+ *
+ * Only social acknowledgements and simple runtime-meta questions enter this
+ * path. Factual questions, external-data requests, artifact work, URLs, code,
+ * and operational verbs deliberately remain on the normal Phoenix path.
+ */
+export function isConversationalFastPathText(text: string): boolean {
+  const candidate = text.trim()
+  if (candidate.length === 0 || candidate.length > 180) return false
+  if (/https?:\/\/|\x60\x60\x60|(?:[A-Za-z]:\\|\.\/|\.\.\/)/u.test(candidate)) return false
+  if (isToolAcquisitionRequest(candidate)) return false
+  return FAST_SOCIAL_TURN.test(candidate) || FAST_RUNTIME_META.test(candidate)
+}
+
+function defaultConversationalSelection(selection: ModelSelection | undefined): ModelSelection | undefined {
+  if (selection?.provider !== 'openai-codex') return undefined
+  return {
+    provider: 'openai-codex',
+    model: 'gpt-5.6-luna',
+    reasoningEffort: ReasoningEffortId('low'),
+  }
+}
+
 /**
  * Low-latency first action for explicit operational Codex turns. The first
  * evidence-gathering step uses Luna/medium; after a tool result the ordinary
@@ -224,6 +251,10 @@ export function installModelSelection(
     fallback: LlmCallConfig,
   ): Promise<LlmCallConfig> {
     if (fallback.provider !== 'openai-codex' || payload.signal.aborted) return fallback
+    const directText = directUserTextForTurn(payload.agent, payload.turn)
+    // Social/meta turns already have a deterministic cheap route. Calling an
+    // external router here would add network latency without improving quality.
+    if (isConversationalFastPathText(directText)) return fallback
     if (Date.now() < jevCircuitOpenUntil) return fallback
 
     const tools = service<InternalToolRegistry>(agentCtx, 'tools')
@@ -334,12 +365,17 @@ export function installModelSelection(
       const selected = selection.assembled
       if (selected === undefined) return resolved
       const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
+      const directText = directUserTextForTurn(_payload.agent, _payload.turn)
+      const conversation = _payload.step === 1 && isConversationalFastPathText(directText)
+        ? defaultConversationalSelection(selected)
+        : undefined
       const acquisition = _payload.step === 1
         && (selection.assembledToolCount ?? 0) > 0
-        && isToolAcquisitionRequest(directUserTextForTurn(_payload.agent, _payload.turn))
+        && isToolAcquisitionRequest(directText)
         ? defaultToolAcquisitionSelection(selected)
         : undefined
-      const routed = acquisition
+      const routed = conversation
+        ?? acquisition
         ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
           ? resolvedHandoff.selection
           : selected)
