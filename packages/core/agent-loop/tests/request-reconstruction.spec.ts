@@ -126,7 +126,7 @@ describe('request stability across the loop', () => {
     await waitForIdle(ctx, agent)
 
     expect(adapter.requests).toHaveLength(2)
-    expect(adapter.requests[0]?.tools.length).toBeGreaterThan(0)
+    expect(adapter.requests[0]?.tools?.length ?? 0).toBeGreaterThan(0)
     expect(adapter.requests[1]?.tools).toEqual(adapter.requests[0]?.tools)
     expectPrefixExtension(adapter.requests[0]!, adapter.requests[1]!)
     expect(adapter.requests[1]?.messages.some(message =>
