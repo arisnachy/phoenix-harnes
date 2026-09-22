@@ -502,31 +502,53 @@ describe('PiAiAdapter provider routing', () => {
     })
   })
 
-  it('serves a Codex route over OpenAI Responses when the credential is a platform key', async () => {
+  it('keeps the low-level adapter platform-key fallback available to explicit embedders', async () => {
     const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'expected mock failure' } }) }])
+    const providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
+      'openai-codex': { baseURL: server.url },
+    }
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
-    await ctx.plugin(LlmPiAi, {
-      providers: { 'openai-codex': { apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url } },
-    })
+    ctx.llm.registerAdapter(['openai-codex'], new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve('test-key'),
+      auth: memoryAuth(),
+    }))
 
     const result = await assemble(ctx, { provider: 'openai-codex', model: 'gpt-5.4', messages: [] })
 
-    // The Codex wire dies on a platform key before any HTTP request, so
-    // reaching the mock at the Responses path proves the reroute happened.
     expect(result.finish.kind).toBe('error')
     expect(server.paths).toEqual(['/responses'])
     expect(server.headers[0]?.authorization).toBe('Bearer test-key')
     expect(server.headers[0]?.['chatgpt-account-id']).toBeUndefined()
   })
 
-  it('wraps every Monday tool before the OpenAI Responses wire, including execute_code', async () => {
-    const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'captured' } }) }])
+  it('does not let a stale apiKeyEnv override native Codex session authentication', async () => {
+    vi.stubEnv('PI_STALE_CODEX_KEY', 'definitely-invalid-platform-key')
+    const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'native auth probe' } }) }])
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(LlmPiAi, {
-      providers: { 'openai-codex': { apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url } },
+      providers: { 'openai-codex': { apiKeyEnv: 'PI_STALE_CODEX_KEY', baseURL: server.url } },
     })
+
+    await assemble(ctx, { provider: 'openai-codex', model: 'gpt-5.4', messages: [] })
+
+    expect(server.headers.every(headers => headers.authorization !== 'Bearer definitely-invalid-platform-key')).toBe(true)
+  })
+
+  it('wraps every Monday tool before the OpenAI Responses wire, including execute_code', async () => {
+    const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'captured' } }) }])
+    const providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
+      'openai-codex': { baseURL: server.url },
+    }
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['openai-codex'], new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve('test-key'),
+      auth: memoryAuth(),
+    }))
 
     await assemble(ctx, {
       provider: 'openai-codex',
@@ -578,12 +600,17 @@ describe('PiAiAdapter provider routing', () => {
     const payload = Buffer
       .from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acc_test' } }))
       .toString('base64')
-    vi.stubEnv('PI_CODEX_JWT', `eyJhbGciOiJub25lIn0.${payload}.sig`)
+    const jwt = `eyJhbGciOiJub25lIn0.${payload}.sig`
+    const providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
+      'openai-codex': { baseURL: server.url },
+    }
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
-    await ctx.plugin(LlmPiAi, {
-      providers: { 'openai-codex': { apiKeyEnv: 'PI_CODEX_JWT', baseURL: server.url } },
-    })
+    ctx.llm.registerAdapter(['openai-codex'], new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve(jwt),
+      auth: memoryAuth(),
+    }))
 
     const result = await assemble(ctx, { provider: 'openai-codex', model: 'gpt-5.4', messages: [] })
 
@@ -603,20 +630,22 @@ describe('PiAiAdapter provider routing', () => {
     const jwtPayload = Buffer
       .from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acc_monday_test' } }))
       .toString('base64')
-    vi.stubEnv('PI_CODEX_MONDAY_JWT', `eyJhbGciOiJub25lIn0.${jwtPayload}.sig`)
+    const jwt = `eyJhbGciOiJub25lIn0.${jwtPayload}.sig`
+    const providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
+      'openai-codex': {
+        baseURL: server.url,
+        models: [{ id: 'gpt-5.4' }],
+        transport: 'sse',
+      },
+    }
 
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
-    await ctx.plugin(LlmPiAi, {
-      providers: {
-        'openai-codex': {
-          apiKeyEnv: 'PI_CODEX_MONDAY_JWT',
-          baseURL: server.url,
-          models: [{ id: 'gpt-5.4' }],
-          transport: 'sse',
-        },
-      },
-    })
+    ctx.llm.registerAdapter(['openai-codex'], new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve(jwt),
+      auth: memoryAuth(),
+    }))
 
     await assemble(ctx, {
       provider: 'openai-codex',
@@ -677,12 +706,17 @@ describe('PiAiAdapter provider routing', () => {
     // chatgpt_account_id claim, so pi-ai's wire would die opaquely; the
     // adapter must say what the route needs instead.
     const payload = Buffer.from(JSON.stringify({ sub: 'user-1' })).toString('base64')
-    vi.stubEnv('PI_CODEX_JWT_NOCLAIM', `eyJhbGciOiJub25lIn0.${payload}.sig`)
+    const jwt = `eyJhbGciOiJub25lIn0.${payload}.sig`
+    const providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
+      'openai-codex': { baseURL: server.url },
+    }
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
-    await ctx.plugin(LlmPiAi, {
-      providers: { 'openai-codex': { apiKeyEnv: 'PI_CODEX_JWT_NOCLAIM', baseURL: server.url } },
-    })
+    ctx.llm.registerAdapter(['openai-codex'], new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve(jwt),
+      auth: memoryAuth(),
+    }))
 
     const result = await assemble(ctx, { provider: 'openai-codex', model: 'gpt-5.4', messages: [] })
 
