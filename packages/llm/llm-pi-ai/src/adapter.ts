@@ -239,7 +239,7 @@ function withCodexReasoningEffort<T>(payload: T, effort: string): T {
       ...current,
       effort,
     },
-  } as T
+  } as unknown as T
 }
 
 /** Merge deployment headers while removing case-insensitive attribution collisions. */
