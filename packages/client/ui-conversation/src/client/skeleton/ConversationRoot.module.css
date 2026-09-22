@@ -6,11 +6,7 @@
   height: 100%;
   min-width: 0;
   background: var(--dsw-alias-bg-base);
-  /* Use the desktop canvas instead of pinning the transcript to the old
-     narrow reading column. KIRA clearance is handled independently by the
-     inherited overlay inset, so this remains a true maximum rather than a
-     forced width. */
-  --dsh-chat-content-width: 1024px;
+  --dsh-chat-content-width: 768px;
   --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
   --dsh-composer-side-clearance: clamp(10px, 2vw, 18px);
   --dsh-composer-dock-inset: 8px;
