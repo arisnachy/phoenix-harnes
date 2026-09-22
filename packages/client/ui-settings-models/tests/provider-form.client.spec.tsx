@@ -1497,6 +1497,37 @@ describe('provider account sign-in', () => {
     inFlight: false,
   }
 
+  it('maps the native Codex account flow onto openai-codex and hides stale API-key setup', async () => {
+    const begin = vi.fn(() => Promise.resolve(ok({ attemptId: 'attempt-native-codex', status: 'pending' } as never)))
+    await mountSection({
+      providers: { 'openai-codex': { apiKeyEnv: 'OPENAI_API_KEY' } },
+      authorization: {
+        entries: [{
+          key: 'subagent-codex/account',
+          label: 'ChatGPT / Codex',
+          methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
+          inFlight: false,
+          // Native Codex stores a secret-free presence marker; it is not an API key.
+          stored: { kind: 'api-key' },
+        }],
+        begin,
+      },
+    })
+    openEditor('openai-codex')
+
+    expect(screen.queryByLabelText(en.keyInput)).toBeNull()
+    expect(screen.getByText(en.accountSignedIn)).toBeTruthy()
+
+    const edit = screen.getByRole('button', { name: en.editProvider.replace('{provider}', 'openai-codex') })
+    const row = edit.closest('li')
+    if (row === null) throw new Error('no row for openai-codex')
+    fireEvent.click(within_(row, `${en.signInWith} ChatGPT / Codex`))
+
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'subagent-codex/account', method: 'oauth' })
+    })
+  })
+
   it('steps the key field aside for an account-only flow and signs in from the card', async () => {
     const begin = vi.fn(() => Promise.resolve(ok({ attemptId: 'attempt-1', status: 'pending' } as never)))
     await mountSection({
