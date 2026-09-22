@@ -11,7 +11,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
-import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 /**
@@ -77,6 +77,58 @@ async function isLockContention(error: unknown, lockPath: string): Promise<boole
   }
 }
 
+/** Parse the PID written by current and legacy lock owners. */
+function parseLockOwnerPid(content: string): number | undefined {
+  const match = /^([1-9]\\d*)\\s*$/.exec(content)
+  if (match === null) return undefined
+  const pid = Number(match[1])
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined
+}
+
+/**
+ * Return true only when the OS proves that the recorded process no longer
+ * exists. Permission errors and every other ambiguous failure stay live-safe.
+ */
+function processIsDefinitelyDead(pid: number): boolean {
+  if (pid === process.pid) return false
+  try {
+    process.kill(pid, 0)
+    return false
+  } catch (error) {
+    return (error as NodeJS.ErrnoException | null)?.code === 'ESRCH'
+  }
+}
+
+/**
+ * Recover a lock left behind by a process the OS proves has exited.
+ *
+ * The content is re-read immediately before removal so an observation made
+ * before another writer replaced the lock cannot delete a different owner's
+ * file. Unknown lock formats are never removed automatically.
+ */
+async function recoverDeadOwnerLock(lockPath: string): Promise<boolean> {
+  let observed: string
+  try {
+    observed = await readFile(lockPath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return true
+    throw error
+  }
+  const pid = parseLockOwnerPid(observed)
+  if (pid === undefined || !processIsDefinitelyDead(pid)) return false
+
+  let confirmed: string
+  try {
+    confirmed = await readFile(lockPath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return true
+    throw error
+  }
+  if (confirmed !== observed || !processIsDefinitelyDead(pid)) return false
+  await rm(lockPath, { force: true })
+  return true
+}
+
 /**
  * Retry cadence for a contended lock. These stay robustness invariants of the
  * cross-process write protocol rather than deployment tunables: they govern how
@@ -139,6 +191,7 @@ export async function withFileLock<T>(
       break
     } catch (error) {
       if (!await isLockContention(error, lockPath)) throw error
+      if (await recoverDeadOwnerLock(lockPath)) continue
     }
     if (Date.now() >= deadline) {
       throw new Error(`atomic-write: timed out waiting for the writer lock at ${lockPath}`)
