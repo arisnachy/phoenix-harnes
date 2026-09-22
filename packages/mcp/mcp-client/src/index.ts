@@ -233,11 +233,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   if (config.transport === 'streamable-http' && config.bearerTokenRef !== undefined) {
     const ref = credentialRef(config.bearerTokenRef)
-    transportOptions = {
-      ...transportOptions,
-      resolveBearerToken: credentials === undefined
-        ? undefined
-        : async () => (await credentials.resolve(ref))?.value,
+    if (credentials !== undefined) {
+      transportOptions = {
+        ...transportOptions,
+        resolveBearerToken: async () => (await credentials.resolve(ref))?.value,
+      }
     }
   }
 
