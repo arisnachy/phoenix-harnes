@@ -79,7 +79,7 @@ async function isLockContention(error: unknown, lockPath: string): Promise<boole
 
 /** Parse the PID written by current and legacy lock owners. */
 function parseLockOwnerPid(content: string): number | undefined {
-  const match = /^([1-9]\\d*)\\s*$/.exec(content)
+  const match = /^([1-9]\d*)\s*$/.exec(content)
   if (match === null) return undefined
   const pid = Number(match[1])
   return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined
