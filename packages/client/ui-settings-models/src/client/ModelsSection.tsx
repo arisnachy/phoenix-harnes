@@ -85,6 +85,21 @@ interface AccountFlow {
   stored?: { kind: string }
 }
 
+const NATIVE_CODEX_ACCOUNT_KEY = 'subagent-codex/account'
+const CODEX_PROVIDER = 'openai-codex'
+
+function accountProviderId(entry: AccountFlow): string {
+  if (entry.key === NATIVE_CODEX_ACCOUNT_KEY) return CODEX_PROVIDER
+  const slash = entry.key.indexOf('/')
+  return slash < 0 ? entry.key : entry.key.slice(slash + 1)
+}
+
+function accountFlowConnected(flow: AccountFlow): boolean {
+  return flow.key === NATIVE_CODEX_ACCOUNT_KEY
+    ? flow.stored !== undefined
+    : flow.stored?.kind === 'grant'
+}
+
 /** Render an editor for either the setup posture or an expanded provider row. */
 function renderProviderEditor({ target, ...props }: ProviderEditorRenderProps): ReactNode {
   return (
@@ -218,7 +233,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
     void api.authorization.list({}).then((response) => {
       if (stale || !response.result.ok) return
       setAccountFlows(new Map(response.result.value.entries.map(entry => [
-        entry.key.slice(entry.key.indexOf('/') + 1),
+        accountProviderId(entry),
         entry,
       ])))
     }, () => undefined)
@@ -243,7 +258,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
       key: flow.key,
       label: flow.label,
       methods: [...flow.methods],
-      connected: flow.stored?.kind === 'grant',
+      connected: accountFlowConnected(flow),
     }
   }
 
