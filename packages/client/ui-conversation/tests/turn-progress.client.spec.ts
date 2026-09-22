@@ -120,6 +120,7 @@ describe('turnProgress', () => {
       phase,
       activity,
       detail: name,
+      startedAt: 1_000,
     })
   })
 
@@ -133,6 +134,7 @@ describe('turnProgress', () => {
       phase: 'running-tools',
       activity: 'reading',
       detail: 'read_file',
+      startedAt: 2_000,
     })
   })
 
