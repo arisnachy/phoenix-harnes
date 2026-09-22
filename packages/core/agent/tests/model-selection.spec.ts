@@ -38,7 +38,7 @@ describe('installModelSelection()', () => {
     }, candidates)).toBeUndefined()
   })
 
-  it('classifies only narrow social/runtime-meta turns for the low-latency path', () => {
+  it('classifies narrow social, runtime-meta, and casual-reaction turns for the low-latency path', () => {
     expect(isConversationalFastPathText('hola')).toBe(true)
     expect(isConversationalFastPathText('¿estás usando Jev?')).toBe(true)
     expect(isConversationalFastPathText('gracias')).toBe(true)
