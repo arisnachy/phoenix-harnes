@@ -81,7 +81,9 @@ function validateHttpEndpoint(raw: string): URL {
 export interface TransportOptions {
   /** Optional OAuth provider used by Streamable HTTP servers. */
   authProvider?: OAuthClientProvider
-  /** Resolve a PHOENIX credential reference without persisting the secret in MCP config. */
+  /** Resolved Bearer token for one transport generation; never persisted in connector config. */
+  bearerToken?: string
+  /** Resolve a PHOENIX credential reference when a fresh generation connects. */
   resolveBearerToken?: (ref: string) => Promise<string | undefined>
 }
 
@@ -92,7 +94,15 @@ function credentialRequired(ref: string): Error & { status: number } {
   )
 }
 
-export async function createTransport(config: Config, options: TransportOptions = {}): Promise<Transport> {
+/**
+ * Construct one MCP transport generation from validated plugin configuration.
+ * Bearer secrets arrive only through the generation-scoped options object and
+ * are copied into request headers without mutating or persisting connector config.
+ * @param config - MCP stdio or Streamable HTTP connector configuration.
+ * @param options - Optional OAuth provider or already-resolved Bearer token.
+ * @returns A fresh MCP client transport ready for one connection generation.
+ */
+export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
     case 'stdio':
       return new StdioClientTransport({
@@ -104,7 +114,7 @@ export async function createTransport(config: Config, options: TransportOptions 
     case 'streamable-http': {
       const headers = { ...config.headers }
       if (config.bearerTokenRef !== undefined) {
-        const token = await options.resolveBearerToken?.(config.bearerTokenRef)
+        const token = options.bearerToken
         if (token === undefined || token.length === 0) throw credentialRequired(config.bearerTokenRef)
         headers.Authorization = `Bearer ${token}`
       }
