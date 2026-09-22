@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-21-adaptive-judge-token-efficiency.md
+2026-09-21-adaptive-judge-token-efficiency.md: c56c189ff018ce9e4177b3aa5fa73e94f7871be4
+2026-09-21-adaptive-judge-token-efficiency.zh.md: 38f6f46192c9d7f9c8dac3b0c4a93b295e596234
