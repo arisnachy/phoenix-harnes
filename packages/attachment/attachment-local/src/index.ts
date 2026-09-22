@@ -56,11 +56,11 @@ export const DEFAULT_NORMALIZED_IMAGE_MAX_BYTES = 4 * 1024 * 1024
 export const DEFAULT_IMAGE_COMPRESSION_CONCURRENCY = 2
 /** Maximum configurable native image transformations per store. */
 export const MAX_IMAGE_COMPRESSION_CONCURRENCY = 8
-/** Default maximum encoded bytes for one arbitrary file. */
+/** Legacy compatibility constant; generic file admission no longer applies this as a default byte ceiling. */
 export const DEFAULT_MAX_FILE_BYTES = 25 * 1024 * 1024
 /** Default maximum arbitrary files in one prompt. */
 export const DEFAULT_MAX_FILES_PER_MESSAGE = 20
-/** Default maximum aggregate arbitrary-file bytes in one prompt. */
+/** Legacy compatibility constant; generic file admission no longer applies this as a default aggregate byte ceiling. */
 export const DEFAULT_MAX_MESSAGE_FILE_BYTES = 100 * 1024 * 1024
 
 /** Local attachment backend configuration. */
@@ -87,7 +87,7 @@ export interface Config {
   maxFileBytes?: number
   /** Maximum arbitrary files accepted in one submitted message. */
   maxFilesPerMessage?: number
-  /** Maximum aggregate arbitrary-file bytes accepted in one submitted message. */
+  /** Optional deployment aggregate-byte override. Omit to delegate byte size to the selected model/provider route. */
   maxMessageFileBytes?: number
 }
 
@@ -165,9 +165,9 @@ export class LocalAttachmentStore extends AttachmentStore {
     normalizedImageMaxBytes: z.number().step(1).min(1).default(DEFAULT_NORMALIZED_IMAGE_MAX_BYTES),
     imageCompressionConcurrency: z.number().step(1).min(1).max(MAX_IMAGE_COMPRESSION_CONCURRENCY)
       .default(DEFAULT_IMAGE_COMPRESSION_CONCURRENCY),
-    maxFileBytes: z.number().step(1).min(1).default(DEFAULT_MAX_FILE_BYTES),
+    maxFileBytes: z.number().step(1).min(1),
     maxFilesPerMessage: z.number().step(1).min(1).default(DEFAULT_MAX_FILES_PER_MESSAGE),
-    maxMessageFileBytes: z.number().step(1).min(1).default(DEFAULT_MAX_MESSAGE_FILE_BYTES),
+    maxMessageFileBytes: z.number().step(1).min(1),
   })
 
   /** Absolute versioned storage root. */
@@ -193,9 +193,9 @@ export class LocalAttachmentStore extends AttachmentStore {
       mediaTypes: Object.freeze(['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const),
     })
     this.fileLimits = Object.freeze({
-      maxFileBytes: config.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
       maxFilesPerMessage: config.maxFilesPerMessage ?? DEFAULT_MAX_FILES_PER_MESSAGE,
-      maxMessageFileBytes: config.maxMessageFileBytes ?? DEFAULT_MAX_MESSAGE_FILE_BYTES,
+      ...config.maxFileBytes === undefined ? {} : { maxFileBytes: config.maxFileBytes },
+      ...config.maxMessageFileBytes === undefined ? {} : { maxMessageFileBytes: config.maxMessageFileBytes },
     })
     this.normalizationPolicy = Object.freeze({
       maxDimension: config.normalizedImageMaxDimension ?? DEFAULT_NORMALIZED_IMAGE_MAX_DIMENSION,
