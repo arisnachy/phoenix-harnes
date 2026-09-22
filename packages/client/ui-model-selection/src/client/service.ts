@@ -63,7 +63,7 @@ export class ModelDirectoryResolver extends Service {
     // settings documents that carry provider catalogs or default selection.
     const refresh = (): void => {
       for (const directory of this.live.directories.values()) {
-        directory.load().catch(() => undefined)
+        directory.load({ force: true }).catch(() => undefined)
       }
     }
     ctx.remote.$on('llm/adapters-updated', refresh)
