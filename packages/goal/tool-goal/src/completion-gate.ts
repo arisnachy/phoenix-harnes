@@ -246,10 +246,10 @@ function reconcileContract(
     const original = matches.length === 1 ? matches[0] : undefined
     let status: CompletionEvidenceStatus = original?.status ?? 'failed'
     let evidence = original === undefined ? [] : [...original.evidence]
-    if (matches.length !== 1) {
+    if (matches.length !== 1 || original === undefined) {
       status = 'failed'
       evidence = []
-      findings.push(matches.length === 0
+      findings.push(matches.length === 0 || original === undefined
         ? 'Locked criterion ' + criterion.id + ' is missing from the evidence ledger.'
         : 'Locked criterion ' + criterion.id + ' appears more than once in the evidence ledger.')
     } else if (original.criterion !== criterion.criterion || original.mandatory !== true) {
