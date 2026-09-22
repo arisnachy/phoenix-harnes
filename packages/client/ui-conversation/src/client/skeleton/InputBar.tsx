@@ -637,13 +637,16 @@ export function InputBar({
         if (existingFiles.length + genericFiles.length > fileLimits.maxFilesPerMessage) {
           return t('file.tooMany', { count: fileLimits.maxFilesPerMessage })
         }
-        if (genericFiles.some(file => file.size > fileLimits.maxFileBytes)) {
+        if (fileLimits.maxFileBytes !== undefined
+          && genericFiles.some(file => file.size > fileLimits.maxFileBytes)) {
           return t('file.fileTooLarge', { size: imageSizeText(fileLimits.maxFileBytes) })
         }
-        const total = existingFiles.reduce((sum, attachment) => sum + attachment.file.size, 0)
-          + genericFiles.reduce((sum, file) => sum + file.size, 0)
-        if (total > fileLimits.maxMessageFileBytes) {
-          return t('file.totalTooLarge', { size: imageSizeText(fileLimits.maxMessageFileBytes) })
+        if (fileLimits.maxMessageFileBytes !== undefined) {
+          const total = existingFiles.reduce((sum, attachment) => sum + attachment.file.size, 0)
+            + genericFiles.reduce((sum, file) => sum + file.size, 0)
+          if (total > fileLimits.maxMessageFileBytes) {
+            return t('file.totalTooLarge', { size: imageSizeText(fileLimits.maxMessageFileBytes) })
+          }
         }
       }
       return addImages(files)
@@ -836,10 +839,15 @@ export function InputBar({
           canAcceptDrop,
           onAddImages: intakeImages,
           onRemoveImage: (id) => { removeImage?.(id) },
-          dropLimits: imageLimits === undefined && fileLimits === undefined ? undefined : {
-            count: fileLimits?.maxFilesPerMessage ?? imageLimits?.maxImagesPerMessage ?? 0,
-            size: imageSizeText(fileLimits?.maxFileBytes ?? imageLimits?.maxImageBytes ?? 0),
-          },
+          dropLimits: fileLimits !== undefined
+            ? fileLimits.maxFileBytes === undefined ? undefined : {
+              count: fileLimits.maxFilesPerMessage,
+              size: imageSizeText(fileLimits.maxFileBytes),
+            }
+            : imageLimits === undefined ? undefined : {
+              count: imageLimits.maxImagesPerMessage,
+              size: imageSizeText(imageLimits.maxImageBytes),
+            },
           fileLimits,
         })}
         {/* One scrollport, two text layers. The hidden mirror renders draft+'\n' and stretches the
