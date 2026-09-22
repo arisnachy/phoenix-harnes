@@ -178,54 +178,98 @@ export class CodexLiveCatalog {
   }
 
   /**
-   * Overlay the dispatch superset only when the route is automatic. The input
-   * object is returned by identity when no overlay applies.
+   * Overlay live Codex metadata without taking ownership away from a pinned
+   * model list.
+   *
+   * Automatic routes receive the full dispatch superset exactly as before.
+   * A non-empty configured list remains the visibility/filter authority, but
+   * each retained id is enriched from Codex's last-good profile so a model
+   * adopted from Settings does not lose capabilities merely because it became
+   * pinned. Explicit `reasoningEfforts: false` still wins as the supported
+   * opt-out; otherwise Codex's live reasoning declaration is authoritative.
    *
    * @param providers - Raw provider settings before live Codex augmentation.
-   * @returns Provider settings with the dispatch-safe Codex model superset when applicable.
+   * @returns Provider settings enriched with the last-good Codex catalog.
    */
   overlayProviders(
     providers: Readonly<Record<string, PiAiProviderProfile>>,
   ): Readonly<Record<string, PiAiProviderProfile>> {
     const profile = providers[CODEX_PROVIDER]
-    if (this.dispatch === undefined || !codexCatalogIsAutomatic(profile)) return providers
+    if (this.dispatch === undefined || profile === undefined) return providers
+
+    if (codexCatalogIsAutomatic(profile)) {
+      return {
+        ...providers,
+        [CODEX_PROVIDER]: {
+          ...profile,
+          models: this.dispatch,
+        },
+      }
+    }
+
+    const liveById = new Map(this.dispatch.map(model => [model.id, model]))
+    const configured = profile.models ?? []
+    const enriched = configured.map((model) => {
+      const live = liveById.get(model.id)
+      if (live === undefined) return model
+      return {
+        ...live,
+        ...model,
+        ...model.reasoningEfforts === false
+          ? { reasoningEfforts: false as const }
+          : live.reasoningEfforts === undefined
+            ? {}
+            : { reasoningEfforts: { ...live.reasoningEfforts } },
+      }
+    })
+
     return {
       ...providers,
       [CODEX_PROVIDER]: {
         ...profile,
-        models: this.dispatch,
+        models: enriched,
       },
     }
   }
 
+  /** Model ids the adapter should advertise for this profile after a refresh. */
+  private advertisedIds(profile: PiAiProviderProfile): readonly string[] | undefined {
+    return codexCatalogIsAutomatic(profile)
+      ? this.visibleIds()
+      : profile.models?.map(model => model.id)
+  }
+
   /**
-   * Refresh Codex when the adapter asks for this route. Failures and empty
-   * replies keep the previous/static catalog. Concurrent callers share one
-   * app-server interrogation.
+   * Refresh Codex whenever the adapter asks for the configured Codex route.
+   * Model-list ownership and metadata freshness are deliberately separate:
+   * even a pinned list must keep receiving current capabilities for its ids.
+   * Failures and empty replies keep the previous/static catalog. Concurrent
+   * callers share one app-server interrogation.
    *
    * @param provider - Provider route requested by the adapter.
    * @param profile - Current raw provider profile for that route.
    * @param force - Retry even inside the failure cooldown when no fresh success exists.
-   * @returns The last valid account-visible model ids, or undefined when unavailable/inapplicable.
+   * @returns Live ids for an automatic route, pinned ids for a configured list,
+   * or undefined when unavailable/inapplicable.
    */
   async refresh(
     provider: string,
     profile: PiAiProviderProfile | undefined,
     force = false,
   ): Promise<readonly string[] | undefined> {
-    if (provider !== CODEX_PROVIDER || !codexCatalogIsAutomatic(profile)) return undefined
+    if (provider !== CODEX_PROVIDER || profile === undefined) return undefined
 
     if (this.inFlight !== undefined) {
       await this.inFlight
-      return this.visibleIds()
+      return this.advertisedIds(profile)
     }
 
     const now = this.now()
     if (this.visible !== undefined && now - this.lastSuccessAt < this.refreshIntervalMs) {
-      return this.visibleIds()
+      return this.advertisedIds(profile)
     }
     if (!force && now - this.lastAttemptAt < this.refreshIntervalMs) {
-      return this.visibleIds()
+      return this.advertisedIds(profile)
     }
 
     this.lastAttemptAt = now
@@ -233,7 +277,7 @@ export class CodexLiveCatalog {
       this.inFlight = undefined
     })
     await this.inFlight
-    return this.visibleIds()
+    return this.advertisedIds(profile)
   }
 
   private async refreshOnce(): Promise<void> {
