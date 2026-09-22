@@ -171,6 +171,42 @@ describe('Codex automatic live catalog policy', () => {
     })
   })
 
+  it('refreshes immediately when Settings pins a newly discovered model inside the normal TTL', async () => {
+    let now = 0
+    let next: CodexDiscoveredModel[] = [{ id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna' }]
+    const list = vi.fn(async () => next)
+    const catalog = new CodexLiveCatalog({
+      transport: { list },
+      now: () => now,
+      refreshIntervalMs: 60_000,
+      installedModelIds: () => [],
+    })
+
+    await catalog.refresh(CODEX_PROVIDER, {})
+    expect(list).toHaveBeenCalledTimes(1)
+
+    next = [{
+      id: 'gpt-6-luna',
+      name: 'GPT-6 Luna',
+      reasoning: {
+        efforts: [
+          { id: 'low', name: 'Low' },
+          { id: 'medium', name: 'Medium' },
+          { id: 'high', name: 'High' },
+          { id: 'xhigh', name: 'Extra High' },
+          { id: 'max', name: 'Max' },
+        ],
+        defaultEffort: 'medium',
+      },
+    }]
+    now = 1
+    const pinned = { models: [{ id: 'gpt-6-luna', name: 'GPT-6 Luna' }] }
+
+    await expect(catalog.refresh(CODEX_PROVIDER, pinned)).resolves.toEqual(['gpt-6-luna'])
+    expect(list).toHaveBeenCalledTimes(2)
+    expect(catalog.reasoningForModel('gpt-6-luna')?.defaultEffort).toBe('medium')
+  })
+
   it('keeps explicit reasoning disablement on a pinned Codex row', async () => {
     const catalog = new CodexLiveCatalog({
       transport: {
