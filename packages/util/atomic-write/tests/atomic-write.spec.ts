@@ -1,4 +1,5 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'\nimport { spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -128,7 +129,7 @@ describe('withFileLock', () => {
       await new Promise(resolve => setTimeout(resolve, 10))
     }
 
-    await writeFile(lockPath, `${stalePid}\\n`)
+    await writeFile(lockPath, `${stalePid}\n`)
     await expect(withFileLock(target, async () => 'recovered', { waitMs: 500 }))
       .resolves.toBe('recovered')
     await expect(readFile(lockPath, 'utf8')).rejects.toThrow()
@@ -137,11 +138,11 @@ describe('withFileLock', () => {
   it('never recovers a lock whose recorded owner is still alive', async () => {
     const dir = await scratch()
     const target = join(dir, 'document')
-    await writeFile(`${target}.lock`, `${process.pid}\\n`)
+    await writeFile(`${target}.lock`, `${process.pid}\n`)
 
     await expect(withFileLock(target, async () => 'stolen', { waitMs: 50 }))
       .rejects.toThrow(/timed out waiting for the writer lock/)
-    expect(await readFile(`${target}.lock`, 'utf8')).toBe(`${process.pid}\\n`)
+    expect(await readFile(`${target}.lock`, 'utf8')).toBe(`${process.pid}\n`)
   })
 
   it('rejects an invalid parent hierarchy before running the operation', async () => {
