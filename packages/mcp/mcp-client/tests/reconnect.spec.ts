@@ -139,6 +139,40 @@ describe('reconnect supervisor', () => {
     ctx = await mountRegistry()
   })
 
+  it('re-resolves a Bearer credential for each fresh HTTP generation', async () => {
+    const resolveBearerToken = vi.fn()
+      .mockResolvedValueOnce('jev-token-1')
+      .mockResolvedValueOnce('jev-token-2')
+    const config: Config = {
+      transport: 'streamable-http',
+      serverName: 'jev',
+      url: 'https://www.jevai.org/api/mcp',
+      headers: {},
+      bearerTokenRef: 'JEV_API_KEY',
+      oauth: false,
+      toolCallTimeoutMs: 1_800,
+      failOnStartupError: false,
+      reconnect: { enabled: true, initialDelayMs: 2, maxDelayMs: 10, maxAttempts: 2 },
+    }
+    const handle = startConnection(
+      ctx,
+      config,
+      resolveReconnectPolicy(config.reconnect, 'reconnect'),
+      undefined,
+      { resolveBearerToken },
+    )
+
+    await handle.ready
+    expect(resolveBearerToken).toHaveBeenNthCalledWith(1, 'JEV_API_KEY')
+
+    instances[0]!.onclose?.()
+    await vi.waitFor(() => { expect(instances).toHaveLength(2) })
+    await vi.waitFor(() => { expect(resolveBearerToken).toHaveBeenCalledTimes(2) })
+    expect(resolveBearerToken).toHaveBeenNthCalledWith(2, 'JEV_API_KEY')
+
+    await handle.dispose()
+  })
+
   it('reconnects after a transport close, re-syncs tools through the new generation, and serves calls', async () => {
     const { warns, infos } = captureLogs(ctx)
     await apply(ctx, stdioConfig({ initialDelayMs: 5, maxDelayMs: 40, maxAttempts: 5 }))
