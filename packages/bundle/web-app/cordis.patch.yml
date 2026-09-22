@@ -103,6 +103,33 @@
     - id: plugin-inventory
       name: '@phoenix-ai/dsh-host-plugin-inventory'
 
+    # Temporary primary browser while Phoenix Desktop/EXE is still maturing.
+    # The MCP process starts quickly but Chrome itself is launched lazily on the
+    # first browser call. Failure is non-fatal and reconnect attempts are bounded.
+    - id: chrome-browser-primary
+      name: '@phoenix-ai/dsh-mcp-client'
+      disabled: !!js process.platform !== 'win32'
+      config:
+        serverName: chrome
+        transport: stdio
+        command: node
+        args:
+          - --import
+          - tsx/esm
+          - packages/mcp/chrome-connector/src/bin.ts
+        cwd: !!js process.cwd()
+        env:
+          PHOENIX_BROWSER_AUTOSTART: 'true'
+          PHOENIX_BROWSER_PREFERRED_ENGINE: chrome
+          PHOENIX_BROWSER_ALLOW_ACTIONS: 'true'
+        failOnStartupError: false
+        startupTimeoutMs: 1000
+        reconnect:
+          enabled: true
+          initialDelayMs: 500
+          maxDelayMs: 2000
+          maxAttempts: 2
+
     # The API gateway: the transport-agnostic dispatch face every client shape
     # shares. The base layer's agent-default-model service owns the default model.
     - id: api-gateway
