@@ -25,6 +25,8 @@ export interface TurnProgress {
   readonly activity: TurnActivity
   /** Current tool identity. Arguments/results are intentionally never surfaced here. */
   readonly detail?: string
+  /** Start time of the concrete activity, when the runtime exposes one. */
+  readonly startedAt?: number
 }
 
 const TOOL_ACTIVITY_MATCHERS: readonly (readonly [TurnActivity, RegExp])[] = [
@@ -59,6 +61,7 @@ function toolProgress(tool: RunningToolCall): TurnProgress {
     phase: activity === 'verifying' ? 'verifying' : 'running-tools',
     activity,
     detail: tool.name,
+    startedAt: tool.time,
   }
 }
 
