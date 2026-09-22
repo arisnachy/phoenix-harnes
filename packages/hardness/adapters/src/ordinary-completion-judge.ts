@@ -64,7 +64,7 @@ interface BridgeState {
   verifiedGeneration: number
   judgedGeneration: number
   hardnessReviewedGeneration: number
-  judgeVerdict?: OrdinaryCompletionJudgeDecision['verdict']
+  judgeVerdict: OrdinaryCompletionJudgeDecision['verdict'] | undefined
   judgePasses: number
   request: string
   mutations: string[]
@@ -93,7 +93,8 @@ function isVerification(name: string, args: unknown): boolean {
 }
 
 function activeGoalOwnsCompletion(agent: Agent): boolean {
-  const latest = agent.session.events.findLast(event => event.type === 'goal/change') as
+  const events = agent.session.events as readonly { readonly type: string; readonly data: unknown }[]
+  const latest = events.findLast(event => event.type === 'goal/change') as
     | { readonly type: string; readonly data: { readonly operation?: string; readonly goal?: { readonly phase?: string } } }
     | undefined
   return latest?.data.operation !== 'clear'
@@ -232,6 +233,7 @@ export function installOrdinaryCompletionJudgeBridge(
       verifiedGeneration: 0,
       judgedGeneration: 0,
       hardnessReviewedGeneration: 0,
+      judgeVerdict: undefined,
       judgePasses: 0,
       request: requestText(message),
       mutations: [],
