@@ -17,6 +17,9 @@
      is owned by the chat scroller. No top pad: the composer stack's gap owns
      the space above; the status strip still carries its own margin. */
   padding: 0 var(--dsh-composer-side-clearance) 8px;
+  padding-right: calc(
+    var(--dsh-composer-side-clearance) + var(--dsh-shell-right-overlay-inset, 0px)
+  );
 }
 
 .hero {
