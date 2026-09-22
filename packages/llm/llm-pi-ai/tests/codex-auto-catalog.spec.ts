@@ -94,6 +94,32 @@ describe('Codex automatic live catalog policy', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
+  it('returns immediately while a stale Codex catalog refreshes in the background', async () => {
+    let release: ((models: readonly CodexDiscoveredModel[]) => void) | undefined
+    const list = vi.fn(() => new Promise<readonly CodexDiscoveredModel[]>((resolve) => {
+      release = resolve
+    }))
+    const catalog = new CodexLiveCatalog({
+      transport: { list },
+      now: () => 0,
+      refreshIntervalMs: 10,
+      installedModelIds: () => [],
+    })
+
+    expect(catalog.refreshInBackground(CODEX_PROVIDER, {})).toBeUndefined()
+    expect(list).toHaveBeenCalledTimes(1)
+    // Repeated selector reads coalesce behind the same background app-server.
+    expect(catalog.refreshInBackground(CODEX_PROVIDER, {})).toBeUndefined()
+    expect(list).toHaveBeenCalledTimes(1)
+
+    release?.([{ id: 'background-model' }])
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(catalog.visibleIds()).toEqual(['background-model'])
+    expect(catalog.revision).toBe(1)
+  })
+
   it('coalesces concurrent refreshes', async () => {
     let release: ((models: readonly CodexDiscoveredModel[]) => void) | undefined
     const list = vi.fn(() => new Promise<readonly CodexDiscoveredModel[]>((resolve) => {
