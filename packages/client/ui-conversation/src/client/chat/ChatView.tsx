@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
-  ConversationTimelineSnapshot, UserMessageNode,
+  ConversationTimelineSnapshot, SteeringMessageNode, UserMessageNode,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
@@ -176,7 +176,7 @@ export function ChatView({
     setFileOpenBusy(false)
   }, [])
 
-  const pendingSteering = useMemo(
+  const transientSteering = useMemo(
     () => inbox.filter(item => item.placement === 'steering'),
     [inbox],
   )
@@ -191,6 +191,19 @@ export function ChatView({
       return node === undefined ? [] : [node]
     }),
     [nodeStore, order],
+  )
+  // Session events and the transient queue arrive on independent streams.
+  // A durable steering node can therefore render one snapshot before the
+  // queue mirror retires its matching transient row. Suppress by stable
+  // message identity, never by text: repeated user text is legitimate.
+  const durableSteeringMessageIds = useMemo(() => new Set(
+    chatNodes.flatMap(node => node.kind === 'steering'
+      ? [String((node.data as SteeringMessageNode).messageId)]
+      : []),
+  ), [chatNodes])
+  const pendingSteering = useMemo(
+    () => transientSteering.filter(item => !durableSteeringMessageIds.has(String(item.messageId))),
+    [durableSteeringMessageIds, transientSteering],
   )
   const progress = useMemo(() => turnProgress(timeline, chatNodes), [chatNodes, timeline])
   // Optimistic bubble lives only until a durable user message appears after
