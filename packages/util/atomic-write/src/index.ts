@@ -102,31 +102,48 @@ function processIsDefinitelyDead(pid: number): boolean {
 /**
  * Recover a lock left behind by a process the OS proves has exited.
  *
- * The content is re-read immediately before removal so an observation made
- * before another writer replaced the lock cannot delete a different owner's
- * file. Unknown lock formats are never removed automatically.
+ * Recovery itself is serialized through a short-lived `<file>.lock.recovery`
+ * guard, then the content is re-read immediately before removal. That prevents
+ * two contenders from turning one stale observation into deletion of a fresh
+ * owner's lock. Unknown lock formats are never removed automatically.
  */
 async function recoverDeadOwnerLock(lockPath: string): Promise<boolean> {
-  let observed: string
+  // Only one contender may decide/remove a stale lock at a time. Without this
+  // recovery guard, two contenders could both observe the same dead owner; one
+  // could remove it and a second could then accidentally remove a fresh lock
+  // created in the tiny gap before its own unlink.
+  const recoveryPath = `${lockPath}.recovery`
   try {
-    observed = await readFile(lockPath, 'utf8')
+    await writeFile(recoveryPath, `${process.pid}\n`, { mode: 0o600, flag: 'wx' })
   } catch (error) {
-    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return true
+    if (await isLockContention(error, recoveryPath)) return false
     throw error
   }
-  const pid = parseLockOwnerPid(observed)
-  if (pid === undefined || !processIsDefinitelyDead(pid)) return false
 
-  let confirmed: string
   try {
-    confirmed = await readFile(lockPath, 'utf8')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return true
-    throw error
+    let observed: string
+    try {
+      observed = await readFile(lockPath, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return true
+      throw error
+    }
+    const pid = parseLockOwnerPid(observed)
+    if (pid === undefined || !processIsDefinitelyDead(pid)) return false
+
+    let confirmed: string
+    try {
+      confirmed = await readFile(lockPath, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return true
+      throw error
+    }
+    if (confirmed !== observed || !processIsDefinitelyDead(pid)) return false
+    await rm(lockPath, { force: true })
+    return true
+  } finally {
+    await rm(recoveryPath, { force: true })
   }
-  if (confirmed !== observed || !processIsDefinitelyDead(pid)) return false
-  await rm(lockPath, { force: true })
-  return true
 }
 
 /**
