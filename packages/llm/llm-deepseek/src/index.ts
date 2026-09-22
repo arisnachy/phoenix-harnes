@@ -150,7 +150,7 @@ export interface Config {
   maxRequestFilesBytes?: number
   /** Maximum accumulated base64 image payload after Files API fallback (default 20 MiB). */
   maxInlineRequestImageBytes?: number
-  /** Maximum arbitrary-file bytes projected into one text request per attachment (default 256 KiB). */
+  /** Optional arbitrary-file projection cap. Default leaves bytes model/context-owned rather than imposing a Phoenix truncation. */
   maxInlineFileBytes?: number
   /** Maximum number of represented images per chat request (default 600). */
   maxImagesPerRequest?: number
