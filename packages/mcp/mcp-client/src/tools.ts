@@ -80,6 +80,31 @@ function unwrapMondayArguments(args: Record<string, unknown>): Record<string, un
   return Object.keys(args).length === 1 && isSchemaObject(wrapped) ? wrapped : args
 }
 
+function mondayModelInputSchema(candidate: SchemaObject): SchemaObject {
+  const normalized = modelInputSchema(candidate)
+  const knownKeys = Object.keys(schemaProperties(normalized)).sort()
+  return {
+    type: 'object',
+    properties: {
+      [MONDAY_ARGUMENT_ENVELOPE_KEY]: {
+        type: 'object',
+        description: [
+          'Exact argument object forwarded unchanged to the Monday MCP tool.',
+          knownKeys.length === 0 ? '' : `Known argument keys: ${knownKeys.join(', ')}.`,
+        ].filter(Boolean).join(' '),
+        additionalProperties: true,
+      },
+    },
+    required: [MONDAY_ARGUMENT_ENVELOPE_KEY],
+    additionalProperties: false,
+  }
+}
+
+function mondayModelDescription(description: string): string {
+  const compatibility = 'PHOENIX Monday compatibility: put the exact Monday tool arguments inside "phoenix_arguments".'
+  return description.trim().length === 0 ? compatibility : `${description} ${compatibility}`
+}
+
 function mergeSchemaProperty(left: unknown, right: unknown): unknown {
   if (left === undefined) return right
   if (right === undefined) return left
@@ -267,17 +292,18 @@ export async function syncTools(
           `mcp-client(${opts.serverName}): server listed tool "${tool.name}" more than once — invalid tool list`,
         )
       }
+      const mondayCompatibility = opts.serverName === MONDAY_SERVER_NAME
       definitions.set(publicName, createDefinition(
         client,
         ctx,
         publicName,
         tool.name,
-        tool.description ?? '',
-        modelInputSchema(tool.inputSchema),
+        mondayCompatibility ? mondayModelDescription(tool.description ?? '') : tool.description ?? '',
+        mondayCompatibility ? mondayModelInputSchema(tool.inputSchema) : modelInputSchema(tool.inputSchema),
         supportedOutputSchema(tool.outputSchema),
         tool.execution?.taskSupport === 'required',
         opts,
-        opts.serverName === MONDAY_SERVER_NAME ? unwrapMondayArguments : undefined,
+        mondayCompatibility ? unwrapMondayArguments : undefined,
       ))
     }
     cursor = response.nextCursor
