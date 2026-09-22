@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import McpConnectorRegistry from '@phoenix-ai/dsh-mcp-connector-registry/src/index.ts'
 
@@ -32,6 +32,24 @@ describe('McpConnectorRegistry', () => {
     registration.dispose()
     registration.dispose()
     expect(registry.list()).toEqual([])
+  })
+
+  it('invokes same-process reconnect hooks without exposing them in snapshots', () => {
+    const registry = new McpConnectorRegistry(new Context())
+    const reconnect = vi.fn()
+    const registration = registry.register({
+      serverName: 'jev',
+      transport: 'streamable-http',
+      reconnect,
+    })
+
+    expect(registry.list()[0]).not.toHaveProperty('reconnect')
+    expect(registry.reconnect('jev')).toBe(true)
+    expect(reconnect).toHaveBeenCalledTimes(1)
+    expect(registry.reconnect('missing')).toBe(false)
+
+    registration.dispose()
+    expect(registry.reconnect('jev')).toBe(false)
   })
 
   it('rejects duplicate server identities without replacing the original', () => {

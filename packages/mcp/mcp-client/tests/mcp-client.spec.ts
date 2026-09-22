@@ -1356,7 +1356,7 @@ describe('createTransport', () => {
     'http://mcp.example.com/mcp',
     'ftp://mcp.example.com/mcp',
     'https://user:pass@mcp.example.com/mcp',
-  ])('rejects unsafe remote MCP endpoint %s', async (url) => {
+  ])('rejects unsafe remote MCP endpoint %s', (url) => {
     const config: Config = {
       transport: 'streamable-http',
       serverName: 'srv',
@@ -1365,7 +1365,7 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 60_000,
       failOnStartupError: false,
     }
-    await expect(createTransport(config)).rejects.toThrow(/MCP endpoint|https|credentials/)
+    expect(() => createTransport(config)).toThrow(/MCP endpoint|https|credentials/)
   })
 
   it('scrubs sensitive env vars and forwards the rest', async () => {
@@ -1416,7 +1416,7 @@ describe('createTransport', () => {
     expect(transport).toBeDefined()
   })
 
-  it('resolves Bearer credentials lazily for Streamable HTTP without putting the secret in config', async () => {
+  it('accepts one already-resolved Bearer token without putting the secret in connector config', () => {
     const config: Config = {
       transport: 'streamable-http',
       serverName: 'jev',
@@ -1427,14 +1427,12 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 1_800,
       failOnStartupError: false,
     }
-    const resolveBearerToken = vi.fn(async (ref: string) => ref === 'JEV_API_KEY' ? 'jev-secret' : undefined)
-    const transport = await createTransport(config, { resolveBearerToken })
-    expect(resolveBearerToken).toHaveBeenCalledWith('JEV_API_KEY')
+    const transport = createTransport(config, { bearerToken: 'jev-secret' })
     expect(transport).toBeDefined()
     expect(JSON.stringify(config)).not.toContain('jev-secret')
   })
 
-  it('classifies an unconfigured Bearer credential as authorization-required input', async () => {
+  it('classifies a missing resolved Bearer credential as authorization-required input', () => {
     const config: Config = {
       transport: 'streamable-http',
       serverName: 'jev',
@@ -1445,8 +1443,13 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 1_800,
       failOnStartupError: false,
     }
-    await expect(createTransport(config, { resolveBearerToken: async () => undefined }))
-      .rejects.toMatchObject({ status: 401 })
+    let thrown: unknown
+    try {
+      createTransport(config)
+    } catch (error: unknown) {
+      thrown = error
+    }
+    expect(thrown).toMatchObject({ status: 401 })
   })
 })
 

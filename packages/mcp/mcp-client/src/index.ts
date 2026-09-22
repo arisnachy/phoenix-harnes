@@ -209,9 +209,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // the transport seam. Keeping the lookup optional preserves minimal test and
   // embedded compositions while the base profile mounts the shared service.
   const mcpConnectors = ctx.get('mcpConnectors')
+  let requestReconnect: (() => void) | undefined
   const registration = mcpConnectors?.register({
     serverName: config.serverName,
     transport: config.transport,
+    reconnect: () => { requestReconnect?.() },
   })
 
   // The supervisor owns the client/transport generations, the reconnect
@@ -242,6 +244,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
 
   const connection = startConnection(ctx, config, reconnect, registration, transportOptions)
+  requestReconnect = connection.reconnect
 
   if (oauthController !== undefined && authorization !== undefined && credentials !== undefined) {
     const controller = oauthController
