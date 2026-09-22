@@ -51,7 +51,7 @@ describe('installModelSelection()', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
-      current: { provider: 'openai-codex', model: 'gpt-5.6-sol', reasoningEffort: ReasoningEffortId('max') },
+      current: { provider: 'openai-codex', model: 'gpt-6-sol', reasoningEffort: ReasoningEffortId('max') },
       assembled: undefined,
     }
     const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
@@ -77,12 +77,12 @@ describe('installModelSelection()', () => {
       { turn: 1, step: 1, signal },
       () => Promise.resolve({
         provider: 'openai-codex',
-        model: 'gpt-5.6-sol',
+        model: 'gpt-6-sol',
         reasoningEffort: ReasoningEffortId('max'),
       }),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-luna',
       reasoningEffort: ReasoningEffortId('low'),
     })
 
