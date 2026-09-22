@@ -140,8 +140,8 @@ export const DEFAULT_MAX_TOKENS = 256_000
 export const DEFAULT_MAX_REQUEST_FILES_BYTES = 128 * 1024 * 1024
 /** Default bound on accumulated base64 image payload after Files API fallback. */
 export const DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES = 20 * 1024 * 1024
-/** Default per-attachment bound for text-projected arbitrary files. */
-export const DEFAULT_MAX_INLINE_FILE_BYTES = 256 * 1024
+/** Default leaves text-projected arbitrary files unbounded at the harness layer; the selected model/provider context owns the effective limit. */
+export const DEFAULT_MAX_INLINE_FILE_BYTES = Number.MAX_SAFE_INTEGER
 /** Provider request image-count limit. */
 export const DEFAULT_MAX_IMAGES_PER_REQUEST = 600
 /** Total-pixel budget matching DeepSeek's normal vision projection. */
