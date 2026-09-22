@@ -7,21 +7,21 @@ import {
 import type { ConversationSettings } from '../src/submission-settings.ts'
 
 describe('ComposerSubmissionPolicy', () => {
-  it('defaults to Queue and only applies the preference while running', () => {
+  it('defaults to Steer while running; Queue remains the explicit alternate preference', () => {
     const policy = new ComposerSubmissionPolicy()
     expect(policy.busyEnter.getSnapshot()).toBe(DEFAULT_BUSY_ENTER_BEHAVIOR)
     expect(policy.resolve(false, 'enter', true)).toBe('queue')
     expect(policy.resolve(false, 'accelerated', true)).toBe('queue')
     expect(policy.resolve(true, 'enter', true)).toBe('queue')
-    expect(policy.resolve(true, 'accelerated', true)).toBe('steer')
+    expect(policy.resolve(true, 'accelerated', true)).toBe('queue')
     expect(policy.resolve(true, 'enter', false)).toBe('queue')
     expect(policy.resolve(true, 'accelerated', false)).toBe('queue')
 
     const changed = vi.fn()
     policy.busyEnter.subscribe(changed)
-    policy.setBusyEnter('steer')
+    policy.setBusyEnter('queue')
     expect(changed).toHaveBeenCalledTimes(1)
-    expect(policy.resolve(true, 'enter', true)).toBe('steer')
+    expect(policy.resolve(true, 'enter', true)).toBe('queue')
     expect(policy.resolve(true, 'accelerated', true)).toBe('queue')
     expect(policy.resolve(false, 'enter', true)).toBe('queue')
     expect(policy.resolve(false, 'accelerated', true)).toBe('queue')
@@ -40,27 +40,27 @@ describe('ComposerSubmissionPolicy', () => {
     }
     const policy = new ComposerSubmissionPolicy(scope)
     liveBehavior = () => policy.busyEnter.getSnapshot()
-    policy.setBusyEnter('steer')
-    expect(observed).toEqual(['busyEnter=steer:steer'])
-    expect(host.set).toHaveBeenCalledWith('busyEnter', 'steer')
+    policy.setBusyEnter('queue')
+    expect(observed).toEqual(['busyEnter=queue:queue'])
+    expect(host.set).toHaveBeenCalledWith('busyEnter', 'queue')
     expect(host.set).toHaveBeenCalledOnce()
   })
 
   it('adopts a Host preference without writing it back and leaves an identical write untouched', () => {
     const host = stubSettingsScope<ConversationSettings>()
     const policy = new ComposerSubmissionPolicy(host.scope)
-    host.publish({ status: 'ready', value: { busyEnter: 'steer' }, revision: 1, writable: true })
-    expect(policy.busyEnter.getSnapshot()).toBe('steer')
-    policy.setBusyEnter('steer')
+    host.publish({ status: 'ready', value: { busyEnter: 'queue' }, revision: 1, writable: true })
+    expect(policy.busyEnter.getSnapshot()).toBe('queue')
+    policy.setBusyEnter('queue')
     expect(host.set).not.toHaveBeenCalled()
-    host.publish({ value: { busyEnter: 'steer' }, revision: 2 })
-    expect(policy.busyEnter.getSnapshot()).toBe('steer')
+    host.publish({ value: { busyEnter: 'queue' }, revision: 2 })
+    expect(policy.busyEnter.getSnapshot()).toBe('queue')
   })
 
   it('adopts a section already standing at construction', () => {
     const host = stubSettingsScope<ConversationSettings>()
-    host.publish({ status: 'ready', value: { busyEnter: 'steer' }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { busyEnter: 'queue' }, revision: 1, writable: true })
     const policy = new ComposerSubmissionPolicy(host.scope)
-    expect(policy.busyEnter.getSnapshot()).toBe('steer')
+    expect(policy.busyEnter.getSnapshot()).toBe('queue')
   })
 })
