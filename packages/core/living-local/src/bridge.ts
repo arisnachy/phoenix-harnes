@@ -157,6 +157,17 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function controlError(error: unknown): { status: number; body: Record<string, unknown> } {
+  const message = messageOf(error)
+  if (/bearer token/i.test(message)) {
+    return { status: 401, body: { error: 'living_control_auth', code: 'AUTH_FAILED', message, retryable: false } }
+  }
+  if (/mismatch|must be|required|undeclared|state keys/i.test(message)) {
+    return { status: 400, body: { error: 'living_control_contract', code: 'CONTRACT_MISMATCH', message, retryable: false } }
+  }
+  return { status: 400, body: { error: 'living_control_error', code: 'BAD_REQUEST', message, retryable: false } }
+}
+
 function loopbackHost(host: string): boolean {
   const normalized = host.trim().toLowerCase()
   return normalized === '127.0.0.1' || normalized === 'localhost' || normalized === '::1'
@@ -296,6 +307,12 @@ export class LivingHttpBridge {
       const path = new URL(req.url, 'http://living.local').pathname
       const body = await readJson(req)
       switch (path) {
+        case '/v1/living/health':
+          sendJson(res, 200, { ok: true, protocol: 1, bridge: 'living-local' })
+          return
+        case '/v1/living/manifest':
+          this.manifest(req, res, body)
+          return
         case '/v1/living/connect':
           await this.connect(req, res, body)
           return
@@ -318,8 +335,23 @@ export class LivingHttpBridge {
           sendJson(res, 404, { error: 'not_found' })
       }
     } catch (error) {
-      sendJson(res, 400, { error: 'living_control_error', message: messageOf(error) })
+      const failure = controlError(error)
+      sendJson(res, failure.status, failure.body)
     }
+  }
+
+  private manifest(req: IncomingMessage, res: ServerResponse, body: Record<string, unknown>): void {
+    const { id, manifest } = this.authorized(req, body)
+    sendJson(res, 200, {
+      creationId: id,
+      capabilities: {
+        state: manifest.state,
+        actions: manifest.actions,
+        events: manifest.events,
+        actors: manifest.actors,
+      },
+      targetLevel: manifest.targetLevel,
+    })
   }
 
   private authorized(req: IncomingMessage, body: Record<string, unknown>): {
