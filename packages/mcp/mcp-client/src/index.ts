@@ -17,7 +17,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import type { AuthorizationService } from '@phoenix-ai/dsh-authorization'
-import type { CredentialProvider } from '@phoenix-ai/dsh-credentials'
+import { credentialRef, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
 import { McpOAuthController } from './oauth.ts'
@@ -100,6 +100,12 @@ export interface StreamableHttpConfig {
   url: string
   /** Additional headers attached to MCP requests. */
   headers: Record<string, string>
+  /**
+   * Optional PHOENIX credential reference used as a Bearer token.
+   * The persisted MCP config stores only the reference name; the secret is
+   * resolved by the credential service when a transport generation connects.
+   */
+  bearerTokenRef?: string
   /** Whether to attach the host-managed OAuth provider when available. */
   oauth?: boolean
   /** Per-tool-call timeout in milliseconds. */
@@ -141,6 +147,7 @@ export const Config = z.union([
     serverName: z.string().required().pattern(SERVER_NAME_PATTERN),
     url: z.string().required(),
     headers: z.dict(String).default({}),
+    bearerTokenRef: z.string(),
     oauth: z.boolean().default(true),
     toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
     failOnStartupError: z.boolean().default(false),
@@ -222,6 +229,15 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       authProvider: oauthController.provider(() => {
         ctx.logger.info(`mcp-client(${config.serverName}): authorization is required`)
       }),
+    }
+  }
+  if (config.transport === 'streamable-http' && config.bearerTokenRef !== undefined) {
+    const ref = credentialRef(config.bearerTokenRef)
+    transportOptions = {
+      ...transportOptions,
+      resolveBearerToken: credentials === undefined
+        ? undefined
+        : async () => (await credentials.resolve(ref))?.value,
     }
   }
 
