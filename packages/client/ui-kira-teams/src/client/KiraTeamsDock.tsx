@@ -332,7 +332,12 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
 
   if (collapsed) {
     return (
-      <div className={`${css.root} ${css.rootCollapsed}`} data-kira-teams data-kira-layout="floating-live">
+      <div
+        className={`${css.root} ${css.rootCollapsed}`}
+        data-kira-teams
+        data-kira-collapsed=""
+        data-kira-layout="floating-live"
+      >
         <button
           type="button"
           className={`${css.pill} ${runningCount > 0 ? css.pillLive : ''}`}
