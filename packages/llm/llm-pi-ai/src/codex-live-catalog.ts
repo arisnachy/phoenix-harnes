@@ -9,6 +9,8 @@
  * @module dsh-llm-pi-ai/codex-live-catalog
  */
 
+import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
+import type { LlmModelReasoningInfo } from '@phoenix-ai/dsh-llm'
 import { deepEqualJson } from '@phoenix-ai/dsh-settings'
 import { catalogModels, THINKING_LEVELS } from './catalog.ts'
 import type { PiAiModelProfile, PiAiProviderProfile, PiAiReasoningEfforts } from './config.ts'
@@ -36,9 +38,14 @@ export function codexCatalogIsAutomatic(profile: PiAiProviderProfile | undefined
 }
 
 /**
- * Translate Codex account metadata into the profile vocabulary pi-ai can
- * materialize today. Unknown future reasoning levels are ignored rather than
- * crashing the whole selector; the model itself remains selectable.
+ * Translate Codex account metadata into the fixed reasoning vocabulary pi-ai
+ * can materialize today. Exact Codex reasoning metadata is retained separately
+ * by CodexLiveCatalog; this profile map is only the transport bridge.
+ *
+ * Known pi-ai levels keep their identity. If a new Codex model exposes only
+ * future effort names, one ordinary pi-ai level is installed as a carrier so
+ * the model remains reasoning-capable at dispatch time. The adapter replaces
+ * that carrier with the exact Codex effort in the final request payload.
  *
  * @param models - Account-visible models returned by Codex app-server.
  * @returns Pi-ai model profiles safe to materialize in the current runtime.
@@ -46,11 +53,24 @@ export function codexCatalogIsAutomatic(profile: PiAiProviderProfile | undefined
 export function codexModelsToProfiles(models: readonly CodexDiscoveredModel[]): PiAiModelProfile[] {
   return models.map((model) => {
     const reasoningEfforts: PiAiReasoningEfforts = {}
-    for (const effort of model.reasoning?.efforts ?? []) {
+    const discoveredEfforts = model.reasoning?.efforts ?? []
+    for (const effort of discoveredEfforts) {
       if (!SUPPORTED_THINKING_LEVELS.has(effort.id)) continue
       reasoningEfforts[effort.id as keyof PiAiReasoningEfforts] = effort.id === 'off' ? null : effort.id
     }
-    const hasThinking = Object.keys(reasoningEfforts).some(level => level !== 'off')
+
+    let hasThinking = Object.keys(reasoningEfforts).some(level => level !== 'off')
+    if (!hasThinking) {
+      const futureEffort = discoveredEfforts.find(effort => effort.id !== 'off')
+      if (futureEffort !== undefined) {
+        // "high" is a carrier only. The selector never sees it unless Codex
+        // actually advertised it; the final Codex payload is rewritten to the
+        // exact future effort string before transport.
+        reasoningEfforts.high = futureEffort.id
+        hasThinking = true
+      }
+    }
+
     return {
       id: model.id,
       ...model.name === undefined ? {} : { name: model.name },
@@ -59,6 +79,25 @@ export function codexModelsToProfiles(models: readonly CodexDiscoveredModel[]): 
       ...hasThinking ? { reasoningEfforts } : {},
     }
   })
+}
+
+/** Convert authoritative Codex reasoning metadata into the Harness vocabulary. */
+function reasoningInfoOf(model: CodexDiscoveredModel): LlmModelReasoningInfo | undefined {
+  const reasoning = model.reasoning
+  if (reasoning === undefined || reasoning.efforts.length === 0) return undefined
+  const efforts = reasoning.efforts.map(effort => ({
+    id: ReasoningEffortId(effort.id),
+    name: effort.name,
+    ...effort.description === undefined ? {} : { description: effort.description },
+  }))
+  const ids = new Set(efforts.map(effort => effort.id as string))
+  const defaultEffort = reasoning.defaultEffort !== undefined && ids.has(reasoning.defaultEffort)
+    ? ReasoningEffortId(reasoning.defaultEffort)
+    : undefined
+  return {
+    efforts,
+    ...defaultEffort === undefined ? {} : { defaultEffort },
+  }
 }
 
 /** Dependencies and policy knobs for one live Codex catalog instance. */
@@ -86,6 +125,8 @@ export interface CodexLiveCatalogOptions {
 export class CodexLiveCatalog {
   private visible: PiAiModelProfile[] | undefined
   private dispatch: PiAiModelProfile[] | undefined
+  /** Exact Codex effort metadata, retained even when pi-ai needs a carrier level. */
+  private reasoningByModel = new Map<string, LlmModelReasoningInfo>()
   private lastAttemptAt = Number.NEGATIVE_INFINITY
   private lastSuccessAt = Number.NEGATIVE_INFINITY
   private inFlight: Promise<void> | undefined
@@ -118,6 +159,22 @@ export class CodexLiveCatalog {
    */
   visibleIds(): readonly string[] | undefined {
     return this.visible?.map(model => model.id)
+  }
+
+  /**
+   * Exact reasoning capabilities Codex advertised for one model.
+   *
+   * Retired models keep their last-good metadata beside the dispatch superset,
+   * so an already-selected session remains valid after the model leaves the
+   * picker. Returned values are detached from the catalog's retained snapshot.
+   */
+  reasoningForModel(modelId: string): LlmModelReasoningInfo | undefined {
+    const reasoning = this.reasoningByModel.get(modelId)
+    if (reasoning === undefined) return undefined
+    return {
+      efforts: reasoning.efforts.map(effort => ({ ...effort })),
+      ...reasoning.defaultEffort === undefined ? {} : { defaultEffort: reasoning.defaultEffort },
+    }
   }
 
   /**
@@ -181,7 +238,8 @@ export class CodexLiveCatalog {
 
   private async refreshOnce(): Promise<void> {
     try {
-      const next = codexModelsToProfiles(await this.transport.list())
+      const discovered = await this.transport.list()
+      const next = codexModelsToProfiles(discovered)
       if (next.length === 0) {
         this.report('Codex returned an empty live model catalog; keeping the last good/static catalog')
         return
@@ -194,9 +252,28 @@ export class CodexLiveCatalog {
       for (const model of next) dispatch.set(model.id, model)
       const nextDispatch = [...dispatch.values()]
 
-      if (deepEqualJson(next, this.visible) && deepEqualJson(nextDispatch, this.dispatch)) return
+      // Reasoning metadata has its own last-good dispatch lifetime. Models that
+      // disappear from the selector retain it; models still present can change
+      // capabilities or lose reasoning without requiring a Phoenix upgrade.
+      const nextReasoning = new Map(this.reasoningByModel)
+      for (const model of discovered) {
+        const reasoning = reasoningInfoOf(model)
+        if (reasoning === undefined) nextReasoning.delete(model.id)
+        else nextReasoning.set(model.id, reasoning)
+      }
+      const reasoningChanged = !deepEqualJson(
+        [...nextReasoning.entries()],
+        [...this.reasoningByModel.entries()],
+      )
+
+      if (
+        deepEqualJson(next, this.visible)
+        && deepEqualJson(nextDispatch, this.dispatch)
+        && !reasoningChanged
+      ) return
       this.visible = next
       this.dispatch = nextDispatch
+      this.reasoningByModel = nextReasoning
       this.revision += 1
     } catch (error: unknown) {
       this.report('Live Codex model refresh failed; keeping the last good/static catalog', error)
