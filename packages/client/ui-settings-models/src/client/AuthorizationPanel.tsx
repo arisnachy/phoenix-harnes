@@ -66,6 +66,14 @@ export interface McpConnectorHubSnapshot {
   managed: Array<{ entryId: string; serverName: string; url: string }>
 }
 
+/** Secret-free Jev setup/runtime projection. */
+export interface JevMcpSnapshot {
+  configured: boolean
+  credentialConfigured: boolean
+  status?: McpConnectorRuntimeView['status']
+  reasonCode?: McpConnectorRuntimeView['reasonCode']
+}
+
 /** Browser-safe client for the Host-owned Official MCP Registry proxy and installer. */
 export interface McpRegistryClient {
   /**
@@ -85,6 +93,13 @@ export interface McpRegistryClient {
    * @returns Idempotent managed-install receipt.
    */
   install(request: { name: string; version?: string }): Promise<{
+    status: 'installed' | 'already-installed'
+    connector: { entryId: string; serverName: string; url: string }
+  }>
+  /** Read Jev setup/runtime state without exposing its secret. */
+  jevState(): Promise<JevMcpSnapshot>
+  /** Store a Jev key in Phoenix credentials and activate the pinned MCP endpoint. */
+  configureJev(request: { apiKey: string }): Promise<{
     status: 'installed' | 'already-installed'
     connector: { entryId: string; serverName: string; url: string }
   }>
@@ -375,21 +390,37 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
+function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuthorize, onConfigure, pending }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
+  mcpRuntime?: McpConnectorRuntimeView | undefined
+  managed?: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
+  onConfigure?: (() => void) | undefined
   pending: boolean
 }): ReactNode {
   const connectedByAccount = accountGrantConnectsCatalogEntry(account)
   const installUrl = safeExternalHref(live?.installUrl)
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
-  const status = liveStatus ?? (connectedByAccount
+  const mcpStatus = mcpRuntime?.status === 'ready'
+    ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+    : mcpRuntime?.status === 'starting'
+      ? { text: t('connectingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
+      : mcpRuntime?.status === 'auth-required'
+        ? { text: t('authorizationRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
+        : mcpRuntime?.status === 'failed'
+          ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
+          : mcpRuntime?.status === 'disconnected'
+            ? { text: t('disconnectedStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
+            : managed === true
+              ? { text: t('jevConfiguredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
+              : undefined
+  const status = liveStatus ?? mcpStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.mode === 'mcp'
-      ? { text: t('mcpReadyStatus'), className: '' }
+      ? { text: definition.id === 'jev' ? t('jevOptionalStatus') : t('mcpReadyStatus'), className: '' }
       : definition.mode === 'api-key'
         ? { text: t('apiKeyStatus'), className: '' }
         : account !== undefined
@@ -420,7 +451,11 @@ function CatalogCard({ definition, live, account, t, onAuthorize, pending }: {
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
       <div className={connectorStyles['connectorFooter']}>
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
-        {installUrl !== undefined ? (
+        {onConfigure !== undefined ? (
+          <button className={connectorStyles['connectorPrimaryButton']} type="button" disabled={pending} onClick={onConfigure}>
+            {t('configure')}
+          </button>
+        ) : installUrl !== undefined ? (
           <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
         ) : oauthAccount === undefined || connectedByAccount ? null : (
           <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
@@ -543,6 +578,11 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryFailure, setRegistryFailure] = useState(false)
   const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
+  const [jevState, setJevState] = useState<JevMcpSnapshot | undefined>()
+  const [jevSetupOpen, setJevSetupOpen] = useState(false)
+  const [jevApiKey, setJevApiKey] = useState('')
+  const [jevBusy, setJevBusy] = useState(false)
+  const [jevFailure, setJevFailure] = useState<string | undefined>()
   const [installingRegistryName, setInstallingRegistryName] = useState<string | undefined>()
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
@@ -597,6 +637,18 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   }, [mcpRegistry, refresh])
 
   useEffect(() => {
+    if (mcpRegistry === undefined) return
+    let stale = false
+    void readConnectorRemoteWithRetry(() => mcpRegistry.jevState(), () => stale).then(
+      snapshot => { if (!stale) setJevState(snapshot) },
+      error => {
+        if (!stale && !isTransientConnectorRemoteFailure(error)) setJevFailure(String(error))
+      },
+    )
+    return () => { stale = true }
+  }, [mcpRegistry, refresh])
+
+  useEffect(() => {
     const search = query.trim()
     if (mcpRegistry === undefined || search.length < 2) {
       setRegistrySnapshot(undefined)
@@ -636,9 +688,18 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
     const account = entries.find(entry => entryMatchesFamily(entry, definition.providerFamily))
-    const connected = live?.installed === true || live?.callable === true || accountGrantConnectsCatalogEntry(account)
-    return { definition, live, account, connected }
-  }), [entries, liveConnectors])
+    const mcpRuntime = definition.id === 'jev'
+      ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
+      : undefined
+    const managed = definition.id === 'jev'
+      ? mcpHub.managed.some(candidate => candidate.serverName === 'jev')
+      : false
+    const connected = live?.installed === true
+      || live?.callable === true
+      || accountGrantConnectsCatalogEntry(account)
+      || mcpRuntime?.status === 'ready'
+    return { definition, live, account, mcpRuntime, managed, connected }
+  }), [entries, liveConnectors, mcpHub])
 
   const visibleRows = catalogRows.filter(({ definition, connected }) => {
     if (filter === 'connected' && !connected) return false
@@ -659,6 +720,26 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       })
       .catch((error: unknown) => { setChatGptWebFailure(String(error)) })
       .finally(() => { setChatGptWebBusy(false) })
+  }
+
+  const configureJev = (): void => {
+    if (mcpRegistry === undefined || jevBusy) return
+    const apiKey = jevApiKey.trim()
+    if (apiKey.length < 8) {
+      setJevFailure(connectorT('jevApiKeyLabel'))
+      return
+    }
+    setJevBusy(true)
+    setJevFailure(undefined)
+    void mcpRegistry.configureJev({ apiKey }).then(
+      () => {
+        setJevApiKey('')
+        setJevSetupOpen(false)
+        setRefresh(current => current + 1)
+        onAuthorized()
+      },
+      (error: unknown) => { setJevFailure(String(error)) },
+    ).finally(() => { setJevBusy(false) })
   }
 
   const installRegistryCandidate = (candidate: McpRegistryCandidateView): void => {
@@ -849,11 +930,55 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                 definition={row.definition}
                 live={row.live}
                 account={row.account}
+                mcpRuntime={row.mcpRuntime}
+                managed={row.managed || (row.definition.id === 'jev' && jevState?.configured === true)}
                 t={connectorT}
-                pending={attempt?.status === 'pending'}
+                pending={attempt?.status === 'pending' || jevBusy}
                 onAuthorize={(entry) => { begin(entry.key, 'oauth') }}
+                onConfigure={row.definition.id === 'jev' ? () => {
+                  setJevFailure(undefined)
+                  setJevSetupOpen(true)
+                } : undefined}
               />
             ))}
+          </div>
+        )}
+        {!jevSetupOpen ? null : (
+          <div className={styles['setupCard']} data-connector-setup="jev">
+            <div className={styles['editorHeader']}>
+              <strong className={styles['editorTitle']}>{connectorT('jevSetupTitle')}</strong>
+              <span className={styles['advancedHint']}>{connectorT('jevOptionalStatus')}</span>
+            </div>
+            <p className={styles['advancedHint']}>{connectorT('jevSetupDescription')}</p>
+            <label className={styles['field']}>
+              <span className={styles['fieldLabel']}>{connectorT('jevApiKeyLabel')}</span>
+              <input
+                className={styles['input']}
+                type="password"
+                autoComplete="new-password"
+                value={jevApiKey}
+                placeholder={connectorT('jevKeyPlaceholder')}
+                disabled={jevBusy}
+                onChange={event => { setJevApiKey(event.target.value) }}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') configureJev()
+                }}
+              />
+            </label>
+            {jevFailure === undefined ? null : <p className={styles['error']}>{jevFailure}</p>}
+            <div className={styles['editorActions']}>
+              <a className={connectorStyles['connectorLink']} href="https://www.jevai.org/agent/keys" target="_blank" rel="noreferrer">{connectorT('viewSource')}</a>
+              <button type="button" className={styles['secondaryButton']} disabled={jevBusy} onClick={() => {
+                setJevApiKey('')
+                setJevFailure(undefined)
+                setJevSetupOpen(false)
+              }}>
+                {t('cancel')}
+              </button>
+              <button type="button" className={styles['primaryButton']} disabled={jevBusy || jevApiKey.trim().length < 8} onClick={configureJev}>
+                {jevBusy ? connectorT('installing') : connectorT('jevSave')}
+              </button>
+            </div>
           </div>
         )}
       </section>
