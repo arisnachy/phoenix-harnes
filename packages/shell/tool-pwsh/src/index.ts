@@ -246,7 +246,8 @@ export function apply(ctx: Context, config: Config = {}): void {
     name: 'tool:pwsh',
     order: 105,
     text: 'Non-zero exits are reported as `[exit code: N]` markers; investigate failures before moving on. '
-      + 'On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure.',
+      + 'On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure. '
+      + 'For browser work, prefer a healthy registered PHOENIX Chrome/Chromium MCP connector as the primary browser route. Use the Phoenix Desktop embedded-browser channel as fallback while the EXE route is unavailable or unhealthy; do not spend the task repairing the desktop browser when Chrome can complete it.',
   })
 
   ctx.tools.register(defineTool({
