@@ -566,6 +566,33 @@ describe('ChatView', () => {
     expect(view.container.querySelectorAll('[data-pending-steering]')).toHaveLength(1)
   })
 
+  it('does not double-render when durable steering lands before the transient queue retires it', () => {
+    const pending = {
+      id: 'steer-overlap-occurrence' as never,
+      messageId: 'steer-overlap-message' as never,
+      placement: 'steering' as const,
+      content: [{ type: 'text' as const, text: 'overlap steering' }],
+      preview: 'overlap steering',
+      text: 'overlap steering',
+    }
+    const h = makeHarness({
+      queue: [pending],
+      nodes: [{
+        kind: 'steering',
+        messageId: pending.messageId,
+        seq: 2,
+        time: 2_000,
+        content: pending.content,
+        source: null,
+      }],
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getAllByText('overlap steering')).toHaveLength(1)
+    expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+  })
+
   it('renders Host-pending steering at the flow tail and hands off to the durable node', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
