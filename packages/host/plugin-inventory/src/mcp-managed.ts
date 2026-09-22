@@ -20,8 +20,25 @@ interface ManagedMcpConfig {
   serverName: string
   url: string
   headers: Record<string, string>
-  oauth: true
+  oauth: boolean
+  bearerTokenRef?: string
+  toolCallTimeoutMs?: number
+  startupTimeoutMs?: number
+  failOnStartupError?: boolean
+  reconnect?: {
+    enabled: boolean
+    initialDelayMs: number
+    maxDelayMs: number
+    maxAttempts: number
+  }
 }
+
+/** Stable local MCP namespace for the pinned Jev connector. */
+export const JEV_MCP_SERVER_NAME = 'jev'
+/** Official pinned Jev Streamable HTTP MCP endpoint. */
+export const JEV_MCP_URL = 'https://www.jevai.org/api/mcp'
+/** Phoenix credential reference that holds the Jev API key outside loader config. */
+export const JEV_API_KEY_REF = 'JEV_API_KEY'
 
 interface ManagedMcpRow {
   id: string
@@ -57,13 +74,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function validConfig(value: unknown): value is ManagedMcpConfig {
   if (!isRecord(value)) return false
   if (value.transport !== 'streamable-http' || typeof value.serverName !== 'string'
-    || typeof value.url !== 'string' || value.oauth !== true) return false
+    || typeof value.url !== 'string' || typeof value.oauth !== 'boolean') return false
   if (!isRecord(value.headers) || Object.keys(value.headers).length !== 0) return false
   try {
-    return new URL(value.url).protocol === 'https:'
+    if (new URL(value.url).protocol !== 'https:') return false
   } catch {
     return false
   }
+
+  // Registry-managed remotes remain OAuth-only and may not smuggle a secret ref.
+  if (value.oauth === true) return value.bearerTokenRef === undefined
+
+  // The only non-OAuth managed remote admitted today is the pinned Jev endpoint.
+  if (value.serverName !== JEV_MCP_SERVER_NAME
+    || value.url !== JEV_MCP_URL
+    || value.bearerTokenRef !== JEV_API_KEY_REF
+    || value.toolCallTimeoutMs !== 1800
+    || value.startupTimeoutMs !== 1200
+    || value.failOnStartupError !== false) return false
+  const reconnect = value.reconnect
+  return isRecord(reconnect)
+    && reconnect.enabled === true
+    && reconnect.initialDelayMs === 1000
+    && reconnect.maxDelayMs === 30_000
+    && reconnect.maxAttempts === 3
 }
 
 function parseManagedRows(raw: string): ManagedMcpRow[] {
@@ -166,6 +200,53 @@ export class ManagedMcpController {
    */
   async snapshot(): Promise<readonly ManagedMcpConnector[]> {
     return (await readManagedRows(this.path)).map(connectorOf)
+  }
+
+  /**
+   * Configure the pinned Jev MCP without ever persisting its API key.
+   * The managed overlay contains only JEV_API_KEY as a credential reference.
+   * @returns Installation receipt for the active or already-installed Jev connector.
+   */
+  async configureJev(): Promise<McpRegistryInstallReceipt> {
+    const config: ManagedMcpConfig = {
+      transport: 'streamable-http',
+      serverName: JEV_MCP_SERVER_NAME,
+      url: JEV_MCP_URL,
+      headers: {},
+      oauth: false,
+      bearerTokenRef: JEV_API_KEY_REF,
+      toolCallTimeoutMs: 1800,
+      startupTimeoutMs: 1200,
+      failOnStartupError: false,
+      reconnect: {
+        enabled: true,
+        initialDelayMs: 1000,
+        maxDelayMs: 30_000,
+        maxAttempts: 3,
+      },
+    }
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+    return withFileLock(this.path, async () => {
+      const rows = await readManagedRows(this.path)
+      const existing = rows.find(row =>
+        row.config.serverName === JEV_MCP_SERVER_NAME || row.config.url === JEV_MCP_URL)
+      if (existing !== undefined) {
+        return { status: 'already-installed', connector: connectorOf(existing) }
+      }
+      const entryId = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
+      const row: ManagedMcpRow = { id: entryId, name: MCP_CLIENT_PACKAGE, config }
+      try {
+        await writeManagedRows(this.path, [...rows, row])
+      } catch (error) {
+        try {
+          await this.loader.remove(entryId)
+        } catch (rollbackError) {
+          throw new AggregateError([error, rollbackError], 'failed to persist Jev MCP and roll back live activation')
+        }
+        throw error
+      }
+      return { status: 'installed', connector: connectorOf(row) }
+    }, { waitMs: 15_000 })
   }
 
   /**
