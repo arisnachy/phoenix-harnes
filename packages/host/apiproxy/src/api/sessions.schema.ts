@@ -249,9 +249,9 @@ export const imageLimitsProjectionSchema = z.object({
 
 /** Host-side validation for arbitrary-file intake limits. */
 export const fileLimitsProjectionSchema = z.object({
-  maxFileBytes: z.number().int().positive(),
+  maxFileBytes: z.number().int().positive().optional(),
   maxFilesPerMessage: z.number().int().positive(),
-  maxMessageFileBytes: z.number().int().positive(),
+  maxMessageFileBytes: z.number().int().positive().optional(),
 }) as unknown as z.ZodType<FileAttachmentLimits>
 
 /** session.history response value (projections rides the tail page only). */
