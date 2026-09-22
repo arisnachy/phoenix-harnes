@@ -22,6 +22,7 @@ import { ConnectorsSettingsSection } from './AuthorizationPanel.tsx'
 import type { ChatGptWebBridgeClient } from './chatgpt-web-toggle.ts'
 import type {
   ConnectorsSettingsSectionProps,
+  JevMcpSnapshot,
   McpConnectorHubSnapshot,
   McpRegistryClient,
   McpRegistrySearchSnapshot,
@@ -79,6 +80,11 @@ type PluginInventoryMcpRegistryRemote = {
     status: 'installed' | 'already-installed'
     connector: { entryId: string; serverName: string; url: string }
   }>>
+  jevMcpState(): Promise<PluginInventoryRemoteResult<JevMcpSnapshot>>
+  configureJevMcp(request: { apiKey: string }): Promise<PluginInventoryRemoteResult<{
+    status: 'installed' | 'already-installed'
+    connector: { entryId: string; serverName: string; url: string }
+  }>>
 }
 
 type PluginInventoryLocalRemote = {
@@ -122,6 +128,14 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     install: async request => unwrapPluginInventory(
       'installMcpRegistryServer',
       await remote().installMcpRegistryServer(request),
+    ),
+    jevState: async () => unwrapPluginInventory(
+      'jevMcpState',
+      await remote().jevMcpState(),
+    ),
+    configureJev: async request => unwrapPluginInventory(
+      'configureJevMcp',
+      await remote().configureJevMcp(request),
     ),
   }
 }
