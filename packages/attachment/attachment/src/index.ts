@@ -55,11 +55,9 @@ export abstract class AttachmentStore extends Service {
   /** Deployment-resolved image policy used by authoritative and fast-path validation. */
   abstract readonly imageLimits: ImageAttachmentLimits
 
-  /** Deployment-resolved limits for arbitrary file uploads. */
+  /** Deployment-resolved limits for arbitrary file uploads. Byte caps are omitted by default so the selected model/provider route owns size acceptance. */
   readonly fileLimits: FileAttachmentLimits = Object.freeze({
-    maxFileBytes: 25 * 1024 * 1024,
     maxFilesPerMessage: 20,
-    maxMessageFileBytes: 100 * 1024 * 1024,
   })
 
   /**
@@ -112,18 +110,20 @@ export abstract class AttachmentStore extends Service {
     ))
   }
 
-  /** Validate arbitrary-file count, per-file bytes, and aggregate bytes before writes. */
+  /** Validate arbitrary-file count and any explicitly configured deployment byte caps before writes. */
   protected validateFileBatch(inputs: readonly SaveFileAttachment[]): void {
     const { maxFilesPerMessage, maxMessageFileBytes, maxFileBytes } = this.fileLimits
     if (inputs.length > maxFilesPerMessage) {
       throw new AttachmentError('File batch exceeds the configured file-count limit.', 'TOO_MANY_FILES')
     }
-    const totalBytes = inputs.reduce((sum, input) => sum + input.data.byteLength, 0)
-    if (totalBytes > maxMessageFileBytes) {
-      throw new AttachmentError('File batch exceeds the configured aggregate file-byte limit.', 'FILES_TOO_LARGE')
+    if (maxMessageFileBytes !== undefined) {
+      const totalBytes = inputs.reduce((sum, input) => sum + input.data.byteLength, 0)
+      if (totalBytes > maxMessageFileBytes) {
+        throw new AttachmentError('File batch exceeds the configured aggregate file-byte limit.', 'FILES_TOO_LARGE')
+      }
     }
     for (const input of inputs) {
-      if (input.data.byteLength > maxFileBytes) {
+      if (maxFileBytes !== undefined && input.data.byteLength > maxFileBytes) {
         throw new AttachmentError('File exceeds the configured byte limit.', 'FILE_TOO_LARGE')
       }
       if (input.mediaType.trim() === '') {
