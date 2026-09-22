@@ -160,6 +160,7 @@ export interface ConnectionHandle {
  * @param config - Resolved plugin config selecting the transport and server identity.
  * @param policy - Resolved reconnect policy from {@link resolveReconnectPolicy}.
  * @param lifecycle - Optional model-safe state publisher for the connector registry.
+ * @param transportOptions - Optional generation-scoped auth resolvers and transport hooks.
  * @returns Handle with a `ready` promise for startup-await and a `dispose` for teardown.
  */
 export function startConnection(
