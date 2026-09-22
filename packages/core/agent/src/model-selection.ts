@@ -111,7 +111,12 @@ function selectedCandidateId(value: unknown, allowed: ReadonlySet<string>): stri
   return undefined
 }
 
-/** Extract only an explicitly selected available candidate from Jev's typed result. */
+/**
+ * Extract only an explicitly selected available candidate from Jev's typed result.
+ * @param value - Untrusted Jev MCP result envelope.
+ * @param candidates - Exact Phoenix-supplied model ids allowed for this routing decision.
+ * @returns The explicit allowed model id, or undefined when Jev did not make a valid choice.
+ */
 export function jevSelectedModelId(value: unknown, candidates: readonly string[]): string | undefined {
   return selectedCandidateId(value, new Set(candidates))
 }
