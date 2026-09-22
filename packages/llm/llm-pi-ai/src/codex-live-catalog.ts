@@ -130,6 +130,8 @@ export class CodexLiveCatalog {
   private lastAttemptAt = Number.NEGATIVE_INFINITY
   private lastSuccessAt = Number.NEGATIVE_INFINITY
   private inFlight: Promise<void> | undefined
+  /** Last pinned id set requested; a change invalidates the normal freshness window once. */
+  private lastPinnedModelKey: string | undefined
   private readonly transport: CodexModelListTransport
   private readonly now: () => number
   private readonly refreshIntervalMs: number
@@ -259,16 +261,27 @@ export class CodexLiveCatalog {
   ): Promise<readonly string[] | undefined> {
     if (provider !== CODEX_PROVIDER || profile === undefined) return undefined
 
+    const automatic = codexCatalogIsAutomatic(profile)
+    const pinnedModelKey = automatic
+      ? undefined
+      : JSON.stringify(profile.models?.map(model => model.id) ?? [])
+    const pinnedModelsChanged = pinnedModelKey !== this.lastPinnedModelKey
+    this.lastPinnedModelKey = pinnedModelKey
+
     if (this.inFlight !== undefined) {
       await this.inFlight
       return this.advertisedIds(profile)
     }
 
     const now = this.now()
-    if (this.visible !== undefined && now - this.lastSuccessAt < this.refreshIntervalMs) {
+    // A model newly adopted from Settings must be enriched immediately even
+    // when the previous live catalog is still inside its normal 60s TTL.
+    if (!pinnedModelsChanged && this.visible !== undefined && now - this.lastSuccessAt < this.refreshIntervalMs) {
       return this.advertisedIds(profile)
     }
-    if (!force && now - this.lastAttemptAt < this.refreshIntervalMs) {
+    // After that one pin-change attempt, failures still respect the cooldown
+    // so an unavailable Codex process cannot be hammered by UI re-renders.
+    if (!force && !pinnedModelsChanged && now - this.lastAttemptAt < this.refreshIntervalMs) {
       return this.advertisedIds(profile)
     }
 
