@@ -31,6 +31,18 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Physical-right clearance claimed only while the expanded floating KIRA
+     card is present. Conversation descendants inherit this without turning
+     KIRA into a structural rail. */
+  --dsh-shell-right-overlay-inset: 0px;
+}
+
+@media (min-width: 761px) {
+  .centerCol:has(> [data-shell-overlay] [data-kira-teams]:not([data-kira-collapsed])) {
+    /* 320px card + its 16px viewport offset. Conversation surfaces add their
+       normal inline clearance on top, leaving a clean gap instead of overlap. */
+    --dsh-shell-right-overlay-inset: 336px;
+  }
 }
 
 /* Floating shell entries remain a true overlay and never participate in the
