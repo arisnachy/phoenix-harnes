@@ -96,10 +96,10 @@ export interface McpRegistryClient {
     status: 'installed' | 'already-installed'
     connector: { entryId: string; serverName: string; url: string }
   }>
-  /** Read Jev setup/runtime state without exposing its secret. */
-  jevState(): Promise<JevMcpSnapshot>
-  /** Store a Jev key in Phoenix credentials and activate the pinned MCP endpoint. */
-  configureJev(request: { apiKey: string }): Promise<{
+  /** Read Jev setup/runtime state without exposing its secret. Optional for older hosts. */
+  jevState?(): Promise<JevMcpSnapshot>
+  /** Store a Jev key in Phoenix credentials and activate the pinned MCP endpoint. Optional for older hosts. */
+  configureJev?(request: { apiKey: string }): Promise<{
     status: 'installed' | 'already-installed'
     connector: { entryId: string; serverName: string; url: string }
   }>
@@ -637,9 +637,10 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   }, [mcpRegistry, refresh])
 
   useEffect(() => {
-    if (mcpRegistry === undefined) return
+    const readJevState = mcpRegistry?.jevState
+    if (readJevState === undefined) return
     let stale = false
-    void readConnectorRemoteWithRetry(() => mcpRegistry.jevState(), () => stale).then(
+    void readConnectorRemoteWithRetry(() => readJevState(), () => stale).then(
       snapshot => { if (!stale) setJevState(snapshot) },
       error => {
         if (!stale && !isTransientConnectorRemoteFailure(error)) setJevFailure(String(error))
@@ -723,7 +724,8 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   }
 
   const configureJev = (): void => {
-    if (mcpRegistry === undefined || jevBusy) return
+    const configure = mcpRegistry?.configureJev
+    if (configure === undefined || jevBusy) return
     const apiKey = jevApiKey.trim()
     if (apiKey.length < 8) {
       setJevFailure(connectorT('jevApiKeyLabel'))
@@ -731,7 +733,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     }
     setJevBusy(true)
     setJevFailure(undefined)
-    void mcpRegistry.configureJev({ apiKey }).then(
+    void configure({ apiKey }).then(
       () => {
         setJevApiKey('')
         setJevSetupOpen(false)
@@ -935,7 +937,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                 t={connectorT}
                 pending={attempt?.status === 'pending' || jevBusy}
                 onAuthorize={(entry) => { begin(entry.key, 'oauth') }}
-                onConfigure={row.definition.id === 'jev' ? () => {
+                onConfigure={row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
                   setJevFailure(undefined)
                   setJevSetupOpen(true)
                 } : undefined}
