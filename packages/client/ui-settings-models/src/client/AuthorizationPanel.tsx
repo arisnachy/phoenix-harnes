@@ -497,6 +497,7 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
   const definition = catalogDefinitionForText(`${candidate.name} ${candidate.title}`)
   const displayName = definition?.name ?? candidate.title
   const technicalName = normalize(displayName) === normalize(candidate.name) ? undefined : candidate.name
+  const configurePinnedJev = definition?.id === 'jev'
   const installable = candidate.status === 'active' && candidate.remoteUrl !== undefined
   const status = installed
     ? t('installedStatus')
@@ -548,7 +549,7 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
               disabled={installing}
               onClick={() => { onInstall(candidate) }}
             >
-              {installing ? t('installing') : t('install')}
+              {installing ? t('installing') : configurePinnedJev ? t('configure') : t('install')}
             </button>
           )}
         </div>
@@ -651,7 +652,11 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
 
   useEffect(() => {
     const search = query.trim()
-    if (mcpRegistry === undefined || search.length < 2) {
+    const catalogMatch = catalogDefinitionForText(search)
+    // Jev is a pinned Phoenix integration with its own credential flow.
+    // Never send Jev through the generic Official MCP Registry installer:
+    // that path performs an unnecessary second registry lookup and can time out.
+    if (mcpRegistry === undefined || search.length < 2 || catalogMatch?.id === 'jev') {
       setRegistrySnapshot(undefined)
       setRegistryFailure(false)
       setRegistryBusy(false)
@@ -746,6 +751,13 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
 
   const installRegistryCandidate = (candidate: McpRegistryCandidateView): void => {
     if (mcpRegistry === undefined || installingRegistryName !== undefined) return
+    const definition = catalogDefinitionForText(`${candidate.name} ${candidate.title}`)
+    if (definition?.id === 'jev' && mcpRegistry.configureJev !== undefined) {
+      setCatalogFailure(undefined)
+      setJevFailure(undefined)
+      setJevSetupOpen(true)
+      return
+    }
     setCatalogFailure(undefined)
     setInstallingRegistryName(candidate.name)
     void mcpRegistry.install({ name: candidate.name, version: candidate.version }).then(
