@@ -1068,6 +1068,7 @@ export class RealityContextEngine {
   private browserWeatherKey: string | undefined
   private runtimeServices = cache<RuntimeServiceTelemetry>(null, 'not-probed', 1, 0)
   private timer: ReturnType<typeof setInterval> | undefined
+  private initialTimer: ReturnType<typeof setTimeout> | undefined
   private refreshJob: Promise<void> | undefined
   private runtimeRefreshJob: Promise<void> | undefined
   private browserWeatherJob: Promise<void> | undefined
@@ -1075,13 +1076,24 @@ export class RealityContextEngine {
   constructor(readonly config: RealityContextConfig) {}
 
   start(): void {
-    if (this.timer !== undefined) return
-    void this.refresh()
+    if (this.timer !== undefined || this.initialTimer !== undefined) return
+    // Battery/GPU/activity/network probes can spawn PowerShell and network I/O.
+    // Give the interactive shell a short head start, then keep the exact same
+    // refresh cadence and on-demand refreshNow semantics.
+    this.initialTimer = setTimeout(() => {
+      this.initialTimer = undefined
+      void this.refresh()
+    }, 1_500)
+    this.initialTimer.unref?.()
     this.timer = setInterval(() => { void this.refresh() }, this.config.refreshMs)
     this.timer.unref?.()
   }
 
   stop(): void {
+    if (this.initialTimer !== undefined) {
+      clearTimeout(this.initialTimer)
+      this.initialTimer = undefined
+    }
     if (this.timer === undefined) return
     clearInterval(this.timer)
     this.timer = undefined
