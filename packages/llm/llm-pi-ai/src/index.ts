@@ -266,8 +266,15 @@ export function apply(ctx: Context, config: Config): void {
     auth,
     refreshModels: (provider, force) =>
       codexCatalog.refresh(provider, current().providers?.[provider], force),
-    reasoningForModel: (provider, model) =>
-      provider === CODEX_PROVIDER ? codexCatalog.reasoningForModel(model) : undefined,
+    reasoningForModel: (provider, model) => {
+      if (provider !== CODEX_PROVIDER) return undefined
+      const configured = current().providers?.[provider]?.models?.find(candidate => candidate.id === model)
+      // A person can still explicitly disable reasoning on a pinned Codex row.
+      // Every other Codex capability comes from app-server so autocarga rows
+      // keep inheriting current efforts as the model evolves.
+      if (configured?.reasoningEfforts === false) return undefined
+      return codexCatalog.reasoningForModel(model)
+    },
     resolveAttachments: () => ctx.get('attachments'),
     onReplayDegrade: ({ provider, model, reason }) => {
       ctx.logger.warn(
