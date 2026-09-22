@@ -81,9 +81,18 @@ function validateHttpEndpoint(raw: string): URL {
 export interface TransportOptions {
   /** Optional OAuth provider used by Streamable HTTP servers. */
   authProvider?: OAuthClientProvider
+  /** Resolve a PHOENIX credential reference without persisting the secret in MCP config. */
+  resolveBearerToken?: (ref: string) => Promise<string | undefined>
 }
 
-export function createTransport(config: Config, options: TransportOptions = {}): Transport {
+function credentialRequired(ref: string): Error & { status: number } {
+  return Object.assign(
+    new Error(`mcp-client: credential reference "${ref}" is not configured`),
+    { status: 401 },
+  )
+}
+
+export async function createTransport(config: Config, options: TransportOptions = {}): Promise<Transport> {
   switch (config.transport) {
     case 'stdio':
       return new StdioClientTransport({
@@ -92,7 +101,13 @@ export function createTransport(config: Config, options: TransportOptions = {}):
         env: buildChildEnv(config.env),
         cwd: config.cwd,
       })
-    case 'streamable-http':
+    case 'streamable-http': {
+      const headers = { ...config.headers }
+      if (config.bearerTokenRef !== undefined) {
+        const token = await options.resolveBearerToken?.(config.bearerTokenRef)
+        if (token === undefined || token.length === 0) throw credentialRequired(config.bearerTokenRef)
+        headers.Authorization = `Bearer ${token}`
+      }
       // The MCP SDK's StreamableHTTPClientTransport has optional callback
       // properties typed without `| undefined` (exactOptionalPropertyTypes
       // mismatch with the Transport interface); the SDK constructed the
@@ -100,9 +115,10 @@ export function createTransport(config: Config, options: TransportOptions = {}):
       return new StreamableHTTPClientTransport(
         validateHttpEndpoint(config.url),
         {
-          requestInit: { headers: config.headers },
+          requestInit: { headers },
           ...(options.authProvider === undefined ? {} : { authProvider: options.authProvider }),
         },
       ) as Transport
+    }
   }
 }
