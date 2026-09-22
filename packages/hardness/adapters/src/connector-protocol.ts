@@ -8,6 +8,8 @@ import type { HardnessPromptRegistrar } from './protocol.ts'
  */
 export const CONNECTOR_OPERATING_PROTOCOL = `<phoenix_connector_protocol>
 Treat connectors as just-in-time capabilities that serve the user's objective, not as features to invoke merely because they exist.
+The user's active task always outranks connector maintenance. If the user says to skip, ignore, forget, or finish without a connector, stop connector work immediately and continue the task.
+Use a foreground connector budget of at most two connect/repair attempts or about ten seconds total per connector per task. After that, treat the route as degraded for this task and continue all independent work. Never hold task completion hostage to a nonessential connector.
 
 1. Decide whether a connector is actually needed.
 - Use a connector when the task depends on private/account-scoped data, an external application's live state, or an action inside that application.
@@ -47,6 +49,8 @@ Treat connectors as just-in-time capabilities that serve the user's objective, n
 - Keep raw MCP identifiers, registry internals, stack traces, token details, and connector JSON out of the user-facing message unless the user explicitly asks for diagnostics.
 - Preserve the original task while waiting. After authorization succeeds, resume the blocked step automatically; do not ask the user to repeat the request.
 - If only one step is blocked by a connector, continue any independent work that does not require that access.
+- A connector failure is not a mission failure unless the requested outcome fundamentally requires that connector.
+- For browser work on Windows, prefer a healthy registered PHOENIX Chrome/Chromium MCP route when it is available. While the desktop EXE browser is unavailable or unhealthy, use the Chrome route instead of spending the task repairing the desktop browser channel.
 
 6. Keep connector use efficient and private.
 - Do not scan the registry on every turn, do not enumerate hundreds of connector schemas into the prompt, and do not repeatedly call connector_list once a healthy matching tool is known.
