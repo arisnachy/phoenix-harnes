@@ -94,6 +94,14 @@ function credentialRequired(ref: string): Error & { status: number } {
   )
 }
 
+/**
+ * Construct one MCP transport generation from validated plugin configuration.
+ * Bearer secrets arrive only through the generation-scoped options object and
+ * are copied into request headers without mutating or persisting connector config.
+ * @param config - MCP stdio or Streamable HTTP connector configuration.
+ * @param options - Optional OAuth provider or already-resolved Bearer token.
+ * @returns A fresh MCP client transport ready for one connection generation.
+ */
 export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
     case 'stdio':
