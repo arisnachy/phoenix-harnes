@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import { completionGatePassed, runAdversarialCompletionGate } from '../src/completion-gate.ts'
+import { buildVerificationContract } from '../src/verification-contract.ts'
 import { judgeGoalCompletion } from '../src/judge.ts'
 
 function provider() {
@@ -36,102 +37,131 @@ const optionalOnlyLedger = [{
   evidence: ['visual review'],
 }]
 
-describe('adversarial completion tester', () => {
-  it('designs fresh attacks from only the original requirement, then executes them with the parent model in a clean-room gate', async () => {
-    const starts: Array<{ name: string; request: Record<string, unknown> }> = []
-    const start = vi.fn(async (name: string, request: Record<string, unknown>) => {
-      starts.push({ name, request })
-      const label = request.label
-      if (label === 'goal-adversarial-test-design') {
-        return {
-          result: Promise.resolve({
-            output: [],
-            stopReason: 'completed' as const,
-            structured: {
-              cases: [
-                { name: 'corrupt-config', purpose: 'Reject corrupt configuration instead of silently succeeding.' },
-                { name: 'alternate-format', purpose: 'Accept the supported alternate input representation.' },
-              ],
-            },
-          }),
-          dispose: async () => {},
-        }
-      }
+function structuredPass(objective: string) {
+  const contract = buildVerificationContract(objective)
+  return {
+    checks: {
+      requirements: 'pass',
+      builder_tests: 'pass',
+      adversarial_tests: 'pass',
+      startup: 'pass',
+      artifact_integrity: 'pass',
+      clean_room: 'pass',
+    },
+    evidence_ledger: contract.criteria.map(item => ({
+      criterion_id: item.id,
+      criterion: item.criterion,
+      mandatory: true,
+      status: 'verified',
+      evidence: ['independent executable evidence'],
+    })),
+    builder_test_audit: contract.requiresBuilderTestAudit
+      ? [{
+          test: 'builder-regression-suite',
+          expected_source: 'specification',
+          circular: false,
+          evidence: ['expected values traced to the original requirement'],
+        }]
+      : [],
+    completion_report: { unverified_items: [], known_limitations: [] },
+    artifact_fingerprint: 'sha256:artifact',
+    clean_room_evidence: 'Packaged, extracted into a fresh temporary directory, and verified there.',
+    findings: [],
+    procedural_lessons: [],
+  }
+}
+
+async function runWithStructured(objective: string, executeStructured: Record<string, unknown>) {
+  const starts: Array<{ name: string; request: Record<string, unknown> }> = []
+  const start = vi.fn(async (name: string, request: Record<string, unknown>) => {
+    starts.push({ name, request })
+    if (request.label === 'goal-adversarial-test-design') {
       return {
         result: Promise.resolve({
           output: [],
           stopReason: 'completed' as const,
-          structured: {
-            checks: {
-              requirements: 'pass',
-              builder_tests: 'pass',
-              adversarial_tests: 'pass',
-              startup: 'pass',
-              artifact_integrity: 'pass',
-              clean_room: 'pass',
-            },
-            evidence_ledger: [{
-              criterion_id: 'REQ-001',
-              criterion: 'The shipped CLI handles malformed and alternate input formats.',
-              mandatory: true,
-              status: 'verified',
-              evidence: ['clean-room smoke + adversarial corrupt/alternate input tests'],
-            }],
-            artifact_fingerprint: 'sha256:artifact',
-            clean_room_evidence: 'Packaged, extracted into a fresh temporary directory, and verified there.',
-            findings: [],
-            procedural_lessons: [],
-          },
+          structured: { cases: [{ name: 'fresh-attack', purpose: 'Break a requirement from the locked contract.' }] },
         }),
         dispose: async () => {},
       }
-    })
+    }
+    return {
+      result: Promise.resolve({ output: [], stopReason: 'completed' as const, structured: executeStructured }),
+      dispose: async () => {},
+    }
+  })
 
-    const result = await runAdversarialCompletionGate({
-      subagents: {
-        getProvider: () => provider() as never,
-        list: () => ['spawn'],
-        start: start as never,
-      },
-      provider: 'spawn',
-      parent: {
-        id: SessionId('anthropic-builder'),
-        options: { provider: 'anthropic', model: 'claude-opus', reasoningEffort: 'high' },
-      } as never,
-      objective: 'Ship a reliable CLI artifact that handles malformed and alternate input formats.',
-      round: 4,
-      signal: new AbortController().signal,
-    })
+  const result = await runAdversarialCompletionGate({
+    subagents: {
+      getProvider: () => provider() as never,
+      list: () => ['spawn'],
+      start: start as never,
+    },
+    provider: 'spawn',
+    parent: {
+      id: SessionId('anthropic-builder'),
+      options: { provider: 'anthropic', model: 'claude-opus', reasoningEffort: 'high' },
+    } as never,
+    objective,
+    round: 4,
+    signal: new AbortController().signal,
+  })
+  return { result, starts }
+}
+
+describe('adversarial completion tester', () => {
+  it('locks literal requirements before workspace inspection and verifies edge obligations', async () => {
+    const objective = 'Ship a regex CLI using argparse. It must report the exact error position.'
+    const { result, starts } = await runWithStructured(objective, structuredPass(objective))
 
     expect(result.checks).toEqual(passingChecks)
-    expect(result.evidenceLedger).toEqual(passingLedger)
-    expect(result.artifactFingerprint).toBe('sha256:artifact')
+    expect(result.evidenceLedger.map(item => item.criterionId)).toEqual(
+      buildVerificationContract(objective).criteria.map(item => item.id),
+    )
     expect(starts).toHaveLength(2)
 
-    const design = starts[0]?.request
-    expect(design).toMatchObject({
-      label: 'goal-adversarial-test-design',
-      agentOptions: { provider: 'anthropic', model: 'claude-opus', reasoningEffort: 'high' },
-      toolFilter: { allow: [] },
-    })
-    const designPrompt = JSON.stringify(design?.prompt)
-    expect(designPrompt).toContain('Original requirement only')
-    expect(designPrompt).toContain('Ship a reliable CLI artifact')
-    expect(designPrompt).toMatch(/cannot inspect/i)
-    expect(designPrompt).not.toContain('corrupt-config')
-    expect(designPrompt).not.toContain('alternate-format')
+    const designPrompt = JSON.stringify(starts[0]?.request.prompt)
+    expect(designPrompt).toContain('Locked verifier-owned criteria')
+    expect(designPrompt).toContain('argparse')
+    expect(designPrompt).toContain('EDGE-UNICODE')
+    expect(designPrompt).toContain('EDGE-ZERO-PROGRESS')
+    expect(designPrompt).toContain('EDGE-ORACLE')
 
-    const execute = starts[1]?.request
-    expect(execute).toMatchObject({
-      label: 'goal-adversarial-tester',
-      agentOptions: { provider: 'anthropic', model: 'claude-opus', reasoningEffort: 'high' },
+    const executePrompt = JSON.stringify(starts[1]?.request.prompt)
+    expect(executePrompt).toContain('builder_test_audit')
+    expect(executePrompt).toContain('expected-value provenance')
+    expect(executePrompt).toContain('completion_report')
+  })
+
+  it('fails closed when the tester omits a locked literal requirement', async () => {
+    const objective = 'Build a CLI using argparse. It must return JSON.'
+    const structured = structuredPass(objective)
+    const contract = buildVerificationContract(objective)
+    const omitted = contract.criteria.find(item => item.source === 'literal') ?? contract.criteria[0]
+    structured.evidence_ledger = structured.evidence_ledger.filter(item => item.criterion_id !== omitted.id)
+
+    const { result } = await runWithStructured(objective, structured)
+    expect(result.checks.requirements).toBe('fail')
+    expect(result.evidenceLedger.find(item => item.criterionId === omitted.id)).toMatchObject({
+      mandatory: true,
+      status: 'failed',
     })
-    expect(JSON.stringify(execute?.prompt)).toContain('corrupt-config')
-    expect(JSON.stringify(execute?.prompt)).toContain('evidence_ledger')
-    expect(JSON.stringify(execute?.prompt)).toMatch(/temporary|clean.room|extract/i)
-    expect(execute?.toolFilter).toEqual(expect.objectContaining({
-      allow: expect.arrayContaining(['bash', 'read', 'glob', 'grep']),
-    }))
+    expect(result.findings.join(' ')).toMatch(/missing from the evidence ledger/i)
+  })
+
+  it('rejects circular builder tests even when their suite is green', async () => {
+    const objective = 'Build a JSON parser compatible with the standard library.'
+    const structured = structuredPass(objective)
+    structured.builder_test_audit = [{
+      test: 'test_error_position',
+      expected_source: 'implementation_observed',
+      circular: true,
+      evidence: ['expected position copied from candidate output'],
+    }]
+
+    const { result } = await runWithStructured(objective, structured)
+    expect(result.checks.builderTests).toBe('fail')
+    expect(result.findings.join(' ')).toMatch(/circular|provenance/i)
   })
 
   it('requires at least one verified mandatory criterion before the gate can pass', () => {
@@ -164,38 +194,21 @@ describe('adversarial completion tester', () => {
         options: { provider: 'anthropic', model: 'claude-opus' },
         session: {
           events: [
-            {
-              type: 'goal/change',
-              data: {
-                operation: 'create',
-                goal: { id: goalId, revision: 1, objective },
-              },
-            },
+            { type: 'goal/change', data: { operation: 'create', goal: { id: goalId, revision: 1, objective } } },
             {
               type: 'goal/completion-gate',
               data: {
-                goalId,
-                revision: 1,
-                round: 2,
-                attemptId: 'gate-pass',
-                checks: passingChecks,
-                evidenceLedger: passingLedger,
-                artifactFingerprint: 'sha256:same-artifact',
-                cleanRoomEvidence: 'verified clean copy',
-                findings: [],
-                proceduralLessons: [],
+                goalId, revision: 1, round: 2, attemptId: 'gate-pass',
+                checks: passingChecks, evidenceLedger: passingLedger,
+                artifactFingerprint: 'sha256:same-artifact', cleanRoomEvidence: 'verified clean copy',
+                findings: [], proceduralLessons: [],
               },
             },
             {
               type: 'goal/judge',
               data: {
-                goalId,
-                revision: 1,
-                round: 2,
-                verdict: 'pass',
-                summary: 'Certified independently.',
-                findings: [],
-                requiredChanges: [],
+                goalId, revision: 1, round: 2, verdict: 'pass',
+                summary: 'Certified independently.', findings: [], requiredChanges: [],
               },
             },
           ],
@@ -224,38 +237,21 @@ describe('adversarial completion tester', () => {
         options: { provider: 'anthropic', model: 'claude-opus' },
         session: {
           events: [
-            {
-              type: 'goal/change',
-              data: {
-                operation: 'create',
-                goal: { id: goalId, revision: 1, objective },
-              },
-            },
+            { type: 'goal/change', data: { operation: 'create', goal: { id: goalId, revision: 1, objective } } },
             {
               type: 'goal/completion-gate',
               data: {
-                goalId,
-                revision: 1,
-                round: 2,
-                attemptId: 'gate-weak',
-                checks: passingChecks,
-                evidenceLedger: optionalOnlyLedger,
-                artifactFingerprint: 'sha256:weak-artifact',
-                cleanRoomEvidence: 'nominal clean copy',
-                findings: [],
-                proceduralLessons: [],
+                goalId, revision: 1, round: 2, attemptId: 'gate-weak',
+                checks: passingChecks, evidenceLedger: optionalOnlyLedger,
+                artifactFingerprint: 'sha256:weak-artifact', cleanRoomEvidence: 'nominal clean copy',
+                findings: [], proceduralLessons: [],
               },
             },
             {
               type: 'goal/judge',
               data: {
-                goalId,
-                revision: 1,
-                round: 2,
-                verdict: 'pass',
-                summary: 'Weak historical pass.',
-                findings: [],
-                requiredChanges: [],
+                goalId, revision: 1, round: 2, verdict: 'pass',
+                summary: 'Weak historical pass.', findings: [], requiredChanges: [],
               },
             },
           ],

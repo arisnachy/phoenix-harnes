@@ -159,10 +159,15 @@ export async function reviewOrdinaryCompletion(input: {
           + 'Observed mutation tools: ' + JSON.stringify(input.mutations) + '\n'
           + 'Observed verification tools: ' + JSON.stringify(input.verifications) + '\n\n'
           + 'Act as a fresh, read-only completion judge. Inspect the actual changed artifact and durable session evidence. '
-          + 'Map every explicit mandatory requirement in the original request to concrete evidence; passing tests are evidence, not blanket proof. '
+          + 'First derive an immutable literal checklist from the original request. Every explicitly named library, API, CLI flag, function name, format, wording, limit, and required behavior is mandatory and may not disappear during review. '
+          + 'Map every explicit mandatory requirement to concrete evidence; passing tests are evidence, not blanket proof. Audit material assertions for expected-value provenance: '
+          + 'an expected result must come from the specification, a reference implementation/standard, a mathematical or metamorphic invariant, or an independent fixture. '
+          + 'If a test copied or derived its expected value from the implementation under test, treat it as circular and insufficient even when green. '
+          + 'For parsers, regexes, iterators, scanners, strings, and loop-driven input processing, explicitly inspect applicable empty/single/boundary cases, Unicode outside the BMP, '
+          + 'zero-length or zero-progress iterations, first/last iteration off-by-one behavior, malformed inputs, and exact error positions. When a trustworthy oracle exists, prefer differential generated/fuzz cases; otherwise require property/metamorphic checks. '
           + 'For public errors/exceptions verify the observable type and every required message field, identifier, collection, or diagnostic detail. '
           + 'When scale, large cardinality, performance, latency, depth, concurrency, or memory matters, require evidence that checks growth/resource behavior and inspect for avoidable superlinear time or space. '
-          + 'Check the real user/production entrypoint and relevant boundary/failure cases. Do not edit files or run commands. '
+          + 'Check the real user/production entrypoint and relevant boundary/failure cases. Require an explicit completion decision about known limitations, even when the list is empty. Do not edit files or run commands. '
           + 'Return pass only with concrete evidence for all material requirements. Return needs_changes with a precise repair list for fixable gaps; blocked only for an external evaluation blocker.\n'
           + '</phoenix_ordinary_completion_judge>',
       }],

@@ -51,9 +51,9 @@ export function renderGoalRoundPrompt(
         ? 'starting execution, keep one complete master plan; do not split it into mini-plans or ask for routine step-by-step confirmation. '
         : 'continue the existing master plan; do not replace it with mini-plans or pause for routine step-by-step confirmation. '
           + 'Use the approval deadline policy for any later gated action. ')
-      + (round === 1 ? '' : 'If this is not the first round, use a materially different strategy from earlier attempts and explain what changed. ')
+      + (round === 1 ? '' : 'If independent verification has stalled, use a materially different strategy; if new verified evidence is still accumulating, keep the cheapest productive strategy rather than rotating just because another round began. ')
       + (feedback === undefined ? '' : 'Address every required change from the prior judge before requesting another review. ')
-      + 'claiming completion, gather evidence that the whole objective is achieved, read the current '
+      + 'claiming completion, mechanically re-check every explicit named requirement, audit material test expected values for independent provenance, and explicitly decide known limitations even when the list is empty. Then gather evidence that the whole objective is achieved, read the current '
       + 'goal only after the exact deliverable, every acceptance criterion, and quality evidence are verified by the independent judge; never mark it complete because progress was made, tests passed, or the turn ended. If work remains or an approach fails, leave the goal active, change strategy, and continue in the next round. Follow '
       + 'the configured goal-tool policy before reporting a blocker.\n'
       + '</goal_round>',

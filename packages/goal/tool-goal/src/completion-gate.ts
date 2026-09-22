@@ -5,6 +5,7 @@ import type { ContentBlock, LlmRuntime } from '@phoenix-ai/dsh-llm'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@phoenix-ai/dsh-tools'
 import { resolveGoalJudgeAgentOptions } from './judge-route.ts'
+import { buildVerificationContract, type VerificationContract } from './verification-contract.ts'
 
 /** Machine verdict for one independently checked completion dimension. */
 export type CompletionCheckStatus = 'pass' | 'fail' | 'blocked'
@@ -52,6 +53,7 @@ const MAX_TEXT = 2_000
 const MAX_ITEMS = 32
 const EXECUTION_TOOLS = ['bash', 'read', 'read_image', 'glob', 'grep'] as const
 const EVIDENCE_STATUSES = ['pending', 'implemented', 'tested', 'verified', 'failed', 'blocked_external'] as const
+const EXPECTED_SOURCES = ['specification', 'reference_oracle', 'standard', 'mathematical_invariant', 'metamorphic_property', 'fixture_or_external_evidence', 'implementation_observed', 'unknown'] as const
 
 const DESIGN_SCHEMA: ObjectJsonSchema = {
   type: 'object',
@@ -105,12 +107,35 @@ const EXECUTION_SCHEMA: ObjectJsonSchema = {
         required: ['criterion_id', 'criterion', 'mandatory', 'status', 'evidence'],
       },
     },
+    builder_test_audit: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          test: { type: 'string' },
+          expected_source: { type: 'string', enum: [...EXPECTED_SOURCES] },
+          circular: { type: 'boolean' },
+          evidence: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['test', 'expected_source', 'circular', 'evidence'],
+      },
+    },
+    completion_report: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        unverified_items: { type: 'array', items: { type: 'string' } },
+        known_limitations: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['unverified_items', 'known_limitations'],
+    },
     artifact_fingerprint: { type: 'string' },
     clean_room_evidence: { type: 'string' },
     findings: { type: 'array', items: { type: 'string' } },
     procedural_lessons: { type: 'array', items: { type: 'string' } },
   },
-  required: ['checks', 'evidence_ledger', 'artifact_fingerprint', 'clean_room_evidence', 'findings', 'procedural_lessons'],
+  required: ['checks', 'evidence_ledger', 'builder_test_audit', 'completion_report', 'artifact_fingerprint', 'clean_room_evidence', 'findings', 'procedural_lessons'],
 }
 
 function normalizedText(value: unknown): value is string {
@@ -165,33 +190,149 @@ function readLedger(value: unknown): CompletionEvidenceEntry[] | undefined {
   return entries
 }
 
-function readExecution(value: unknown): GoalCompletionGateResult | undefined {
+interface BuilderTestAuditEntry {
+  readonly test: string
+  readonly expectedSource: typeof EXPECTED_SOURCES[number]
+  readonly circular: boolean
+  readonly evidence: readonly string[]
+}
+
+function readBuilderTestAudit(value: unknown): BuilderTestAuditEntry[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_ITEMS) return undefined
+  const entries: BuilderTestAuditEntry[] = []
+  for (const item of value) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) return undefined
+    const record = item as Record<string, unknown>
+    if (!normalizedText(record.test)
+      || typeof record.expected_source !== 'string'
+      || !EXPECTED_SOURCES.includes(record.expected_source as typeof EXPECTED_SOURCES[number])
+      || typeof record.circular !== 'boolean'
+      || !normalizedList(record.evidence)) return undefined
+    entries.push({
+      test: record.test,
+      expectedSource: record.expected_source as typeof EXPECTED_SOURCES[number],
+      circular: record.circular,
+      evidence: record.evidence,
+    })
+  }
+  return entries
+}
+
+function readCompletionReport(value: unknown): { unverifiedItems: string[]; knownLimitations: string[] } | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  if (!normalizedList(record.unverified_items) || !normalizedList(record.known_limitations)) return undefined
+  return { unverifiedItems: record.unverified_items, knownLimitations: record.known_limitations }
+}
+
+function reconcileContract(
+  raw: readonly CompletionEvidenceEntry[],
+  contract: VerificationContract,
+): { ledger: CompletionEvidenceEntry[]; findings: string[]; requiredVerified: boolean; edgesVerified: boolean } {
+  const findings: string[] = []
+  const requiredIds = new Set(contract.criteria.map(item => item.id))
+  const byId = new Map<string, CompletionEvidenceEntry[]>()
+  for (const entry of raw) {
+    const current = byId.get(entry.criterionId) ?? []
+    current.push(entry)
+    byId.set(entry.criterionId, current)
+  }
+
+  const ledger: CompletionEvidenceEntry[] = []
+  let requiredVerified = true
+  let edgesVerified = true
+  for (const criterion of contract.criteria) {
+    const matches = byId.get(criterion.id) ?? []
+    const original = matches.length === 1 ? matches[0] : undefined
+    let status: CompletionEvidenceStatus = original?.status ?? 'failed'
+    let evidence = original === undefined ? [] : [...original.evidence]
+    if (matches.length !== 1) {
+      status = 'failed'
+      evidence = []
+      findings.push(matches.length === 0
+        ? 'Locked criterion ' + criterion.id + ' is missing from the evidence ledger.'
+        : 'Locked criterion ' + criterion.id + ' appears more than once in the evidence ledger.')
+    } else if (original.criterion !== criterion.criterion || original.mandatory !== true) {
+      status = 'failed'
+      findings.push('Locked criterion ' + criterion.id + ' was rewritten or downgraded by the verifier.')
+    }
+    if (status !== 'verified') {
+      requiredVerified = false
+      if (criterion.source === 'edge') edgesVerified = false
+    }
+    ledger.push({
+      criterionId: criterion.id,
+      criterion: criterion.criterion,
+      mandatory: true,
+      status,
+      evidence,
+    })
+  }
+
+  for (const entry of raw) {
+    if (!requiredIds.has(entry.criterionId)) ledger.push(entry)
+  }
+  return { ledger, findings, requiredVerified, edgesVerified }
+}
+
+function readExecution(value: unknown, contract: VerificationContract): GoalCompletionGateResult | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
   const checksValue = record.checks
   if (checksValue === null || typeof checksValue !== 'object' || Array.isArray(checksValue)) return undefined
   const checks = checksValue as Record<string, unknown>
-  const requirements = check(checks.requirements)
-  const builderTests = check(checks.builder_tests)
-  const adversarialTests = check(checks.adversarial_tests)
+  let requirements = check(checks.requirements)
+  let builderTests = check(checks.builder_tests)
+  let adversarialTests = check(checks.adversarial_tests)
   const startup = check(checks.startup)
   const artifactIntegrity = check(checks.artifact_integrity)
   const cleanRoom = check(checks.clean_room)
-  const evidenceLedger = readLedger(record.evidence_ledger)
+  const rawLedger = readLedger(record.evidence_ledger)
+  const builderAudit = readBuilderTestAudit(record.builder_test_audit)
+  const completionReport = readCompletionReport(record.completion_report)
   if (requirements === undefined || builderTests === undefined || adversarialTests === undefined
     || startup === undefined || artifactIntegrity === undefined || cleanRoom === undefined
-    || evidenceLedger === undefined
+    || rawLedger === undefined || builderAudit === undefined || completionReport === undefined
     || !normalizedText(record.artifact_fingerprint)
     || !normalizedText(record.clean_room_evidence)
     || !normalizedList(record.findings)
     || !normalizedList(record.procedural_lessons)) return undefined
+
+  const reconciled = reconcileContract(rawLedger, contract)
+  const contractFindings = [...reconciled.findings]
+  if (!reconciled.requiredVerified || completionReport.unverifiedItems.length > 0) {
+    requirements = 'fail'
+    if (completionReport.unverifiedItems.length > 0) {
+      contractFindings.push('Completion report still has unverified items: ' + completionReport.unverifiedItems.join('; '))
+    }
+  }
+  if (!reconciled.edgesVerified) adversarialTests = 'fail'
+
+  if (contract.requiresBuilderTestAudit) {
+    const unsafe = builderAudit.filter(item =>
+      item.circular || item.expectedSource === 'implementation_observed' || item.expectedSource === 'unknown')
+    if (builderAudit.length === 0) {
+      builderTests = 'fail'
+      contractFindings.push('Builder tests were not audited for expected-value provenance.')
+    } else if (unsafe.length > 0) {
+      builderTests = 'fail'
+      contractFindings.push('Builder test expected values are circular or lack independent provenance: '
+        + unsafe.map(item => item.test).join(', '))
+    }
+  }
+
+  const proceduralLessons = [...record.procedural_lessons as string[]]
+  if (contractFindings.some(item => /provenance|circular/iu.test(item))) {
+    proceduralLessons.push('Never certify a test whose expected value was copied from the implementation under test.')
+  }
+
   return {
     checks: { requirements, builderTests, adversarialTests, startup, artifactIntegrity, cleanRoom },
-    evidenceLedger,
-    artifactFingerprint: record.artifact_fingerprint,
-    cleanRoomEvidence: record.clean_room_evidence,
-    findings: record.findings,
-    proceduralLessons: record.procedural_lessons,
+    evidenceLedger: reconciled.ledger,
+    artifactFingerprint: record.artifact_fingerprint as string,
+    cleanRoomEvidence: record.clean_room_evidence as string,
+    findings: [...record.findings as string[], ...contractFindings].slice(0, MAX_ITEMS),
+    proceduralLessons: [...new Set(proceduralLessons)].slice(0, MAX_ITEMS),
   }
 }
 
@@ -286,6 +427,7 @@ export async function runAdversarialCompletionGate(input: {
       ? 'No structured completion tester provider is available.'
       : 'No independent tester provider is available for the active non-Codex model; Luna fallback is forbidden.')
   }
+  const contract = buildVerificationContract(input.objective)
   const agentOptions = await resolveGoalJudgeAgentOptions({
     parent: input.parent,
     ...input.llm === undefined ? {} : { llm: input.llm },
@@ -294,12 +436,16 @@ export async function runAdversarialCompletionGate(input: {
   const designPrompt: ContentBlock[] = [{
     type: 'text',
     text: '<adversarial_test_design>\n'
-      + `Original requirement only: ${JSON.stringify(input.objective)}\n\n`
+      + `Original requirement only: ${JSON.stringify(input.objective)}\n`
+      + `Locked verifier-owned criteria: ${JSON.stringify(contract.criteria)}\n\n`
       + 'You are an independent tester. You cannot inspect the Builder workspace, Builder tests, implementation, or prior review. '
-      + 'Generate genuinely new failure-oriented test ideas strictly from the original requirement. Think about literal requirement gaps, '
-      + 'real-world variability, edge cases, corrupt inputs, alternate formats, missing resources, unexpected environment/state, restart behavior, '
-      + 'partial files, stale data, packaging mistakes, and cases where a technically literal result would still be a poor real-world solution. '
-      + 'Each case must state what it tries to break. Do not assume the Builder tests are sufficient.\n'
+      + 'Generate genuinely new failure-oriented test ideas strictly from the original requirement and the verifier-owned criteria. '
+      + 'The locked criteria are immutable: every one is mandatory and must receive an independent attempt at evidence. '
+      + 'Cover applicable empty/single/boundary cases, Unicode outside the BMP, zero-progress loop termination, malformed inputs, and exact diagnostics. '
+      + 'When a trustworthy standard-library or reference oracle exists, include differential generated cases; otherwise use property/metamorphic invariants. '
+      + 'Think about real-world variability, alternate formats, missing resources, unexpected environment/state, restart behavior, partial files, stale data, '
+      + 'packaging mistakes, and cases where a technically literal result would still be a poor real-world solution. Each case must state what it tries to break. '
+      + 'Do not assume the Builder tests are sufficient.\n'
       + '</adversarial_test_design>',
   }]
   const designed = await runStructured(input.subagents, provider, {
@@ -319,19 +465,23 @@ export async function runAdversarialCompletionGate(input: {
     text: '<adversarial_completion_gate>\n'
       + `Original requirement: ${JSON.stringify(input.objective)}\n`
       + `Candidate completion round: ${input.round}\n`
-      + `Fresh adversarial cases designed without workspace access: ${JSON.stringify(cases)}\n\n`
+      + `Fresh adversarial cases designed without workspace access: ${JSON.stringify(cases)}\n`
+      + `Locked verifier-owned criteria: ${JSON.stringify(contract.criteria)}\n\n`
       + 'Act as the independent completion Tester, not the Builder. Inspect the implementation only now. Verify all six dimensions separately: '
       + 'requirements, Builder-owned tests, fresh adversarial tests, startup, artifact integrity, and clean-room verification. '
-      + 'Build an evidence_ledger from the original requirement. Give every acceptance criterion a stable criterion_id, literal criterion text, mandatory flag, '
-      + 'status, and concrete evidence references. At least one criterion must be mandatory; never classify every original requirement as optional. '
-      + 'Mandatory criteria are verified only when current reproducible evidence demonstrates them; Builder prose is not evidence. '
-      + 'For adversarial tests, turn the supplied cases into new executable checks; do not merely rerun or rename existing Builder tests. '
+      + 'The evidence_ledger MUST include every locked criterion_id exactly once with the exact criterion text and mandatory=true. '
+      + 'You may add extra criteria, but you may not omit, rewrite, merge, or downgrade locked criteria. A locked criterion is verified only with current reproducible evidence. '
+      + 'Audit Builder assertions in builder_test_audit. For every material expected value, identify whether it came from the specification, a reference oracle/standard, '
+      + 'a mathematical or metamorphic invariant, an external fixture, or the implementation itself. Mark circular=true whenever the expected result was copied or derived '
+      + 'from the candidate implementation; such a test cannot certify correctness. Builder prose and a green aggregate suite are never blanket evidence. '
+      + 'For adversarial tests, turn the supplied cases into genuinely new executable checks; do not merely rerun or rename existing Builder tests. '
       + 'Actively try to break the solution with edge conditions, corrupt/partial input, supported alternate representations, and unexpected real-world conditions. '
       + 'Then create the final deliverable exactly as a user would receive it. Compute a stable fingerprint for that packaged artifact. '
       + 'Create a brand-new OS temporary directory outside the workspace, copy/extract only the packaged deliverable into it, and run startup plus the relevant '
       + 'verification against that clean copy. Do not use workspace-only files, caches, installed links, or unshipped dependencies to make clean-room pass. '
       + 'Compare the original requirement, Builder claims/tests, actual artifact contents, and clean-room behavior. Any inconsistency is a failure/blocker. '
       + 'Ask three final questions: Did the mission do everything requested? Did it comply literally? Even if literal, is it an excellent solution under real-world variability? '
+      + 'Populate completion_report every time. unverified_items must explicitly list anything not proven; known_limitations must be decided explicitly even when it is empty. '
       + 'Record concise procedural_lessons for every discovered failure pattern so PHOENIX can avoid repeating it.\n'
       + '</adversarial_completion_gate>',
   }]
@@ -344,5 +494,5 @@ export async function runAdversarialCompletionGate(input: {
     outputSchema: EXECUTION_SCHEMA,
     toolFilter: { allow: [...EXECUTION_TOOLS] },
   })
-  return readExecution(executed) ?? unavailable('Independent adversarial execution did not return valid clean-room evidence.')
+  return readExecution(executed, contract) ?? unavailable('Independent adversarial execution did not return valid clean-room evidence.')
 }
