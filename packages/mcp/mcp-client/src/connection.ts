@@ -332,7 +332,15 @@ export function startConnection(
       },
     )
     try {
-      await generation.connect(await createTransport(config, transportOptions))
+      let generationTransportOptions = transportOptions
+      if (config.transport === 'streamable-http' && config.bearerTokenRef !== undefined) {
+        const token = await transportOptions?.resolveBearerToken?.(config.bearerTokenRef)
+        generationTransportOptions = {
+          ...transportOptions,
+          ...(token === undefined ? {} : { bearerToken: token }),
+        }
+      }
+      await generation.connect(createTransport(config, generationTransportOptions))
       if (hasClosed()) {
         attemptSettled = true
         generationDown(generation, { status: 'failed', reasonCode: 'connection-failed' })
