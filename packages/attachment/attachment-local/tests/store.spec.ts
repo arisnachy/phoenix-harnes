@@ -58,6 +58,10 @@ const FILE_LIMITS: FileAttachmentLimits = {
   maxMessageFileBytes: 2048,
 }
 
+const MODEL_OWNED_FILE_LIMITS: FileAttachmentLimits = {
+  maxFilesPerMessage: 4,
+}
+
 const TEXT_FILE = Uint8Array.from(Buffer.from('name,value\nPhoenix,ready\n', 'utf8'))
 
 const roots: string[] = []
@@ -100,12 +104,25 @@ describe('local attachment store', () => {
     await expect(readFileAttachment(storageRoot, ref)).resolves.toEqual({ ref, data: TEXT_FILE })
   })
 
-  it('rejects an arbitrary file that exceeds the configured byte cap', async () => {
+  it('rejects an arbitrary file that exceeds an explicitly configured byte cap', async () => {
     const storageRoot = await root()
 
     await expect(saveFileAttachment(storageRoot, {
       data: new Uint8Array(1025), mediaType: 'application/octet-stream',
     }, FILE_LIMITS)).rejects.toMatchObject({ code: 'FILE_TOO_LARGE' })
+  })
+
+  it('accepts the same file when byte size is delegated to the model/provider route', async () => {
+    const storageRoot = await root()
+    const data = new Uint8Array(1025)
+    data[0] = 7
+
+    const ref = await saveFileAttachment(storageRoot, {
+      data, mediaType: 'application/octet-stream', name: 'large-for-local-policy.bin',
+    }, MODEL_OWNED_FILE_LIMITS)
+
+    expect(ref.bytes).toBe(data.byteLength)
+    await expect(readFileAttachment(storageRoot, ref)).resolves.toEqual({ ref, data })
   })
 
   it.skipIf(process.platform === 'win32')('syncs every object ancestor up to the durable boundary before returning', async () => {
