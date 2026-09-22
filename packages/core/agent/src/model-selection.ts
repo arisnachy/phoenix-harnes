@@ -216,6 +216,7 @@ export function installModelSelection(
   let jevFailures = 0
   let jevCircuitOpenUntil = 0
   let jevCallSequence = 0
+  let jevTurn = -1
   const jevRoutes = new Map<string, string>()
 
   async function routeWithJev(
@@ -231,7 +232,14 @@ export function installModelSelection(
     // exposes its setup card; the task continues on PHOENIX's native route.
     if (routeTool === undefined) return fallback
 
-    const cacheKey = `${payload.turn}:${payload.step}:${fallback.model}`
+    // One Jev decision per native route per turn. Reusing it across later
+    // steps keeps latency, quota use, and token overhead bounded while still
+    // allowing a second decision when Phoenix intentionally changes phase/model.
+    if (payload.turn !== jevTurn) {
+      jevTurn = payload.turn
+      jevRoutes.clear()
+    }
+    const cacheKey = fallback.model
     const cached = jevRoutes.get(cacheKey)
     if (cached !== undefined) {
       if (cached === fallback.model) return fallback
