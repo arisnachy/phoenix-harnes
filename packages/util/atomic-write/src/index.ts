@@ -11,7 +11,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
-import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 /**
@@ -77,6 +77,75 @@ async function isLockContention(error: unknown, lockPath: string): Promise<boole
   }
 }
 
+/** Parse the PID written by current and legacy lock owners. */
+function parseLockOwnerPid(content: string): number | undefined {
+  const match = /^([1-9]\d*)\s*$/.exec(content)
+  if (match === null) return undefined
+  const pid = Number(match[1])
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined
+}
+
+/**
+ * Return true only when the OS proves that the recorded process no longer
+ * exists. Permission errors and every other ambiguous failure stay live-safe.
+ */
+function processIsDefinitelyDead(pid: number): boolean {
+  if (pid === process.pid) return false
+  try {
+    process.kill(pid, 0)
+    return false
+  } catch (error) {
+    return (error as NodeJS.ErrnoException | null)?.code === 'ESRCH'
+  }
+}
+
+/**
+ * Recover a lock left behind by a process the OS proves has exited.
+ *
+ * Recovery itself is serialized through a short-lived `<file>.lock.recovery`
+ * guard, then the content is re-read immediately before removal. That prevents
+ * two contenders from turning one stale observation into deletion of a fresh
+ * owner's lock. Unknown lock formats are never removed automatically.
+ */
+async function recoverDeadOwnerLock(lockPath: string): Promise<boolean> {
+  // Only one contender may decide/remove a stale lock at a time. Without this
+  // recovery guard, two contenders could both observe the same dead owner; one
+  // could remove it and a second could then accidentally remove a fresh lock
+  // created in the tiny gap before its own unlink.
+  const recoveryPath = `${lockPath}.recovery`
+  try {
+    await writeFile(recoveryPath, `${process.pid}\n`, { mode: 0o600, flag: 'wx' })
+  } catch (error) {
+    if (await isLockContention(error, recoveryPath)) return false
+    throw error
+  }
+
+  try {
+    let observed: string
+    try {
+      observed = await readFile(lockPath, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return true
+      throw error
+    }
+    const pid = parseLockOwnerPid(observed)
+    if (pid === undefined || !processIsDefinitelyDead(pid)) return false
+
+    let confirmed: string
+    try {
+      confirmed = await readFile(lockPath, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return true
+      throw error
+    }
+    if (confirmed !== observed || !processIsDefinitelyDead(pid)) return false
+    await rm(lockPath, { force: true })
+    return true
+  } finally {
+    await rm(recoveryPath, { force: true })
+  }
+}
+
 /**
  * Retry cadence for a contended lock. These stay robustness invariants of the
  * cross-process write protocol rather than deployment tunables: they govern how
@@ -117,9 +186,10 @@ export interface FileLockOptions {
  * contention only when a fresh `lstat` confirms the lock path exists, covering
  * Windows exclusive-create behavior without hiding an unrelated permission
  * failure. Contention backs off exponentially and fails with a timed-out error
- * after the deadline. The contender never removes an existing lock because
- * file age cannot prove that its owner stopped; orphan recovery is an operator
- * action. The parent directory must exist.
+ * after the deadline. A lock whose recorded PID is proven dead by the OS is
+ * recovered automatically. Unknown formats and ambiguous liveness checks are
+ * preserved; file age alone is never evidence of abandonment. The parent
+ * directory must exist.
  * @param filename - the file whose writers this lock serializes.
  * @param operation - the read-render-commit cycle to run while holding the lock.
  * @param options - acquisition options; omitted waits {@link DEFAULT_LOCK_WAIT_MS}.
@@ -139,6 +209,7 @@ export async function withFileLock<T>(
       break
     } catch (error) {
       if (!await isLockContention(error, lockPath)) throw error
+      if (await recoverDeadOwnerLock(lockPath)) continue
     }
     if (Date.now() >= deadline) {
       throw new Error(`atomic-write: timed out waiting for the writer lock at ${lockPath}`)
