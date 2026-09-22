@@ -121,6 +121,33 @@ export class CodexLiveCatalog {
   }
 
   /**
+   * Return the last account-visible catalog immediately and refresh stale data
+   * in the background. This is the selector hot path: opening the model menu
+   * must never wait for spawning Codex app-server or its model/list RPC.
+   *
+   * Exact-model misses still call {@link refresh} with force=true and wait,
+   * preserving the request-time ability to discover a newly introduced model.
+   *
+   * @param provider - Provider route requested by the adapter.
+   * @param profile - Current raw provider profile for that route.
+   * @returns Last valid visible model ids, or undefined until the first refresh lands.
+   */
+  refreshInBackground(
+    provider: string,
+    profile: PiAiProviderProfile | undefined,
+  ): readonly string[] | undefined {
+    if (provider !== CODEX_PROVIDER || !codexCatalogIsAutomatic(profile)) return undefined
+    const now = this.now()
+    const due = this.visible === undefined
+      ? now - this.lastAttemptAt >= this.refreshIntervalMs
+      : now - this.lastSuccessAt >= this.refreshIntervalMs
+    if (due && this.inFlight === undefined) {
+      void this.refresh(provider, profile).catch(() => undefined)
+    }
+    return this.visibleIds()
+  }
+
+  /**
    * Overlay the dispatch superset only when the route is automatic. The input
    * object is returned by identity when no overlay applies.
    *
