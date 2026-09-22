@@ -104,6 +104,22 @@ describe('universal living creations', () => {
       return { response, value }
     }
 
+    const health = await post('/health', {})
+    expect(health.response.status).toBe(200)
+    expect(health.value).toMatchObject({ ok: true, protocol: 1, bridge: 'living-local' })
+
+    const contract = await post('/manifest', {})
+    expect(contract.response.status).toBe(200)
+    expect(contract.value).toMatchObject({
+      creationId: id,
+      capabilities: {
+        state: manifest.state,
+        actions: manifest.actions,
+        events: manifest.events,
+        actors: manifest.actors,
+      },
+    })
+
     const connected = await post('/connect', {
       capabilities: {
         state: manifest.state,
@@ -165,7 +181,7 @@ describe('universal living creations', () => {
     })
 
     await expect(request('wrong-control-token-0123456789abcdef', ['update']).then(response => response.status))
-      .resolves.toBe(400)
+      .resolves.toBe(401)
     await expect(request(token, ['update', 'undeclared']).then(response => response.status))
       .resolves.toBe(400)
     expect(root.living.inspect(id)).toMatchObject({ connected: false, achievedLevel: 'static' })
