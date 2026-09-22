@@ -342,7 +342,9 @@ export function apply(ctx: Context, config: Config): void {
       }
     }
 
-    await refresh(true)
+    // Catalog freshness is not a boot prerequisite. Seed from the shipped
+    // fallback immediately and refresh the rotating free list after activation.
+    void refresh(true)
     const timer = setInterval(() => { void refresh() }, 60_000)
     timer.unref()
     return async () => {
