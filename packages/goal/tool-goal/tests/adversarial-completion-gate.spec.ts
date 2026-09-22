@@ -138,6 +138,7 @@ describe('adversarial completion tester', () => {
     const structured = structuredPass(objective)
     const contract = buildVerificationContract(objective)
     const omitted = contract.criteria.find(item => item.source === 'literal') ?? contract.criteria[0]
+    if (omitted === undefined) throw new Error('verification contract must contain at least one criterion')
     structured.evidence_ledger = structured.evidence_ledger.filter(item => item.criterion_id !== omitted.id)
 
     const { result } = await runWithStructured(objective, structured)
