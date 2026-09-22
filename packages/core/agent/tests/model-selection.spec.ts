@@ -43,6 +43,22 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('¿estás usando Jev?')).toBe(true)
     expect(isConversationalFastPathText('gracias')).toBe(true)
     expect(isConversationalFastPathText('eso parece un pollo pavo bien feo jajja')).toBe(true)
+    for (const continuation of [
+      'dale',
+      'sí',
+      'ok',
+      'perfecto',
+      'listo',
+      'bien',
+      'no',
+      'claro',
+      'adelante',
+      'continúa',
+      'hazlo',
+      'go ahead',
+    ]) {
+      expect(isConversationalFastPathText(continuation)).toBe(false)
+    }
     expect(isConversationalFastPathText('revisa el repo y arregla el error')).toBe(false)
     expect(isConversationalFastPathText('¿esto parece un error de memoria?')).toBe(false)
     expect(isConversationalFastPathText('qué tiempo hace hoy')).toBe(false)
