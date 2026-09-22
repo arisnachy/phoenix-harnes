@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-20-execution-efficiency-quality-bridge.md
-2026-09-20-execution-efficiency-quality-bridge.md: 4bc0f2962dfa72abc669ff271f67ef8bc609fda6
-2026-09-20-execution-efficiency-quality-bridge.zh.md: 2d6b5d9799bfab8243b5e19031edcea653634381
+2026-09-20-execution-efficiency-quality-bridge.md: 7bf6237a1f6c32fea677bbbb08b5fad7a735aa96
+2026-09-20-execution-efficiency-quality-bridge.zh.md: b6133ea2e6e86ff9184e082280123a3170e732ac
