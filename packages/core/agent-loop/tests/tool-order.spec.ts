@@ -54,12 +54,16 @@ function registerNamed(ctx: Context, name: string) {
 }
 
 /** Run one text-only turn and return the harness context + agent. */
-async function runTurn(registrationOrder: string[], toolOrder?: SystemPromptConfig['toolOrder']) {
+async function runTurn(
+  registrationOrder: string[],
+  toolOrder?: SystemPromptConfig['toolOrder'],
+  text = 'go',
+) {
   const adapter = new MockAdapter([textResponse('done')])
   const ctx = await harness(adapter, toolOrder)
   for (const name of registrationOrder) registerNamed(ctx, name)
   const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
-  agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+  agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
   await waitForIdle(ctx, agent)
   return { ctx, agent, adapter }
 }
@@ -91,6 +95,16 @@ describe('loop-level canonical tool order', () => {
     expect(header?.tools?.map(tool => tool.name)).toEqual(['zulu', 'alpha', 'mike'])
     expect(adapter.requests[0]?.tools?.map(tool => tool.name)).toEqual(['zulu', 'alpha', 'mike'])
     expect(Object.isFrozen(adapter.requests[0])).toBe(true)
+  })
+
+  it('omits the tool catalog for a trivial conversational turn', async () => {
+    const { agent, adapter } = await runTurn(
+      ['alpha', 'mike', 'zulu'],
+      undefined,
+      '¿estás usando Jev?',
+    )
+    expect(foldRequestHeader(agent.session.events)?.tools).toBeUndefined()
+    expect(adapter.requests[0]?.tools).toBeUndefined()
   })
 
   it('closes a no-step turn when toolOrder names an unregistered tool', async () => {
