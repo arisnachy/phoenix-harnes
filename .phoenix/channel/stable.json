@@ -3,8 +3,8 @@
   "product": "PHOENIX",
   "channel": "stable",
   "sourceBranch": "main",
-  "sourceCommit": "b46badf296bdc6c3ba14dee24d845d04804f1bda",
-  "publishedAt": "2026-09-22T16:36:45Z",
+  "sourceCommit": "f75a85a5ffb63e210dcec3545b2da99f9e6bdf05",
+  "publishedAt": "2026-09-22T18:00:11Z",
   "minimumNode": "22.19.0",
   "policy": {
     "installMode": "auto",
