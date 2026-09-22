@@ -18,6 +18,13 @@
   /* Sides = composer clearance + 16px: on narrow viewports the transcript
      stays exactly 32px narrower than the input card (the shared width rule). */
   padding: 16px calc(var(--dsh-composer-side-clearance) + 16px);
+  /* The KIRA card is a floating overlay, not a structural rail. When it is
+     expanded on desktop, consume only its physical-right footprint so the
+     transcript can grow through the former dead space without sitting under
+     the agents. Collapsing KIRA restores the width immediately. */
+  padding-right: calc(
+    var(--dsh-composer-side-clearance) + 16px + var(--dsh-shell-right-overlay-inset, 0px)
+  );
   /* Inline-size query container: wide markdown tables size their breakout
      against this box's content width (100cqw in AssistantMarkdown's
      md-table-wide rule) — the CSS stand-in for deepsuite chat's JS-measured
