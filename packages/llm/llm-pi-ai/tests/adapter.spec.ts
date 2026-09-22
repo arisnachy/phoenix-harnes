@@ -452,6 +452,56 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.headers[0]?.authorization).toBe('')
   })
 
+  it('inherits a future Codex reasoning level into model metadata and the final wire payload', async () => {
+    const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'captured' } }) }])
+    const payload = Buffer
+      .from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acc_dynamic_reasoning' } }))
+      .toString('base64')
+    const jwt = `eyJhbGciOiJub25lIn0.${payload}.sig`
+    const providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
+      'openai-codex': {
+        apiKeyEnv: 'PI_CODEX_DYNAMIC_JWT',
+        baseURL: server.url,
+        models: [{ id: 'gpt-5.4' }],
+        transport: 'sse',
+      },
+    }
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['openai-codex'], new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve(jwt),
+      auth: memoryAuth(),
+      reasoningForModel: (provider, model) => provider === 'openai-codex' && model === 'gpt-5.4'
+        ? {
+            efforts: [
+              { id: ReasoningEffortId('low'), name: 'Low' },
+              { id: ReasoningEffortId('ultra'), name: 'Ultra', description: 'Future Codex level' },
+            ],
+            defaultEffort: ReasoningEffortId('ultra'),
+          }
+        : undefined,
+    }))
+
+    await expect(ctx.llm.resolveModelInfo('openai-codex', 'gpt-5.4')).resolves.toMatchObject({
+      reasoning: {
+        efforts: [
+          { id: 'low', name: 'Low' },
+          { id: 'ultra', name: 'Ultra', description: 'Future Codex level' },
+        ],
+        defaultEffort: 'ultra',
+      },
+    })
+
+    const result = await assemble(ctx, { provider: 'openai-codex', model: 'gpt-5.4', messages: [] })
+    expect(result.finish.kind).toBe('error')
+    expect(server.paths.length).toBeGreaterThan(0)
+    expect(server.paths.every(path => path === '/codex/responses')).toBe(true)
+    expect(server.requests[0]).toMatchObject({
+      reasoning: { effort: 'ultra' },
+    })
+  })
+
   it('serves a Codex route over OpenAI Responses when the credential is a platform key', async () => {
     const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'expected mock failure' } }) }])
     const ctx = new Context()
