@@ -5,6 +5,7 @@ import {
   agentEvents,
   defaultExecutionHandoff,
   installModelSelection,
+  isConversationalFastPathText,
   jevSelectedModelId,
   type Agent,
   type ModelSelectionRef,
@@ -34,6 +35,58 @@ describe('installModelSelection()', () => {
         'gpt-5.6-luna': 0.9,
       },
     }, candidates)).toBeUndefined()
+  })
+
+  it('classifies only narrow social/runtime-meta turns for the low-latency path', () => {
+    expect(isConversationalFastPathText('hola')).toBe(true)
+    expect(isConversationalFastPathText('¿estás usando Jev?')).toBe(true)
+    expect(isConversationalFastPathText('gracias')).toBe(true)
+    expect(isConversationalFastPathText('revisa el repo y arregla el error')).toBe(false)
+    expect(isConversationalFastPathText('qué tiempo hace hoy')).toBe(false)
+    expect(isConversationalFastPathText('https://example.com')).toBe(false)
+  })
+
+  it('routes trivial Codex conversation to Luna/low instead of spending the selected high-effort model', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: 'gpt-5.6-sol', reasoningEffort: ReasoningEffortId('max') },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const agent = {
+      session: {
+        events: [
+          { type: 'turn/start', data: { turn: 1 } },
+          {
+            type: 'user/message',
+            data: {
+              source: { kind: 'user' },
+              content: [{ type: 'text', text: '¿estás usando Jev?' }],
+            },
+          },
+        ],
+      },
+    } as unknown as Agent
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request',
+      { turn: 1, step: 1, signal },
+      () => Promise.resolve({
+        provider: 'openai-codex',
+        model: 'gpt-5.6-sol',
+        reasoningEffort: ReasoningEffortId('max'),
+      }),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-5.6-luna',
+      reasoningEffort: ReasoningEffortId('low'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
   })
 
   it('only provides the default Luna handoff for OpenAI Codex', () => {
