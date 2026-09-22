@@ -33,7 +33,7 @@ const SUPPORTED_THINKING_LEVELS = new Set<string>(THINKING_LEVELS)
  * @param profile - Provider settings currently active for the Codex route.
  * @returns True only when the route exists and does not pin a non-empty model list.
  */
-export function codexCatalogIsAutomatic(profile: PiAiProviderProfile | undefined): profile is PiAiProviderProfile {
+export function codexCatalogIsAutomatic(profile: PiAiProviderProfile | undefined): boolean {
   return profile !== undefined && (profile.models === undefined || profile.models.length === 0)
 }
 
