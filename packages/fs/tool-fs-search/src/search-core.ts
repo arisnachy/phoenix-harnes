@@ -40,7 +40,10 @@ export const RAW_OUTPUT_MAX_BYTES = 20_000_000
  * config), attached to both tool definitions for
  * `@phoenix-ai/dsh-tool-call-timeout-policy` to enforce through `exec.signal`.
  */
-export const SEARCH_TIMEOUT_MS = 60_000
+export const GLOB_TIMEOUT_MS = 8_000
+export const GREP_TIMEOUT_MS = 15_000
+/** Backward-compatible shared timeout alias; new deployments use the per-tool defaults. */
+export const SEARCH_TIMEOUT_MS = GREP_TIMEOUT_MS
 
 /**
  * Default cap in bytes on the retained stderr tail of one search run — a
