@@ -1216,7 +1216,7 @@ describe('default one-shot summarizer', () => {
       purpose: 'compaction',
     })
     const instruction = adapter.lastOptions?.messages.at(-1)?.content[0]
-    expect(instruction?.type === 'text' ? instruction.text : '').toContain('## Primary Request and Intent')
+    expect(instruction?.type === 'text' ? instruction.text : '').toContain('## Objective')
   })
 
   it('replays the conversation prefix and appends the instruction as the final message', async () => {
@@ -1252,7 +1252,7 @@ describe('default one-shot summarizer', () => {
     const lastText = last?.type === 'text' ? last.text : ''
     expect(lastText).toContain('Write concise English engineering prose.')
     expect(lastText).toContain('numeric values, function signatures, and syntax fragments.')
-    expect(lastText).toContain('## Primary Request and Intent')
+    expect(lastText).toContain('## Objective')
   })
 
   it('applies the routed model policy without changing the replayed prefix', async () => {
