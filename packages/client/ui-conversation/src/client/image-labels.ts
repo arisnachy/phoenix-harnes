@@ -56,10 +56,10 @@ export function attachmentErrorText(
       if (fileLimits !== undefined) return t('file.tooMany', { count: fileLimits.maxFilesPerMessage })
       break
     case 'FILE_TOO_LARGE':
-      if (fileLimits !== undefined) return t('file.fileTooLarge', { size: imageSizeText(fileLimits.maxFileBytes) })
+      if (fileLimits?.maxFileBytes !== undefined) return t('file.fileTooLarge', { size: imageSizeText(fileLimits.maxFileBytes) })
       break
     case 'FILES_TOO_LARGE':
-      if (fileLimits !== undefined) return t('file.totalTooLarge', { size: imageSizeText(fileLimits.maxMessageFileBytes) })
+      if (fileLimits?.maxMessageFileBytes !== undefined) return t('file.totalTooLarge', { size: imageSizeText(fileLimits.maxMessageFileBytes) })
       break
     case 'INVALID_FILE':
     case 'UNSUPPORTED_FILE_TYPE':
