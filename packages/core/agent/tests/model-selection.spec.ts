@@ -38,11 +38,13 @@ describe('installModelSelection()', () => {
     }, candidates)).toBeUndefined()
   })
 
-  it('classifies only narrow social/runtime-meta turns for the low-latency path', () => {
+  it('classifies narrow social, runtime-meta, and casual-reaction turns for the low-latency path', () => {
     expect(isConversationalFastPathText('hola')).toBe(true)
     expect(isConversationalFastPathText('¿estás usando Jev?')).toBe(true)
     expect(isConversationalFastPathText('gracias')).toBe(true)
+    expect(isConversationalFastPathText('eso parece un pollo pavo bien feo jajja')).toBe(true)
     expect(isConversationalFastPathText('revisa el repo y arregla el error')).toBe(false)
+    expect(isConversationalFastPathText('¿esto parece un error de memoria?')).toBe(false)
     expect(isConversationalFastPathText('qué tiempo hace hoy')).toBe(false)
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
   })

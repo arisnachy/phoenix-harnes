@@ -205,11 +205,28 @@ export function ChatView({
       return user.time >= floor && userMessageText(user) === expectedText
     })
   }, [chatNodes, pendingSubmit])
+  // Host queue acknowledgement can arrive before the durable transcript node.
+  // Once the same submission is visible as steering, that authoritative bubble
+  // replaces the optimistic one immediately; rendering both is the duplicate
+  // message race seen when a user sends during a long-running turn.
+  const pendingSubmitInSteering = useMemo(() => {
+    if (pendingSubmit === undefined) return false
+    const expected = new Set(
+      [pendingSubmit.text, pendingSubmit.modelText]
+        .filter((value): value is string => value !== undefined && value !== ''),
+    )
+    return pendingSteering.some(item => {
+      const text = item.content
+        .flatMap(block => block.type === 'text' ? [block.text] : [])
+        .join('')
+      return expected.has(text)
+    })
+  }, [pendingSteering, pendingSubmit])
   const optimisticSubmit = useMemo(() => (
-    pendingSubmit !== undefined && !pendingSubmitDurable && pendingSubmit.text !== ''
+    pendingSubmit !== undefined && !pendingSubmitDurable && !pendingSubmitInSteering && pendingSubmit.text !== ''
       ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt }
       : undefined
-  ), [pendingSubmit, pendingSubmitDurable])
+  ), [pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
 
   useEffect(() => {
     const finished = previousRunning.current && !running
@@ -439,7 +456,7 @@ export function ChatView({
           <ToolActivityFlow
             nodes={chatNodes}
             optimisticSubmit={optimisticSubmit}
-            turnStatus={running ? { startTime: runningTurnStart, progress } : undefined}
+            turnStatus={running ? { startTime: progress?.startedAt ?? runningTurnStart, progress } : undefined}
             useSession={useSession}
             selectedCallId={selectedCallId}
             cwd={cwd}
