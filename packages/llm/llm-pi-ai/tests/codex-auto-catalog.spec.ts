@@ -44,6 +44,68 @@ describe('Codex automatic live catalog policy', () => {
     ])
   })
 
+  it('retains exact live reasoning metadata and revisions when only capabilities change', async () => {
+    let now = 0
+    let next: CodexDiscoveredModel[] = [{
+      id: 'future-reasoner',
+      reasoning: {
+        efforts: [{ id: 'low', name: 'Low', description: 'Fast' }],
+        defaultEffort: 'low',
+      },
+    }]
+    const catalog = new CodexLiveCatalog({
+      transport: { list: async () => next },
+      now: () => now,
+      refreshIntervalMs: 10,
+      installedModelIds: () => [],
+    })
+
+    await catalog.refresh(CODEX_PROVIDER, {})
+    expect(catalog.revision).toBe(1)
+    expect(catalog.reasoningForModel('future-reasoner')).toEqual({
+      efforts: [{ id: 'low', name: 'Low', description: 'Fast' }],
+      defaultEffort: 'low',
+    })
+
+    // "ultra" is outside pi-ai 0.82's fixed internal vocabulary. The model
+    // profile is otherwise unchanged, so this proves exact Codex metadata has
+    // its own revision signal instead of being discarded by profile projection.
+    next = [{
+      id: 'future-reasoner',
+      reasoning: {
+        efforts: [
+          { id: 'low', name: 'Low', description: 'Fast' },
+          { id: 'ultra', name: 'Ultra', description: 'Maximum Codex reasoning' },
+        ],
+        defaultEffort: 'ultra',
+      },
+    }]
+    now = 11
+    await catalog.refresh(CODEX_PROVIDER, {})
+
+    expect(catalog.revision).toBe(2)
+    expect(catalog.reasoningForModel('future-reasoner')).toEqual({
+      efforts: [
+        { id: 'low', name: 'Low', description: 'Fast' },
+        { id: 'ultra', name: 'Ultra', description: 'Maximum Codex reasoning' },
+      ],
+      defaultEffort: 'ultra',
+    })
+  })
+
+  it('gives a future-only Codex reasoner a hidden pi-ai carrier level', () => {
+    expect(codexModelsToProfiles([{
+      id: 'future-only',
+      reasoning: {
+        efforts: [{ id: 'ultra', name: 'Ultra' }],
+        defaultEffort: 'ultra',
+      },
+    }])).toEqual([{
+      id: 'future-only',
+      reasoningEfforts: { high: 'ultra' },
+    }])
+  })
+
   it('replaces selector visibility while retaining installed and previously-seen dispatch models', async () => {
     let now = 0
     let next: CodexDiscoveredModel[] = [

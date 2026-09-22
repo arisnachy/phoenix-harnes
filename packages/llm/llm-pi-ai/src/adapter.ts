@@ -53,6 +53,7 @@ import {
 import type {
   GenerateOptions,
   LlmModelInfo,
+  LlmModelReasoningInfo,
   LlmProviderInfo,
   LlmResolvedModelInfo,
   PreparedAdapterCall,
@@ -67,6 +68,7 @@ import {
   CHATGPT_WEB_PROVIDER,
 } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
+import { CODEX_PROVIDER } from './codex-live-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
 import { applyMondayCodexMembrane, normalizeCodexToolSchemas, normalizeOpenAiFunctionToolPayload, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
@@ -107,6 +109,12 @@ export interface PiAiAdapterOptions {
    * exact-model miss. The plugin owns caching/fallback; the adapter only asks.
    */
   refreshModels?: (provider: string, force?: boolean) => Promise<readonly string[] | undefined>
+  /**
+   * Authoritative per-model reasoning metadata supplied by a live provider
+   * catalog. Codex uses this to preserve effort names added after pi-ai's
+   * fixed thinking-level vocabulary.
+   */
+  reasoningForModel?: (provider: string, model: string) => LlmModelReasoningInfo | undefined
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
   /**
@@ -212,6 +220,26 @@ function reasoningInfo(
       ...defaultLevel === undefined ? {} : { defaultEffort: ReasoningEffortId(defaultLevel) },
     },
   }
+}
+
+/**
+ * Override one final provider payload with the exact Codex effort advertised
+ * by app-server. pi-ai may have used a fixed internal carrier level to reach
+ * this hook; that implementation detail must never leak onto the Codex wire.
+ */
+function withCodexReasoningEffort<T>(payload: T, effort: string): T {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return payload
+  const record = payload as Record<string, unknown>
+  const current = typeof record.reasoning === 'object' && record.reasoning !== null && !Array.isArray(record.reasoning)
+    ? record.reasoning as Record<string, unknown>
+    : {}
+  return {
+    ...record,
+    reasoning: {
+      ...current,
+      effort,
+    },
+  } as unknown as T
 }
 
 /** Merge deployment headers while removing case-insensitive attribution collisions. */
@@ -334,7 +362,12 @@ export class PiAiAdapter extends LlmAdapter {
     return this.modelInfo(snapshot, provider, model)
   }
 
-  private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
+  private modelInfo(
+    snapshot: PiAiSnapshot,
+    provider: string,
+    model: string,
+    liveReasoning = this.config.reasoningForModel?.(provider, model),
+  ): LlmResolvedModelInfo {
     const profile = this.profileOf(snapshot, provider)
     const resolvedModel = this.modelOf(snapshot, provider, model)
     const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
@@ -348,25 +381,35 @@ export class PiAiAdapter extends LlmAdapter {
       inputModalities: [...resolvedModel.input],
       context: { contextWindow: resolvedModel.contextWindow },
       ...configuredMaxTokens === undefined ? {} : { defaultMaxTokens: configuredMaxTokens },
-      ...reasoningInfo(resolvedModel, defaultLevel),
+      ...liveReasoning === undefined
+        ? reasoningInfo(resolvedModel, defaultLevel)
+        : {
+            reasoning: {
+              efforts: liveReasoning.efforts.map(effort => ({ ...effort })),
+              ...liveReasoning.defaultEffort === undefined ? {} : { defaultEffort: liveReasoning.defaultEffort },
+            },
+          },
     }
   }
 
   override async prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
     const snapshot = await this.snapshotForModel(provider, model)
+    const liveReasoning = this.config.reasoningForModel?.(provider, model)
     return {
-      model: this.modelInfo(snapshot, provider, model),
-      stream: options => this.streamWithSnapshot(options, snapshot),
+      model: this.modelInfo(snapshot, provider, model, liveReasoning),
+      stream: options => this.streamWithSnapshot(options, snapshot, liveReasoning),
     }
   }
 
   stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-    return this.streamWithSnapshot(options, this.current())
+    const liveReasoning = this.config.reasoningForModel?.(options.provider, options.model)
+    return this.streamWithSnapshot(options, this.current(), liveReasoning)
   }
 
   private async * streamWithSnapshot(
     options: GenerateOptions,
     snapshot: PiAiSnapshot,
+    liveReasoning: LlmModelReasoningInfo | undefined,
   ): AsyncIterable<StreamChunk> {
     if (options.stop !== undefined) {
       throw new LlmError('llm-pi-ai does not support GenerateOptions.stop', 'UNSUPPORTED_OPTION')
@@ -378,10 +421,36 @@ export class PiAiAdapter extends LlmAdapter {
     // the one it started with and the next call picks up the new one.
     const profile = this.profileOf(snapshot, options.provider)
     const model = this.modelOf(snapshot, options.provider, options.model)
-    const reasoning = resolveReasoningLevel(
-      model,
-      options.reasoningEffort ?? profile.reasoning,
-    )
+    const requestedReasoning = options.reasoningEffort ?? profile.reasoning
+    let reasoning: ModelThinkingLevel | undefined
+    let codexWireReasoningEffort: string | undefined
+
+    if (liveReasoning !== undefined && requestedReasoning !== undefined) {
+      const requested = String(requestedReasoning)
+      if (!liveReasoning.efforts.some(effort => effort.id === requested)) {
+        throw new LlmError(
+          `pi-ai provider "${model.provider}" model "${model.id}" does not support reasoning effort "${requested}"`,
+          'UNSUPPORTED_REASONING_EFFORT',
+        )
+      }
+
+      // pi-ai 0.82 has a closed internal effort vocabulary. Use any supported
+      // non-off level as a carrier when Codex advertises a newer name, then
+      // replace the final payload with the exact app-server value below.
+      const supported = getSupportedThinkingLevels(model)
+      reasoning = supported.find(level => level === requested)
+        ?? supported.find(level => level !== 'off')
+        ?? (supported.includes('off') ? 'off' : undefined)
+      if (reasoning === undefined) {
+        throw new LlmError(
+          `pi-ai provider "${model.provider}" model "${model.id}" has no reasoning carrier for "${requested}"`,
+          'UNSUPPORTED_REASONING_EFFORT',
+        )
+      }
+      if (options.provider === CODEX_PROVIDER) codexWireReasoningEffort = requested
+    } else {
+      reasoning = resolveReasoningLevel(model, requestedReasoning)
+    }
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
     // One credential-shape repair: pi-ai's ChatGPT Codex backend authenticates
     // only with its OAuth access JWT (`Failed to extract accountId from
@@ -461,10 +530,20 @@ export class PiAiAdapter extends LlmAdapter {
       const providerContext = requiresFunctionSchemaProjection
         ? normalizeOpenAiFunctionToolPayload(context, requiresMondayMembrane) as typeof context
         : context
+      const needsPayloadProjection = requiresFunctionSchemaProjection || codexWireReasoningEffort !== undefined
       const streamOptions: SimpleStreamOptions = {
         ...profileOptions(profile, reasoning, apiKey),
-        ...requiresFunctionSchemaProjection
-          ? { onPayload: payload => normalizeOpenAiFunctionToolPayload(payload, requiresMondayMembrane) }
+        ...needsPayloadProjection
+          ? {
+              onPayload: payload => {
+                const projected = requiresFunctionSchemaProjection
+                  ? normalizeOpenAiFunctionToolPayload(payload, requiresMondayMembrane)
+                  : payload
+                return codexWireReasoningEffort === undefined
+                  ? projected
+                  : withCodexReasoningEffort(projected, codexWireReasoningEffort)
+              },
+            }
           : {},
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
