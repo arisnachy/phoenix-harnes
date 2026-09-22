@@ -244,6 +244,11 @@ export function apply(ctx: Context, config: Config): void {
     provider: string,
     profile: ResolvedPiAiProviderProfile,
   ): Promise<string | undefined> => {
+    // openai-codex is the native ChatGPT/Codex session route. Never let an
+    // OPENAI_API_KEY (including a stale apiKeyEnv left by an older Settings
+    // build) override that OAuth session; platform API keys belong to the
+    // separate "openai" provider route.
+    if (provider === CODEX_PROVIDER) return undefined
     const ref = profile.apiKeyEnv
     if (ref === undefined) return undefined
     const credentials = ctx.get('credentials')
