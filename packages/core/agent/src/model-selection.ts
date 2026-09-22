@@ -189,7 +189,16 @@ function isToolAcquisitionRequest(text: string): boolean {
   return TOOL_ACTION.test(text) && TOOL_ARTIFACT.test(text)
 }
 
-const FAST_SOCIAL_TURN = /^(?:[¡!¿?.,\s]*(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|gracias|thanks|thank\s+you|ok(?:ay)?|perfecto|dale|listo|entendido|bien|s[ií]|no)[¡!¿?.,\s]*)$/iu
+const FAST_SOCIAL_TURN = /^(?:[¡!¿?.,\s]*(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|gracias|thanks|thank\s+you)[¡!¿?.,\s]*)$/iu
+/**
+ * Bare confirmations/continuations are not self-contained social turns.
+ *
+ * They resolve against the immediately preceding assistant offer ("dale" means
+ * "do what you just proposed") and may require the tools that offer needs.
+ * Sending them through the tool-free conversational path can erase the very
+ * action the user just approved.
+ */
+const CONTEXTUAL_CONTINUATION = /^(?:[¡!¿?.,\s]*(?:ok(?:ay)?|perfecto|dale|listo|entendido|bien|s[ií]|no|claro|de\s+acuerdo|adelante|contin[uú]a|sigue|hazlo|vamos|yes|yeah|yep|sure|go\s+ahead|continue|do\s+it)[¡!¿?.,\s]*)$/iu
 const FAST_RUNTIME_META = /^(?:[¡!¿?.,\s]*(?:(?:est[aá]s|estas|sigues)\s+(?:usando|utilizando)\s+jev|usas\s+jev|(?:se\s+)?est[aá]\s+usando\s+jev|qu[eé]\s+modelo\s+(?:est[aá]s|estas)\s+usando|cu[aá]l\s+modelo\s+(?:est[aá]s|estas)\s+usando)[¡!¿?.,\s]*)$/iu
 /** Short, non-question reactions to the current output; they never need external evidence. */
 const FAST_CASUAL_REACTION = /(?:\b(?:jaj+a+|jeje+|jiji+|lol)\b|\b(?:eso|esto)\s+(?:parece|se\s+ve|est[aá])\b|\b(?:qu[eé]\s+)?(?:feo|bonito|lindo|gracioso|raro)\b)/iu
@@ -206,6 +215,9 @@ export function isConversationalFastPathText(text: string): boolean {
   if (candidate.length === 0 || candidate.length > 180) return false
   if (/https?:\/\/|\x60\x60\x60|(?:[A-Za-z]:\\|\.\/|\.\.\/)/u.test(candidate)) return false
   if (isToolAcquisitionRequest(candidate)) return false
+  // A one-word approval is a continuation command, not chit-chat. Keep normal
+  // history, tool schemas, and the user's selected reasoning route.
+  if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
   if (FAST_SOCIAL_TURN.test(candidate) || FAST_RUNTIME_META.test(candidate)) return true
   // Feedback such as "eso parece un pollo ... jaja" should not reload hundreds
   // of tools or a multi-megabyte work transcript. Keep questions on the normal
