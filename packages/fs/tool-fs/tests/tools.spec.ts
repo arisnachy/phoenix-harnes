@@ -152,13 +152,15 @@ describe('session cwd resolution', () => {
 })
 
 describe('registration', () => {
-  it('registers read, write, and edit', async () => {
+  it('registers fs_status, read, write, and edit', async () => {
     const { ctx } = await setup()
-    expect(ctx.tools.schemas().map(s => s.name).sort()).toEqual(['edit', 'read', 'write'])
+    expect(ctx.tools.schemas().map(s => s.name).sort()).toEqual(['edit', 'fs_status', 'read', 'write'])
   })
 
   it('declares read parallel-safe while write/edit remain exclusive', async () => {
     const { ctx } = await setup()
+    expect(ctx.tools.executionMode({ signal: testToolSignal, callId: CallId('status-safe'), name: 'fs_status', arguments: { paths: ['a.txt'] } }))
+      .toEqual({ kind: 'parallel' })
     expect(ctx.tools.executionMode({ signal: testToolSignal, callId: CallId('read-safe'), name: 'read', arguments: { file_path: 'a.txt' } }))
       .toEqual({ kind: 'parallel' })
     expect(ctx.tools.executionMode({ signal: testToolSignal, callId: CallId('write-exclusive'), name: 'write', arguments: { file_path: 'a.txt', content: 'x' } }))
@@ -170,6 +172,7 @@ describe('registration', () => {
   it('registers prompt sections for each tool', async () => {
     const { ctx } = await setup()
     const prompt = renderPrompt(await ctx.systemPrompt.assemble())
+    expect(prompt).toContain('Use fs_status')
     expect(prompt).toContain('Use the read tool')
     expect(prompt).toContain('Use the write tool')
     expect(prompt).toContain('Use the edit tool')
@@ -192,13 +195,31 @@ describe('registration', () => {
     const fiber = await ctx.plugin(ToolFs)
     // Each tool contributes BOTH a schema and a prompt section; disposal must
     // withdraw both, not just the schemas.
-    expect(ctx.tools.schemas()).toHaveLength(3)
+    expect(ctx.tools.schemas()).toHaveLength(4)
     const sectionNames = (a: { sections: { name: string }[] }) => a.sections.map(s => s.name).sort()
-    expect(sectionNames(await ctx.systemPrompt.assemble())).toEqual(['deployment:persona', 'harness:identity', 'tool:edit', 'tool:read', 'tool:write'])
+    expect(sectionNames(await ctx.systemPrompt.assemble())).toEqual(['deployment:persona', 'harness:identity', 'tool:edit', 'tool:fs-status', 'tool:read', 'tool:write'])
     await fiber.dispose()
     expect(ctx.tools.schemas()).toHaveLength(0)
     // Only the system-prompt plugin's own built-in sections remain.
     expect(sectionNames(await ctx.systemPrompt.assemble())).toEqual(['deployment:persona', 'harness:identity'])
+  })
+})
+
+describe('fs_status tool', () => {
+  it('batches exact present/absent checks without reading contents', async () => {
+    const { ctx, fs } = await setup()
+    fs.files.set('key:a.txt', 'hello')
+    const readSpy = vi.spyOn(fs, 'readText')
+    const result = await call(ctx, 'fs_status', { paths: ['a.txt', 'missing.txt'] }, { session: { header: {} } })
+    expect(result.isError).toBe(false)
+    if (result.isError) throw new Error('expected fs_status success')
+    expect(result.value).toEqual({
+      items: [
+        { path: '/abs/a.txt', exists: true, type: 'file', size: 5 },
+        { path: '/abs/missing.txt', exists: false },
+      ],
+    })
+    expect(readSpy).not.toHaveBeenCalled()
   })
 })
 
