@@ -415,43 +415,29 @@ export function adaptCognitiveWorkflow(
  * @returns Stable prompt text; descriptors contain no executable authority or private reasoning.
  */
 export function renderCognitiveWorkflowGuide(locale: 'en' | 'es' = 'en'): string {
-  const catalog = COGNITIVE_FLOW_CATALOG
-    .map(flow => `- ${flow.id}: ${flow.purpose} Use when: ${flow.useWhen.join('; ')}.`)
-    .join('\n')
+  const catalog = COGNITIVE_FLOW_IDS.join(', ')
   if (locale === 'es') {
     return [
       '<phoenix_cognitive_workflows>',
-      'HARDNESS conoce estos flujos cognitivos y debe seleccionar/componer los necesarios antes de formular el plan de ejecución:',
-      catalog,
-      'Elige el flujo más ligero que preserve la calidad; no uses procesos pesados por ceremonia.',
-      'Los flujos HARDNESS seleccionados son la política de proceso de esta misión. No precargues brainstorming, planificación, revisión u otras skills metodológicas solo porque un catálogo genérico las parezca hacer aplicables; carga skills de proceso únicamente cuando implementen flujos HARDNESS seleccionados.',
-      'Usa fast mode para cambios acotados cosméticos, de redacción, estilo e implementación localizada: haz el cambio seguro mínimo, verifica con evidencia fresca dirigida y escala solo cuando nueva evidencia añada riesgo, alcance, fallo u otro disparador real.',
+      `Flujos HARDNESS disponibles bajo demanda: ${catalog}.`,
+      'Selecciona automáticamente fast, standard o deep con el rubric determinista y usa el flujo más ligero que preserve la calidad; hardness_workflow materializa el plan completo solo cuando sea útil inspeccionarlo o adaptarlo.',
+      'No precargues brainstorming, planificación, revisión ni otras metodologías sin un disparador real.',
       'En depuración encuentra la causa raíz antes de proponer una corrección.',
-      'Paraleliza únicamente trabajo realmente independiente y usa contextos frescos cuando delegues dominios separados.',
-      'Para trabajo complejo o de alto riesgo separa implementación, crítica y juicio independiente.',
-      'Adapta el flujo cuando nueva evidencia invalide la estrategia actual; un fallo fortalece el proceso, no cierra la misión.',
-      'Una obligación futura concreta vuelve la misión persistente y activa autonomous-follow-up; programar o ejecutar el seguimiento sigue perteneciendo al scheduler autorizado.',
-      'Verifica con evidencia fresca antes de DONE y compara el resultado con el objetivo original.',
-      'No expongas cadena de pensamiento privada; registra decisiones, evidencia, artefactos y justificación útil para auditoría.',
-      'La selección de flujo no concede permisos ni autoridad de ejecución: conserva el protocolo HARDNESS de aprobación y verificación.',
+      'Paraleliza únicamente trabajo realmente independiente y usa contextos frescos al delegar dominios separados.',
+      'Adapta el workflow cuando nueva evidencia cambie riesgo, alcance, independencia o fallo; no expongas cadena de pensamiento privada.',
+      'La selección de workflow no concede permisos ni autoridad; la verificación fresca sigue siendo necesaria antes de DONE.',
       '</phoenix_cognitive_workflows>',
     ].join('\n')
   }
   return [
     '<phoenix_cognitive_workflows>',
-    'HARDNESS knows these cognitive flows and must select/compose the necessary ones before formulating the execution plan:',
-    catalog,
-    'Choose the lightest workflow that preserves quality; do not add heavyweight ceremony without a trigger.',
-    'Selected HARDNESS flows are the process policy for this mission. Do not preload brainstorming, planning, review, or other methodology skills merely because a generic skill catalog makes them look applicable; load process skills only when they implement selected HARDNESS flows.',
-    'Use fast mode for bounded cosmetic, wording, styling, and localized implementation changes: make the smallest safe change, run targeted fresh verification, and escalate only when new evidence adds risk, scope, failure, or another real trigger.',
+    `HARDNESS flows available on demand: ${catalog}.`,
+    'Automatically select fast, standard, or deep with the deterministic rubric and choose the lightest workflow that preserves quality; materialize the full plan with hardness_workflow only when inspecting or adapting it adds value.',
+    'Do not preload brainstorming, planning, review, or other methodology without a real trigger.',
     'Find root cause before proposing a debugging fix.',
     'Parallelize only independent work and use fresh contexts when delegating separate domains.',
-    'For high-complexity or high-risk work separate implementation, adversarial critique, and independent judgment.',
-    'Adapt the workflow when new evidence invalidates the current strategy; failure strengthens the process instead of ending the mission.',
-    'A concrete future obligation makes the mission persistent and activates autonomous-follow-up; scheduling or executing that follow-up remains owned by the authorized scheduler.',
-    'Require fresh verification evidence before DONE and compare the outcome with the original objective.',
-    'Do not expose private chain-of-thought; record decisions, evidence, artifacts, and audit-useful rationale instead.',
-    'Workflow selection grants no permission or execution authority; preserve HARDNESS approval and verification gates.',
+    'Adapt the workflow when new evidence changes risk, scope, independence, or failure; Do not expose private chain-of-thought.',
+    'Workflow selection grants no permission or execution authority; fresh verification remains required before DONE.',
     '</phoenix_cognitive_workflows>',
   ].join('\n')
 }

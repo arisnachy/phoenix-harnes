@@ -264,8 +264,9 @@ export function apply(ctx: Context, config: Config): void {
     profiles,
     resolveApiKey,
     auth,
-    refreshModels: (provider, force) =>
-      codexCatalog.refresh(provider, current().providers?.[provider], force),
+    refreshModels: (provider, force) => force === true
+      ? codexCatalog.refresh(provider, current().providers?.[provider], true)
+      : Promise.resolve(codexCatalog.refreshInBackground(provider, current().providers?.[provider])),
     resolveAttachments: () => ctx.get('attachments'),
     onReplayDegrade: ({ provider, model, reason }) => {
       ctx.logger.warn(
@@ -341,7 +342,9 @@ export function apply(ctx: Context, config: Config): void {
       }
     }
 
-    await refresh(true)
+    // Catalog freshness is not a boot prerequisite. Seed from the shipped
+    // fallback immediately and refresh the rotating free list after activation.
+    void refresh(true)
     const timer = setInterval(() => { void refresh() }, 60_000)
     timer.unref()
     return async () => {

@@ -48,6 +48,11 @@ export class ModelDirectory {
   /** Latest operation wins; an older response never overwrites a newer one. */
   private generation = 0
   private disposed = false
+  /** Last complete projected directory; menu opens can reuse it without a Host round-trip. */
+  private cached: SessionModels | undefined
+  private cachedAt = Number.NEGATIVE_INFINITY
+  /** Coalesce mount/open/invalidation bursts into one in-flight directory request. */
+  private inFlight: Promise<SessionModels> | undefined
 
   /**
    * @param sessions - the session wire face (captured from the plugin's root connection).
@@ -63,39 +68,60 @@ export class ModelDirectory {
   ) {}
 
   /**
-   * Refresh the advisory directory (both entries call this on open).
-   * Failure preserves the last good groups and current selection.
-   * @returns the fresh directory value.
+   * Refresh the advisory directory. Ordinary menu opens reuse a short-lived
+   * last-good value; real topology/settings invalidations pass force=true.
+   * Host catalog and Phoenix Local state are read in parallel, and concurrent
+   * callers share one request.
+   * @param options - force bypasses the short freshness window.
+   * @returns the projected directory value.
    */
-  async load(): Promise<SessionModels> {
+  async load(options: { force?: boolean } = {}): Promise<SessionModels> {
     this.assertAvailable()
+    const now = Date.now()
+    if (options.force !== true && this.cached !== undefined && now - this.cachedAt < 30_000) {
+      return structuredClone(this.cached)
+    }
+    if (this.inFlight !== undefined) return this.inFlight
+
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'loading'; s.error = null })
-    const { result } = await this.sessions.models({ sessionId: this.sessionId })
-    if (!result.ok) {
-      if (!this.disposed && generation === this.generation) {
-        this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
+    const operation = (async (): Promise<SessionModels> => {
+      const [{ result }, localState] = await Promise.all([
+        this.sessions.models({ sessionId: this.sessionId }),
+        this.safeLocalModelState(),
+      ])
+      if (!result.ok) {
+        if (!this.disposed && generation === this.generation) {
+          this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
+        }
+        throw new Error(`session.models failed: ${result.error.code}: ${result.error.message}`)
       }
-      throw new Error(`session.models failed: ${result.error.code}: ${result.error.message}`)
-    }
 
-    const localState = await this.safeLocalModelState()
-    const projected = {
-      ...result.value,
-      ...projectPhoenixLocalAvailability(result.value, localState),
-    }
-    if (this.disposed || generation !== this.generation) return projected
+      const projected: SessionModels = {
+        ...result.value,
+        ...projectPhoenixLocalAvailability(result.value, localState),
+      }
+      if (this.disposed || generation !== this.generation) return projected
 
-    const { current, routable, groups, failures } = projected
-    this.store.update((s) => {
-      s.current = current
-      s.routable = routable
-      s.groups = groups
-      s.failures = failures
-      s.status = 'ready'
-      s.error = null
-    })
-    return projected
+      this.cached = structuredClone(projected)
+      this.cachedAt = Date.now()
+      const { current, routable, groups, failures } = projected
+      this.store.update((s) => {
+        s.current = current
+        s.routable = routable
+        s.groups = groups
+        s.failures = failures
+        s.status = 'ready'
+        s.error = null
+      })
+      return projected
+    })()
+    this.inFlight = operation
+    try {
+      return await operation
+    } finally {
+      if (this.inFlight === operation) this.inFlight = undefined
+    }
   }
 
   /**
@@ -143,6 +169,10 @@ export class ModelDirectory {
       s.status = 'ready'
       s.error = null
     })
+    if (this.cached !== undefined) {
+      this.cached = { ...this.cached, current: { ...result.value.selected }, routable: true }
+      this.cachedAt = Date.now()
+    }
   }
 
   /**
@@ -153,6 +183,8 @@ export class ModelDirectory {
   resetConnected(): void {
     if (this.disposed) return
     ++this.generation
+    this.cached = undefined
+    this.cachedAt = Number.NEGATIVE_INFINITY
     this.store.update((s) => {
       s.current = null
       s.routable = null
@@ -162,7 +194,7 @@ export class ModelDirectory {
       s.error = null
     })
     if (!this.available()) return
-    void this.load().catch(() => { /* the next menu open remains the explicit retry surface */ })
+    void this.load({ force: true }).catch(() => { /* the next menu open remains the explicit retry surface */ })
   }
 
   /** Scope teardown: late settlements lose write access to the store. */

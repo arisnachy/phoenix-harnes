@@ -102,34 +102,47 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.localModel = createNodeLocalModelRuntimeManager()
     this.chatGptWeb = createChatGptWebIntegration()
     this.managedMcp = new ManagedMcpController(ctx.loader)
-    void ctx.effect(async () => {
-      try {
-        await this.chatGptWeb.restore()
-      } catch (error: unknown) {
+    void ctx.effect(() => {
+      // Restore is useful but not boot-critical. A slow browser bridge must not
+      // keep the whole Loader tree pending before the chat becomes interactive.
+      void this.chatGptWeb.restore().catch((error: unknown) => {
         ctx.logger.error('chatgpt-web: persisted bridge could not be restored')
         ctx.logger.error(error)
-      }
+      })
       return () => undefined
     }, 'chatgpt-web persisted integration')
     // Cordis owns both loopback resources so reload/unload cannot leave port
     // 17842 occupied or a llama-server child detached from the Host lifecycle.
-    void ctx.effect(async () => {
-      try {
-        const server = await startPhoenixLocalProxy(this.localModel)
-        return async () => {
-          server.closeAllConnections()
-          await new Promise<void>((resolve) => {
-            server.close((error) => {
-              if (error !== undefined) ctx.logger.error(error)
-              resolve()
-            })
+    void ctx.effect(() => {
+      // Bind the lightweight loopback proxy in the background. Local inference
+      // remains fully available, but plugin activation no longer waits on OS
+      // port/process setup before the Web shell can mount.
+      let disposed = false
+      let server: Awaited<ReturnType<typeof startPhoenixLocalProxy>> | undefined
+      const closeServer = async (target: Awaited<ReturnType<typeof startPhoenixLocalProxy>>): Promise<void> => {
+        target.closeAllConnections()
+        await new Promise<void>((resolve) => {
+          target.close((error) => {
+            if (error !== undefined) ctx.logger.error(error)
+            resolve()
           })
-          await (await this.localModel).dispose()
+        })
+      }
+      const startup = startPhoenixLocalProxy(this.localModel).then(async (started) => {
+        if (disposed) {
+          await closeServer(started)
+          return
         }
-      } catch (error: unknown) {
+        server = started
+      }, (error: unknown) => {
         ctx.logger.error('phoenix-local: loopback proxy could not start')
         ctx.logger.error(error)
-        return async () => { await (await this.localModel).dispose() }
+      })
+      return async () => {
+        disposed = true
+        await startup
+        if (server !== undefined) await closeServer(server)
+        await (await this.localModel).dispose()
       }
     }, 'phoenix-local loopback proxy')
   }

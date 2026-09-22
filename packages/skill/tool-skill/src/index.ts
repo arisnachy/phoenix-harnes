@@ -30,7 +30,7 @@ import {
 export const name = 'tool-skill'
 export const inject = ['agents', 'tools', 'skills']
 
-const DEFAULT_CATALOG_DESCRIPTION_MAX_LENGTH = 500
+const DEFAULT_CATALOG_DESCRIPTION_MAX_LENGTH = 180
 /**
  * Durable provider and item records for one published session skill catalog. The catalog is a
  * `catalog`-form context, so it records the entries it published beside the
@@ -288,14 +288,14 @@ function renderCatalogMessage(entries: SkillCatalogSource['entries']): UserMessa
       type: 'text',
       text: [
         '<system-reminder>',
-        'A skill is a reusable set of task-specific instructions. The following skills are available in this session:',
+        'Available on-demand skills (summaries only):',
         '',
         '<available_skills>',
         ...renderCatalogEntries(entries),
         '</available_skills>',
         '',
-        "If the user names a skill, or the task clearly matches a skill's description, call the `skill` tool with the exact skill name before taking task actions. Load all applicable skills, then follow their full instructions. This catalog contains summaries only; do not infer or follow a skill's instructions until it has been loaded.",
-        'A user may also invoke a skill directly; its <skill_content> block then appears in this conversation. Follow it, and do not call the `skill` tool again for that skill.',
+        "Load a full skill body with the `skill` tool only when the user names it or the task clearly matches it. Do not preload skill instructions merely because they are installed.",
+        'If <skill_content> is already present for a skill, follow it without loading it again.',
         '</system-reminder>',
       ].join('\n'),
     }],
@@ -314,8 +314,8 @@ function renderCatalogUpdate(entries: SkillCatalogSource['entries']): UserMessag
       'A user may still invoke a skill directly; its <skill_content> block then appears in this conversation. Follow it, and do not call the `skill` tool for it.',
     ]
     : [
-      'Use only names in this replacement catalog. If the user names a listed skill, or the task clearly matches its description, call the `skill` tool with the exact name before acting.',
-      'A user may also invoke a skill directly; its <skill_content> block then appears in this conversation. Follow it, and do not call the `skill` tool again for that skill.',
+      'Use only names in this replacement catalog. Load a full body with the `skill` tool only when the task actually needs that skill.',
+      'If <skill_content> is already present, follow it without loading that skill again.',
     ]
   return createUserMessage({
     content: [{

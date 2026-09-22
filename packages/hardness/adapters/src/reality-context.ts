@@ -190,8 +190,37 @@ interface RealityAssemblyContext {
       readonly maxTokens?: number
       readonly reasoningEffort?: unknown
     }
-    readonly session: unknown
+    readonly session: {
+      readonly events?: readonly unknown[]
+    }
   }
+}
+
+const REALITY_TASK_CUE = /\b(time|date|timezone|clock|weather|forecast|location|where am i|calendar|schedule|reminder|battery|gpu|device|hardware|network|internet|latency|runtime|provider|quota|authentication|auth|connector|update|hora|fecha|zona horaria|reloj|clima|pronóstico|ubicaci[oó]n|d[oó]nde estoy|calendario|agenda|recordatorio|bater[ií]a|dispositivo|hardware|red|internet|latencia|runtime|proveedor|cuota|autenticaci[oó]n|conector|actualizaci[oó]n)\b/iu
+
+function latestDirectTaskText(assembly: RealityAssemblyContext | undefined): string | undefined {
+  const events = assembly?.agent?.session.events
+  if (events === undefined) return undefined
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = asRecord(events[index])
+    if (event?.type !== 'user/message') continue
+    const data = asRecord(event.data)
+    const source = asRecord(data?.source)
+    if (source?.kind !== 'user' || !Array.isArray(data?.content)) continue
+    const text = data.content.flatMap((part) => {
+      const block = asRecord(part)
+      return typeof block?.text === 'string' ? [block.text] : []
+    }).join(' ').replace(/\s+/gu, ' ').trim()
+    if (text !== '') return text
+  }
+  return undefined
+}
+
+function needsAutomaticRealityContext(assembly: RealityAssemblyContext | undefined): boolean {
+  const task = latestDirectTaskText(assembly)
+  // Direct diagnostics/tests and non-agent callers preserve the full snapshot.
+  if (task === undefined) return true
+  return REALITY_TASK_CUE.test(task)
 }
 
 function finiteNumber(value: string | undefined): number | undefined {
@@ -1068,6 +1097,7 @@ export class RealityContextEngine {
   private browserWeatherKey: string | undefined
   private runtimeServices = cache<RuntimeServiceTelemetry>(null, 'not-probed', 1, 0)
   private timer: ReturnType<typeof setInterval> | undefined
+  private initialTimer: ReturnType<typeof setTimeout> | undefined
   private refreshJob: Promise<void> | undefined
   private runtimeRefreshJob: Promise<void> | undefined
   private browserWeatherJob: Promise<void> | undefined
@@ -1075,13 +1105,24 @@ export class RealityContextEngine {
   constructor(readonly config: RealityContextConfig) {}
 
   start(): void {
-    if (this.timer !== undefined) return
-    void this.refresh()
+    if (this.timer !== undefined || this.initialTimer !== undefined) return
+    // Battery/GPU/activity/network probes can spawn PowerShell and network I/O.
+    // Give the interactive shell a short head start, then keep the exact same
+    // refresh cadence and on-demand refreshNow semantics.
+    this.initialTimer = setTimeout(() => {
+      this.initialTimer = undefined
+      void this.refresh()
+    }, 1_500)
+    this.initialTimer.unref?.()
     this.timer = setInterval(() => { void this.refresh() }, this.config.refreshMs)
     this.timer.unref?.()
   }
 
   stop(): void {
+    if (this.initialTimer !== undefined) {
+      clearTimeout(this.initialTimer)
+      this.initialTimer = undefined
+    }
     if (this.timer === undefined) return
     clearInterval(this.timer)
     this.timer = undefined
@@ -1520,7 +1561,7 @@ export function installRealityContextProjection(
   return systemPrompt.context({
     name: 'hardness:reality-context',
     order: 20,
-    text: context => engine.render(ctx, context),
+    text: context => needsAutomaticRealityContext(context) ? engine.render(ctx, context) : '',
     interpolateVariables: false,
   })
 }
