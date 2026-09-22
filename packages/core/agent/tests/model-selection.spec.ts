@@ -5,6 +5,7 @@ import {
   agentEvents,
   defaultExecutionHandoff,
   installModelSelection,
+  isCodexPlannerModel,
   isConversationalFastPathText,
   jevSelectedModelId,
   type Agent,
@@ -50,7 +51,7 @@ describe('installModelSelection()', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
-      current: { provider: 'openai-codex', model: 'gpt-5.6-sol', reasoningEffort: ReasoningEffortId('max') },
+      current: { provider: 'openai-codex', model: 'gpt-6-sol', reasoningEffort: ReasoningEffortId('max') },
       assembled: undefined,
     }
     const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
@@ -76,12 +77,12 @@ describe('installModelSelection()', () => {
       { turn: 1, step: 1, signal },
       () => Promise.resolve({
         provider: 'openai-codex',
-        model: 'gpt-5.6-sol',
+        model: 'gpt-6-sol',
         reasoningEffort: ReasoningEffortId('max'),
       }),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-luna',
       reasoningEffort: ReasoningEffortId('low'),
     })
 
@@ -89,19 +90,32 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('only provides the default Luna handoff for OpenAI Codex', () => {
+  it('uses premium Codex models as planners and the matching Luna generation at Max as worker', () => {
+    expect(isCodexPlannerModel('gpt-5.6-sol')).toBe(true)
+    expect(isCodexPlannerModel('gpt-6-astra')).toBe(true)
+    expect(isCodexPlannerModel('gpt-6-luna')).toBe(false)
+
     expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-5.6-sol' })).toEqual({
       afterStep: 1,
       selection: {
         provider: 'openai-codex',
         model: 'gpt-5.6-luna',
-        reasoningEffort: ReasoningEffortId('high'),
+        reasoningEffort: ReasoningEffortId('max'),
       },
     })
+    expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-6-astra' })).toEqual({
+      afterStep: 1,
+      selection: {
+        provider: 'openai-codex',
+        model: 'gpt-6-luna',
+        reasoningEffort: ReasoningEffortId('max'),
+      },
+    })
+    expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-6-luna' })).toBeUndefined()
     expect(defaultExecutionHandoff({ provider: 'other', model: 'custom' })).toBeUndefined()
   })
 
-  it('uses a medium first evidence step for explicit tool work, then high for execution', async () => {
+  it('uses a medium first evidence step for Luna tool work, then returns to the selected Max effort', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -146,7 +160,55 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-5.6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('keeps Sol/Astra on the first operational planning step, then hands execution to Luna Max', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'read', description: 'read a file', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: 'gpt-6-astra', reasoningEffort: ReasoningEffortId('high') },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const agent = {
+      session: {
+        events: [
+          { type: 'turn/start', data: { turn: 1 } },
+          {
+            type: 'user/message',
+            data: {
+              source: { kind: 'user' },
+              content: [{ type: 'text', text: 'Arregla router.ts y ejecuta los tests.' }],
+            },
+          },
+        ],
+      },
+    } as unknown as Agent
+    const seed: LlmCallConfig = {
+      provider: 'openai-codex',
+      model: 'gpt-6-astra',
       reasoningEffort: ReasoningEffortId('high'),
+    }
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(seed)
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
