@@ -318,7 +318,7 @@ export function prepareFileAttachment(
   limits: FileAttachmentLimits,
 ): PreparedFileAttachment {
   if (input.data.byteLength === 0) throw new AttachmentError('File is empty.', 'INVALID_FILE')
-  if (input.data.byteLength > limits.maxFileBytes) {
+  if (limits.maxFileBytes !== undefined && input.data.byteLength > limits.maxFileBytes) {
     throw new AttachmentError('File exceeds the configured byte limit.', 'FILE_TOO_LARGE')
   }
   const mediaType = input.mediaType.trim().toLowerCase()
