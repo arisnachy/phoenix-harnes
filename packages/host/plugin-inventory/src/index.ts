@@ -215,7 +215,10 @@ export class PluginInventoryGateway extends TypertRemoteService {
     return this.managedMcp.install(request)
   }
 
-  /** Return Jev setup state without exposing the stored API key. */
+  /**
+   * Return Jev setup state without exposing the stored API key.
+   * @returns Secret-free configured, credential, and runtime status.
+   */
   @Remote('jevMcpState')
   async jevMcpState(): Promise<JevMcpSnapshot> {
     const credentials = (this.ctx.get as (name: string) => unknown)('credentials') as
@@ -243,6 +246,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
   /**
    * Store the Jev key in PHOENIX credentials and activate the pinned optional MCP.
    * The secret never enters the managed loader overlay.
+   * @param request - Jev setup request containing the user-supplied API key.
+   * @returns Installation receipt for the pinned Jev connector.
    */
   @Remote('configureJevMcp')
   async configureJevMcp(request: JevMcpConfigureRequest): Promise<McpRegistryInstallReceipt> {
