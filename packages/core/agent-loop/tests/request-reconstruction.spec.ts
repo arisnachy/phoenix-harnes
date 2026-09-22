@@ -111,6 +111,31 @@ describe('request stability across the loop', () => {
     expectPrefixExtension(adapter.requests[0]!, adapter.requests[1]!)
   })
 
+  it('keeps contextual acknowledgements on the full-history, tool-capable path', async () => {
+    const adapter = new MockAdapter([
+      textResponse('Puedo mostrarte el adelanto ahora. ¿Quieres que lo haga?'),
+      textResponse('Aquí tienes el adelanto.'),
+    ])
+    const ctx = await harness(adapter)
+    registerEcho(ctx)
+    const agent = ctx.agentLoop.create(SessionId('contextual-ack'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'muéstrame qué puedes hacer')
+    await waitForIdle(ctx, agent)
+    send(agent, 'dale')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(2)
+    expect(adapter.requests[0]?.tools.length).toBeGreaterThan(0)
+    expect(adapter.requests[1]?.tools).toEqual(adapter.requests[0]?.tools)
+    expectPrefixExtension(adapter.requests[0]!, adapter.requests[1]!)
+    expect(adapter.requests[1]?.messages.some(message =>
+      message.source.kind === 'model'
+      && message.content.some(block =>
+        block.type === 'text' && block.text.includes('¿Quieres que lo haga?')),
+    )).toBe(true)
+  })
+
   it('logs adapter defaults, supports per-turn effort changes, and restores the effective value', async () => {
     const reasoning = {
       efforts: [
