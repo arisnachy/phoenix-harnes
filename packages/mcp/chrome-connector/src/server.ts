@@ -15,7 +15,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 const DEFAULT_PORTS = [9222, 9223, 9224]
-const CDP_READY_TIMEOUT_MS = 12_000
+const CDP_READY_TIMEOUT_MS = 6_000
 let managedBrowser: ChildProcess | undefined
 let managedProfileDir: string | undefined
 let managedEndpoint: string | undefined
@@ -181,10 +181,17 @@ async function endpoint(): Promise<string> {
     await json(`${configured}/json/version`)
     return configured
   }
-  for (const port of DEFAULT_PORTS) {
+  const discovered = await Promise.all(DEFAULT_PORTS.map(async (port) => {
     const candidate = `http://127.0.0.1:${port}`
-    try { await json(`${candidate}/json/version`); return candidate } catch { /* try next port */ }
-  }
+    try {
+      await json(`${candidate}/json/version`)
+      return candidate
+    } catch {
+      return undefined
+    }
+  }))
+  const existing = discovered.find((candidate): candidate is string => candidate !== undefined)
+  if (existing !== undefined) return existing
   if (managedEndpoint) {
     try { await json(`${managedEndpoint}/json/version`); return managedEndpoint } catch { cleanupManagedBrowser() }
   }
