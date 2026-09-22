@@ -217,9 +217,10 @@ function defaultConversationalSelection(selection: ModelSelection | undefined): 
 }
 
 /**
- * Low-latency first action for explicit operational Codex turns. The first
- * evidence-gathering step uses Luna/medium; after a tool result the ordinary
- * execution handoff raises the worker to Luna/high.
+ * Low-latency first action for explicit operational Codex turns that already
+ * selected Luna. Premium Sol/Astra/Terra selections keep their first planning
+ * step; Luna-only turns use medium for first evidence and then resume the
+ * person's selected effort.
  */
 function defaultToolAcquisitionSelection(selection: ModelSelection | undefined): ModelSelection | undefined {
   if (selection?.provider !== 'openai-codex') return undefined
@@ -312,10 +313,14 @@ export function installModelSelection(
       jevTurn = payload.turn
       jevRoutes.clear()
     }
+    const workerGeneration = String(fallback.reasoningEffort) === 'max'
+      ? codexLunaGeneration(fallback.model)
+      : undefined
     const cacheKey = fallback.model
     const cached = jevRoutes.get(cacheKey)
     if (cached !== undefined) {
       if (cached === fallback.model) return fallback
+      if (workerGeneration !== undefined) return { ...fallback, model: cached }
       const { reasoningEffort: _effort, ...withoutEffort } = fallback
       return { ...withoutEffort, model: cached }
     }
@@ -324,9 +329,6 @@ export function installModelSelection(
     if (catalog === undefined) return fallback
     try {
       const listed = await catalog.listModels(fallback.provider)
-      const workerGeneration = String(fallback.reasoningEffort) === 'max'
-        ? codexLunaGeneration(fallback.model)
-        : undefined
       const candidates = new Map<string, SameFamilyModelInfo>()
       candidates.set(fallback.model, {
         provider: fallback.provider,
