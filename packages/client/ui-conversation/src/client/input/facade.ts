@@ -243,6 +243,9 @@ export class SessionInputShell implements SessionInput {
       this.notify('error', this.deps.commandImages.unsupportedNotice(before.claim?.token ?? before.draft))
       return
     }
+    // Sending is a cold path: commit the last debounced draft before
+    // admission so a crash/reload cannot resurrect an older persisted value.
+    this.flushMirror()
     this.run(this.core.dispatch({ type: 'enter', mode }))
     const phase = this.snapshot.phase
     if (phase === 'adjudicating' || phase === 'submitting') {
