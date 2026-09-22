@@ -72,6 +72,13 @@ interface InternalToolRegistry {
   get(name: string, scope?: Agent): InternalRoutingTool | undefined
 }
 
+interface JevRoutePayload {
+  readonly agent: Agent
+  readonly turn: number
+  readonly step: number
+  readonly signal: AbortSignal
+}
+
 function service<T>(ctx: Context, name: string): T | undefined {
   return (ctx.get as unknown as (key: string) => T | undefined)(name)
 }
@@ -206,12 +213,7 @@ export function installModelSelection(
   const jevRoutes = new Map<string, string>()
 
   async function routeWithJev(
-    payload: Parameters<Context['waterfall']>[2] extends never ? never : {
-      readonly agent: Agent
-      readonly turn: number
-      readonly step: number
-      readonly signal: AbortSignal
-    },
+    payload: JevRoutePayload,
     fallback: LlmCallConfig,
   ): Promise<LlmCallConfig> {
     if (fallback.provider !== 'openai-codex' || payload.signal.aborted) return fallback
