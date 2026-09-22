@@ -274,10 +274,10 @@ describe('registration', () => {
     expect(ctx.tools.get('grep')?.timeoutMs).toBe(5000)
   })
 
-  it('defaults the timeout budget to 60 seconds for recursive searches', async () => {
+  it('uses short per-tool discovery budgets by default', async () => {
     const { ctx } = await setup()
-    expect(ctx.tools.get('glob')?.timeoutMs).toBe(60_000)
-    expect(ctx.tools.get('grep')?.timeoutMs).toBe(60_000)
+    expect(ctx.tools.get('glob')?.timeoutMs).toBe(8_000)
+    expect(ctx.tools.get('grep')?.timeoutMs).toBe(15_000)
   })
 
   it('describes the modification-time head when over-cap sampling is disabled', async () => {
@@ -307,6 +307,8 @@ describe('config validation', () => {
     ['rawOutputMaxBytes', { rawOutputMaxBytes: 0 }],
     ['graceMs', { graceMs: 0 }],
     ['stderrMaxBytes', { stderrMaxBytes: -1 }],
+    ['globTimeoutMs', { globTimeoutMs: 0 }],
+    ['grepTimeoutMs', { grepTimeoutMs: -1 }],
     ['timeoutMs', { timeoutMs: -100 }],
   ] as const)('rejects a non-positive or fractional %s at load', async (name, config) => {
     const ctx = new Context()
@@ -334,7 +336,6 @@ describe('command construction (plain argv)', () => {
       '--files',
       '--glob=**/*.ts',
       '--sort=modified',
-      '--no-ignore',
       '--hidden',
       '--glob=!**/.git', '--glob=!**/.git/**',
       '--glob=!**/.svn', '--glob=!**/.svn/**',
@@ -345,8 +346,13 @@ describe('command construction (plain argv)', () => {
     ])
   })
 
+  it('glob: ignored files are opt-in, not a default full-tree traversal', () => {
+    expect(buildGlobCommand({ pattern: '**/*.ts', includeIgnored: true })).toContain('--no-ignore')
+    expect(buildGlobCommand({ pattern: '**/*.ts' })).not.toContain('--no-ignore')
+  })
+
   it('glob: the search root rides behind -- as a plain element', () => {
-    expect(buildGlobCommand({ pattern: '*.md', path: 'docs dir' })).toEqual(['--files', '--glob=*.md', '--sort=modified', '--no-ignore', '--hidden',
+    expect(buildGlobCommand({ pattern: '*.md', path: 'docs dir' })).toEqual(['--files', '--glob=*.md', '--sort=modified', '--hidden',
       '--glob=!**/.git', '--glob=!**/.git/**',
       '--glob=!**/.svn', '--glob=!**/.svn/**',
       '--glob=!**/.hg', '--glob=!**/.hg/**',
@@ -751,7 +757,7 @@ describe('glob results', () => {
     subprocess.handler = () => runResult('sub/a.ts\n')
     const result = await call(ctx, 'glob', { pattern: '*.ts', path: 'sub' })
     expect(result.isError).toBe(false)
-    expect(subprocess.spawns[0]?.argv).toEqual([rgPath, '--no-config', '--files', '--glob=*.ts', '--sort=modified', '--no-ignore', '--hidden',
+    expect(subprocess.spawns[0]?.argv).toEqual([rgPath, '--no-config', '--files', '--glob=*.ts', '--sort=modified', '--hidden',
       '--glob=!**/.git', '--glob=!**/.git/**',
       '--glob=!**/.svn', '--glob=!**/.svn/**',
       '--glob=!**/.hg', '--glob=!**/.hg/**',
