@@ -33,8 +33,11 @@ interface ManagedMcpConfig {
   }
 }
 
+/** Stable local MCP namespace for the pinned Jev connector. */
 export const JEV_MCP_SERVER_NAME = 'jev'
+/** Official pinned Jev Streamable HTTP MCP endpoint. */
 export const JEV_MCP_URL = 'https://www.jevai.org/api/mcp'
+/** Phoenix credential reference that holds the Jev API key outside loader config. */
 export const JEV_API_KEY_REF = 'JEV_API_KEY'
 
 interface ManagedMcpRow {
@@ -202,6 +205,7 @@ export class ManagedMcpController {
   /**
    * Configure the pinned Jev MCP without ever persisting its API key.
    * The managed overlay contains only JEV_API_KEY as a credential reference.
+   * @returns Installation receipt for the active or already-installed Jev connector.
    */
   async configureJev(): Promise<McpRegistryInstallReceipt> {
     const config: ManagedMcpConfig = {
