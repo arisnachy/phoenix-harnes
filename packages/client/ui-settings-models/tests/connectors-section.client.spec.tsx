@@ -316,6 +316,42 @@ describe('connectors settings section', () => {
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy()
   })
 
+  it('routes Jev through its pinned setup instead of the generic MCP Registry installer', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const configureJev = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: { entryId: 'jev-managed', serverName: 'jev', url: 'https://www.jevai.org/api/mcp' },
+    }))
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      jevState: vi.fn(async () => ({ configured: false, credentialConfigured: false })),
+      configureJev,
+      install: vi.fn(),
+      search: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    const search = screen.getByRole('searchbox', { name: 'Search connectors' })
+    fireEvent.change(search, { target: { value: 'jev' } })
+
+    expect(await screen.findByText('Jev')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Configure' }))
+    expect(await screen.findByText('Configure Jev MCP')).toBeTruthy()
+    expect(mcpRegistry.search).not.toHaveBeenCalled()
+    expect(mcpRegistry.install).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('Jev API key'), { target: { value: 'jev-test-api-key' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save & connect' }))
+    await waitFor(() => {
+      expect(configureJev).toHaveBeenCalledWith({ apiKey: 'jev-test-api-key' })
+    })
+    expect(mcpRegistry.install).not.toHaveBeenCalled()
+  })
+
   it('searches the Official MCP Registry only after the user asks for an unconnected connector', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
