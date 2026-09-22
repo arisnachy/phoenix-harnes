@@ -5,12 +5,37 @@ import {
   agentEvents,
   defaultExecutionHandoff,
   installModelSelection,
+  jevSelectedModelId,
   type Agent,
   type ModelSelectionRef,
 } from '../src/index.ts'
 import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 describe('installModelSelection()', () => {
+  it('accepts only an explicit Jev choice from the supplied same-family candidates', () => {
+    const candidates = ['gpt-5.6-sol', 'gpt-5.6-luna']
+    expect(jevSelectedModelId({
+      structuredContent: {
+        data: {
+          result: { selected_model: 'gpt-5.6-luna' },
+        },
+      },
+    }, candidates)).toBe('gpt-5.6-luna')
+    expect(jevSelectedModelId({
+      structuredContent: {
+        data: {
+          result: { selected_model: 'claude-sonnet' },
+        },
+      },
+    }, candidates)).toBeUndefined()
+    expect(jevSelectedModelId({
+      probabilities: {
+        'gpt-5.6-sol': 0.1,
+        'gpt-5.6-luna': 0.9,
+      },
+    }, candidates)).toBeUndefined()
+  })
+
   it('only provides the default Luna handoff for OpenAI Codex', () => {
     expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-5.6-sol' })).toEqual({
       afterStep: 1,
