@@ -107,7 +107,7 @@ export { createHardnessTool } from './hardness-tool.ts'
 export { createPhoenixVisualizerTool } from './visualize-tool.ts'
 export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 export { installOrdinaryCompletionJudgeBridge, reviewOrdinaryCompletion } from './ordinary-completion-judge.ts'
-export type { OrdinaryCompletionJudgeDecision } from './ordinary-completion-judge.ts'
+export type { OrdinaryCompletionJudgeDecision, OrdinaryRepairAction } from './ordinary-completion-judge.ts'
 export { createConnectorListTool } from './connector-list-tool.ts'
 export { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 export { createConnectorInstallTool } from './connector-install-tool.ts'
@@ -136,6 +136,8 @@ export interface Config {
   judgeOrdinaryMutations?: boolean
   /** Maximum independent ordinary-task judge passes before deterministic gates take over. */
   maxOrdinaryJudgePasses?: number
+  /** Maximum output-token budget for one ordinary independent judge activation. */
+  judgeMaxTokens?: number
   /** Durable proactive-task ledger. Empty/omitted uses ~/.dsh/phoenix-tasks.json; :memory: is test-only. */
   taskLedgerPath?: string
   /** How often the host checks for due scheduled work. */
@@ -152,10 +154,11 @@ export interface Config {
 
 /** Schemastery validation for mission and durable proactivity settings. */
 export const Config: z<Config> = z.object({
-  judgeProvider: z.string().default('spawn'),
+  judgeProvider: z.string().default('judge-spawn'),
   modelTools: z.boolean().default(true),
   judgeOrdinaryMutations: z.boolean().default(true),
   maxOrdinaryJudgePasses: z.number().step(1).min(1).max(3).default(2),
+  judgeMaxTokens: z.number().step(1).min(512).max(16_384).default(4096),
   taskLedgerPath: z.string().default(''),
   taskPollMs: z.number().default(15_000),
   privateWorkProvider: z.string().default('spawn'),
@@ -266,8 +269,9 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       if (subagents !== undefined && (config.judgeOrdinaryMutations ?? true)) {
         disposers.push(installOrdinaryCompletionJudgeBridge(ctx, {
           subagents,
-          provider: config.judgeProvider?.trim() || 'spawn',
+          provider: config.judgeProvider?.trim() || 'judge-spawn',
           maxPasses: config.maxOrdinaryJudgePasses ?? 2,
+          maxTokens: config.judgeMaxTokens ?? 4096,
         }))
       }
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))

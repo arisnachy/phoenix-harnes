@@ -433,6 +433,15 @@
       config:
         providerName: spawn
 
+    # Fresh independent reviewer: same structured subagent contract, but no
+    # writable Git worktree and no inherited PHOENIX prompt/context payload.
+    - id: subagent-judge-in-process
+      name: '@phoenix-ai/dsh-subagent-spawn-in-process'
+      config:
+        providerName: judge-spawn
+        worktreeIsolation: false
+        reviewIsolation: true
+
     - id: subagent-fork-in-process
       name: '@phoenix-ai/dsh-subagent-fork-in-process'
       config:
@@ -521,7 +530,7 @@
         # A goal cannot enter complete until a fresh read-only structured judge
         # independently approves the whole objective.
         requireJudge: true
-        judgeProvider: spawn
+        judgeProvider: judge-spawn
 
     # Optional, LAN-only Home Assistant integration. It is disabled unless an
     # operator supplies a private endpoint and both explicit entity/service
@@ -621,8 +630,9 @@
       # pump/recovery/RPC and shared capability runtime without leaking those
       # tools into every agent, including `minimal`.
       config:
-        judgeProvider: spawn
+        judgeProvider: judge-spawn
         modelTools: false
+        judgeMaxTokens: 4096
 
     # The deployment persona is a deployment choice; plan-mode and tool plugins own
     # their own prompt sections.
