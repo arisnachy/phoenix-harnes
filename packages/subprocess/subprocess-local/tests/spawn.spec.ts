@@ -776,10 +776,12 @@ describe('coverage seams', () => {
   it('taskkillProcessTree ignores non-positive pids and contains a missing binary', () => {
     expect(() => { taskkillProcessTree(-1) }).not.toThrow()
     expect(() => { taskkillProcessTree(0) }).not.toThrow()
-    // On POSIX there is no taskkill; spawnSync reports the failure in its
-    // result and the function stays silent — the same containment Windows
-    // relies on for an already-absent tree.
+    // On POSIX there is no taskkill; the asynchronous spawn reports ENOENT
+    // through its contained error listener. The call itself must stay silent
+    // and, critically, must never synchronously wait on OS process teardown.
+    const started = performance.now()
     expect(() => { taskkillProcessTree(2 ** 30) }).not.toThrow()
+    expect(performance.now() - started).toBeLessThan(250)
   })
 
   it('covers the injected POSIX group paths on any host', async () => {
