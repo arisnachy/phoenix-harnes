@@ -61,7 +61,7 @@ import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoen
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
-import { CodexLiveCatalog } from './codex-live-catalog.ts'
+import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
 import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
@@ -266,6 +266,8 @@ export function apply(ctx: Context, config: Config): void {
     auth,
     refreshModels: (provider, force) =>
       codexCatalog.refresh(provider, current().providers?.[provider], force),
+    reasoningForModel: (provider, model) =>
+      provider === CODEX_PROVIDER ? codexCatalog.reasoningForModel(model) : undefined,
     resolveAttachments: () => ctx.get('attachments'),
     onReplayDegrade: ({ provider, model, reason }) => {
       ctx.logger.warn(
