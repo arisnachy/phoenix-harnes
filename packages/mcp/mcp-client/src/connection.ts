@@ -160,6 +160,7 @@ export interface ConnectionHandle {
  * @param config - Resolved plugin config selecting the transport and server identity.
  * @param policy - Resolved reconnect policy from {@link resolveReconnectPolicy}.
  * @param lifecycle - Optional model-safe state publisher for the connector registry.
+ * @param transportOptions - Optional generation-scoped auth resolvers and transport hooks.
  * @returns Handle with a `ready` promise for startup-await and a `dispose` for teardown.
  */
 export function startConnection(
@@ -332,7 +333,15 @@ export function startConnection(
       },
     )
     try {
-      await generation.connect(createTransport(config, transportOptions))
+      let generationTransportOptions = transportOptions
+      if (config.transport === 'streamable-http' && config.bearerTokenRef !== undefined) {
+        const token = await transportOptions?.resolveBearerToken?.(config.bearerTokenRef)
+        generationTransportOptions = {
+          ...transportOptions,
+          ...(token === undefined ? {} : { bearerToken: token }),
+        }
+      }
+      await generation.connect(createTransport(config, generationTransportOptions))
       if (hasClosed()) {
         attemptSettled = true
         generationDown(generation, { status: 'failed', reasonCode: 'connection-failed' })

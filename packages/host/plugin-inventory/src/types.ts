@@ -117,6 +117,19 @@ export interface McpRegistryInstallReceipt {
   readonly connector: ManagedMcpConnector
 }
 
+/** Secret-bearing Jev setup request accepted only by the trusted Host remote. */
+export interface JevMcpConfigureRequest {
+  readonly apiKey: string
+}
+
+/** Secret-free Jev setup and runtime projection for Settings. */
+export interface JevMcpSnapshot {
+  readonly configured: boolean
+  readonly credentialConfigured: boolean
+  readonly status?: McpConnectorRuntimeEntry['status']
+  readonly reasonCode?: McpConnectorRuntimeEntry['reasonCode']
+}
+
 /** Stable updater lifecycle states projected to trusted Web clients. */
 export type PhoenixUpdateStatus =
   | 'idle'

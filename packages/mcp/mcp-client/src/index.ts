@@ -17,7 +17,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import type { AuthorizationService } from '@phoenix-ai/dsh-authorization'
-import type { CredentialProvider } from '@phoenix-ai/dsh-credentials'
+import { credentialRef, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
 import { McpOAuthController } from './oauth.ts'
@@ -100,6 +100,12 @@ export interface StreamableHttpConfig {
   url: string
   /** Additional headers attached to MCP requests. */
   headers: Record<string, string>
+  /**
+   * Optional PHOENIX credential reference used as a Bearer token.
+   * The persisted MCP config stores only the reference name; the secret is
+   * resolved by the credential service when a transport generation connects.
+   */
+  bearerTokenRef?: string
   /** Whether to attach the host-managed OAuth provider when available. */
   oauth?: boolean
   /** Per-tool-call timeout in milliseconds. */
@@ -141,6 +147,7 @@ export const Config = z.union([
     serverName: z.string().required().pattern(SERVER_NAME_PATTERN),
     url: z.string().required(),
     headers: z.dict(String).default({}),
+    bearerTokenRef: z.string(),
     oauth: z.boolean().default(true),
     toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
     failOnStartupError: z.boolean().default(false),
@@ -202,9 +209,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // the transport seam. Keeping the lookup optional preserves minimal test and
   // embedded compositions while the base profile mounts the shared service.
   const mcpConnectors = ctx.get('mcpConnectors')
+  let requestReconnect: (() => void) | undefined
   const registration = mcpConnectors?.register({
     serverName: config.serverName,
     transport: config.transport,
+    reconnect: () => { requestReconnect?.() },
   })
 
   // The supervisor owns the client/transport generations, the reconnect
@@ -224,8 +233,18 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       }),
     }
   }
+  if (config.transport === 'streamable-http' && config.bearerTokenRef !== undefined) {
+    const ref = credentialRef(config.bearerTokenRef)
+    if (credentials !== undefined) {
+      transportOptions = {
+        ...transportOptions,
+        resolveBearerToken: async () => (await credentials.resolve(ref))?.value,
+      }
+    }
+  }
 
   const connection = startConnection(ctx, config, reconnect, registration, transportOptions)
+  requestReconnect = connection.reconnect
 
   if (oauthController !== undefined && authorization !== undefined && credentials !== undefined) {
     const controller = oauthController

@@ -19,9 +19,15 @@ import {
   type LocalModelRuntimeSnapshot,
 } from './local-model/index.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
-import { ManagedMcpController } from './mcp-managed.ts'
+import {
+  JEV_API_KEY_REF,
+  JEV_MCP_SERVER_NAME,
+  ManagedMcpController,
+} from './mcp-managed.ts'
 import type {
   ChatGptWebSnapshot,
+  JevMcpConfigureRequest,
+  JevMcpSnapshot,
   McpConnectorHubSnapshot,
   McpConnectorRuntimeEntry,
   McpRegistryInstallReceipt,
@@ -207,6 +213,61 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('installMcpRegistryServer')
   async installMcpRegistryServer(request: McpRegistryInstallRequest): Promise<McpRegistryInstallReceipt> {
     return this.managedMcp.install(request)
+  }
+
+  /**
+   * Return Jev setup state without exposing the stored API key.
+   * @returns Secret-free configured, credential, and runtime status.
+   */
+  @Remote('jevMcpState')
+  async jevMcpState(): Promise<JevMcpSnapshot> {
+    const credentials = (this.ctx.get as (name: string) => unknown)('credentials') as
+      | { describe(ref: string): Promise<{ configured: boolean }> }
+      | undefined
+    const credentialConfigured = credentials === undefined
+      ? false
+      : (await credentials.describe(JEV_API_KEY_REF)).configured
+    const managed = await this.managedMcp.snapshot()
+    const configured = managed.some(connector => connector.serverName === JEV_MCP_SERVER_NAME)
+    const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { list(): readonly McpConnectorRuntimeEntry[] }
+      | undefined
+    const runtime = registry?.list().find(entry => entry.serverName === JEV_MCP_SERVER_NAME)
+    return {
+      configured,
+      credentialConfigured,
+      ...(runtime === undefined ? {} : {
+        status: runtime.status,
+        ...(runtime.reasonCode === undefined ? {} : { reasonCode: runtime.reasonCode }),
+      }),
+    }
+  }
+
+  /**
+   * Store the Jev key in PHOENIX credentials and activate the pinned optional MCP.
+   * The secret never enters the managed loader overlay.
+   * @param request - Jev setup request containing the user-supplied API key.
+   * @returns Installation receipt for the pinned Jev connector.
+   */
+  @Remote('configureJevMcp')
+  async configureJevMcp(request: JevMcpConfigureRequest): Promise<McpRegistryInstallReceipt> {
+    const apiKey = request.apiKey.trim()
+    if (apiKey.length < 8) throw new Error('Jev API key is missing or too short')
+    const credentials = (this.ctx.get as (name: string) => unknown)('credentials') as
+      | { set(ref: string, value: string): Promise<void> }
+      | undefined
+    if (credentials === undefined) throw new Error('PHOENIX credential storage is unavailable')
+    await credentials.set(JEV_API_KEY_REF, apiKey)
+    const receipt = await this.managedMcp.configureJev()
+    const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { reconnect(serverName: string): boolean }
+      | undefined
+    // A prior bad/expired Jev key leaves the optional connector parked in
+    // auth-required. Saving a replacement must retry immediately rather than
+    // forcing a Host restart. New installs may still be in their first connect;
+    // reconnect() is intentionally a no-op while a generation is active.
+    registry?.reconnect(JEV_MCP_SERVER_NAME)
+    return receipt
   }
 
   /**

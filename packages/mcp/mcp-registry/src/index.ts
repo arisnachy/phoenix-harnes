@@ -44,11 +44,14 @@ export interface McpConnectorRegistration {
 export interface McpConnectorRegistrationInput {
   readonly serverName: string
   readonly transport: McpConnectorTransport
+  /** Optional same-process recovery hook; never exposed by {@link list}. */
+  readonly reconnect?: () => void
 }
 
 interface MutableEntry {
   readonly serverName: string
   readonly transport: McpConnectorTransport
+  readonly reconnect?: () => void
   status: McpConnectorStatus
   toolNames: string[]
   reasonCode?: McpConnectorReasonCode
@@ -77,6 +80,7 @@ export class McpConnectorRegistry extends Service {
     const entry: MutableEntry = {
       serverName: input.serverName,
       transport: input.transport,
+      ...(input.reconnect === undefined ? {} : { reconnect: input.reconnect }),
       status: 'starting',
       toolNames: [],
     }
@@ -101,6 +105,20 @@ export class McpConnectorRegistry extends Service {
       },
       dispose,
     }
+  }
+
+  /**
+   * Request an immediate reconnect for one registered server.
+   * This is a same-process control seam: the callback itself is never returned
+   * by {@link list}, so model/browser projections remain secret-free.
+   * @param serverName - Stable MCP namespace to reconnect.
+   * @returns true when a live registration accepted the request.
+   */
+  reconnect(serverName: string): boolean {
+    const entry = this.entries.get(serverName)
+    if (entry?.reconnect === undefined) return false
+    entry.reconnect()
+    return true
   }
 
   /**

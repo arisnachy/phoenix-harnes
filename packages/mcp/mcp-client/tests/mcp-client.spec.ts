@@ -1274,7 +1274,7 @@ describe('createTransport', () => {
     expect(repairPhoenixStdioProxyArgs([missing])).toEqual([missing])
   })
 
-  it('creates StdioClientTransport for stdio config', () => {
+  it('creates StdioClientTransport for stdio config', async () => {
     const config: Config = {
       transport: 'stdio',
       serverName: 'srv',
@@ -1285,13 +1285,13 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 60_000,
       failOnStartupError: false,
     }
-    const transport = createTransport(config)
+    const transport = await createTransport(config)
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
   })
 
-  it('creates StreamableHTTPClientTransport for http config without headers', () => {
+  it('creates StreamableHTTPClientTransport for http config without headers', async () => {
     const config: Config = {
       transport: 'streamable-http',
       serverName: 'srv',
@@ -1300,13 +1300,13 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 60_000,
       failOnStartupError: false,
     }
-    const transport = createTransport(config)
+    const transport = await createTransport(config)
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
   })
 
-  it('creates StreamableHTTPClientTransport for http config with headers', () => {
+  it('creates StreamableHTTPClientTransport for http config with headers', async () => {
     const config: Config = {
       transport: 'streamable-http',
       serverName: 'srv',
@@ -1315,13 +1315,13 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 60_000,
       failOnStartupError: false,
     }
-    const transport = createTransport(config)
+    const transport = await createTransport(config)
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
   })
 
-  it('passes an OAuth provider to StreamableHTTPClientTransport', () => {
+  it('passes an OAuth provider to StreamableHTTPClientTransport', async () => {
     const config: Config = {
       transport: 'streamable-http',
       serverName: 'srv',
@@ -1347,7 +1347,7 @@ describe('createTransport', () => {
       codeVerifier: () => 'verifier',
     } satisfies OAuthClientProvider
 
-    const transport = createTransport(config, { authProvider: provider })
+    const transport = await createTransport(config, { authProvider: provider })
 
     expect(transport).toHaveProperty('_authProvider', provider)
   })
@@ -1368,7 +1368,7 @@ describe('createTransport', () => {
     expect(() => createTransport(config)).toThrow(/MCP endpoint|https|credentials/)
   })
 
-  it('scrubs sensitive env vars and forwards the rest', () => {
+  it('scrubs sensitive env vars and forwards the rest', async () => {
     const original = { ...process.env }
     try {
       process.env.SAFE_VAR = 'kept'
@@ -1388,7 +1388,7 @@ describe('createTransport', () => {
       }
       // StdioClientTransport keeps its env private; the observable contract is
       // that createTransport(config) returns a transport without throwing.
-      const transport = createTransport(config)
+      const transport = await createTransport(config)
       expect(transport).toBeDefined()
     } finally {
       delete process.env.SAFE_VAR
@@ -1401,7 +1401,7 @@ describe('createTransport', () => {
     }
   })
 
-  it('merges explicit env on top of scrubbed ambient env', () => {
+  it('merges explicit env on top of scrubbed ambient env', async () => {
     const config: Config = {
       transport: 'stdio',
       serverName: 'srv',
@@ -1412,8 +1412,44 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 60_000,
       failOnStartupError: false,
     }
-    const transport = createTransport(config)
+    const transport = await createTransport(config)
     expect(transport).toBeDefined()
+  })
+
+  it('accepts one already-resolved Bearer token without putting the secret in connector config', () => {
+    const config: Config = {
+      transport: 'streamable-http',
+      serverName: 'jev',
+      url: 'https://www.jevai.org/api/mcp',
+      headers: {},
+      bearerTokenRef: 'JEV_API_KEY',
+      oauth: false,
+      toolCallTimeoutMs: 1_800,
+      failOnStartupError: false,
+    }
+    const transport = createTransport(config, { bearerToken: 'jev-secret' })
+    expect(transport).toBeDefined()
+    expect(JSON.stringify(config)).not.toContain('jev-secret')
+  })
+
+  it('classifies a missing resolved Bearer credential as authorization-required input', () => {
+    const config: Config = {
+      transport: 'streamable-http',
+      serverName: 'jev',
+      url: 'https://www.jevai.org/api/mcp',
+      headers: {},
+      bearerTokenRef: 'JEV_API_KEY',
+      oauth: false,
+      toolCallTimeoutMs: 1_800,
+      failOnStartupError: false,
+    }
+    let thrown: unknown
+    try {
+      createTransport(config)
+    } catch (error: unknown) {
+      thrown = error
+    }
+    expect(thrown).toMatchObject({ status: 401 })
   })
 })
 

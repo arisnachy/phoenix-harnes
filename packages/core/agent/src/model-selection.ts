@@ -4,7 +4,8 @@
  */
 
 import type { Context } from '@phoenix-ai/cordis'
-import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
+import { CallId, ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
+import type { Agent } from './runtime-types.ts'
 
 /** Complete provider, model, and optional reasoning effort selected for one live Agent. */
 export interface ModelSelection {
@@ -37,6 +38,88 @@ export interface ModelSelectionHandoff {
 /** Re-resolve the execution handoff from the model currently selected for this step. */
 type ModelSelectionHandoffResolver = (selection: ModelSelection | undefined) => ModelSelectionHandoff | undefined
 
+
+const JEV_MODEL_ROUTE_TOOL = 'mcp__jev__jev_route_model'
+const JEV_FAILURE_THRESHOLD = 3
+const JEV_CIRCUIT_OPEN_MS = 5 * 60_000
+const JEV_MAX_TASK_CHARS = 4_000
+const JEV_MAX_CANDIDATES = 10
+
+interface SameFamilyModelInfo {
+  readonly provider: string
+  readonly id: string
+  readonly name: string
+  readonly description?: string
+}
+
+interface SameFamilyCatalog {
+  listModels(provider: string): Promise<readonly SameFamilyModelInfo[]>
+}
+
+interface InternalRoutingTool {
+  execute(args: unknown, exec: {
+    readonly callId: ReturnType<typeof CallId>
+    readonly rootCallId: ReturnType<typeof CallId>
+    readonly name: string
+    readonly arguments: unknown
+    readonly agent: Agent
+    readonly signal: AbortSignal
+    deferContext(context: never): void
+    concludeTurn(): void
+  }): Promise<unknown>
+}
+
+interface InternalToolRegistry {
+  get(name: string, scope?: Agent): InternalRoutingTool | undefined
+}
+
+interface JevRoutePayload {
+  readonly agent: Agent
+  readonly turn: number
+  readonly step: number
+  readonly signal: AbortSignal
+}
+
+function service<T>(ctx: Context, name: string): T | undefined {
+  return (ctx.get as unknown as (key: string) => T | undefined)(name)
+}
+
+function selectedCandidateId(value: unknown, allowed: ReadonlySet<string>): string | undefined {
+  if (typeof value === 'string') return allowed.has(value) ? value : undefined
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const selected = selectedCandidateId(item, allowed)
+      if (selected !== undefined) return selected
+    }
+    return undefined
+  }
+  if (typeof value !== 'object' || value === null) return undefined
+  const record = value as Record<string, unknown>
+  for (const key of ['choice', 'decision', 'selected', 'selected_model', 'model_id', 'candidate_id', 'model']) {
+    const direct = record[key]
+    if (typeof direct === 'string' && allowed.has(direct)) return direct
+  }
+  // MCP returns REST data under structuredContent. Recurse through likely
+  // decision envelopes, never through probabilities (whose keys are candidates).
+  for (const key of ['structuredContent', 'data', 'result', 'answer', 'answers']) {
+    const nested = record[key]
+    if (nested !== undefined) {
+      const selected = selectedCandidateId(nested, allowed)
+      if (selected !== undefined) return selected
+    }
+  }
+  return undefined
+}
+
+/**
+ * Extract only an explicitly selected available candidate from Jev's typed result.
+ * @param value - Untrusted Jev MCP result envelope.
+ * @param candidates - Exact Phoenix-supplied model ids allowed for this routing decision.
+ * @returns The explicit allowed model id, or undefined when Jev did not make a valid choice.
+ */
+export function jevSelectedModelId(value: unknown, candidates: readonly string[]): string | undefined {
+  return selectedCandidateId(value, new Set(candidates))
+}
 
 /**
  * Resolve the default quality-preserving execution route for OpenAI Codex orchestrators.
@@ -130,6 +213,105 @@ export function installModelSelection(
   selection: ModelSelectionRef,
   handoff?: ModelSelectionHandoff | ModelSelectionHandoffResolver,
 ): () => void {
+  let jevFailures = 0
+  let jevCircuitOpenUntil = 0
+  let jevCallSequence = 0
+  let jevTurn = -1
+  const jevRoutes = new Map<string, string>()
+
+  async function routeWithJev(
+    payload: JevRoutePayload,
+    fallback: LlmCallConfig,
+  ): Promise<LlmCallConfig> {
+    if (fallback.provider !== 'openai-codex' || payload.signal.aborted) return fallback
+    if (Date.now() < jevCircuitOpenUntil) return fallback
+
+    const tools = service<InternalToolRegistry>(agentCtx, 'tools')
+    const routeTool = tools?.get(JEV_MODEL_ROUTE_TOOL, payload.agent)
+    // Missing/unconfigured Jev is deliberately a zero-cost no-op. Settings
+    // exposes its setup card; the task continues on PHOENIX's native route.
+    if (routeTool === undefined) return fallback
+
+    // One Jev decision per native route per turn. Reusing it across later
+    // steps keeps latency, quota use, and token overhead bounded while still
+    // allowing a second decision when Phoenix intentionally changes phase/model.
+    if (payload.turn !== jevTurn) {
+      jevTurn = payload.turn
+      jevRoutes.clear()
+    }
+    const cacheKey = fallback.model
+    const cached = jevRoutes.get(cacheKey)
+    if (cached !== undefined) {
+      if (cached === fallback.model) return fallback
+      const { reasoningEffort: _effort, ...withoutEffort } = fallback
+      return { ...withoutEffort, model: cached }
+    }
+
+    const catalog = service<SameFamilyCatalog>(agentCtx, 'llm')
+    if (catalog === undefined) return fallback
+    try {
+      const listed = await catalog.listModels(fallback.provider)
+      const candidates = new Map<string, SameFamilyModelInfo>()
+      candidates.set(fallback.model, {
+        provider: fallback.provider,
+        id: fallback.model,
+        name: fallback.model,
+        description: 'Current PHOENIX route; preserves the existing routing decision.',
+      })
+      for (const model of listed) {
+        // Same provider is the hard family boundary for this first rollout.
+        if (model.provider !== fallback.provider || candidates.has(model.id)) continue
+        candidates.set(model.id, model)
+        if (candidates.size >= JEV_MAX_CANDIDATES) break
+      }
+      if (candidates.size < 2) return fallback
+
+      const task = directUserTextForTurn(payload.agent, payload.turn).slice(0, JEV_MAX_TASK_CHARS)
+        || 'Continue the current PHOENIX task.'
+      const args = {
+        task,
+        candidates: [...candidates.values()].map(model => ({
+          id: model.id,
+          description: model.description ?? model.name,
+        })),
+        priorities: ['quality', 'latency', 'cost', 'tool_use'],
+        constraints: [
+          'Select only a candidate supplied by PHOENIX.',
+          'Stay inside the openai-codex provider family.',
+          'Prefer the current route unless another candidate materially improves the task trade-off.',
+        ],
+      }
+      const callId = CallId(`phoenix-jev-model-route-${payload.turn}-${payload.step}-${jevCallSequence++}`)
+      const raw = await routeTool.execute(args, {
+        callId,
+        rootCallId: callId,
+        name: JEV_MODEL_ROUTE_TOOL,
+        arguments: args,
+        agent: payload.agent,
+        signal: payload.signal,
+        deferContext() {},
+        concludeTurn() {},
+      })
+      const chosen = jevSelectedModelId(raw, [...candidates.keys()])
+      if (chosen === undefined) throw new Error('Jev returned no valid same-family model id')
+      jevFailures = 0
+      jevRoutes.set(cacheKey, chosen)
+      if (chosen === fallback.model) return fallback
+      // Reasoning effort is model-specific. On a model switch, let the selected
+      // Codex model use its own safe default instead of forwarding an unsupported effort.
+      const { reasoningEffort: _effort, ...withoutEffort } = fallback
+      return { ...withoutEffort, model: chosen }
+    } catch (error: unknown) {
+      jevFailures += 1
+      if (jevFailures >= JEV_FAILURE_THRESHOLD) {
+        jevCircuitOpenUntil = Date.now() + JEV_CIRCUIT_OPEN_MS
+        jevFailures = 0
+      }
+      agentCtx.logger.warn(`Jev model routing degraded; keeping PHOENIX native route: ${String(error)}`)
+      return fallback
+    }
+  }
+
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
@@ -162,7 +344,7 @@ export function installModelSelection(
           ? resolvedHandoff.selection
           : selected)
       const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
-      return {
+      const nativeRoute: LlmCallConfig = {
         ...withoutInheritedEffort,
         provider: routed.provider,
         model: routed.model,
@@ -170,6 +352,7 @@ export function installModelSelection(
           ? {}
           : { reasoningEffort: routed.reasoningEffort },
       }
+      return routeWithJev(_payload, nativeRoute)
     },
   )
   return () => {
