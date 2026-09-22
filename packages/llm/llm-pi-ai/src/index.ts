@@ -264,8 +264,9 @@ export function apply(ctx: Context, config: Config): void {
     profiles,
     resolveApiKey,
     auth,
-    refreshModels: (provider, force) =>
-      codexCatalog.refresh(provider, current().providers?.[provider], force),
+    refreshModels: (provider, force) => force === true
+      ? codexCatalog.refresh(provider, current().providers?.[provider], true)
+      : Promise.resolve(codexCatalog.refreshInBackground(provider, current().providers?.[provider])),
     resolveAttachments: () => ctx.get('attachments'),
     onReplayDegrade: ({ provider, model, reason }) => {
       ctx.logger.warn(
