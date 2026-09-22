@@ -258,7 +258,16 @@ export class PluginInventoryGateway extends TypertRemoteService {
       | undefined
     if (credentials === undefined) throw new Error('PHOENIX credential storage is unavailable')
     await credentials.set(JEV_API_KEY_REF, apiKey)
-    return this.managedMcp.configureJev()
+    const receipt = await this.managedMcp.configureJev()
+    const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { reconnect(serverName: string): boolean }
+      | undefined
+    // A prior bad/expired Jev key leaves the optional connector parked in
+    // auth-required. Saving a replacement must retry immediately rather than
+    // forcing a Host restart. New installs may still be in their first connect;
+    // reconnect() is intentionally a no-op while a generation is active.
+    registry?.reconnect(JEV_MCP_SERVER_NAME)
+    return receipt
   }
 
   /**
