@@ -117,6 +117,9 @@ export function inferQualityDomains(argumentsValue: unknown): QualityDomain[] {
 interface QualitySignals {
   errorContract: boolean
   scale: boolean
+  unicodeBoundary: boolean
+  zeroProgress: boolean
+  differentialOracle: boolean
 }
 
 interface QualityState {
@@ -148,10 +151,19 @@ export function inferQualitySignals(text: string): QualitySignals {
   const errorObservable = /\b(?:message|include|contain|list|identify|show|detail|field|code|which|exact)\b/u.test(normalized)
   const scale = /\b(?:performance|memory|latency|throughput|scal(?:e|ing|ability)|complexity|big[- ]?o|benchmark|stress|load|depth|concurren(?:cy|t)|10k|100k|million)\b/u.test(normalized)
     || /\b(?:\d{1,3}(?:[,_]\d{3})+|\d{4,})\b/u.test(normalized)
-  return { errorContract: errorSubject && errorObservable, scale }
+  const unicodeBoundary = /\b(?:unicode|utf|surrogate|non[- ]?bmp|character|escape|json|string|text|parser|regex|regexp)\b/u.test(normalized)
+  const zeroProgress = /\b(?:loop|while|iterator|iteration|parser|parse|regex|regexp|match|token|lexer|scanner|consume|cursor|stream)\b/u.test(normalized)
+  const differentialOracle = /\b(?:json|regex|regexp|url|uri|base64|csv|parser|compatible|standard|reference|oracle|math|expression)\b/u.test(normalized)
+  return { errorContract: errorSubject && errorObservable, scale, unicodeBoundary, zeroProgress, differentialOracle }
 }
 
-function newState(signals: QualitySignals = { errorContract: false, scale: false }): QualityState {
+function newState(signals: QualitySignals = {
+  errorContract: false,
+  scale: false,
+  unicodeBoundary: false,
+  zeroProgress: false,
+  differentialOracle: false,
+}): QualityState {
   return {
     generation: 0,
     verifiedGeneration: 0,
@@ -212,6 +224,9 @@ function missingSignalHint(state: QualityState): string {
   if (state.signals.scale && state.scaleVerifiedGeneration !== state.generation) {
     missing.push('Run a bounded scale/resource check (time and/or memory as applicable) and inspect for avoidable superlinear growth.')
   }
+  if (state.signals.unicodeBoundary) missing.push('Cover empty/single/boundary text plus Unicode outside the BMP or surrogate behavior when applicable.')
+  if (state.signals.zeroProgress) missing.push('Prove loop/iterator termination when an inner match or consume step advances zero units.')
+  if (state.signals.differentialOracle) missing.push('Prefer differential generated/fuzz checks against a trustworthy oracle; otherwise use property/metamorphic invariants.')
   return missing.join(' ')
 }
 
@@ -220,8 +235,9 @@ function stopReminder(state: QualityState): UserMessage {
     'This task has successful mutations after its latest accepted verification. Before presenting it as complete, '
       + qualityHint(state.domains)
       + ' ' + missingSignalHint(state)
-      + ' Prefer the existing production/user entrypoint and the smallest high-signal check; do not rerun evidence '
-      + 'that is still fresh. If no meaningful automated check exists, inspect the final artifact and state the verification limit.',
+      + ' Mechanically re-check every literal named requirement from the original request. Audit important test expected values so they come from the spec/oracle/invariant, never from the implementation under test. '
+      + 'Prefer the existing production/user entrypoint and the smallest high-signal check; do not rerun evidence that is still fresh. '
+      + 'Before final completion, explicitly decide known limitations even when none remain. If no meaningful automated check exists, inspect the final artifact and state the verification limit.',
     'fresh requirement-aware verification needed',
   )
 }

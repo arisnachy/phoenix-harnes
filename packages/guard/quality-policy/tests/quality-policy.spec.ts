@@ -83,9 +83,18 @@ describe('classification', () => {
   })
 
   it('infers requirement signals that need targeted evidence', () => {
-    expect(inferQualitySignals('CycleError must include the exact cycle in its message')).toEqual({ errorContract: true, scale: false })
-    expect(inferQualitySignals('Support 10,000 tasks without excessive memory growth')).toEqual({ errorContract: false, scale: true })
-    expect(inferQualitySignals('ordinary refactor')).toEqual({ errorContract: false, scale: false })
+    expect(inferQualitySignals('CycleError must include the exact cycle in its message')).toEqual({
+      errorContract: true, scale: false, unicodeBoundary: false, zeroProgress: false, differentialOracle: false,
+    })
+    expect(inferQualitySignals('Support 10,000 tasks without excessive memory growth')).toEqual({
+      errorContract: false, scale: true, unicodeBoundary: false, zeroProgress: false, differentialOracle: false,
+    })
+    expect(inferQualitySignals('regex parser must handle Unicode and zero-length matches')).toEqual({
+      errorContract: false, scale: false, unicodeBoundary: true, zeroProgress: true, differentialOracle: true,
+    })
+    expect(inferQualitySignals('ordinary refactor')).toEqual({
+      errorContract: false, scale: false, unicodeBoundary: false, zeroProgress: false, differentialOracle: false,
+    })
   })
 
   it('infers supported domains and generic fallback', () => {
