@@ -12,6 +12,7 @@ import { applyReadTool, READ_LIMIT, STREAM_MIN_SIZE } from './read.ts'
 import { applyWriteTool } from './write.ts'
 import { applyEditTool } from './edit.ts'
 import { applyReadImageTool } from './read-image.ts'
+import { applyStatusTool } from './status.ts'
 import { READ_MAX_BYTES, READ_MAX_LINE_LENGTH } from './read-render.ts'
 import { FsSandboxController } from './sandbox.ts'
 
@@ -50,7 +51,7 @@ function assertPositiveInteger(name: string, value: number): void {
   }
 }
 
-/** Register the full `read`/`write`/`edit` filesystem tool suite, plus `read_image` while `attachments` is mounted. */
+/** Register the full `fs_status`/`read`/`write`/`edit` filesystem tool suite, plus `read_image` while `attachments` is mounted. */
 export function apply(ctx: Context, config: Config): void {
   // schemastery (Config) has already filled every defaulted field.
   const resolved = config as ResolvedConfig
@@ -58,6 +59,7 @@ export function apply(ctx: Context, config: Config): void {
   assertPositiveInteger('readMaxLineLength', resolved.readMaxLineLength)
   assertPositiveInteger('readMaxBytes', resolved.readMaxBytes)
   assertPositiveInteger('readStreamMinSize', resolved.readStreamMinSize)
+  applyStatusTool(ctx)
   applyReadTool(ctx, {
     limit: resolved.readLimit,
     maxLineLength: resolved.readMaxLineLength,
