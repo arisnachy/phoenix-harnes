@@ -15,7 +15,7 @@ import type {
   PreStepDecision,
   RequestErrorAction,
 } from '@phoenix-ai/dsh-agent'
-import { Inbox, agentEvents, assembleContextFor } from '@phoenix-ai/dsh-agent'
+import { Inbox, agentEvents, assembleContextFor, isConversationalFastPathText } from '@phoenix-ai/dsh-agent'
 import type { GenerateOptions, LlmCallConfig, Message, PreparedLlmCall } from '@phoenix-ai/dsh-llm'
 import {
   BlockAssembler,
@@ -61,6 +61,16 @@ const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest
 type PreparedStep =
   | { kind: 'reject' }
   | { kind: 'enter'; messages: UserMessage[]; assembly: PromptAssembly }
+
+function directUserText(messages: readonly UserMessage[]): string {
+  return messages
+    .filter(message => message.source.kind === 'user')
+    .flatMap(message => message.content)
+    .filter(block => block.type === 'text')
+    .map(block => block.text)
+    .join(' ')
+    .trim()
+}
 
 /** Remove adapter-derived values before plugins propose the next request config. */
 function requestProposal(header: EpochHeader): LlmCallConfig {
@@ -239,8 +249,17 @@ export class ReactLoopAgent implements Agent {
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
     const claimed = this.inbox.claim(target, position.turn)
-    const assembly = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal))
+    const assembled = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal))
     signal.throwIfAborted()
+    const fastConversation = target === 'next-turn'
+      && position.step === 1
+      && isConversationalFastPathText(directUserText(claimed))
+    // Hundreds of MCP schemas can dominate a trivial request before the model
+    // emits its first token. Social/meta turns cannot need tools by definition,
+    // so omit them from this one request without changing registry state.
+    const assembly = fastConversation && assembled.tools.length > 0
+      ? { ...assembled, tools: [] }
+      : assembled
     const sections = renderContextSections(assembly)
     const context = this.runtimeContext.project(joinContextSections(sections), sections)
     const decision = await this.dispatch.waterfall(
