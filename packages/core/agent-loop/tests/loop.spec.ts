@@ -673,6 +673,41 @@ describe('agent loop', () => {
     expect(flat).toContain('change of plans')
   })
 
+  it('fast-paths casual user steering without replaying tools or tool history', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'slow', {}, 'checking the generated object'),
+      textResponse('jajaja, sí'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('fast-casual-steering'), { provider: 'mock', model: 'mock' })
+    ctx.tools.register(defineContentToolFixture({
+      name: 'slow',
+      description: 'slow work',
+      parameters: {},
+      async execute() {
+        agent.steer(createUserMessage({
+          content: [{ type: 'text', text: 'eso parece un pollo pavo bien feo jajja' }],
+          source: { kind: 'user' },
+        }))
+        return [{ type: 'text', text: 'large tool result that should not replay' }]
+      },
+    }))
+
+    send(agent, 'build the object')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(2)
+    expect(adapter.requests[0]?.tools?.map(tool => tool.name)).toContain('slow')
+    expect(adapter.requests[1]?.tools ?? []).toEqual([])
+    const second = adapter.requests[1]!
+    expect(second.messages).toHaveLength(2)
+    const flat = JSON.stringify(second.messages)
+    expect(flat).toContain('build the object')
+    expect(flat).toContain('eso parece un pollo pavo bien feo jajja')
+    expect(flat).not.toContain('large tool result that should not replay')
+    expect(flat).not.toContain('"tool-call"')
+  })
+
   it('starts idle steering synchronously and enters later steering at the next step', async () => {
     const adapter = new MockAdapter([textResponse('first'), textResponse('second')])
     const ctx = await harness(adapter)

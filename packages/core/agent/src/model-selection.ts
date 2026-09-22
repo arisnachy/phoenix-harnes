@@ -191,6 +191,8 @@ function isToolAcquisitionRequest(text: string): boolean {
 
 const FAST_SOCIAL_TURN = /^(?:[¡!¿?.,\s]*(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|gracias|thanks|thank\s+you|ok(?:ay)?|perfecto|dale|listo|entendido|bien|s[ií]|no)[¡!¿?.,\s]*)$/iu
 const FAST_RUNTIME_META = /^(?:[¡!¿?.,\s]*(?:(?:est[aá]s|estas|sigues)\s+(?:usando|utilizando)\s+jev|usas\s+jev|(?:se\s+)?est[aá]\s+usando\s+jev|qu[eé]\s+modelo\s+(?:est[aá]s|estas)\s+usando|cu[aá]l\s+modelo\s+(?:est[aá]s|estas)\s+usando)[¡!¿?.,\s]*)$/iu
+/** Short, non-question reactions to the current output; they never need external evidence. */
+const FAST_CASUAL_REACTION = /(?:\b(?:jaj+a+|jeje+|jiji+|lol)\b|\b(?:eso|esto)\s+(?:parece|se\s+ve|est[aá])\b|\b(?:qu[eé]\s+)?(?:feo|bonito|lindo|gracioso|raro)\b)/iu
 
 /**
  * Very narrow low-latency conversational classifier.
@@ -204,7 +206,11 @@ export function isConversationalFastPathText(text: string): boolean {
   if (candidate.length === 0 || candidate.length > 180) return false
   if (/https?:\/\/|\x60\x60\x60|(?:[A-Za-z]:\\|\.\/|\.\.\/)/u.test(candidate)) return false
   if (isToolAcquisitionRequest(candidate)) return false
-  return FAST_SOCIAL_TURN.test(candidate) || FAST_RUNTIME_META.test(candidate)
+  if (FAST_SOCIAL_TURN.test(candidate) || FAST_RUNTIME_META.test(candidate)) return true
+  // Feedback such as "eso parece un pollo ... jaja" should not reload hundreds
+  // of tools or a multi-megabyte work transcript. Keep questions on the normal
+  // path: even a short "¿eso parece X?" can be a real factual request.
+  return !/[?¿]/u.test(candidate) && FAST_CASUAL_REACTION.test(candidate)
 }
 
 function defaultConversationalSelection(selection: ModelSelection | undefined): ModelSelection | undefined {

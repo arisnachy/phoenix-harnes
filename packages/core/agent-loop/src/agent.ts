@@ -60,7 +60,10 @@ const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest
 
 type PreparedStep =
   | { kind: 'reject' }
-  | { kind: 'enter'; messages: UserMessage[]; assembly: PromptAssembly }
+  | { kind: 'enter'; messages: UserMessage[]; assembly: PromptAssembly; fastConversation: boolean }
+
+const FAST_CONVERSATION_HISTORY_MAX_MESSAGES = 8
+const FAST_CONVERSATION_HISTORY_MAX_CHARS = 12_000
 
 function directUserText(messages: readonly UserMessage[]): string {
   return messages
@@ -70,6 +73,38 @@ function directUserText(messages: readonly UserMessage[]): string {
     .map(block => block.text)
     .join(' ')
     .trim()
+}
+
+function isTextOnlyHumanBatch(messages: readonly UserMessage[]): boolean {
+  return messages.length > 0 && messages.every(message =>
+    message.source.kind === 'user'
+    && message.content.length > 0
+    && message.content.every(block => block.type === 'text'))
+}
+
+/**
+ * Keep only a tiny, tool-free conversational tail for social/meta reactions.
+ * This prevents a one-line steering comment from replaying megabytes of tool
+ * calls/results accumulated by the task it interrupted.
+ */
+function fastConversationHistory(messages: Message[]): Message[] {
+  const selected: Message[] = []
+  let chars = 0
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message === undefined) continue
+    const safe = message.source.kind === 'user'
+      || (message.source.kind === 'model'
+        && message.content.length > 0
+        && message.content.every(block => block.type === 'text'))
+    if (!safe || !message.content.every(block => block.type === 'text')) continue
+    const size = message.content.reduce((sum, block) => sum + (block.type === 'text' ? block.text.length : 0), 0)
+    if (selected.length > 0 && chars + size > FAST_CONVERSATION_HISTORY_MAX_CHARS) continue
+    selected.push(message)
+    chars += size
+    if (selected.length >= FAST_CONVERSATION_HISTORY_MAX_MESSAGES) break
+  }
+  return selected.reverse()
 }
 
 /** Remove adapter-derived values before plugins propose the next request config. */
@@ -251,8 +286,10 @@ export class ReactLoopAgent implements Agent {
     const claimed = this.inbox.claim(target, position.turn)
     const assembled = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal))
     signal.throwIfAborted()
-    const fastConversation = target === 'next-turn'
-      && position.step === 1
+    const firstTurnBoundary = target === 'next-turn' && position.step === 1
+    const userSteeringBoundary = target === 'next-step'
+    const fastConversation = (firstTurnBoundary || userSteeringBoundary)
+      && isTextOnlyHumanBatch(claimed)
       && isConversationalFastPathText(directUserText(claimed))
     // Hundreds of MCP schemas can dominate a trivial request before the model
     // emits its first token. Social/meta turns cannot need tools by definition,
@@ -270,7 +307,7 @@ export class ReactLoopAgent implements Agent {
       }),
     )
     signal.throwIfAborted()
-    return decision.kind === 'reject' ? decision : { ...decision, assembly }
+    return decision.kind === 'reject' ? decision : { ...decision, assembly, fastConversation }
   }
 
   /** Open one turn before claiming its first proposed step. */
@@ -327,7 +364,7 @@ export class ReactLoopAgent implements Agent {
           }
           // max-tokens is sticky: once any step hits the ceiling, later steps
           // that complete normally must not downgrade the turn outcome.
-          const stepEnd = await this.step(decision.assembly)
+          const stepEnd = await this.step(decision.assembly, decision.fastConversation)
           // max-tokens stays sticky: a later completed step must not
           // downgrade the turn outcome.
           if (turnEnds === null || turnEnds.kind !== 'max-tokens') turnEnds = stepEnd
@@ -372,7 +409,7 @@ export class ReactLoopAgent implements Agent {
     return true
   }
 
-  private async step(assembly: PromptAssembly): Promise<StepEndReason | null> {
+  private async step(assembly: PromptAssembly, fastConversation = false): Promise<StepEndReason | null> {
     /* v8 ignore next -- private callers establish the running phase before executing a step */
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": step outside running phase`)
     const { turn, step, abort: { signal } } = this.phase
@@ -380,8 +417,10 @@ export class ReactLoopAgent implements Agent {
     const system = renderPrompt(assembly)
 
     while (true) {
+      const derived = this.session.deriveMessages()
+      const boundaryMessages = fastConversation ? fastConversationHistory(derived) : derived
       const { request, preparedCall } = await this.buildRequest(
-        turn, step, assembly.tools, system, this.session.deriveMessages(), signal,
+        turn, step, assembly.tools, system, boundaryMessages, signal,
       )
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []

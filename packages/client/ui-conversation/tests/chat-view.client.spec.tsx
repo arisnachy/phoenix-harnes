@@ -546,6 +546,26 @@ describe('ChatView', () => {
       ])
   })
 
+  it('does not double-render an optimistic send once Host exposes the same steering message', () => {
+    const startedAt = Date.now()
+    const pending = {
+      id: 'steer-duplicate-occurrence' as never,
+      messageId: 'steer-duplicate-message' as never,
+      placement: 'steering' as const,
+      content: [{ type: 'text' as const, text: 'eso parece un pollo pavo bien feo jajja' }],
+      preview: 'eso parece un pollo pavo bien feo jajja',
+      text: 'eso parece un pollo pavo bien feo jajja',
+    }
+    const h = makeHarness(
+      { nodes: [assistant(1, 'working')], queue: [pending], running: true },
+      { pendingSubmit: { text: 'eso parece un pollo pavo bien feo jajja', startedAt } },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getAllByText('eso parece un pollo pavo bien feo jajja')).toHaveLength(1)
+    expect(view.container.querySelectorAll('[data-pending-steering]')).toHaveLength(1)
+  })
+
   it('renders Host-pending steering at the flow tail and hands off to the durable node', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
