@@ -637,15 +637,17 @@ export function InputBar({
         if (existingFiles.length + genericFiles.length > fileLimits.maxFilesPerMessage) {
           return t('file.tooMany', { count: fileLimits.maxFilesPerMessage })
         }
-        if (fileLimits.maxFileBytes !== undefined
-          && genericFiles.some(file => file.size > fileLimits.maxFileBytes)) {
-          return t('file.fileTooLarge', { size: imageSizeText(fileLimits.maxFileBytes) })
+        const maxFileBytes = fileLimits.maxFileBytes
+        if (maxFileBytes !== undefined
+          && genericFiles.some(file => file.size > maxFileBytes)) {
+          return t('file.fileTooLarge', { size: imageSizeText(maxFileBytes) })
         }
-        if (fileLimits.maxMessageFileBytes !== undefined) {
+        const maxMessageFileBytes = fileLimits.maxMessageFileBytes
+        if (maxMessageFileBytes !== undefined) {
           const total = existingFiles.reduce((sum, attachment) => sum + attachment.file.size, 0)
             + genericFiles.reduce((sum, file) => sum + file.size, 0)
-          if (total > fileLimits.maxMessageFileBytes) {
-            return t('file.totalTooLarge', { size: imageSizeText(fileLimits.maxMessageFileBytes) })
+          if (total > maxMessageFileBytes) {
+            return t('file.totalTooLarge', { size: imageSizeText(maxMessageFileBytes) })
           }
         }
       }
