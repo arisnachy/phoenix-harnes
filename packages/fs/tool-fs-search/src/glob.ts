@@ -59,6 +59,7 @@ export interface GlobToolCaps {
 export interface GlobInput {
   pattern: string
   path?: string
+  includeIgnored?: boolean
 }
 
 /**
@@ -69,10 +70,14 @@ export interface GlobInput {
  * @param args - the schema-validated `glob` arguments.
  * @returns the accepted input, unchanged.
  */
-export function parseGlobArgs(args: { pattern: string; path?: string }): GlobInput {
+export function parseGlobArgs(args: { pattern: string; path?: string; includeIgnored?: boolean }): GlobInput {
   if (args.pattern.trim().length === 0) throw new Error('pattern must be a non-empty string')
   if (args.path !== undefined && args.path.trim().length === 0) throw new Error('path must be a non-empty string when given')
-  return { pattern: args.pattern, ...args.path !== undefined ? { path: args.path } : {} }
+  return {
+    pattern: args.pattern,
+    ...args.path !== undefined ? { path: args.path } : {},
+    ...args.includeIgnored === true ? { includeIgnored: true } : {},
+  }
 }
 
 /**
@@ -92,7 +97,7 @@ export function buildGlobCommand(input: GlobInput): string[] {
     '--files',
     `--glob=${input.pattern}`,
     '--sort=modified',
-    '--no-ignore',
+    ...(input.includeIgnored === true ? ['--no-ignore'] : []),
     '--hidden',
     // Two negated globs per VCS name: the bare form prunes the directory
     // during traversal; the /** form still excludes the contents when the
@@ -301,8 +306,8 @@ export function applyGlobTool(ctx: Context, caps: GlobToolCaps): void {
   ctx.systemPrompt.section({
     name: 'tool:glob',
     order: 103,
-    text: 'Use the glob tool — not shell find — to discover files by path pattern. Do not use a workspace-wide basename glob such as "*" merely to confirm the workspace, orient one directory, or check files whose exact paths are already known; read known paths directly and scope discovery to the narrowest directory first. A pattern with no "/" matches basenames at any depth, so "*" matches every file in the tree rather than its top level. '
-      + `Results are files only, never directories, and include hidden and ignored files: a result that fits comes back in modification-time order, ${overCapGuidance}`,
+    text: 'Use the glob tool — not shell find — only for real discovery. For exact known paths or existence checks, use fs_status; never launch a workspace-wide glob merely to see whether a named file exists. Scope discovery to the narrowest directory first. A pattern with no "/" matches basenames at any depth, so "*" matches every file in the searchable tree rather than its top level. Glob respects normal ignore rules by default; set includeIgnored=true only when the task specifically requires ignored/generated files. '
+      + `Results are files only, never directories, and include hidden files: a result that fits comes back in modification-time order, ${overCapGuidance}`,
   })
 
   const overCapDescription = caps.sampleOverCapGlobResults
@@ -311,7 +316,7 @@ export function applyGlobTool(ctx: Context, caps: GlobToolCaps): void {
   const tool = defineTool({
     name: 'glob',
     description: 'Find files whose paths match a glob pattern. Returns matching file paths — never directories — '
-      + 'including hidden and ignored files (VCS metadata directories are excluded). '
+      + 'including hidden files while respecting normal ignore rules (VCS metadata directories are always excluded). '
       + `Up to ${caps.maxResults} paths come back in modification-time order; ${overCapDescription}, `
       + 'says so, and reports where the complete sorted list was saved. This tool does not enumerate directory entries.',
     parameters: {
@@ -322,6 +327,7 @@ export function applyGlobTool(ctx: Context, caps: GlobToolCaps): void {
           + 'A pattern with no "/" matches the basename at any depth, so "*" and "*.ts" both search the whole tree; include a separator to anchor the depth.',
       },
       path: { type: 'string', description: 'Directory to search in. Defaults to the session workspace; a relative path resolves against it.' },
+      includeIgnored: { type: 'boolean', description: 'Include ignored/generated files. Defaults false; enable only when explicitly needed.' },
     },
     timeoutMs: caps.timeoutMs,
     output: {
