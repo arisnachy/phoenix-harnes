@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process'
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -104,6 +105,44 @@ describe('withFileLock', () => {
 
     await expect(withFileLock(join(dir, 'document'), operation)).rejects.toMatchObject({ code: 'EPERM' })
     expect(operation).not.toHaveBeenCalled()
+  })
+
+  it('recovers a writer lock whose recorded owner has exited', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    const lockPath = `${target}.lock`
+    const child = spawn(process.execPath, ['-e', 'process.exit(0)'])
+    const stalePid = child.pid
+    if (stalePid === undefined) throw new Error('test child did not expose a pid')
+    await new Promise<void>((resolve, reject) => {
+      child.once('error', reject)
+      child.once('exit', () => resolve())
+    })
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      try {
+        process.kill(stalePid, 0)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | null)?.code === 'ESRCH') break
+        throw error
+      }
+      if (attempt === 99) throw new Error('test child pid remained live')
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+
+    await writeFile(lockPath, `${stalePid}\n`)
+    await expect(withFileLock(target, async () => 'recovered', { waitMs: 500 }))
+      .resolves.toBe('recovered')
+    await expect(readFile(lockPath, 'utf8')).rejects.toThrow()
+  })
+
+  it('never recovers a lock whose recorded owner is still alive', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    await writeFile(`${target}.lock`, `${process.pid}\n`)
+
+    await expect(withFileLock(target, async () => 'stolen', { waitMs: 50 }))
+      .rejects.toThrow(/timed out waiting for the writer lock/)
+    expect(await readFile(`${target}.lock`, 'utf8')).toBe(`${process.pid}\n`)
   })
 
   it('rejects an invalid parent hierarchy before running the operation', async () => {
