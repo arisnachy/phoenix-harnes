@@ -66,6 +66,13 @@ export const connectorEn = {
   chatgptWebNeedsSetup: 'Setup required',
   chatgptWebBusy: 'Applying…',
   chatgptWebSetupHint: 'Open Codex Web GPT once and complete Setup > Browser-only, then turn this switch on again.',
+  jevSetupTitle: 'Configure Jev MCP',
+  jevSetupDescription: 'Add your Jev API key. Phoenix stores it in credentials, never in the MCP config, and falls back to its native router if Jev is unavailable or out of quota.',
+  jevApiKeyLabel: 'Jev API key',
+  jevKeyPlaceholder: 'Paste your Jev API key',
+  jevSave: 'Save & connect',
+  jevConfiguredStatus: 'Configured',
+  jevOptionalStatus: 'Optional · native fallback enabled',
 } as const
 
 /** Translation-key union shared by every Settings → Connectors locale dictionary. */
@@ -139,6 +146,13 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
   chatgptWebNeedsSetup: 'Requiere configuración',
   chatgptWebBusy: 'Aplicando…',
   chatgptWebSetupHint: 'Abre Codex Web GPT una vez y completa Setup > Browser-only; luego vuelve a activar este switch.',
+  jevSetupTitle: 'Configurar Jev MCP',
+  jevSetupDescription: 'Agrega tu API key de Jev. Phoenix la guarda en credenciales, nunca en la configuración MCP, y vuelve a su router nativo si Jev no está disponible o se queda sin cuota.',
+  jevApiKeyLabel: 'API key de Jev',
+  jevKeyPlaceholder: 'Pega tu API key de Jev',
+  jevSave: 'Guardar y conectar',
+  jevConfiguredStatus: 'Configurado',
+  jevOptionalStatus: 'Opcional · fallback nativo activo',
 }
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
@@ -181,4 +195,11 @@ export const connectorZh: { [Key in ConnectorKey]: string } = {
   chatgptWebNeedsSetup: '需要设置',
   chatgptWebBusy: '正在应用…',
   chatgptWebSetupHint: '先打开一次 Codex Web GPT 并完成 Setup > Browser-only，然后再次开启此开关。',
+  jevSetupTitle: '配置 Jev MCP',
+  jevSetupDescription: '添加 Jev API Key。Phoenix 会把它保存在凭据存储中，不写入 MCP 配置；Jev 不可用或额度耗尽时会自动回退到原生路由。',
+  jevApiKeyLabel: 'Jev API Key',
+  jevKeyPlaceholder: '粘贴 Jev API Key',
+  jevSave: '保存并连接',
+  jevConfiguredStatus: '已配置',
+  jevOptionalStatus: '可选 · 已启用原生回退',
 }
