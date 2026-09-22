@@ -64,6 +64,7 @@ interface BridgeState {
   verifiedGeneration: number
   judgedGeneration: number
   hardnessReviewedGeneration: number
+  judgeVerdict?: OrdinaryCompletionJudgeDecision['verdict']
   judgePasses: number
   request: string
   mutations: string[]
@@ -250,6 +251,7 @@ export function installOrdinaryCompletionJudgeBridge(
 
     if (isSubstantiveMutation(exec.name, exec.arguments)) {
       state.generation += 1
+      state.judgeVerdict = undefined
       state.mutations.push(operationName(exec.name))
       state.mutations = state.mutations.slice(-12)
     } else if (isHardnessRun(exec.name) && state.generation > 0) {
@@ -262,7 +264,7 @@ export function installOrdinaryCompletionJudgeBridge(
       state.verifiedGeneration = state.generation
       // A judge may ask only for missing evidence. New deterministic evidence
       // must therefore reopen this unchanged generation for a fresh review.
-      if (state.judgedGeneration === state.generation) state.judgedGeneration = 0
+      if (state.judgedGeneration === state.generation && state.judgeVerdict !== 'pass') state.judgedGeneration = 0
       state.verifications.push(operationName(exec.name) + ':' + argumentText(exec.arguments).slice(0, 300))
       state.verifications = state.verifications.slice(-12)
     }
@@ -292,7 +294,12 @@ export function installOrdinaryCompletionJudgeBridge(
       signal,
     })
     state.judgedGeneration = state.generation
-    if (decision.verdict !== 'pass') agent.steer(judgeNotice(decision))
+    state.judgeVerdict = decision.verdict
+    const infrastructureOnlyBlock = decision.verdict === 'blocked'
+      && /^Independent completion judge (?:is unavailable|did not complete|returned invalid evidence|failed)\./.test(decision.summary)
+    if (decision.verdict === 'needs_changes' || (decision.verdict === 'blocked' && !infrastructureOnlyBlock)) {
+      agent.steer(judgeNotice(decision))
+    }
   }))
 
   disposers.push(ctx.on('agent/disposed', ({ agent }) => {
