@@ -166,10 +166,10 @@ describe('user profile validation and projection helpers', () => {
     expect(profile().connectorMode).toBe('ask')
     const automatic = mergeUserProfile(profile(), { connectorMode: 'approved' })
     expect(automatic.connectorMode).toBe('approved')
-    expect(renderConnectorPolicy(automatic.connectorMode)).toContain('Approved external connectors may be used automatically')
+    expect(renderConnectorPolicy(automatic.connectorMode ?? DEFAULT_CONNECTOR_MODE)).toContain('Approved external connectors may be used automatically')
 
     const disabled = mergeUserProfile(automatic, { connectorMode: 'disabled' })
-    expect(renderConnectorPolicy(disabled.connectorMode)).toContain('External connectors are disabled')
+    expect(renderConnectorPolicy(disabled.connectorMode ?? DEFAULT_CONNECTOR_MODE)).toContain('External connectors are disabled')
     expect(() => { validateUserProfileUpdate({ connectorMode: 'always' as never }) }).toThrow('connectorMode')
   })
 
