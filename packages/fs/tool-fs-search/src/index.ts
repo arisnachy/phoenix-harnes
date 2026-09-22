@@ -31,7 +31,7 @@ import z from '@phoenix-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import { GLOB_MAX_RESULTS, applyGlobTool } from './glob.ts'
 import { GREP_MAX_LINE_BYTES, GREP_MAX_MATCHES, applyGrepTool } from './grep.ts'
-import { RAW_OUTPUT_MAX_BYTES, SEARCH_GRACE_MS, SEARCH_META_MAX_BYTES, SEARCH_STDERR_MAX_BYTES, SEARCH_TIMEOUT_MS } from './search-core.ts'
+import { GLOB_TIMEOUT_MS, GREP_TIMEOUT_MS, RAW_OUTPUT_MAX_BYTES, SEARCH_GRACE_MS, SEARCH_META_MAX_BYTES, SEARCH_STDERR_MAX_BYTES, SEARCH_TIMEOUT_MS } from './search-core.ts'
 
 export { GLOB_MAX_RESULTS, GLOB_VCS_EXCLUDES, applyGlobTool, buildGlobCommand, formatGlobOutput, parseGlobArgs, presentGlobCall, presentGlobResult, sampleAcrossTopLevel } from './glob.ts'
 export type { GlobInput, GlobSample, GlobToolCaps } from './glob.ts'
@@ -53,6 +53,8 @@ export {
   SEARCH_GRACE_MS,
   SEARCH_META_MAX_BYTES,
   SEARCH_STDERR_MAX_BYTES,
+  GLOB_TIMEOUT_MS,
+  GREP_TIMEOUT_MS,
   SEARCH_TIMEOUT_MS,
   SearchError,
   previewLine,
@@ -87,10 +89,11 @@ export interface Config {
   graceMs?: number
   /** Max bytes retained for one search's stderr tail; the excerpt is embedded in `SEARCH_*` error messages, never shown on success. */
   stderrMaxBytes?: number
-  /**
-   * Cooperative tool-call timeout budget (ms) on both tools, enforced by
-   * `@phoenix-ai/dsh-tool-call-timeout-policy` through `exec.signal`.
-   */
+  /** Cooperative timeout for glob discovery. Defaults to a short 8-second budget. */
+  globTimeoutMs?: number
+  /** Cooperative timeout for grep discovery. Defaults to 15 seconds. */
+  grepTimeoutMs?: number
+  /** Legacy shared override for both tools. When present, it wins over the per-tool defaults. */
   timeoutMs?: number
 }
 
@@ -103,11 +106,13 @@ export const Config: z<Config> = z.object({
   rawOutputMaxBytes: z.number().default(RAW_OUTPUT_MAX_BYTES),
   graceMs: z.number().default(SEARCH_GRACE_MS),
   stderrMaxBytes: z.number().default(SEARCH_STDERR_MAX_BYTES),
-  timeoutMs: z.number().default(SEARCH_TIMEOUT_MS),
+  globTimeoutMs: z.number().default(GLOB_TIMEOUT_MS),
+  grepTimeoutMs: z.number().default(GREP_TIMEOUT_MS),
+  timeoutMs: z.number(),
 })
 
 /** The shape after schemastery applied the defaults. */
-type ResolvedConfig = Required<Config>
+type ResolvedConfig = Omit<Required<Config>, 'timeoutMs'> & Pick<Config, 'timeoutMs'>
 
 /** Every search cap counts items/bytes/milliseconds — a positive integer, or retention and timeout arithmetic misbehaves silently. */
 function assertPositiveInteger(name: string, value: number): void {
@@ -138,7 +143,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     throw new Error(`tool-fs-search: graceMs must be no greater than ${MAX_TIMER_DELAY_MS}`)
   }
   assertPositiveInteger('stderrMaxBytes', resolved.stderrMaxBytes)
-  assertPositiveInteger('timeoutMs', resolved.timeoutMs)
+  assertPositiveInteger('globTimeoutMs', resolved.globTimeoutMs)
+  assertPositiveInteger('grepTimeoutMs', resolved.grepTimeoutMs)
+  if (resolved.timeoutMs !== undefined) assertPositiveInteger('timeoutMs', resolved.timeoutMs)
+  const globTimeoutMs = resolved.timeoutMs ?? resolved.globTimeoutMs
+  const grepTimeoutMs = resolved.timeoutMs ?? resolved.grepTimeoutMs
   applyGlobTool(ctx, {
     sampleOverCapGlobResults: resolved.sampleOverCapGlobResults,
     maxResults: resolved.globMaxResults,
@@ -146,7 +155,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     rawOutputMaxBytes: resolved.rawOutputMaxBytes,
     graceMs: resolved.graceMs,
     stderrMaxBytes: resolved.stderrMaxBytes,
-    timeoutMs: resolved.timeoutMs,
+    timeoutMs: globTimeoutMs,
   })
   applyGrepTool(ctx, {
     maxMatches: resolved.grepMaxMatches,
@@ -155,6 +164,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     rawOutputMaxBytes: resolved.rawOutputMaxBytes,
     graceMs: resolved.graceMs,
     stderrMaxBytes: resolved.stderrMaxBytes,
-    timeoutMs: resolved.timeoutMs,
+    timeoutMs: grepTimeoutMs,
   })
 }
