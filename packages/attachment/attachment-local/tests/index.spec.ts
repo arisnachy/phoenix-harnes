@@ -37,6 +37,9 @@ describe('local attachment service', () => {
       maxBytes: DEFAULT_NORMALIZED_IMAGE_MAX_BYTES,
     })
     expect(service.imageCompressionConcurrency).toBe(DEFAULT_IMAGE_COMPRESSION_CONCURRENCY)
+    expect(service.fileLimits).toEqual({
+      maxFilesPerMessage: 20,
+    })
   })
 
   it('resolves and validates the instance image-compression concurrency', () => {
