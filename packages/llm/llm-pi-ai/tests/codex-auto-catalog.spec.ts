@@ -106,6 +106,96 @@ describe('Codex automatic live catalog policy', () => {
     }])
   })
 
+  it('refreshes live metadata for pinned Codex rows without changing their selected ids', async () => {
+    const list = vi.fn(async (): Promise<readonly CodexDiscoveredModel[]> => [{
+      id: 'gpt-6-luna',
+      name: 'GPT-6 Luna',
+      reasoning: {
+        efforts: [
+          { id: 'low', name: 'Low' },
+          { id: 'medium', name: 'Medium' },
+          { id: 'high', name: 'High' },
+          { id: 'xhigh', name: 'Extra High' },
+          { id: 'max', name: 'Max' },
+        ],
+        defaultEffort: 'medium',
+      },
+    }, {
+      id: 'gpt-6-astra',
+      name: 'GPT-6 Astra',
+      reasoning: {
+        efforts: [{ id: 'high', name: 'High' }],
+        defaultEffort: 'high',
+      },
+    }])
+    const catalog = new CodexLiveCatalog({
+      transport: { list },
+      now: () => 0,
+      refreshIntervalMs: 10,
+      installedModelIds: () => [],
+    })
+    const pinned = {
+      [CODEX_PROVIDER]: {
+        models: [
+          { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna' },
+          { id: 'gpt-6-luna', name: 'GPT-6 Luna' },
+        ],
+      },
+    }
+
+    await expect(catalog.refresh(CODEX_PROVIDER, pinned[CODEX_PROVIDER]))
+      .resolves.toEqual(['gpt-5.6-luna', 'gpt-6-luna'])
+    expect(list).toHaveBeenCalledOnce()
+    expect(catalog.reasoningForModel('gpt-6-luna')).toEqual({
+      efforts: [
+        { id: 'low', name: 'Low' },
+        { id: 'medium', name: 'Medium' },
+        { id: 'high', name: 'High' },
+        { id: 'xhigh', name: 'Extra High' },
+        { id: 'max', name: 'Max' },
+      ],
+      defaultEffort: 'medium',
+    })
+
+    const overlaid = catalog.overlayProviders(pinned)[CODEX_PROVIDER]
+    expect(overlaid?.models?.map(model => model.id)).toEqual(['gpt-5.6-luna', 'gpt-6-luna'])
+    expect(overlaid?.models?.[1]).toMatchObject({
+      id: 'gpt-6-luna',
+      reasoningEfforts: {
+        low: 'low',
+        medium: 'medium',
+        high: 'high',
+        xhigh: 'xhigh',
+        max: 'max',
+      },
+    })
+  })
+
+  it('keeps explicit reasoning disablement on a pinned Codex row', async () => {
+    const catalog = new CodexLiveCatalog({
+      transport: {
+        list: async () => [{
+          id: 'gpt-6-luna',
+          reasoning: {
+            efforts: [{ id: 'high', name: 'High' }],
+            defaultEffort: 'high',
+          },
+        }],
+      },
+      now: () => 0,
+      refreshIntervalMs: 10,
+      installedModelIds: () => [],
+    })
+    const pinned = {
+      [CODEX_PROVIDER]: {
+        models: [{ id: 'gpt-6-luna', reasoningEfforts: false as const }],
+      },
+    }
+
+    await catalog.refresh(CODEX_PROVIDER, pinned[CODEX_PROVIDER])
+    expect(catalog.overlayProviders(pinned)[CODEX_PROVIDER]?.models?.[0]?.reasoningEfforts).toBe(false)
+  })
+
   it('replaces selector visibility while retaining installed and previously-seen dispatch models', async () => {
     let now = 0
     let next: CodexDiscoveredModel[] = [
@@ -122,11 +212,9 @@ describe('Codex automatic live catalog policy', () => {
       logger: { warn },
     })
     const automatic = { [CODEX_PROVIDER]: {} }
-    const pinned = { [CODEX_PROVIDER]: { models: [{ id: 'pinned-model' }] } }
 
     expect(catalog.overlayProviders(automatic)).toBe(automatic)
     expect(await catalog.refresh('not-codex', {})).toBeUndefined()
-    expect(await catalog.refresh(CODEX_PROVIDER, pinned[CODEX_PROVIDER])).toBeUndefined()
     expect(list).not.toHaveBeenCalled()
 
     await expect(catalog.refresh(CODEX_PROVIDER, automatic[CODEX_PROVIDER]))
@@ -134,7 +222,6 @@ describe('Codex automatic live catalog policy', () => {
     expect(catalog.revision).toBe(1)
     expect(catalog.overlayProviders(automatic)[CODEX_PROVIDER]?.models?.map(model => model.id))
       .toEqual(['installed-only', 'new-live-model', 'second-live-model'])
-    expect(catalog.overlayProviders(pinned)).toBe(pinned)
 
     now = 5
     await catalog.refresh(CODEX_PROVIDER, automatic[CODEX_PROVIDER])
