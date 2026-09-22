@@ -45,6 +45,39 @@ const JEV_CIRCUIT_OPEN_MS = 5 * 60_000
 const JEV_MAX_TASK_CHARS = 4_000
 const JEV_MAX_CANDIDATES = 10
 
+/** Premium Codex tiers that should spend one step planning before Luna executes. */
+const CODEX_PLANNER_MODEL = /^gpt-(\d+(?:\.\d+)?)-(?:sol|astra|terra)(?:$|-)/i
+/** Luna worker ids, grouped by the same GPT generation as their planner. */
+const CODEX_LUNA_MODEL = /^gpt-(\d+(?:\.\d+)?)-luna(?:$|-)/i
+
+function codexPlannerGeneration(model: string): string | undefined {
+  return CODEX_PLANNER_MODEL.exec(model)?.[1]
+}
+
+function codexLunaGeneration(model: string): string | undefined {
+  return CODEX_LUNA_MODEL.exec(model)?.[1]
+}
+
+/**
+ * Whether one Codex model is expensive/capable enough to act as planner.
+ * The rule is deliberately explicit: unknown future tiers keep the user's
+ * normal configuration until Phoenix learns their place in the family.
+ */
+export function isCodexPlannerModel(model: string): boolean {
+  return codexPlannerGeneration(model) !== undefined
+}
+
+function lunaWorkerFor(model: string): string | undefined {
+  const plannerGeneration = codexPlannerGeneration(model)
+  if (plannerGeneration !== undefined) return `gpt-${plannerGeneration}-luna`
+  return codexLunaGeneration(model) === undefined ? undefined : model
+}
+
+function isJevAvailabilityFailure(error: unknown): boolean {
+  const message = String(error).toLowerCase()
+  return /(?:\b(?:401|402|403|429)\b|api\s*key|auth(?:entication|orization)?|credit|quota|rate[-\s]?limit|insufficient|payment)/i.test(message)
+}
+
 interface SameFamilyModelInfo {
   readonly provider: string
   readonly id: string
@@ -128,14 +161,16 @@ export function jevSelectedModelId(value: unknown, candidates: readonly string[]
  */
 export function defaultExecutionHandoff(selection: ModelSelection | undefined): ModelSelectionHandoff | undefined {
   if (selection?.provider !== 'openai-codex') return undefined
+  const worker = lunaWorkerFor(selection.model)
+  if (worker === undefined || !isCodexPlannerModel(selection.model)) return undefined
   return {
-    // Agent-loop steps are 1-based. Preserve the selected model for the first
-    // reasoning step; later execution steps use the low-latency Luna route.
+    // Agent-loop steps are 1-based. Sol/Astra/Terra keep the first reasoning
+    // step; the matching Luna generation executes subsequent steps at Max.
     afterStep: 1,
     selection: {
       provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: ReasoningEffortId('high'),
+      model: worker,
+      reasoningEffort: ReasoningEffortId('max'),
     },
   }
 }
@@ -176,21 +211,25 @@ function defaultConversationalSelection(selection: ModelSelection | undefined): 
   if (selection?.provider !== 'openai-codex') return undefined
   return {
     provider: 'openai-codex',
-    model: 'gpt-5.6-luna',
+    model: lunaWorkerFor(selection.model) ?? 'gpt-5.6-luna',
     reasoningEffort: ReasoningEffortId('low'),
   }
 }
 
 /**
- * Low-latency first action for explicit operational Codex turns. The first
- * evidence-gathering step uses Luna/medium; after a tool result the ordinary
- * execution handoff raises the worker to Luna/high.
+ * Low-latency first action for explicit operational Codex turns that already
+ * selected Luna. Premium Sol/Astra/Terra selections keep their first planning
+ * step; Luna-only turns use medium for first evidence and then resume the
+ * person's selected effort.
  */
 function defaultToolAcquisitionSelection(selection: ModelSelection | undefined): ModelSelection | undefined {
   if (selection?.provider !== 'openai-codex') return undefined
+  // Premium selections are planners. Do not steal their first step merely
+  // because tools are present; Luna takes over after the plan via handoff.
+  if (isCodexPlannerModel(selection.model)) return undefined
   return {
     provider: 'openai-codex',
-    model: 'gpt-5.6-luna',
+    model: lunaWorkerFor(selection.model) ?? 'gpt-5.6-luna',
     reasoningEffort: ReasoningEffortId('medium'),
   }
 }
@@ -255,6 +294,10 @@ export function installModelSelection(
     // Social/meta turns already have a deterministic cheap route. Calling an
     // external router here would add network latency without improving quality.
     if (isConversationalFastPathText(directText)) return fallback
+    // Respect the user's premium planner choice. Jev participates after the
+    // plan, where it can optimize the Luna worker without turning execution
+    // back into an expensive planner loop.
+    if (payload.step === 1 && isCodexPlannerModel(fallback.model)) return fallback
     if (Date.now() < jevCircuitOpenUntil) return fallback
 
     const tools = service<InternalToolRegistry>(agentCtx, 'tools')
@@ -270,10 +313,14 @@ export function installModelSelection(
       jevTurn = payload.turn
       jevRoutes.clear()
     }
+    const workerGeneration = String(fallback.reasoningEffort) === 'max'
+      ? codexLunaGeneration(fallback.model)
+      : undefined
     const cacheKey = fallback.model
     const cached = jevRoutes.get(cacheKey)
     if (cached !== undefined) {
       if (cached === fallback.model) return fallback
+      if (workerGeneration !== undefined) return { ...fallback, model: cached }
       const { reasoningEffort: _effort, ...withoutEffort } = fallback
       return { ...withoutEffort, model: cached }
     }
@@ -287,14 +334,20 @@ export function installModelSelection(
         provider: fallback.provider,
         id: fallback.model,
         name: fallback.model,
-        description: 'Current PHOENIX route; preserves the existing routing decision.',
+        description: workerGeneration === undefined
+          ? 'Current PHOENIX route; preserves the existing routing decision.'
+          : 'Current PHOENIX Luna execution worker.',
       })
       for (const model of listed) {
-        // Same provider is the hard family boundary for this first rollout.
+        // Same provider is the hard family boundary. During the execution
+        // phase Jev is additionally constrained to the matching Luna
+        // generation so it cannot spend Sol/Astra tokens after planning.
         if (model.provider !== fallback.provider || candidates.has(model.id)) continue
+        if (workerGeneration !== undefined && codexLunaGeneration(model.id) !== workerGeneration) continue
         candidates.set(model.id, model)
         if (candidates.size >= JEV_MAX_CANDIDATES) break
       }
+      // One candidate means there is no routing decision to buy from Jev.
       if (candidates.size < 2) return fallback
 
       const task = directUserTextForTurn(payload.agent, payload.turn).slice(0, JEV_MAX_TASK_CHARS)
@@ -305,11 +358,18 @@ export function installModelSelection(
           id: model.id,
           description: model.description ?? model.name,
         })),
-        priorities: ['quality', 'latency', 'cost', 'tool_use'],
+        priorities: workerGeneration === undefined
+          ? ['quality', 'latency', 'cost', 'tool_use']
+          : ['latency', 'cost', 'quality', 'tool_use'],
         constraints: [
           'Select only a candidate supplied by PHOENIX.',
           'Stay inside the openai-codex provider family.',
-          'Prefer the current route unless another candidate materially improves the task trade-off.',
+          ...(workerGeneration === undefined
+            ? ['Prefer the current route unless another candidate materially improves the task trade-off.']
+            : [
+                `Execution phase: stay on Luna generation ${workerGeneration}; do not select Sol/Astra/Terra.`,
+                'Prefer the fastest worker that preserves output quality for the concrete execution step.',
+              ]),
         ],
       }
       const callId = CallId(`phoenix-jev-model-route-${payload.turn}-${payload.step}-${jevCallSequence++}`)
@@ -328,15 +388,28 @@ export function installModelSelection(
       jevFailures = 0
       jevRoutes.set(cacheKey, chosen)
       if (chosen === fallback.model) return fallback
-      // Reasoning effort is model-specific. On a model switch, let the selected
-      // Codex model use its own safe default instead of forwarding an unsupported effort.
+      if (workerGeneration !== undefined) {
+        // Luna workers in this phase intentionally run at the selected Max
+        // effort even when Jev picks another same-generation Luna variant.
+        return { ...fallback, model: chosen }
+      }
+      // Outside the worker phase, reasoning effort is model-specific. Let a
+      // Jev-selected model use its own safe default instead of forwarding an
+      // unsupported effort.
       const { reasoningEffort: _effort, ...withoutEffort } = fallback
       return { ...withoutEffort, model: chosen }
     } catch (error: unknown) {
-      jevFailures += 1
-      if (jevFailures >= JEV_FAILURE_THRESHOLD) {
+      if (isJevAvailabilityFailure(error)) {
+        // Missing credits, auth, or rate limit: do not burn two more attempts.
+        // Open the circuit immediately and continue on Phoenix's native route.
         jevCircuitOpenUntil = Date.now() + JEV_CIRCUIT_OPEN_MS
         jevFailures = 0
+      } else {
+        jevFailures += 1
+        if (jevFailures >= JEV_FAILURE_THRESHOLD) {
+          jevCircuitOpenUntil = Date.now() + JEV_CIRCUIT_OPEN_MS
+          jevFailures = 0
+        }
       }
       agentCtx.logger.warn(`Jev model routing degraded; keeping PHOENIX native route: ${String(error)}`)
       return fallback
