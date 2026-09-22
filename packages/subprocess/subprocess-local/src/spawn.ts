@@ -7,7 +7,7 @@
  * @module dsh-subprocess-local/spawn
  */
 
-import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import type { Readable } from 'node:stream'
 import { randomBytes } from 'node:crypto'
 import { closeSync, mkdtempSync, openSync, unlinkSync, writeSync } from 'node:fs'
@@ -275,10 +275,22 @@ export function killGroup(pid: number, sig: NodeJS.Signals): void {
  */
 export function taskkillProcessTree(pid: number): void {
   if (pid <= 0) return
-  // Outcome deliberately unchecked: an already-absent tree (status 128), exit
-  // races, and a missing taskkill binary (spawnSync reports, never throws) are
-  // as tolerable here as ESRCH is for a POSIX group signal.
-  spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' })
+  // Cancellation/timeout runs on the Host event loop. A synchronous taskkill
+  // can itself stall on a large or unhealthy process tree (Blender is a real
+  // example), freezing chat, timers, and steering long after the tool timeout.
+  // Launch the OS tree killer asynchronously and detach its handle instead.
+  // Missing binaries, already-dead trees, and nonzero taskkill exits remain
+  // contained exactly like ESRCH on POSIX.
+  try {
+    const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    killer.once('error', () => {})
+    killer.unref()
+  } catch {
+    // Spawn argument/setup failures are teardown noise, never Host-fatal.
+  }
 }
 
 /**
