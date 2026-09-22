@@ -106,6 +106,46 @@ describe('ManagedMcpController', () => {
     expect(live.create).toHaveBeenCalledTimes(1)
   })
 
+  it('configures pinned Jev with only a credential reference and native-fallback budgets', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    await expect(controller.configureJev()).resolves.toEqual({
+      status: 'installed',
+      connector: {
+        entryId: 'live-entry-id',
+        serverName: 'jev',
+        url: 'https://www.jevai.org/api/mcp',
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: {
+        transport: 'streamable-http',
+        serverName: 'jev',
+        url: 'https://www.jevai.org/api/mcp',
+        headers: {},
+        oauth: false,
+        bearerTokenRef: 'JEV_API_KEY',
+        toolCallTimeoutMs: 1800,
+        startupTimeoutMs: 1200,
+        failOnStartupError: false,
+        reconnect: {
+          enabled: true,
+          initialDelayMs: 1000,
+          maxDelayMs: 30_000,
+          maxAttempts: 3,
+        },
+      },
+    })
+    const persisted = readFileSync(patchPath, 'utf8')
+    expect(persisted).toContain('JEV_API_KEY')
+    expect(persisted).not.toContain('Authorization')
+    await expect(controller.configureJev()).resolves.toMatchObject({ status: 'already-installed' })
+    expect(live.create).toHaveBeenCalledTimes(1)
+  })
+
   it('fails closed when registry identity, status, or transport is not installable', async () => {
     const patchPath = tempPatch()
     const live = loader()

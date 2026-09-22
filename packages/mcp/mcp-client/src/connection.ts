@@ -332,7 +332,7 @@ export function startConnection(
       },
     )
     try {
-      await generation.connect(createTransport(config, transportOptions))
+      await generation.connect(await createTransport(config, transportOptions))
       if (hasClosed()) {
         attemptSettled = true
         generationDown(generation, { status: 'failed', reasonCode: 'connection-failed' })
