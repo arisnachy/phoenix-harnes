@@ -242,13 +242,14 @@ describe('syncTools', () => {
     expect(tool?.parameters).toMatchObject({
       type: 'object',
       properties: {
-        board_id: { type: 'string' },
-        item_name: { type: 'string' },
-        item_id: { type: 'string' },
-        column_values: { type: 'object' },
-        action: { anyOf: [{ const: 'create' }, { const: 'update' }] },
+        phoenix_arguments: {
+          type: 'object',
+          additionalProperties: true,
+          description: expect.stringContaining('Known argument keys:'),
+        },
       },
-      required: ['action'],
+      required: ['phoenix_arguments'],
+      additionalProperties: false,
     })
     expect(tool?.parameters).not.toHaveProperty('oneOf')
     expect(tool?.parameters).not.toHaveProperty('anyOf')
@@ -306,6 +307,24 @@ describe('syncTools', () => {
     ])
 
     await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'monday-com-monday-com' }, new Map())
+
+    for (const name of ['execute_code', 'future_tool']) {
+      const parameters = ctx.tools.get(`mcp__monday-com-monday-com__${name}`)?.parameters
+      expect(parameters).toMatchObject({
+        type: 'object',
+        properties: {
+          phoenix_arguments: {
+            type: 'object',
+            additionalProperties: true,
+          },
+        },
+        required: ['phoenix_arguments'],
+        additionalProperties: false,
+      })
+      for (const forbidden of ['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not']) {
+        expect(parameters).not.toHaveProperty(forbidden)
+      }
+    }
 
     const executeArgs = { code: 'return 1' }
     await ctx.tools.execute({
