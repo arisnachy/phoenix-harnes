@@ -113,6 +113,9 @@ export class SessionInputShell implements SessionInput {
   private disposed = false
   /** Draft persistence mirror (chat store write; receives the clipboard projection, never display-only ranges). */
   private mirrorFn: ((text: string) => void) | undefined
+  /** Draft persistence is deliberately off the keystroke hot path. */
+  private mirrorTimer: ReturnType<typeof setTimeout> | undefined
+  private pendingMirror: string | undefined
 
   constructor(private readonly deps: SessionInputDeps) {
     this.state = createSnapshotStore<InputState>(this.compose())
@@ -240,6 +243,9 @@ export class SessionInputShell implements SessionInput {
       this.notify('error', this.deps.commandImages.unsupportedNotice(before.claim?.token ?? before.draft))
       return
     }
+    // Sending is a cold path: commit the last debounced draft before
+    // admission so a crash/reload cannot resurrect an older persisted value.
+    this.flushMirror()
     this.run(this.core.dispatch({ type: 'enter', mode }))
     const phase = this.snapshot.phase
     if (phase === 'adjudicating' || phase === 'submitting') {
@@ -399,6 +405,7 @@ export class SessionInputShell implements SessionInput {
 
   /** Teardown: abort any in-flight attempt and stop accepting async settlements. */
   dispose(): void {
+    this.flushMirror()
     this.disposed = true
     this.pendingSubmit = undefined
     this.run(this.core.dispatch({ type: 'release' }))
@@ -419,8 +426,13 @@ export class SessionInputShell implements SessionInput {
    */
   bindMirror(write: (text: string) => void): () => void {
     this.mirrorFn = write
+    // A draft may have changed during scope materialization before the bridge
+    // mounted. Persist that pending value now rather than waiting for another key.
+    this.flushMirror()
     return () => {
-      if (this.mirrorFn === write) this.mirrorFn = undefined
+      if (this.mirrorFn !== write) return
+      this.flushMirror()
+      this.mirrorFn = undefined
     }
   }
 
@@ -645,7 +657,24 @@ export class SessionInputShell implements SessionInput {
     const mirroredDraft = projectClipboard(next)
     if (mirroredDraft !== this.lastMirroredDraft) {
       this.lastMirroredDraft = mirroredDraft
-      this.mirrorFn?.(mirroredDraft)
+      this.pendingMirror = mirroredDraft
+      if (this.mirrorTimer !== undefined) clearTimeout(this.mirrorTimer)
+      // localStorage persistence behind the chat store is synchronous. Keep it
+      // out of the input event while still persisting shortly after the user
+      // stops typing. Submit/unmount flush synchronously through flushMirror().
+      this.mirrorTimer = setTimeout(() => { this.flushMirror() }, 180)
     }
+  }
+
+  /** Commit the latest draft mirror and cancel any pending debounce timer. */
+  private flushMirror(): void {
+    if (this.mirrorTimer !== undefined) {
+      clearTimeout(this.mirrorTimer)
+      this.mirrorTimer = undefined
+    }
+    const pending = this.pendingMirror
+    if (pending === undefined || this.mirrorFn === undefined) return
+    this.pendingMirror = undefined
+    this.mirrorFn(pending)
   }
 }
