@@ -57,7 +57,7 @@ export const DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET = 2048 * 2048
 /** Default raw encoded-byte cap before inline base64 expansion. */
 export const DEFAULT_REQUEST_IMAGE_MAX_BYTES = 1024 * 1024
 /** Default raw byte bound for projecting one text attachment into a request. */
-export const DEFAULT_MAX_INLINE_FILE_BYTES = 256 * 1024
+export const DEFAULT_MAX_INLINE_FILE_BYTES = Number.MAX_SAFE_INTEGER
 
 /** Context capacity assumed for a model neither configuration nor the catalog sizes. */
 export const DEFAULT_CONTEXT_WINDOW = 262_144
@@ -214,7 +214,7 @@ export interface PiAiProviderProfile {
   requestImagePixelBudget?: number
   /** Raw encoded-byte cap for each deterministic inline request version. */
   requestImageMaxBytes?: number
-  /** Maximum bytes of one text attachment projected into a pi-ai request. */
+  /** Optional provider-route cap for one text attachment projected into a pi-ai request; default delegates to the selected model context. */
   maxInlineFileBytes?: number
   /** Provider-owned model-request retry policy; omission uses normal mode with two retries. */
   retryPolicy?: RetryPolicyConfig
