@@ -113,8 +113,7 @@ describe('Codex automatic live catalog policy', () => {
     expect(list).toHaveBeenCalledTimes(1)
 
     release?.([{ id: 'background-model' }])
-    await Promise.resolve()
-    await Promise.resolve()
+    await expect(catalog.refresh(CODEX_PROVIDER, {})).resolves.toEqual(['background-model'])
 
     expect(catalog.visibleIds()).toEqual(['background-model'])
     expect(catalog.revision).toBe(1)
