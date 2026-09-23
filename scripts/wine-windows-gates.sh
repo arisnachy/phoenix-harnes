@@ -221,10 +221,11 @@ wine_node() {
 
 cd "$scratch/tree"
 tsc_js='node_modules/typescript/bin/tsc'
+tsx_js='node_modules/tsx/dist/cli.mjs'
 tsdown_js='node_modules/tsdown/dist/run.mjs'
 vitepress_js='node_modules/vitepress/bin/vitepress.js'
 [ -f "$vitepress_js" ] || vitepress_js='website/node_modules/vitepress/bin/vitepress.js'
-for entry in "$tsc_js" "$tsdown_js" "$vitepress_js"; do
+for entry in "$tsc_js" "$tsx_js" "$tsdown_js" "$vitepress_js"; do
   [ -f "$entry" ] || { echo "wine-windows-gates: expected entrypoint missing after hoisted install: $entry" >&2; exit 1; }
 done
 # VitePress links vue into the site's node_modules at build time; Wine cannot
@@ -244,6 +245,9 @@ grep -q '^smoke: win32 x64' "$scratch/logs/smoke.log" || { echo 'wine-windows-ga
 # Both statuses are captured so one failure cannot hide the other's result.
 build_gate() {
   wine_node "$scratch/logs/host-tsc.log" "$tsc_js" -b tsconfig.host.json --pretty false || return $?
+  # Match package.json build:lib:host exactly: generated Typert/Remote contracts
+  # must exist before Host bundling and, especially, before Client typecheck.
+  wine_node "$scratch/logs/host-typert.log" "$tsx_js" scripts/generate-typert.ts || return $?
   wine_node "$scratch/logs/host-tsdown.log" "$tsdown_js" --env.DSH_BUILD_FACE host || return $?
   wine_node "$scratch/logs/client-tsc.log" "$tsc_js" -b tsconfig.client.json --pretty false || return $?
   wine_node "$scratch/logs/client-tsdown.log" "$tsdown_js" --env.DSH_BUILD_FACE client
@@ -274,6 +278,7 @@ report() {
 }
 report 'build (Host tsc/tsdown, Client tsc/tsdown)' "$build_status" \
   "$scratch/logs/host-tsc.log" \
+  "$scratch/logs/host-typert.log" \
   "$scratch/logs/host-tsdown.log" \
   "$scratch/logs/client-tsc.log" \
   "$scratch/logs/client-tsdown.log"
