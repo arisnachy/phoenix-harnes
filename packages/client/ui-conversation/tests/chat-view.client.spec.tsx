@@ -433,6 +433,9 @@ describe('ChatView', () => {
 
     const optimistic = view.getByText('mensaje inmediato').closest('[data-pending-steering]')
     expect(optimistic).not.toBeNull()
+    const preparing = view.getByRole('status')
+    expect(preparing.getAttribute('data-phase')).toBe('preparing')
+    expect(preparing.getAttribute('data-activity')).toBe('preparing')
     const previousRow = view.getByText('respuesta previa').closest('[data-chat-flow-key]')
     expect(previousRow).not.toBeNull()
     expect(previousRow!.compareDocumentPosition(optimistic!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
