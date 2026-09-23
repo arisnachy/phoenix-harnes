@@ -920,6 +920,55 @@ describe('Agent.cancel()', () => {
     expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason).toEqual({ kind: 'aborted', reason: { kind: 'user' } })
   })
 
+  it('steer interrupts an active cooperative tool and immediately replays the steering input', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('slow-tool', 'blocked', {}),
+      textResponse('steered reply'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('steer-active-tool'), { provider: 'mock', model: 'mock' })
+    const started = Promise.withResolvers<undefined>()
+    ctx.tools.register(defineContentToolFixture({
+      name: 'blocked',
+      description: 'wait until steering interrupts this tool',
+      parameters: {},
+      execute: async (_args, exec) => {
+        started.resolve(undefined)
+        if (!exec.signal.aborted) {
+          await new Promise<void>((resolve) => {
+            exec.signal.addEventListener('abort', () => { resolve() }, { once: true })
+          })
+        }
+        return [{ type: 'text', text: 'interrupted for user steering' }]
+      },
+    }))
+
+    send(agent, 'start long tool')
+    await started.promise
+    const steering = createUserMessage({
+      content: [{ type: 'text', text: 'answer this now' }],
+      source: { kind: 'user' },
+    })
+    agent.steer(steering)
+    await Promise.race([
+      agent.whenIdle(),
+      new Promise((_resolve, reject) => {
+        setTimeout(() => { reject(new Error('steering stayed behind the active tool')) }, 1_000)
+      }),
+    ])
+
+    expect(adapter.requests).toHaveLength(2)
+    expect(userTexts(agent)).toEqual(['start long tool', 'answer this now'])
+    expect(agent.inbox.nextStep).toHaveLength(0)
+    expect(agent.session.events
+      .filter(event => event.type === 'turn/end')
+      .map(event => event.type === 'turn/end' ? event.data.reason : undefined))
+      .toEqual([
+        { kind: 'aborted', reason: { kind: 'user' } },
+        { kind: 'completed' },
+      ])
+  })
+
   it.each([
     'pre-step',
     'system-prompt',
