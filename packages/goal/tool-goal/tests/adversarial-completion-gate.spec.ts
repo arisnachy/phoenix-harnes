@@ -228,6 +228,154 @@ describe('adversarial completion tester', () => {
     })
   })
 
+  it('reuses a certified PASS after the same artifact passes a fresh gate without launching another semantic judge', async () => {
+    const objective = 'Ship the verified artifact.'
+    const goalId = 'goal-same-artifact'
+    const events: any[] = [
+      {
+        type: 'goal/change',
+        data: { operation: 'create', goal: { id: goalId, revision: 1, objective } },
+      },
+      {
+        type: 'goal/completion-gate',
+        data: {
+          goalId,
+          revision: 1,
+          round: 1,
+          attemptId: 'gate-old',
+          checks: passingChecks,
+          evidenceLedger: passingLedger,
+          artifactFingerprint: 'sha256:same-artifact',
+          cleanRoomEvidence: 'verified clean copy',
+          findings: [],
+          proceduralLessons: [],
+        },
+      },
+      {
+        type: 'goal/judge',
+        data: {
+          goalId,
+          revision: 1,
+          round: 1,
+          verdict: 'pass',
+          summary: 'Already certified.',
+          findings: [],
+          requiredChanges: [],
+        },
+      },
+    ]
+    const start = vi.fn(async (_name: string, request: Record<string, unknown>) => {
+      if (request.label === 'goal-adversarial-test-design') {
+        return {
+          result: Promise.resolve({
+            output: [],
+            stopReason: 'completed' as const,
+            structured: { cases: [{ name: 'fresh-boundary', purpose: 'Exercise one fresh boundary.' }] },
+          }),
+          dispose: async () => {},
+        }
+      }
+      if (request.label === 'goal-adversarial-tester') {
+        return {
+          result: Promise.resolve({
+            output: [],
+            stopReason: 'completed' as const,
+            structured: {
+              checks: {
+                requirements: 'pass',
+                builder_tests: 'pass',
+                adversarial_tests: 'pass',
+                startup: 'pass',
+                artifact_integrity: 'pass',
+                clean_room: 'pass',
+              },
+              evidence_ledger: [{
+                criterion_id: 'REQ-001',
+                criterion: 'The shipped CLI handles malformed and alternate input formats.',
+                mandatory: true,
+                status: 'verified',
+                evidence: ['fresh clean-room boundary check'],
+              }],
+              artifact_fingerprint: 'sha256:same-artifact',
+              clean_room_evidence: 'fresh clean copy passed',
+              findings: [],
+              procedural_lessons: [],
+            },
+          }),
+          dispose: async () => {},
+        }
+      }
+      throw new Error('redundant semantic judge should not run')
+    })
+
+    const result = await judgeGoalCompletion({
+      subagents: {
+        getProvider: () => provider() as never,
+        list: () => ['spawn'],
+        start: start as never,
+      },
+      provider: 'spawn',
+      parent: {
+        options: { provider: 'anthropic', model: 'claude-opus' },
+        session: {
+          events,
+          append: (type: string, data: unknown) => { events.push({ type, data }) },
+        },
+      } as never,
+      objective,
+      round: 2,
+      signal: new AbortController().signal,
+    })
+
+    expect(result).toEqual({
+      verdict: 'pass',
+      summary: 'Already certified.',
+      findings: [],
+      requiredChanges: [],
+    })
+    expect(start).toHaveBeenCalledTimes(2)
+  })
+
+  it('classifies verifier infrastructure failure as blocked without launching a semantic judge', async () => {
+    const objective = 'Ship the verified artifact.'
+    const goalId = 'goal-verifier-down'
+    const events: any[] = [{
+      type: 'goal/change',
+      data: { operation: 'create', goal: { id: goalId, revision: 1, objective } },
+    }]
+    const start = vi.fn(async () => ({
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed' as const,
+        structured: { cases: [] },
+      }),
+      dispose: async () => {},
+    }))
+
+    const result = await judgeGoalCompletion({
+      subagents: {
+        getProvider: () => provider() as never,
+        list: () => ['spawn'],
+        start: start as never,
+      },
+      provider: 'spawn',
+      parent: {
+        options: { provider: 'anthropic', model: 'claude-opus' },
+        session: {
+          events,
+          append: (type: string, data: unknown) => { events.push({ type, data }) },
+        },
+      } as never,
+      objective,
+      round: 1,
+      signal: new AbortController().signal,
+    })
+
+    expect(result.verdict).toBe('blocked')
+    expect(result.requiredChanges).toEqual([])
+    expect(start).toHaveBeenCalledTimes(1)
+  })
+
   it('does not reuse a historical PASS whose gate has no mandatory criterion', async () => {
     const objective = 'Ship the verified artifact.'
     const goalId = 'goal-weak-history'

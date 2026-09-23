@@ -22,6 +22,9 @@ export type AssistantGender = 'masculine' | 'feminine' | 'neutral'
 /** Provenance for a persisted assistant presentation; absence keeps inference open. */
 export type AssistantGenderSource = 'inferred' | 'manual'
 
+/** User-owned policy controlling when Phoenix may use external connectors. */
+export type ConnectorMode = 'ask' | 'approved' | 'disabled'
+
 /** Data persisted by the profile namespace. Age is intentionally absent. */
 export interface UserProfileSettings {
   assistantName: string
@@ -29,6 +32,8 @@ export interface UserProfileSettings {
   assistantGenderSource?: AssistantGenderSource
   /** Provider route order shown by model selectors; absent means directory order. */
   modelProviderOrder?: string[]
+  /** External connector policy; ask is the safe default. */
+  connectorMode?: ConnectorMode
   preferredName?: string
   dateOfBirth?: string
   gender?: string
@@ -44,6 +49,7 @@ export interface UserProfileUpdate {
   assistantGender?: AssistantGender | null
   assistantGenderSource?: AssistantGenderSource | null
   modelProviderOrder?: string[] | null
+  connectorMode?: ConnectorMode | null
   preferredName?: string | null
   dateOfBirth?: string | null
   gender?: string | null

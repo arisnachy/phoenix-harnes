@@ -170,6 +170,53 @@ describe('HARDNESS mission orchestrator', () => {
     await ctx.fiber.dispose()
   })
 
+  it('defers semantic completion review to the active Goal while preserving deterministic HARDNESS evidence checks', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const acquisition = new AcquisitionRegistry(hardness)
+    acquisition.register(async need => need.kind === 'weather' ? descriptor : undefined)
+    const execute = vi.fn<ToolRuntime['execute']>(async () => ({
+      isError: false as const,
+      value: null,
+      content: [],
+      meta: { artifact: { id: 'forecast-goal', mime: 'text/plain', data: 'sunny' } },
+    }))
+    const artifacts = new ArtifactRuntime()
+    artifacts.register('text/plain', artifact => ({ kind: 'text', artifactId: artifact.id }))
+    const events: any[] = [{
+      type: 'goal/change',
+      data: { operation: 'create', goal: { id: 'goal-weather', phase: 'active' } },
+    }]
+    const session = {
+      events,
+      append: vi.fn((type: string, data: unknown) => { events.push({ type, data }) }),
+    }
+    const semanticJudge = vi.fn<HardnessMissionJudge>(passingJudge())
+
+    const result = await runHardnessMission({
+      hardness,
+      acquisition,
+      tools: { execute },
+      approval: { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) },
+      artifacts,
+      judge: semanticJudge,
+      need: { kind: 'weather', inputs: ['city'], outputs: ['forecast'] },
+      args: { city: 'Madrid' },
+      context: {
+        callId: 'mission-goal-authority' as never,
+        signal: new AbortController().signal,
+        agent: { session } as never,
+      },
+    })
+
+    expect(result).toMatchObject({ kind: 'completed', artifact: { id: 'forecast-goal' } })
+    expect(semanticJudge).not.toHaveBeenCalled()
+    expect(hardness.get(descriptor.id)?.status).toBe('verified')
+    expect(events.some(event => event.type === 'hardness/kernel' && event.data.kind === 'judge' && event.data.status === 'DONE')).toBe(true)
+    await ctx.fiber.dispose()
+  })
+
   it('automatically retries a disposable tool failure through an alternate ATLAS provider', async () => {
     const ctx = new Context()
     await ctx.plugin(HardnessRegistry)

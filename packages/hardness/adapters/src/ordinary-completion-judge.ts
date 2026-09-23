@@ -63,6 +63,8 @@ interface BridgeState {
   generation: number
   verifiedGeneration: number
   judgedGeneration: number
+  hardnessReviewedGeneration: number
+  judgeVerdict: OrdinaryCompletionJudgeDecision['verdict'] | undefined
   judgePasses: number
   request: string
   mutations: string[]
@@ -88,6 +90,20 @@ function isSubstantiveMutation(name: string, args: unknown): boolean {
 function isVerification(name: string, args: unknown): boolean {
   const op = operationName(name)
   return VERIFY.test(op) || (SHELL.test(op) && SHELL_VERIFY.test(argumentText(args)))
+}
+
+function activeGoalOwnsCompletion(agent: Agent): boolean {
+  const events = agent.session.events as readonly { readonly type: string; readonly data: unknown }[]
+  const latest = events.findLast(event => event.type === 'goal/change') as
+    | { readonly type: string; readonly data: { readonly operation?: string; readonly goal?: { readonly phase?: string } } }
+    | undefined
+  return latest?.data.operation !== 'clear'
+    && latest?.data.goal?.phase !== undefined
+    && latest.data.goal.phase !== 'complete'
+}
+
+function isHardnessRun(name: string): boolean {
+  return operationName(name) === 'hardness_run'
 }
 
 function requestText(message: UserMessage): string {
@@ -221,6 +237,8 @@ export function installOrdinaryCompletionJudgeBridge(
       generation: 0,
       verifiedGeneration: 0,
       judgedGeneration: 0,
+      hardnessReviewedGeneration: 0,
+      judgeVerdict: undefined,
       judgePasses: 0,
       request: requestText(message),
       mutations: [],
@@ -240,13 +258,20 @@ export function installOrdinaryCompletionJudgeBridge(
 
     if (isSubstantiveMutation(exec.name, exec.arguments)) {
       state.generation += 1
+      state.judgeVerdict = undefined
       state.mutations.push(operationName(exec.name))
       state.mutations = state.mutations.slice(-12)
+    } else if (isHardnessRun(exec.name) && state.generation > 0) {
+      // HARDNESS already performed its governed verification for everything
+      // mutated inside this call. If nothing mutates afterwards, it owns
+      // completion review for this generation and the ordinary judge must not
+      // duplicate that semantic work.
+      state.hardnessReviewedGeneration = state.generation
     } else if (state.generation > 0 && isVerification(exec.name, exec.arguments)) {
       state.verifiedGeneration = state.generation
       // A judge may ask only for missing evidence. New deterministic evidence
       // must therefore reopen this unchanged generation for a fresh review.
-      if (state.judgedGeneration === state.generation) state.judgedGeneration = 0
+      if (state.judgedGeneration === state.generation && state.judgeVerdict !== 'pass') state.judgedGeneration = 0
       state.verifications.push(operationName(exec.name) + ':' + argumentText(exec.arguments).slice(0, 300))
       state.verifications = state.verifications.slice(-12)
     }
@@ -256,6 +281,12 @@ export function installOrdinaryCompletionJudgeBridge(
   disposers.push(ctx.on('agent/turn-stopping', async ({ agent, signal }) => {
     const state = states.get(agent)
     if (state === undefined || state.generation === 0) return
+    // Completion authority is hierarchical: an active Goal owns the final
+    // semantic review for the whole mission; otherwise a completed HARDNESS
+    // run owns the generation it governed. Ordinary review is only the
+    // fallback for substantive mutations that have neither authority.
+    if (activeGoalOwnsCompletion(agent)) return
+    if (state.hardnessReviewedGeneration === state.generation) return
     if (state.verifiedGeneration !== state.generation || state.judgedGeneration === state.generation) return
     if (state.judgePasses >= maxPasses) return
 
@@ -270,7 +301,12 @@ export function installOrdinaryCompletionJudgeBridge(
       signal,
     })
     state.judgedGeneration = state.generation
-    if (decision.verdict !== 'pass') agent.steer(judgeNotice(decision))
+    state.judgeVerdict = decision.verdict
+    const infrastructureOnlyBlock = decision.verdict === 'blocked'
+      && /^Independent completion judge (?:is unavailable|did not complete|returned invalid evidence|failed)\./.test(decision.summary)
+    if (decision.verdict === 'needs_changes' || (decision.verdict === 'blocked' && !infrastructureOnlyBlock)) {
+      agent.steer(judgeNotice(decision))
+    }
   }))
 
   disposers.push(ctx.on('agent/disposed', ({ agent }) => {

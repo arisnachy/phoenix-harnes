@@ -32,9 +32,9 @@ export interface ReconnectConfig {
   enabled?: boolean
   /** First reconnect delay in milliseconds; doubles per consecutive failed attempt (default 500). */
   initialDelayMs?: number
-  /** Backoff ceiling in milliseconds; also the uptime after which the attempt budget resets (default 30000). */
+  /** Backoff ceiling in milliseconds; also the uptime after which the attempt budget resets (default 5000). */
   maxDelayMs?: number
-  /** Consecutive failed attempts per outage before giving up for good (default 10). */
+  /** Automatic reconnect attempts per outage before giving up for good (default 1). */
   maxAttempts?: number
 }
 
@@ -42,8 +42,10 @@ export interface ReconnectConfig {
 export const RECONNECT_DEFAULTS: Required<ReconnectConfig> = Object.freeze({
   enabled: true,
   initialDelayMs: 500,
-  maxDelayMs: 30_000,
-  maxAttempts: 10,
+  maxDelayMs: 5_000,
+  // Optional infrastructure gets one automatic retry. A connector that still
+  // cannot recover must fail open so it cannot consume the primary mission.
+  maxAttempts: 1,
 })
 
 // The SDK's stdio transport owns two two-second termination grace periods.

@@ -9,7 +9,7 @@ import {
 } from './schema.ts'
 import { inferAssistantGenderFromUserMessage } from './inference.ts'
 import type {
-  AssistantIdentity, UserProfileConsented, UserProfileRedacted, UserProfileSettings, UserProfileUpdate, UserProfileView,
+  AssistantIdentity, ConnectorMode, UserProfileConsented, UserProfileRedacted, UserProfileSettings, UserProfileUpdate, UserProfileView,
 } from './types.ts'
 
 export * from './schema.ts'
@@ -40,6 +40,26 @@ function redactProfile(profile: UserProfileSettings): UserProfileRedacted {
 }
 
 /** Render only explicitly consented profile fields for the dynamic context snapshot. */
+/** Render the user's durable external-connector policy for model execution.
+ * @param mode - persisted connector-use preference.
+ * @returns model-facing execution policy for external connectors.
+ */
+export function renderConnectorPolicy(mode: ConnectorMode): string {
+  const instruction = mode === 'disabled'
+    ? 'External connectors are disabled. Do not call them unless the direct current user request explicitly overrides this setting; use local or built-in fallbacks instead.'
+    : mode === 'approved'
+      ? 'Approved external connectors may be used automatically when they materially advance the primary task. Connector failures remain fail-open unless that connector is required by the requested outcome.'
+      : 'Ask before the first use of an optional external connector. If the current user request explicitly names or inherently requires that connected service, the request itself is authorization to use it. Prefer local or built-in capabilities when they can complete the task without a connector.'
+  return [
+    '<phoenix_connector_policy>',
+    `Mode: ${mode}`,
+    instruction,
+    'The primary user task always outranks connector setup, diagnosis, repair, retries, telemetry, or catalog refresh.',
+    'Never repair a connector during an unrelated task. One bounded retry is the maximum for optional connector infrastructure before fallback or degradation.',
+    '</phoenix_connector_policy>',
+  ].join('\n')
+}
+
 function renderConsentedProfile(profile: UserProfileConsented): string {
   const lines: string[] = []
   if (profile.preferredName !== undefined) lines.push(`Preferred name: ${profile.preferredName}`)
@@ -86,6 +106,11 @@ export class UserProfileService extends Service {
       name: 'user-profile:assistant-identity',
       order: -49,
       text: () => renderAssistantIdentity(this.getAssistantIdentity()),
+    })
+    ctx.systemPrompt.context({
+      name: 'user-profile:connector-policy',
+      order: -48,
+      text: () => renderConnectorPolicy(this.scope.get().connectorMode ?? 'ask'),
     })
     const rawProfile = ctx.settings.describe().find(entry => entry.ns === USER_PROFILE_NAMESPACE)?.user
     this.legacyAssistantGenderManual = hasLegacyAssistantGenderOverride(rawProfile)

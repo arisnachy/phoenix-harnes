@@ -84,7 +84,7 @@ const stdioConfig: Config = {
   env: {},
   cwd: '',
   toolCallTimeoutMs: 60_000,
-  startupTimeoutMs: 5_000,
+  startupTimeoutMs: 2_000,
   failOnStartupError: false,
 }
 
@@ -134,7 +134,7 @@ describe('mcp-client plugin module exports', () => {
       serverName: 'srv',
       command: 'echo',
     } as never)
-    expect(omitted.reconnect).toEqual({ enabled: true, initialDelayMs: 500, maxDelayMs: 30_000, maxAttempts: 10 })
+    expect(omitted.reconnect).toEqual({ enabled: true, initialDelayMs: 500, maxDelayMs: 5_000, maxAttempts: 1 })
 
     const partial = ConfigSchema({
       transport: 'stdio',
@@ -142,8 +142,8 @@ describe('mcp-client plugin module exports', () => {
       command: 'echo',
       reconnect: { initialDelayMs: 100 },
     } as never)
-    expect(partial.reconnect).toEqual({ enabled: true, initialDelayMs: 100, maxDelayMs: 30_000, maxAttempts: 10 })
-    expect(partial.startupTimeoutMs).toBe(5_000)
+    expect(partial.reconnect).toEqual({ enabled: true, initialDelayMs: 100, maxDelayMs: 5_000, maxAttempts: 1 })
+    expect(partial.startupTimeoutMs).toBe(2_000)
   })
 
   it('Config schema rejects an invalid reconnect block', () => {

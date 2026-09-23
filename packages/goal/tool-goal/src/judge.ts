@@ -339,11 +339,15 @@ export async function judgeGoalCompletion(input: {
     signal: input.signal,
   })
   recordCompletionGate(input.parent, input.objective, input.round, gate)
-  if (mayReuseSettledPass(settled, gate) && gateIsInfrastructureOnlyBlocked(gate)) return settled.result
+  // A certified artifact is immutable evidence for this exact goal revision.
+  // If the fresh executable gate observes the same fingerprint, do not spend
+  // another semantic-judge run proving the same thing. Likewise, verifier
+  // infrastructure failure is not an implementation defect and must not launch
+  // more review work or reopen a previously certified deliverable.
+  if (mayReuseSettledPass(settled, gate)) return settled.result
+  if (gateIsInfrastructureOnlyBlocked(gate)) return unavailable()
   const provider = reviewProvider(subagents, input.provider, input.parent)
-  if (provider === undefined) {
-    return mayReuseSettledPass(settled, gate) ? settled.result : enforceGate(unavailable(), gate)
-  }
+  if (provider === undefined) return enforceGate(unavailable(), gate)
   const history = durableMissionReviewHistory(input.parent, input.objective)
 
   const prompt: ContentBlock[] = [{
@@ -362,7 +366,7 @@ export async function judgeGoalCompletion(input: {
       + 'Return pass only when the whole objective is literally satisfied, every mandatory criterion is verified, every gate dimension passed, and the '
       + 'delivered artifact is an excellent real-world solution rather than merely a nominal-case implementation. Consider real-world variability, edge cases, '
       + 'corrupt inputs, alternate supported formats, unexpected conditions, and whether a new user receiving only the final artifact can actually use it. '
-      + 'Return needs_changes for repairable implementation/artifact defects. Return blocked only for a concrete external dependency that genuinely prevents verification.\n'
+      + 'Return needs_changes only for a repairable implementation/artifact defect backed by concrete reproducible evidence from the current artifact, executable gate, or read-only inspection; every required change must identify what failed and how that failure was observed. Administrative state, unavailable verifier infrastructure, connector outages, review-tool failures, or inability to obtain fresh evidence are blocked conditions, not implementation defects, and must never reopen an otherwise certified artifact. Return blocked only for a concrete external dependency that genuinely prevents verification.\n'
       + '</goal_judge>',
   }]
 
@@ -389,7 +393,6 @@ export async function judgeGoalCompletion(input: {
   } finally {
     if (run !== undefined) await run.dispose()
   }
-  if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) return settled.result
   return enforceGate(judged, gate)
 }
 
