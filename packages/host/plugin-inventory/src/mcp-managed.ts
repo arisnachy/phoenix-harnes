@@ -151,6 +151,17 @@ function connectorOf(row: ManagedMcpRow): ManagedMcpConnector {
   }
 }
 
+function isRetiredJevManagedRow(row: ManagedMcpRow): boolean {
+  return row.config.serverName === JEV_MCP_SERVER_NAME || row.config.url === JEV_MCP_URL
+}
+
+function isRetiredJevCandidate(candidate: McpRegistryCandidate): boolean {
+  if (candidate.remoteUrl === JEV_MCP_URL) return true
+  const name = candidate.name.toLowerCase()
+  const title = candidate.title.toLowerCase()
+  return name === 'jev' || name.endsWith('/jev') || title === 'jev'
+}
+
 function serverNameFor(candidate: McpRegistryCandidate): string {
   const tail = candidate.name.slice(candidate.name.lastIndexOf('/') + 1)
   const base = tail.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'mcp'
@@ -203,7 +214,9 @@ export class ManagedMcpController {
    * @returns Persisted managed connector identities and endpoints.
    */
   async snapshot(): Promise<readonly ManagedMcpConnector[]> {
-    return (await readManagedRows(this.path)).map(connectorOf)
+    return (await readManagedRows(this.path))
+      .filter(row => !isRetiredJevManagedRow(row))
+      .map(connectorOf)
   }
 
   /**
@@ -211,63 +224,40 @@ export class ManagedMcpController {
    * The managed overlay contains only JEV_API_KEY as a credential reference.
    * @returns Installation receipt for the active or already-installed Jev connector.
    */
-  async configureJev(): Promise<McpRegistryInstallReceipt> {
-    const config: ManagedMcpConfig = {
-      transport: 'streamable-http',
-      serverName: JEV_MCP_SERVER_NAME,
-      url: JEV_MCP_URL,
-      headers: {},
-      oauth: false,
-      bearerTokenRef: JEV_API_KEY_REF,
-      toolCallTimeoutMs: JEV_TOOL_TIMEOUT_MS,
-      startupTimeoutMs: JEV_STARTUP_TIMEOUT_MS,
-      failOnStartupError: false,
-      reconnect: {
-        enabled: true,
-        initialDelayMs: 1000,
-        maxDelayMs: 30_000,
-        maxAttempts: 3,
-      },
-    }
-    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+  /**
+   * Remove a legacy PHOENIX-managed Jev connector from persistence and the live Loader.
+   * Generic registry-managed MCPs are left untouched.
+   * @returns true when a legacy Jev row was retired.
+   */
+  async retireJev(): Promise<boolean> {
     return withFileLock(this.path, async () => {
       const rows = await readManagedRows(this.path)
-      const existing = rows.find(row =>
-        row.config.serverName === JEV_MCP_SERVER_NAME || row.config.url === JEV_MCP_URL)
-      if (existing !== undefined) {
-        // Upgrade the persisted Jev budgets in place. Legacy 1.8s/1.2s rows
-        // remain readable above so an existing install never looks corrupt,
-        // while the next Host load receives the corrected budgets.
-        if (existing.config.serverName === JEV_MCP_SERVER_NAME
-          && (existing.config.toolCallTimeoutMs !== JEV_TOOL_TIMEOUT_MS
-            || existing.config.startupTimeoutMs !== JEV_STARTUP_TIMEOUT_MS)) {
-          const upgraded: ManagedMcpRow = {
-            ...existing,
-            config: {
-              ...existing.config,
-              toolCallTimeoutMs: JEV_TOOL_TIMEOUT_MS,
-              startupTimeoutMs: JEV_STARTUP_TIMEOUT_MS,
-            },
-          }
-          await writeManagedRows(this.path, rows.map(row => row === existing ? upgraded : row))
-          return { status: 'already-installed', connector: connectorOf(upgraded) }
-        }
-        return { status: 'already-installed', connector: connectorOf(existing) }
-      }
-      const entryId = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
-      const row: ManagedMcpRow = { id: entryId, name: MCP_CLIENT_PACKAGE, config }
-      try {
-        await writeManagedRows(this.path, [...rows, row])
-      } catch (error) {
+      const retired = rows.filter(isRetiredJevManagedRow)
+      if (retired.length === 0) return false
+
+      // Persist the retirement first so a failed live unload cannot resurrect
+      // Jev on the next Phoenix start.
+      await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+      await writeManagedRows(this.path, rows.filter(row => !isRetiredJevManagedRow(row)))
+
+      const failures: unknown[] = []
+      for (const row of retired) {
         try {
-          await this.loader.remove(entryId)
-        } catch (rollbackError) {
-          throw new AggregateError([error, rollbackError], 'failed to persist Jev MCP and roll back live activation')
+          await this.loader.remove(row.id)
+        } catch (error: unknown) {
+          failures.push(error)
         }
-        throw error
       }
-      return { status: 'installed', connector: connectorOf(row) }
+      if (failures.length > 0) {
+        throw new AggregateError(failures, 'Jev was retired from persistent MCP config but one or more live entries could not be unloaded')
+      }
+      return true
     }, { waitMs: 15_000 })
+  }
+
+  /** Compatibility endpoint retained for old clients; Jev can no longer be installed by Phoenix. */
+  async configureJev(): Promise<McpRegistryInstallReceipt> {
+    throw new Error('Jev integration is retired because new Jev accounts are unavailable; PHOENIX uses native routing instead')
   }
 
   /**
@@ -282,6 +272,9 @@ export class ManagedMcpController {
     if (name.length < 2) throw new Error('MCP registry install requires a valid server name')
     const snapshot = await this.registrySearch({ query: name, limit: 20 })
     const candidate = selectInstallableCandidate(snapshot, { ...request, name })
+    if (isRetiredJevCandidate(candidate)) {
+      throw new Error('Jev integration is retired and cannot be installed through the Official MCP Registry')
+    }
     const serverName = serverNameFor(candidate)
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
 
