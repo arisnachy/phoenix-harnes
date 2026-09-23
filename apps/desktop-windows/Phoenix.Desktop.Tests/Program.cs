@@ -297,6 +297,13 @@ try
     False(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)), "unverified source is not persisted as the backend of record", failures);
 
     DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
+    var unavailableSourceRoot = Path.Combine(sourceInstallRoot, "missing-source");
+    Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", unavailableSourceRoot);
+    Equal(null, resolver?.Invoke(null, new object?[] { sourceInstallRoot, true }) as string,
+        "source mode does not fall back to a verified pointer when the explicit checkout is unavailable", failures);
+    Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", sourceTestRoot);
+
+    DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
     Equal(Path.GetFullPath(sourceTestRoot), File.ReadAllText(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)).Trim(), "verified backend root is persisted", failures);
     Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "verified backend root resolves first on later launches", failures);
 

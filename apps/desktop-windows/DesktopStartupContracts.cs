@@ -12,8 +12,16 @@ internal static class DesktopStartupContract
     internal const bool UserCloseHidesToTray = true;
     internal const string InitialStatus = "Iniciando Phoenix…";
 
-    internal static string? ResolveSourceRoot(string stateRoot, bool sourceModeRequested) =>
-        sourceModeRequested ? DesktopSourceCheckout.Resolve(stateRoot, includeConventional: false) : null;
+    internal static string? ResolveSourceRoot(string stateRoot, bool sourceModeRequested)
+    {
+        if (!sourceModeRequested)
+            return null;
+
+        var configured = Environment.GetEnvironmentVariable("PHOENIX_SOURCE_ROOT");
+        return DesktopSourceCheckout.IsRunnable(configured)
+            ? DesktopSourceCheckout.Resolve(stateRoot, includeConventional: false)
+            : null;
+    }
 }
 
 internal static class DesktopRuntimeLaunchContract
