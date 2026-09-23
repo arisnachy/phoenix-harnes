@@ -12,7 +12,7 @@ import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime, { type JsonValue } from '@phoenix-ai/dsh-tools'
 import type { PostToolDecision } from '@phoenix-ai/dsh-tools'
 import { publicToolName, syncTools, type ToolBridgeOptions } from '@phoenix-ai/dsh-mcp-client/src/tools.ts'
-import { createTransport, repairPhoenixStdioProxyArgs } from '@phoenix-ai/dsh-mcp-client/src/transport.ts'
+import { createTransport, normalizeBearerToken, repairPhoenixStdioProxyArgs } from '@phoenix-ai/dsh-mcp-client/src/transport.ts'
 import type { Config } from '@phoenix-ai/dsh-mcp-client'
 
 const testToolSignal = new AbortController().signal
@@ -1433,6 +1433,15 @@ describe('createTransport', () => {
     }
     const transport = await createTransport(config)
     expect(transport).toBeDefined()
+  })
+
+
+  it('normalizes common Bearer copy/paste forms without altering the stored config', () => {
+    expect(normalizeBearerToken('  jev-secret  ')).toBe('jev-secret')
+    expect(normalizeBearerToken('Bearer jev-secret')).toBe('jev-secret')
+    expect(normalizeBearerToken('bearer "jev-secret"')).toBe('jev-secret')
+    expect(normalizeBearerToken("'jev-secret'")).toBe('jev-secret')
+    expect(normalizeBearerToken('   ')).toBeUndefined()
   })
 
   it('accepts one already-resolved Bearer token without putting the secret in connector config', () => {
