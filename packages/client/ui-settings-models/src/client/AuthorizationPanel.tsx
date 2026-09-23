@@ -732,7 +732,11 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     const configure = mcpRegistry?.configureJev
     if (configure === undefined || jevBusy) return
     const apiKey = jevApiKey.trim()
-    if (apiKey.length < 8) {
+    if (apiKey.length === 0 && jevState?.credentialConfigured !== true) {
+      setJevFailure(connectorT('jevApiKeyLabel'))
+      return
+    }
+    if (apiKey.length > 0 && apiKey.length < 8) {
       setJevFailure(connectorT('jevApiKeyLabel'))
       return
     }
@@ -989,8 +993,19 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
               }}>
                 {t('cancel')}
               </button>
-              <button type="button" className={styles['primaryButton']} disabled={jevBusy || jevApiKey.trim().length < 8} onClick={configureJev}>
-                {jevBusy ? connectorT('installing') : connectorT('jevSave')}
+              <button
+                type="button"
+                className={styles['primaryButton']}
+                disabled={jevBusy
+                  || (jevApiKey.trim().length === 0 && jevState?.credentialConfigured !== true)
+                  || (jevApiKey.trim().length > 0 && jevApiKey.trim().length < 8)}
+                onClick={configureJev}
+              >
+                {jevBusy
+                  ? connectorT('installing')
+                  : jevApiKey.trim().length === 0 && jevState?.credentialConfigured === true
+                    ? connectorT('reconnect')
+                    : connectorT('jevSave')}
               </button>
             </div>
           </div>
