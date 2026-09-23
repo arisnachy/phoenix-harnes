@@ -112,11 +112,8 @@
       config:
         serverName: chrome
         transport: stdio
-        command: node
-        args:
-          - --import
-          - tsx/esm
-          - packages/mcp/chrome-connector/src/bin.ts
+        command: !!js process.execPath
+        args: !!js "process.env.PHOENIX_DESKTOP_MANAGED === '1' ? [process.env.PHOENIX_RUNTIME_ROOT + '/runtime-app/node_modules/@phoenix-ai/dsh-chrome-connector/lib/bin.js'] : ['--import', 'tsx/esm', 'packages/mcp/chrome-connector/src/bin.ts']"
         cwd: !!js process.cwd()
         env:
           PHOENIX_BROWSER_AUTOSTART: 'true'

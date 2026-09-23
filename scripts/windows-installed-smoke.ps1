@@ -28,7 +28,38 @@ function Get-DesktopLogText {
         return ''
     }
 
-    return [System.IO.File]::ReadAllText($desktopLogPath)
+    $maxAttempts = 5
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        $stream = $null
+        $reader = $null
+        try {
+            $stream = [System.IO.FileStream]::new(
+                $desktopLogPath,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Read,
+                ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+            )
+            $reader = [System.IO.StreamReader]::new($stream)
+            return $reader.ReadToEnd()
+        } catch [System.IO.FileNotFoundException] {
+            return ''
+        } catch [System.IO.DirectoryNotFoundException] {
+            return ''
+        } catch [System.IO.IOException] {
+            if ($attempt -eq $maxAttempts) {
+                throw
+            }
+            Start-Sleep -Milliseconds 50
+        } finally {
+            if ($null -ne $reader) {
+                $reader.Dispose()
+            } elseif ($null -ne $stream) {
+                $stream.Dispose()
+            }
+        }
+    }
+
+    return ''
 }
 
 function Get-PhoenixListenerIdentity {

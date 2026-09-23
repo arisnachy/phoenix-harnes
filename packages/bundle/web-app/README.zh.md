@@ -8,6 +8,10 @@ dsh 浏览器表层组合包。[`cordis.patch.yml`](cordis.patch.yml) 叠加在 
 
 Web 使用共享的有界 normal 默认值，在首次请求后最多再重试五次符合条件的失败。`deepseek-official` 与由 settings 新增的 pi-ai 路由在省略 `retryPolicy` 时使用该默认值；显式提供方策略仍然优先。Web 不再增加重试专用的组合覆盖，因此非 Web profile 的省略行为与之相同。
 
+## Windows 浏览器连接器
+
+在 Windows 上，`chrome-browser-primary` 行会使用捆绑的 Node 可执行文件，从受管 runtime 启动已编译的 `@phoenix-ai/dsh-chrome-connector`；源码启动则通过 `tsx/esm` 使用 TypeScript 入口。连接器启动失败不会中止应用，重连次数有上限。
+
 ## 模型体验
 
 ### Harness 源码与 Web 表层上下文

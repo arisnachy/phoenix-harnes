@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-22-windows-installed-desktop-startup.md
-2026-09-22-windows-installed-desktop-startup.md: ac483fe466e8eb8835f4487bb0b036fe780571c5
-2026-09-22-windows-installed-desktop-startup.zh.md: c349fb929e2c6cb2ed34ad2b1ef8af9421900045
+2026-09-22-windows-installed-desktop-startup.md: 47fc5b830d82a6055799a306b32a96c9c08ce2ce
+2026-09-22-windows-installed-desktop-startup.zh.md: d3da7e7dff2382c1b009ec262052b90a6d55059d

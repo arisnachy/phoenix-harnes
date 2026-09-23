@@ -8,6 +8,10 @@ The dsh browser-surface bundle. [`cordis.patch.yml`](cordis.patch.yml) rides ove
 
 Web uses the shared bounded normal default of five eligible retries after the initial request. The `deepseek-official` route and settings-added pi-ai routes use that default when they omit `retryPolicy`; explicit provider policies still win. Web adds no retry-specific composition override, so the same omission behavior applies to non-Web profiles.
 
+## Windows browser connector
+
+On Windows, the `chrome-browser-primary` row starts the compiled `@phoenix-ai/dsh-chrome-connector` from the managed runtime with the bundled Node executable; source launches use the TypeScript entry through `tsx/esm`. Connector startup is non-fatal, and reconnect attempts are bounded.
+
 ## Model Experience
 
 ### Harness-source and Web-surface context

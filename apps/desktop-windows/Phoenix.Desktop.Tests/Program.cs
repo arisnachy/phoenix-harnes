@@ -283,6 +283,18 @@ if (stableListenerIdentity is not null)
 }
 
 var processIdentityType = typeof(DesktopRuntimeLaunchContract).Assembly.GetType("Phoenix.Desktop.DesktopRuntimeProcessIdentity");
+var isSameOrDescendant = processIdentityType?.GetMethod(
+    "IsSameOrDescendantOf",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+    binder: null,
+    types: new[] { typeof(int), typeof(int) },
+    modifiers: null);
+var sameOrDescendant = processIdentityType?.GetMethod(
+    "IsSameOrDescendantOf",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+    binder: null,
+    types: new[] { typeof(int), typeof(int), typeof(IReadOnlyDictionary<int, int>) },
+    modifiers: null);
 var matchesLoopbackListener = processIdentityType?.GetMethod(
     "MatchesLoopbackListener",
     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
@@ -295,6 +307,24 @@ var readProcessCommandLine = processIdentityType?.GetMethod(
 True(findListenerIdentity is not null, "listener PID identity lookup exists", failures);
 True(readProcessCommandLine is not null, "process command-line lookup exists", failures);
 True(matchesLoopbackListener is not null, "listener lookup filters to the loopback endpoint", failures);
+True(isSameOrDescendant is not null, "native process ancestry lookup exists", failures);
+True(sameOrDescendant is not null, "owned runtime process-tree check exists", failures);
+if (OperatingSystem.IsWindows() && isSameOrDescendant is not null)
+    EqualBool(true, (bool)isSameOrDescendant.Invoke(null, new object?[] { Environment.ProcessId, Environment.ProcessId })!,
+        "Toolhelp32 snapshot recognizes the current process as its own ancestor", failures);
+if (sameOrDescendant is not null)
+{
+    var processParents = new Dictionary<int, int> { [701] = 700, [700] = 699 };
+    EqualBool(true, (bool)sameOrDescendant.Invoke(null, new object?[] { 701, 699, processParents })!,
+        "listener descendant is owned by the started runtime supervisor", failures);
+    EqualBool(true, (bool)sameOrDescendant.Invoke(null, new object?[] { 699, 699, processParents })!,
+        "the runtime supervisor may own the listener directly", failures);
+    EqualBool(false, (bool)sameOrDescendant.Invoke(null, new object?[] { 701, 698, processParents })!,
+        "an unrelated process is not owned by the runtime supervisor", failures);
+    var cyclicParents = new Dictionary<int, int> { [701] = 700, [700] = 701 };
+    EqualBool(false, (bool)sameOrDescendant.Invoke(null, new object?[] { 701, 698, cyclicParents })!,
+        "a malformed process ancestry cycle fails closed", failures);
+}
 if (matchesLoopbackListener is not null)
 {
     var loopbackAddress = BitConverter.ToUInt32(IPAddress.Loopback.GetAddressBytes());
