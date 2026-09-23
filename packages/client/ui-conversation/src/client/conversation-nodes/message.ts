@@ -9,6 +9,8 @@ import type { InboxState } from './inbox.ts'
 import { chatNode } from './common.ts'
 
 interface ReferencedUserMessageNode extends UserMessageNode {
+  /** Stable durable identity used to reconcile transient/optimistic copies. */
+  readonly messageId: UserMessageNode extends { messageId: infer T } ? T : string
   /** Labels cited by the immediately following session-reference context. */
   readonly referenceLabels?: readonly string[]
 }
@@ -72,6 +74,7 @@ export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
       }
       : {
         kind: 'user',
+        messageId: event.data.id,
         seq: event.seq,
         time: event.time,
         content: event.data.content,
