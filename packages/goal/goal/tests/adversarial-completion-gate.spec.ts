@@ -41,7 +41,11 @@ function refOf(goal: { id: GoalRef['id']; revision: number }): GoalRef {
   return { id: goal.id, revision: goal.revision }
 }
 
-function appendGate(session: Session, ref: GoalRef): void {
+function appendGate(
+  session: Session,
+  ref: GoalRef,
+  options: { evidence?: readonly string[]; unverifiedItems?: readonly string[] } = {},
+): void {
   session.append('goal/completion-gate', {
     goalId: ref.id,
     revision: ref.revision,
@@ -60,12 +64,17 @@ function appendGate(session: Session, ref: GoalRef): void {
       criterion: 'Ship a verified artifact.',
       mandatory: true,
       status: 'verified',
-      evidence: ['clean-room verification'],
+      evidence: [...(options.evidence ?? ['clean-room verification'])],
     }],
     artifactFingerprint: 'sha256:test-artifact',
     cleanRoomEvidence: 'verified extracted artifact in a clean temporary directory',
     findings: [],
     proceduralLessons: [],
+    completionReport: {
+      unverifiedItems: [...(options.unverifiedItems ?? [])],
+      knownLimitations: [],
+    },
+    verificationIncidents: [],
   })
 }
 
@@ -92,6 +101,30 @@ describe('adversarial completion gate', () => {
     const { ctx, agent, session } = await harness()
     const goal = ctx.goals.create(agent, { objective: 'Ship a verified artifact' })
     const ref = refOf(goal)
+    appendJudge(session, ref, 'pass', 'judge-pass')
+
+    expect(() => ctx.goals.complete(agent, ref)).toThrow(expect.objectContaining({
+      code: 'GOAL_COMPLETION_GATE_NOT_VERIFIED',
+    }))
+  })
+
+  it('rejects a nominal pass whose mandatory evidence is empty', async () => {
+    const { ctx, agent, session } = await harness()
+    const goal = ctx.goals.create(agent, { objective: 'Ship a verified artifact' })
+    const ref = refOf(goal)
+    appendGate(session, ref, { evidence: [] })
+    appendJudge(session, ref, 'pass', 'judge-pass')
+
+    expect(() => ctx.goals.complete(agent, ref)).toThrow(expect.objectContaining({
+      code: 'GOAL_COMPLETION_GATE_NOT_VERIFIED',
+    }))
+  })
+
+  it('rejects a nominal pass while the canonical report still has unverified work', async () => {
+    const { ctx, agent, session } = await harness()
+    const goal = ctx.goals.create(agent, { objective: 'Ship a verified artifact' })
+    const ref = refOf(goal)
+    appendGate(session, ref, { unverifiedItems: ['production entrypoint not exercised'] })
     appendJudge(session, ref, 'pass', 'judge-pass')
 
     expect(() => ctx.goals.complete(agent, ref)).toThrow(expect.objectContaining({
