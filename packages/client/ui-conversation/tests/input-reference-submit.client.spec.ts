@@ -244,7 +244,12 @@ describe('submit transaction hardening', () => {
 
       settle({ kind: 'success' })
       await vi.waitFor(() => { expect(shell.snapshot.phase).toBe('plain') })
-      expect(shell.snapshot.pendingSubmit).toBeUndefined()
+      // Host acceptance is not the durable transcript handoff. Keep the local
+      // receipt alive so the UI cannot go blank while the session stream lags.
+      expect(shell.snapshot.pendingSubmit).toMatchObject({
+        text: 'interrumpe esto',
+        modelText: 'interrumpe esto',
+      })
       expect(shell.snapshot.draft).toBe('')
     } finally {
       vi.useRealTimers()
