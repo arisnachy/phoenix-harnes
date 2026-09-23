@@ -159,8 +159,11 @@ export function codexMetadataAppServerArgv(): string[] {
  * Preserve the real Codex home while giving Phoenix-owned Codex subagents their
  * own SQLite state. Explicit CODEX_SQLITE_HOME remains authoritative.
  */
-export function codexSubagentEnvironment(
+type CodexRuntimeSqliteScope = 'subagent' | 'account'
+
+function codexRuntimeEnvironment(
   explicit: Readonly<Record<string, string>>,
+  scope: CodexRuntimeSqliteScope,
 ): Record<string, string> {
   const configuredHome = explicit.CODEX_HOME?.trim() ?? process.env.CODEX_HOME?.trim()
   const home = configuredHome && configuredHome.length > 0
@@ -172,16 +175,30 @@ export function codexSubagentEnvironment(
   const sqliteHome = explicitConfiguredSqlite && explicitConfiguredSqlite.length > 0
     ? resolve(explicitConfiguredSqlite)
     : phoenixConfiguredSqlite && phoenixConfiguredSqlite.length > 0
-      ? resolve(phoenixConfiguredSqlite, 'subagent')
+      ? resolve(phoenixConfiguredSqlite, scope)
       : ambientCodexSqlite && ambientCodexSqlite.length > 0
-        ? resolve(ambientCodexSqlite, 'phoenix-runtime', 'subagent')
-        : join(home, 'phoenix-runtime', 'sqlite', 'subagent')
+        ? resolve(ambientCodexSqlite, 'phoenix-runtime', scope)
+        : join(home, 'phoenix-runtime', 'sqlite', scope)
   mkdirSync(sqliteHome, { recursive: true })
   return {
     ...explicit,
     CODEX_HOME: home,
     CODEX_SQLITE_HOME: sqliteHome,
   }
+}
+
+/** Preserve ChatGPT auth while isolating one-shot agent SQLite state from the user's Codex runtime. */
+export function codexSubagentEnvironment(
+  explicit: Readonly<Record<string, string>>,
+): Record<string, string> {
+  return codexRuntimeEnvironment(explicit, 'subagent')
+}
+
+/** Preserve ChatGPT auth while isolating account/telemetry probes from every other Codex process. */
+export function codexAccountEnvironment(
+  explicit: Readonly<Record<string, string>>,
+): Record<string, string> {
+  return codexRuntimeEnvironment(explicit, 'account')
 }
 
 /** Fully resolved inputs for one Codex app-server run. */

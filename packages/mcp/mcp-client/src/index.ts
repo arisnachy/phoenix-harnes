@@ -299,8 +299,12 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
 
   ctx.effect(() => {
-    return () => {
-      void connection.dispose()
+    return async () => {
+      // Host replacement must not overlap stdio MCP children from the old
+      // generation with children spawned by the replacement Host. The
+      // connection supervisor already owns a bounded process-close barrier;
+      // await it here instead of fire-and-forget disposal.
+      await connection.dispose()
       registration?.dispose()
     }
   }, 'mcp-client.connection')

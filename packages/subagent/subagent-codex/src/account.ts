@@ -18,10 +18,17 @@ import type { AuthorizationConnectorTelemetry } from '@phoenix-ai/dsh-authorizat
 import { credentialKey } from '@phoenix-ai/dsh-credentials'
 import { JsonRpcLineTransport } from '@phoenix-ai/dsh-sdk-protocol'
 import type { SubprocessHandle } from '@phoenix-ai/dsh-subprocess'
-import { codexMetadataAppServerArgv } from './run.ts'
+import { codexAccountEnvironment, codexMetadataAppServerArgv } from './run.ts'
 
 /** Credential marker for the Codex-managed ChatGPT account session. */
 export const CODEX_ACCOUNT_KEY = credentialKey('subagent-codex', 'account')
+
+/** Keep Settings/telemetry re-renders from spawning a Codex app-server storm. */
+const ACCOUNT_INSPECTION_TTL_MS = 60_000
+/** A failed native probe is retried later, not once per UI subscriber/render. */
+const ACCOUNT_FAILURE_COOLDOWN_MS = 30_000
+/** Shared background probe ceiling; individual callers may stop waiting sooner. */
+const ACCOUNT_PROBE_TIMEOUT_MS = 20_000
 
 /** Runtime configuration required to open and dispose the native Codex account bridge. */
 export interface CodexAccountBridgeConfig {
@@ -336,7 +343,7 @@ async function openConnection(
     stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' },
     graceMs: config.disposeGraceMs,
     signal,
-    env: { ...config.env },
+    env: codexAccountEnvironment(config.env),
   })
   const connection = new CodexAccountConnection(child, config.disposeGraceMs)
   try {
@@ -530,19 +537,89 @@ export function registerCodexAccountFlow(
   ctx: Context,
   config: CodexAccountBridgeConfig,
 ): () => void {
-  return ctx.authorization.registerFlow({
+  const lifecycle = new AbortController()
+  let cached: { readonly snapshot: CodexAccountSnapshot; readonly at: number } | undefined
+  let failed: { readonly error: unknown; readonly at: number } | undefined
+  let inFlightSnapshot: Promise<CodexAccountSnapshot> | undefined
+
+  const waitForSharedSnapshot = async (
+    pending: Promise<CodexAccountSnapshot>,
+    signal: AbortSignal,
+  ): Promise<CodexAccountSnapshot> => {
+    if (signal.aborted) throw abortError(signal)
+    return await new Promise<CodexAccountSnapshot>((resolve, reject) => {
+      const onAbort = (): void => { reject(abortError(signal)) }
+      signal.addEventListener('abort', onAbort, { once: true })
+      void pending.then(resolve, reject).finally(() => {
+        signal.removeEventListener('abort', onAbort)
+      })
+    })
+  }
+
+  const inspectSnapshot = async (signal: AbortSignal): Promise<CodexAccountSnapshot> => {
+    const now = Date.now()
+    if (cached !== undefined && now - cached.at < ACCOUNT_INSPECTION_TTL_MS) {
+      return cached.snapshot
+    }
+
+    if (inFlightSnapshot === undefined
+      && (failed === undefined || now - failed.at >= ACCOUNT_FAILURE_COOLDOWN_MS)) {
+      // The native process belongs to the flow, not to the first UI caller.
+      // One caller cancelling its render must not kill the shared refresh and
+      // cause every remaining subscriber to spawn a replacement process.
+      const probeSignal = AbortSignal.any([
+        lifecycle.signal,
+        AbortSignal.timeout(ACCOUNT_PROBE_TIMEOUT_MS),
+      ])
+      const job = readCodexAccountSnapshot(ctx, config, probeSignal).then(
+        (snapshot) => {
+          cached = { snapshot, at: Date.now() }
+          failed = undefined
+          return snapshot
+        },
+        (error: unknown) => {
+          failed = { error, at: Date.now() }
+          throw error
+        },
+      )
+      const tracked = job.finally(() => {
+        if (inFlightSnapshot === tracked) inFlightSnapshot = undefined
+      })
+      inFlightSnapshot = tracked
+    }
+
+    if (inFlightSnapshot !== undefined) {
+      return await waitForSharedSnapshot(inFlightSnapshot, signal)
+    }
+    if (cached !== undefined) return cached.snapshot
+    if (failed?.error instanceof Error) throw failed.error
+    throw new Error('subagent-codex account: native account inspection is temporarily unavailable')
+  }
+
+  const invalidateInspection = (): void => {
+    cached = undefined
+    failed = undefined
+  }
+
+  const unregister = ctx.authorization.registerFlow({
     key: CODEX_ACCOUNT_KEY,
     label: 'ChatGPT / Codex',
     methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
     async inspect(signal) {
-      const snapshot = await readCodexAccountSnapshot(ctx, config, signal)
-      return codexAccountTelemetry(snapshot)
+      return codexAccountTelemetry(await inspectSnapshot(signal ?? new AbortController().signal))
     },
     async disconnect(signal) {
       await logoutManagedChatGpt(ctx, config, signal ?? new AbortController().signal)
+      invalidateInspection()
     },
     async run(session) {
       await loginManagedChatGpt(ctx, config, session)
+      invalidateInspection()
     },
   })
+
+  return () => {
+    lifecycle.abort(new Error('subagent-codex account flow disposed'))
+    unregister()
+  }
 }

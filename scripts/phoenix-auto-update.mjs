@@ -39,6 +39,7 @@ const DEFAULT_POLL_MS = 60 * 1000
 const MIN_POLL_MS = 15 * 1000
 const FETCH_ATTEMPTS = 3
 const FETCH_RETRY_MS = 750
+const MAX_NETWORK_BACKOFF_MS = 15 * 60 * 1000
 const STATE_FILE = 'phoenix-update-state.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
@@ -218,12 +219,12 @@ function waitForFetchRetry(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
-function fetchBranchCommit(root, branch, label) {
+function fetchBranchCommit(root, branch, label, attempts = FETCH_ATTEMPTS) {
   const safeLabel = label.replace(/[^A-Za-z0-9._-]/gu, '-')
   const localRef = `refs/phoenix/update/fetch-${String(process.pid)}-${safeLabel}`
   let lastFailure
 
-  for (let attempt = 1; attempt <= FETCH_ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const result = git(root, [
       'fetch', '--quiet', REMOTE,
       `+refs/heads/${branch}:${localRef}`,
@@ -235,29 +236,29 @@ function fetchBranchCommit(root, branch, label) {
     }
 
     lastFailure = result
-    if (attempt < FETCH_ATTEMPTS) {
-      console.error(`[PHOENIX UPDATE] ${label} fetch attempt ${String(attempt)}/${String(FETCH_ATTEMPTS)} failed; retrying...`)
+    if (attempt < attempts) {
+      console.error(`[PHOENIX UPDATE] ${label} fetch attempt ${String(attempt)}/${String(attempts)} failed; retrying...`)
       waitForFetchRetry(FETCH_RETRY_MS * attempt)
     }
   }
 
   git(root, ['update-ref', '-d', localRef], { allowFailure: true })
   const detail = lastFailure?.stderr?.trim()
-  throw new Error(`git fetch ${label} failed after ${String(FETCH_ATTEMPTS)} attempts${detail?.length > 0 ? `: ${detail}` : ''}`)
+  throw new Error(`git fetch ${label} failed after ${String(attempts)} attempts${detail?.length > 0 ? `: ${detail}` : ''}`)
 }
 
-function fetchStableManifest(root) {
-  const channelCommit = fetchBranchCommit(root, CHANNEL_BRANCH, 'stable-channel')
+function fetchStableManifest(root, attempts = FETCH_ATTEMPTS) {
+  const channelCommit = fetchBranchCommit(root, CHANNEL_BRANCH, 'stable-channel', attempts)
   const text = git(root, ['show', `${channelCommit}:${CHANNEL_PATH}`]).stdout
   return parseManifest(text)
 }
 
-function fetchTarget(root, manifest) {
+function fetchTarget(root, manifest, attempts = FETCH_ATTEMPTS) {
   // The channel manifest is the signed identity/metadata record. The promoted
   // branch is the moving release pointer. Reading only manifest.sourceCommit
   // made later commits on origin/stable invisible until somebody published a
   // second channel commit, which is the failure this watcher must avoid.
-  const target = fetchBranchCommit(root, STABLE_SOURCE_BRANCH, STABLE_SOURCE_BRANCH)
+  const target = fetchBranchCommit(root, STABLE_SOURCE_BRANCH, STABLE_SOURCE_BRANCH, attempts)
   const exists = git(root, ['cat-file', '-e', `${target}^{commit}`], { allowFailure: true })
   if (!exists.ok) throw new Error(`stable target ${target} is not available after fetching ${REMOTE}/${STABLE_SOURCE_BRANCH}`)
   return target
@@ -270,12 +271,13 @@ function relation(root, current, target) {
   return 'diverged'
 }
 
-function inspectUpdate(root) {
+function inspectUpdate(root, options = {}) {
   if (UPDATE_MODE === 'off') return { status: 'off' }
   if (!remoteMatchesExpected(root)) return { status: 'foreign-remote' }
   const branch = currentBranch(root)
-  const manifest = fetchStableManifest(root)
-  const target = fetchTarget(root, manifest)
+  const attempts = options.fetchAttempts ?? FETCH_ATTEMPTS
+  const manifest = fetchStableManifest(root, attempts)
+  const target = fetchTarget(root, manifest, attempts)
   const sourceCurrent = currentCommit(root)
   const activeRuntime = validatedActiveRuntime(root)
   const current = activeRuntime?.target ?? sourceCurrent
@@ -836,6 +838,7 @@ async function watch(root, parentPid) {
   let announcedTarget
   let pending
   let preparedTarget
+  let consecutiveNetworkFailures = 0
   recoverStaleStagingIndexLock(root)
   clearRefreshRequest(root)
   writeState(root, {
@@ -848,17 +851,29 @@ async function watch(root, parentPid) {
     clearRefreshRequest(root)
     let inspection
     try {
-      inspection = inspectUpdate(root)
+      // Watch mode makes one network attempt per poll. A failed internet
+      // connection must never hold the updater in three consecutive ~20s Git
+      // timeouts or compete with the live model/tool traffic.
+      inspection = inspectUpdate(root, { fetchAttempts: 1 })
+      consecutiveNetworkFailures = 0
     } catch (error) {
-      // Channel/network failures are temporary check failures. They must not
-      // be presented as a failed update, because no candidate was applied.
-      console.error(`[PHOENIX UPDATE] watcher check failed; retrying automatically: ${error instanceof Error ? error.message : String(error)}`)
+      // Channel/network failures are temporary check failures. Back off across
+      // failures while still allowing a manual refresh marker to wake the wait.
+      consecutiveNetworkFailures += 1
+      const retryMs = Math.min(
+        MAX_NETWORK_BACKOFF_MS,
+        pollInterval() * 2 ** Math.min(consecutiveNetworkFailures - 1, 4),
+      )
+      console.error(
+        `[PHOENIX UPDATE] watcher check failed; retrying in ${String(Math.ceil(retryMs / 1000))}s: `
+        + `${error instanceof Error ? error.message : String(error)}`,
+      )
       writeState(root, {
         status: 'checking',
         phase: 'retry',
-        detail: 'The stable channel is temporarily unavailable. PHOENIX will retry automatically.',
+        detail: `The stable channel is temporarily unavailable. PHOENIX will retry in about ${String(Math.ceil(retryMs / 1000))} seconds.`,
       })
-      await waitForPollOrParentExit(root, parentPid, pollInterval())
+      await waitForPollOrParentExit(root, parentPid, retryMs)
       continue
     }
 
