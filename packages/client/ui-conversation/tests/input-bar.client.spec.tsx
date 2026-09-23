@@ -508,7 +508,7 @@ describe('Enter semantics', () => {
       expect(send.shell.snapshot.pendingSubmit?.text).toBe('slow admission')
       expect(send.shell.snapshot.phase).toBe('submitting')
       expect(send.shell.snapshot.draft).toBe('')
-      expect(send.textarea).toHaveValue('')
+      expect(send.textarea.value).toBe('')
       expect(send.sink).toHaveBeenCalledTimes(1)
 
       act(() => { vi.advanceTimersByTime(9_000) })
