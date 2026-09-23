@@ -63,7 +63,7 @@ function structuredPass(objective: string) {
           evidence: ['expected values traced to the original requirement'],
         }]
       : [],
-    completion_report: { unverified_items: [], known_limitations: [] },
+    completion_report: { unverified_items: [] as string[], known_limitations: [] as string[] },
     artifact_fingerprint: 'sha256:artifact',
     clean_room_evidence: 'Packaged, extracted into a fresh temporary directory, and verified there.',
     findings: [],
