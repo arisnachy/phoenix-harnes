@@ -532,7 +532,7 @@ export async function runAdversarialCompletionGate(input: {
       + 'requirements, Builder-owned tests, fresh adversarial tests, startup, artifact integrity, and clean-room verification. '
       + 'The evidence_ledger MUST include every locked criterion_id exactly once with the exact criterion text and mandatory=true. '
       + 'You may add extra criteria, but you may not omit, rewrite, merge, or downgrade locked criteria. A locked criterion is verified only with current reproducible evidence. '
-      + 'Audit Builder assertions in builder_test_audit. For every material expected value, identify whether it came from the specification, a reference oracle/standard, '
+      + 'Audit Builder assertions in builder_test_audit for expected-value provenance. For every material expected value, identify whether it came from the specification, a reference oracle/standard, '
       + 'a mathematical or metamorphic invariant, an external fixture, or the implementation itself. Mark circular=true whenever the expected result was copied or derived '
       + 'from the candidate implementation; such a test cannot certify correctness. Builder prose and a green aggregate suite are never blanket evidence. '
       + 'For adversarial tests, turn the supplied cases into genuinely new executable checks; do not merely rerun or rename existing Builder tests. '
