@@ -58,6 +58,18 @@ function codexLunaGeneration(model: string): string | undefined {
   return CODEX_LUNA_MODEL.exec(model)?.[1]
 }
 
+/** GPT-6 Luna is Phoenix's full-power execution worker and must never be downgraded. */
+function isGpt6LunaModel(model: string): boolean {
+  const generation = codexLunaGeneration(model)
+  return generation !== undefined && /^6(?:\.|$)/u.test(generation)
+}
+
+/** Pin every GPT-6 Luna route to Max, regardless of the route that selected it. */
+function pinGpt6LunaMax(selection: ModelSelection): ModelSelection {
+  if (selection.provider !== 'openai-codex' || !isGpt6LunaModel(selection.model)) return selection
+  return { ...selection, reasoningEffort: ReasoningEffortId('max') }
+}
+
 /**
  * Whether one Codex model is expensive/capable enough to act as planner.
  * The rule is deliberately explicit: unknown future tiers keep the user's
@@ -465,11 +477,13 @@ export function installModelSelection(
         && isToolAcquisitionRequest(directText)
         ? defaultToolAcquisitionSelection(selected)
         : undefined
-      const routed = conversation
-        ?? acquisition
-        ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
-          ? resolvedHandoff.selection
-          : selected)
+      const routed = pinGpt6LunaMax(
+        conversation
+          ?? acquisition
+          ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
+            ? resolvedHandoff.selection
+            : selected),
+      )
       const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
       const nativeRoute: LlmCallConfig = {
         ...withoutInheritedEffort,
