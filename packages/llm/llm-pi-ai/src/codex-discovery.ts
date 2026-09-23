@@ -18,7 +18,9 @@ import type { Interface as ReadlineInterface } from 'node:readline'
 import { LlmError } from '@phoenix-ai/dsh-llm'
 import type { LlmDiscoveredModel } from '@phoenix-ai/dsh-llm'
 
-const RPC_TIMEOUT_MS = 20_000
+// Cold Codex catalog refreshes can spend tens of seconds in the upstream models manager.
+// Stay bounded, but do not abort the app-server before its own refresh path can settle.
+const RPC_TIMEOUT_MS = 45_000
 const PAGE_LIMIT = 100
 const MAX_PAGES = 50
 
@@ -199,6 +201,19 @@ function finishProcessSetup(child: ChildProcessWithoutNullStreams): ChildProcess
   return child
 }
 
+/** Fixed capability-reduced argv for metadata-only Codex app-server probes. */
+export function codexDiscoveryArgs(): string[] {
+  return [
+    '-c',
+    'features.plugins=false',
+    '-c',
+    'skills.bundled.enabled=false',
+    'app-server',
+    '--listen',
+    'stdio://',
+  ]
+}
+
 function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
   const common = {
     cwd: process.cwd(),
@@ -212,13 +227,13 @@ function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
     // also handles npm's `codex.cmd` shim, which cannot be execFile'd directly.
     return finishProcessSetup(spawn(
       shell,
-      ['/d', '/s', '/c', 'codex -c features.plugins=false app-server --listen stdio://'],
+      ['/d', '/s', '/c', `codex ${codexDiscoveryArgs().join(' ')}`],
       common,
     ))
   }
   return finishProcessSetup(spawn(
     'codex',
-    ['-c', 'features.plugins=false', 'app-server', '--listen', 'stdio://'],
+    codexDiscoveryArgs(),
     common,
   ))
 }

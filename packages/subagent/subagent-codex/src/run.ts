@@ -148,6 +148,8 @@ export function codexMetadataAppServerArgv(): string[] {
     CODEX_PACKAGE_BIN,
     '-c',
     'features.plugins=false',
+    '-c',
+    'skills.bundled.enabled=false',
     'app-server',
     '--stdio',
   ]
