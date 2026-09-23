@@ -106,86 +106,82 @@ describe('ManagedMcpController', () => {
     expect(live.create).toHaveBeenCalledTimes(1)
   })
 
-  it('configures pinned Jev with only a credential reference and native-fallback budgets', async () => {
-    const patchPath = tempPatch()
-    const live = loader()
-    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
-
-    await expect(controller.configureJev()).resolves.toEqual({
-      status: 'installed',
-      connector: {
-        entryId: 'live-entry-id',
-        serverName: 'jev',
-        url: 'https://www.jevai.org/api/mcp',
-      },
-    })
-    expect(live.create).toHaveBeenCalledWith({
-      name: '@phoenix-ai/dsh-mcp-client',
-      config: {
-        transport: 'streamable-http',
-        serverName: 'jev',
-        url: 'https://www.jevai.org/api/mcp',
-        headers: {},
-        oauth: false,
-        bearerTokenRef: 'JEV_API_KEY',
-        toolCallTimeoutMs: 30_000,
-        startupTimeoutMs: 5_000,
-        failOnStartupError: false,
-        reconnect: {
-          enabled: true,
-          initialDelayMs: 1000,
-          maxDelayMs: 30_000,
-          maxAttempts: 3,
-        },
-      },
-    })
-    const persisted = readFileSync(patchPath, 'utf8')
-    expect(persisted).toContain('JEV_API_KEY')
-    expect(persisted).not.toContain('Authorization')
-    await expect(controller.configureJev()).resolves.toMatchObject({ status: 'already-installed' })
-    expect(live.create).toHaveBeenCalledTimes(1)
-  })
-
-
-  it('upgrades an existing legacy Jev row without reinstalling the live connector', async () => {
+  it('retires a legacy managed Jev row without touching other managed MCPs', async () => {
     const patchPath = tempPatch()
     mkdirSync(dirname(patchPath), { recursive: true })
     writeFileSync(patchPath, JSON.stringify([{
-      insert: [{
-        id: 'legacy-jev',
-        name: '@phoenix-ai/dsh-mcp-client',
-        config: {
-          transport: 'streamable-http',
-          serverName: 'jev',
-          url: 'https://www.jevai.org/api/mcp',
-          headers: {},
-          oauth: false,
-          bearerTokenRef: 'JEV_API_KEY',
-          toolCallTimeoutMs: 1800,
-          startupTimeoutMs: 1200,
-          failOnStartupError: false,
-          reconnect: {
-            enabled: true,
-            initialDelayMs: 1000,
-            maxDelayMs: 30_000,
-            maxAttempts: 3,
+      insert: [
+        {
+          id: 'legacy-jev',
+          name: '@phoenix-ai/dsh-mcp-client',
+          config: {
+            transport: 'streamable-http',
+            serverName: 'jev',
+            url: 'https://www.jevai.org/api/mcp',
+            headers: {},
+            oauth: false,
+            bearerTokenRef: 'JEV_API_KEY',
+            toolCallTimeoutMs: 1800,
+            startupTimeoutMs: 1200,
+            failOnStartupError: false,
+            reconnect: {
+              enabled: true,
+              initialDelayMs: 1000,
+              maxDelayMs: 30_000,
+              maxAttempts: 3,
+            },
           },
         },
-      }],
+        {
+          id: 'calendar-managed',
+          name: '@phoenix-ai/dsh-mcp-client',
+          config: {
+            transport: 'streamable-http',
+            serverName: 'calendar-a1b2c3d',
+            url: 'https://mcp.example.com/calendar',
+            headers: {},
+            oauth: true,
+          },
+        },
+      ],
     }]))
 
     const live = loader()
     const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
-    await expect(controller.configureJev()).resolves.toMatchObject({
-      status: 'already-installed',
-      connector: { entryId: 'legacy-jev', serverName: 'jev' },
-    })
-    expect(live.create).not.toHaveBeenCalled()
 
+    await expect(controller.retireJev()).resolves.toBe(true)
+    expect(live.remove).toHaveBeenCalledTimes(1)
+    expect(live.remove).toHaveBeenCalledWith('legacy-jev')
+    await expect(controller.snapshot()).resolves.toEqual([{
+      entryId: 'calendar-managed',
+      serverName: 'calendar-a1b2c3d',
+      url: 'https://mcp.example.com/calendar',
+    }])
     const persisted = readFileSync(patchPath, 'utf8')
-    expect(persisted).toContain('"toolCallTimeoutMs": 30000')
-    expect(persisted).toContain('"startupTimeoutMs": 5000')
+    expect(persisted).not.toContain('JEV_API_KEY')
+    expect(persisted).not.toContain('jevai.org')
+    expect(persisted).toContain('calendar-managed')
+    await expect(controller.retireJev()).resolves.toBe(false)
   })
+
+  it('refuses to configure or reinstall retired Jev', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const jevCandidate = candidate({
+      name: 'ai.jev/jev',
+      title: 'Jev',
+      remoteUrl: 'https://www.jevai.org/api/mcp',
+    })
+    const controller = new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([jevCandidate]),
+    })
+
+    await expect(controller.configureJev()).rejects.toThrow('Jev integration is retired')
+    await expect(controller.install({ name: 'ai.jev/jev' })).rejects.toThrow('Jev integration is retired')
+    expect(live.create).not.toHaveBeenCalled()
+  })
+
 
   it('fails closed when registry identity, status, or transport is not installable', async () => {
     const patchPath = tempPatch()
