@@ -47,9 +47,6 @@ jobs:
       - name: Reconcile lockfile
         run: pnpm install --no-frozen-lockfile
 
-      - name: Rescope vendor metadata
-        run: pnpm run rescope-vendor
-
       - name: Regenerate independent catalogs
         shell: bash
         run: |
