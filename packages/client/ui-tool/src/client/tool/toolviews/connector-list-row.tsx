@@ -18,6 +18,7 @@ interface ConnectorView {
   label: string
   status: string
   recommended_action: string
+  relevant: true
 }
 
 function actionableConnectors(block: ToolCallViewProps['block']): ConnectorView[] {
@@ -31,6 +32,7 @@ function actionableConnectors(block: ToolCallViewProps['block']): ConnectorView[
       return typeof candidate.id === 'string'
         && typeof candidate.label === 'string'
         && typeof candidate.status === 'string'
+        && candidate.relevant === true
         && candidate.recommended_action === 'connect-or-reconnect'
     })
   } catch {
@@ -170,7 +172,7 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
         {phase === 'failed' ? <StateDot state="error" /> : <IconApiOutline14 />}
       </div>
       <div className={css.copy}>
-        <strong>{copy.title}</strong>
+        <strong>{connector.label}</strong>
         <span>{statusText}</span>
         {error === undefined ? null : <span className={css.error}>{error}</span>}
       </div>
