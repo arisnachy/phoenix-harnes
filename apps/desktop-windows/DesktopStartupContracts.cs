@@ -24,6 +24,10 @@ internal static class DesktopStartupContract
     }
 }
 
+internal readonly record struct DesktopRuntimeListenerIdentity(
+    int ProcessId,
+    long CreationTimeUtcTicks);
+
 internal static class DesktopRuntimeLaunchContract
 {
     internal const int DesktopPort = 3080;
@@ -108,6 +112,17 @@ internal static class DesktopRuntimeLaunchContract
     internal static bool CanMarkReady(bool supervisorExited, int consecutiveReady) =>
         !supervisorExited && consecutiveReady >= ReadyConsecutiveSamples;
 
+    internal static bool HasStableListenerIdentity(
+        int firstProcessId,
+        long firstCreationTimeUtcTicks,
+        int secondProcessId,
+        long secondCreationTimeUtcTicks) =>
+        firstProcessId > 0
+        && secondProcessId == firstProcessId
+        && firstCreationTimeUtcTicks > 0
+        && secondCreationTimeUtcTicks == firstCreationTimeUtcTicks;
+
+    // This method classifies a command line; adoption also requires endpoint, PID, and liveness checks.
     internal static bool CanAdoptListener(string? commandLine) =>
         LooksLikePhoenixProcessCommandLine(commandLine);
 }
