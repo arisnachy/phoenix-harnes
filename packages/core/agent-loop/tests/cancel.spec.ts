@@ -920,6 +920,45 @@ describe('Agent.cancel()', () => {
     expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason).toEqual({ kind: 'aborted', reason: { kind: 'user' } })
   })
 
+  it('steer interrupts an active model stream and immediately replays the steering input', async () => {
+    const adapter = new MockAdapter([
+      'hang',
+      textResponse('steered reply'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('steer-active-model'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'start slow model')
+    await expect.poll(() => adapter.requests.length).toBe(1)
+    const firstSignal = adapter.requests[0]?.signal
+    if (firstSignal === undefined) throw new Error('model request omitted its turn signal')
+
+    const steering = createUserMessage({
+      content: [{ type: 'text', text: 'answer this now' }],
+      source: { kind: 'user' },
+    })
+    agent.steer(steering)
+
+    await Promise.race([
+      agent.whenIdle(),
+      new Promise((_resolve, reject) => {
+        setTimeout(() => { reject(new Error('steering stayed behind the active model stream')) }, 1_000)
+      }),
+    ])
+
+    expect(firstSignal.aborted).toBe(true)
+    expect(adapter.requests).toHaveLength(2)
+    expect(userTexts(agent)).toEqual(['start slow model', 'answer this now'])
+    expect(agent.inbox.nextStep).toHaveLength(0)
+    expect(agent.session.events
+      .filter(event => event.type === 'turn/end')
+      .map(event => event.type === 'turn/end' ? event.data.reason : undefined))
+      .toEqual([
+        { kind: 'aborted', reason: { kind: 'user' } },
+        { kind: 'completed' },
+      ])
+  })
+
   it('steer interrupts an active cooperative tool and immediately replays the steering input', async () => {
     const adapter = new MockAdapter([
       toolCallResponse('slow-tool', 'blocked', {}),
