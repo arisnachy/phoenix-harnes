@@ -90,13 +90,21 @@ interface ComputerPreferenceValue {
   readonly evidenceCount: number
 }
 
-/** Project a durable Computer tool/call event into safe metadata. */
+/**
+ * Project a durable Computer tool/call event into safe metadata.
+ * @param event - Durable session event to inspect.
+ * @returns Safe action metadata, or undefined when the event is not a valid Computer call.
+ */
 export function projectComputerEvent(event: unknown): SafeComputerStep | undefined {
   if (!isRecord(event) || event.type !== 'tool/call') return undefined
   return projectComputerCall(event.data)
 }
 
-/** Project one raw Computer tool/call payload without retaining its arguments. */
+/**
+ * Project one raw Computer tool/call payload without retaining its arguments.
+ * @param data - Raw tool-call payload from the durable session event.
+ * @returns Safe action metadata, or undefined when the payload is not a valid Computer call.
+ */
 export function projectComputerCall(data: unknown): SafeComputerStep | undefined {
   if (!isRecord(data) || data.name !== 'computer' || typeof data.arguments !== 'string') return undefined
   let parsed: unknown
@@ -127,17 +135,29 @@ export function projectComputerCall(data: unknown): SafeComputerStep | undefined
   return { action }
 }
 
-/** Return true for rows owned by this Computer-learning projection. */
+/**
+ * Return true for rows owned by this Computer-learning projection.
+ * @param record - Cognitive memory row to inspect.
+ * @returns Whether the row belongs to the Computer projection.
+ */
 export function isComputerMemory(record: CognitiveMemoryRecord): boolean {
   return record.subject?.startsWith(COMPUTER_SUBJECT_PREFIX) === true
 }
 
-/** Hide malformed or forgotten Computer rows from ordinary model recall. */
+/**
+ * Hide malformed or forgotten Computer rows from ordinary model recall.
+ * @param hits - Cognitive search hits to filter.
+ * @returns Hits excluding malformed or forgotten Computer rows.
+ */
 export function filterComputerSearchHits<T extends { record: CognitiveMemoryRecord }>(hits: readonly T[]): T[] {
   return hits.filter(hit => !isComputerMemory(hit.record) || decodeComputerValue(hit.record) !== undefined)
 }
 
-/** Derive a bounded non-path project label from a test session when needed. */
+/**
+ * Derive a bounded non-path project label from a test session when needed.
+ * @param session - Session envelope whose preset may identify the project.
+ * @returns The bounded preset label, or undefined when it is unavailable.
+ */
 export function projectIdForComputerSession(session: unknown): string | undefined {
   if (!isRecord(session) || !isRecord(session.header)) return undefined
   return typeof session.header.agentPreset === 'string' && session.header.agentPreset.trim() !== ''
@@ -214,7 +234,11 @@ export class ComputerLearningProjector {
     }
   }
 
-  /** Return only safe fields for explicit human review. */
+  /**
+   * Return only safe fields for explicit human review.
+   * @param projectId - Optional project whose Computer records should be reviewed.
+   * @returns Recent safe Computer flow and preference summaries.
+   */
   review(projectId?: string): ComputerMemoryReview[] {
     return this.store.timeline({
       ...projectId === undefined ? {} : { projectId },
@@ -245,7 +269,12 @@ export class ComputerLearningProjector {
       .slice(-MAX_REVIEW)
   }
 
-  /** Forget one exact Computer record and retain the ledger tombstone. */
+  /**
+   * Forget one exact Computer record and retain the ledger tombstone.
+   * @param id - Exact memory identifier to forget.
+   * @param projectId - Optional project scope for the lookup.
+   * @returns Whether an active Computer record was found and forgotten.
+   */
   async forget(id: string, projectId?: string): Promise<boolean> {
     if (id.trim() === '') return false
     const record = this.store.timeline({
@@ -342,7 +371,11 @@ export class ComputerLearningProjector {
   }
 }
 
-/** Install safe Computer observation into the model-facing learning plugin. */
+/**
+ * Install safe Computer observation into the model-facing learning plugin.
+ * @param ctx - Cordis context providing durable learning memory and session events.
+ * @returns Projector that can review or forget safe Computer memories.
+ */
 export function installComputerLearning(ctx: Context): ComputerLearningProjector {
   const projector = new ComputerLearningProjector({
     rememberCognitive: input => ctx.learningMemory.rememberCognitive(input),

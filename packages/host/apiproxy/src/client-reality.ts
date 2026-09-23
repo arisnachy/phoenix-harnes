@@ -31,7 +31,11 @@ export class ClientRealityService extends Service {
     super(ctx, 'clientReality')
   }
 
-  /** Record a browser position only when its observation time is plausibly current. */
+  /**
+   * Record a browser position only when its observation time is plausibly current.
+   * @param sessionId - Session that owns the browser observation.
+   * @param location - Browser-provided position and observation metadata.
+   */
   observeLocation(sessionId: SessionId, location: ClientLocation): void {
     const now = Date.now()
     if (location.observedAt > now + MAX_FUTURE_SKEW_MS) return
@@ -60,7 +64,11 @@ export class ClientRealityService extends Service {
     if (this.locations.size > 64) this.prune(now)
   }
 
-  /** Read the current non-expired position for one live/persisted session id. */
+  /**
+   * Read the current non-expired position for one live/persisted session id.
+   * @param sessionId - Session whose current browser position should be read.
+   * @returns A copied current position, or undefined when none is available.
+   */
   locationFor(sessionId: SessionId): ObservedClientLocation | undefined {
     const value = this.locations.get(sessionId)
     if (value === undefined) return undefined

@@ -187,6 +187,7 @@ export class AdaptiveLearningEngine {
    * Promote recent candidate strategies from one session after Phoenix's
    * fail-closed goal completion path provides verified success evidence.
    * @param input - Completion evidence and session provenance for promotion.
+   * @param eligible - Optional filter restricting which candidate states are promoted.
    * @returns Candidate states that were re-observed as verified successes.
    */
   async confirmRecentCandidates(input: {

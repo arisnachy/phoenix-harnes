@@ -381,7 +381,12 @@ class ResidentDesktopClient {
 
 const residentDesktopClient = new ResidentDesktopClient()
 
-/** Map a validated Computer action onto schema-2 without allowing credential fields. */
+/**
+ * Map a validated Computer action onto schema-2 without allowing credential fields.
+ * @param args - Validated model-visible Computer action.
+ * @param requestId - Correlation id assigned to the resident desktop request.
+ * @returns Schema-2 request containing only the selected action fields.
+ */
 export function desktopComputerRequestForAction(
   args: ComputerToolArgs,
   requestId = randomUUID(),

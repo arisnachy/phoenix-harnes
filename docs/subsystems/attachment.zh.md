@@ -28,11 +28,11 @@ interface FileAttachmentRef {
 ```
 
 ```ts type-equiv
-/** Deployment-resolved limits for arbitrary file uploads. */
+/** Deployment-resolved limits for arbitrary file uploads. Byte caps are optional: omission delegates size acceptance to the selected model/provider route. */
 interface FileAttachmentLimits {
-  maxFileBytes: number
+  maxFileBytes?: number
   maxFilesPerMessage: number
-  maxMessageFileBytes: number
+  maxMessageFileBytes?: number
 }
 ```
 
