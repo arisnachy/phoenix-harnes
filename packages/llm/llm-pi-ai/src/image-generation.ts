@@ -101,7 +101,13 @@ interface ImageRuntimeContext {
 type ImageSize = 'auto' | '1024x1024' | '1536x1024' | '1024x1536'
 type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
 type ImageBackground = 'auto' | 'opaque' | 'transparent'
+/**
+ * Public image generation backend shape.
+ */
 export type ImageGenerationBackend = 'auto' | 'codex' | 'local' | 'free'
+/**
+ * Public image generation provider shape.
+ */
 export type ImageGenerationProvider = 'codex' | 'local' | 'cloudflare' | 'huggingface'
 
 interface ImageGenerationArgs {
@@ -231,6 +237,8 @@ function codexHome(): string {
  * Phoenix shares the user's real Codex home (auth/config/sessions) but keeps
  * transactional SQLite state in a Phoenix-owned directory. CODEX_SQLITE_HOME
  * is the public Codex seam for exactly this split-state layout.
+ * @param purpose - The purpose value.
+ * @returns The resulting value.
  */
 export async function phoenixCodexSqliteHome(purpose = 'image'): Promise<string> {
   const explicitPhoenix = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
@@ -252,7 +260,12 @@ const MAX_FREE_IMAGE_BYTES = 32 * 1024 * 1024
 /** Hosted zero-upfront-cost providers, in the order PHOENIX tries them. */
 export const freeImageProviderOrder = ['cloudflare', 'huggingface'] as const
 
-/** Resolve the backend attempt order without coupling image generation to the text route. */
+/**
+ * Resolve the backend attempt order without coupling image generation to the text route.
+ * @param _activeProvider - The active provider value.
+ * @param requested - The requested value.
+ * @returns The resulting value.
+ */
 export function imageGenerationBackendOrder(
   requested: ImageGenerationBackend | undefined,
   _activeProvider: string | undefined,
@@ -261,7 +274,12 @@ export function imageGenerationBackendOrder(
   return ['codex', 'local', 'free']
 }
 
-/** Select the first image backend PHOENIX will try. */
+/**
+ * Select the first image backend PHOENIX will try.
+ * @param activeProvider - The active provider value.
+ * @param requested - The requested value.
+ * @returns The resulting value.
+ */
 export function selectImageGenerationBackend(
   requested: ImageGenerationBackend | undefined,
   activeProvider: string | undefined,

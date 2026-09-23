@@ -21,7 +21,11 @@ const LOCAL_AUTHORIZATION = 'Bearer phoenix-opencode-free'
 /** Models known to use another OpenCode wire are excluded from this chat-completions route. */
 const RESPONSE_ONLY_FREE_PREFIXES = ['muse-spark-'] as const
 
-/** Whether a Zen catalog id is eligible for the no-account chat-completions route. */
+/**
+ * Whether a Zen catalog id is eligible for the no-account chat-completions route.
+ * @param id - The id value.
+ * @returns The resulting value.
+ */
 export function isOpenCodeFreeCandidate(id: string): boolean {
   if (RESPONSE_ONLY_FREE_PREFIXES.some(prefix => id.startsWith(prefix))) return false
   return id === 'big-pickle' || id.endsWith('-free')
@@ -36,7 +40,11 @@ function modelDisplayName(id: string): string {
     .join(' ')} · Gratis`
 }
 
-/** Convert OpenCode's OpenAI-style catalog payload into Phoenix model descriptors. */
+/**
+ * Convert OpenCode's OpenAI-style catalog payload into Phoenix model descriptors.
+ * @param payload - The payload value.
+ * @returns The resulting value.
+ */
 export function parseOpenCodeFreeModels(payload: unknown): PiAiModelProfile[] {
   if (typeof payload !== 'object' || payload === null || !('data' in payload)) return []
   const data = (payload as { data?: unknown }).data
@@ -68,7 +76,11 @@ function cloneModel(model: PiAiModelProfile): PiAiModelProfile {
   return input === undefined ? rest : { ...rest, input: [...input] }
 }
 
-/** Built-in Phoenix provider profile shown in the normal model selector. */
+/**
+ * Built-in Phoenix provider profile shown in the normal model selector.
+ * @param models - The models value.
+ * @returns The resulting value.
+ */
 export function opencodeFreeProfile(models: readonly PiAiModelProfile[]): PiAiProviderProfile {
   return {
     displayName: '🟢 OpenCode · Gratis',
@@ -84,6 +96,9 @@ export function opencodeFreeProfile(models: readonly PiAiModelProfile[]): PiAiPr
   }
 }
 
+/**
+ * Public open code free catalog shape.
+ */
 export interface OpenCodeFreeCatalog {
   /** Last known-good free models; always non-empty because a conservative fallback ships with Phoenix. */
   models(): readonly PiAiModelProfile[]
@@ -91,13 +106,20 @@ export interface OpenCodeFreeCatalog {
   refresh(force?: boolean): Promise<boolean>
 }
 
+/**
+ * Public open code free catalog options shape.
+ */
 export interface OpenCodeFreeCatalogOptions {
   fetchImpl?: typeof fetch
   now?: () => number
   refreshMs?: number
 }
 
-/** Stateful, failure-tolerant cache for OpenCode's rotating free model ids. */
+/**
+ * Stateful, failure-tolerant cache for OpenCode's rotating free model ids.
+ * @param options - The options value.
+ * @returns The resulting value.
+ */
 export function createOpenCodeFreeCatalog(options: OpenCodeFreeCatalogOptions = {}): OpenCodeFreeCatalog {
   const fetchImpl = options.fetchImpl ?? fetch
   const now = options.now ?? Date.now
@@ -140,7 +162,11 @@ export function createOpenCodeFreeCatalog(options: OpenCodeFreeCatalogOptions = 
   }
 }
 
-/** Copy safe request headers to OpenCode while removing all hop-by-hop and authorization data. */
+/**
+ * Copy safe request headers to OpenCode while removing all hop-by-hop and authorization data.
+ * @param headers - The headers value.
+ * @returns The resulting value.
+ */
 export function openCodeUpstreamHeaders(
   headers: Readonly<Record<string, string | readonly string[] | undefined>>,
 ): Record<string, string> {
@@ -222,7 +248,11 @@ async function handleProxyRequest(
   await pipeResponse(upstream, response)
 }
 
-/** Start the loopback-only OpenCode bridge. Upstream requests carry no Authorization header. */
+/**
+ * Start the loopback-only OpenCode bridge. Upstream requests carry no Authorization header.
+ * @param fetchImpl - The fetch impl value.
+ * @returns The resulting value.
+ */
 export async function startOpenCodeFreeProxy(fetchImpl: typeof fetch = fetch): Promise<Server> {
   const server = createServer((request, response) => {
     void handleProxyRequest(request, response, fetchImpl).catch((error: unknown) => {

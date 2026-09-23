@@ -93,6 +93,8 @@ function samplePosition(signal?: AbortSignal): Promise<BrowserClientLocation | u
  * Return a browser position only when geolocation permission is already
  * granted. Permission states "prompt" and "denied" both return undefined, so
  * sending a message never opens a surprise permission dialog.
+ * @param signal - The signal value.
+ * @returns The resulting value.
  */
 export async function resolvedClientLocation(
   signal?: AbortSignal,

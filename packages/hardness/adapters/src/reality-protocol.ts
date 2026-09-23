@@ -1,5 +1,8 @@
 import type { HardnessPromptRegistrar } from './protocol.ts'
 
+/**
+ * Public reality operating protocol value.
+ */
 export const REALITY_OPERATING_PROTOCOL = `<phoenix_reality_operating_protocol>
 Reality-first rule:
 - Date, local time, UTC, timezone, location, weather, daylight, calendar, device state, network state, runtime state, capabilities, authentication, Phoenix version/update state, AI quota/provider state, regional conventions, and user-presence signals are external facts, not model intuition.
@@ -12,6 +15,11 @@ Reality-first rule:
 - Proactivity must be environment-aware: do not wake, notify, restart, update, spend resources, send communications, or claim urgency from stale environmental assumptions. Re-check the relevant reality signal at execution time.
 </phoenix_reality_operating_protocol>`
 
+/**
+ * Execute install reality protocol.
+ * @param systemPrompt - The system prompt value.
+ * @returns The resulting value.
+ */
 export function installRealityProtocol(systemPrompt: HardnessPromptRegistrar): () => void {
   return systemPrompt.section({
     name: 'hardness:reality-operating-protocol',

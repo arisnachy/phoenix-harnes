@@ -81,6 +81,10 @@ function decoratorTransformHook(): DecoratorTransformHook {
   }
 }
 
+/**
+ * Execute decorator lowering plugin.
+ * @returns The resulting value.
+ */
 export function decoratorLoweringPlugin(): DecoratorLoweringPlugin {
   return {
     name: 'dsh-decorator-lowering',

@@ -169,6 +169,8 @@ export class CodexLiveCatalog {
    * Retired models keep their last-good metadata beside the dispatch superset,
    * so an already-selected session remains valid after the model leaves the
    * picker. Returned values are detached from the catalog's retained snapshot.
+   * @param modelId - The model id value.
+   * @returns The resulting value.
    */
   reasoningForModel(modelId: string): LlmModelReasoningInfo | undefined {
     const reasoning = this.reasoningByModel.get(modelId)

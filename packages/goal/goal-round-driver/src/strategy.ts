@@ -27,6 +27,10 @@ export interface GoalVerificationProgress {
  * rounds are not a failure signal by themselves: only rounds that add no new
  * verified criterion, no new passed gate dimension, and resolve no finding
  * count as stagnant.
+ * @param revision - The revision value.
+ * @param goalId - The goal id value.
+ * @param events - The events value.
+ * @returns The resulting value.
  */
 export function measureGoalVerificationProgress(
   events: readonly SessionEvent[],
@@ -63,6 +67,9 @@ export function measureGoalVerificationProgress(
 /**
  * Keep the current strategy while independent evidence is still increasing.
  * Rotate only after a verifier round adds no new useful coverage.
+ * @param stagnantRounds - The stagnant rounds value.
+ * @param previous - The previous value.
+ * @returns The resulting value.
  */
 export function selectNextStrategy(previous: GoalStrategyId | undefined, stagnantRounds: number): GoalStrategyId {
   if (!Number.isSafeInteger(stagnantRounds) || stagnantRounds < 0) {
@@ -76,7 +83,12 @@ export function selectNextStrategy(previous: GoalStrategyId | undefined, stagnan
   return GOAL_STRATEGIES[(index + offset) % GOAL_STRATEGIES.length] ?? 'baseline'
 }
 
-/** Rebuild the latest selected strategy for one exact goal and round history. */
+/**
+ * Rebuild the latest selected strategy for one exact goal and round history.
+ * @param goalId - The goal id value.
+ * @param events - The events value.
+ * @returns The resulting value.
+ */
 export function replayGoalStrategy(
   events: readonly SessionEvent[],
   goalId: GoalId | string,
@@ -86,7 +98,11 @@ export function replayGoalStrategy(
     ?.data
 }
 
-/** Append the selected strategy before its model-visible prompt. */
+/**
+ * Append the selected strategy before its model-visible prompt.
+ * @param selection - The selection value.
+ * @param session - The session value.
+ */
 export function recordGoalStrategy(session: Session, selection: GoalStrategySelection): void {
   if (selection.goalId.trim().length === 0 || !Number.isSafeInteger(selection.revision) || selection.revision < 1
     || !Number.isSafeInteger(selection.round) || selection.round < 1

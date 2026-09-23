@@ -41,6 +41,9 @@ export const RAW_OUTPUT_MAX_BYTES = 20_000_000
  * `@phoenix-ai/dsh-tool-call-timeout-policy` to enforce through `exec.signal`.
  */
 export const GLOB_TIMEOUT_MS = 8_000
+/**
+ * Public grep timeout ms value.
+ */
 export const GREP_TIMEOUT_MS = 15_000
 /** Backward-compatible shared timeout alias; new deployments use the per-tool defaults. */
 export const SEARCH_TIMEOUT_MS = GREP_TIMEOUT_MS

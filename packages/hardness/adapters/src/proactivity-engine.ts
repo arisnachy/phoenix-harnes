@@ -470,6 +470,11 @@ export class ProactivityEngine {
     this.state = snapshot
   }
 
+  /**
+   * Execute proactivity engine create.
+   * @param input - The input value.
+   * @returns The resulting value.
+   */
   async create(input: CreateProactivityTaskInput): Promise<ProactivityTask> {
     return this.exclusive(async () => {
       const snapshot = await this.snapshot()
@@ -518,6 +523,11 @@ export class ProactivityEngine {
     })
   }
 
+  /**
+   * Execute proactivity engine get.
+   * @param id - The id value.
+   * @returns The resulting value.
+   */
   async get(id: string): Promise<ProactivityTask | undefined> {
     return this.exclusive(async () => {
       const task = (await this.snapshot()).tasks.find(candidate => candidate.id === id)
@@ -525,6 +535,11 @@ export class ProactivityEngine {
     })
   }
 
+  /**
+   * Execute proactivity engine list.
+   * @param options - The options value.
+   * @returns The resulting value.
+   */
   async list(options: ProactivityListOptions = {}): Promise<ProactivityTask[]> {
     return this.exclusive(async () => {
       const now = (options.now ?? new Date()).getTime()
@@ -551,8 +566,23 @@ export class ProactivityEngine {
     })
   }
 
+  /**
+   * Execute proactivity engine pause.
+   * @param id - The id value.
+   * @returns The resulting value.
+   */
   pause(id: string): Promise<ProactivityTask> { return this.setStatus(id, 'paused') }
+  /**
+   * Execute proactivity engine resume.
+   * @param id - The id value.
+   * @returns The resulting value.
+   */
   resume(id: string): Promise<ProactivityTask> { return this.setStatus(id, 'scheduled') }
+  /**
+   * Execute proactivity engine cancel.
+   * @param id - The id value.
+   * @returns The resulting value.
+   */
   cancel(id: string): Promise<ProactivityTask> { return this.setStatus(id, 'cancelled') }
 
   private dueOccurrences(task: ProactivityTask, nowMs: number): string[] {
@@ -747,6 +777,7 @@ export class ProactivityEngine {
    * Execute currently due work. Due-pass serialization is separate from the
    * ledger mutex, so active agents can safely list/create/cancel tasks while a
    * scheduled execution is awaiting model/tool work.
+   * @param now - The now value.
    */
   runDue(now: Date = new Date()): Promise<void> {
     const run = this.runTail.then(() => this.runDuePass(now), () => this.runDuePass(now))

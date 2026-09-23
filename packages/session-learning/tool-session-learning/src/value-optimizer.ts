@@ -42,6 +42,10 @@ export interface OptimizationDecision {
 /**
  * Return true only when candidate is at least as good on quality and no worse
  * on every comparable resource dimension, with a strict improvement somewhere.
+ * @param constraint - The constraint value.
+ * @param baseline - The baseline value.
+ * @param candidate - The candidate value.
+ * @returns The resulting value.
  */
 export function dominatesStrategy(
   candidate: StrategyObservation,
@@ -75,7 +79,12 @@ export function dominatesStrategy(
   return qualityImproved || comparable.some(([next, old]) => next < old)
 }
 
-/** Keep only quality-passing strategies that are not dominated by another observation. */
+/**
+ * Keep only quality-passing strategies that are not dominated by another observation.
+ * @param constraint - The constraint value.
+ * @param observations - The observations value.
+ * @returns The resulting value.
+ */
 export function paretoEfficientStrategies(
   observations: readonly StrategyObservation[],
   constraint: QualityConstraint = {},
@@ -92,6 +101,8 @@ export function paretoEfficientStrategies(
  * expected remaining workload. Money and wall time each have their own gate:
  * saving dollars never excuses making the user wait longer than the expected
  * time savings can amortize, and vice versa.
+ * @param input - The input value.
+ * @returns The resulting value.
  */
 export function shouldInvestInOptimization(input: OptimizationInvestment): OptimizationDecision {
   const runs = requireNonNegativeInteger(input.expectedFutureRuns, 'expectedFutureRuns')

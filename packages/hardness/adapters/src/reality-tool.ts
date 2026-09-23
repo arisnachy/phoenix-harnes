@@ -6,6 +6,9 @@ import type { RealityContextEngine } from './reality-context.ts'
  * Create the read-only tool that waits for current Reality Context evidence.
  * Fresh mode respects signal TTLs; full mode deliberately reprobes every host
  * and runtime signal before returning.
+ * @param ctx - The ctx value.
+ * @param engine - The engine value.
+ * @returns The resulting value.
  */
 export function createRealitySnapshotTool(
   engine: RealityContextEngine,

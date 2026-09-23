@@ -17,6 +17,9 @@ import type { Context } from '@phoenix-ai/cordis'
 
 const execFileAsync = promisify(execFile)
 
+/**
+ * Public reality context config shape.
+ */
 export interface RealityContextConfig {
   readonly refreshMs: number
   readonly latitude?: number
@@ -26,6 +29,9 @@ export interface RealityContextConfig {
   readonly currency?: string
 }
 
+/**
+ * Public reality signal shape.
+ */
 export interface RealitySignal<T> {
   readonly value: T | null
   readonly source: string
@@ -162,6 +168,9 @@ interface RuntimeServiceTelemetry {
   }
 }
 
+/**
+ * Public reality snapshot shape.
+ */
 export interface RealitySnapshot {
   readonly schema: 1
   readonly generatedAt: string
@@ -205,6 +214,11 @@ function positiveNumber(value: string | undefined): number | undefined {
   return parsed !== undefined && parsed >= 0 ? parsed : undefined
 }
 
+/**
+ * Execute reality config from environment.
+ * @param env - The env value.
+ * @returns The resulting value.
+ */
 export function realityConfigFromEnvironment(env: NodeJS.ProcessEnv = process.env): RealityContextConfig {
   const latitude = finiteNumber(env.PHOENIX_REALITY_LATITUDE)
   const longitude = finiteNumber(env.PHOENIX_REALITY_LONGITUDE)
@@ -1057,6 +1071,9 @@ async function probeClockSync(): Promise<{ value: boolean | null; source: string
   return { value: null, source: 'unverified', confidence: 0 }
 }
 
+/**
+ * Public reality context engine contract.
+ */
 export class RealityContextEngine {
   private internet = cache<InternetProbePayload>(null, 'not-probed', 1, 0)
   private userActivity = cache<UserActivityPayload>(null, 'not-probed', 1, 0)
@@ -1074,6 +1091,9 @@ export class RealityContextEngine {
 
   constructor(readonly config: RealityContextConfig) {}
 
+  /**
+   * Execute reality context engine start.
+   */
   start(): void {
     if (this.timer !== undefined) return
     void this.refresh()
@@ -1081,6 +1101,9 @@ export class RealityContextEngine {
     this.timer.unref?.()
   }
 
+  /**
+   * Execute reality context engine stop.
+   */
   stop(): void {
     if (this.timer === undefined) return
     clearInterval(this.timer)
@@ -1149,6 +1172,10 @@ export class RealityContextEngine {
     }
   }
 
+  /**
+   * Execute reality context engine refresh runtime services.
+   * @param ctx - The ctx value.
+   */
   async refreshRuntimeServices(ctx: Context): Promise<void> {
     if (Date.now() <= this.runtimeServices.expiresAt) return
     if (this.runtimeRefreshJob !== undefined) return this.runtimeRefreshJob
@@ -1218,6 +1245,7 @@ export class RealityContextEngine {
    * for currently due work.
    * @param ctx - Cordis scope supplying live Phoenix runtime services.
    * @param full - Whether to invalidate every configured probe before refreshing.
+   * @param assembly - The assembly value.
    */
   async refreshNow(
     ctx: Context,
@@ -1250,6 +1278,13 @@ export class RealityContextEngine {
     ])
   }
 
+  /**
+   * Execute reality context engine snapshot.
+   * @param assembly - The assembly value.
+   * @param now - The now value.
+   * @param ctx - The ctx value.
+   * @returns The resulting value.
+   */
   snapshot(
     ctx: Context,
     now = new Date(),
@@ -1493,6 +1528,12 @@ export class RealityContextEngine {
     }
   }
 
+  /**
+   * Execute reality context engine render.
+   * @param assembly - The assembly value.
+   * @param ctx - The ctx value.
+   * @returns The resulting value.
+   */
   render(ctx: Context, assembly?: RealityAssemblyContext): string {
     return [
       '<phoenix_reality_context>',
@@ -1503,6 +1544,9 @@ export class RealityContextEngine {
   }
 }
 
+/**
+ * Public reality prompt registrar shape.
+ */
 export interface RealityPromptRegistrar {
   context: (context: {
     readonly name: string
@@ -1512,6 +1556,13 @@ export interface RealityPromptRegistrar {
   }) => () => void
 }
 
+/**
+ * Execute install reality context projection.
+ * @param ctx - The ctx value.
+ * @param engine - The engine value.
+ * @param systemPrompt - The system prompt value.
+ * @returns The resulting value.
+ */
 export function installRealityContextProjection(
   systemPrompt: RealityPromptRegistrar,
   engine: RealityContextEngine,

@@ -7,6 +7,9 @@ import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import { sessionResolveOptions } from './session-cwd.ts'
 
+/**
+ * Public fs status max paths value.
+ */
 export const FS_STATUS_MAX_PATHS = 64
 
 function parseStatusArgs(args: { paths: string[] }): string[] {
@@ -24,7 +27,10 @@ function parseStatusArgs(args: { paths: string[] }): string[] {
   })
 }
 
-/** Register the exact-path metadata probe. */
+/**
+ * Register the exact-path metadata probe.
+ * @param ctx - The ctx value.
+ */
 export function applyStatusTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:fs-status',

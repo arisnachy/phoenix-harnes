@@ -104,6 +104,9 @@ export class ApiProxyService extends Service implements ApiProxy {
     })]),
   })
 
+  /**
+   * Public api proxy service client reality contract.
+   */
   readonly clientReality: ClientRealityService
   readonly sessions: ApiProxy['sessions']
   readonly subagents: ApiProxy['subagents']

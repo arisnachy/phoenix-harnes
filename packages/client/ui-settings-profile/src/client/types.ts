@@ -18,7 +18,13 @@ export interface UserProfileFamilyMember {
 
 /** Presentation preference for the assistant identity shown by Settings. */
 export type AssistantGender = 'masculine' | 'feminine' | 'neutral'
+/**
+ * Public assistant gender source shape.
+ */
 export type AssistantGenderSource = 'inferred' | 'manual'
+/**
+ * Public assistant gender mode shape.
+ */
 export type AssistantGenderMode = 'auto' | AssistantGenderSource
 
 /** Browser-local settings values mirrored from the Host profile namespace. */

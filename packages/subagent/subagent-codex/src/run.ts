@@ -141,6 +141,7 @@ export function codexAppServerArgv(): string[] {
  * user's plugin/skill inventory. Disabling plugin loading avoids expensive
  * Windows cache walks and file-lock noise while preserving the real Codex
  * home, managed ChatGPT auth, model catalog, quotas and account state.
+ * @returns The resulting value.
  */
 export function codexMetadataAppServerArgv(): string[] {
   return [
@@ -158,6 +159,8 @@ export function codexMetadataAppServerArgv(): string[] {
 /**
  * Preserve the real Codex home while giving Phoenix-owned Codex subagents their
  * own SQLite state. Explicit CODEX_SQLITE_HOME remains authoritative.
+ * @param explicit - The explicit value.
+ * @returns The resulting value.
  */
 export function codexSubagentEnvironment(
   explicit: Readonly<Record<string, string>>,

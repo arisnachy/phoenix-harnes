@@ -184,6 +184,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * Search the public Official MCP Registry from the Host. The browser never
    * calls the registry directly, avoiding cross-origin failures and centralizing
    * timeout, cache, and provenance policy.
+   * @param request - The request value.
+   * @returns The resulting value.
    */
   @Remote('searchMcpRegistry')
   async searchMcpRegistry(request: McpRegistrySearchRequest): Promise<McpRegistrySearchSnapshot> {
@@ -257,6 +259,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * The secret never enters the managed loader overlay.
    * @param request - Jev setup request containing the user-supplied API key.
    * @returns Installation receipt for the pinned Jev connector.
+   * @param _request - The request value.
    */
   @Remote('configureJevMcp')
   async configureJevMcp(_request: JevMcpConfigureRequest): Promise<McpRegistryInstallReceipt> {

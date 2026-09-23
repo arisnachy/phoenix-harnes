@@ -6,6 +6,9 @@ const GROUNDING =
   'Report only what earlier rounds and tool results in this session actually establish; '
   + 'when a detail is not in the session, say so instead of inventing it. '
 
+/**
+ * Public completion wrapup digest shape.
+ */
 export interface CompletionWrapupDigest {
   readonly judgeSummary?: string
   readonly findings?: readonly string[]
@@ -43,6 +46,7 @@ function canonicalDigest(value: CompletionWrapupDigest | undefined): object | un
  * @param objective - the terminal goal's objective, echoed for grounding.
  * @param blockedReason - the validated report for `blocked`; omitted for `complete`.
  * @returns a fresh one-block context for `ToolRunContext.deferContext()`.
+ * @param digest - The digest value.
  */
 export function renderWrapupContext(
   objective: string,

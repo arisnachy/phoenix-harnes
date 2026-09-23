@@ -161,7 +161,10 @@ export function readCodexModelPage(result: unknown): {
   return { models, ...nextCursor === undefined ? {} : { nextCursor } }
 }
 
-/** Only the ambient facts Codex needs to find its install, config and network. */
+/**
+ * Only the ambient facts Codex needs to find its install, config and network.
+ * @returns The resulting value.
+ */
 export function codexEnvironment(): NodeJS.ProcessEnv {
   const names = [
     'PATH', 'Path', 'PATHEXT', 'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
@@ -201,7 +204,10 @@ function finishProcessSetup(child: ChildProcessWithoutNullStreams): ChildProcess
   return child
 }
 
-/** Fixed capability-reduced argv for metadata-only Codex app-server probes. */
+/**
+ * Fixed capability-reduced argv for metadata-only Codex app-server probes.
+ * @returns The resulting value.
+ */
 export function codexDiscoveryArgs(): string[] {
   return [
     '-c',

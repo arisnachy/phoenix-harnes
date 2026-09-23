@@ -21,11 +21,19 @@ function keyOf(config: RealityContextConfig): string {
   })
 }
 
+/**
+ * Public reality context lease shape.
+ */
 export interface RealityContextLease {
   readonly engine: RealityContextEngine
   release(): void
 }
 
+/**
+ * Execute acquire reality context.
+ * @param config - The config value.
+ * @returns The resulting value.
+ */
 export function acquireRealityContext(config: RealityContextConfig): RealityContextLease {
   const key = keyOf(config)
   let entry = shared.get(key)
