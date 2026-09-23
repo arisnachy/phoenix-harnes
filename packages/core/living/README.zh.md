@@ -12,8 +12,12 @@ Phoenix 与其所创建内容保持通用运行关系的 Service Definition。`c
 
 ## Model Experience
 
-本包本身不向模型暴露工具。`@phoenix-ai/dsh-tool-living` 拥有常驻创建规则和模型控制。进程内插件仍可直接使用 `ctx.living.attach()`；默认本地实现还为生成的进程外运行时提供经过认证的控制桥。
+Indirectly, through `@phoenix-ai/dsh-tool-living`，由其负责面向模型的创建策略、工具 schema 与结果呈现。
+
+#### KV Cache effect
+
+本 service 自身不增加 prompt 或 schema token；cache 可见上下文只由已挂载的模型侧 consumer 改变。
 
 ## Known Limitations and Deferred Work
 
-Service Definition 有意不规定持久化方式，也不强制唯一传输实现。具体 provider 决定存储与连接机制。内置本地 provider 使用 owner-local HTTP bridge；远程或云端部署可替换传输，同时保持相同的 `ctx.living` 契约。
+- Service Definition 有意不规定持久化方式，也不强制唯一传输实现。具体 provider 决定存储与连接机制；内置本地 provider 使用 owner-local HTTP bridge，远程或云端部署可以替换传输而保持相同的 `ctx.living` 契约。
