@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Phoenix</AssemblyName>
     <RootNamespace>Phoenix.Desktop</RootNamespace>
-    <Version>1.0.20</Version>
+    <Version>1.0.22</Version>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <Compile Remove="Phoenix.Desktop.Tests\**\*.cs" />
+    <Compile Remove="Phoenix.CredentialBroker\**\*.cs" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
   </ItemGroup>
 </Project>

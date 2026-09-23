@@ -6,7 +6,15 @@ English | [中文](phoenix-windows.zh.md)
 
 Run the one-line PowerShell installer from the repository README. It installs a dedicated checkout under `%LOCALAPPDATA%\Programs\PHOENIX`, builds the exact `main` revision, and creates **PHOENIX HARDNESS** shortcuts in the Start menu, Windows startup, and the taskbar shortcut store. Windows versions that do not expose a localized pin action still receive a taskbar-ready shortcut; pin it once from the shortcut context menu. Use `-NoStartup` or `-NoTaskbar` to opt out. Managed launches fetch `origin/main` and accept only a clean fast-forward; local modifications stop the update instead of being overwritten. Set `PHOENIX_AUTO_UPDATE=0` to disable launch-time checks.
 
-The bootstrap is operational but not Authenticode-signed. A trusted signed release requires an external publisher certificate and remains a release credential gate.
+The managed PowerShell bootstrap and `Phoenix-Windows-Setup.exe` do not carry Authenticode signatures. A trusted signed release requires an external publisher certificate and remains a release credential gate.
+
+## Native desktop app
+
+Run `Phoenix-Windows-Setup.exe` to install the per-user desktop app under `%LOCALAPPDATA%\Programs\Phoenix`. Setup creates a Start menu shortcut and offers desktop-shortcut and Windows-startup tasks. When the startup task is selected, Phoenix opens when the current user signs in.
+
+Interactive setup prepares the bundled production runtime and the dedicated WebView2 profile before opening Phoenix. Normal installed launches use the packaged runtime and do not select a checkout found in a conventional folder. Set `PHOENIX_SOURCE_ROOT` only when intentionally launching a runnable source checkout; an unavailable or invalid path leaves Phoenix on its packaged runtime.
+
+The native window opens while Phoenix checks runtime readiness and reports startup or recovery status. Closing the window hides Phoenix to the notification area; launching its shortcut again restores the existing window.
 
 ## VS Code and Cursor
 

@@ -12,6 +12,8 @@ on:
       - 'installer/windows/**'
       - 'scripts/phoenix-windows-supervisor.mjs'
       - 'scripts/build-windows-runtime-seed.mjs'
+      - 'scripts/windows-installed-smoke.ps1'
+      - 'scripts/windows-installer.spec.ts'
       - 'apps/web/public/favicon.png'
       - 'apps/web/public/favicon.svg'
       - '.github/workflows/phoenix-windows-desktop.yml'
@@ -22,6 +24,8 @@ on:
       - 'installer/windows/**'
       - 'scripts/phoenix-windows-supervisor.mjs'
       - 'scripts/build-windows-runtime-seed.mjs'
+      - 'scripts/windows-installed-smoke.ps1'
+      - 'scripts/windows-installer.spec.ts'
       - '.github/workflows/phoenix-windows-desktop.yml'
   workflow_dispatch:
 
@@ -98,6 +102,28 @@ jobs:
             -p:PublishSingleFile=true `
             -o dist/phoenix-desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $brokerOutput = Join-Path (Resolve-Path dist/phoenix-desktop).Path 'credential-broker'
+          New-Item -ItemType Directory -Force $brokerOutput | Out-Null
+          dotnet publish apps/desktop-windows/Phoenix.CredentialBroker/Phoenix.CredentialBroker.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=None `
+            -o $brokerOutput
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path (Join-Path $brokerOutput 'Phoenix.CredentialBroker.exe'))) {
+            throw 'Credential broker publish did not produce Phoenix.CredentialBroker.exe'
+          }
+
+          dotnet run --project apps/desktop-windows/Phoenix.Desktop.Tests/Phoenix.Desktop.Tests.csproj `
+            --configuration Release `
+            --no-build `
+            -- --credential-broker-probe (Join-Path $brokerOutput 'Phoenix.CredentialBroker.exe')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           Copy-Item apps/desktop-windows/phoenix.ico dist/phoenix-desktop/phoenix.ico
           Copy-Item installer/windows/bootstrap-runtime.ps1 dist/phoenix-desktop/bootstrap-runtime.ps1
 
@@ -149,6 +175,14 @@ jobs:
           $loader = Get-ChildItem dist/phoenix-desktop -Recurse -Filter WebView2Loader.dll -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $loader) { throw 'WebView2Loader.dll is missing from the desktop publish payload' }
 
+      - name: Verify credential broker deployment payload
+        shell: pwsh
+        run: |
+          $broker = Join-Path (Resolve-Path dist/phoenix-desktop).Path 'credential-broker\Phoenix.CredentialBroker.exe'
+          if (-not (Test-Path $broker -PathType Leaf)) {
+            throw 'Phoenix.CredentialBroker.exe is missing from the desktop publish payload'
+          }
+
       - name: Verify installer packages full desktop payload
         shell: pwsh
         run: |
@@ -174,6 +208,9 @@ jobs:
           if (-not (Test-Path dist/phoenix-desktop/runtime-seed.zip)) {
             throw 'Installer payload is missing the prebuilt production runtime seed'
           }
+          if (-not (Test-Path dist/phoenix-desktop/credential-broker/Phoenix.CredentialBroker.exe)) {
+            throw 'Installer payload is missing the credential broker executable'
+          }
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $seedArchive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path dist/phoenix-desktop/runtime-seed.zip).Path)
           try {
@@ -193,6 +230,39 @@ jobs:
           if ($iss -match '(?m)^Filename:\s*"powershell\.exe".*bootstrap-runtime\.ps1') {
             throw 'Installer must not hide first-run runtime bootstrap; Phoenix.exe owns visible bootstrap now'
           }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup compiler was not found' }
+          New-Item -ItemType Directory -Force dist/installer | Out-Null
+          $source = (Resolve-Path dist/phoenix-desktop).Path
+          $output = (Resolve-Path dist/installer).Path
+          & $iscc "/DSourceDir=$source" "/DOutputDir=$output" installer/windows/Phoenix.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path dist/installer/Phoenix-Windows-Setup.exe)) { throw 'Installer artifact missing' }
+
+      - name: Install and smoke the Inno package
+        shell: pwsh
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP 'phoenix-installed-smoke'
+          $installer = (Resolve-Path dist/installer/Phoenix-Windows-Setup.exe).Path
+          & .\scripts\windows-installed-smoke.ps1 -InstallerPath $installer -SmokeRoot $smokeRoot
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload installed-smoke diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Phoenix-Windows-Installed-Smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phoenix-installed-smoke
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Launcher command smoke test
         shell: pwsh
@@ -262,22 +332,6 @@ jobs:
             throw 'Phoenix native shell did not prove a successful WebView2 navigation to loopback'
           }
 
-      - name: Build installer
-        shell: pwsh
-        run: |
-          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path $iscc)) {
-            choco install innosetup -y --no-progress
-          }
-          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path $iscc)) { throw 'Inno Setup compiler was not found' }
-          New-Item -ItemType Directory -Force dist/installer | Out-Null
-          $source = (Resolve-Path dist/phoenix-desktop).Path
-          $output = (Resolve-Path dist/installer).Path
-          & $iscc "/DSourceDir=$source" "/DOutputDir=$output" installer/windows/Phoenix.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (-not (Test-Path dist/installer/Phoenix-Windows-Setup.exe)) { throw 'Installer artifact missing' }
-
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
@@ -285,5 +339,6 @@ jobs:
           path: |
             dist/installer/Phoenix-Windows-Setup.exe
             dist/phoenix-desktop/Phoenix.exe
+            dist/phoenix-desktop/credential-broker/Phoenix.CredentialBroker.exe
           if-no-files-found: error
           retention-days: 30

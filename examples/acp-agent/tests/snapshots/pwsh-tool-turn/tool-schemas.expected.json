@@ -2,17 +2,28 @@
   "initial": [
     {
       "name": "computer",
-      "description": "Control the Windows desktop with window-aware actions. Before controlling an external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.",
+      "description": "Control the Windows desktop with window-aware actions. For web work in Phoenix Desktop, prefer browser_inspect/browser_fill_form/browser_click_text/browser_login over coordinate typing when possible. browser_login obtains credentials through a Phoenix-only prompt or the local vault, fills recognized sign-in fields, never submits the form, and never returns credential values. Never put passwords, account names, or credential values in Computer arguments. browser_forget_credentials removes saved credentials for one HTTPS origin. browser_inspect returns labels/indexes but never current field values. Other browser_* actions command Phoenix's embedded WebView2 directly through the native desktop channel and never intentionally launch the system browser. Then use screenshot/click/type/key/scroll against the Phoenix window for full visual control. Before controlling any other external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot, except credential operations. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.",
       "parameters": {
         "type": "object",
         "properties": {
           "action": {
             "type": "string",
-            "description": "Desktop operation. windows lists visible top-level windows; focus activates a target and verifies foreground identity.",
+            "description": "Desktop operation. browser_inspect reads visible text/form metadata without values; browser_fill_form fills non-secret inspected indexes; browser_click_text clicks visible button/link text; browser_login privately fills recognized sign-in fields without submitting; browser_forget_credentials removes the current origin credential.",
             "enum": [
               "screenshot",
               "windows",
               "focus",
+              "browser_open",
+              "browser_close",
+              "browser_back",
+              "browser_forward",
+              "browser_reload",
+              "browser_focus",
+              "browser_inspect",
+              "browser_fill_form",
+              "browser_click_text",
+              "browser_login",
+              "browser_forget_credentials",
               "move",
               "click",
               "double_click",
@@ -24,7 +35,41 @@
           },
           "target": {
             "type": "string",
-            "description": "Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus and strongly recommended for external-app input."
+            "description": "Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus; embedded browser actions do not need it."
+          },
+          "url": {
+            "type": "string",
+            "description": "URL or search text for browser_open. Phoenix validates it and navigates the embedded WebView2 directly."
+          },
+          "origin": {
+            "type": "string",
+            "description": "Expected live page origin for browser_fill_form/browser_click_text; HTTPS origin for browser_login/browser_forget_credentials."
+          },
+          "fields": {
+            "type": "array",
+            "description": "For browser_fill_form: visible field indexes from browser_inspect and one value or checked state each. Password/file inputs are protected and rejected.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "field": {
+                  "type": "integer"
+                },
+                "value": {
+                  "type": "string"
+                },
+                "checked": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "field"
+              ]
+            }
+          },
+          "submit": {
+            "type": "boolean",
+            "description": "Submit the containing form after browser_fill_form. Defaults to false; browser_login never submits."
           },
           "x": {
             "type": "integer",

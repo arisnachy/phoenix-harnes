@@ -104,6 +104,7 @@ export class ApiProxyService extends Service implements ApiProxy {
     })]),
   })
 
+  /** Short-lived browser position cache owned by this ApiProxy instance. */
   readonly clientReality: ClientRealityService
   readonly sessions: ApiProxy['sessions']
   readonly subagents: ApiProxy['subagents']

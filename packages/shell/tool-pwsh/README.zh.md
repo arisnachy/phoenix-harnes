@@ -28,9 +28,9 @@
 
 ### `computer`（Windows）
 
-Windows 组合还会注册受保护的 `computer` 工具。在 Phoenix Desktop 中，其结构化浏览器动作直接操作内嵌 WebView2：`browser_inspect` 返回可见文字、字段元数据与按钮，但不会返回字段当前值；`browser_fill_form` 填写已检查的非机密字段；`browser_click_text` 按可见文字点击按钮/链接；`browser_login` 则在内部从 `ctx.credentials` 解析按 origin 绑定的登录信息。
+Windows 组合还会注册受保护的 `computer` 工具。在 Phoenix Desktop 中，其结构化浏览器动作直接操作内嵌 WebView2：`browser_inspect` 返回可见文字、字段元数据与按钮，但不会返回字段当前值；`browser_fill_form` 填写已检查的非机密字段；`browser_click_text` 按可见文字点击按钮/链接。HTTPS origin 首次需要凭据时，`browser_login` 会通过 Phoenix 私密提示框向用户询问，默认将凭据保存到本机 Phoenix Vault；以后只会填入一组明确可识别的可见账号/密码字段，不会提交表单。用户可以关闭保存选项，`browser_forget_credentials` 会删除当前 origin 的凭据。凭据不会进入 Computer 参数、结果、登录动作返回的截图或学习到的流程。`browser_fill_form` 会拒绝密码和文件控件。
 
-用户只需一次执行 `/secret login-set https://example.com ACCOUNT SECRET` 即可授权该站点。之后这个精确的规范化 origin 会拥有 `autonomous` 授权，用于无人值守的打开、登录、填表与点击，因此重复任务不必在每一步再次请求 workspace-write 批准。账户机密不会成为模型参数、工具结果、prompt token 或检查结果。TypeScript broker 与 WebView 脚本都会再次核对 origin；远程授权必须使用 HTTPS（回环地址 HTTP 例外）。其他 Computer Use 动作仍遵守原有 sandbox/审批策略。
+当 Phoenix Desktop 发布 `PHOENIX_DESKTOP_CONTROL_DESCRIPTOR` 时，所有 Computer 动作都会通过一个当前用户 named pipe 使用常驻 schema-2 Win32 驱动。服务器只接受所属 runtime 进程树的客户端，按序处理请求，并用 `requestId` 关联回复；超时或取消会关闭通道。改变状态的请求会在输入注入返回后立即捕获截图并放入回复，以免另发截图请求或等待固定的动作后延迟；凭据动作不会附加截图。模型必须核对可见结果，因为工具成功只确认操作系统已接收输入，并不证明应用已完成操作。离开 Phoenix Desktop 时仍使用经过验证的 PowerShell 驱动作为回退。这消除了进程开销，但没有在同一台机器完成基准测试前宣称与 Codex 达到相同速度。
 
 ### Managed shell environment
 

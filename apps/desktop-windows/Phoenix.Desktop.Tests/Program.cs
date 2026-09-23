@@ -1,5 +1,7 @@
 using System.IO.Compression;
 using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using Phoenix.Desktop;
 
@@ -8,6 +10,12 @@ var failures = new List<string>();
 static void Equal(string? expected, string? actual, string name, List<string> failures)
 {
     if (!string.Equals(expected, actual, StringComparison.Ordinal))
+        failures.Add($"{name}: expected '{expected}', got '{actual}'");
+}
+
+static void EqualBool(bool expected, bool actual, string name, List<string> failures)
+{
+    if (expected != actual)
         failures.Add($"{name}: expected '{expected}', got '{actual}'");
 }
 
@@ -24,6 +32,122 @@ static void False(bool value, string name, List<string> failures)
 static void EqualInt(int expected, int actual, string name, List<string> failures)
 {
     if (expected != actual) failures.Add($"{name}: expected '{expected}', got '{actual}'");
+}
+
+static async Task<bool> VerifyCredentialBrokerAsync(string brokerExecutable)
+{
+    var profileName = $"probe-{Guid.NewGuid():N}";
+    var persistentOrigin = $"https://{Guid.NewGuid():N}.phoenix.invalid";
+    var transientOrigin = $"https://{Guid.NewGuid():N}.phoenix.invalid";
+    const string account = "phoenix-synthetic-account";
+    const string secret = "phoenix-synthetic-secret";
+    var results = new Dictionary<string, bool>(StringComparer.Ordinal);
+    DesktopCredentialBrokerProcess? broker = null;
+
+    try
+    {
+        broker = await DesktopCredentialBrokerProcess.StartAsync(brokerExecutable, profileName);
+        results["starts_empty"] = !await broker.HasAsync(persistentOrigin);
+        var diagnosticRequest = DesktopCredentialRequest.Create(
+            persistentOrigin,
+            CredentialBrokerOperations.Store,
+            TimeSpan.FromSeconds(30),
+            account: account,
+            secret: secret,
+            remember: true);
+        results["redacts_request_diagnostics"] = !diagnosticRequest.ToString().Contains(secret, StringComparison.Ordinal)
+            && !diagnosticRequest.ToString().Contains(account, StringComparison.Ordinal);
+        await broker.StoreAsync(persistentOrigin, account, secret, remember: true);
+        results["stores_persistently"] = await broker.HasAsync(persistentOrigin);
+        results["isolates_origin"] = !await broker.HasAsync(transientOrigin);
+
+        var capability = await broker.IssueFillCapabilityAsync(persistentOrigin);
+        results["redacts_capability_diagnostics"] = !capability.ToString().Contains(capability.Token, StringComparison.Ordinal);
+        var credential = await broker.FillOnceAsync(persistentOrigin, capability);
+        results["fills_once"] = credential?.Account == account && credential.Secret == secret;
+        results["redacts_credential_diagnostics"] = credential is not null
+            && !credential.ToString().Contains(secret, StringComparison.Ordinal)
+            && !credential.ToString().Contains(account, StringComparison.Ordinal);
+        var replayRejected = false;
+        try
+        {
+            _ = await broker.FillOnceAsync(persistentOrigin, capability);
+        }
+        catch (InvalidOperationException)
+        {
+            replayRejected = true;
+        }
+        results["rejects_replayed_capability"] = replayRejected;
+
+        await broker.DisposeAsync();
+        broker = await DesktopCredentialBrokerProcess.StartAsync(brokerExecutable, profileName);
+        results["persists_across_broker_restart"] = await broker.HasAsync(persistentOrigin);
+        var restartCapability = await broker.IssueFillCapabilityAsync(persistentOrigin);
+        var restartedCredential = await broker.FillOnceAsync(persistentOrigin, restartCapability);
+        results["fills_after_restart"] = restartedCredential?.Account == account && restartedCredential.Secret == secret;
+
+        var oversizedSecretRejected = false;
+        try
+        {
+            await broker.StoreAsync(persistentOrigin, account, new string('x', 513), remember: true);
+        }
+        catch (ArgumentException)
+        {
+            oversizedSecretRejected = true;
+        }
+        results["rejects_oversized_persistent_secret"] = oversizedSecretRejected;
+
+        await broker.ForgetAsync(persistentOrigin);
+        results["forgets_persistent_credential"] = !await broker.HasAsync(persistentOrigin);
+        await broker.StoreAsync(transientOrigin, account, secret, remember: false);
+        var transientCapability = await broker.IssueFillCapabilityAsync(transientOrigin);
+        var transientCredential = await broker.FillOnceAsync(transientOrigin, transientCapability);
+        results["fills_transient_credential"] = transientCredential?.Account == account && transientCredential.Secret == secret;
+        results["consumes_transient_credential"] = !await broker.HasAsync(transientOrigin);
+
+        await broker.DisposeAsync();
+        broker = await DesktopCredentialBrokerProcess.StartAsync(brokerExecutable, profileName);
+        results["does_not_persist_transient_credential"] = !await broker.HasAsync(transientOrigin);
+        await broker.ForgetAsync(persistentOrigin);
+        await broker.ForgetAsync(transientOrigin);
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"Credential broker probe stopped: {exception.GetType().Name}");
+        results["completed"] = false;
+    }
+    finally
+    {
+        if (broker is not null)
+        {
+            try
+            {
+                await broker.ForgetAsync(persistentOrigin);
+                await broker.ForgetAsync(transientOrigin);
+            }
+            catch (Exception exception)
+            {
+                Console.Error.WriteLine($"Credential broker cleanup failed: {exception.GetType().Name}");
+                results["cleanup"] = false;
+            }
+            await broker.DisposeAsync();
+        }
+    }
+
+    foreach (var result in results)
+        Console.WriteLine($"credential-broker-{result.Key}={result.Value}");
+    return results.Count > 0 && results.Values.All(static passed => passed);
+}
+
+if (args.Length != 0)
+{
+    if (args.Length != 2 || args[0] != "--credential-broker-probe" || !OperatingSystem.IsWindows())
+    {
+        Console.Error.WriteLine("Usage: Phoenix.Desktop.Tests --credential-broker-probe <broker executable>");
+        return 2;
+    }
+
+    return await VerifyCredentialBrokerAsync(args[1]) ? 0 : 1;
 }
 
 Equal("https://example.com/", BrowserNavigation.NormalizeAddress("example.com")?.ToString(), "hostname uses https", failures);
@@ -89,13 +213,27 @@ True(
 Equal("Continue", clickText.Text, "click text preserved", failures);
 True(
     BrowserCommand.TryParse(
-        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com/login\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",
-        out var loginCommand,
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com\"}",
+        out var browserLogin,
         allowAutomation: true),
-    "runtime pipe admits origin-bound login",
+    "runtime pipe admits native broker login without credential fields",
     failures);
-Equal("https://example.com", loginCommand.Origin, "login origin canonicalized", failures);
-True(loginCommand.Submit, "login submits by default", failures);
+Equal("https://example.com", browserLogin.Origin, "native login origin is canonical", failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.forget-credentials\",\"origin\":\"https://example.com\"}",
+        out var forgetCredentials,
+        allowAutomation: true),
+    "runtime pipe admits origin-bound vault removal",
+    failures);
+Equal("https://example.com", forgetCredentials.Origin, "vault removal origin is canonical", failures);
+False(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com/login\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",
+        out _,
+        allowAutomation: true),
+    "legacy browser login with inline credentials is rejected",
+    failures);
 False(
     BrowserCommand.TryParse(
         "{\"type\":\"phoenix.browser.login\",\"origin\":\"http://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",
@@ -103,6 +241,128 @@ False(
         allowAutomation: true),
     "runtime pipe rejects insecure remote login origin",
     failures);
+
+True(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r1\",\"type\":\"click\",\"x\":12,\"y\":34,\"button\":\"right\",\"capture\":true}",
+        out var computerClick),
+    "schema 2 desktop click parses",
+    failures);
+Equal("r1", computerClick.RequestId, "schema 2 request id is preserved", failures);
+Equal("right", computerClick.Button, "schema 2 mouse button is preserved", failures);
+True(computerClick.Capture, "schema 2 capture flag is preserved", failures);
+True(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r-login\",\"type\":\"browser_login\",\"origin\":\"https://example.com\"}",
+        out var computerLogin),
+    "schema 2 admits origin-bound broker login without credential fields",
+    failures);
+Equal("https://example.com", computerLogin.Origin, "resident login origin is canonical", failures);
+False(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r-login-capture\",\"type\":\"browser_login\",\"origin\":\"https://example.com\",\"capture\":true}",
+        out _),
+    "schema 2 refuses screenshots on a credential fill action",
+    failures);
+False(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r-login-http\",\"type\":\"browser_login\",\"origin\":\"http://example.com\"}",
+        out _),
+    "schema 2 rejects insecure login origins",
+    failures);
+True(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r-forget\",\"type\":\"browser_forget_credentials\",\"origin\":\"https://example.com\"}",
+        out _),
+    "schema 2 admits origin-bound vault removal",
+    failures);
+const string credentialRequestId = "0123456789abcdef0123456789abcdef";
+const string credentialOrigin = "https://example.com";
+var credentialResponseJson = "{\"kind\":\"computer-credential-response\",\"requestId\":\"0123456789abcdef0123456789abcdef\",\"origin\":\"https://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\",\"remember\":true}";
+True(
+    DesktopCredentialPromptProtocol.TryParseReply(credentialResponseJson, out var credentialResponse),
+    "native credential response parses",
+    failures);
+True(credentialResponse.Secret == "synthetic-login-secret", "native response keeps the credential only in its private value", failures);
+True(credentialResponse.Remember, "native credential response preserves the explicit remember choice", failures);
+True(
+    DesktopCredentialPromptProtocol.MatchesRequest(credentialRequestId, credentialOrigin, credentialResponse),
+    "native response matches its active request and origin",
+    failures);
+False(
+    DesktopCredentialPromptProtocol.MatchesRequest("ffffffffffffffffffffffffffffffff", credentialOrigin, credentialResponse),
+    "native response cannot satisfy another request",
+    failures);
+False(
+    DesktopCredentialPromptProtocol.TryParseReply(
+        credentialResponseJson.Replace("https://example.com", "http://example.com", StringComparison.Ordinal),
+        out _),
+    "native credential response rejects non-HTTPS origins",
+    failures);
+False(
+    DesktopCredentialPromptProtocol.TryParseReply(
+        credentialResponseJson.Replace("\"remember\":true}", "\"remember\":true,\"extra\":\"value\"}", StringComparison.Ordinal),
+        out _),
+    "native credential response rejects unknown fields",
+    failures);
+False(
+    DesktopCredentialPromptProtocol.TryParseReply(
+        credentialResponseJson.Replace("\"requestId\":\"0123456789abcdef0123456789abcdef\",", "\"requestId\":\"0123456789abcdef0123456789abcdef\",\"requestId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",", StringComparison.Ordinal),
+        out _),
+    "native credential response rejects duplicate properties",
+    failures);
+True(
+    DesktopCredentialPromptProtocol.TryParseReply(
+        "{\"kind\":\"computer-credential-cancelled\",\"requestId\":\"0123456789abcdef0123456789abcdef\",\"origin\":\"https://example.com\"}",
+        out var credentialCancellation),
+    "native credential cancellation parses",
+    failures);
+True(credentialCancellation.Cancelled, "native credential cancellation carries no values", failures);
+False(
+    DesktopCredentialPromptProtocol.IsTrustedShellMessageSource(
+        "http://127.0.0.1:3080/chat",
+        "http://127.0.0.1:3080/",
+        new Uri("http://127.0.0.1:3080/")),
+    "native credential response rejects a stale shell page",
+    failures);
+True(
+    DesktopCredentialPromptProtocol.IsTrustedShellMessageSource(
+        "http://127.0.0.1:3080/chat",
+        "http://127.0.0.1:3080/chat",
+        new Uri("http://127.0.0.1:3080/")),
+    "native credential response accepts the current trusted shell page",
+    failures);
+False(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r2\",\"type\":\"click\",\"x\":12,\"y\":34,\"account\":\"secret-user\"}",
+        out _),
+    "schema 2 rejects credential properties",
+    failures);
+False(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r2-secret\",\"type\":\"click\",\"x\":12,\"y\":34,\"secret\":\"synthetic-login-secret\"}",
+        out _),
+    "schema 2 rejects secret properties",
+    failures);
+False(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r3\",\"type\":\"click\",\"x\":12,\"y\":34,\"button\":\"side\"}",
+        out _),
+    "schema 2 rejects unsupported mouse buttons",
+    failures);
+True(DesktopComputerProtocol.MatchesReply("r1", "r1"), "reply matches request id", failures);
+False(DesktopComputerProtocol.MatchesReply("r1", "r2"), "reply cannot cross request ids", failures);
+False(DesktopBrowserControlServer.IsAllowedClient(999, 123), "unrelated client PID is rejected", failures);
+if (OperatingSystem.IsWindows())
+    True(
+        DesktopBrowserControlServer.IsAllowedClient(Environment.ProcessId, Environment.ProcessId),
+        "the owning runtime PID is accepted",
+        failures);
+if (OperatingSystem.IsWindows())
+{
+    var residentWindows = DesktopComputerDriver.Execute(new DesktopComputerRequest(2, "driver-test", "windows"));
+    True(residentWindows.Details is not null, "resident Win32 driver enumerates desktop windows", failures);
+}
 
 // The model/runtime must control the embedded WebView through a direct current-user named pipe.
 // This prevents browser_open from falling back to global Ctrl+L/type/Enter input.
@@ -122,7 +382,7 @@ using (var control = new DesktopBrowserControlServer(
         "desktop control descriptor parses",
         failures);
     Equal(control.PipeName, descriptor.PipeName, "desktop control descriptor names live pipe", failures);
-    EqualInt(1, descriptor.Schema, "desktop control descriptor schema", failures);
+    EqualInt(2, descriptor.Schema, "desktop control descriptor schema", failures);
 
     using var client = new NamedPipeClientStream(
         ".",
@@ -139,6 +399,29 @@ using (var control = new DesktopBrowserControlServer(
         await Task.Delay(10);
     Equal("phoenix.browser.open", receivedControlCommand?.Type, "desktop control dispatches browser command", failures);
     Equal("https://example.com", receivedControlCommand?.Url, "desktop control preserves browser URL", failures);
+
+    await writer.WriteLineAsync("{\"schema\":2,\"requestId\":\"resident-1\",\"type\":\"browser_inspect\"}");
+    var residentReply = await reader.ReadLineAsync();
+    True(residentReply?.Contains("\"schema\":2", StringComparison.Ordinal) == true,
+        "resident schema 2 reply is versioned",
+        failures);
+    True(residentReply?.Contains("\"requestId\":\"resident-1\"", StringComparison.Ordinal) == true,
+        "resident reply preserves request id",
+        failures);
+
+    await writer.WriteLineAsync("{\"schema\":2,\"requestId\":\"resident-2\",\"type\":\"browser_close\"}");
+    var secondResidentReply = await reader.ReadLineAsync();
+    True(secondResidentReply?.Contains("\"requestId\":\"resident-2\"", StringComparison.Ordinal) == true,
+        "resident pipe accepts a second serialized request",
+        failures);
+
+    var previouslyReceived = receivedControlCommand?.Type;
+    await writer.WriteLineAsync("{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com/login\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}");
+    var legacyLoginReply = await reader.ReadLineAsync();
+    True(legacyLoginReply?.Contains("\"ok\":false", StringComparison.Ordinal) == true,
+        "legacy pipe rejects inline credential login",
+        failures);
+    Equal(previouslyReceived, receivedControlCommand?.Type, "rejected legacy login is never dispatched", failures);
 }
 False(File.Exists(controlDescriptorPath), "desktop control descriptor removed on dispose", failures);
 
@@ -241,6 +524,115 @@ True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node C:\U
 True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"powershell -Command corepack pnpm phoenix -- --no-open"), "PowerShell pnpm Phoenix listener is recognized", failures);
 False(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"python -m http.server 3080"), "unrelated local HTTP listener is rejected", failures);
 
+var runtimeContractType = typeof(DesktopRuntimeLaunchContract);
+var canMarkReady = runtimeContractType.GetMethod(
+    "CanMarkReady",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+var canAdoptListener = runtimeContractType.GetMethod(
+    "CanAdoptListener",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+var stableListenerIdentity = runtimeContractType.GetMethod(
+    "HasStableListenerIdentity",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+True(canMarkReady is not null, "runtime readiness decision exists", failures);
+True(canAdoptListener is not null, "listener adoption decision exists", failures);
+True(stableListenerIdentity is not null, "stable listener identity decision exists", failures);
+if (canMarkReady is not null)
+    EqualBool(false, (bool)canMarkReady.Invoke(null, new object?[] { true, 2 })!,
+        "an exited owned supervisor cannot mark Phoenix ready", failures);
+if (canAdoptListener is not null)
+{
+    EqualBool(false, (bool)canAdoptListener.Invoke(null, new object?[] { "python -m http.server 3080" })!,
+        "an unrelated listener is never adopted", failures);
+    EqualBool(true, (bool)canAdoptListener.Invoke(null, new object?[] { "node scripts/phoenix-windows-supervisor.mjs" })!,
+        "a compatible Phoenix listener may serve the desktop without becoming owned", failures);
+}
+if (stableListenerIdentity is not null)
+{
+    EqualBool(true, (bool)stableListenerIdentity.Invoke(null, new object?[] { 700, 1234L, 700, 1234L })!,
+        "matching listener PID and creation time remain stable", failures);
+    EqualBool(false, (bool)stableListenerIdentity.Invoke(null, new object?[] { 700, 1234L, 701, 1234L })!,
+        "a changed listener PID breaks stable identity", failures);
+    EqualBool(false, (bool)stableListenerIdentity.Invoke(null, new object?[] { 700, 1234L, 700, 1235L })!,
+        "a reused listener PID with a changed creation time breaks stable identity", failures);
+}
+
+var processIdentityType = typeof(DesktopRuntimeLaunchContract).Assembly.GetType("Phoenix.Desktop.DesktopRuntimeProcessIdentity");
+var isSameOrDescendant = processIdentityType?.GetMethod(
+    "IsSameOrDescendantOf",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+    binder: null,
+    types: new[] { typeof(int), typeof(int) },
+    modifiers: null);
+var sameOrDescendant = processIdentityType?.GetMethod(
+    "IsSameOrDescendantOf",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+    binder: null,
+    types: new[] { typeof(int), typeof(int), typeof(IReadOnlyDictionary<int, int>) },
+    modifiers: null);
+var matchesLoopbackListener = processIdentityType?.GetMethod(
+    "MatchesLoopbackListener",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+var findListenerIdentity = processIdentityType?.GetMethod(
+    "FindListeningProcessIdentity",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+var readProcessCommandLine = processIdentityType?.GetMethod(
+    "TryGetCommandLine",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+True(findListenerIdentity is not null, "listener PID identity lookup exists", failures);
+True(readProcessCommandLine is not null, "process command-line lookup exists", failures);
+True(matchesLoopbackListener is not null, "listener lookup filters to the loopback endpoint", failures);
+True(isSameOrDescendant is not null, "native process ancestry lookup exists", failures);
+True(sameOrDescendant is not null, "owned runtime process-tree check exists", failures);
+if (OperatingSystem.IsWindows() && isSameOrDescendant is not null)
+    EqualBool(true, (bool)isSameOrDescendant.Invoke(null, new object?[] { Environment.ProcessId, Environment.ProcessId })!,
+        "Toolhelp32 snapshot recognizes the current process as its own ancestor", failures);
+if (sameOrDescendant is not null)
+{
+    var processParents = new Dictionary<int, int> { [701] = 700, [700] = 699 };
+    EqualBool(true, (bool)sameOrDescendant.Invoke(null, new object?[] { 701, 699, processParents })!,
+        "listener descendant is owned by the started runtime supervisor", failures);
+    EqualBool(true, (bool)sameOrDescendant.Invoke(null, new object?[] { 699, 699, processParents })!,
+        "the runtime supervisor may own the listener directly", failures);
+    EqualBool(false, (bool)sameOrDescendant.Invoke(null, new object?[] { 701, 698, processParents })!,
+        "an unrelated process is not owned by the runtime supervisor", failures);
+    var cyclicParents = new Dictionary<int, int> { [701] = 700, [700] = 701 };
+    EqualBool(false, (bool)sameOrDescendant.Invoke(null, new object?[] { 701, 698, cyclicParents })!,
+        "a malformed process ancestry cycle fails closed", failures);
+}
+if (matchesLoopbackListener is not null)
+{
+    var loopbackAddress = BitConverter.ToUInt32(IPAddress.Loopback.GetAddressBytes());
+    var wildcardAddress = BitConverter.ToUInt32(IPAddress.Any.GetAddressBytes());
+    var testPort = 3080;
+    var encodedPort = (uint)IPAddress.HostToNetworkOrder((short)testPort);
+    EqualBool(true, (bool)matchesLoopbackListener.Invoke(null, new object?[] { loopbackAddress, encodedPort, testPort })!,
+        "Phoenix loopback endpoint matches", failures);
+    EqualBool(false, (bool)matchesLoopbackListener.Invoke(null, new object?[] { wildcardAddress, encodedPort, testPort })!,
+        "wildcard listener does not match the Phoenix loopback endpoint", failures);
+    EqualBool(false, (bool)matchesLoopbackListener.Invoke(null, new object?[] { loopbackAddress, encodedPort, testPort + 1 })!,
+        "listener on a different port does not match", failures);
+}
+if (OperatingSystem.IsWindows() && findListenerIdentity is not null && readProcessCommandLine is not null)
+{
+    var currentCommandLine = readProcessCommandLine.Invoke(null, new object?[] { Environment.ProcessId })?.ToString();
+    True(!string.IsNullOrWhiteSpace(currentCommandLine), "current Windows process command line is readable", failures);
+
+    using var identityListener = new TcpListener(IPAddress.Loopback, 0);
+    identityListener.Start();
+    var identityPort = ((IPEndPoint)identityListener.LocalEndpoint).Port;
+    var listenerIdentity = findListenerIdentity.Invoke(null, new object?[] { identityPort });
+    True(listenerIdentity is not null, "loopback listener resolves to a process identity", failures);
+    if (listenerIdentity is not null)
+    {
+        var identityType = listenerIdentity.GetType();
+        var processId = (int)identityType.GetProperty("ProcessId")!.GetValue(listenerIdentity)!;
+        var creationTicks = (long)identityType.GetProperty("CreationTimeUtcTicks")!.GetValue(listenerIdentity)!;
+        EqualInt(Environment.ProcessId, processId, "loopback listener belongs to the test process", failures);
+        True(creationTicks > 0, "loopback listener exposes process creation time", failures);
+    }
+}
+
 var consolePrefRoot = Path.Combine(Path.GetTempPath(), $"phoenix-console-test-{Guid.NewGuid():N}");
 var previousConsoleEnv = Environment.GetEnvironmentVariable("PHOENIX_DESKTOP_CONSOLE");
 try
@@ -274,6 +666,20 @@ try
     Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", null);
     False(DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible: false), "normal installed desktop does not auto-boot a discovered source checkout", failures);
     False(DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible: true), "developer console does not switch the installed EXE into source mode", failures);
+    var startupContract = typeof(DesktopSourceCheckout).Assembly.GetType("Phoenix.Desktop.DesktopStartupContract");
+    var resolver = startupContract?.GetMethod(
+        "ResolveSourceRoot",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    True(resolver is not null, "source root resolver exists", failures);
+    if (resolver is not null)
+    {
+        Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", null);
+        Equal(null, resolver.Invoke(null, new object?[] { sourceInstallRoot, false }) as string,
+            "installed launch ignores a conventional source checkout", failures);
+        Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", sourceTestRoot);
+        Equal(Path.GetFullPath(sourceTestRoot), resolver.Invoke(null, new object?[] { sourceInstallRoot, true }) as string,
+            "source mode resolves the explicit checkout", failures);
+    }
 
     // Explicit/configured source roots are candidates, but discovery alone must not persist
     // them as the trusted backend until the runtime stability handshake succeeds.
@@ -283,13 +689,39 @@ try
     False(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)), "unverified source is not persisted as the backend of record", failures);
 
     DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
+    var unavailableSourceRoot = Path.Combine(sourceInstallRoot, "missing-source");
+    Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", unavailableSourceRoot);
+    Equal(null, resolver?.Invoke(null, new object?[] { sourceInstallRoot, true }) as string,
+        "source mode does not fall back to a verified pointer when the explicit checkout is unavailable", failures);
+    Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", sourceTestRoot);
+
+    DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
     Equal(Path.GetFullPath(sourceTestRoot), File.ReadAllText(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)).Trim(), "verified backend root is persisted", failures);
     Equal(Path.GetFullPath(sourceTestRoot), DesktopSourceCheckout.Resolve(sourceInstallRoot), "verified backend root resolves first on later launches", failures);
 
     DesktopSourceCheckout.ForgetVerified(sourceInstallRoot);
     False(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)), "failed source fallback clears verified backend pointer", failures);
     False(File.Exists(DesktopSourceCheckout.LegacyPointerPath(sourceInstallRoot)), "failed source fallback clears legacy backend pointer", failures);
-    DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
+
+    var rememberVerifiedIfReady = typeof(DesktopSourceCheckout).GetMethod(
+        "RememberVerifiedIfReady",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    True(rememberVerifiedIfReady is not null, "verified source persistence is readiness-gated", failures);
+    if (rememberVerifiedIfReady is not null)
+    {
+        EqualBool(false, (bool)rememberVerifiedIfReady.Invoke(
+            null,
+            new object?[] { sourceInstallRoot, sourceTestRoot, false })!,
+            "failed final readiness does not persist the verified source", failures);
+        False(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)),
+            "failed final readiness leaves verified source pointer absent", failures);
+        EqualBool(true, (bool)rememberVerifiedIfReady.Invoke(
+            null,
+            new object?[] { sourceInstallRoot, sourceTestRoot, true })!,
+            "successful readiness persists the verified source", failures);
+        True(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)),
+            "successful readiness creates verified source pointer", failures);
+    }
 
     var conventionalRoots = DesktopSourceCheckout.ConventionalRoots(@"C:\Users\arisn");
     True(
@@ -369,6 +801,76 @@ finally
         if (Directory.Exists(path))
             Directory.Delete(path, recursive: true);
     }
+}
+
+// A ready runtime can still be older than the seed shipped by an upgraded desktop installer.
+// Replacing that runtime must retain its previous tree so local self-modifications remain recoverable.
+var replacementAppRoot = Path.Combine(Path.GetTempPath(), $"phoenix-seed-replacement-app-{Guid.NewGuid():N}");
+var replacementSourceRoot = Path.Combine(Path.GetTempPath(), $"phoenix-seed-replacement-source-{Guid.NewGuid():N}");
+var replacementRuntimeRoot = Path.Combine(Path.GetTempPath(), $"phoenix-seed-replacement-runtime-{Guid.NewGuid():N}");
+try
+{
+    Directory.CreateDirectory(replacementAppRoot);
+    Directory.CreateDirectory(Path.Combine(replacementSourceRoot, ".git"));
+    Directory.CreateDirectory(Path.Combine(replacementRuntimeRoot, ".git"));
+    File.WriteAllText(
+        Path.Combine(replacementSourceRoot, ManagedRuntimeMarker.ReadyMarkerName),
+        "schema=1\nstate=ready\nchannel=stable\ncommit=new-seed\ninstalledAt=2026-09-23T00:00:00Z\n");
+    File.WriteAllText(Path.Combine(replacementSourceRoot, "fresh-package.txt"), "fresh-runtime");
+    File.WriteAllText(
+        Path.Combine(replacementRuntimeRoot, ManagedRuntimeMarker.ReadyMarkerName),
+        "schema=1\nstate=ready\nchannel=stable\ncommit=old-seed\ninstalledAt=2026-09-20T00:00:00Z\n");
+    File.WriteAllText(Path.Combine(replacementRuntimeRoot, "local-work.txt"), "keep-me");
+    ZipFile.CreateFromDirectory(
+        replacementSourceRoot,
+        DesktopRuntimeSeedInstaller.ArchivePath(replacementAppRoot),
+        CompressionLevel.Fastest,
+        includeBaseDirectory: false);
+
+    True(
+        DesktopRuntimeSeedInstaller.EnsureInstalled(replacementAppRoot, replacementRuntimeRoot),
+        "runtime seed installer refreshes an older ready runtime",
+        failures);
+    True(
+        File.Exists(Path.Combine(replacementRuntimeRoot, "fresh-package.txt")),
+        "runtime seed refresh installs files from the newer seed",
+        failures);
+    var retainedRuntime = Directory.GetDirectories(
+        Path.GetDirectoryName(replacementRuntimeRoot)!,
+        Path.GetFileName(replacementRuntimeRoot) + ".replaced-*");
+    True(retainedRuntime.Length == 1, "runtime seed refresh retains the previous runtime", failures);
+    True(
+        retainedRuntime.Length == 1 && File.Exists(Path.Combine(retainedRuntime[0], "local-work.txt")),
+        "runtime seed refresh keeps local runtime work recoverable",
+        failures);
+    True(
+        DesktopRuntimeSeedInstaller.IsCurrent(replacementAppRoot, replacementRuntimeRoot),
+        "runtime seed refresh records the bundled seed commit",
+        failures);
+    True(
+        DesktopRuntimeSeedInstaller.EnsureInstalled(replacementAppRoot, replacementRuntimeRoot),
+        "runtime seed installer leaves a matching ready runtime in place",
+        failures);
+    True(
+        Directory.GetDirectories(
+            Path.GetDirectoryName(replacementRuntimeRoot)!,
+            Path.GetFileName(replacementRuntimeRoot) + ".replaced-*").Length == 1,
+        "matching runtime seed does not create another backup",
+        failures);
+}
+finally
+{
+    foreach (var path in new[] { replacementAppRoot, replacementSourceRoot, replacementRuntimeRoot })
+    {
+        if (Directory.Exists(path))
+            Directory.Delete(path, recursive: true);
+    }
+
+    var replacementParent = Path.GetDirectoryName(replacementRuntimeRoot)!;
+    foreach (var path in Directory.GetDirectories(
+                 replacementParent,
+                 Path.GetFileName(replacementRuntimeRoot) + ".replaced-*"))
+        Directory.Delete(path, recursive: true);
 }
 
 if (failures.Count == 0)

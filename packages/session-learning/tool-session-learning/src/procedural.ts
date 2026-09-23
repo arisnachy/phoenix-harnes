@@ -538,6 +538,9 @@ export function installProceduralLearning(
 
     const run = async (): Promise<void> => {
       if (eventType === 'tool/call' && isRecord(data) && typeof data.name === 'string' && data.name.trim() !== '') {
+        // Computer has a dedicated redacted projector. The generic trace must
+        // never turn raw desktop actions into an independently recalled flow.
+        if (data.name === 'computer') return
         if (data.name === 'living_act' && isRecord(data.arguments) && typeof data.arguments.action === 'string') {
           trace.livingAction(sessionId, data.arguments.action)
         } else {

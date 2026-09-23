@@ -11,7 +11,22 @@ internal static class DesktopStartupContract
     internal const bool EmbeddedBrowserStartsLazy = true;
     internal const bool UserCloseHidesToTray = true;
     internal const string InitialStatus = "Iniciando Phoenix…";
+
+    internal static string? ResolveSourceRoot(string stateRoot, bool sourceModeRequested)
+    {
+        if (!sourceModeRequested)
+            return null;
+
+        var configured = Environment.GetEnvironmentVariable("PHOENIX_SOURCE_ROOT");
+        return DesktopSourceCheckout.IsRunnable(configured)
+            ? DesktopSourceCheckout.Resolve(stateRoot, includeConventional: false)
+            : null;
+    }
 }
+
+internal readonly record struct DesktopRuntimeListenerIdentity(
+    int ProcessId,
+    long CreationTimeUtcTicks);
 
 internal static class DesktopRuntimeLaunchContract
 {
@@ -93,6 +108,23 @@ internal static class DesktopRuntimeLaunchContract
             || commandLine.Contains("pnpm phoenix", StringComparison.OrdinalIgnoreCase)
             || commandLine.Contains(@"\Phoenix\runtime", StringComparison.OrdinalIgnoreCase);
     }
+
+    internal static bool CanMarkReady(bool supervisorExited, int consecutiveReady) =>
+        !supervisorExited && consecutiveReady >= ReadyConsecutiveSamples;
+
+    internal static bool HasStableListenerIdentity(
+        int firstProcessId,
+        long firstCreationTimeUtcTicks,
+        int secondProcessId,
+        long secondCreationTimeUtcTicks) =>
+        firstProcessId > 0
+        && secondProcessId == firstProcessId
+        && firstCreationTimeUtcTicks > 0
+        && secondCreationTimeUtcTicks == firstCreationTimeUtcTicks;
+
+    // This method classifies a command line; adoption also requires endpoint, PID, and liveness checks.
+    internal static bool CanAdoptListener(string? commandLine) =>
+        LooksLikePhoenixProcessCommandLine(commandLine);
 }
 
 
@@ -312,6 +344,15 @@ internal static class DesktopSourceCheckout
         }
     }
 
+    internal static bool RememberVerifiedIfReady(string stateRoot, string root, bool startupReady)
+    {
+        if (!startupReady)
+            return false;
+
+        RememberVerified(stateRoot, root);
+        return true;
+    }
+
     internal static void ForgetVerified(string stateRoot)
     {
         foreach (var path in new[] { VerifiedPointerPath(stateRoot), LegacyPointerPath(stateRoot) })
@@ -466,5 +507,24 @@ internal static class ManagedRuntimeMarker
         return content.Contains("schema=1", StringComparison.OrdinalIgnoreCase)
             && content.Contains("state=ready", StringComparison.OrdinalIgnoreCase)
             && content.Contains("installedAt=", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static string? ReadCommit(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return null;
+
+        foreach (var line in content.Split('\n'))
+        {
+            var separator = line.IndexOf('=');
+            if (separator > 0
+                && line[..separator].Trim().Equals("commit", StringComparison.OrdinalIgnoreCase))
+            {
+                var commit = line[(separator + 1)..].Trim();
+                return string.IsNullOrWhiteSpace(commit) ? null : commit;
+            }
+        }
+
+        return null;
     }
 }

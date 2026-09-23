@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -313,6 +314,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     private readonly EventWaitHandle showEvent;
     private readonly Thread showSignalThread;
     private Process? ownedRuntime;
+    private int? runtimeOwnerPid;
     private Task? startupTask;
     private string runtimeRoot = Program.RuntimeRoot;
     private bool sourceCheckoutRuntime;
@@ -335,7 +337,11 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         _ = window.Handle;
         browserControl = new DesktopBrowserControlServer(
             window.ExecuteBrowserCommandAsync,
-            Program.DesktopControlDescriptorPath);
+            Program.DesktopControlDescriptorPath,
+            clientPid => ownedRuntime is { HasExited: false } supervisor
+                ? DesktopRuntimeProcessIdentity.IsSameOrDescendantOf(clientPid, supervisor.Id)
+                : runtimeOwnerPid is int ownerPid
+                    && DesktopRuntimeProcessIdentity.IsSameOrDescendantOf(clientPid, ownerPid));
         DesktopLog.Write($"Desktop browser control pipe ready: {browserControl.PipeName}");
 
         var menu = new ContextMenuStrip();
@@ -439,11 +445,19 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         try
         {
             window.SetStartupStatus("Iniciando Phoenix…");
-            if (await IsStableReadyAsync())
+            var stableListener = await IsStableReadyAsync();
+            if (stableListener is not null)
             {
-                if (await IsCompatiblePhoenixListenerAsync())
+                var finalListener = await IsReadyAsync();
+                if (finalListener is not null
+                    && DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                        stableListener.Value.ProcessId,
+                        stableListener.Value.CreationTimeUtcTicks,
+                        finalListener.Value.ProcessId,
+                        finalListener.Value.CreationTimeUtcTicks))
                 {
                     externallyManaged = true;
+                    runtimeOwnerPid = finalListener.Value.ProcessId;
                     restartItem.Enabled = false;
                     restartItem.Text = "Phoenix ya está activo";
                     tray.Text = "Phoenix · activo";
@@ -453,22 +467,14 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                     return;
                 }
 
-                tray.Text = "Phoenix · puerto 3080 ocupado";
-                window.SetStartupStatus(
-                    "El puerto normal de Phoenix (3080) está ocupado por otro programa.\n\nCierra ese proceso y vuelve a abrir Phoenix.",
-                    isError: true);
-                DesktopLog.Write("Refused to attach because 127.0.0.1:3080 answered but its listener did not look like Phoenix.");
-                return;
+                DesktopLog.Write("Phoenix listener identity changed during the final readiness check; continuing with owned runtime startup.");
             }
 
-            // Phoenix.exe is the desktop supervisor. If the user has a real Phoenix source
-            // checkout, prefer it automatically so double-clicking the EXE performs the same startup
-            // they currently have to do by hand in PowerShell. Verified/configured roots win first;
-            // conventional ChatGPT/Phoenix locations are then probed. If no checkout is runnable,
-            // fall back to the bundled managed runtime.
-            var sourceRoot = DesktopSourceCheckout.Resolve(
-                Program.InstallRoot,
-                includeConventional: true);
+            // Phoenix.exe is the desktop supervisor. A source checkout is selected only when the
+            // caller explicitly requests source mode through the configured environment variable;
+            // installed launches always continue with the bundled managed runtime.
+            var sourceModeRequested = DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible);
+            var sourceRoot = DesktopStartupContract.ResolveSourceRoot(Program.InstallRoot, sourceModeRequested);
 
             if (sourceRoot is not null)
             {
@@ -496,6 +502,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
             runtimeRoot = Program.RuntimeRoot;
             sourceCheckoutRuntime = false;
+            runtimeOwnerPid = null;
             restartItem.Text = "Reiniciar runtime administrado";
 
             if (!await EnsureManagedRuntimeAsync())
@@ -520,14 +527,19 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     {
         var state = ManagedRuntimeMarker.Inspect(Program.RuntimeRoot);
         DesktopLog.Write($"Managed runtime state: {state}");
+        var bundledSeed = DesktopRuntimeSeedInstaller.ArchivePath(AppContext.BaseDirectory);
 
-        if (state == ManagedRuntimeState.Ready)
+        if (state == ManagedRuntimeState.Ready
+            && (!File.Exists(bundledSeed)
+                || DesktopRuntimeSeedInstaller.IsCurrent(AppContext.BaseDirectory, Program.RuntimeRoot)))
         {
             // A verified runtime should boot immediately. The Windows supervisor already owns
             // background stable updates after the Host is healthy, so doing a network/update
             // check here only makes every desktop launch slower and can strand the shell on a
-            // blank startup screen when GitHub or the updater is slow.
-            DesktopLog.Write("Managed runtime is ready; launching immediately and leaving stable updates to the supervised background watcher.");
+            // blank startup screen when GitHub or the updater is slow. A bundled seed with a
+            // different commit is refreshed before launch so an older ready marker cannot hide
+            // missing production packages after a desktop upgrade.
+            DesktopLog.Write("Managed runtime is ready and its bundled seed is current or unavailable; launching immediately and leaving stable updates to the supervised background watcher.");
             return true;
         }
 
@@ -535,11 +547,11 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         // Runtime-seed extraction can involve hundreds of MB and thousands of files, so it must
         // never execute on the WinForms thread. The installer normally pre-warms this path; this
         // worker-thread fallback keeps direct EXE launches responsive too.
-        var bundledSeed = DesktopRuntimeSeedInstaller.ArchivePath(AppContext.BaseDirectory);
         if (File.Exists(bundledSeed))
         {
-            window.SetStartupStatus("Preparando el runtime de Phoenix…");
-            tray.Text = "Phoenix · preparando";
+            var updating = state == ManagedRuntimeState.Ready;
+            window.SetStartupStatus(updating ? "Actualizando el runtime de Phoenix…" : "Preparando el runtime de Phoenix…");
+            tray.Text = updating ? "Phoenix · actualizando" : "Phoenix · preparando";
             DesktopLog.Write($"Installing bundled runtime seed without blocking the UI: {bundledSeed}");
             var installed = await Task.Run(() => DesktopRuntimeSeedInstaller.EnsureInstalled(
                 AppContext.BaseDirectory,
@@ -833,29 +845,74 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         return true;
     }
 
-    private async Task<bool> IsCompatiblePhoenixListenerAsync()
+    private async Task<DesktopRuntimeListenerIdentity?> IsCompatiblePhoenixListenerAsync()
     {
         try
         {
-            // Identify Phoenix through its own HTML shell instead of asking PowerShell/WMI which
-            // process owns port 3080. This keeps normal EXE startup shell-free and also proves that
-            // the web UI, not merely a TCP listener, is actually ready for WebView2.
+            var firstListener = DesktopRuntimeProcessIdentity.FindListeningProcessIdentity(DesktopRuntimeLaunchContract.DesktopPort);
+            if (firstListener is null || !DesktopRuntimeProcessIdentity.IsStillAlive(firstListener.Value))
+            {
+                DesktopLog.Write("Phoenix identity probe found no live loopback listener before the HTTP request.");
+                return null;
+            }
+
+            // Identify Phoenix through its own HTML shell and then validate the owning process
+            // after the HTTP request. The listener must not change while the response is read.
             using var response = await http.GetAsync(Program.PhoenixUri, HttpCompletionOption.ResponseContentRead);
             if (!response.IsSuccessStatusCode)
             {
                 DesktopLog.Write($"Phoenix identity probe returned HTTP {(int)response.StatusCode}.");
-                return false;
+                return null;
             }
 
             var html = await response.Content.ReadAsStringAsync();
             var compatible = DesktopPhoenixIdentity.LooksLikePhoenixHtml(html);
-            DesktopLog.Write($"Phoenix identity probe compatible={compatible}; bytes={html.Length}.");
-            return compatible;
+            if (!compatible)
+            {
+                DesktopLog.Write($"Phoenix identity probe compatible=false; bytes={html.Length}.");
+                return null;
+            }
+
+            var listener = DesktopRuntimeProcessIdentity.FindListeningProcessIdentity(DesktopRuntimeLaunchContract.DesktopPort);
+            if (listener is null)
+            {
+                DesktopLog.Write("Phoenix identity probe found the Phoenix shell but no owning listener PID after the HTTP request.");
+                return null;
+            }
+
+            var stableIdentity = DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                firstListener.Value.ProcessId,
+                firstListener.Value.CreationTimeUtcTicks,
+                listener.Value.ProcessId,
+                listener.Value.CreationTimeUtcTicks);
+            var processAlive = stableIdentity && DesktopRuntimeProcessIdentity.IsStillAlive(listener.Value);
+            var supervisor = ownedRuntime;
+            var processCompatible = false;
+            if (supervisor is not null)
+            {
+                try
+                {
+                    processCompatible = !supervisor.HasExited
+                        && DesktopRuntimeProcessIdentity.IsSameOrDescendantOf(listener.Value.ProcessId, supervisor.Id);
+                }
+                catch (InvalidOperationException)
+                {
+                    processCompatible = false;
+                }
+            }
+            else
+            {
+                var commandLine = DesktopRuntimeProcessIdentity.TryGetCommandLine(listener.Value.ProcessId);
+                processCompatible = DesktopRuntimeLaunchContract.CanAdoptListener(commandLine);
+            }
+
+            DesktopLog.Write($"Phoenix identity probe compatible={stableIdentity && processAlive && processCompatible}; listenerPid={listener.Value.ProcessId}; processAlive={processAlive}; processCompatible={processCompatible}; ownedRuntime={supervisor is not null}; bytes={html.Length}.");
+            return stableIdentity && processAlive && processCompatible ? listener : null;
         }
         catch (Exception ex)
         {
             DesktopLog.Write("Phoenix identity probe failed.", ex);
-            return false;
+            return null;
         }
     }
 
@@ -903,6 +960,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             }
             return false;
         }
+        runtimeOwnerPid = ownedRuntime.Id;
 
         if (psi.RedirectStandardOutput)
         {
@@ -935,22 +993,48 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             : DesktopRuntimeLaunchContract.ManagedStartupWaitSeconds);
         var wait = Stopwatch.StartNew();
         var consecutiveReady = 0;
+        DesktopRuntimeListenerIdentity? previousReady = null;
 
         while (wait.Elapsed < maxWait && !shuttingDown)
         {
-            if (await IsReadyAsync())
+            var currentReady = await IsReadyAsync();
+            if (currentReady is not null)
             {
-                consecutiveReady++;
-                if (consecutiveReady >= DesktopRuntimeLaunchContract.ReadyConsecutiveSamples)
+                consecutiveReady = previousReady is not null
+                    && DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                        previousReady.Value.ProcessId,
+                        previousReady.Value.CreationTimeUtcTicks,
+                        currentReady.Value.ProcessId,
+                        currentReady.Value.CreationTimeUtcTicks)
+                    ? consecutiveReady + 1
+                    : 1;
+                previousReady = currentReady;
+                if (DesktopRuntimeLaunchContract.CanMarkReady(ownedRuntime.HasExited, consecutiveReady))
                 {
-                    if (sourceCheckoutRuntime)
+                    var finalReady = await IsReadyAsync();
+                    var finalReadinessValidated = finalReady is not null
+                        && DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                            currentReady.Value.ProcessId,
+                            currentReady.Value.CreationTimeUtcTicks,
+                            finalReady.Value.ProcessId,
+                            finalReady.Value.CreationTimeUtcTicks)
+                        && DesktopRuntimeLaunchContract.CanMarkReady(ownedRuntime.HasExited, consecutiveReady);
+                    if (!finalReadinessValidated)
                     {
-                        DesktopSourceCheckout.RememberVerified(Program.InstallRoot, runtimeRoot);
-                        DesktopLog.Write($"Verified backend root persisted: {runtimeRoot}");
+                        previousReady = finalReady;
+                        consecutiveReady = finalReady is null ? 0 : 1;
+                        continue;
                     }
 
-                    tray.Text = "Phoenix · activo";
                     window.MarkRuntimeReady();
+                    if (sourceCheckoutRuntime
+                        && DesktopSourceCheckout.RememberVerifiedIfReady(
+                            Program.InstallRoot,
+                            runtimeRoot,
+                            finalReadinessValidated))
+                        DesktopLog.Write($"Verified backend root persisted: {runtimeRoot}");
+
+                    tray.Text = "Phoenix · activo";
                     if (openWhenReady)
                         ShowWindow();
                     DesktopLog.Write($"Phoenix runtime is stable and ready from {runtimeRoot}; desktop WebView is navigating to Phoenix.");
@@ -959,6 +1043,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             }
             else
             {
+                previousReady = null;
                 consecutiveReady = 0;
             }
 
@@ -1101,20 +1186,32 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     }
 
 
-    private async Task<bool> IsStableReadyAsync()
+    private async Task<DesktopRuntimeListenerIdentity?> IsStableReadyAsync()
     {
+        DesktopRuntimeListenerIdentity? first = null;
         for (var sample = 0; sample < DesktopRuntimeLaunchContract.ReadyConsecutiveSamples; sample++)
         {
-            if (!await IsReadyAsync())
-                return false;
+            var current = await IsReadyAsync();
+            if (current is null)
+                return null;
+
+            if (first is not null
+                && !DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                    first.Value.ProcessId,
+                    first.Value.CreationTimeUtcTicks,
+                    current.Value.ProcessId,
+                    current.Value.CreationTimeUtcTicks))
+                return null;
+
+            first ??= current;
 
             if (sample + 1 < DesktopRuntimeLaunchContract.ReadyConsecutiveSamples)
                 await Task.Delay(DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds);
         }
-        return true;
+        return first;
     }
 
-    private Task<bool> IsReadyAsync()
+    private Task<DesktopRuntimeListenerIdentity?> IsReadyAsync()
     {
         // Readiness means the Phoenix application shell is actually being served, not just that
         // something answered on port 3080. This avoids racing WebView2 against a half-started host.
@@ -1128,15 +1225,8 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         try
         {
             if (!ownedRuntime.HasExited)
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "taskkill.exe",
-                    Arguments = $"/PID {ownedRuntime.Id} /T /F",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                })?.WaitForExit(5000);
-            }
+                ownedRuntime.Kill(entireProcessTree: true);
+            ownedRuntime.WaitForExit(5000);
         }
         catch (Exception ex)
         {
@@ -1146,6 +1236,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         {
             ownedRuntime.Dispose();
             ownedRuntime = null;
+            runtimeOwnerPid = null;
         }
     }
 
@@ -1175,12 +1266,293 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         try { showEvent.Set(); } catch { }
         StopOwnedRuntime();
         browserControl.Dispose();
+        window.StopCredentialBroker();
         if (!window.IsDisposed) window.Dispose();
         tray.Visible = false;
         tray.Dispose();
         http.Dispose();
         ExitThread();
     }
+}
+
+internal static class DesktopRuntimeProcessIdentity
+{
+    private const uint ErrorInsufficientBuffer = 122;
+    private const int ErrorNoMoreFiles = 18;
+    private const int AddressFamilyInterNetwork = 2;
+    private const int TcpTableOwnerPidListener = 3;
+    private const int TcpStateListen = 2;
+    private const uint SnapshotAllProcesses = 0x00000002;
+    private static readonly nint InvalidHandleValue = new(-1);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MibTcpRowOwnerPid
+    {
+        internal uint State;
+        internal uint LocalAddress;
+        internal uint LocalPort;
+        internal uint RemoteAddress;
+        internal uint RemotePort;
+        internal uint OwningPid;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ProcessEntry32
+    {
+        internal uint Size;
+        internal uint Usage;
+        internal uint ProcessId;
+        internal nint DefaultHeapId;
+        internal uint ModuleId;
+        internal uint ThreadCount;
+        internal uint ParentProcessId;
+        internal int PriorityBase;
+        internal uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        internal string? ExecutableFileName;
+    }
+
+    [DllImport("iphlpapi.dll", SetLastError = true)]
+    private static extern uint GetExtendedTcpTable(
+        nint tcpTable,
+        ref int size,
+        [MarshalAs(UnmanagedType.Bool)] bool order,
+        int addressFamily,
+        int tableClass,
+        uint reserved);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern nint CreateToolhelp32Snapshot(uint flags, uint processId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "Process32FirstW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32First(nint snapshot, ref ProcessEntry32 entry);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "Process32NextW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32Next(nint snapshot, ref ProcessEntry32 entry);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(nint handle);
+
+    internal static bool IsSameOrDescendantOf(int processId, int ancestorProcessId)
+    {
+        if (!OperatingSystem.IsWindows() || processId <= 0 || ancestorProcessId <= 0)
+            return false;
+
+        var snapshot = CreateToolhelp32Snapshot(SnapshotAllProcesses, 0);
+        if (snapshot == InvalidHandleValue)
+            return false;
+
+        try
+        {
+            var parents = new Dictionary<int, int>();
+            var entry = new ProcessEntry32
+            {
+                Size = (uint)Marshal.SizeOf<ProcessEntry32>(),
+                ExecutableFileName = string.Empty,
+            };
+            if (!Process32First(snapshot, ref entry))
+                return false;
+
+            do
+            {
+                if (entry.ProcessId > 0 && entry.ParentProcessId > 0)
+                    parents[(int)entry.ProcessId] = (int)entry.ParentProcessId;
+            }
+            while (Process32Next(snapshot, ref entry));
+
+            if (Marshal.GetLastWin32Error() != ErrorNoMoreFiles)
+                return false;
+
+            return IsSameOrDescendantOf(processId, ancestorProcessId, parents);
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            _ = CloseHandle(snapshot);
+        }
+    }
+
+    internal static bool IsSameOrDescendantOf(
+        int processId,
+        int ancestorProcessId,
+        IReadOnlyDictionary<int, int> parentProcessIds)
+    {
+        if (processId <= 0 || ancestorProcessId <= 0)
+            return false;
+
+        var visited = new HashSet<int>();
+        var current = processId;
+        while (current > 0 && visited.Add(current))
+        {
+            if (current == ancestorProcessId)
+                return true;
+            if (!parentProcessIds.TryGetValue(current, out var parentProcessId))
+                return false;
+            current = parentProcessId;
+        }
+
+        return false;
+    }
+
+    internal static int? FindListeningProcessId(int port)
+    {
+        if (!OperatingSystem.IsWindows())
+            return null;
+
+        var size = 0;
+        var status = GetExtendedTcpTable(
+            nint.Zero,
+            ref size,
+            order: false,
+            AddressFamilyInterNetwork,
+            TcpTableOwnerPidListener,
+            reserved: 0);
+        if (status != ErrorInsufficientBuffer || size <= 0)
+            return null;
+
+        var allocatedSize = size;
+        var table = Marshal.AllocHGlobal(allocatedSize);
+        try
+        {
+            status = GetExtendedTcpTable(
+                table,
+                ref size,
+                order: false,
+                AddressFamilyInterNetwork,
+            TcpTableOwnerPidListener,
+                reserved: 0);
+            if (status != 0)
+                return null;
+
+            var rowCount = Marshal.ReadInt32(table);
+            var rowSize = Marshal.SizeOf<MibTcpRowOwnerPid>();
+            if (rowCount < 0 || allocatedSize < sizeof(int) || rowCount > (allocatedSize - sizeof(int)) / rowSize)
+                return null;
+
+            for (var index = 0; index < rowCount; index++)
+            {
+                var row = Marshal.PtrToStructure<MibTcpRowOwnerPid>(
+                    IntPtr.Add(table, sizeof(int) + index * rowSize));
+                if (row.State == TcpStateListen
+                    && MatchesLoopbackListener(row.LocalAddress, row.LocalPort, port)
+                    && row.OwningPid > 0)
+                    return checked((int)row.OwningPid);
+            }
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(table);
+        }
+
+        return null;
+    }
+
+    internal static DesktopRuntimeListenerIdentity? FindListeningProcessIdentity(int port)
+    {
+        var processId = FindListeningProcessId(port);
+        if (processId is null)
+            return null;
+
+        try
+        {
+            using var process = Process.GetProcessById(processId.Value);
+            if (process.HasExited)
+                return null;
+
+            return new DesktopRuntimeListenerIdentity(
+                process.Id,
+                process.StartTime.ToUniversalTime().Ticks);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static bool IsStillAlive(DesktopRuntimeListenerIdentity identity)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(identity.ProcessId);
+            return !process.HasExited
+                && process.StartTime.ToUniversalTime().Ticks == identity.CreationTimeUtcTicks;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal static string? TryGetCommandLine(int processId)
+    {
+        if (!OperatingSystem.IsWindows())
+            return null;
+
+        object? locator = null;
+        object? services = null;
+        object? results = null;
+        object? current = null;
+        try
+        {
+            var locatorType = Type.GetTypeFromProgID("WbemScripting.SWbemLocator");
+            if (locatorType is null)
+                return null;
+
+            locator = Activator.CreateInstance(locatorType);
+            if (locator is null)
+                return null;
+
+            services = ((dynamic)locator).ConnectServer(".", "root\\cimv2");
+            results = ((dynamic)services).ExecQuery(
+                $"SELECT CommandLine FROM Win32_Process WHERE ProcessId = {processId}");
+            if (results is not System.Collections.IEnumerable enumerable)
+                return null;
+
+            string? commandLine = null;
+            foreach (var item in enumerable)
+            {
+                current = item;
+                commandLine = (string?)((dynamic)item).CommandLine;
+                break;
+            }
+
+            return commandLine;
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            ReleaseComObject(current);
+            ReleaseComObject(results);
+            ReleaseComObject(services);
+            ReleaseComObject(locator);
+        }
+    }
+
+    private static void ReleaseComObject(object? value)
+    {
+        if (value is not null && Marshal.IsComObject(value))
+            Marshal.FinalReleaseComObject(value);
+    }
+
+    private static int NetworkPort(uint value) =>
+        (int)(((value & 0xff) << 8) | ((value >> 8) & 0xff));
+
+    private static bool MatchesLoopbackListener(uint localAddress, uint localPort, int port) =>
+        localAddress == BitConverter.ToUInt32(IPAddress.Loopback.GetAddressBytes())
+        && NetworkPort(localPort) == port;
 }
 
 internal static class DesktopLog

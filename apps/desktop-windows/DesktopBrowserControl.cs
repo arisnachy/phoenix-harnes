@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -13,7 +14,7 @@ internal sealed record DesktopBrowserControlDescriptor(
     [property: JsonPropertyName("schema")] int Schema,
     [property: JsonPropertyName("pipeName")] string PipeName)
 {
-    internal const int CurrentSchema = 1;
+    internal const int CurrentSchema = 2;
     private const string PipePrefix = "PhoenixDesktop.Browser.";
 
     internal static DesktopBrowserControlDescriptor Create(string pipeName) =>
@@ -62,6 +63,7 @@ internal sealed record DesktopBrowserControlDescriptor(
 internal sealed class DesktopBrowserControlServer : IDisposable
 {
     private readonly Func<BrowserCommand, Task<string?>> dispatch;
+    private readonly Func<int, bool> clientAuthorizer;
     private readonly CancellationTokenSource stopping = new();
     private readonly Task serverTask;
     private bool disposed;
@@ -71,9 +73,11 @@ internal sealed class DesktopBrowserControlServer : IDisposable
 
     internal DesktopBrowserControlServer(
         Func<BrowserCommand, Task<string?>> dispatch,
-        string descriptorPath)
+        string descriptorPath,
+        Func<int, bool>? clientAuthorizer = null)
     {
         this.dispatch = dispatch;
+        this.clientAuthorizer = clientAuthorizer ?? (clientPid => clientPid == Environment.ProcessId);
         DescriptorPath = descriptorPath;
         PipeName = $"PhoenixDesktop.Browser.{Guid.NewGuid():N}";
 
@@ -109,29 +113,34 @@ internal sealed class DesktopBrowserControlServer : IDisposable
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
                 await pipe.WaitForConnectionAsync(stopping.Token);
-                using var reader = new StreamReader(pipe, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
-                using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
-                var line = await reader.ReadLineAsync(stopping.Token);
-
-                if (line is null || !BrowserCommand.TryParse(line, out var command, allowAutomation: true))
+                if (!TryGetClientProcessId(pipe, out var clientPid) || !clientAuthorizer(clientPid))
                 {
-                    await writer.WriteLineAsync("{\"ok\":false,\"error\":\"invalid browser command\"}");
+                    DesktopLog.Write($"Rejected unauthorized desktop control pipe client PID {clientPid}.");
+                    pipe.Disconnect();
                     continue;
                 }
+                using var reader = new StreamReader(pipe, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+                using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+                while (!stopping.IsCancellationRequested)
+                {
+                    var line = await reader.ReadLineAsync(stopping.Token);
+                    if (line is null) break;
 
-                try
-                {
-                    var details = await dispatch(command);
-                    if (details is null)
-                        await writer.WriteLineAsync("{\"ok\":true}");
-                    else
-                        await writer.WriteLineAsync(JsonSerializer.Serialize(new { ok = true, details }));
-                }
-                catch (Exception ex)
-                {
-                    DesktopLog.Write("Desktop browser control dispatch failed", ex);
-                    var error = JsonSerializer.Serialize(new { ok = false, error = ex.Message });
-                    await writer.WriteLineAsync(error);
+                    if (DesktopComputerRequest.TryParse(line, out var computerRequest))
+                    {
+                        await HandleComputerRequestAsync(writer, computerRequest);
+                        continue;
+                    }
+
+                    // Schema 1 is limited to non-sensitive window/navigation commands. Automation
+                    // with form data or credentials must use the validated schema-2 protocol.
+                    if (BrowserCommand.TryParse(line, out var command))
+                    {
+                        await HandleLegacyBrowserRequestAsync(writer, command);
+                        continue;
+                    }
+
+                    await writer.WriteLineAsync("{\"ok\":false,\"error\":\"invalid browser command\"}");
                 }
             }
             catch (OperationCanceledException) when (stopping.IsCancellationRequested)
@@ -151,6 +160,117 @@ internal sealed class DesktopBrowserControlServer : IDisposable
                 }
             }
         }
+    }
+
+    private async Task HandleLegacyBrowserRequestAsync(StreamWriter writer, BrowserCommand command)
+    {
+        try
+        {
+            var details = await dispatch(command);
+            if (details is null)
+                await writer.WriteLineAsync("{\"ok\":true}");
+            else
+                await writer.WriteLineAsync(JsonSerializer.Serialize(new { ok = true, details }));
+        }
+        catch (Exception ex)
+        {
+            DesktopLog.Write("Desktop browser control dispatch failed", ex);
+            var error = JsonSerializer.Serialize(new { ok = false, error = ex.Message });
+            await writer.WriteLineAsync(error);
+        }
+    }
+
+    private async Task HandleComputerRequestAsync(StreamWriter writer, DesktopComputerRequest request)
+    {
+        try
+        {
+            string? details;
+            string? screenshot = null;
+            if (request.Type.StartsWith("browser_", StringComparison.Ordinal))
+            {
+                details = await DispatchBrowserRequestAsync(request);
+                if (request.Capture && request.Type is not ("browser_login" or "browser_forget_credentials"))
+                    screenshot = DesktopComputerDriver.CaptureScreenshot();
+            }
+            else
+            {
+                var result = DesktopComputerDriver.Execute(request);
+                details = result.Details;
+                screenshot = result.ScreenshotBase64;
+            }
+
+            await writer.WriteLineAsync(JsonSerializer.Serialize(new
+            {
+                schema = DesktopComputerRequest.CurrentSchema,
+                requestId = request.RequestId,
+                ok = true,
+                details,
+                screenshotBase64 = screenshot,
+            }));
+        }
+        catch (Exception ex)
+        {
+            if (request.Type == "browser_login")
+                DesktopLog.Write("Resident desktop credential fill failed.");
+            else
+                DesktopLog.Write("Resident desktop Computer dispatch failed", ex);
+            await writer.WriteLineAsync(JsonSerializer.Serialize(new
+            {
+                schema = DesktopComputerRequest.CurrentSchema,
+                requestId = request.RequestId,
+                ok = false,
+                error = request.Type == "browser_login" ? "Credential fill failed." : ex.Message,
+            }));
+        }
+    }
+
+    internal static bool IsAllowedClient(int clientPid, int runtimePid) =>
+        clientPid > 0
+        && runtimePid > 0
+        && DesktopRuntimeProcessIdentity.IsSameOrDescendantOf(clientPid, runtimePid);
+
+    private static bool TryGetClientProcessId(NamedPipeServerStream pipe, out int processId)
+    {
+        processId = 0;
+        if (!OperatingSystem.IsWindows()
+            || !GetNamedPipeClientProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out var rawProcessId)
+            || rawProcessId > int.MaxValue)
+            return false;
+        processId = (int)rawProcessId;
+        return processId > 0;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetNamedPipeClientProcessId(nint pipe, out uint processId);
+
+    private async Task<string?> DispatchBrowserRequestAsync(DesktopComputerRequest request)
+    {
+        return request.Type switch
+        {
+            "browser_open" => await dispatch(new BrowserCommand("phoenix.browser.open", Url: request.Url)),
+            "browser_close" => await dispatch(new BrowserCommand("phoenix.browser.close")),
+            "browser_back" => await dispatch(new BrowserCommand("phoenix.browser.back")),
+            "browser_forward" => await dispatch(new BrowserCommand("phoenix.browser.forward")),
+            "browser_reload" => await dispatch(new BrowserCommand("phoenix.browser.reload")),
+            "browser_focus" => await dispatch(new BrowserCommand("phoenix.browser.focus")),
+            "browser_inspect" => await dispatch(new BrowserCommand("phoenix.browser.inspect")),
+            "browser_fill_form" => await dispatch(new BrowserCommand(
+                "phoenix.browser.fill-form",
+                Origin: request.Origin,
+                Submit: request.Submit,
+                Fields: request.Fields)),
+            "browser_click_text" => await dispatch(new BrowserCommand(
+                "phoenix.browser.click-text",
+                Origin: request.Origin,
+                Text: request.Text)),
+            "browser_login" => await dispatch(new BrowserCommand(
+                "phoenix.browser.login",
+                Origin: request.Origin)),
+            "browser_forget_credentials" => await dispatch(new BrowserCommand(
+                "phoenix.browser.forget-credentials",
+                Origin: request.Origin)),
+            _ => throw new InvalidOperationException($"Unsupported resident browser action: {request.Type}"),
+        };
     }
 
     public void Dispose()

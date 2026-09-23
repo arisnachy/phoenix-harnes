@@ -90,6 +90,7 @@
     "@phoenix-ai/dsh-cmdline": "workspace:^",
     "@phoenix-ai/dsh-code-runtime-worker-thread": "workspace:^",
     "@phoenix-ai/dsh-code-runtime-python": "workspace:^",
+    "@phoenix-ai/dsh-chrome-connector": "workspace:^",
     "@phoenix-ai/dsh-cordis-client-runner": "workspace:^",
     "@phoenix-ai/dsh-cordis-host-runner": "workspace:^",
     "@phoenix-ai/dsh-web-frontend": "workspace:^",

@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const WEB_PATCH = new URL('../cordis.patch.yml', import.meta.url)
+const WEB_PACKAGE = new URL('../package.json', import.meta.url)
 const CODEX_PATCH = new URL('../../../subagent/subagent-codex/cordis.patch.yml', import.meta.url)
 
 function codexLoaderEntryCount(source: string): number {
@@ -21,5 +22,19 @@ describe('web-app Cordis composition', () => {
 
     expect(codexLoaderEntryCount(codexPatch)).toBe(1)
     expect(codexLoaderEntryCount(webPatch)).toBe(0)
+  })
+
+  it('packages the compiled Chrome connector for managed Windows startup', () => {
+    const webPackage = JSON.parse(readFileSync(WEB_PACKAGE, 'utf8')) as {
+      dependencies?: Record<string, string>
+    }
+    const webPatch = readFileSync(WEB_PATCH, 'utf8')
+
+    expect(webPackage.dependencies?.['@phoenix-ai/dsh-chrome-connector']).toBe('workspace:^')
+    expect(webPatch).toContain('command: !!js process.execPath')
+    expect(webPatch).toContain(
+      "process.env.PHOENIX_DESKTOP_MANAGED === '1' ? [process.env.PHOENIX_RUNTIME_ROOT + '/runtime-app/node_modules/@phoenix-ai/dsh-chrome-connector/lib/bin.js']",
+    )
+    expect(webPatch).toContain("['--import', 'tsx/esm', 'packages/mcp/chrome-connector/src/bin.ts']")
   })
 })

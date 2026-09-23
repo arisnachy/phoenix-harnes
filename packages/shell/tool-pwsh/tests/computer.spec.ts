@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertComputerActionAllowed,
-  browserCommandForAction,
   computerActionNeedsApproval,
   computerModeForSandbox,
+  desktopComputerRequestForAction,
   parseDesktopBrowserControlDescriptor,
   runWindowsComputerAction,
   shouldCaptureAfterAction,
@@ -35,7 +35,6 @@ describe('Computer Use permissions', () => {
     expect(computerActionNeedsApproval('workspace-write', 'click')).toBe(true)
     expect(computerActionNeedsApproval('workspace-write', 'browser_open')).toBe(true)
     expect(computerActionNeedsApproval('workspace-write', 'browser_inspect')).toBe(false)
-    expect(computerActionNeedsApproval('workspace-write', 'browser_login')).toBe(true)
     expect(computerActionNeedsApproval('read-only', 'click')).toBe(false)
   })
 })
@@ -61,8 +60,9 @@ describe('Computer Use argument contract', () => {
     expect(() => validateComputerArgs({ action: 'browser_fill_form', origin: 'https://example.com', fields: [{ field: 0, value: 'synthetic' }] })).not.toThrow()
     expect(() => validateComputerArgs({ action: 'browser_fill_form', origin: 'https://example.com' })).toThrow(/field/i)
     expect(() => validateComputerArgs({ action: 'browser_click_text', origin: 'https://example.com', text: 'Continue' })).not.toThrow()
-    expect(() => validateComputerArgs({ action: 'browser_login', origin: 'https://example.com/login' })).not.toThrow()
-    expect(() => validateComputerArgs({ action: 'browser_login', origin: 'http://example.com/login' })).toThrow(/HTTPS/i)
+    expect(() => validateComputerArgs({ action: 'browser_login', origin: 'https://example.com' })).not.toThrow()
+    expect(() => validateComputerArgs({ action: 'browser_login', origin: 'http://example.com' })).toThrow(/HTTPS/i)
+    expect(() => validateComputerArgs({ action: 'browser_forget_credentials', origin: 'https://example.com' })).not.toThrow()
   })
 
   it('keeps model text and window selectors out of the PowerShell command line', () => {
@@ -111,59 +111,78 @@ describe('Computer Use argument contract', () => {
     expect(shouldCaptureAfterAction('browser_inspect')).toBe(false)
     expect(shouldCaptureAfterAction('browser_fill_form')).toBe(true)
     expect(shouldCaptureAfterAction('browser_click_text')).toBe(true)
-    expect(shouldCaptureAfterAction('browser_login')).toBe(true)
+    expect(shouldCaptureAfterAction('browser_login')).toBe(false)
+    expect(shouldCaptureAfterAction('browser_forget_credentials')).toBe(false)
     expect(shouldCaptureAfterAction('move')).toBe(false)
     expect(shouldCaptureAfterAction('windows')).toBe(false)
   })
 
-  it('routes browser actions to the native embedded-browser protocol, never the keyboard driver', () => {
-    expect(browserCommandForAction({ action: 'browser_open', url: 'https://example.com/path?q=phoenix' }))
-      .toEqual({ type: 'phoenix.browser.open', url: 'https://example.com/path?q=phoenix' })
-    expect(browserCommandForAction({ action: 'browser_back' })).toEqual({ type: 'phoenix.browser.back' })
-    expect(browserCommandForAction({ action: 'browser_forward' })).toEqual({ type: 'phoenix.browser.forward' })
-    expect(browserCommandForAction({ action: 'browser_reload' })).toEqual({ type: 'phoenix.browser.reload' })
-    expect(browserCommandForAction({ action: 'browser_close' })).toEqual({ type: 'phoenix.browser.close' })
-    expect(browserCommandForAction({ action: 'browser_focus' })).toEqual({ type: 'phoenix.browser.focus' })
-    expect(browserCommandForAction({ action: 'browser_inspect' })).toEqual({ type: 'phoenix.browser.inspect' })
-    expect(browserCommandForAction({
+  it('routes structured browser actions through the resident channel, never the keyboard driver', () => {
+    expect(desktopComputerRequestForAction({ action: 'browser_open', url: 'https://example.com/path?q=phoenix' }))
+      .toMatchObject({ schema: 2, type: 'browser_open', url: 'https://example.com/path?q=phoenix', capture: true })
+    expect(desktopComputerRequestForAction({ action: 'browser_back' })).toMatchObject({ type: 'browser_back', capture: true })
+    expect(desktopComputerRequestForAction({ action: 'browser_inspect' })).toMatchObject({ type: 'browser_inspect' })
+    expect(desktopComputerRequestForAction({
       action: 'browser_fill_form',
       origin: 'https://Example.com/form',
       fields: [{ field: 2, value: 'synthetic' }],
       submit: true,
-    })).toEqual({
-      type: 'phoenix.browser.fill-form',
+    })).toMatchObject({
+      type: 'browser_fill_form',
       origin: 'https://example.com',
       fields: [{ field: 2, value: 'synthetic' }],
       submit: true,
     })
-    expect(browserCommandForAction({
+    expect(desktopComputerRequestForAction({
       action: 'browser_click_text',
       origin: 'https://example.com/path',
       text: 'Continue',
-    })).toEqual({
-      type: 'phoenix.browser.click-text',
-      origin: 'https://example.com',
-      text: 'Continue',
-    })
-    expect(browserCommandForAction({
-      action: 'browser_login',
-      origin: 'https://example.com/sign-in',
-    })).toEqual({
-      type: 'phoenix.browser.login',
-      origin: 'https://example.com',
-      submit: true,
-    })
+    })).toMatchObject({ type: 'browser_click_text', origin: 'https://example.com', text: 'Continue' })
+    const login = desktopComputerRequestForAction({ action: 'browser_login', origin: 'https://example.com/login' })
+    expect(login).toMatchObject({ type: 'browser_login', origin: 'https://example.com' })
+    expect(login.capture).toBeUndefined()
+    expect(JSON.stringify(login)).not.toMatch(/account|secret|password|synthetic/i)
+    expect(desktopComputerRequestForAction({ action: 'browser_forget_credentials', origin: 'https://example.com' }))
+      .toMatchObject({ type: 'browser_forget_credentials', origin: 'https://example.com' })
     expect(() => windowsComputerInvocation({ action: 'browser_open', url: 'https://example.com' }))
       .toThrow(/desktop control channel/i)
   })
 
+  it('builds schema 2 resident requests without credential fields', () => {
+    expect(desktopComputerRequestForAction({ action: 'click', x: 12, y: 34, button: 'right' }, '00000000-0000-4000-8000-000000000001'))
+      .toMatchObject({
+        schema: 2,
+        requestId: '00000000-0000-4000-8000-000000000001',
+        type: 'click',
+        x: 12,
+        y: 34,
+        button: 'right',
+      })
+  })
+
   it('validates the current-user desktop control descriptor before connecting', () => {
-    expect(parseDesktopBrowserControlDescriptor('{"schema":1,"pipeName":"PhoenixDesktop.Browser.abc-123"}'))
-      .toEqual({ schema: 1, pipeName: 'PhoenixDesktop.Browser.abc-123' })
-    expect(() => parseDesktopBrowserControlDescriptor('{"schema":2,"pipeName":"PhoenixDesktop.Browser.abc"}'))
+    expect(parseDesktopBrowserControlDescriptor('{"schema":2,"pipeName":"PhoenixDesktop.Browser.abc-123"}'))
+      .toEqual({ schema: 2, pipeName: 'PhoenixDesktop.Browser.abc-123' })
+    expect(() => parseDesktopBrowserControlDescriptor('{"schema":1,"pipeName":"PhoenixDesktop.Browser.abc"}'))
       .toThrow(/schema/i)
-    expect(() => parseDesktopBrowserControlDescriptor('{"schema":1,"pipeName":"..\\\\evil"}'))
+    expect(() => parseDesktopBrowserControlDescriptor('{"schema":2,"pipeName":"..\\\\evil"}'))
       .toThrow(/pipe/i)
+  })
+
+  it('does not retain the fixed post-action delay in the hot path', async () => {
+    const source = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../src/computer.ts', import.meta.url), 'utf8'))
+    expect(source).not.toContain('POST_ACTION_SETTLE_MS')
+    expect(source).not.toContain('await delay(')
+  })
+
+  it('keeps credentials out of Computer arguments and legacy browser transport', async () => {
+    const source = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../src/computer.ts', import.meta.url), 'utf8'))
+    expect(source).not.toContain('requestLegacy')
+    expect(source).not.toContain('account?: string')
+    expect(source).not.toContain('secret?: string')
+    expect(source).toContain('never returns credential values')
+    const login = desktopComputerRequestForAction({ action: 'browser_login', origin: 'https://example.com' })
+    expect(JSON.stringify(login)).not.toMatch(/account|secret|password|synthetic/i)
   })
 
   it('rejects key strings outside the closed combo grammar', () => {
