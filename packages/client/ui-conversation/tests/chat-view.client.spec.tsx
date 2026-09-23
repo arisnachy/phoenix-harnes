@@ -448,6 +448,7 @@ describe('ChatView', () => {
 
     expect(view.getAllByText('mensaje inmediato')).toHaveLength(1)
     expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+    expect(view.queryByRole('status')).toBeNull()
     const durableRow = view.getByText('mensaje inmediato').closest('[data-chat-flow-key]')
     expect(durableRow).not.toBeNull()
     expect(previousRow!.compareDocumentPosition(durableRow!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
