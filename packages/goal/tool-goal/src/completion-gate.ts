@@ -31,6 +31,12 @@ export interface CompletionEvidenceEntry {
   readonly evidence: readonly string[]
 }
 
+/** Canonical, bounded completion report preserved through Judge and wrap-up. */
+export interface CompletionReport {
+  readonly unverifiedItems: readonly string[]
+  readonly knownLimitations: readonly string[]
+}
+
 /** Durable-worthy evidence returned by the adversarial tester. */
 export interface GoalCompletionGateResult {
   readonly checks: CompletionGateChecks
@@ -39,6 +45,8 @@ export interface GoalCompletionGateResult {
   readonly cleanRoomEvidence: string
   readonly findings: readonly string[]
   readonly proceduralLessons: readonly string[]
+  readonly completionReport?: CompletionReport
+  readonly verificationIncidents?: readonly string[]
 }
 
 interface AdversarialCase {
@@ -218,11 +226,34 @@ function readBuilderTestAudit(value: unknown): BuilderTestAuditEntry[] | undefin
   return entries
 }
 
-function readCompletionReport(value: unknown): { unverifiedItems: string[]; knownLimitations: string[] } | undefined {
+interface ParsedCompletionReport extends CompletionReport {
+  readonly duplicateItems: readonly string[]
+}
+
+function normalizedReportKey(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim().toLocaleLowerCase()
+}
+
+function readCompletionReport(value: unknown): ParsedCompletionReport | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
   if (!normalizedList(record.unverified_items) || !normalizedList(record.known_limitations)) return undefined
-  return { unverifiedItems: record.unverified_items, knownLimitations: record.known_limitations }
+
+  const duplicates: string[] = []
+  const seen = new Set<string>()
+  const unique = (items: readonly string[]): string[] => items.filter((item) => {
+    const key = normalizedReportKey(item)
+    if (seen.has(key)) {
+      duplicates.push(item)
+      return false
+    }
+    seen.add(key)
+    return true
+  })
+
+  const unverifiedItems = unique(record.unverified_items)
+  const knownLimitations = unique(record.known_limitations)
+  return { unverifiedItems, knownLimitations, duplicateItems: duplicates }
 }
 
 function reconcileContract(
@@ -306,6 +337,16 @@ function readExecution(value: unknown, contract: VerificationContract): GoalComp
       contractFindings.push('Completion report still has unverified items: ' + completionReport.unverifiedItems.join('; '))
     }
   }
+  if (completionReport.duplicateItems.length > 0) {
+    requirements = 'fail'
+    contractFindings.push('Completion report contains duplicate claims: ' + completionReport.duplicateItems.join('; '))
+  }
+  const limitationAudit = reconciled.ledger.find(entry => entry.criterionId === 'RISK-LIMITATIONS')
+  if (completionReport.knownLimitations.length === 0
+    && (limitationAudit?.status !== 'verified' || limitationAudit.evidence.length === 0)) {
+    requirements = 'fail'
+    contractFindings.push('No-known-limitations claim lacks explicit limitation-search evidence.')
+  }
   if (!reconciled.edgesVerified) adversarialTests = 'fail'
 
   if (contract.requiresBuilderTestAudit) {
@@ -333,6 +374,11 @@ function readExecution(value: unknown, contract: VerificationContract): GoalComp
     cleanRoomEvidence: record.clean_room_evidence as string,
     findings: [...record.findings as string[], ...contractFindings].slice(0, MAX_ITEMS),
     proceduralLessons: [...new Set(proceduralLessons)].slice(0, MAX_ITEMS),
+    completionReport: {
+      unverifiedItems: completionReport.unverifiedItems,
+      knownLimitations: completionReport.knownLimitations,
+    },
+    verificationIncidents: [],
   }
 }
 
@@ -345,7 +391,8 @@ export function completionGatePassed(result: GoalCompletionGateResult): boolean 
   return Object.values(result.checks).every(value => value === 'pass')
     && result.evidenceLedger.length > 0
     && result.evidenceLedger.some(entry => entry.mandatory)
-    && result.evidenceLedger.every(entry => !entry.mandatory || entry.status === 'verified')
+    && result.evidenceLedger.every(entry => !entry.mandatory || (entry.status === 'verified' && entry.evidence.length > 0))
+    && (result.completionReport === undefined || result.completionReport.unverifiedItems.length === 0)
     && result.artifactFingerprint.length > 0
     && result.cleanRoomEvidence.length > 0
 }
@@ -371,6 +418,8 @@ function unavailable(reason: string): GoalCompletionGateResult {
     cleanRoomEvidence: reason,
     findings: [reason],
     proceduralLessons: [`Completion verification workflow failed: ${reason}`],
+    completionReport: { unverifiedItems: [reason], knownLimitations: [] },
+    verificationIncidents: [reason],
   }
 }
 
@@ -386,18 +435,26 @@ function reviewProvider(runtime: CompletionRuntime, requested: string, parent: A
   return candidates.find(candidate => !candidate.inheritsParentContext)?.name ?? candidates[0]?.name
 }
 
+interface StructuredRunOutcome {
+  readonly structured?: unknown
+  readonly incident?: string
+}
+
 async function runStructured(
   runtime: CompletionRuntime,
   provider: string,
   request: Parameters<CompletionRuntime['start']>[1],
-): Promise<unknown | undefined> {
+): Promise<StructuredRunOutcome> {
   let run
   try {
     run = await runtime.start(provider, request)
     const result = await run.result
-    return result.stopReason === 'completed' ? result.structured : undefined
-  } catch {
-    return undefined
+    return result.stopReason === 'completed'
+      ? { structured: result.structured }
+      : { incident: 'tester-stop:' + result.stopReason }
+  } catch (error) {
+    const kind = error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+    return { incident: 'tester-error:' + kind }
   } finally {
     if (run !== undefined) await run.dispose()
   }
@@ -443,12 +500,13 @@ export async function runAdversarialCompletionGate(input: {
       + 'The locked criteria are immutable: every one is mandatory and must receive an independent attempt at evidence. '
       + 'Cover applicable empty/single/boundary cases, Unicode outside the BMP, zero-progress loop termination, malformed inputs, and exact diagnostics. '
       + 'When a trustworthy standard-library or reference oracle exists, include differential generated cases; otherwise use property/metamorphic invariants. '
-      + 'Think about real-world variability, alternate formats, missing resources, unexpected environment/state, restart behavior, partial files, stale data, '
-      + 'packaging mistakes, and cases where a technically literal result would still be a poor real-world solution. Each case must state what it tries to break. '
+      + 'Think about real-world variability, ambiguous representations or conventions, alternate formats, normalization, locale/timezone/encoding, missing resources, '
+      + 'unexpected environment/state, restart behavior, partial files, stale data, packaging mistakes, and cases where a technically literal result would still be a poor real-world solution. '
+      + 'Before concluding that no limitations are known, generate plausible failure classes that were not suggested by the Builder and attack or explicitly bound them. Each case must state what it tries to break. '
       + 'Do not assume the Builder tests are sufficient.\n'
       + '</adversarial_test_design>',
   }]
-  const designed = await runStructured(input.subagents, provider, {
+  const designRun = await runStructured(input.subagents, provider, {
     label: 'goal-adversarial-test-design',
     prompt: designPrompt,
     parent: input.parent,
@@ -457,8 +515,11 @@ export async function runAdversarialCompletionGate(input: {
     outputSchema: DESIGN_SCHEMA,
     toolFilter: { allow: [] },
   })
-  const cases = readCases(designed)
-  if (cases === undefined) return unavailable('Independent adversarial test design did not produce valid fresh cases.')
+  const cases = readCases(designRun.structured)
+  if (cases === undefined) {
+    const incident = designRun.incident === undefined ? '' : ' Incident: ' + designRun.incident + '.'
+    return unavailable('Independent adversarial test design did not produce valid fresh cases.' + incident)
+  }
 
   const executePrompt: ContentBlock[] = [{
     type: 'text',
@@ -482,10 +543,12 @@ export async function runAdversarialCompletionGate(input: {
       + 'Compare the original requirement, Builder claims/tests, actual artifact contents, and clean-room behavior. Any inconsistency is a failure/blocker. '
       + 'Ask three final questions: Did the mission do everything requested? Did it comply literally? Even if literal, is it an excellent solution under real-world variability? '
       + 'Populate completion_report every time. unverified_items must explicitly list anything not proven; known_limitations must be decided explicitly even when it is empty. '
-      + 'Record concise procedural_lessons for every discovered failure pattern so PHOENIX can avoid repeating it.\n'
+      + 'An empty known_limitations list is itself a claim: support RISK-LIMITATIONS with concrete evidence showing which plausible failure classes were actively considered and how they were tested or bounded. '
+      + 'Keep the report canonical: no duplicate claims, conflicting counts, mixed run states, or repeated review narratives. '
+      + 'Record concise procedural_lessons as generalized failure classes rather than task-specific anecdotes so PHOENIX can reuse them.\n'
       + '</adversarial_completion_gate>',
   }]
-  const executed = await runStructured(input.subagents, provider, {
+  const executionRun = await runStructured(input.subagents, provider, {
     label: 'goal-adversarial-tester',
     prompt: executePrompt,
     parent: input.parent,
@@ -494,5 +557,8 @@ export async function runAdversarialCompletionGate(input: {
     outputSchema: EXECUTION_SCHEMA,
     toolFilter: { allow: [...EXECUTION_TOOLS] },
   })
-  return readExecution(executed, contract) ?? unavailable('Independent adversarial execution did not return valid clean-room evidence.')
+  const executed = readExecution(executionRun.structured, contract)
+  if (executed !== undefined) return executed
+  const incident = executionRun.incident === undefined ? '' : ' Incident: ' + executionRun.incident + '.'
+  return unavailable('Independent adversarial execution did not return valid clean-room evidence.' + incident)
 }

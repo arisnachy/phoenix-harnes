@@ -479,7 +479,13 @@ export function apply(ctx: Context, config: Config): void {
       if (authority.kind === 'goal-round') {
         exec.deferContext(createUserMessage({
           content: args.action === 'complete'
-            ? renderWrapupContext(goal.objective)
+            ? renderWrapupContext(goal.objective, undefined, judge === undefined ? undefined : {
+              judgeSummary: judge.summary,
+              findings: judge.findings,
+              knownLimitations: judge.completionReport?.knownLimitations,
+              unverifiedItems: judge.completionReport?.unverifiedItems,
+              verificationIncidents: judge.verificationIncidents,
+            })
             : renderWrapupContext(goal.objective, args.blocked_reason as string),
           source: {
             kind: 'plugin',

@@ -18,6 +18,8 @@ describe('ordinary completion judge', () => {
           verdict: 'needs_changes',
           summary: 'cycle message and memory growth are not evidenced',
           evidence: ['tests'],
+          known_limitations: ['memory growth remains unmeasured'],
+          risk_coverage: { ambiguity: true, limitations: true, report_integrity: true },
           required_changes: ['assert CycleError includes the exact cycle', 'measure bounded memory growth'],
         },
       }),
@@ -52,6 +54,8 @@ describe('ordinary completion judge', () => {
     expect(prompt).toMatch(/passing tests are evidence, not blanket proof/i)
     expect(prompt).toMatch(/superlinear time or space/i)
     expect(prompt).toMatch(/message field/i)
+    expect(prompt).toMatch(/universal risk pass/i)
+    expect(prompt).toMatch(/no known limitations/i)
     expect(dispose).toHaveBeenCalledOnce()
   })
 
@@ -62,7 +66,47 @@ describe('ordinary completion judge', () => {
       result: Promise.resolve({
         stopReason: 'completed' as const,
         output: [],
-        structured: { verdict: 'pass', summary: 'looks fine', evidence: [], required_changes: [] },
+        structured: {
+          verdict: 'pass',
+          summary: 'looks fine',
+          evidence: [],
+          known_limitations: [],
+          risk_coverage: { ambiguity: true, limitations: true, report_integrity: true },
+          required_changes: [],
+        },
+      }),
+      dispose: vi.fn(async () => {}),
+    }))
+
+    await expect(reviewOrdinaryCompletion({
+      subagents: {
+        getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never,
+        start,
+      },
+      provider: 'spawn',
+      parent,
+      request: 'change code',
+      mutations: ['write'],
+      verifications: ['verify'],
+      signal: new AbortController().signal,
+    })).resolves.toMatchObject({ verdict: 'blocked' })
+  })
+
+  it('fails closed when a pass skips universal risk coverage', async () => {
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
+      id: 'judge' as never,
+      localAgent: undefined,
+      result: Promise.resolve({
+        stopReason: 'completed' as const,
+        output: [],
+        structured: {
+          verdict: 'pass',
+          summary: 'tests passed',
+          evidence: ['targeted tests passed'],
+          known_limitations: [],
+          risk_coverage: { ambiguity: false, limitations: true, report_integrity: true },
+          required_changes: [],
+        },
       }),
       dispose: vi.fn(async () => {}),
     }))

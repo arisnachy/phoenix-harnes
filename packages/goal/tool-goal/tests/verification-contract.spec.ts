@@ -29,9 +29,25 @@ describe('verification contract', () => {
     ]))
   })
 
-  it('does not force software-only edge obligations onto a plain writing objective', () => {
+  it('keeps universal risk obligations on non-software work without forcing software-only edges', () => {
     const contract = buildVerificationContract('Write a concise executive summary of the attached report.')
     expect(contract.softwareLike).toBe(false)
-    expect(contract.criteria.map(item => item.id)).toEqual(['REQ-ROOT'])
+    expect(contract.criteria.map(item => item.id)).toEqual([
+      'REQ-ROOT',
+      'RISK-AMBIGUITY',
+      'RISK-LIMITATIONS',
+      'RISK-REPORT-INTEGRITY',
+    ])
+  })
+
+  it('adds representation and environment risks to software work even when the prompt does not name them', () => {
+    const ids = buildVerificationContract('Implement a function that validates account identifiers.').criteria.map(item => item.id)
+    expect(ids).toEqual(expect.arrayContaining([
+      'RISK-AMBIGUITY',
+      'RISK-LIMITATIONS',
+      'RISK-REPORT-INTEGRITY',
+      'EDGE-REPRESENTATION',
+      'EDGE-ENVIRONMENT',
+    ]))
   })
 })
