@@ -13,6 +13,7 @@ import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
 import { assessHabitExperience, formatHabitGuidance } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
+import { filterComputerSearchHits, installComputerLearning } from './computer-learning.ts'
 import { filterProceduralSearchHits, installProceduralLearning } from './procedural.ts'
 import { formatProceduralContext } from './procedural-presentation.ts'
 import { formatMemorySearchResult, formatRecentMemoryContext } from './presentation.ts'
@@ -48,6 +49,7 @@ export function apply(ctx: Context, config: Config): void {
   if (!Number.isSafeInteger(maxResults) || maxResults < 1) throw new TypeError('maxResults must be a positive safe integer')
 
   const tasks = new RecentTaskLedger()
+  const computer = installComputerLearning(ctx)
   const curator = new AutonomousMemoryCurator({
     async remember(input) {
       await ctx.learningMemory.rememberCognitive({ ...input })
@@ -154,6 +156,9 @@ export function apply(ctx: Context, config: Config): void {
       + 'Use personal or profile memory only when it materially improves the current task; never enumerate protected personal categories merely to prove privacy or recall. '
       + 'Solve the user\'s task first, then report concise outcome evidence when useful; internal execution narration is secondary and should normally stay out of the answer. '
       + 'Candidate, quarantined, secret-bearing, or contextually unrelated procedures must not guide automatic recall. '
+      + 'Computer learning retains only verified reusable browser flows and enumerated preferences: action names and canonical HTTPS origins. '
+      + 'A successful Computer tool result is only a candidate until the durable goal completion event passes; never retain passwords, MFA codes, tokens, cookies, form values, private page text, screenshots, paths, queries, fragments, coordinates, or free-typed text. '
+      + 'When the user explicitly asks what Computer learned, call computer_learning with review; when the user explicitly asks to remove one entry, use forget with the exact reviewed memory id. '
       + 'When the user explicitly teaches a durable workflow or demonstration, memory_teach remains available for structured authoritative teaching. '
       + 'Use memory_remember for deliberate durable preferences or verified lessons that are not procedures. Never store credentials, private secrets, or unverified guesses. '
       + 'For phrases such as previous, last, anterior, or como antes, use resolved task evidence or memory/history; never infer the referent from repository commit recency, an unrelated module, or tool activity. '
@@ -257,7 +262,7 @@ export function apply(ctx: Context, config: Config): void {
       if (args.include_history !== undefined) filters.includeHistory = args.include_history
       const resultLimit = Math.min(requested, maxResults)
       const cognitive = ctx.learningMemory.searchCognitive(args.query ?? '', resultLimit * 4, filters)
-      const records = filterProceduralSearchHits(filterAdaptiveSearchHits(cognitive)).slice(0, resultLimit)
+      const records = filterComputerSearchHits(filterProceduralSearchHits(filterAdaptiveSearchHits(cognitive))).slice(0, resultLimit)
       return Promise.resolve(formatMemorySearchResult(records))
     },
     presentCall: args => ({ card: 'generic', title: 'Search memory', kind: 'read', rawInput: args.query ?? '' }),
@@ -340,6 +345,26 @@ export function apply(ctx: Context, config: Config): void {
     },
     presentCall: args => ({ card: 'generic', title: 'Learn procedure', kind: 'other', rawInput: args.title }),
   }))
+
+  ctx.tools.register(defineTool({
+    name: 'computer_learning',
+    description: 'Review or forget verified Computer flows and preferences. Only safe browser action names and canonical HTTPS origins are shown; credentials, form values, page text, screenshots, paths, queries, and tokens are never returned.',
+    parameters: {
+      action: { type: 'string', required: true, enum: ['review', 'forget'], description: 'Review safe learned Computer metadata or forget one exact reviewed memory id.' },
+      memory_id: { type: 'string', description: 'Exact id returned by review when action is forget.' },
+    },
+    output: MEMORY_OUTPUT,
+    isConcurrencySafe: args => args.action === 'review',
+    async execute(args, execution) {
+      const projectId = ctx.learningMemory.currentProjectId()
+      if (args.action === 'review') return JSON.stringify({ memories: computer.review(projectId) })
+      if (execution.agent === undefined) throw new TypeError('computer_learning forget requires an active agent session')
+      if (args.memory_id === undefined || args.memory_id.trim() === '') throw new TypeError('memory_id is required when action is forget')
+      const forgotten = await computer.forget(args.memory_id, projectId)
+      return JSON.stringify({ status: forgotten ? 'forgotten' : 'not_found' })
+    },
+    presentCall: args => ({ card: 'generic', title: args.action === 'review' ? 'Review Computer learning' : 'Forget Computer learning', kind: 'other', rawInput: args.memory_id ?? '' }),
+  }))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -348,7 +373,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function messageText(data: unknown): string | undefined {
   if (!isRecord(data) || !Array.isArray(data.content)) return undefined
-  const parts = data.content.flatMap((part) => isRecord(part) && typeof part.text === 'string' ? [part.text] : [])
+  const parts = data.content.flatMap(part => isRecord(part) && typeof part.text === 'string' ? [part.text] : [])
   const text = parts.join(' ').replace(/\s+/gu, ' ').trim()
   return text === '' ? undefined : text
 }

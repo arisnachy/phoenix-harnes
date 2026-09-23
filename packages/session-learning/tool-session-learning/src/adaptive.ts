@@ -18,6 +18,20 @@ const DEFAULT_CANDIDATE_CONFIDENCE = 0.5
 const VERIFIED_SUCCESS_CONFIDENCE = 0.85
 const MAX_TEXT_CHARS = 2_048
 const MAX_CONFIRM_RECENT = 4
+const EXPLICIT_CORRECTION_PATTERN = new RegExp(
+  String.raw`\b(?:${[
+    String.raw`that(?:'s| is) wrong`,
+    'incorrect',
+    'wrong approach',
+    String.raw`you got (?:it|that) wrong`,
+    String.raw`eso est[aá] mal`,
+    String.raw`incorrect[oa]`,
+    'te dije que no',
+    String.raw`esa estrategia est[aá] mal`,
+    String.raw`corrige (?:eso|esto)`,
+  ].join('|')})\b`,
+  'iu',
+)
 
 /** Durable adaptive lifecycle, independent from the cognitive row lifecycle. */
 export type AdaptiveLearningStatus = 'candidate' | 'active' | 'quarantined'
@@ -72,6 +86,23 @@ export interface AdaptiveOutcomeInput {
   readonly projectId?: string
   readonly verified?: boolean
   readonly ttlMs?: number
+}
+
+/**
+ * Classify one tool result before it enters adaptive learning.
+ * Computer reports accepted input before the application goal is verified, so
+ * a successful Computer result remains a candidate until goal completion.
+ * @param toolName - Model-facing tool name from the pending call.
+ * @param failed - Whether the tool result reported an error.
+ * @returns Safe outcome fields for `recordOutcome`.
+ */
+export function adaptiveOutcomeForToolResult(
+  toolName: string,
+  failed: boolean,
+): { readonly outcome: AdaptiveLearningOutcome; readonly verified?: boolean } {
+  if (failed) return { outcome: 'failure' }
+  if (toolName === 'computer') return { outcome: 'candidate' }
+  return { outcome: 'success', verified: true }
 }
 
 /** Versioned state retained for one normalized strategy. */
@@ -165,12 +196,13 @@ export class AdaptiveLearningEngine {
     readonly occurredAt: number
     readonly evidence: string
     readonly projectId?: string
-  }): Promise<readonly AdaptiveLearningState[]> {
+  }, eligible: (state: AdaptiveLearningState) => boolean = () => true): Promise<readonly AdaptiveLearningState[]> {
     const candidates = this.states({
       sessionId: input.sessionId,
       ...input.projectId === undefined ? {} : { projectId: input.projectId },
     })
       .filter(state => state.status === 'candidate')
+      .filter(eligible)
       .sort((left, right) => right.lastObservedAt - left.lastObservedAt)
       .slice(0, MAX_CONFIRM_RECENT)
     const promoted: AdaptiveLearningState[] = []
@@ -272,6 +304,7 @@ function applyOutcome(previous: AdaptiveLearningState | undefined, input: Outcom
   const expiresAt = input.ttlMs === undefined
     ? previous?.expiresAt
     : input.occurredAt + input.ttlMs
+  const projectId = input.projectId ?? previous?.projectId
 
   return {
     version: STATE_VERSION,
@@ -287,7 +320,7 @@ function applyOutcome(previous: AdaptiveLearningState | undefined, input: Outcom
     lastObservedAt: input.occurredAt,
     lastOutcome: input.outcome,
     lastEvidence: input.evidence,
-    ...input.projectId === undefined ? previous?.projectId === undefined ? {} : { projectId: previous.projectId } : { projectId: input.projectId },
+    ...projectId === undefined ? {} : { projectId },
     ...expiresAt === undefined ? {} : { expiresAt },
   }
 }
@@ -364,7 +397,8 @@ export function filterAdaptiveSearchHits(hits: readonly CognitiveMemoryHit[], no
  */
 export function installAdaptiveLearning(ctx: Context): AdaptiveLearningEngine {
   const engine = new AdaptiveLearningEngine(cognitiveStore(ctx))
-  const pendingTools = new Map<string, string>()
+  const pendingTools = new Map<string, { readonly name: string; readonly strategy: string }>()
+  const computerCandidates = new Map<string, Set<string>>()
   const lastStrategies = new Map<string, string>()
 
   ctx.on('session/event', (session, event) => {
@@ -377,6 +411,7 @@ export function installAdaptiveLearning(ctx: Context): AdaptiveLearningEngine {
 
     const run = async (): Promise<void> => {
       if (eventType === 'goal/false-pass') {
+        computerCandidates.delete(sessionId)
         const payload = isRecord(data) ? data : {}
         const lessons = stringArray(payload.candidateProceduralLessons).slice(0, MAX_CONFIRM_RECENT)
         for (const strategy of lessons) {
@@ -396,6 +431,7 @@ export function installAdaptiveLearning(ctx: Context): AdaptiveLearningEngine {
       }
 
       if (eventType === 'goal/change' && isRecord(data) && data.operation === 'complete') {
+        const eligibleComputerCandidates = computerCandidates.get(sessionId) ?? new Set<string>()
         const promoted = await engine.confirmRecentCandidates({
           sessionId,
           eventSeq,
@@ -403,35 +439,49 @@ export function installAdaptiveLearning(ctx: Context): AdaptiveLearningEngine {
           occurredAt,
           evidence: 'Phoenix goal completion passed the configured fail-closed verification path.',
           ...projectId === undefined ? {} : { projectId },
-        })
+        }, state => state.strategy !== 'Use tool computer' || eligibleComputerCandidates.has(state.strategy))
+        computerCandidates.delete(sessionId)
         const newest = promoted.at(-1)
         if (newest !== undefined) lastStrategies.set(sessionId, newest.strategy)
         return
       }
 
       if (eventType === 'tool/call' && isRecord(data) && typeof data.name === 'string' && data.name.trim() !== '') {
-        const strategy = `Use tool ${data.name.trim().slice(0, 160)}`
-        pendingTools.set(sessionId, strategy)
+        const name = data.name.trim().slice(0, 160)
+        const strategy = `Use tool ${name}`
+        pendingTools.set(sessionId, { name, strategy })
         lastStrategies.set(sessionId, strategy)
         return
       }
 
       if (eventType === 'tool/result') {
-        const strategy = pendingTools.get(sessionId)
-        if (strategy === undefined) return
+        const pending = pendingTools.get(sessionId)
+        if (pending === undefined) return
         pendingTools.delete(sessionId)
         const failed = toolResultFailed(data)
+        const outcome = adaptiveOutcomeForToolResult(pending.name, failed)
+        if (pending.name === 'computer' && outcome.outcome === 'candidate') {
+          const candidates = computerCandidates.get(sessionId) ?? new Set<string>()
+          candidates.add(pending.strategy)
+          computerCandidates.set(sessionId, candidates)
+        } else if (pending.name === 'computer' && failed) {
+          computerCandidates.get(sessionId)?.delete(pending.strategy)
+        }
         await engine.recordOutcome({
-          strategy,
+          strategy: pending.strategy,
           evidence: failed ? 'The tool returned an error result.' : 'The tool completed without an error result.',
-          outcome: failed ? 'failure' : 'success',
-          verified: !failed,
+          ...outcome,
           sessionId,
           eventSeq,
           sourceEventType: eventType,
           occurredAt,
           ...projectId === undefined ? {} : { projectId },
         })
+        return
+      }
+
+      if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
+        computerCandidates.delete(sessionId)
         return
       }
 
@@ -549,7 +599,7 @@ function sanitizeEventType(value: string): string {
 }
 
 function isExplicitCorrection(text: string): boolean {
-  return /\b(?:that(?:'s| is) wrong|incorrect|wrong approach|you got (?:it|that) wrong|eso est[aá] mal|incorrect[oa]|te dije que no|esa estrategia est[aá] mal|corrige (?:eso|esto))\b/iu.test(text)
+  return EXPLICIT_CORRECTION_PATTERN.test(text)
 }
 
 function toolResultFailed(data: unknown): boolean {
@@ -562,7 +612,7 @@ function toolResultFailed(data: unknown): boolean {
 
 function messageText(data: unknown): string | undefined {
   if (!isRecord(data) || !Array.isArray(data.content)) return undefined
-  const parts = data.content.flatMap((part) => isRecord(part) && typeof part.text === 'string' ? [part.text] : [])
+  const parts = data.content.flatMap(part => isRecord(part) && typeof part.text === 'string' ? [part.text] : [])
   const text = parts.join(' ').trim()
   return text === '' ? undefined : text
 }

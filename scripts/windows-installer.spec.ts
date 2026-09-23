@@ -116,4 +116,18 @@ describe('PHOENIX managed Windows installation', () => {
     expect(firstLooseLaunchStep).toBeGreaterThan(installedSmokeStep)
   })
 
+  it('publishes and verifies the self-contained credential broker in the installer payload', () => {
+    const workflow = read('.github/workflows/phoenix-windows-desktop.yml')
+    const brokerProject = 'apps/desktop-windows/Phoenix.CredentialBroker/Phoenix.CredentialBroker.csproj'
+    const brokerPayload = 'dist/phoenix-desktop/credential-broker/Phoenix.CredentialBroker.exe'
+
+    expect(workflow).toContain(`dotnet publish ${brokerProject}`)
+    expect(workflow).toContain('--self-contained true')
+    expect(workflow).toContain('-p:PublishSingleFile=true')
+    expect(workflow).toContain('credential-broker')
+    expect(workflow).toContain(brokerPayload)
+    expect(workflow).toContain('Credential broker publish did not produce Phoenix.CredentialBroker.exe')
+    expect(workflow).toContain('Installer payload is missing the credential broker executable')
+  })
+
 })

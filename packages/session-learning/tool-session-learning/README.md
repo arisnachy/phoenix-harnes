@@ -13,6 +13,8 @@ Model-facing `memory_search` and `memory_remember` tools over PHOENIX's persiste
 
 The tool requires `tools`, `systemPrompt`, and `learningMemory`. Search is read-only; remember cannot change prompts, permissions, tools, or credentials. Search supports project, layer, time-window, and superseded-history filters. Automatic context is bounded to eight project-scoped cognitive records and excludes raw conversation records.
 
+Computer learning is a separate safe projection. After a verified goal completion it may retain only a closed browser action name, a canonical HTTPS origin, provenance, confidence, and an enumerated preference. It never retains passwords, MFA codes, tokens, cookies, form values, private page text, screenshots, coordinates, URL paths, queries, fragments, or free-typed text. A successful Computer tool result alone stays a candidate and cannot guide recall. `computer_learning` supports explicit `review` and `forget`; remembered flows are evidence and never grant permissions.
+
 ## Model Experience
 
 ### Explicit memory recall and learning

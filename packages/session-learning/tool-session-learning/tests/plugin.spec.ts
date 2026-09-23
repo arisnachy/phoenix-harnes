@@ -118,5 +118,9 @@ describe('tool-session-learning plugin', () => {
     const schema = ctx.tools.schemas().find(candidate => candidate.name === 'memory_teach')
     expect(schema).toBeDefined()
     expect(schema?.description).toMatch(/procedure/i)
+
+    const computerSchema = ctx.tools.schemas().find(candidate => candidate.name === 'computer_learning')
+    expect(computerSchema).toBeDefined()
+    expect(computerSchema?.description).toMatch(/review or forget/i)
   })
 })

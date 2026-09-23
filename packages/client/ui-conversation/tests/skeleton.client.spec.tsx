@@ -4,7 +4,7 @@
 // owned draft, and the hero workspace picker (switching = retargetWorkspace).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { bindSnapshotSelector } from '@phoenix-ai/dsh-client-test-runtime'
 import {
   createSnapshotStore, EMPTY_CHAT_SNAPSHOT, EMPTY_CONVERSATION_VIEWS,
@@ -19,13 +19,14 @@ import { en as commonEn } from '@phoenix-ai/dsh-client-locale/src/locales/en.ts'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
-import { en, zh } from '../src/client/locales.ts'
+import { en, es, zh } from '../src/client/locales.ts'
 import { ConversationRoot } from '../src/client/skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from '../src/client/skeleton/ConversationSession.tsx'
 import { HeroShell } from '../src/client/skeleton/EmptyHero.tsx'
 import type { HeroShellProps } from '../src/client/skeleton/EmptyHero.tsx'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
+import { ComputerCredentialPrompt } from '../src/client/skeleton/ComputerCredentialPrompt.tsx'
 import type {
   ComposerBarOwnerProps, ConversationHeaderLineageOwnerProps,
 } from '../src/client/contract/slots.ts'
@@ -47,6 +48,7 @@ class ResizeObserverStub {
 
 afterEach(() => {
   cleanup()
+  Reflect.deleteProperty(window, 'chrome')
   vi.unstubAllGlobals()
 })
 beforeEach(() => {
@@ -555,5 +557,150 @@ describe('ConversationRoot resident composer', () => {
     }))
     expect(b.view.getByRole('alert').textContent).toContain('Message send failed (offline)')
     expect(b.view.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+})
+
+interface NativeBridgeFixture {
+  readonly postMessage: ReturnType<typeof vi.fn>
+  dispatch(data: unknown): void
+}
+
+function installNativeBridge(): NativeBridgeFixture {
+  const listeners = new Set<(event: MessageEvent<unknown>) => void>()
+  const postMessage = vi.fn()
+  const webview = {
+    addEventListener: (_type: 'message', listener: (event: MessageEvent<unknown>) => void) => {
+      listeners.add(listener)
+    },
+    removeEventListener: (_type: 'message', listener: (event: MessageEvent<unknown>) => void) => {
+      listeners.delete(listener)
+    },
+    postMessage,
+  }
+  Object.defineProperty(window, 'chrome', {
+    configurable: true,
+    value: { webview },
+  })
+  return {
+    postMessage,
+    dispatch(data: unknown) {
+      for (const listener of listeners) listener({ data } as MessageEvent<unknown>)
+    },
+  }
+}
+
+describe('native Computer credential prompt', () => {
+  it('keeps the secret outside the composer and posts only the native response', () => {
+    const bridge = installNativeBridge()
+    render(<ComputerCredentialPrompt t={makeTranslate(en, commonEn)} />)
+
+    act(() => {
+      bridge.dispatch({
+        kind: 'computer-credential',
+        requestId: 'request-1',
+        origin: 'https://example.test',
+        legacyCredentialPresent: false,
+      })
+    })
+
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect((screen.getByLabelText('Password') as HTMLInputElement).type).toBe('password')
+    expect(screen.getByLabelText('Password').getAttribute('autocomplete')).toBe('off')
+    expect((screen.getByRole('checkbox', { name: /save in phoenix vault/i }) as HTMLInputElement).checked).toBe(true)
+    expect(document.querySelector('[data-composer-seat]')).toBeNull()
+
+    fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'alice' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'synthetic-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(bridge.postMessage).toHaveBeenCalledOnce()
+    expect(bridge.postMessage).toHaveBeenCalledWith({
+      kind: 'computer-credential-response',
+      requestId: 'request-1',
+      origin: 'https://example.test',
+      account: 'alice',
+      secret: 'synthetic-secret',
+      remember: true,
+    })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.body.textContent).not.toContain('synthetic-secret')
+  })
+
+  it('clears a pending request and secret when the person cancels', () => {
+    const bridge = installNativeBridge()
+    render(<ComputerCredentialPrompt t={makeTranslate(es, commonEn)} />)
+    act(() => {
+      bridge.dispatch({
+        kind: 'computer-credential',
+        requestId: 'request-2',
+        origin: 'https://example.test',
+        legacyCredentialPresent: true,
+      })
+    })
+    fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'cancelled-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(bridge.postMessage).toHaveBeenCalledOnce()
+    expect(bridge.postMessage).toHaveBeenCalledWith({
+      kind: 'computer-credential-cancelled',
+      requestId: 'request-2',
+      origin: 'https://example.test',
+    })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.body.textContent).not.toContain('cancelled-secret')
+  })
+
+  it('ignores malformed or non-HTTPS native requests', () => {
+    const bridge = installNativeBridge()
+    render(<ComputerCredentialPrompt t={makeTranslate(en, commonEn)} />)
+    act(() => {
+      bridge.dispatch({ kind: 'computer-credential', requestId: 'bad', origin: 'http://example.test', legacyCredentialPresent: false })
+      bridge.dispatch({ kind: 'other-message', requestId: 'bad', origin: 'https://example.test', legacyCredentialPresent: false })
+    })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('renders the native credential card in Chinese through the conversation translator', () => {
+    const bridge = installNativeBridge()
+    render(<ComputerCredentialPrompt t={makeTranslate(zh, commonZh)} />)
+    act(() => {
+      bridge.dispatch({
+        kind: 'computer-credential',
+        requestId: 'request-zh',
+        origin: 'https://example.test',
+        legacyCredentialPresent: false,
+      })
+    })
+
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('登录网站')
+    expect(screen.getByLabelText('账号')).toBeTruthy()
+    expect(screen.getByLabelText('密码')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '取消' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '继续' })).toBeTruthy()
+  })
+
+  it('clears the secret when the native host dismisses a request after navigation', () => {
+    const bridge = installNativeBridge()
+    render(<ComputerCredentialPrompt t={makeTranslate(en, commonEn)} />)
+    act(() => {
+      bridge.dispatch({
+        kind: 'computer-credential',
+        requestId: 'request-3',
+        origin: 'https://example.test',
+        legacyCredentialPresent: false,
+      })
+    })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'stale-secret' } })
+    act(() => {
+      bridge.dispatch({
+        kind: 'computer-credential-dismissed',
+        requestId: 'request-3',
+        origin: 'https://example.test',
+      })
+    })
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.body.textContent).not.toContain('stale-secret')
+    expect(bridge.postMessage).not.toHaveBeenCalled()
   })
 })
