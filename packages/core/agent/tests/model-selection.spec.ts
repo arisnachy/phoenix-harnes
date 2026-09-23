@@ -65,7 +65,7 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
   })
 
-  it('routes trivial Codex conversation to Luna/low instead of spending the selected high-effort model', async () => {
+  it('routes trivial GPT-6 Codex conversation to Luna/Max without downgrading the worker', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -101,7 +101,96 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('low'),
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('pins a directly selected GPT-6 Luna route to Max even when the stored selection says medium', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('medium') },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const agent = {
+      session: {
+        events: [
+          { type: 'turn/start', data: { turn: 1 } },
+          {
+            type: 'user/message',
+            data: {
+              source: { kind: 'user' },
+              content: [{ type: 'text', text: 'Analiza este problema con detalle.' }],
+            },
+          },
+        ],
+      },
+    } as unknown as Agent
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request',
+      { turn: 1, step: 1, signal },
+      () => Promise.resolve({
+        provider: 'openai-codex',
+        model: 'gpt-6-luna',
+        reasoningEffort: ReasoningEffortId('medium'),
+      }),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('pins GPT-6 Luna tool acquisition to Max on the first step', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'read', description: 'read a file', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('medium') },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const agent = {
+      session: {
+        events: [
+          { type: 'turn/start', data: { turn: 1 } },
+          {
+            type: 'user/message',
+            data: {
+              source: { kind: 'user' },
+              content: [{ type: 'text', text: 'Arregla router.ts y ejecuta los tests.' }],
+            },
+          },
+        ],
+      },
+    } as unknown as Agent
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request',
+      { turn: 1, step: 1, signal },
+      () => Promise.resolve({
+        provider: 'openai-codex',
+        model: 'gpt-6-luna',
+        reasoningEffort: ReasoningEffortId('medium'),
+      }),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
