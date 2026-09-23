@@ -352,6 +352,54 @@ describe('connectors settings section', () => {
     expect(mcpRegistry.install).not.toHaveBeenCalled()
   })
 
+
+  it('reconnects Jev with its existing credential without requiring the API key again', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const configureJev = vi.fn(async () => ({
+      status: 'already-installed' as const,
+      connector: { entryId: 'jev-managed', serverName: 'jev', url: 'https://www.jevai.org/api/mcp' },
+    }))
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        runtime: [{
+          serverName: 'jev',
+          transport: 'streamable-http' as const,
+          status: 'failed' as const,
+          toolNames: [],
+          reasonCode: 'connection-lost' as const,
+        }],
+        managed: [{ entryId: 'jev-managed', serverName: 'jev', url: 'https://www.jevai.org/api/mcp' }],
+      })),
+      jevState: vi.fn(async () => ({
+        configured: true,
+        credentialConfigured: true,
+        status: 'failed' as const,
+        reasonCode: 'connection-lost' as const,
+      })),
+      configureJev,
+      install: vi.fn(),
+      search: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'jev' } })
+
+    expect(await screen.findByText('Jev')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Configure' }))
+    expect(await screen.findByText('Configure Jev MCP')).toBeTruthy()
+    const reconnect = screen.getByRole('button', { name: 'Reconnect' })
+    expect((reconnect as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(reconnect)
+
+    await waitFor(() => {
+      expect(configureJev).toHaveBeenCalledWith({ apiKey: '' })
+    })
+  })
+
   it('searches the Official MCP Registry only after the user asks for an unconnected connector', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
