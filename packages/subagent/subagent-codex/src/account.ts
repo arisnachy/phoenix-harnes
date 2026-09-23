@@ -606,7 +606,7 @@ export function registerCodexAccountFlow(
     label: 'ChatGPT / Codex',
     methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
     async inspect(signal) {
-      return codexAccountTelemetry(await inspectSnapshot(signal))
+      return codexAccountTelemetry(await inspectSnapshot(signal ?? new AbortController().signal))
     },
     async disconnect(signal) {
       await logoutManagedChatGpt(ctx, config, signal ?? new AbortController().signal)
