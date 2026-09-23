@@ -65,7 +65,7 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
   })
 
-  it('routes trivial GPT-6 Codex conversation to Luna/Max without downgrading the worker', async () => {
+  it('routes trivial GPT-6 Codex conversation to Luna/low without spending Max reasoning', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -81,7 +81,7 @@ describe('installModelSelection()', () => {
             type: 'user/message',
             data: {
               source: { kind: 'user' },
-              content: [{ type: 'text', text: '¿estás usando Jev?' }],
+              content: [{ type: 'text', text: 'hola' }],
             },
           },
         ],
@@ -101,7 +101,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
+      reasoningEffort: ReasoningEffortId('low'),
     })
 
     dispose()
