@@ -21,6 +21,11 @@ export interface GoalJudgeResult {
   readonly summary: string
   readonly findings: readonly string[]
   readonly requiredChanges: readonly string[]
+  readonly completionReport?: {
+    readonly unverifiedItems: readonly string[]
+    readonly knownLimitations: readonly string[]
+  }
+  readonly verificationIncidents?: readonly string[]
 }
 
 interface SettledGoalPass {
@@ -140,6 +145,11 @@ function durableMissionReviewHistory(parent: Agent, objective: string): object {
       })),
       findings: [...event.data.findings],
       proceduralLessons: [...event.data.proceduralLessons],
+      completionReport: event.data.completionReport === undefined ? undefined : {
+        unverifiedItems: [...event.data.completionReport.unverifiedItems],
+        knownLimitations: [...event.data.completionReport.knownLimitations],
+      },
+      verificationIncidents: [...(event.data.verificationIncidents ?? [])],
     }))
   const falsePasses = parent.session.events
     .filter((event): event is SessionEvent<'goal/false-pass'> => event.type === 'goal/false-pass' && belongsToCurrentGoal(event.data))
@@ -210,7 +220,8 @@ function sessionGatePassed(event: SessionEvent<'goal/completion-gate'>): boolean
   return Object.values(event.data.checks).every(status => status === 'pass')
     && event.data.evidenceLedger.length > 0
     && event.data.evidenceLedger.some(entry => entry.mandatory)
-    && event.data.evidenceLedger.every(entry => !entry.mandatory || entry.status === 'verified')
+    && event.data.evidenceLedger.every(entry => !entry.mandatory || (entry.status === 'verified' && entry.evidence.length > 0))
+    && (event.data.completionReport === undefined || event.data.completionReport.unverifiedItems.length === 0)
     && event.data.artifactFingerprint.trim().length > 0
 }
 
@@ -242,6 +253,11 @@ function settledGoalPass(parent: Agent, objective: string): SettledGoalPass | un
       summary: judge.data.summary,
       findings: [...judge.data.findings],
       requiredChanges: [],
+      completionReport: gate.data.completionReport === undefined ? undefined : {
+        unverifiedItems: [...gate.data.completionReport.unverifiedItems],
+        knownLimitations: [...gate.data.completionReport.knownLimitations],
+      },
+      verificationIncidents: [...(gate.data.verificationIncidents ?? [])],
     },
   }
 }
@@ -308,6 +324,11 @@ function recordCompletionGate(parent: Agent, objective: string, round: number, g
     cleanRoomEvidence: gate.cleanRoomEvidence,
     findings: [...gate.findings],
     proceduralLessons: [...gate.proceduralLessons],
+    completionReport: gate.completionReport === undefined ? undefined : {
+      unverifiedItems: [...gate.completionReport.unverifiedItems],
+      knownLimitations: [...gate.completionReport.knownLimitations],
+    },
+    verificationIncidents: [...(gate.verificationIncidents ?? [])],
   })
 }
 
@@ -342,7 +363,13 @@ export async function judgeGoalCompletion(input: {
   if (mayReuseSettledPass(settled, gate) && gateIsInfrastructureOnlyBlocked(gate)) return settled.result
   const provider = reviewProvider(subagents, input.provider, input.parent)
   if (provider === undefined) {
-    return mayReuseSettledPass(settled, gate) ? settled.result : enforceGate(unavailable(), gate)
+    return mayReuseSettledPass(settled, gate)
+      ? settled.result
+      : enforceGate({
+        ...unavailable(),
+        completionReport: gate.completionReport,
+        verificationIncidents: gate.verificationIncidents,
+      }, gate)
   }
   const history = durableMissionReviewHistory(input.parent, input.objective)
 
@@ -390,7 +417,11 @@ export async function judgeGoalCompletion(input: {
     if (run !== undefined) await run.dispose()
   }
   if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) return settled.result
-  return enforceGate(judged, gate)
+  return enforceGate({
+    ...judged,
+    completionReport: gate.completionReport,
+    verificationIncidents: gate.verificationIncidents,
+  }, gate)
 }
 
 /**

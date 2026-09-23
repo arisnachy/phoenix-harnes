@@ -98,6 +98,11 @@ export interface GoalCompletionGateAuditEntry {
   readonly cleanRoomEvidence?: string
   readonly findings: readonly string[]
   readonly proceduralLessons: readonly string[]
+  readonly completionReport?: {
+    readonly unverifiedItems: readonly string[]
+    readonly knownLimitations: readonly string[]
+  }
+  readonly verificationIncidents?: readonly string[]
 }
 
 /** A previously accepted PASS disproved by later valid executable evidence. */

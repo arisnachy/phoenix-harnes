@@ -1,6 +1,6 @@
 /** Deterministic completion obligations derived only from the original objective. */
 
-export type VerificationCriterionSource = 'objective' | 'literal' | 'edge'
+export type VerificationCriterionSource = 'objective' | 'literal' | 'risk' | 'edge'
 
 /** One immutable criterion that a completion tester is not allowed to omit or downgrade. */
 export interface VerificationCriterion {
@@ -58,6 +58,21 @@ function softwareSignals(text: string): boolean {
   return /\b(?:code|software|program|application|app|cli|api|service|function|class|method|library|package|parser|regex|regexp|json|yaml|xml|csv|algorithm|python|javascript|typescript|node|rust|golang|java|c\+\+|input|string|expression|command|argument|argparse|test|tests)\b/iu.test(text)
 }
 
+function universalRiskCriteria(): VerificationCriterion[] {
+  const criteria: VerificationCriterion[] = []
+  const seen = new Set<string>()
+  const add = (id: string, criterion: string): void => pushCriterion(criteria, seen, criterion, 'risk', id)
+
+  add('RISK-AMBIGUITY',
+    'Actively search for ambiguous interpretations, representations, normalization rules, implicit conventions, or multiple plausible meanings that could change the result. Exercise the ambiguity or document the chosen rule with evidence.')
+  add('RISK-LIMITATIONS',
+    'Before claiming that no known limitations remain, generate plausible failure classes beyond the happy path and either test them, bound them explicitly as out of scope with evidence, or report them as known limitations.')
+  add('RISK-REPORT-INTEGRITY',
+    'Cross-check final claims, counts, statuses, evidence references, and limitation statements for duplication or contradiction. One canonical result must survive into the final report.')
+
+  return criteria
+}
+
 function edgeCriteria(objective: string, softwareLike: boolean): VerificationCriterion[] {
   const text = objective.toLocaleLowerCase()
   const criteria: VerificationCriterion[] = []
@@ -68,6 +83,8 @@ function edgeCriteria(objective: string, softwareLike: boolean): VerificationCri
     add('EDGE-EMPTY', 'Exercise empty input or zero-cardinality state at the real user-facing boundary when that state is representable.')
     add('EDGE-BOUNDARY', 'Exercise cardinality one, exact lower/upper boundaries, first and last element or iteration, and adjacent off-by-one cases where applicable.')
     add('EDGE-MALFORMED', 'Exercise malformed, truncated, unsupported, or otherwise invalid externally controlled input and require a domain-classified failure rather than an implementation exception.')
+    add('EDGE-REPRESENTATION', 'Exercise equivalent, non-canonical, padded, case-varied, whitespace-varied, separator-varied, or otherwise ambiguous external representations wherever parsing or normalization can change meaning.')
+    add('EDGE-ENVIRONMENT', 'Exercise plausible environment differences that can affect observable behavior, including platform/path rules, locale/timezone/encoding, permissions, dependency availability, and clean-state versus stale-state execution where applicable.')
   }
 
   if (softwareLike && /\b(?:text|string|parser|parse|regex|regexp|json|yaml|xml|csv|unicode|utf|escape|character|char|token|lexer|scanner|position|offset)\b/iu.test(text)) {
@@ -123,6 +140,13 @@ export function buildVerificationContract(objective: string): VerificationContra
       'REQ-' + String(literalIndex).padStart(3, '0'),
     )
     literalIndex += 1
+  }
+
+  for (const criterion of universalRiskCriteria()) {
+    if (!seen.has(criterion.criterion.toLocaleLowerCase())) {
+      seen.add(criterion.criterion.toLocaleLowerCase())
+      criteria.push(criterion)
+    }
   }
 
   const softwareLike = softwareSignals(objective)

@@ -26,9 +26,20 @@ const OUTPUT_SCHEMA: ObjectJsonSchema = {
     verdict: { type: 'string', enum: ['pass', 'needs_changes', 'blocked'] },
     summary: { type: 'string' },
     evidence: { type: 'array', items: { type: 'string' } },
+    known_limitations: { type: 'array', items: { type: 'string' } },
+    risk_coverage: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        ambiguity: { type: 'boolean' },
+        limitations: { type: 'boolean' },
+        report_integrity: { type: 'boolean' },
+      },
+      required: ['ambiguity', 'limitations', 'report_integrity'],
+    },
     required_changes: { type: 'array', items: { type: 'string' } },
   },
-  required: ['verdict', 'summary', 'evidence', 'required_changes'],
+  required: ['verdict', 'summary', 'evidence', 'known_limitations', 'risk_coverage', 'required_changes'],
 }
 
 const READ_ONLY_TOOLS = [
@@ -54,6 +65,12 @@ export interface OrdinaryCompletionJudgeDecision {
   readonly verdict: 'pass' | 'needs_changes' | 'blocked'
   readonly summary: string
   readonly evidence: readonly string[]
+  readonly knownLimitations: readonly string[]
+  readonly riskCoverage: {
+    readonly ambiguity: boolean
+    readonly limitations: boolean
+    readonly reportIntegrity: boolean
+  }
   readonly requiredChanges: readonly string[]
 }
 
@@ -106,18 +123,47 @@ function validList(value: unknown): value is string[] {
   return Array.isArray(value) && value.length <= 12 && value.every(validText)
 }
 
+function uniqueList(items: readonly string[]): string[] | undefined {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const item of items) {
+    const key = item.replace(/\s+/gu, ' ').trim().toLocaleLowerCase()
+    if (seen.has(key)) return undefined
+    seen.add(key)
+    result.push(item)
+  }
+  return result
+}
+
 function parseDecision(value: unknown): OrdinaryCompletionJudgeDecision | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
+  const risk = record.risk_coverage
   if (!validText(record.verdict) || !['pass', 'needs_changes', 'blocked'].includes(record.verdict)
-    || !validText(record.summary) || !validList(record.evidence) || !validList(record.required_changes)) return undefined
-  if (record.verdict === 'pass' && record.evidence.length === 0) return undefined
-  if (record.verdict === 'needs_changes' && record.required_changes.length === 0) return undefined
+    || !validText(record.summary) || !validList(record.evidence) || !validList(record.known_limitations)
+    || !validList(record.required_changes)
+    || risk === null || typeof risk !== 'object' || Array.isArray(risk)) return undefined
+  const riskRecord = risk as Record<string, unknown>
+  if (typeof riskRecord.ambiguity !== 'boolean' || typeof riskRecord.limitations !== 'boolean'
+    || typeof riskRecord.report_integrity !== 'boolean') return undefined
+  const evidence = uniqueList(record.evidence)
+  const knownLimitations = uniqueList(record.known_limitations)
+  const requiredChanges = uniqueList(record.required_changes)
+  if (evidence === undefined || knownLimitations === undefined || requiredChanges === undefined) return undefined
+  if (record.verdict === 'pass' && (evidence.length === 0
+    || !riskRecord.ambiguity || !riskRecord.limitations || !riskRecord.report_integrity)) return undefined
+  if (record.verdict === 'needs_changes' && requiredChanges.length === 0) return undefined
   return {
     verdict: record.verdict as OrdinaryCompletionJudgeDecision['verdict'],
     summary: record.summary,
-    evidence: record.evidence,
-    requiredChanges: record.required_changes,
+    evidence,
+    knownLimitations,
+    riskCoverage: {
+      ambiguity: riskRecord.ambiguity,
+      limitations: riskRecord.limitations,
+      reportIntegrity: riskRecord.report_integrity,
+    },
+    requiredChanges,
   }
 }
 
@@ -140,7 +186,10 @@ export async function reviewOrdinaryCompletion(input: {
     list: () => input.subagents.list?.() ?? [],
   }, input.provider)
   if (resolved === undefined) {
-    return { verdict: 'blocked', summary: 'Independent completion judge is unavailable.', evidence: [], requiredChanges: [] }
+    return {
+      verdict: 'blocked', summary: 'Independent completion judge is unavailable.', evidence: [],
+      knownLimitations: [], riskCoverage: { ambiguity: false, limitations: false, reportIntegrity: false }, requiredChanges: [],
+    }
   }
 
   const toolFilter: ToolRestriction = { allow: [...READ_ONLY_TOOLS] }
@@ -167,19 +216,31 @@ export async function reviewOrdinaryCompletion(input: {
           + 'zero-length or zero-progress iterations, first/last iteration off-by-one behavior, malformed inputs, and exact error positions. When a trustworthy oracle exists, prefer differential generated/fuzz cases; otherwise require property/metamorphic checks. '
           + 'For public errors/exceptions verify the observable type and every required message field, identifier, collection, or diagnostic detail. '
           + 'When scale, large cardinality, performance, latency, depth, concurrency, or memory matters, require evidence that checks growth/resource behavior and inspect for avoidable superlinear time or space. '
-          + 'Check the real user/production entrypoint and relevant boundary/failure cases. Require an explicit completion decision about known limitations, even when the list is empty. Do not edit files or run commands. '
-          + 'Return pass only with concrete evidence for all material requirements. Return needs_changes with a precise repair list for fixable gaps; blocked only for an external evaluation blocker.\n'
+          + 'Apply a universal risk pass before deciding completion: actively search for ambiguous representations or implicit conventions; vary realistic input, environment, and state when applicable; and generate plausible failure classes that were not suggested by the worker. '
+          + 'Do not infer "no known limitations" from green tests. An empty known_limitations list requires concrete evidence that plausible limitation classes were considered, tested, or explicitly bounded. '
+          + 'Cross-check the closing facts, counts, statuses, and limitation statements so the final report has one canonical result with no duplicate or contradictory claims. Set every risk_coverage flag only after performing that check. '
+          + 'Check the real user/production entrypoint and relevant boundary/failure cases. Do not edit files or run commands. '
+          + 'Return pass only with concrete evidence for all material requirements and all three risk_coverage checks true. Return needs_changes with a precise repair list for fixable gaps; blocked only for an external evaluation blocker.\n'
           + '</phoenix_ordinary_completion_judge>',
       }],
     })
     const result = await run.result
     if (result.stopReason !== 'completed') {
-      return { verdict: 'blocked', summary: 'Independent completion judge did not complete.', evidence: [], requiredChanges: [] }
+      return {
+        verdict: 'blocked', summary: 'Independent completion judge did not complete.', evidence: [],
+        knownLimitations: [], riskCoverage: { ambiguity: false, limitations: false, reportIntegrity: false }, requiredChanges: [],
+      }
     }
     return parseDecision(result.structured)
-      ?? { verdict: 'blocked', summary: 'Independent completion judge returned invalid evidence.', evidence: [], requiredChanges: [] }
+      ?? {
+        verdict: 'blocked', summary: 'Independent completion judge returned invalid evidence.', evidence: [],
+        knownLimitations: [], riskCoverage: { ambiguity: false, limitations: false, reportIntegrity: false }, requiredChanges: [],
+      }
   } catch {
-    return { verdict: 'blocked', summary: 'Independent completion judge failed.', evidence: [], requiredChanges: [] }
+    return {
+      verdict: 'blocked', summary: 'Independent completion judge failed.', evidence: [],
+      knownLimitations: [], riskCoverage: { ambiguity: false, limitations: false, reportIntegrity: false }, requiredChanges: [],
+    }
   } finally {
     if (run !== undefined) await run.dispose()
   }

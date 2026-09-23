@@ -131,6 +131,33 @@ describe('adversarial completion tester', () => {
     expect(executePrompt).toContain('builder_test_audit')
     expect(executePrompt).toContain('expected-value provenance')
     expect(executePrompt).toContain('completion_report')
+    expect(executePrompt).toContain('RISK-LIMITATIONS')
+    expect(result.completionReport).toEqual({ unverifiedItems: [], knownLimitations: [] })
+  })
+
+  it('preserves known limitations as canonical gate data', async () => {
+    const objective = 'Implement a parser for account identifiers.'
+    const structured = structuredPass(objective)
+    structured.completion_report = {
+      unverified_items: [],
+      known_limitations: ['Legacy locale-specific aliases remain intentionally unsupported.'],
+    }
+    const { result } = await runWithStructured(objective, structured)
+    expect(result.completionReport?.knownLimitations).toEqual([
+      'Legacy locale-specific aliases remain intentionally unsupported.',
+    ])
+  })
+
+  it('fails report integrity when completion claims are duplicated', async () => {
+    const objective = 'Implement a parser for account identifiers.'
+    const structured = structuredPass(objective)
+    structured.completion_report = {
+      unverified_items: [],
+      known_limitations: ['One bounded limitation.', 'One bounded limitation.'],
+    }
+    const { result } = await runWithStructured(objective, structured)
+    expect(result.checks.requirements).toBe('fail')
+    expect(result.findings.join(' ')).toMatch(/duplicate claims/i)
   })
 
   it('fails closed when the tester omits a locked literal requirement', async () => {
