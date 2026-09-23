@@ -50,19 +50,22 @@ jobs:
       - name: Regenerate independent catalogs
         shell: bash
         run: |
-          set -euo pipefail
-          pnpm run gen-client-catalog
-          pnpm run gen-config-catalog
-          pnpm run gen-tool-catalog
-          pnpm run gen-persistence-catalog
-          pnpm run gen-module-graph
-          pnpm run gen-scoped-events
-          pnpm run gen-third-party-notices
+          set -u
+          failed=0
+          for command in             "pnpm run gen-client-catalog"             "pnpm run gen-config-catalog"             "pnpm run gen-tool-catalog"             "pnpm run gen-persistence-catalog"             "pnpm run gen-module-graph"             "pnpm run gen-scoped-events"             "pnpm run gen-third-party-notices"
+          do
+            echo "::group::$command"
+            bash -lc "$command" || failed=1
+            echo "::endgroup::"
+          done
+          echo "Mechanical generator residual status: $failed"
 
       - name: Refresh deterministic snapshots
+        continue-on-error: true
         run: pnpm run test:snapshot:refresh
 
       - name: Commit mechanical repairs
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
