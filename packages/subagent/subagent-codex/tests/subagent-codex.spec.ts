@@ -401,6 +401,8 @@ describe('task admission and package contracts', () => {
       resolve(dirname(codexPackageJson), codexManifest.bin.codex),
       '-c',
       'features.plugins=false',
+      '-c',
+      'skills.bundled.enabled=false',
       'app-server',
       '--stdio',
     ])
