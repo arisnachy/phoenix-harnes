@@ -68,6 +68,8 @@ describe('dsh-base bundle', () => {
     expect(manifest.dependencies).not.toHaveProperty('@phoenix-ai/dsh-subagent-codex')
     expect(manifest.dependencies).not.toHaveProperty('@phoenix-ai/dsh-subagent-claude-code')
     expect(manifest.dependencies).toHaveProperty('@phoenix-ai/dsh-mcp-connector-registry', 'workspace:^')
+    expect(manifest.dependencies).toHaveProperty('@phoenix-ai/dsh-session-telemetry', 'workspace:^')
+    expect(manifest.dependencies).toHaveProperty('@phoenix-ai/dsh-session-title-llm', 'workspace:^')
     expect(rows.find(row => row.id === 'agent-default-model')?.config).toEqual({
       provider: 'openrouter',
       model: 'openrouter/free',
