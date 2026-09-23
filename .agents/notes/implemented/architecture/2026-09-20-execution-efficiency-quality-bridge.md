@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-09-20-execution-efficiency-quality-bridge.zh.md)
+
 ## Problem
 
 External A/B runs exposed a shared failure mode: PHOENIX spent latency on process overhead while still allowing incomplete evidence to count as completion.

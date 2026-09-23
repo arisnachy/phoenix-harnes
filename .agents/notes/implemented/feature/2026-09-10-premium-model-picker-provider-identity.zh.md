@@ -2,6 +2,8 @@
 
 Status: implemented
 
+[English](2026-09-10-premium-model-picker-provider-identity.md) | 中文
+
 ## Problem
 
 Composer 的模型选择器直接暴露了面向适配器的目录标签，因此较长的技术名称、预览日期以及不一致的提供方大小写会以相同的视觉权重相互竞争。菜单也可能被异常长的 id 撑宽，并依赖浏览器原生 `title` 提示处理溢出。提供方只有文字标识，在多提供方的大型目录中不够易于快速扫描。
