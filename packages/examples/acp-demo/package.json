@@ -36,7 +36,6 @@
     "lib/index.js",
     "lib/invariant.js",
     "lib/bin.js",
-    "bin/dsh-acp-demo.js",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
