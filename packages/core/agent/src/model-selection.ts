@@ -4,7 +4,7 @@
  */
 
 import type { Context } from '@phoenix-ai/cordis'
-import { CallId, ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
+import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 import type { Agent } from './runtime-types.ts'
 
 /** Complete provider, model, and optional reasoning effort selected for one live Agent. */
@@ -38,15 +38,6 @@ export interface ModelSelectionHandoff {
 /** Re-resolve the execution handoff from the model currently selected for this step. */
 type ModelSelectionHandoffResolver = (selection: ModelSelection | undefined) => ModelSelectionHandoff | undefined
 
-
-const JEV_MODEL_ROUTE_TOOL = 'mcp__jev__jev_route_model'
-const JEV_FAILURE_THRESHOLD = 3
-const JEV_CIRCUIT_OPEN_MS = 5 * 60_000
-const JEV_MAX_TASK_CHARS = 4_000
-const JEV_MAX_CANDIDATES = 10
-// Automatic routing must stay cheap even though explicit Jev review tools may
-// legitimately need the full remote-tool timeout.
-const JEV_ROUTE_BUDGET_MS = 3_000
 
 /** Premium Codex tiers that should spend one step planning before Luna executes. */
 const CODEX_PLANNER_MODEL = /^gpt-(\d+(?:\.\d+)?)-(?:sol|astra|terra)(?:$|-)/i
@@ -86,50 +77,6 @@ function lunaWorkerFor(model: string): string | undefined {
   const plannerGeneration = codexPlannerGeneration(model)
   if (plannerGeneration !== undefined) return `gpt-${plannerGeneration}-luna`
   return codexLunaGeneration(model) === undefined ? undefined : model
-}
-
-function isJevAvailabilityFailure(error: unknown): boolean {
-  const message = String(error).toLowerCase()
-  return /(?:\b(?:401|402|403|429)\b|api\s*key|auth(?:entication|orization)?|credit|quota|rate[-\s]?limit|insufficient|payment)/i.test(message)
-}
-
-interface SameFamilyModelInfo {
-  readonly provider: string
-  readonly id: string
-  readonly name: string
-  readonly description?: string
-}
-
-interface SameFamilyCatalog {
-  listModels(provider: string): Promise<readonly SameFamilyModelInfo[]>
-}
-
-interface InternalRoutingTool {
-  execute(args: unknown, exec: {
-    readonly callId: ReturnType<typeof CallId>
-    readonly rootCallId: ReturnType<typeof CallId>
-    readonly name: string
-    readonly arguments: unknown
-    readonly agent: Agent
-    readonly signal: AbortSignal
-    deferContext(context: never): void
-    concludeTurn(): void
-  }): Promise<unknown>
-}
-
-interface InternalToolRegistry {
-  get(name: string, scope?: Agent): InternalRoutingTool | undefined
-}
-
-interface JevRoutePayload {
-  readonly agent: Agent
-  readonly turn: number
-  readonly step: number
-  readonly signal: AbortSignal
-}
-
-function service<T>(ctx: Context, name: string): T | undefined {
-  return (ctx.get as unknown as (key: string) => T | undefined)(name)
 }
 
 function selectedCandidateId(value: unknown, allowed: ReadonlySet<string>): string | undefined {
@@ -312,154 +259,6 @@ export function installModelSelection(
   selection: ModelSelectionRef,
   handoff?: ModelSelectionHandoff | ModelSelectionHandoffResolver,
 ): () => void {
-  let jevFailures = 0
-  let jevCircuitOpenUntil = 0
-  let jevCallSequence = 0
-  let jevTurn = -1
-  const jevRoutes = new Map<string, string>()
-
-  async function routeWithJev(
-    payload: JevRoutePayload,
-    fallback: LlmCallConfig,
-  ): Promise<LlmCallConfig> {
-    if (fallback.provider !== 'openai-codex' || payload.signal.aborted) return fallback
-    const directText = directUserTextForTurn(payload.agent, payload.turn)
-    // Social/meta turns already have a deterministic cheap route. Calling an
-    // external router here would add network latency without improving quality.
-    if (isConversationalFastPathText(directText)) return fallback
-    // Respect the user's premium planner choice. Jev participates after the
-    // plan, where it can optimize the Luna worker without turning execution
-    // back into an expensive planner loop.
-    if (payload.step === 1 && isCodexPlannerModel(fallback.model)) return fallback
-    if (Date.now() < jevCircuitOpenUntil) return fallback
-
-    const tools = service<InternalToolRegistry>(agentCtx, 'tools')
-    const routeTool = tools?.get(JEV_MODEL_ROUTE_TOOL, payload.agent)
-    // Missing/unconfigured Jev is deliberately a zero-cost no-op. Settings
-    // exposes its setup card; the task continues on PHOENIX's native route.
-    if (routeTool === undefined) return fallback
-
-    // One Jev decision per native route per turn. Reusing it across later
-    // steps keeps latency, quota use, and token overhead bounded while still
-    // allowing a second decision when Phoenix intentionally changes phase/model.
-    if (payload.turn !== jevTurn) {
-      jevTurn = payload.turn
-      jevRoutes.clear()
-    }
-    const workerGeneration = String(fallback.reasoningEffort) === 'max'
-      ? codexLunaGeneration(fallback.model)
-      : undefined
-    const cacheKey = fallback.model
-    const cached = jevRoutes.get(cacheKey)
-    if (cached !== undefined) {
-      if (cached === fallback.model) return fallback
-      if (workerGeneration !== undefined) return { ...fallback, model: cached }
-      const { reasoningEffort: _effort, ...withoutEffort } = fallback
-      return { ...withoutEffort, model: cached }
-    }
-
-    const catalog = service<SameFamilyCatalog>(agentCtx, 'llm')
-    if (catalog === undefined) return fallback
-    try {
-      const listed = await catalog.listModels(fallback.provider)
-      const candidates = new Map<string, SameFamilyModelInfo>()
-      candidates.set(fallback.model, {
-        provider: fallback.provider,
-        id: fallback.model,
-        name: fallback.model,
-        description: workerGeneration === undefined
-          ? 'Current PHOENIX route; preserves the existing routing decision.'
-          : 'Current PHOENIX Luna execution worker.',
-      })
-      for (const model of listed) {
-        // Same provider is the hard family boundary. During the execution
-        // phase Jev is additionally constrained to the matching Luna
-        // generation so it cannot spend Sol/Astra tokens after planning.
-        if (model.provider !== fallback.provider || candidates.has(model.id)) continue
-        if (workerGeneration !== undefined && codexLunaGeneration(model.id) !== workerGeneration) continue
-        candidates.set(model.id, model)
-        if (candidates.size >= JEV_MAX_CANDIDATES) break
-      }
-      // One candidate means there is no routing decision to buy from Jev.
-      if (candidates.size < 2) return fallback
-
-      const task = directUserTextForTurn(payload.agent, payload.turn).slice(0, JEV_MAX_TASK_CHARS)
-        || 'Continue the current PHOENIX task.'
-      const args = {
-        task,
-        candidates: [...candidates.values()].map(model => ({
-          id: model.id,
-          description: model.description ?? model.name,
-        })),
-        priorities: workerGeneration === undefined
-          ? ['quality', 'latency', 'cost', 'tool_use']
-          : ['latency', 'cost', 'quality', 'tool_use'],
-        constraints: [
-          'Select only a candidate supplied by PHOENIX.',
-          'Stay inside the openai-codex provider family.',
-          ...(workerGeneration === undefined
-            ? ['Prefer the current route unless another candidate materially improves the task trade-off.']
-            : [
-                `Execution phase: stay on Luna generation ${workerGeneration}; do not select Sol/Astra/Terra.`,
-                'Prefer the fastest worker that preserves output quality for the concrete execution step.',
-              ]),
-        ],
-      }
-      const callId = CallId(`phoenix-jev-model-route-${payload.turn}-${payload.step}-${jevCallSequence++}`)
-      const routeController = new AbortController()
-      const abortRoute = (): void => { routeController.abort() }
-      payload.signal.addEventListener('abort', abortRoute, { once: true })
-      const routeTimer = setTimeout(() => { routeController.abort() }, JEV_ROUTE_BUDGET_MS)
-      routeTimer.unref?.()
-      let raw: unknown
-      try {
-        raw = await routeTool.execute(args, {
-          callId,
-          rootCallId: callId,
-          name: JEV_MODEL_ROUTE_TOOL,
-          arguments: args,
-          agent: payload.agent,
-          signal: routeController.signal,
-          deferContext() {},
-          concludeTurn() {},
-        })
-      } finally {
-        clearTimeout(routeTimer)
-        payload.signal.removeEventListener('abort', abortRoute)
-      }
-      const chosen = jevSelectedModelId(raw, [...candidates.keys()])
-      if (chosen === undefined) throw new Error('Jev returned no valid same-family model id')
-      jevFailures = 0
-      jevRoutes.set(cacheKey, chosen)
-      if (chosen === fallback.model) return fallback
-      if (workerGeneration !== undefined) {
-        // Luna workers in this phase intentionally run at the selected Max
-        // effort even when Jev picks another same-generation Luna variant.
-        return { ...fallback, model: chosen }
-      }
-      // Outside the worker phase, reasoning effort is model-specific. Let a
-      // Jev-selected model use its own safe default instead of forwarding an
-      // unsupported effort.
-      const { reasoningEffort: _effort, ...withoutEffort } = fallback
-      return { ...withoutEffort, model: chosen }
-    } catch (error: unknown) {
-      if (isJevAvailabilityFailure(error)) {
-        // Missing credits, auth, or rate limit: do not burn two more attempts.
-        // Open the circuit immediately and continue on Phoenix's native route.
-        jevCircuitOpenUntil = Date.now() + JEV_CIRCUIT_OPEN_MS
-        jevFailures = 0
-      } else {
-        jevFailures += 1
-        if (jevFailures >= JEV_FAILURE_THRESHOLD) {
-          jevCircuitOpenUntil = Date.now() + JEV_CIRCUIT_OPEN_MS
-          jevFailures = 0
-        }
-      }
-      agentCtx.logger.warn(`Jev model routing degraded; keeping PHOENIX native route: ${String(error)}`)
-      return fallback
-    }
-  }
-
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
@@ -508,7 +307,7 @@ export function installModelSelection(
           ? {}
           : { reasoningEffort: routed.reasoningEffort },
       }
-      return routeWithJev(_payload, nativeRoute)
+      return nativeRoute
     },
   )
   return () => {
