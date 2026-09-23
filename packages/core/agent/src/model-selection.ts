@@ -5,7 +5,6 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
-import type { Agent } from './runtime-types.ts'
 
 /** Complete provider, model, and optional reasoning effort selected for one live Agent. */
 export interface ModelSelection {
