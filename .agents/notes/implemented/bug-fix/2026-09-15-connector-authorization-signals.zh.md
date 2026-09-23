@@ -29,3 +29,9 @@ MCP 客户端中的 `httpStatus` 先读取数字型 `status`，再回退到数�
 `packages/mcp/mcp-client/tests/apply.spec.ts` 覆盖 SDK 形式的拒绝（`code: 401`）应为 `auth-required`，以及非数字网络码应为 `connection-failed`，并与既有 `status: 401` 用例并列；该文件以 24 个测试通过。
 
 `packages/llm/llm-pi-ai/tests/login.spec.ts` 新增授权用例与 api-key 用例，断言检查遥测，并包含存储任何凭据之前的空回答。由于该包依赖树中的 `typebox` 与 `zod-to-json-schema` 副本不完整，pi-ai 包测试无法在撰写环境中执行；这些用例是针对先前实现会失败而编写的。
+
+## 考虑过的替代方案
+
+- **把每个 transport failure 都视为 authorization failure** — 拒绝，因为 `ECONNREFUSED` 等网络错误必须与 HTTP 401/403 保持可区分。
+- **只根据已配置的授权方法推断 provider 已连接，而不检查已存凭据** — 拒绝，因为存在授权 flow 并不能证明用户已经完成认证。
+- **在 authorization telemetry 中暴露 credential material** — 拒绝，因为 connected-state telemetry 只需要 provider identity 与 credential kind，不需要 secret 本身。
