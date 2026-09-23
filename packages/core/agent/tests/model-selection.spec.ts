@@ -43,6 +43,9 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('¿estás usando Jev?')).toBe(true)
     expect(isConversationalFastPathText('gracias')).toBe(true)
     expect(isConversationalFastPathText('eso parece un pollo pavo bien feo jajja')).toBe(true)
+    expect(isConversationalFastPathText('a mi super')).toBe(true)
+    expect(isConversationalFastPathText('yo estoy súper')).toBe(true)
+    expect(isConversationalFastPathText('me siento genial')).toBe(true)
     for (const continuation of [
       'dale',
       'sí',
