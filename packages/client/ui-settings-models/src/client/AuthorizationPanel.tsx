@@ -309,6 +309,11 @@ function catalogDefinitionForText(value: string): ConnectorDefinition | undefine
   })
 }
 
+function isRetiredJevSearchText(value: string): boolean {
+  const needle = normalize(value)
+  return needle === 'jev' || needle === 'jev-ai' || needle === 'jev ai' || needle === 'jevai'
+}
+
 function isRetiredJevCandidate(candidate: McpRegistryCandidateView): boolean {
   const name = normalize(candidate.name)
   const title = normalize(candidate.title)
@@ -667,7 +672,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     // Jev is a pinned Phoenix integration with its own credential flow.
     // Never send Jev through the generic Official MCP Registry installer:
     // that path performs an unnecessary second registry lookup and can time out.
-    if (mcpRegistry === undefined || search.length < 2 || catalogMatch?.id === 'jev') {
+    if (mcpRegistry === undefined || search.length < 2 || isRetiredJevSearchText(search) || catalogMatch?.id === 'jev') {
       setRegistrySnapshot(undefined)
       setRegistryFailure(false)
       setRegistryBusy(false)
