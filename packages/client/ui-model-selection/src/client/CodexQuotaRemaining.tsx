@@ -56,6 +56,8 @@ export type CodexQuotaRemainingProps = {
 
 const QUOTA_REFRESH_MS = 60_000
 const QUOTA_STARTUP_RETRY_MS = 2_000
+const QUOTA_STORAGE_KEY = 'phoenix.codex-quota.v1'
+const LOADING_WINDOW_LABELS = ['5h', '7d'] as const
 
 function isOpenAI(value: string | undefined): boolean {
   if (value === undefined) return false
@@ -72,6 +74,30 @@ function isValidRateLimit(value: RateLimitWindow | undefined): value is RateLimi
     && Number.isFinite(value.usedPercent)
     && value.usedPercent >= 0
     && value.usedPercent <= 100
+}
+
+function readPersistedQuota(): QuotaState | undefined {
+  const raw = window.localStorage.getItem(QUOTA_STORAGE_KEY)
+  if (raw === null) return undefined
+  const parsed = JSON.parse(raw) as QuotaState
+  const primaryLimit = isValidRateLimit(parsed.primaryLimit) ? parsed.primaryLimit : undefined
+  const secondaryLimit = isValidRateLimit(parsed.secondaryLimit) ? parsed.secondaryLimit : undefined
+  if (primaryLimit === undefined && secondaryLimit === undefined) {
+    window.localStorage.removeItem(QUOTA_STORAGE_KEY)
+    return undefined
+  }
+  return {
+    ...primaryLimit === undefined ? {} : { primaryLimit },
+    ...secondaryLimit === undefined ? {} : { secondaryLimit },
+  }
+}
+
+function persistQuota(quota: QuotaState): void {
+  window.localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(quota))
+}
+
+function clearPersistedQuota(): void {
+  window.localStorage.removeItem(QUOTA_STORAGE_KEY)
 }
 
 function remaining(limit: RateLimitWindow): number {
@@ -104,7 +130,9 @@ function windowLabel(limit: RateLimitWindow, fallback: string): string {
 /**
  * Show native Codex account quota whenever the current session has a visible
  * sidebar and the authorization catalog provides OpenAI/Codex telemetry.
- * Missing telemetry reserves no sidebar space and never invents limits.
+ * The last valid quota survives page/host restarts while fresh native telemetry
+ * warms, and a known account keeps explicit 5h/7d loading seats without
+ * inventing percentages or reset times.
  * @param props - session identity/sidebar state plus account/model-directory faces.
  * @returns the compact quota chip or null.
  */
@@ -112,9 +140,11 @@ export function CodexQuotaRemaining({
   wide, authorization, quotaCacheKey,
 }: CodexQuotaRemainingProps) {
   const cacheKey = quotaCacheKey ?? authorization
-  const [quota, setQuota] = useState<QuotaState | undefined>(() => quotaCache.get(cacheKey))
+  const [quota, setQuota] = useState<QuotaState | undefined>(
+    () => quotaCache.get(cacheKey) ?? readPersistedQuota(),
+  )
   const [accountPresent, setAccountPresent] = useState<boolean | undefined>(
-    () => quotaCache.has(cacheKey) ? true : undefined,
+    () => quota === undefined ? undefined : true,
   )
   const [clockMs, setClockMs] = useState(() => Date.now())
   const authorizationRef = useRef(authorization)
@@ -142,7 +172,13 @@ export function CodexQuotaRemaining({
         }
         const accountEntries = (response.result.value.entries as AuthorizationEntry[])
           .filter(isOpenAIAccount)
-        setAccountPresent(accountEntries.length > 0)
+        const hasAccount = accountEntries.length > 0
+        setAccountPresent(hasAccount)
+        if (!hasAccount) {
+          quotaCache.delete(cacheKey)
+          clearPersistedQuota()
+          setQuota(undefined)
+        }
         const telemetry = accountEntries
           .map(entry => entry.telemetry)
           .find((candidate): candidate is AccountTelemetry => candidate !== undefined
@@ -160,6 +196,7 @@ export function CodexQuotaRemaining({
         const available = Object.keys(nextQuota).length !== 0
         if (available) {
           quotaCache.set(cacheKey, nextQuota)
+          persistQuota(nextQuota)
           setQuota(nextQuota)
         }
         schedule(available ? QUOTA_REFRESH_MS : QUOTA_STARTUP_RETRY_MS)
@@ -178,11 +215,11 @@ export function CodexQuotaRemaining({
   }, [cacheKey])
 
   useEffect(() => {
-    if (!wide || quota === undefined) return
+    if (quota === undefined) return
     setClockMs(Date.now())
     const timer = window.setInterval(() => { setClockMs(Date.now()) }, 1_000)
     return () => { window.clearInterval(timer) }
-  }, [quota, wide])
+  }, [quota])
 
   if (quota === undefined) {
     // A known Codex account whose native telemetry is still warming (for
@@ -197,10 +234,13 @@ export function CodexQuotaRemaining({
           aria-label="OpenAI Codex usage limits loading"
           data-codex-quota-loading="true"
         >
-          <span className={css.railWindow}>
-            <span className={css.railLabel}>Codex</span>
-            <strong className={css.railValue}>…</strong>
-          </span>
+          {LOADING_WINDOW_LABELS.map(label => (
+            <span className={css.railWindow} key={label} aria-label={`Codex ${label} usage loading`}>
+              <span className={css.railLabel}>{label}</span>
+              <strong className={css.railValue}>…</strong>
+              <span className={css.railReset}>↻ …</span>
+            </span>
+          ))}
         </span>
       )
     }
@@ -211,12 +251,21 @@ export function CodexQuotaRemaining({
         aria-label="OpenAI Codex usage limits loading"
         data-codex-quota-loading="true"
       >
-        <span className={css.window}>
-          <span className={css.copy}>
-            <span className={css.label}>Codex</span>
-            <span className={css.reset}>…</span>
+        {LOADING_WINDOW_LABELS.map((label, index) => (
+          <span
+            className={`${css.window} ${index === 0 ? css.primary : css.secondary}`}
+            key={label}
+            aria-label={`Codex ${label} usage loading`}
+          >
+            <span className={css.meter} aria-hidden="true">
+              <strong className={css.value}>…</strong>
+            </span>
+            <span className={css.copy}>
+              <span className={css.label}>{label}</span>
+              <span className={css.reset}>↻ …</span>
+            </span>
           </span>
-        </span>
+        ))}
       </span>
     )
   }
@@ -255,11 +304,12 @@ export function CodexQuotaRemaining({
           <span
             className={css.railWindow}
             key={window.key}
-            title={`OpenAI Codex · ${window.label} · ${window.value}% remaining`}
-            aria-label={`Codex ${window.label} · ${window.value}% remaining`}
+            title={`OpenAI Codex · ${window.label} · ${window.value}% remaining${window.resetText === undefined ? '' : ` · resets in ${window.resetText}`}`}
+            aria-label={`Codex ${window.label} · ${window.value}% remaining${window.resetText === undefined ? '' : ` · resets in ${window.resetText}`}`}
           >
             <span className={css.railLabel}>{window.label}</span>
             <strong className={css.railValue}>{window.value}%</strong>
+            {window.resetText === undefined ? null : <span className={css.railReset}>↻ {window.resetText}</span>}
           </span>
         ))}
       </span>

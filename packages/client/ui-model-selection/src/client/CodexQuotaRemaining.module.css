@@ -136,6 +136,19 @@
   white-space: nowrap;
 }
 
+.railReset {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 7px;
+  line-height: 9px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
 @media (max-width: 760px) {
   .root {
     gap: 6px;

@@ -9,6 +9,7 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   cleanup()
+  window.localStorage.clear()
 })
 
 const sid = 's1' as SessionId
@@ -135,8 +136,10 @@ describe('CodexQuotaRemaining', () => {
     expect(group.querySelectorAll('[data-quota-meter]')).toHaveLength(2)
   })
 
-  it('keeps a quiet text-only 5h/7d readout in the collapsed sidebar rail', async () => {
+  it('keeps 5h/7d percentages and reset countdowns visible in the collapsed sidebar rail', async () => {
     const d = directory('openai-codex')
+    const nowMs = Date.parse('2026-08-27T12:00:00.000Z')
+    vi.spyOn(Date, 'now').mockReturnValue(nowMs)
     const auth = {
       list: vi.fn(() => Promise.resolve({
         rpcId: 'authorization-list-collapsed-two-windows' as never,
@@ -149,8 +152,8 @@ describe('CodexQuotaRemaining', () => {
               telemetry: {
                 kind: 'account' as const,
                 provider: 'Codex',
-                primaryLimit: { usedPercent: 14, windowDurationMins: 300 },
-                secondaryLimit: { usedPercent: 9, windowDurationMins: 10080 },
+                primaryLimit: { usedPercent: 14, windowDurationMins: 300, resetsAt: nowMs / 1000 + 2 * 60 * 60 + 18 * 60 },
+                secondaryLimit: { usedPercent: 9, windowDurationMins: 10080, resetsAt: nowMs / 1000 + 4 * 86400 + 6 * 60 * 60 },
               },
             }],
           },
@@ -166,10 +169,13 @@ describe('CodexQuotaRemaining', () => {
     const rail = view.container.querySelector('[data-codex-quota-rail="true"]')
     expect(rail).not.toBeNull()
     expect(rail?.getAttribute('aria-label')).toBe('OpenAI Codex usage limits')
-    // Two window wrappers + two labels: no decorative progress-track/fill spans.
-    expect(rail?.querySelectorAll('span')).toHaveLength(4)
+    expect(screen.getByText('↻ 2h 18m')).toBeTruthy()
+    expect(screen.getByText('↻ 4d 6h')).toBeTruthy()
+    expect(screen.getByLabelText(/5h.*86%.*2h 18m/)).toBeTruthy()
+    expect(screen.getByLabelText(/7d.*91%.*4d 6h/)).toBeTruthy()
+    // Two window wrappers + labels + reset countdowns: still no decorative progress bars.
+    expect(rail?.querySelectorAll('span')).toHaveLength(6)
     expect(rail?.querySelector('[style]')).toBeNull()
-    expect(screen.queryByText(/↻/)).toBeNull()
   })
 
   it('keeps a window visible without inventing a countdown when reset time is absent', async () => {
@@ -217,7 +223,9 @@ describe('CodexQuotaRemaining', () => {
     await act(async () => { await Promise.resolve() })
     expect(screen.queryByText('86%')).toBeNull()
     expect(view.container.querySelector('[data-codex-quota-loading="true"]')).not.toBeNull()
-    expect(screen.getByText('Codex')).toBeTruthy()
+    expect(screen.getByText('5h')).toBeTruthy()
+    expect(screen.getByText('7d')).toBeTruthy()
+    expect(screen.getAllByText('↻ …')).toHaveLength(2)
 
     await act(async () => {
       vi.advanceTimersByTime(2_000)
@@ -292,6 +300,45 @@ describe('CodexQuotaRemaining', () => {
     render(<CodexQuotaRemaining {...propsFor(d.fake, pendingAuthorization, cacheKey)} />)
 
     expect(screen.getByText('74%')).toBeTruthy()
+  })
+
+  it('restores persisted 5h/7d quota and reset countdowns while native telemetry warms after reload', async () => {
+    const d = directory('openai-codex')
+    const nowMs = Date.parse('2026-08-27T12:00:00.000Z')
+    vi.spyOn(Date, 'now').mockReturnValue(nowMs)
+    const auth = {
+      list: vi.fn(() => Promise.resolve({
+        rpcId: 'authorization-list-persisted-two-windows' as never,
+        result: {
+          ok: true as const,
+          value: {
+            entries: [{
+              key: 'subagent-codex/account',
+              label: 'ChatGPT / Codex',
+              telemetry: {
+                kind: 'account' as const,
+                provider: 'Codex',
+                primaryLimit: { usedPercent: 14, windowDurationMins: 300, resetsAt: nowMs / 1000 + 2 * 60 * 60 + 18 * 60 },
+                secondaryLimit: { usedPercent: 9, windowDurationMins: 10080, resetsAt: nowMs / 1000 + 4 * 86400 + 6 * 60 * 60 },
+              },
+            }],
+          },
+        },
+      })),
+    }
+    const first = render(<CodexQuotaRemaining {...propsFor(d.fake, auth, {})} />)
+
+    expect(await screen.findByText('86%')).toBeTruthy()
+    expect(screen.getByText('↻ 2h 18m')).toBeTruthy()
+    first.unmount()
+
+    const pendingAuthorization = { list: vi.fn(() => new Promise<never>(() => {})) }
+    render(<CodexQuotaRemaining {...propsFor(d.fake, pendingAuthorization, {})} />)
+
+    expect(screen.getByText('86%')).toBeTruthy()
+    expect(screen.getByText('91%')).toBeTruthy()
+    expect(screen.getByText('↻ 2h 18m')).toBeTruthy()
+    expect(screen.getByText('↻ 4d 6h')).toBeTruthy()
   })
 
   it('hides unknown telemetry instead of inventing a context percentage', async () => {
