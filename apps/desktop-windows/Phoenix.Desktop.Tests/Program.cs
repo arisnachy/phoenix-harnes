@@ -274,6 +274,20 @@ try
     Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", null);
     False(DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible: false), "normal installed desktop does not auto-boot a discovered source checkout", failures);
     False(DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible: true), "developer console does not switch the installed EXE into source mode", failures);
+    var startupContract = typeof(DesktopSourceCheckout).Assembly.GetType("Phoenix.Desktop.DesktopStartupContract");
+    var resolver = startupContract?.GetMethod(
+        "ResolveSourceRoot",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    True(resolver is not null, "source root resolver exists", failures);
+    if (resolver is not null)
+    {
+        Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", null);
+        Equal(null, resolver.Invoke(null, new object?[] { sourceInstallRoot, false }) as string,
+            "installed launch ignores a conventional source checkout", failures);
+        Environment.SetEnvironmentVariable("PHOENIX_SOURCE_ROOT", sourceTestRoot);
+        Equal(Path.GetFullPath(sourceTestRoot), resolver.Invoke(null, new object?[] { sourceInstallRoot, true }) as string,
+            "source mode resolves the explicit checkout", failures);
+    }
 
     // Explicit/configured source roots are candidates, but discovery alone must not persist
     // them as the trusted backend until the runtime stability handshake succeeds.

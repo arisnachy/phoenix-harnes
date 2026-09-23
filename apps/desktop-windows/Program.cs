@@ -461,14 +461,11 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 return;
             }
 
-            // Phoenix.exe is the desktop supervisor. If the user has a real Phoenix source
-            // checkout, prefer it automatically so double-clicking the EXE performs the same startup
-            // they currently have to do by hand in PowerShell. Verified/configured roots win first;
-            // conventional ChatGPT/Phoenix locations are then probed. If no checkout is runnable,
-            // fall back to the bundled managed runtime.
-            var sourceRoot = DesktopSourceCheckout.Resolve(
-                Program.InstallRoot,
-                includeConventional: true);
+            // Phoenix.exe is the desktop supervisor. A source checkout is selected only when the
+            // caller explicitly requests source mode through the configured environment variable;
+            // installed launches always continue with the bundled managed runtime.
+            var sourceModeRequested = DesktopSourceCheckout.ShouldUseSourceCheckout(developerConsoleVisible);
+            var sourceRoot = DesktopStartupContract.ResolveSourceRoot(Program.InstallRoot, sourceModeRequested);
 
             if (sourceRoot is not null)
             {

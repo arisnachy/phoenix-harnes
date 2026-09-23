@@ -11,6 +11,9 @@ internal static class DesktopStartupContract
     internal const bool EmbeddedBrowserStartsLazy = true;
     internal const bool UserCloseHidesToTray = true;
     internal const string InitialStatus = "Iniciando Phoenix…";
+
+    internal static string? ResolveSourceRoot(string stateRoot, bool sourceModeRequested) =>
+        sourceModeRequested ? DesktopSourceCheckout.Resolve(stateRoot, includeConventional: false) : null;
 }
 
 internal static class DesktopRuntimeLaunchContract
