@@ -349,7 +349,8 @@ describe('connectors settings section', () => {
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'jev' } })
 
-    await waitFor(() => { expect(mcpRegistry.search).toHaveBeenCalled() })
+    await act(async () => { await Promise.resolve() })
+    expect(mcpRegistry.search).not.toHaveBeenCalled()
     expect(screen.queryByText('Jev')).toBeNull()
     expect(install).not.toHaveBeenCalled()
   })
