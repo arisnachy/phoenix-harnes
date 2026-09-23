@@ -1,0 +1,132 @@
+name: PHOENIX premium repair mechanical sync
+
+on:
+  push:
+    branches:
+      - 'repair/premium-green-main-20260923'
+    paths-ignore:
+      - 'artifacts/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phoenix-premium-repair-main
+  cancel-in-progress: true
+
+env:
+  CI: '1'
+  DSH_TELEMETRY_DISABLED: '1'
+  OPENAI_API_KEY: ''
+  ANTHROPIC_API_KEY: ''
+  DEEPSEEK_API_KEY: ''
+  GOOGLE_API_KEY: ''
+  GEMINI_API_KEY: ''
+  GROQ_API_KEY: ''
+  OPENROUTER_API_KEY: ''
+  XAI_API_KEY: ''
+
+jobs:
+  mechanical-sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair/premium-green-main-20260923
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Reconcile lockfile
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Rescope vendor metadata
+        run: pnpm run rescope-vendor
+
+      - name: Regenerate independent catalogs
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm run gen-client-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-tool-catalog
+          pnpm run gen-persistence-catalog
+          pnpm run gen-module-graph
+          pnpm run gen-scoped-events
+          pnpm run gen-third-party-notices
+
+      - name: Refresh deterministic snapshots
+        run: pnpm run test:snapshot:refresh
+
+      - name: Commit mechanical repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No mechanical changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(repair): sync generated contracts and snapshots"
+          git push origin HEAD:repair/premium-green-main-20260923
+
+  focused-validation:
+    if: github.actor == 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair/premium-green-main-20260923
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Judge regression
+        run: pnpm exec vitest run packages/goal/tool-goal/tests/adversarial-completion-gate.spec.ts --maxWorkers=1
+
+      - name: Runtime closure
+        run: pnpm run verify-runtime-closure
+
+      - name: Workspace constraints
+        run: pnpm run constraints
+
+      - name: Cordis loader config
+        run: pnpm run verify-cordis-config
+
+      - name: Client package relationships
+        run: pnpm run verify-client-packages
+
+      - name: Type equivalence
+        run: pnpm run verify-type-equiv
+
+      - name: Generated catalogs
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm run verify-client-catalog
+          pnpm run verify-config-catalog
+          pnpm run verify-tool-catalog
+          pnpm run verify-persistence-catalog
+          pnpm run verify-module-graph
+          pnpm run verify-scoped-events
+
+      - name: Snapshot replay
+        run: pnpm run test:snapshot
