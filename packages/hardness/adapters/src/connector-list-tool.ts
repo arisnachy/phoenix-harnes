@@ -174,7 +174,7 @@ export function createConnectorListTool(
 ): ToolDefinition {
   return defineTool({
     name: 'connector_list',
-    description: 'List installed/authorized connectors and callable services without changing access. When the user names a service or capability, pass that concise name in target so PHOENIX can mark only task-relevant connectors. Call this only when the needed connector is not already directly available, selection is ambiguous, or a connector just failed. Follow recommended_action: use, connect-or-reconnect, wait, repair, or inspect. Never surface an unrelated connector merely because it needs authorization. If target has no relevant match, call connector_discover for that target.',
+    description: 'List installed/authorized connectors and callable services without changing access. When the user names a service or capability, pass that concise name in target so PHOENIX can mark only task-relevant connectors. Results returned without target are inventory-only and must never trigger a user-facing Connect/Reconnect action; re-call with target first. Call this only when the needed connector is not already directly available, selection is ambiguous, or a connector just failed. Follow recommended_action: use, connect-or-reconnect, wait, repair, or inspect. Never surface an unrelated connector merely because it needs authorization. If target has no relevant match, call connector_discover for that target.',
     parameters: {
       target: { type: 'string' },
     },
