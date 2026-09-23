@@ -12,6 +12,7 @@ import { JsonBlock, MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { MarkdownFileMentions } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts'
 import css from './AssistantMarkdown.module.css'
+import { GenerativeUi, splitGenerativeUiText } from './GenerativeUi.tsx'
 
 export interface AssistantMarkdownProps {
   blocks: readonly AssistantBlock[]
@@ -44,17 +45,27 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
     const block = blocks[i]
     if (block === undefined) continue
     switch (block.kind) {
-      case 'text':
-        rendered.push(
-          <MarkdownText
-            key={i}
-            text={block.text}
-            streaming={streaming}
-            codeLabels={codeLabels}
-            fileMentions={mentions}
-          />,
-        )
+      case 'text': {
+        const segments = splitGenerativeUiText(block.text, { streaming })
+        segments.forEach((segment, segmentIndex) => {
+          if (segment.kind === 'ui') {
+            rendered.push(
+              <GenerativeUi key={`${i}:ui:${segmentIndex}`} block={segment.block} />,
+            )
+            return
+          }
+          rendered.push(
+            <MarkdownText
+              key={`${i}:markdown:${segmentIndex}`}
+              text={segment.text}
+              streaming={streaming}
+              codeLabels={codeLabels}
+              fileMentions={mentions}
+            />,
+          )
+        })
         break
+      }
       // Reasoning is represented once inside the compact Tools disclosure.
       case 'reasoning':
         break
