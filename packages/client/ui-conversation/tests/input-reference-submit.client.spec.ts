@@ -244,6 +244,7 @@ describe('submit transaction hardening', () => {
 
       settle({ kind: 'success' })
       await vi.waitFor(() => { expect(shell.snapshot.phase).toBe('plain') })
+      expect(shell.snapshot.pendingSubmit).toBeUndefined()
       expect(shell.snapshot.draft).toBe('')
     } finally {
       vi.useRealTimers()

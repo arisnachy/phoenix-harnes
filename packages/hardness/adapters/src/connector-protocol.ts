@@ -19,8 +19,8 @@ Use a foreground connector budget of at most two connect/repair attempts or abou
 
 2. Select the fastest healthy path.
 - If the matching connector tool is already available and healthy, call it directly. Do not call connector_list first just to confirm what the tool registry already proves.
-- Call connector_list once when the needed app capability is not directly available, when several connectors could satisfy the request, or after an authorization/connection failure.
-- Read connector status, advertised services, callable flags, and MCP tool names. Prefer an already connected/ready connector that actually exposes the required capability. Do not install a duplicate connector.
+- Call connector_list once when the needed app capability is not directly available, when several connectors could satisfy the request, or after an authorization/connection failure. When the user named a service/provider, pass that concise name in connector_list.target (for example "Hostinger" or "Google Workspace") so only connectors relevant to this task can become actionable.
+- Read connector status, advertised services, callable flags, MCP tool names, and relevance. A connector that is auth-required but not relevant to connector_list.target is background inventory, not a user action. An untargeted connector_list result is inventory-only: before showing Connect/Reconnect, re-run connector_list with the specific service/capability target and require relevant=true. Prefer an already connected/ready connector that actually exposes the required capability. Do not install a duplicate connector.
 - connected/ready plus a callable matching capability -> use it.
 - not-connected/auth-required -> user action is connect-or-reconnect; do not keep retrying the protected action.
 - starting -> wait only briefly and re-check once.
@@ -37,7 +37,7 @@ Use a foreground connector budget of at most two connect/repair attempts or abou
 - A later successful authorization clears that task-local avoidance: refresh connector state once and resume the blocked step.
 
 4. Discover missing capabilities safely.
-- Only after connector_list confirms the needed capability is absent, use connector_discover against the Official MCP Registry.
+- Only after connector_list confirms the needed capability is absent — or returns has_relevant_match=false for the named target — use connector_discover against the Official MCP Registry. Never substitute a different disconnected connector for the requested one.
 - Registry metadata is discovery provenance, not proof that a product vendor authored a server.
 - Only candidates marked install-with-user-approval are eligible for connector_install.
 - connector_install must receive only the exact registry identity/version and must use PHOENIX's approval seam. Never execute an arbitrary GitHub URL, package, command, or custom scheme merely because search found it.

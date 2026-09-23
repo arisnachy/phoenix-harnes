@@ -309,6 +309,22 @@ function catalogDefinitionForText(value: string): ConnectorDefinition | undefine
   })
 }
 
+function isRetiredJevSearchText(value: string): boolean {
+  const needle = normalize(value)
+  return needle === 'jev' || needle === 'jev-ai' || needle === 'jev ai' || needle === 'jevai'
+}
+
+function isRetiredJevCandidate(candidate: McpRegistryCandidateView): boolean {
+  const name = normalize(candidate.name)
+  const title = normalize(candidate.title)
+  const endpoint = candidate.remoteUrl?.toLowerCase() ?? ''
+  return name === 'jev'
+    || name.endsWith('/jev')
+    || title === 'jev'
+    || endpoint === 'https://www.jevai.org/api/mcp'
+    || endpoint.startsWith('https://www.jevai.org/')
+}
+
 function collapsedTechnicalName(value: string): string {
   const raw = value.replace(/^MCP\s+/i, '').trim()
   const parts = raw.split('-').filter(Boolean)
@@ -656,7 +672,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     // Jev is a pinned Phoenix integration with its own credential flow.
     // Never send Jev through the generic Official MCP Registry installer:
     // that path performs an unnecessary second registry lookup and can time out.
-    if (mcpRegistry === undefined || search.length < 2 || catalogMatch?.id === 'jev') {
+    if (mcpRegistry === undefined || search.length < 2 || isRetiredJevSearchText(search) || catalogMatch?.id === 'jev') {
       setRegistrySnapshot(undefined)
       setRegistryFailure(false)
       setRegistryBusy(false)
@@ -668,7 +684,12 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       setRegistryFailure(false)
       void mcpRegistry.search({ query: search, limit: 12 }).then(
         snapshot => {
-          if (!stale) setRegistrySnapshot(snapshot)
+          if (!stale) {
+            setRegistrySnapshot({
+              ...snapshot,
+              candidates: snapshot.candidates.filter(candidate => !isRetiredJevCandidate(candidate)),
+            })
+          }
         },
         () => {
           if (!stale) {
@@ -732,7 +753,11 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     const configure = mcpRegistry?.configureJev
     if (configure === undefined || jevBusy) return
     const apiKey = jevApiKey.trim()
-    if (apiKey.length < 8) {
+    if (apiKey.length === 0 && jevState?.credentialConfigured !== true) {
+      setJevFailure(connectorT('jevApiKeyLabel'))
+      return
+    }
+    if (apiKey.length > 0 && apiKey.length < 8) {
       setJevFailure(connectorT('jevApiKeyLabel'))
       return
     }
@@ -750,7 +775,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   }
 
   const installRegistryCandidate = (candidate: McpRegistryCandidateView): void => {
-    if (mcpRegistry === undefined || installingRegistryName !== undefined) return
+    if (mcpRegistry === undefined || installingRegistryName !== undefined || isRetiredJevCandidate(candidate)) return
     const definition = catalogDefinitionForText(`${candidate.name} ${candidate.title}`)
     if (definition?.id === 'jev' && mcpRegistry.configureJev !== undefined) {
       setCatalogFailure(undefined)
@@ -989,8 +1014,19 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
               }}>
                 {t('cancel')}
               </button>
-              <button type="button" className={styles['primaryButton']} disabled={jevBusy || jevApiKey.trim().length < 8} onClick={configureJev}>
-                {jevBusy ? connectorT('installing') : connectorT('jevSave')}
+              <button
+                type="button"
+                className={styles['primaryButton']}
+                disabled={jevBusy
+                  || (jevApiKey.trim().length === 0 && jevState?.credentialConfigured !== true)
+                  || (jevApiKey.trim().length > 0 && jevApiKey.trim().length < 8)}
+                onClick={configureJev}
+              >
+                {jevBusy
+                  ? connectorT('installing')
+                  : jevApiKey.trim().length === 0 && jevState?.credentialConfigured === true
+                    ? connectorT('reconnect')
+                    : connectorT('jevSave')}
               </button>
             </div>
           </div>

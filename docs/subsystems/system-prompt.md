@@ -8,7 +8,7 @@ Source: [`packages/core/system-prompt/src/index.ts`](../../packages/core/system-
 
 ## Assembly context
 
-`AssembleContext` identifies the scope layer one assembly resolves and may carry the explicit control signal for that request. It is merge-extensible: `dsh-agent` adds the optional live `agent` field, and `assembleContextFor(agent, signal)` sets the explicit fields together. A bare assembly has neither scope nor signal.
+`AssembleContext` identifies the scope layer one assembly resolves and may carry the explicit control signal for that request. It is merge-extensible: `dsh-agent` adds the optional live `agent` field, and `assembleContextFor(agent, signal)` sets the explicit fields together. `omitTools` is an explicit optimization hint for requests already proven tool-free; it skips tool-provider evaluation while preserving the rest of prompt assembly. A bare assembly has neither scope nor signal and does not omit tools.
 
 ```ts type-equiv
 /** Merge-extensible context for one prompt assembly. */
@@ -20,6 +20,13 @@ interface AssembleContext {
   scope?: ScopeKey
   /** Explicit control signal for the turn that requested this assembly, when any. */
   signal?: AbortSignal
+  /**
+   * Skip tool-schema provider evaluation for a request that is already known
+   * to be tool-free (for example a bounded conversational fast path).
+   * Waterfall listeners still run; callers that require a hard tool-free
+   * boundary should also clear any tools a listener deliberately adds.
+   */
+  omitTools?: boolean
 }
 ```
 

@@ -41,6 +41,8 @@ type McpConnector = {
 
 type ConnectorListResult = {
   kind: 'connector_list'
+  requested_target?: string
+  has_relevant_match?: boolean
   connectors: {
     id: string
     label: string
@@ -54,6 +56,7 @@ type ConnectorListResult = {
     transport?: McpConnectorEntry['transport']
     tools?: string[]
     reason_code?: NonNullable<McpConnectorEntry['reasonCode']>
+    relevant?: boolean
   }[]
 }
 
@@ -73,6 +76,34 @@ function mcpRecommendedAction(status: McpConnectorEntry['status']): ConnectorRec
   if (status === 'auth-required') return 'connect-or-reconnect'
   if (status === 'starting') return 'wait'
   return 'repair'
+}
+
+const GENERIC_TARGET_TOKENS = new Set([
+  'connector', 'connectors', 'service', 'services', 'tool', 'tools', 'mcp',
+  'email', 'mail', 'calendar', 'file', 'files', 'storage', 'drive',
+  'hosting', 'host', 'domain', 'domains', 'design', 'code', 'repo', 'repository',
+])
+
+function targetTokens(value: string): string[] {
+  return value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter(token => token.length >= 2)
+}
+
+function relevantToTarget(
+  connector: ConnectorListResult['connectors'][number],
+  target: string,
+): boolean {
+  const requested = targetTokens(target)
+  if (requested.length === 0) return false
+  const specific = requested.filter(token => !GENERIC_TARGET_TOKENS.has(token))
+  const required = specific.length > 0 ? specific : requested
+  const searchable = targetTokens(JSON.stringify(connector))
+  const haystack = new Set(searchable)
+  return required.every(token => haystack.has(token))
 }
 
 function serviceViews(telemetry: AuthorizationTelemetry | undefined): JsonValue[] {
@@ -143,14 +174,18 @@ export function createConnectorListTool(
 ): ToolDefinition {
   return defineTool({
     name: 'connector_list',
-    description: 'List installed/authorized connectors and callable services without changing access. Call this only when the needed connector is not already directly available, selection is ambiguous, or a connector just failed. Follow recommended_action: use, connect-or-reconnect, wait, repair, or inspect. Authorization failures must surface Connect/Reconnect instead of blind retries. If the needed connector is absent, call connector_discover.',
-    parameters: {},
+    description: 'List installed/authorized connectors and callable services without changing access. When the user names a service or capability, pass that concise name in target so PHOENIX can mark only task-relevant connectors. Results returned without target are inventory-only and must never trigger a user-facing Connect/Reconnect action; re-call with target first. Call this only when the needed connector is not already directly available, selection is ambiguous, or a connector just failed. Follow recommended_action: use, connect-or-reconnect, wait, repair, or inspect. Never surface an unrelated connector merely because it needs authorization. If target has no relevant match, call connector_discover for that target.',
+    parameters: {
+      target: { type: 'string' },
+    },
     output: {
       schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
           kind: { type: 'string', const: 'connector_list', required: true },
+          requested_target: { type: 'string' },
+          has_relevant_match: { type: 'boolean' },
           connectors: {
             type: 'array',
             required: true,
@@ -192,6 +227,7 @@ export function createConnectorListTool(
                   type: 'string',
                   enum: ['connection-failed', 'connection-lost', 'authorization-required', 'retry-exhausted'],
                 },
+                relevant: { type: 'boolean' },
               },
             },
           },
@@ -199,16 +235,35 @@ export function createConnectorListTool(
       },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    async execute() {
+    async execute(args) {
       const authorizationEntries = authorization === undefined
         ? []
         : await Promise.all(authorization.list().map(entry => projectEntry(authorization, entry)))
       const mcpEntries = mcpConnectors?.list().map(projectMcpEntry) ?? []
       const entries = [...authorizationEntries, ...mcpEntries]
-      return { kind: 'connector_list', connectors: entries } satisfies ConnectorListResult
+      const target = args.target?.trim()
+      if (target === undefined || target.length === 0) {
+        return { kind: 'connector_list', connectors: entries } satisfies ConnectorListResult
+      }
+      const connectors = entries.map(connector => ({
+        ...connector,
+        relevant: relevantToTarget(connector, target),
+      }))
+      return {
+        kind: 'connector_list',
+        requested_target: target,
+        has_relevant_match: connectors.some(connector => connector.relevant),
+        connectors,
+      } satisfies ConnectorListResult
     },
-    presentCall() {
-      return { card: 'generic', title: 'Connector inventory', kind: 'execute', rawInput: 'connector_list' }
+    presentCall(args) {
+      const target = args.target?.trim()
+      return {
+        card: 'generic',
+        title: target === undefined || target.length === 0 ? 'Connector inventory' : `Connector: ${target}`,
+        kind: 'execute',
+        rawInput: target ?? 'connector_list',
+      }
     },
   })
 }

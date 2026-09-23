@@ -87,6 +87,26 @@ export interface TransportOptions {
   resolveBearerToken?: (ref: string) => Promise<string | undefined>
 }
 
+/**
+ * Normalize a user/environment Bearer value into the token bytes expected by
+ * the Authorization header. This accepts the common copy/paste forms
+ * "Bearer <token>" and one pair of wrapping quotes without ever logging the
+ * resulting secret.
+ */
+export function normalizeBearerToken(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  let token = value.trim()
+  if (/^Bearer\s+/i.test(token)) token = token.replace(/^Bearer\s+/i, '').trim()
+  if (token.length >= 2) {
+    const first = token[0]
+    const last = token[token.length - 1]
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      token = token.slice(1, -1).trim()
+    }
+  }
+  return token.length === 0 ? undefined : token
+}
+
 function credentialRequired(ref: string): Error & { status: number } {
   return Object.assign(
     new Error(`mcp-client: credential reference "${ref}" is not configured`),
@@ -114,8 +134,8 @@ export function createTransport(config: Config, options: TransportOptions = {}):
     case 'streamable-http': {
       const headers = { ...config.headers }
       if (config.bearerTokenRef !== undefined) {
-        const token = options.bearerToken
-        if (token === undefined || token.length === 0) throw credentialRequired(config.bearerTokenRef)
+        const token = normalizeBearerToken(options.bearerToken)
+        if (token === undefined) throw credentialRequired(config.bearerTokenRef)
         headers.Authorization = `Bearer ${token}`
       }
       // The MCP SDK's StreamableHTTPClientTransport has optional callback

@@ -47,6 +47,13 @@ export interface AssembleContext {
   scope?: ScopeKey
   /** Explicit control signal for the turn that requested this assembly, when any. */
   signal?: AbortSignal
+  /**
+   * Skip tool-schema provider evaluation for a request that is already known
+   * to be tool-free (for example a bounded conversational fast path).
+   * Waterfall listeners still run; callers that require a hard tool-free
+   * boundary should also clear any tools a listener deliberately adds.
+   */
+  omitTools?: boolean
 }
 
 /** One contributed section of the system prompt (registry input). */
@@ -493,10 +500,14 @@ export class SystemPrompt extends Service {
     const sectionByName = this.layers.merge(scope, layer => layer.sections)
     const contextByName = this.layers.merge(scope, layer => layer.contexts)
     // Validate order against pre-restriction names while collecting visible schemas.
-    const providers = [
-      ...this.layers.global.toolProviders.values(),
-      ...scopeLayers.flatMap(layer => [...layer.toolProviders.values()]),
-    ]
+    // A known tool-free request must not pay to enumerate/clone a potentially
+    // huge MCP catalog merely to discard it after assembly.
+    const providers = context.omitTools === true
+      ? []
+      : [
+          ...this.layers.global.toolProviders.values(),
+          ...scopeLayers.flatMap(layer => [...layer.toolProviders.values()]),
+        ]
     const collected: ToolSchema[] = []
     const knownNames = new Set<string>()
     for (const provider of providers) {
@@ -536,7 +547,7 @@ export class SystemPrompt extends Service {
             text: typeof entry.text === 'function' ? entry.text(context) : entry.text,
             ...entry.interpolateVariables === undefined ? {} : { interpolateVariables: entry.interpolateVariables },
           })),
-      tools: orderTools(collected, this.toolOrder, knownNames),
+      tools: context.omitTools === true ? [] : orderTools(collected, this.toolOrder, knownNames),
       variables,
     }
     const transformed = await this.ctx.waterfall(

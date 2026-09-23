@@ -433,6 +433,9 @@ describe('ChatView', () => {
 
     const optimistic = view.getByText('mensaje inmediato').closest('[data-pending-steering]')
     expect(optimistic).not.toBeNull()
+    const preparing = view.getByRole('status')
+    expect(preparing.getAttribute('data-phase')).toBe('preparing')
+    expect(preparing.getAttribute('data-activity')).toBe('preparing')
     const previousRow = view.getByText('respuesta previa').closest('[data-chat-flow-key]')
     expect(previousRow).not.toBeNull()
     expect(previousRow!.compareDocumentPosition(optimistic!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
@@ -445,6 +448,7 @@ describe('ChatView', () => {
 
     expect(view.getAllByText('mensaje inmediato')).toHaveLength(1)
     expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+    expect(view.queryByRole('status')).toBeNull()
     const durableRow = view.getByText('mensaje inmediato').closest('[data-chat-flow-key]')
     expect(durableRow).not.toBeNull()
     expect(previousRow!.compareDocumentPosition(durableRow!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
@@ -1050,7 +1054,7 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     expect(view.getByTestId('tool-seat-r1')).toBeTruthy()
     expect(h.toolOwners[0]?.block).toMatchObject({ callId: 'r1', argsRaw: '{"command":"cmd-r1"}' })
-    expect(view.getByRole('status').textContent).toBe('PHOENIX 正在准备任务…')
+    expect(view.getByRole('status').getAttribute('data-activity')).toBe('executing')
   })
 
   it('keeps the Tool renderer mounted when a running call settles into log order', () => {
@@ -1099,6 +1103,17 @@ describe('ChatView', () => {
     expect(tool.dataset.state).toBe('settled')
     expect(mounted).toHaveBeenCalledTimes(1)
     expect(unmounted).not.toHaveBeenCalled()
+  })
+
+  it('hides stale turn activity once visible assistant output owns the tail', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'hola'), assistant(2, '¡Hola! ¿Qué tal?')],
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getByText('¡Hola! ¿Qué tal?')).toBeTruthy()
+    expect(view.queryByRole('status')).toBeNull()
   })
 
   it('the running clock uses turn/start, ignores steering, and stays out of the live region', () => {

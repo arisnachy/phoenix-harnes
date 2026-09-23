@@ -121,6 +121,8 @@ export class ReactLoopAgent implements Agent {
   readonly inbox: Inbox
   private phase: Phase
   private activityDone: Promise<void> = Promise.resolve()
+  /** True only while the current step is waiting on a model stream. */
+  private modelBoundaryActive = false
   /** True only while the current step is waiting on model-requested tool work. */
   private toolBoundaryActive = false
 
@@ -183,16 +185,17 @@ export class ReactLoopAgent implements Agent {
   }
 
   steer(input: UserMessage): void {
-    const shouldInterruptTool = this.phase.kind === 'running'
-      && this.toolBoundaryActive
+    const shouldInterruptActiveWork = this.phase.kind === 'running'
+      && (this.modelBoundaryActive || this.toolBoundaryActive)
       && !this.phase.abort.signal.aborted
     this.send(input, 'next-step', true)
-    if (!shouldInterruptTool || this.phase.kind !== 'running' || this.phase.abort.signal.aborted) return
+    if (!shouldInterruptActiveWork || this.phase.kind !== 'running' || this.phase.abort.signal.aborted) return
 
     // "Steer" is the interactive path, distinct from Queue. A user message
-    // must not sit behind an unbounded Blender/PowerShell/browser call. Keep
-    // the steering inbox item, cooperatively abort the active tool boundary,
-    // and latch a fresh turn; the normal abort drain still owns cleanup.
+    // must not sit behind a long model TTFT/stream or an unbounded
+    // Blender/PowerShell/browser call. Keep the steering inbox item,
+    // cooperatively abort the active model/tool boundary, and latch a fresh
+    // turn; the normal abort drain still owns cleanup and replay.
     this.phase.wakeRequested = true
     this.phase.abort.abort({ kind: 'user' })
   }
@@ -297,16 +300,21 @@ export class ReactLoopAgent implements Agent {
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
     const claimed = this.inbox.claim(target, position.turn)
-    const assembled = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal))
-    signal.throwIfAborted()
     const firstTurnBoundary = target === 'next-turn' && position.step === 1
     const userSteeringBoundary = target === 'next-step'
     const fastConversation = (firstTurnBoundary || userSteeringBoundary)
       && isTextOnlyHumanBatch(claimed)
       && isConversationalFastPathText(directUserText(claimed))
-    // Hundreds of MCP schemas can dominate a trivial request before the model
-    // emits its first token. Social/meta turns cannot need tools by definition,
-    // so omit them from this one request without changing registry state.
+    // Decide the fast path before prompt assembly. Otherwise a one-word social
+    // turn still enumerates and structured-clones the complete MCP/tool catalog
+    // before throwing those schemas away.
+    const assembled = await this.loopCtx.systemPrompt.assemble({
+      ...assembleContextFor(this, signal),
+      ...fastConversation ? { omitTools: true } : {},
+    })
+    signal.throwIfAborted()
+    // A waterfall listener may deliberately add a schema even when providers
+    // were skipped. Keep the conversational boundary strictly tool-free.
     const assembly = fastConversation && assembled.tools.length > 0
       ? { ...assembled, tools: [] }
       : assembled
@@ -437,6 +445,7 @@ export class ReactLoopAgent implements Agent {
       )
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
+      this.modelBoundaryActive = true
       try {
         const stream = preparedCall?.stream(request) ?? this.loopCtx.llm.stream(request)
         signal.throwIfAborted()
@@ -463,6 +472,8 @@ export class ReactLoopAgent implements Agent {
           }
         }
         throw error
+      } finally {
+        this.modelBoundaryActive = false
       }
       const finish = assembler.finish
       if (finish.kind === 'error' || finish.kind === 'aborted') {

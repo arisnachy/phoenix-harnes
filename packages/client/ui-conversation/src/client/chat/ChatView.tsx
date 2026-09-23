@@ -243,6 +243,35 @@ export function ChatView({
       ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt }
       : undefined
   ), [pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
+  // A stale pendingSubmit must never resurrect "preparing" after the durable
+  // transcript (or steering mirror) has already taken ownership of the send.
+  // This is a defensive handoff in addition to the input facade retiring the
+  // optimistic submit when Host admission settles.
+  const visiblePendingSubmit = pendingSubmit !== undefined
+    && !pendingSubmitDurable
+    && !pendingSubmitInSteering
+    ? pendingSubmit
+    : undefined
+  // Enter is a local UX boundary: show PHOENIX as preparing in the same render
+  // as the optimistic bubble instead of waiting for Host admission/running
+  // propagation. Authoritative turn progress replaces this placeholder as soon
+  // as the session stream exposes it.
+  const visibleProgress = progress ?? (visiblePendingSubmit === undefined
+    ? null
+    : {
+        phase: 'preparing' as const,
+        activity: 'preparing' as const,
+        startedAt: visiblePendingSubmit.startedAt,
+      })
+  // Session.running can remain true while Host-side settlement, logging, or
+  // verification finishes after user-visible assistant output has arrived.
+  // Render status only for an observable activity, never from running alone.
+  const visibleTurnStatus = visibleProgress === null
+    ? undefined
+    : {
+        startTime: progress?.startedAt ?? runningTurnStart ?? visiblePendingSubmit?.startedAt ?? null,
+        progress: visibleProgress,
+      }
 
   useEffect(() => {
     const finished = previousRunning.current && !running
@@ -472,7 +501,7 @@ export function ChatView({
           <ToolActivityFlow
             nodes={chatNodes}
             optimisticSubmit={optimisticSubmit}
-            turnStatus={running ? { startTime: progress?.startedAt ?? runningTurnStart, progress } : undefined}
+            turnStatus={visibleTurnStatus}
             useSession={useSession}
             selectedCallId={selectedCallId}
             cwd={cwd}
