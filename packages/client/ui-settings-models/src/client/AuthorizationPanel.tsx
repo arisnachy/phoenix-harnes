@@ -309,6 +309,17 @@ function catalogDefinitionForText(value: string): ConnectorDefinition | undefine
   })
 }
 
+function isRetiredJevCandidate(candidate: McpRegistryCandidateView): boolean {
+  const name = normalize(candidate.name)
+  const title = normalize(candidate.title)
+  const endpoint = candidate.remoteUrl?.toLowerCase() ?? ''
+  return name === 'jev'
+    || name.endsWith('/jev')
+    || title === 'jev'
+    || endpoint === 'https://www.jevai.org/api/mcp'
+    || endpoint.startsWith('https://www.jevai.org/')
+}
+
 function collapsedTechnicalName(value: string): string {
   const raw = value.replace(/^MCP\s+/i, '').trim()
   const parts = raw.split('-').filter(Boolean)
@@ -668,7 +679,12 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       setRegistryFailure(false)
       void mcpRegistry.search({ query: search, limit: 12 }).then(
         snapshot => {
-          if (!stale) setRegistrySnapshot(snapshot)
+          if (!stale) {
+            setRegistrySnapshot({
+              ...snapshot,
+              candidates: snapshot.candidates.filter(candidate => !isRetiredJevCandidate(candidate)),
+            })
+          }
         },
         () => {
           if (!stale) {
@@ -754,7 +770,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   }
 
   const installRegistryCandidate = (candidate: McpRegistryCandidateView): void => {
-    if (mcpRegistry === undefined || installingRegistryName !== undefined) return
+    if (mcpRegistry === undefined || installingRegistryName !== undefined || isRetiredJevCandidate(candidate)) return
     const definition = catalogDefinitionForText(`${candidate.name} ${candidate.title}`)
     if (definition?.id === 'jev' && mcpRegistry.configureJev !== undefined) {
       setCatalogFailure(undefined)
