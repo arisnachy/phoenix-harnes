@@ -67,7 +67,7 @@ function isGpt6LunaModel(model: string): boolean {
   return generation !== undefined && /^6(?:\.|$)/u.test(generation)
 }
 
-/** Pin every GPT-6 Luna route to Max, regardless of the route that selected it. */
+/** Pin substantive GPT-6 Luna routes to Max; the explicit conversational fast path stays low-latency. */
 function pinGpt6LunaMax(selection: ModelSelection): ModelSelection {
   if (selection.provider !== 'openai-codex' || !isGpt6LunaModel(selection.model)) return selection
   return { ...selection, reasoningEffort: ReasoningEffortId('max') }
