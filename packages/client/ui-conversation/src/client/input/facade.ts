@@ -536,10 +536,12 @@ export class SessionInputShell implements SessionInput {
     pending.then(
       (outcome) => {
         if (this.dead(attempt)) return
-        // The optimistic submit exists only while Host admission is unresolved.
-        // Retire it on every terminal settlement, including success; otherwise a
-        // completed answer can leave the UI stuck in a fake "preparing" state.
-        if (this.pendingSubmit?.seq === attempt.seq) {
+        // Host acceptance only closes the admission transaction; the durable
+        // user row/steering mirror can arrive later on the session stream. Keep
+        // the local receipt after success so Enter never creates a blank visual
+        // gap. ChatView hands it off to the authoritative durable/steering row.
+        // A refusal must retire it immediately because the exact draft is restored.
+        if (outcome.kind !== 'success' && this.pendingSubmit?.seq === attempt.seq) {
           this.pendingSubmit = undefined
         }
         if (outcome.kind === 'success' && imageIds.length > 0) {
