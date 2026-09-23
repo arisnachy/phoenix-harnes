@@ -50,7 +50,7 @@ Depende de los límites de Computer y browser_login del [plan de Computer](2026-
 
 - [ ] **Paso 1: añadir test de resultado Computer sin objetivo completado**
 
-~~~ts
+~~~ts ignore-check
 expect(adaptiveOutcomeForToolResult('computer', false)).toEqual({ outcome: 'candidate' })
 expect(adaptiveOutcomeForToolResult('computer', true)).toEqual({ outcome: 'failure' })
 expect(adaptiveOutcomeForToolResult('computer', false)).not.toHaveProperty('verified', true)
@@ -96,7 +96,7 @@ Esperado: ninguna acción Computer individual aparece como éxito probado y las 
 
 - [ ] **Paso 1: probar que los argumentos sensibles no generan pasos**
 
-~~~ts
+~~~ts ignore-check
 // appendToolCall creates a real tool/call SessionEvent in the fixture session.
 const typingEvent = appendToolCall(session, 'computer', { action: 'type', text: 'private-form-value' })
 expect(projectComputerEvent(typingEvent))
@@ -153,7 +153,7 @@ Esperado: solo las proyecciones seguras sobreviven a reinicio y las tareas no ve
 
 - [ ] **Paso 1: probar salida de revisión y tombstone**
 
-~~~ts
+~~~ts ignore-check
 // executeTool is a typed test helper using ctx.tools.execute, a unique CallId, an Agent and an AbortSignal.
 const review = await executeTool(ctx, agent, 'computer_learning', { action: 'review' })
 expect(review).toContain('https://example.com')

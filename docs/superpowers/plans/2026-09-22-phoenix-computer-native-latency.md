@@ -52,7 +52,7 @@ Depende del smoke del instalador del [plan de arranque](2026-09-22-phoenix-windo
 
 - [ ] **Paso 1: añadir pruebas de nombres y redacción de medidas**
 
-~~~ts
+~~~ts ignore-check
 expect(timings.map(item => item.stage)).toEqual([
   'approval', 'driver-start', 'descriptor', 'connect', 'host-dispatch', 'webview-ready', 'action', 'capture', 'attachment',
 ])
@@ -141,7 +141,7 @@ Esperado: pasan parser, PID, correlación, serialización, desconexión, cierre 
 
 - [ ] **Paso 1: añadir pruebas de despacho y compatibilidad de modo**
 
-~~~ts
+~~~ts ignore-check
 expect(desktopComputerCommandForAction({ action: 'click', x: 12, y: 34 }, 'request-1')).toMatchObject({
   requestId: 'request-1', schema: 2, type: 'click', x: 12, y: 34,
 })
@@ -185,7 +185,7 @@ Esperado: no se mezclan respuestas paralelas, timeout produce error visible y un
 
 - [ ] **Paso 1: añadir la regresión de finalización sin delay**
 
-~~~ts
+~~~ts ignore-check
 const computerSource = await readFile(new URL('../src/computer.ts', import.meta.url), 'utf8')
 expect(computerSource).not.toContain('POST_ACTION_SETTLE_MS')
 expect(shouldCaptureAfterAction('click')).toBe(true)

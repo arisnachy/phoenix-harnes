@@ -164,11 +164,11 @@ Esperado: una semilla inválida o una extracción fallida conserva la copia admi
 - Consume: el Phoenix-Windows-Setup.exe producido por el paso Inno Setup y los argumentos -InstallerPath y -SmokeRoot del script.
 - Produce: código de salida cero solo cuando la copia instalada, los assets, shortcuts, inicio de sesión, runtime administrado y ventana cumplen el smoke.
 
-- [ ] **Paso 1: añadir el contrato del smoke instalado**
+- [x] **Paso 1: añadir el contrato del smoke instalado**
 
 Añade existsSync a los imports de Node; el test comprueba la existencia antes de leer el script y retorna si falta, de modo que RED sea una aserción y no un error de archivo ausente.
 
-~~~ts
+~~~ts ignore-check
 it('runs the Inno installer against a temporary install root and checks autostart entries', () => {
   const scriptPath = resolve(root, 'scripts/windows-installed-smoke.ps1')
   const scriptExists = existsSync(scriptPath)
@@ -181,25 +181,25 @@ it('runs the Inno installer against a temporary install root and checks autostar
 })
 ~~~
 
-- [ ] **Paso 2: verificar que la prueba detecta un smoke ausente**
+- [x] **Paso 2: verificar que la prueba detecta un smoke ausente**
 
 Ejecutar: pnpm exec vitest run scripts/windows-installer.spec.ts.
 
 Esperado: falla hasta que exista el script conectado al workflow.
 
-- [ ] **Paso 3: implementar el smoke con instalación silenciosa y lanzamiento explícito**
+- [x] **Paso 3: implementar el smoke con instalación silenciosa y lanzamiento explícito**
 
 El script ejecuta el instalador con /VERYSILENT, /SUPPRESSMSGBOXES, /NORESTART, /TASKS=desktopicon,autostart y /DIR en un directorio temporal; valida Phoenix.exe, runtime-seed.zip, Node, MinGit y WebView2Loader.dll; comprueba el acceso directo, HKCU Run y destino de instalación.
 
 La instalación silenciosa omite las entradas [Run] que tienen skipifsilent; por eso el script lanza Phoenix.exe por separado con --prepare-runtime, --prepare-webview, --enable-autostart, --smoke-webview-loopback y --smoke-window, espera cada proceso y verifica su log. No pasa varios flags a una sola instancia porque Program.MainCore termina tras el primer comando de preparación.
 
-Después, arranca Phoenix.exe sin flags, espera en el log la ventana visible y el handshake de readiness administrado, verifica identidad HTML Phoenix y termina mediante taskkill /PID /T /F usando exclusivamente el PID capturado del smoke para cerrar el árbol de procesos que inició. Luego ejecuta el desinstalador de esa copia. El runner usa su perfil efímero; un bloque finally restaura exactamente los valores previos de las claves HKCU que toca Inno, conserva cualquier acceso directo preexistente y elimina solo los accesos directos creados por esta ejecución y el directorio de instalación bajo SmokeRoot. No borra recursivamente rutas fuera de SmokeRoot.
+Después, arranca Phoenix.exe sin flags, espera en un log nuevo la ventana visible y el readiness administrado, verifica la identidad HTTP y demuestra que el listener pertenece al árbol de procesos iniciado por Phoenix. La comprobación incluye PID y tiempo de creación antes y después de la solicitud HTTP. El script detiene el árbol mediante el Process capturado y verifica que sus descendientes terminaron antes de desinstalar o eliminar el perfil aislado. El bloque finally ejecuta el desinstalador y retira solo los valores Run, accesos directos, registros y directorios creados por esta ejecución; ante una falla de propiedad o cierre, conserva la instalación y el perfil para diagnóstico.
 
-- [ ] **Paso 4: conectar el smoke después de compilar el instalador**
+- [x] **Paso 4: conectar el smoke después de compilar el instalador**
 
-El workflow usa el artefacto de ISCC.exe ya generado, invoca scripts/windows-installed-smoke.ps1 con la ruta del instalador y SmokeRoot dentro de runner.temp, y publica el log si falla; no cambia el comportamiento del instalador ni sus tareas autostart existentes.
+El workflow usa el artefacto de ISCC.exe ya generado, invoca scripts/windows-installed-smoke.ps1 con la ruta del instalador y SmokeRoot dentro de runner.temp antes de los lanzamientos sueltos que crean el perfil Phoenix. Si falla, publica los diagnósticos preservados; no cambia el comportamiento del instalador ni sus tareas autostart existentes.
 
-- [ ] **Paso 5: validar la prueba estática del instalador**
+- [x] **Paso 5: validar la prueba estática del instalador**
 
 Ejecutar: pnpm exec vitest run scripts/windows-installer.spec.ts.
 
@@ -224,11 +224,11 @@ Esperado: el runner instala y ejecuta la copia desde SmokeRoot; el log demuestra
 - Consume: el contrato de modo fuente explícito y la readiness del supervisor propio.
 - Produce: documentación actual que explica el arranque instalado, el inicio de sesión y la recuperación visible.
 
-- [ ] **Paso 1: actualizar el README de escritorio**
+- [x] **Paso 1: actualizar el README de escritorio**
 
 Documenta el modo fuente con PHOENIX_SOURCE_ROOT, el runtime empaquetado normal, el comportamiento del inicio con Windows y el diagnóstico del overlay de arranque; actualiza el texto chino y vuelve a registrar docs/phoenix-windows.i18n.yaml siguiendo docs/i18n/README.md.
 
-- [ ] **Paso 2: escribir el Agent Note como decisión implementada**
+- [x] **Paso 2: escribir el Agent Note como decisión implementada**
 
 Registra el defecto de selección de checkout, la propiedad del supervisor y el requisito de instalar el EXE Inno en CI; expresa el estado que se envía, no una lista de deseos.
 

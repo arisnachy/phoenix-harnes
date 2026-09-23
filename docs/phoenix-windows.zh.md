@@ -6,7 +6,15 @@
 
 运行仓库 README 中的 PowerShell 单行安装命令。它会在 `%LOCALAPPDATA%\Programs\PHOENIX` 下安装专用 checkout，构建 `main` 的精确 revision，并在开始菜单、Windows 启动文件夹和任务栏快捷方式存储位置创建 **PHOENIX HARDNESS** 快捷方式。如果 Windows 版本没有提供本地化的固定到任务栏操作，仍会创建可用于任务栏的快捷方式；从快捷方式上下文菜单固定一次即可。使用 `-NoStartup` 或 `-NoTaskbar` 可选择退出。受管启动会获取 `origin/main`，并且只接受干净的快进更新；本地修改会停止更新，而不会被覆盖。设置 `PHOENIX_AUTO_UPDATE=0` 可以禁用启动时检查。
 
-该引导程序可以运行，但尚未使用 Authenticode 签名。可信签名发布需要外部发布者证书，因此仍属于发布凭据 gate。
+受管 PowerShell 引导程序和 `Phoenix-Windows-Setup.exe` 均没有 Authenticode 签名。可信签名发布需要外部发布者证书，因此仍属于发布凭据 gate。
+
+## 原生桌面应用
+
+运行 `Phoenix-Windows-Setup.exe`，即可在 `%LOCALAPPDATA%\Programs\Phoenix` 下为当前用户安装桌面应用。安装程序会创建开始菜单快捷方式，并提供桌面快捷方式和 Windows 启动任务。选中启动任务后，Phoenix 会在当前用户登录 Windows 时打开。
+
+交互式安装会先准备随安装包提供的生产运行时和专用 WebView2 配置文件，再打开 Phoenix。正常安装启动会使用随包提供的运行时，不会选择常规目录中找到的 checkout。只有在明确要启动可运行的源码 checkout 时才设置 `PHOENIX_SOURCE_ROOT`；路径不可用或无效时，Phoenix 会继续使用安装包中的运行时。
+
+Phoenix 会在原生窗口中显示启动进度或恢复状态，同时检查运行时是否就绪。关闭主窗口会将 Phoenix 隐藏到通知区域；再次启动快捷方式会恢复现有窗口。
 
 ## VS Code 与 Cursor
 

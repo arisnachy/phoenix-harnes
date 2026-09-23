@@ -115,7 +115,7 @@ Esperado: un proceso full-trust del mismo usuario no puede abrir el archivo del 
 
 - [ ] **Paso 1: probar que la entrada no usa el composer ni la API RPC**
 
-~~~tsx
+~~~ts ignore-check
 expect(screen.getByLabelText('Contraseña')).toHaveAttribute('type', 'password')
 expect(screen.getByRole('checkbox', { name: /guardar y rellenar/i })).not.toBeChecked()
 expect(apiClient.authorization.answer).not.toHaveBeenCalled()
@@ -166,7 +166,7 @@ Esperado: solo la ruta PostWebMessageAsJson entrega el valor al host nativo.
 
 - [ ] **Paso 1: añadir pruebas de ausencia de valores y submit**
 
-~~~ts
+~~~ts ignore-check
 expect(browserCommandForAction({ action: 'browser_login', origin: 'https://example.com/login' }))
   .toEqual({ schema: 2, requestId: expect.any(String), type: 'phoenix.browser.login', origin: 'https://example.com' })
 expect(JSON.stringify(browserCommandForAction({ action: 'browser_login', origin: 'https://example.com' })))
