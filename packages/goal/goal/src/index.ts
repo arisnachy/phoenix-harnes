@@ -415,6 +415,11 @@ export class GoalService extends TypertRemoteService {
     )
     const gatePassed = gate !== undefined
       && Object.values(gate.data.checks).every(status => status === 'pass')
+      && gate.data.evidenceLedger.length > 0
+      && gate.data.evidenceLedger.some(entry => entry.mandatory)
+      && gate.data.evidenceLedger.every(entry =>
+        !entry.mandatory || (entry.status === 'verified' && entry.evidence.length > 0))
+      && (gate.data.completionReport === undefined || gate.data.completionReport.unverifiedItems.length === 0)
       && gate.data.artifactFingerprint.trim().length > 0
     if (!gatePassed) {
       throw new GoalError(
