@@ -77,6 +77,8 @@ function pinGpt6LunaMax(selection: ModelSelection): ModelSelection {
  * Whether one Codex model is expensive/capable enough to act as planner.
  * The rule is deliberately explicit: unknown future tiers keep the user's
  * normal configuration until Phoenix learns their place in the family.
+ * @param model - Codex model identifier to classify.
+ * @returns true when the model belongs to a planner tier.
  */
 export function isCodexPlannerModel(model: string): boolean {
   return codexPlannerGeneration(model) !== undefined
@@ -226,6 +228,8 @@ const FAST_CASUAL_REACTION = /(?:\b(?:jaj+a+|jeje+|jiji+|lol)\b|\b(?:eso|esto)\s
  * Only social acknowledgements and simple runtime-meta questions enter this
  * path. Factual questions, external-data requests, artifact work, URLs, code,
  * and operational verbs deliberately remain on the normal Phoenix path.
+ * @param text - Direct human text for the candidate turn.
+ * @returns true when the turn is safe for the tool-free low-latency path.
  */
 export function isConversationalFastPathText(text: string): boolean {
   const candidate = text.trim()
