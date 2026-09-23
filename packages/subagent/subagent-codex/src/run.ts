@@ -135,6 +135,25 @@ export function codexAppServerArgv(): string[] {
 }
 
 /**
+ * Lightweight app-server command for account/catalog metadata only.
+ *
+ * These probes never execute a Codex turn and therefore do not need the
+ * user's plugin/skill inventory. Disabling plugin loading avoids expensive
+ * Windows cache walks and file-lock noise while preserving the real Codex
+ * home, managed ChatGPT auth, model catalog, quotas and account state.
+ */
+export function codexMetadataAppServerArgv(): string[] {
+  return [
+    process.execPath,
+    CODEX_PACKAGE_BIN,
+    '-c',
+    'features.plugins=false',
+    'app-server',
+    '--stdio',
+  ]
+}
+
+/**
  * Preserve the real Codex home while giving Phoenix-owned Codex subagents their
  * own SQLite state. Explicit CODEX_SQLITE_HOME remains authoritative.
  */
