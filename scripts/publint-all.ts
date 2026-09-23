@@ -30,6 +30,8 @@ interface PackageTarget {
 interface PackageManifest {
   name?: string
   files?: unknown
+  dsh?: unknown
+  exports?: unknown
 }
 
 type PublintResult =
@@ -177,6 +179,42 @@ function relativeImports(file: string, sourceText: string): RelativeImport[] {
   return imports
 }
 
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+/**
+ * PHOENIX Web client contributions are intentionally wrapped CommonJS factories
+ * consumed by window.__ModuleLoader__, even though the package's ordinary Node
+ * surface is ESM. Suppress only Publint's exact Node-format diagnostic when
+ * the manifest declares a Web client contribution and the published artifact
+ * proves it is the PHOENIX loader wrapper.
+ */
+function intentionalPhoenixClientFactoryDiagnostic(
+  target: PackageTarget,
+  files: readonly PackFile[],
+  message: Message,
+  normalizedManifest: Record<string, unknown>,
+): boolean {
+  const formatted = formatMessage(message, normalizedManifest, { color: false }) ?? ''
+  if (!formatted.startsWith('pkg.exports["./client"].default is ./lib/client.js and is written in CJS, but is interpreted as ESM.')) {
+    return false
+  }
+  const dsh = record(target.manifest.dsh)
+  const client = record(dsh?.client)
+  if (client?.platform !== 'web') return false
+  const exports = record(target.manifest.exports)
+  const clientExport = record(exports?.['./client'])
+  if (clientExport?.default !== './lib/client.js') return false
+  const artifact = files.find(file => file.name === 'package/lib/client.js')
+  if (artifact === undefined) return false
+  const bytes = artifact.data instanceof ArrayBuffer ? new Uint8Array(artifact.data) : artifact.data
+  const source = typeof bytes === 'string' ? bytes : Buffer.from(bytes).toString('utf8')
+  return source.includes('window.__ModuleLoader__.load(')
+}
+
 async function runPublint(target: PackageTarget): Promise<PublintResult> {
   try {
     const files = publicationFiles(target)
@@ -186,9 +224,11 @@ async function runPublint(target: PackageTarget): Promise<PublintResult> {
       pack: { files },
     })
     const manifest = result.pkg as Record<string, unknown>
-    return result.messages.some(message => message.type === 'error') || closureViolations.length > 0
-      ? { path: target.path, status: 'failed', messages: result.messages, closureViolations, manifest }
-      : { path: target.path, status: 'passed', messages: result.messages, closureViolations, manifest }
+    const messages = result.messages.filter(message =>
+      !intentionalPhoenixClientFactoryDiagnostic(target, files, message, manifest))
+    return messages.some(message => message.type === 'error') || closureViolations.length > 0
+      ? { path: target.path, status: 'failed', messages, closureViolations, manifest }
+      : { path: target.path, status: 'passed', messages, closureViolations, manifest }
   } catch (error: unknown) {
     return {
       path: target.path,
