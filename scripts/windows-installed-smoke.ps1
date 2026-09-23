@@ -425,7 +425,15 @@ try {
         }
     }
 
-    $desktopProcess = Start-Process -FilePath $phoenixExe -WorkingDirectory $installRoot -PassThru
+    $previousAutoUpdate = [Environment]::GetEnvironmentVariable('PHOENIX_AUTO_UPDATE', 'Process')
+    try {
+        # This smoke verifies installed startup and readiness. Keep the independent stable-channel
+        # poll out of the isolated install tree so the test can stop and remove that exact tree.
+        [Environment]::SetEnvironmentVariable('PHOENIX_AUTO_UPDATE', '0', 'Process')
+        $desktopProcess = Start-Process -FilePath $phoenixExe -WorkingDirectory $installRoot -PassThru
+    } finally {
+        [Environment]::SetEnvironmentVariable('PHOENIX_AUTO_UPDATE', $previousAutoUpdate, 'Process')
+    }
     $ownedDesktopTreeVerifiedStopped = $false
     $desktopProcessCreationTimeUtcTicks = $desktopProcess.StartTime.ToUniversalTime().Ticks
     $readinessDeadline = [DateTimeOffset]::UtcNow.AddMinutes(3)

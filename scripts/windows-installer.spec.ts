@@ -80,6 +80,8 @@ describe('PHOENIX managed Windows installation', () => {
     expect(smokeScript).toContain('Assert-PhoenixListenerOwned')
     expect(smokeScript).toContain('listenerBeforeRequest')
     expect(smokeScript).toContain('listenerAfterRequest')
+    expect(smokeScript).toContain("SetEnvironmentVariable('PHOENIX_AUTO_UPDATE', '0', 'Process')")
+    expect(smokeScript).toContain('Keep the independent stable-channel')
     expect(smokeScript).toContain('$ownedDesktopTreeVerifiedStopped -and')
     expect(smokeScript).toContain('$installedCommandTreesVerifiedStopped -and')
     expect(smokeScript).toContain('Assert-StartedProcessTreeStopped')
