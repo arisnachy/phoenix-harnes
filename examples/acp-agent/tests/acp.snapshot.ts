@@ -308,6 +308,9 @@ const SCENARIOS: Scenario[] = [
     pinsHeader: true,
     headerClass: 'persistent-pwsh',
     configPath: PERSISTENT_PWSH_CONFIG,
+    // The shipped persistent-pwsh PTY stack is Windows-only. A POSIX runner
+    // having pwsh installed does not make it the Windows composition certified here.
+    windowsOnly: true,
     pwshOnly: true,
   },
   // Authored keyless replay through a test-only partial-Landlock provider:
