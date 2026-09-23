@@ -252,6 +252,7 @@ describe('adversarial completion tester', () => {
       summary: 'Certified independently.',
       findings: [],
       requiredChanges: [],
+      verificationIncidents: [],
     })
   })
 
