@@ -243,16 +243,29 @@ export function ChatView({
       ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt }
       : undefined
   ), [pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
+  // A stale pendingSubmit must never resurrect "preparing" after the durable
+  // transcript (or steering mirror) has already taken ownership of the send.
+  // This is a defensive handoff in addition to the input facade retiring the
+  // optimistic submit when Host admission settles.
+  const visiblePendingSubmit = pendingSubmit !== undefined
+    && !pendingSubmitDurable
+    && !pendingSubmitInSteering
+    ? pendingSubmit
+    : undefined
   // Enter is a local UX boundary: show PHOENIX as preparing in the same render
   // as the optimistic bubble instead of waiting for Host admission/running
   // propagation. Authoritative turn progress replaces this placeholder as soon
   // as the session stream exposes it.
-  const visibleProgress = progress ?? (pendingSubmit === undefined
+  const visibleProgress = progress ?? (visiblePendingSubmit === undefined
     ? null
-    : { phase: 'preparing' as const, activity: 'preparing' as const, startedAt: pendingSubmit.startedAt })
-  const visibleTurnStatus = running || pendingSubmit !== undefined
+    : {
+        phase: 'preparing' as const,
+        activity: 'preparing' as const,
+        startedAt: visiblePendingSubmit.startedAt,
+      })
+  const visibleTurnStatus = running || progress !== null || visiblePendingSubmit !== undefined
     ? {
-        startTime: progress?.startedAt ?? runningTurnStart ?? pendingSubmit?.startedAt ?? null,
+        startTime: progress?.startedAt ?? runningTurnStart ?? visiblePendingSubmit?.startedAt ?? null,
         progress: visibleProgress,
       }
     : undefined
