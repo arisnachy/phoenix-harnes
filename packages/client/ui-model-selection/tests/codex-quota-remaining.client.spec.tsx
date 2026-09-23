@@ -211,7 +211,7 @@ describe('CodexQuotaRemaining', () => {
             entries: [{ key: 'subagent-codex/account', label: 'ChatGPT / Codex' }],
           },
         },
-      })
+      } as never)
 
     const view = render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
     await act(async () => { await Promise.resolve() })
