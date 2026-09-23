@@ -633,21 +633,29 @@ async function resolvingReferencesSnapshot(number, pull) {
   }
 }
 
-async function pullRequestSnapshot(number) {
+export async function pullRequestSnapshot(number) {
   const [pull, reviewRequests, reviews] = await Promise.all([
     api(`/repos/${ACTIVE_REPOSITORY.owner}/${ACTIVE_REPOSITORY.repository}/pulls/${number}`),
     api(`/repos/${ACTIVE_REPOSITORY.owner}/${ACTIVE_REPOSITORY.repository}/pulls/${number}/requested_reviewers`),
     api(`/repos/${ACTIVE_REPOSITORY.owner}/${ACTIVE_REPOSITORY.repository}/pulls/${number}/reviews?per_page=100`),
   ])
-  const resolving = await resolvingReferencesSnapshot(number, pull)
-  return {
-    ...resolving,
+  const snapshot = {
+    number,
     isDraft: pull.draft,
     authorType: pull.user?.type ?? 'User',
     reviewRequestCount: reviewRequests.users.length + reviewRequests.teams.length,
     reviewCount: reviews.length,
     labels: pull.labels.map((label) => label.name),
   }
+  if (!requiresPullRequestPolicy(snapshot)) {
+    return {
+      ...snapshot,
+      references: { all: [], resolving: [], related: [] },
+      issues: new Map(),
+    }
+  }
+  const resolving = await resolvingReferencesSnapshot(number, pull)
+  return { ...snapshot, ...resolving }
 }
 
 async function lifecyclePullRequestSnapshot(number) {

@@ -5,6 +5,7 @@ import {
   countVisibleUnits,
   nextResolvingIssueStatus,
   parseReferences,
+  pullRequestSnapshot,
   resolveRepositoryCoordinates,
   retainIssueReferences,
   resolvingIssueStatusCommand,
@@ -243,6 +244,47 @@ test('requires policy only after a human PR enters review', () => {
     }),
     false,
   )
+})
+
+test('does not resolve issue references before a human PR enters review', async () => {
+  const priorApiUrl = process.env.GITHUB_API_URL
+  const priorToken = process.env.GH_TOKEN
+  const priorFetch = globalThis.fetch
+  const requests = []
+  process.env.GITHUB_API_URL = 'https://api.test'
+  process.env.GH_TOKEN = 'test-token'
+  globalThis.fetch = async (input) => {
+    const url = new URL(input)
+    requests.push(url.pathname)
+    if (url.pathname.endsWith('/pulls/572')) {
+      return Response.json({
+        body: 'Fixes #42',
+        draft: false,
+        user: { type: 'User' },
+        labels: [],
+      })
+    }
+    if (url.pathname.endsWith('/pulls/572/requested_reviewers')) {
+      return Response.json({ users: [], teams: [] })
+    }
+    if (url.pathname.endsWith('/pulls/572/reviews')) return Response.json([])
+    throw new Error(`Unexpected GitHub API request: ${url.pathname}`)
+  }
+
+  try {
+    const snapshot = await pullRequestSnapshot(572)
+    assert.equal(snapshot.reviewRequestCount, 0)
+    assert.deepEqual(snapshot.references, { all: [], resolving: [], related: [] })
+    assert.equal(snapshot.issues.size, 0)
+    assert.equal(requests.length, 3)
+    assert.ok(requests.every((path) => path.includes('/pulls/572')))
+  } finally {
+    globalThis.fetch = priorFetch
+    if (priorApiUrl === undefined) delete process.env.GITHUB_API_URL
+    else process.env.GITHUB_API_URL = priorApiUrl
+    if (priorToken === undefined) delete process.env.GH_TOKEN
+    else process.env.GH_TOKEN = priorToken
+  }
 })
 
 test('maps only explicit review handoffs to review status commands', () => {
