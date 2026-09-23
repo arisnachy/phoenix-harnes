@@ -110,6 +110,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.managedMcp = new ManagedMcpController(ctx.loader)
     void ctx.effect(async () => {
       try {
+        await this.managedMcp.retireJev()
+      } catch (error: unknown) {
+        ctx.logger.warn('managed Jev retirement did not fully unload the live entry; persistent config is already retired')
+        ctx.logger.warn(error)
+      }
+      return () => undefined
+    }, 'managed Jev retirement')
+    void ctx.effect(async () => {
+      try {
         await this.chatGptWeb.restore()
       } catch (error: unknown) {
         ctx.logger.error('chatgpt-web: persisted bridge could not be restored')
@@ -250,47 +259,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * @returns Installation receipt for the pinned Jev connector.
    */
   @Remote('configureJevMcp')
-  async configureJevMcp(request: JevMcpConfigureRequest): Promise<McpRegistryInstallReceipt> {
-    const credentials = (this.ctx.get as (name: string) => unknown)('credentials') as
-      | {
-          describe(ref: string): Promise<{ configured: boolean; writable: boolean }>
-          set(ref: string, value: string): Promise<void>
-        }
-      | undefined
-    if (credentials === undefined) throw new Error('PHOENIX credential storage is unavailable')
-
-    const info = await credentials.describe(JEV_API_KEY_REF)
-    let apiKey = request.apiKey.trim()
-    if (/^Bearer\s+/i.test(apiKey)) apiKey = apiKey.replace(/^Bearer\s+/i, '').trim()
-    if (apiKey.length >= 2) {
-      const first = apiKey[0]
-      const last = apiKey[apiKey.length - 1]
-      if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
-        apiKey = apiKey.slice(1, -1).trim()
-      }
-    }
-
-    if (apiKey.length === 0) {
-      if (!info.configured) throw new Error('Jev API key is not configured')
-      // The user already has a key (file, .env, or launching environment).
-      // Reuse it without asking them to paste a secret into the UI again.
-    } else {
-      if (apiKey.length < 8) throw new Error('Jev API key is missing or too short')
-      if (!info.writable) {
-        throw new Error('JEV_API_KEY is supplied by the launching environment; reuse the existing key or change it in that environment')
-      }
-      await credentials.set(JEV_API_KEY_REF, apiKey)
-    }
-    const receipt = await this.managedMcp.configureJev()
-    const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
-      | { reconnect(serverName: string): boolean }
-      | undefined
-    // A prior bad/expired Jev key leaves the optional connector parked in
-    // auth-required. Saving a replacement must retry immediately rather than
-    // forcing a Host restart. New installs may still be in their first connect;
-    // reconnect() is intentionally a no-op while a generation is active.
-    registry?.reconnect(JEV_MCP_SERVER_NAME)
-    return receipt
+  async configureJevMcp(_request: JevMcpConfigureRequest): Promise<McpRegistryInstallReceipt> {
+    throw new Error('Jev integration is retired because new Jev accounts are unavailable; PHOENIX uses native routing instead')
   }
 
   /**
