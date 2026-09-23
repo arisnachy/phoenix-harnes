@@ -43,6 +43,23 @@ const DEFAULT_TOOL_CALL_TIMEOUT_MS = 60_000
 /** Default startup budget; slow or unavailable optional MCP servers do not block the Web UI. */
 const DEFAULT_STARTUP_TIMEOUT_MS = 5_000
 
+// Jev's pinned remote performs real routing/review work over MCP. Its previous
+// 1.8s tool budget was shorter than normal network/model latency and produced
+// false "Request timed out" failures even with a valid API key.
+const JEV_SERVER_NAME = 'jev'
+const JEV_ENDPOINT = 'https://www.jevai.org/api/mcp'
+const JEV_API_KEY_REF = 'JEV_API_KEY'
+const JEV_TOOL_TIMEOUT_MS = 30_000
+
+function effectiveConnectionConfig(config: Config): Config {
+  if (config.transport !== 'streamable-http'
+    || config.serverName !== JEV_SERVER_NAME
+    || config.url !== JEV_ENDPOINT
+    || config.bearerTokenRef !== JEV_API_KEY_REF) return config
+  if (config.toolCallTimeoutMs >= JEV_TOOL_TIMEOUT_MS) return config
+  return { ...config, toolCallTimeoutMs: JEV_TOOL_TIMEOUT_MS }
+}
+
 /** Valid `serverName`, kept below the public tool-name budget. */
 const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
 
@@ -243,7 +260,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     }
   }
 
-  const connection = startConnection(ctx, config, reconnect, registration, transportOptions)
+  const connection = startConnection(ctx, effectiveConnectionConfig(config), reconnect, registration, transportOptions)
   requestReconnect = connection.reconnect
 
   if (oauthController !== undefined && authorization !== undefined && credentials !== undefined) {
