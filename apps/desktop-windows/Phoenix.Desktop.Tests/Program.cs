@@ -26,6 +26,122 @@ static void EqualInt(int expected, int actual, string name, List<string> failure
     if (expected != actual) failures.Add($"{name}: expected '{expected}', got '{actual}'");
 }
 
+static async Task<bool> VerifyCredentialBrokerAsync(string brokerExecutable)
+{
+    var profileName = $"probe-{Guid.NewGuid():N}";
+    var persistentOrigin = $"https://{Guid.NewGuid():N}.phoenix.invalid";
+    var transientOrigin = $"https://{Guid.NewGuid():N}.phoenix.invalid";
+    const string account = "phoenix-synthetic-account";
+    const string secret = "phoenix-synthetic-secret";
+    var results = new Dictionary<string, bool>(StringComparer.Ordinal);
+    DesktopCredentialBrokerProcess? broker = null;
+
+    try
+    {
+        broker = await DesktopCredentialBrokerProcess.StartAsync(brokerExecutable, profileName);
+        results["starts_empty"] = !await broker.HasAsync(persistentOrigin);
+        var diagnosticRequest = DesktopCredentialRequest.Create(
+            persistentOrigin,
+            CredentialBrokerOperations.Store,
+            TimeSpan.FromSeconds(30),
+            account: account,
+            secret: secret,
+            remember: true);
+        results["redacts_request_diagnostics"] = !diagnosticRequest.ToString().Contains(secret, StringComparison.Ordinal)
+            && !diagnosticRequest.ToString().Contains(account, StringComparison.Ordinal);
+        await broker.StoreAsync(persistentOrigin, account, secret, remember: true);
+        results["stores_persistently"] = await broker.HasAsync(persistentOrigin);
+        results["isolates_origin"] = !await broker.HasAsync(transientOrigin);
+
+        var capability = await broker.IssueFillCapabilityAsync(persistentOrigin);
+        results["redacts_capability_diagnostics"] = !capability.ToString().Contains(capability.Token, StringComparison.Ordinal);
+        var credential = await broker.FillOnceAsync(persistentOrigin, capability);
+        results["fills_once"] = credential?.Account == account && credential.Secret == secret;
+        results["redacts_credential_diagnostics"] = credential is not null
+            && !credential.ToString().Contains(secret, StringComparison.Ordinal)
+            && !credential.ToString().Contains(account, StringComparison.Ordinal);
+        var replayRejected = false;
+        try
+        {
+            _ = await broker.FillOnceAsync(persistentOrigin, capability);
+        }
+        catch (InvalidOperationException)
+        {
+            replayRejected = true;
+        }
+        results["rejects_replayed_capability"] = replayRejected;
+
+        await broker.DisposeAsync();
+        broker = await DesktopCredentialBrokerProcess.StartAsync(brokerExecutable, profileName);
+        results["persists_across_broker_restart"] = await broker.HasAsync(persistentOrigin);
+        var restartCapability = await broker.IssueFillCapabilityAsync(persistentOrigin);
+        var restartedCredential = await broker.FillOnceAsync(persistentOrigin, restartCapability);
+        results["fills_after_restart"] = restartedCredential?.Account == account && restartedCredential.Secret == secret;
+
+        var oversizedSecretRejected = false;
+        try
+        {
+            await broker.StoreAsync(persistentOrigin, account, new string('x', 513), remember: true);
+        }
+        catch (ArgumentException)
+        {
+            oversizedSecretRejected = true;
+        }
+        results["rejects_oversized_persistent_secret"] = oversizedSecretRejected;
+
+        await broker.ForgetAsync(persistentOrigin);
+        results["forgets_persistent_credential"] = !await broker.HasAsync(persistentOrigin);
+        await broker.StoreAsync(transientOrigin, account, secret, remember: false);
+        var transientCapability = await broker.IssueFillCapabilityAsync(transientOrigin);
+        var transientCredential = await broker.FillOnceAsync(transientOrigin, transientCapability);
+        results["fills_transient_credential"] = transientCredential?.Account == account && transientCredential.Secret == secret;
+        results["consumes_transient_credential"] = !await broker.HasAsync(transientOrigin);
+
+        await broker.DisposeAsync();
+        broker = await DesktopCredentialBrokerProcess.StartAsync(brokerExecutable, profileName);
+        results["does_not_persist_transient_credential"] = !await broker.HasAsync(transientOrigin);
+        await broker.ForgetAsync(persistentOrigin);
+        await broker.ForgetAsync(transientOrigin);
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"Credential broker probe stopped: {exception.GetType().Name}");
+        results["completed"] = false;
+    }
+    finally
+    {
+        if (broker is not null)
+        {
+            try
+            {
+                await broker.ForgetAsync(persistentOrigin);
+                await broker.ForgetAsync(transientOrigin);
+            }
+            catch (Exception exception)
+            {
+                Console.Error.WriteLine($"Credential broker cleanup failed: {exception.GetType().Name}");
+                results["cleanup"] = false;
+            }
+            await broker.DisposeAsync();
+        }
+    }
+
+    foreach (var result in results)
+        Console.WriteLine($"credential-broker-{result.Key}={result.Value}");
+    return results.Count > 0 && results.Values.All(static passed => passed);
+}
+
+if (args.Length != 0)
+{
+    if (args.Length != 2 || args[0] != "--credential-broker-probe" || !OperatingSystem.IsWindows())
+    {
+        Console.Error.WriteLine("Usage: Phoenix.Desktop.Tests --credential-broker-probe <broker executable>");
+        return 2;
+    }
+
+    return await VerifyCredentialBrokerAsync(args[1]) ? 0 : 1;
+}
+
 Equal("https://example.com/", BrowserNavigation.NormalizeAddress("example.com")?.ToString(), "hostname uses https", failures);
 Equal("http://localhost:3080/", BrowserNavigation.NormalizeAddress("localhost:3080")?.ToString(), "localhost uses http", failures);
 Equal("http://127.0.0.1:3080/", BrowserNavigation.NormalizeAddress("127.0.0.1:3080")?.ToString(), "loopback uses http", failures);
@@ -89,13 +205,27 @@ True(
 Equal("Continue", clickText.Text, "click text preserved", failures);
 True(
     BrowserCommand.TryParse(
-        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com/login\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",
-        out var loginCommand,
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com\"}",
+        out var browserLogin,
         allowAutomation: true),
-    "runtime pipe admits origin-bound login",
+    "runtime pipe admits native broker login without credential fields",
     failures);
-Equal("https://example.com", loginCommand.Origin, "login origin canonicalized", failures);
-True(loginCommand.Submit, "login submits by default", failures);
+Equal("https://example.com", browserLogin.Origin, "native login origin is canonical", failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.forget-credentials\",\"origin\":\"https://example.com\"}",
+        out var forgetCredentials,
+        allowAutomation: true),
+    "runtime pipe admits origin-bound vault removal",
+    failures);
+Equal("https://example.com", forgetCredentials.Origin, "vault removal origin is canonical", failures);
+False(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com/login\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",
+        out _,
+        allowAutomation: true),
+    "legacy browser login with inline credentials is rejected",
+    failures);
 False(
     BrowserCommand.TryParse(
         "{\"type\":\"phoenix.browser.login\",\"origin\":\"http://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",
@@ -103,6 +233,128 @@ False(
         allowAutomation: true),
     "runtime pipe rejects insecure remote login origin",
     failures);
+
+True(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r1\",\"type\":\"click\",\"x\":12,\"y\":34,\"button\":\"right\",\"capture\":true}",
+        out var computerClick),
+    "schema 2 desktop click parses",
+    failures);
+Equal("r1", computerClick.RequestId, "schema 2 request id is preserved", failures);
+Equal("right", computerClick.Button, "schema 2 mouse button is preserved", failures);
+True(computerClick.Capture, "schema 2 capture flag is preserved", failures);
+True(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r-login\",\"type\":\"browser_login\",\"origin\":\"https://example.com\"}",
+        out var computerLogin),
+    "schema 2 admits origin-bound broker login without credential fields",
+    failures);
+Equal("https://example.com", computerLogin.Origin, "resident login origin is canonical", failures);
+False(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r-login-capture\",\"type\":\"browser_login\",\"origin\":\"https://example.com\",\"capture\":true}",
+        out _),
+    "schema 2 refuses screenshots on a credential fill action",
+    failures);
+False(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r-login-http\",\"type\":\"browser_login\",\"origin\":\"http://example.com\"}",
+        out _),
+    "schema 2 rejects insecure login origins",
+    failures);
+True(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r-forget\",\"type\":\"browser_forget_credentials\",\"origin\":\"https://example.com\"}",
+        out _),
+    "schema 2 admits origin-bound vault removal",
+    failures);
+const string credentialRequestId = "0123456789abcdef0123456789abcdef";
+const string credentialOrigin = "https://example.com";
+var credentialResponseJson = "{\"kind\":\"computer-credential-response\",\"requestId\":\"0123456789abcdef0123456789abcdef\",\"origin\":\"https://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\",\"remember\":true}";
+True(
+    DesktopCredentialPromptProtocol.TryParseReply(credentialResponseJson, out var credentialResponse),
+    "native credential response parses",
+    failures);
+True(credentialResponse.Secret == "synthetic-login-secret", "native response keeps the credential only in its private value", failures);
+True(credentialResponse.Remember, "native credential response preserves the explicit remember choice", failures);
+True(
+    DesktopCredentialPromptProtocol.MatchesRequest(credentialRequestId, credentialOrigin, credentialResponse),
+    "native response matches its active request and origin",
+    failures);
+False(
+    DesktopCredentialPromptProtocol.MatchesRequest("ffffffffffffffffffffffffffffffff", credentialOrigin, credentialResponse),
+    "native response cannot satisfy another request",
+    failures);
+False(
+    DesktopCredentialPromptProtocol.TryParseReply(
+        credentialResponseJson.Replace("https://example.com", "http://example.com", StringComparison.Ordinal),
+        out _),
+    "native credential response rejects non-HTTPS origins",
+    failures);
+False(
+    DesktopCredentialPromptProtocol.TryParseReply(
+        credentialResponseJson.Replace("\"remember\":true}", "\"remember\":true,\"extra\":\"value\"}", StringComparison.Ordinal),
+        out _),
+    "native credential response rejects unknown fields",
+    failures);
+False(
+    DesktopCredentialPromptProtocol.TryParseReply(
+        credentialResponseJson.Replace("\"requestId\":\"0123456789abcdef0123456789abcdef\",", "\"requestId\":\"0123456789abcdef0123456789abcdef\",\"requestId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",", StringComparison.Ordinal),
+        out _),
+    "native credential response rejects duplicate properties",
+    failures);
+True(
+    DesktopCredentialPromptProtocol.TryParseReply(
+        "{\"kind\":\"computer-credential-cancelled\",\"requestId\":\"0123456789abcdef0123456789abcdef\",\"origin\":\"https://example.com\"}",
+        out var credentialCancellation),
+    "native credential cancellation parses",
+    failures);
+True(credentialCancellation.Cancelled, "native credential cancellation carries no values", failures);
+False(
+    DesktopCredentialPromptProtocol.IsTrustedShellMessageSource(
+        "http://127.0.0.1:3080/chat",
+        "http://127.0.0.1:3080/",
+        new Uri("http://127.0.0.1:3080/")),
+    "native credential response rejects a stale shell page",
+    failures);
+True(
+    DesktopCredentialPromptProtocol.IsTrustedShellMessageSource(
+        "http://127.0.0.1:3080/chat",
+        "http://127.0.0.1:3080/chat",
+        new Uri("http://127.0.0.1:3080/")),
+    "native credential response accepts the current trusted shell page",
+    failures);
+False(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r2\",\"type\":\"click\",\"x\":12,\"y\":34,\"account\":\"secret-user\"}",
+        out _),
+    "schema 2 rejects credential properties",
+    failures);
+False(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r2-secret\",\"type\":\"click\",\"x\":12,\"y\":34,\"secret\":\"synthetic-login-secret\"}",
+        out _),
+    "schema 2 rejects secret properties",
+    failures);
+False(
+    DesktopComputerRequest.TryParse(
+        "{\"schema\":2,\"requestId\":\"r3\",\"type\":\"click\",\"x\":12,\"y\":34,\"button\":\"side\"}",
+        out _),
+    "schema 2 rejects unsupported mouse buttons",
+    failures);
+True(DesktopComputerProtocol.MatchesReply("r1", "r1"), "reply matches request id", failures);
+False(DesktopComputerProtocol.MatchesReply("r1", "r2"), "reply cannot cross request ids", failures);
+False(DesktopBrowserControlServer.IsAllowedClient(999, 123), "unrelated client PID is rejected", failures);
+if (OperatingSystem.IsWindows())
+    True(
+        DesktopBrowserControlServer.IsAllowedClient(Environment.ProcessId, Environment.ProcessId),
+        "the owning runtime PID is accepted",
+        failures);
+if (OperatingSystem.IsWindows())
+{
+    var residentWindows = DesktopComputerDriver.Execute(new DesktopComputerRequest(2, "driver-test", "windows"));
+    True(residentWindows.Details is not null, "resident Win32 driver enumerates desktop windows", failures);
+}
 
 // The model/runtime must control the embedded WebView through a direct current-user named pipe.
 // This prevents browser_open from falling back to global Ctrl+L/type/Enter input.
@@ -122,7 +374,7 @@ using (var control = new DesktopBrowserControlServer(
         "desktop control descriptor parses",
         failures);
     Equal(control.PipeName, descriptor.PipeName, "desktop control descriptor names live pipe", failures);
-    EqualInt(1, descriptor.Schema, "desktop control descriptor schema", failures);
+    EqualInt(2, descriptor.Schema, "desktop control descriptor schema", failures);
 
     using var client = new NamedPipeClientStream(
         ".",
@@ -139,6 +391,29 @@ using (var control = new DesktopBrowserControlServer(
         await Task.Delay(10);
     Equal("phoenix.browser.open", receivedControlCommand?.Type, "desktop control dispatches browser command", failures);
     Equal("https://example.com", receivedControlCommand?.Url, "desktop control preserves browser URL", failures);
+
+    await writer.WriteLineAsync("{\"schema\":2,\"requestId\":\"resident-1\",\"type\":\"browser_inspect\"}");
+    var residentReply = await reader.ReadLineAsync();
+    True(residentReply?.Contains("\"schema\":2", StringComparison.Ordinal) == true,
+        "resident schema 2 reply is versioned",
+        failures);
+    True(residentReply?.Contains("\"requestId\":\"resident-1\"", StringComparison.Ordinal) == true,
+        "resident reply preserves request id",
+        failures);
+
+    await writer.WriteLineAsync("{\"schema\":2,\"requestId\":\"resident-2\",\"type\":\"browser_close\"}");
+    var secondResidentReply = await reader.ReadLineAsync();
+    True(secondResidentReply?.Contains("\"requestId\":\"resident-2\"", StringComparison.Ordinal) == true,
+        "resident pipe accepts a second serialized request",
+        failures);
+
+    var previouslyReceived = receivedControlCommand?.Type;
+    await writer.WriteLineAsync("{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com/login\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}");
+    var legacyLoginReply = await reader.ReadLineAsync();
+    True(legacyLoginReply?.Contains("\"ok\":false", StringComparison.Ordinal) == true,
+        "legacy pipe rejects inline credential login",
+        failures);
+    Equal(previouslyReceived, receivedControlCommand?.Type, "rejected legacy login is never dispatched", failures);
 }
 False(File.Exists(controlDescriptorPath), "desktop control descriptor removed on dispose", failures);
 

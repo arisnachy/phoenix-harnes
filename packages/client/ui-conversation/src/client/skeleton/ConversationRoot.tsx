@@ -7,6 +7,7 @@ import clsx from 'clsx'
 import type { SessionId, WorkspaceId } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
 import { HeroGlow, HeroShell, WorkspaceChip, workspaceLabel } from './EmptyHero.tsx'
+import { ComputerCredentialPrompt } from './ComputerCredentialPrompt.tsx'
 import css from './ConversationRoot.module.css'
 
 /** Full props composed from the slot contract. */
@@ -210,12 +211,15 @@ export function ConversationRoot({
   )
 
   return (
-    <div className={css.root} data-phase={phase}>
-      <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
-      <div className={css.scrollBody} data-conversation-scroll="">
-        <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
-        {composerSeat}
+    <>
+      <div className={css.root} data-phase={phase}>
+        <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
+        <div className={css.scrollBody} data-conversation-scroll="">
+          <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
+          {composerSeat}
+        </div>
       </div>
-    </div>
+      <ComputerCredentialPrompt t={t} />
+    </>
   )
 }

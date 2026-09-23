@@ -1,10 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import {
   AdaptiveLearningEngine,
+  adaptiveOutcomeForToolResult,
   type AdaptiveMemoryStore,
   type AdaptiveMemoryWrite,
   type AdaptiveStoredMemory,
 } from '../src/adaptive.ts'
+
+describe('adaptiveOutcomeForToolResult', () => {
+  it('keeps an accepted Computer result as an unverified candidate', () => {
+    expect(adaptiveOutcomeForToolResult('computer', false)).toEqual({ outcome: 'candidate' })
+    expect(adaptiveOutcomeForToolResult('computer', false)).not.toHaveProperty('verified', true)
+  })
+
+  it('preserves failures and verified success for other tools', () => {
+    expect(adaptiveOutcomeForToolResult('computer', true)).toEqual({ outcome: 'failure' })
+    expect(adaptiveOutcomeForToolResult('web_search', false)).toEqual({ outcome: 'success', verified: true })
+  })
+})
 
 class MemoryStore implements AdaptiveMemoryStore {
   readonly rows: AdaptiveStoredMemory[] = []

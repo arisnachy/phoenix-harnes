@@ -313,6 +313,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     private readonly EventWaitHandle showEvent;
     private readonly Thread showSignalThread;
     private Process? ownedRuntime;
+    private int? runtimeOwnerPid;
     private Task? startupTask;
     private string runtimeRoot = Program.RuntimeRoot;
     private bool sourceCheckoutRuntime;
@@ -335,7 +336,11 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         _ = window.Handle;
         browserControl = new DesktopBrowserControlServer(
             window.ExecuteBrowserCommandAsync,
-            Program.DesktopControlDescriptorPath);
+            Program.DesktopControlDescriptorPath,
+            clientPid => ownedRuntime is { HasExited: false } supervisor
+                ? DesktopRuntimeProcessIdentity.IsSameOrDescendantOf(clientPid, supervisor.Id)
+                : runtimeOwnerPid is int ownerPid
+                    && DesktopRuntimeProcessIdentity.IsSameOrDescendantOf(clientPid, ownerPid));
         DesktopLog.Write($"Desktop browser control pipe ready: {browserControl.PipeName}");
 
         var menu = new ContextMenuStrip();
@@ -444,6 +449,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 if (await IsCompatiblePhoenixListenerAsync())
                 {
                     externallyManaged = true;
+                    runtimeOwnerPid = finalListener.Value.ProcessId;
                     restartItem.Enabled = false;
                     restartItem.Text = "Phoenix ya está activo";
                     tray.Text = "Phoenix · activo";
@@ -496,6 +502,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
             runtimeRoot = Program.RuntimeRoot;
             sourceCheckoutRuntime = false;
+            runtimeOwnerPid = null;
             restartItem.Text = "Reiniciar runtime administrado";
 
             if (!await EnsureManagedRuntimeAsync())
@@ -903,6 +910,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             }
             return false;
         }
+        runtimeOwnerPid = ownedRuntime.Id;
 
         if (psi.RedirectStandardOutput)
         {
@@ -1146,6 +1154,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         {
             ownedRuntime.Dispose();
             ownedRuntime = null;
+            runtimeOwnerPid = null;
         }
     }
 
@@ -1175,6 +1184,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         try { showEvent.Set(); } catch { }
         StopOwnedRuntime();
         browserControl.Dispose();
+        window.StopCredentialBroker();
         if (!window.IsDisposed) window.Dispose();
         tray.Visible = false;
         tray.Dispose();

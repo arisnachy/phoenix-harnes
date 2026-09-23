@@ -10,6 +10,7 @@ namespace Phoenix.Desktop;
 /// </summary>
 internal sealed class PhoenixDesktopWindow : Form
 {
+    private static readonly TimeSpan CredentialPromptTimeout = TimeSpan.FromMinutes(2);
     private readonly Uri phoenixUri;
     private readonly SplitContainer split = new();
     private readonly WebView2 phoenixView = new();
@@ -21,16 +22,33 @@ internal sealed class PhoenixDesktopWindow : Form
     private readonly Label startupStatus = new();
     private readonly Label startupSpinner = new();
     private readonly System.Windows.Forms.Timer startupAnimationTimer = new() { Interval = 120 };
+    private readonly Dictionary<string, PendingCredentialPrompt> pendingCredentialPrompts = new(StringComparer.Ordinal);
+    private readonly object credentialBrokerGate = new();
+    private readonly CancellationTokenSource credentialBrokerLifetime = new();
+    private Task<DesktopCredentialBrokerProcess>? credentialBrokerTask;
     private int startupAnimationFrame;
     private bool initialized;
     private bool runtimeReady;
     private bool applyingBrowserLayout;
     private int? browserWidthOverride;
     private Task? browserInitializationTask;
+    private TaskCompletionSource<bool>? pendingBrowserNavigation;
     private DateTimeOffset lastPhoenixNavigationAt = DateTimeOffset.MinValue;
     private int phoenixNavigationRetryCount;
     private bool phoenixNavigationRetryScheduled;
     private bool phoenixNavigationInFlight;
+
+    private sealed class PendingCredentialPrompt(
+        string requestId,
+        string origin,
+        string browserPageUri,
+        TaskCompletionSource<DesktopCredentialPromptReply> completion)
+    {
+        internal string RequestId { get; } = requestId;
+        internal string Origin { get; } = origin;
+        internal string BrowserPageUri { get; } = browserPageUri;
+        internal TaskCompletionSource<DesktopCredentialPromptReply> Completion { get; } = completion;
+    }
 
     // Exposed to the native smoke test so CI verifies the real SplitContainer state,
     // not only the pure layout contract.
@@ -39,6 +57,44 @@ internal sealed class PhoenixDesktopWindow : Form
     internal bool IsStartupOverlayVisible => startupOverlay.Visible;
 
     internal event EventHandler? LogoutRequested;
+
+    private Task<DesktopCredentialBrokerProcess> GetCredentialBrokerAsync()
+    {
+        lock (credentialBrokerGate)
+        {
+            if (credentialBrokerTask is null || credentialBrokerTask.IsFaulted || credentialBrokerTask.IsCanceled)
+            {
+                var executable = Path.Combine(AppContext.BaseDirectory, "credential-broker", "Phoenix.CredentialBroker.exe");
+                credentialBrokerTask = DesktopCredentialBrokerProcess.StartAsync(
+                    executable,
+                    "PhoenixCredentialVault",
+                    credentialBrokerLifetime.Token);
+            }
+            return credentialBrokerTask;
+        }
+    }
+
+    /// <summary>Stop the lazily started credential broker when Phoenix exits.</summary>
+    internal void StopCredentialBroker()
+    {
+        credentialBrokerLifetime.Cancel();
+        Task<DesktopCredentialBrokerProcess>? starting;
+        lock (credentialBrokerGate)
+            starting = credentialBrokerTask;
+
+        if (starting is not null)
+        {
+            try
+            {
+                starting.GetAwaiter().GetResult().DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch (Exception)
+            {
+                DesktopLog.Write("Credential broker shutdown did not complete cleanly.");
+            }
+        }
+        credentialBrokerLifetime.Dispose();
+    }
 
     internal PhoenixDesktopWindow(Uri phoenixUri, bool initializeWebViewsOnShow = true)
     {
@@ -350,7 +406,7 @@ internal sealed class PhoenixDesktopWindow : Form
         {
             AutoSize = true,
             Text = "Phoenix",
-            Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 28, FontStyle.Bold),
+            Font = new Font(SystemFonts.MessageBoxFont?.FontFamily ?? SystemFonts.DefaultFont.FontFamily, 28, FontStyle.Bold),
             ForeColor = SystemColors.ControlText,
             Anchor = AnchorStyles.None,
         };
@@ -457,7 +513,7 @@ internal sealed class PhoenixDesktopWindow : Form
             var shellEnvironment = await CoreWebView2Environment.CreateAsync(null, shellProfile, shellOptions);
             await phoenixView.EnsureCoreWebView2Async(shellEnvironment);
             ConfigureWebView(phoenixView.CoreWebView2, isPhoenixSurface: true);
-            phoenixView.CoreWebView2.WebMessageReceived += (_, e) => HandlePhoenixMessage(e.WebMessageAsJson);
+            phoenixView.CoreWebView2.WebMessageReceived += (_, e) => HandlePhoenixMessage(e.WebMessageAsJson, e.Source);
             phoenixView.CoreWebView2.NewWindowRequested += (_, e) =>
             {
                 e.Handled = true;
@@ -468,6 +524,7 @@ internal sealed class PhoenixDesktopWindow : Form
             };
             phoenixView.CoreWebView2.NavigationStarting += (_, e) =>
             {
+                CancelPendingCredentialPrompts();
                 if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target)) return;
                 if (IsPhoenixUri(target)) return;
                 e.Cancel = true;
@@ -548,10 +605,106 @@ internal sealed class PhoenixDesktopWindow : Form
             core.Settings.AreHostObjectsAllowed = false;
     }
 
-    private void HandlePhoenixMessage(string json)
+    private void HandlePhoenixMessage(string json, string source)
     {
+        var currentShellSource = phoenixView.Source?.ToString();
+        if (currentShellSource is null
+            || !DesktopCredentialPromptProtocol.IsTrustedShellMessageSource(source, currentShellSource, phoenixUri))
+            return;
+
+        if (DesktopCredentialPromptProtocol.TryParseReply(json, out var reply))
+        {
+            if (!pendingCredentialPrompts.TryGetValue(reply.RequestId, out var pending)
+                || !DesktopCredentialPromptProtocol.MatchesRequest(pending.RequestId, pending.Origin, reply)
+                || !string.Equals(pending.BrowserPageUri, browserView.Source?.AbsoluteUri, StringComparison.Ordinal)
+                || !string.Equals(pending.Origin, BrowserNavigation.NormalizeCredentialOrigin(browserView.Source?.ToString()), StringComparison.Ordinal))
+                return;
+            pending.Completion.TrySetResult(reply);
+            return;
+        }
+
         if (!BrowserCommand.TryParse(json, out var command)) return;
         _ = ExecuteBrowserCommandAsync(command);
+    }
+
+    /// <summary>Ask through a temporary WebView2 modal without putting credentials in session input.</summary>
+    private async Task<DesktopCredentialPromptReply> RequestCredentialPromptAsync(string rawOrigin)
+    {
+        var origin = BrowserNavigation.NormalizeCredentialOrigin(rawOrigin);
+        if (origin is null || !origin.StartsWith("https://", StringComparison.Ordinal))
+            throw new InvalidOperationException("Credential prompt requires an HTTPS page origin.");
+
+        var browserPageUri = browserView.Source?.AbsoluteUri;
+        if (browserPageUri is null
+            || !string.Equals(origin, BrowserNavigation.NormalizeCredentialOrigin(browserView.Source?.ToString()), StringComparison.Ordinal))
+            throw new InvalidOperationException("Embedded browser origin changed; refusing credential prompt.");
+
+        var shellSource = phoenixView.Source?.ToString();
+        var core = phoenixView.CoreWebView2;
+        if (core is null || shellSource is null
+            || !DesktopCredentialPromptProtocol.IsTrustedShellMessageSource(shellSource, shellSource, phoenixUri))
+            throw new InvalidOperationException("Phoenix credential prompt is unavailable.");
+
+        if (pendingCredentialPrompts.Count > 0)
+            throw new InvalidOperationException("A credential prompt is already active.");
+
+        var requestId = Guid.NewGuid().ToString("N");
+        var completion = new TaskCompletionSource<DesktopCredentialPromptReply>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pending = new PendingCredentialPrompt(requestId, origin, browserPageUri, completion);
+        pendingCredentialPrompts.Add(requestId, pending);
+        try
+        {
+            ShowAndActivate();
+            core.PostWebMessageAsJson(JsonSerializer.Serialize(new
+            {
+                kind = "computer-credential",
+                requestId,
+                origin,
+                legacyCredentialPresent = false,
+            }));
+
+            var reply = await completion.Task.WaitAsync(CredentialPromptTimeout);
+            if (reply.Cancelled)
+                throw new OperationCanceledException("Credential prompt was cancelled.");
+
+            if (!string.Equals(browserPageUri, browserView.Source?.AbsoluteUri, StringComparison.Ordinal)
+                || !string.Equals(origin, BrowserNavigation.NormalizeCredentialOrigin(browserView.Source?.ToString()), StringComparison.Ordinal))
+                throw new OperationCanceledException("Embedded browser page changed while the credential prompt was open.");
+
+            return reply;
+        }
+        catch (TimeoutException)
+        {
+            throw new InvalidOperationException("Credential prompt timed out.");
+        }
+        finally
+        {
+            pendingCredentialPrompts.Remove(requestId);
+        }
+    }
+
+    private void CancelPendingCredentialPrompts()
+    {
+        if (pendingCredentialPrompts.Count == 0) return;
+        foreach (var pending in pendingCredentialPrompts.Values.ToArray())
+        {
+            pending.Completion.TrySetCanceled();
+            var core = phoenixView.CoreWebView2;
+            if (core is null) continue;
+            try
+            {
+                core.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    kind = "computer-credential-dismissed",
+                    requestId = pending.RequestId,
+                    origin = pending.Origin,
+                }));
+            }
+            catch (InvalidOperationException)
+            {
+                // WebView2 may already be tearing down while the prompt is being dismissed.
+            }
+        }
     }
 
     /// <summary>
@@ -593,14 +746,19 @@ internal sealed class PhoenixDesktopWindow : Form
     {
         switch (command.Type)
         {
+            case "phoenix.browser.open":
+                await OpenBrowserAsync(command.Url, waitForCompletion: true);
+                return null;
             case "phoenix.browser.inspect":
                 return await InspectBrowserAsync();
             case "phoenix.browser.fill-form":
                 return await FillBrowserFormAsync(command);
+            case "phoenix.browser.login":
+                return await FillBrowserCredentialsAsync(command);
+            case "phoenix.browser.forget-credentials":
+                return await ForgetBrowserCredentialsAsync(command);
             case "phoenix.browser.click-text":
                 return await ClickBrowserTextAsync(command);
-            case "phoenix.browser.login":
-                return await LoginBrowserAsync(command);
             default:
                 ExecuteBrowserCommand(command);
                 return null;
@@ -611,9 +769,6 @@ internal sealed class PhoenixDesktopWindow : Form
     {
         switch (command.Type)
         {
-            case "phoenix.browser.open":
-                OpenBrowser(command.Url);
-                break;
             case "phoenix.browser.close":
                 SetBrowserVisible(false);
                 break;
@@ -705,18 +860,60 @@ internal sealed class PhoenixDesktopWindow : Form
         return DecodeScriptJson(raw);
     }
 
-    private async Task<string> LoginBrowserAsync(BrowserCommand command)
+    private async Task<string> FillBrowserCredentialsAsync(BrowserCommand command)
     {
-        var core = await RequireBrowserForOriginAsync(command.Origin);
-        if (string.IsNullOrEmpty(command.Account) || string.IsNullOrEmpty(command.Secret))
-            throw new InvalidOperationException("Origin-bound login is incomplete.");
-        var script = BrowserLoginScript
-            .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
-            .Replace("__ACCOUNT__", JsonSerializer.Serialize(command.Account), StringComparison.Ordinal)
-            .Replace("__SECRET__", JsonSerializer.Serialize(command.Secret), StringComparison.Ordinal)
-            .Replace("__SUBMIT__", command.Submit ? "true" : "false", StringComparison.Ordinal);
+        var origin = CredentialOrigin.Normalize(command.Origin)
+            ?? throw new InvalidOperationException("Credential fill requires a secure page origin.");
+        if (!origin.StartsWith("https://", StringComparison.Ordinal))
+            throw new InvalidOperationException("Credential fill requires HTTPS.");
+
+        var core = await RequireBrowserForOriginAsync(origin);
+        var broker = await GetCredentialBrokerAsync();
+        if (!await broker.HasAsync(origin))
+        {
+            DesktopCredentialPromptReply? reply = await RequestCredentialPromptAsync(origin);
+            if (reply.Cancelled || reply.Account is null || reply.Secret is null)
+                throw new OperationCanceledException("Credential prompt was cancelled.");
+            var account = reply.Account;
+            var secret = reply.Secret;
+            var remember = reply.Remember;
+            await broker.StoreAsync(origin, account, secret, remember);
+            account = string.Empty;
+            secret = string.Empty;
+            reply = null;
+        }
+
+        // The capability authorizes one read for one exact HTTPS origin and is consumed before
+        // the credential reaches WebView2. Neither the Computer request nor its result has fields
+        // for the returned account or secret.
+        var capability = await broker.IssueFillCapabilityAsync(origin);
+        DesktopCredentialValue? value = await broker.FillOnceAsync(origin, capability)
+            ?? throw new InvalidOperationException("No saved credential is available for this origin.");
+        core = await RequireBrowserForOriginAsync(origin);
+        var script = BrowserCredentialFillScript
+            .Replace("__ORIGIN__", JsonSerializer.Serialize(origin), StringComparison.Ordinal)
+            .Replace("__ACCOUNT__", JsonSerializer.Serialize(value.Account), StringComparison.Ordinal)
+            .Replace("__SECRET__", JsonSerializer.Serialize(value.Secret), StringComparison.Ordinal);
+        value = null;
         var raw = await core.ExecuteScriptAsync(script);
-        return DecodeScriptJson(raw);
+        script = string.Empty;
+        var result = DecodeScriptJson(raw);
+        using var document = JsonDocument.Parse(result);
+        if (!document.RootElement.TryGetProperty("ok", out var ok) || ok.ValueKind != JsonValueKind.True)
+            throw new InvalidOperationException("The current page has no unambiguous sign-in fields.");
+        return "Recognized sign-in fields filled. The form was not submitted.";
+    }
+
+    private async Task<string> ForgetBrowserCredentialsAsync(BrowserCommand command)
+    {
+        var origin = CredentialOrigin.Normalize(command.Origin)
+            ?? throw new InvalidOperationException("Credential removal requires a secure page origin.");
+        if (!origin.StartsWith("https://", StringComparison.Ordinal))
+            throw new InvalidOperationException("Credential removal requires HTTPS.");
+        _ = await RequireBrowserForOriginAsync(origin);
+        var broker = await GetCredentialBrokerAsync();
+        await broker.ForgetAsync(origin);
+        return "Saved credentials were removed for this origin.";
     }
 
     private const string BrowserInspectScript = """
@@ -874,37 +1071,35 @@ internal sealed class PhoenixDesktopWindow : Form
         })()
         """;
 
-    private const string BrowserLoginScript = """
+    private const string BrowserCredentialFillScript = """
         (() => {
           const expected = __ORIGIN__;
-          if (location.origin !== expected) throw new Error('origin mismatch');
-          const account = __ACCOUNT__;
-          const secret = __SECRET__;
-          const submit = __SUBMIT__;
+          if (location.origin !== expected) return JSON.stringify({ ok: false });
           const visible = (el) => {
             const style = getComputedStyle(el);
             const rect = el.getBoundingClientRect();
-            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+            return !el.disabled && !el.readOnly && style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
           };
-          const inputs = Array.from(document.querySelectorAll('input')).filter(visible);
-          const scoreAccount = (el) => {
-            const type = (el.type || '').toLowerCase();
-            if (type === 'password' || type === 'hidden' || type === 'file') return -1000;
-            const ac = (el.autocomplete || '').toLowerCase();
-            const identity = ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.placeholder || '')).toLowerCase();
-            let score = 0;
-            if (ac === 'username') score += 100;
-            if (type === 'email') score += 80;
-            if (/user|email|login|account/.test(identity)) score += 50;
-            if (type === 'text' || type === 'email' || type === 'tel' || !type) score += 10;
-            return score;
+          const passwords = Array.from(document.querySelectorAll('input[type="password"]')).filter(visible);
+          if (passwords.length !== 1) return JSON.stringify({ ok: false });
+          const candidates = Array.from(document.querySelectorAll('input'))
+            .filter((el) => visible(el) && !passwords.includes(el) && ['text', 'email', 'tel'].includes((el.type || '').toLowerCase()));
+          const score = (el) => {
+            const metadata = [el.autocomplete, el.name, el.id, el.getAttribute('aria-label'), el.placeholder]
+              .join(' ').toLowerCase();
+            let result = el.autocomplete.toLowerCase() === 'username' ? 8 : 0;
+            if (el.type.toLowerCase() === 'email') result += 2;
+            if (/(user|email|login|account|identifier)/u.test(metadata)) result += 4;
+            if (/(search|phone|otp|code|token)/u.test(metadata)) result -= 8;
+            return result;
           };
-          const secretFields = inputs.filter((el) => (el.type || '').toLowerCase() === 'password');
-          const accountFields = inputs.filter((el) => scoreAccount(el) >= 0).sort((a, b) => scoreAccount(b) - scoreAccount(a));
-          const accountField = accountFields[0] || null;
-          const secretField = secretFields.find((el) => (el.autocomplete || '').toLowerCase() === 'current-password')
-            || secretFields[0]
-            || null;
+          const ranked = candidates.map((el) => ({ el, score: score(el) })).sort((a, b) => b.score - a.score);
+          const account = ranked.length === 1
+            ? ranked[0].el
+            : ranked.length > 1 && ranked[0].score > 0 && ranked[0].score > ranked[1].score
+              ? ranked[0].el
+              : undefined;
+          if (!account) return JSON.stringify({ ok: false });
           const setValue = (el, value) => {
             const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
             if (descriptor?.set) descriptor.set.call(el, value);
@@ -912,35 +1107,26 @@ internal sealed class PhoenixDesktopWindow : Form
             el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
           };
-          if (!accountField && !secretField)
-            return JSON.stringify({ origin: location.origin, phase: 'fields-not-found', submitted: false });
-
-          if (accountField) setValue(accountField, account);
-          if (secretField) setValue(secretField, secret);
-
-          let submitted = false;
-          let phase = secretField ? 'credentials-filled' : 'account-filled';
-          if (submit) {
-            const form = secretField?.form || accountField?.form || null;
-            if (form) {
-              const actionOrigin = new URL(form.action || location.href, location.href).origin;
-              if (actionOrigin !== expected) throw new Error('cross-origin login submit refused');
-              if (typeof form.requestSubmit === 'function') form.requestSubmit();
-              else form.submit();
-              submitted = true;
-              phase = secretField ? 'credentials-submitted' : 'account-submitted';
-            }
-          }
-          return JSON.stringify({ origin: location.origin, phase, submitted });
+          setValue(account, __ACCOUNT__);
+          setValue(passwords[0], __SECRET__);
+          return JSON.stringify({ ok: true, submitted: false });
         })()
         """;
 
     private void OpenBrowser(string? value)
     {
+        _ = OpenBrowserAsync(value, waitForCompletion: false);
+    }
+
+    private async Task OpenBrowserAsync(string? value, bool waitForCompletion)
+    {
         if (string.IsNullOrWhiteSpace(value)) return;
         ShowAndActivate();
         SetBrowserVisible(true);
-        NavigateBrowser(value);
+        var uri = BrowserNavigation.NormalizeAddress(value);
+        if (uri is null) return;
+        address.Text = uri.ToString();
+        await NavigateBrowserAsync(uri, waitForCompletion);
     }
 
     private void NavigateBrowser(string value)
@@ -951,19 +1137,47 @@ internal sealed class PhoenixDesktopWindow : Form
         _ = NavigateBrowserAsync(uri);
     }
 
-    private async Task NavigateBrowserAsync(Uri uri)
+    private async Task NavigateBrowserAsync(Uri uri, bool waitForCompletion = false)
     {
         try
         {
             await EnsureBrowserInitializedAsync();
-            if (browserView.CoreWebView2 is not null)
-                browserView.CoreWebView2.Navigate(uri.ToString());
-            else
+            var core = browserView.CoreWebView2;
+            if (core is null)
+            {
                 browserView.Source = uri;
+                if (waitForCompletion)
+                    throw new InvalidOperationException("Embedded browser did not initialize its WebView2 controller.");
+                return;
+            }
+
+            if (!waitForCompletion)
+            {
+                core.Navigate(uri.ToString());
+                return;
+            }
+
+            if (pendingBrowserNavigation is not null)
+                throw new InvalidOperationException("Embedded browser already has a navigation in progress.");
+            var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            pendingBrowserNavigation = completed;
+            try
+            {
+                core.Navigate(uri.ToString());
+                var success = await completed.Task.WaitAsync(TimeSpan.FromSeconds(15));
+                if (!success)
+                    throw new InvalidOperationException("Embedded browser navigation did not complete successfully.");
+            }
+            finally
+            {
+                if (ReferenceEquals(pendingBrowserNavigation, completed))
+                    pendingBrowserNavigation = null;
+            }
         }
         catch (Exception ex)
         {
             DesktopLog.Write("Embedded browser navigation initialization failed", ex);
+            if (waitForCompletion) throw;
         }
     }
 
@@ -980,8 +1194,16 @@ internal sealed class PhoenixDesktopWindow : Form
         var browserEnvironment = await CoreWebView2Environment.CreateAsync(null, browserProfile);
         await browserView.EnsureCoreWebView2Async(browserEnvironment);
         ConfigureWebView(browserView.CoreWebView2, isPhoenixSurface: false);
-        browserView.CoreWebView2.NavigationStarting += (_, e) => address.Text = e.Uri;
-        browserView.CoreWebView2.NavigationCompleted += (_, _) => PublishBrowserState();
+        browserView.CoreWebView2.NavigationStarting += (_, e) =>
+        {
+            CancelPendingCredentialPrompts();
+            address.Text = e.Uri;
+        };
+        browserView.CoreWebView2.NavigationCompleted += (_, args) =>
+        {
+            pendingBrowserNavigation?.TrySetResult(args.IsSuccess);
+            PublishBrowserState();
+        };
         browserView.CoreWebView2.SourceChanged += (_, _) => PublishBrowserState();
         browserView.CoreWebView2.DocumentTitleChanged += (_, _) => PublishBrowserState();
         browserView.CoreWebView2.HistoryChanged += (_, _) => PublishBrowserState();
@@ -996,6 +1218,7 @@ internal sealed class PhoenixDesktopWindow : Form
 
     private void SetBrowserVisible(bool visible)
     {
+        if (!visible) CancelPendingCredentialPrompts();
         var opening = visible && split.Panel2Collapsed;
         split.Panel2Collapsed = !visible;
         if (visible)
@@ -1056,7 +1279,10 @@ internal sealed class PhoenixDesktopWindow : Form
     protected override void Dispose(bool disposing)
     {
         if (disposing)
+        {
+            CancelPendingCredentialPrompts();
             startupAnimationTimer.Dispose();
+        }
         base.Dispose(disposing);
     }
 
@@ -1064,6 +1290,7 @@ internal sealed class PhoenixDesktopWindow : Form
     {
         if (DesktopStartupContract.UserCloseHidesToTray && e.CloseReason == CloseReason.UserClosing)
         {
+            CancelPendingCredentialPrompts();
             e.Cancel = true;
             Hide();
             DesktopLog.Write("Phoenix window closed by user; shell hidden to tray while runtime remains active.");
