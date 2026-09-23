@@ -19,12 +19,12 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tools` | `run_code` | `ctx.tools`, `ctx.codeRuntime (execution time)`, `ctx.systemPrompt` | `tool/call`, `one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`, `tool/result` | - | Owned by the tool registry as a reserved transport outside filterable capability layers under `mode: code` / `mode: both` (see the Code Mode Agent Note). Under `code` it is the registry's only wire contribution; the other visible capabilities are declared in a generated SDK section in the loaded runtime's language, and a program calls them through bindings scheduled under the native concurrency contract (submission-ordered starts and policy; concurrency-safe bodies overlap up to `maxParallelSubCalls`) that re-enter the complete guarded tool pipeline and link each nested execution to this outer result. |
 | `@phoenix-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
 | `@phoenix-ai/dsh-tool-bash` | `bash` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The bash tool is the model-facing consumer of the bash executor seam. A `run_in_background` run registers with the generic `ctx.jobs` runtime and is collected/stopped through the `job_*` tools from `@phoenix-ai/dsh-tool-jobs`; the `enableRunInBackground` config (default true) removes the parameter entirely when disabled. |
-| `@phoenix-ai/dsh-tool-pwsh` | `pwsh` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The pwsh tool is the PowerShell-dialect consumer of the bash executor seam for Windows compositions (a PowerShell executor such as `@phoenix-ai/dsh-pwsh-local` backs `ctx.shell`); it mirrors the bash tool call-for-call minus sandbox controls — `run_in_background` runs register with the generic `ctx.jobs` runtime and are collected/stopped through the `job_*` tools, and the managed `DSH_*` environment comes from `@phoenix-ai/dsh-shell-env`. Each call runs in a fresh process (no persistent PTY session), with native `C:\...` paths and `$env:NAME` variables. |
+| `@phoenix-ai/dsh-tool-pwsh` | `computer`, `pwsh` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The pwsh tool is the PowerShell-dialect consumer of the bash executor seam for Windows compositions (a PowerShell executor such as `@phoenix-ai/dsh-pwsh-local` backs `ctx.shell`); it mirrors the bash tool call-for-call minus sandbox controls — `run_in_background` runs register with the generic `ctx.jobs` runtime and are collected/stopped through the `job_*` tools, and the managed `DSH_*` environment comes from `@phoenix-ai/dsh-shell-env`. Each call runs in a fresh process (no persistent PTY session), with native `C:\...` paths and `$env:NAME` variables. |
 | `@phoenix-ai/dsh-tool-cordis` | `cordis_define`, `cordis_inspect_list`, `cordis_inspect_query`, `cordis_inspect_self`, `cordis_run`, `cordis_stop`, `cordis_undefine` | `ctx.tools`, `ctx.dynamicCordisRunner` | `tool/call`, `tool/result`, `process-local dynamic package lifecycle` | - | Not in any shipped tree (a deliberate opt-in — dynamic package code reaches the real runtime, see .agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.md). The toolset injects `ctx.dynamicCordisRunner` from `@phoenix-ai/dsh-cordis-host-runner`, which owns the definition registry and the vm sandbox; a composition missing it never activates the tools. A running package may register ADDITIONAL model-visible tools until it is stopped, undefined, or PHOENIX restarts; a full changed request header logs those tool-set changes. |
 | `@phoenix-ai/dsh-tool-bash-persistent` | `bash` | `ctx.tools`, `ctx.terminals`, `an owning Agent at execution time` | `tool/call`, `PTY shell state`, `tool/result` | - | One owner-isolated persistent bash tool; deployment composition supplies the PTY backend and may override the model-facing environment description. |
 | `@phoenix-ai/dsh-tool-pwsh-persistent` | `pwsh` | `ctx.tools`, `ctx.terminals`, `an owning Agent at execution time` | `tool/call`, `PTY shell state`, `tool/result` | - | One owner-isolated persistent pwsh tool, the Windows counterpart of the persistent bash tool; deployment composition supplies a pwsh-dialect PTY backend and may override the model-facing environment description. |
 | `@phoenix-ai/dsh-tool-str-replace-editor` | `str_replace_editor` | `ctx.tools`, `ctx.fs` | `tool/call`, `fs/observed after view presence/absence, edit absence, or successful mutation`, `tool/result` | - | Standalone view/create/unique literal replace/line insert tool over the filesystem seam; it composes with any shell or terminal API. |
-| `@phoenix-ai/dsh-tool-fs` | `edit`, `read`, `read_image`, `write` | `ctx.tools`, `ctx.fs`, `ctx.systemPrompt`, `ctx.attachments (image-tool registration)`, `ctx.llm + an image-capable route (image-tool execution)` | `tool/call`, `fs/write-intent or fs/edit-intent for mutations`, `fs/observed after read presence/absence or successful file operation`, `durable attachment (read_image)`, `tool/result` | - | The read-before-write/edit policy is added by `@phoenix-ai/dsh-fs-observation-policy` (an `fs/*` event-gate plugin, no schema change); a deployment that loads these tools is expected to also load it. The image tool is not registered without `ctx.attachments`; its schema is route-independent, and execution refuses unless the exact routed model declares image input. |
+| `@phoenix-ai/dsh-tool-fs` | `edit`, `fs_status`, `read`, `read_image`, `write` | `ctx.tools`, `ctx.fs`, `ctx.systemPrompt`, `ctx.attachments (image-tool registration)`, `ctx.llm + an image-capable route (image-tool execution)` | `tool/call`, `fs/write-intent or fs/edit-intent for mutations`, `fs/observed after read presence/absence or successful file operation`, `durable attachment (read_image)`, `tool/result` | - | The read-before-write/edit policy is added by `@phoenix-ai/dsh-fs-observation-policy` (an `fs/*` event-gate plugin, no schema change); a deployment that loads these tools is expected to also load it. The image tool is not registered without `ctx.attachments`; its schema is route-independent, and execution refuses unless the exact routed model declares image input. |
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`, `grep` | `ctx.tools`, `ctx.subprocess`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments. |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`, `terminal_list`, `terminal_open`, `terminal_read`, `terminal_send`, `terminal_signal` | `ctx.tools`, `ctx.terminals`, `ctx.systemPrompt`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The six terminal tools are opt-in and complement one-shot shell/filesystem tools. `terminal_send(run_in_background: true)` registers with `ctx.jobs`; TUI, named key sequences, BEL, resize, auto-start, and cross-agent sharing are absent from the schema. |
 | `@phoenix-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `organization_forge`, `specialist_lab`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
@@ -34,7 +34,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@phoenix-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
-| `@phoenix-ai/dsh-tool-session-learning` | `memory_remember`, `memory_search`, `memory_teach` | `ctx.tools`, `ctx.systemPrompt`, `ctx.learningMemory` | `tool/call`, `tool/result`, `bounded learning context` | - | memory_search and memory_remember expose only bounded, provenance-preserving learning records; they never grant permissions or modify trusted instructions. |
+| `@phoenix-ai/dsh-tool-session-learning` | `computer_learning`, `memory_remember`, `memory_search`, `memory_teach` | `ctx.tools`, `ctx.systemPrompt`, `ctx.learningMemory` | `tool/call`, `tool/result`, `bounded learning context` | - | memory_search and memory_remember expose only bounded, provenance-preserving learning records; they never grant permissions or modify trusted instructions. |
 | `@phoenix-ai/dsh-tool-session-query` | `session_event_read`, `session_event_search`, `session_event_trace`, `session_search`, `session_trace` | `ctx.tools`, `ctx.systemPrompt`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `tool/result` | - | The five read-only tools hide provider cursors and authorize every result from the immutable calling agent session. The package is opt-in; compositions that need enforced deadlines or bounded inline output also mount the generic timeout or spill policies. |
 | `@phoenix-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`, `ctx.subagents`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `child session events through the chosen provider` | `subagent`, `subagent_fork` | The registered tool name is the load-time `toolName` config (default `subagent`); the schema above is that default. The shipped compositions load this package once per subagent backend, so the model additionally sees `subagent_fork` bound to the fork backend. Each instance's description, `run_in_background` parameter, and system-prompt policy follow its own `backgroundMode` and `enableRunInBackground`, so the two shipped schemas are not identical: `subagent` is `continuable` and defaults omitted calls to background with automatic settlement delivery, while `subagent_fork` stays `one-shot` and defaults them to foreground — see `packages/bundle/base/cordis.patch.yml` and `examples/acp-agent/cordis.yml`. |
 | `@phoenix-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
@@ -229,6 +229,125 @@ The bash tool is the model-facing consumer of the bash executor seam. A `run_in_
 <a id="phoenix-aidsh-tool-pwsh"></a>
 
 ## `@phoenix-ai/dsh-tool-pwsh`
+
+### `computer`
+
+Control the Windows desktop with window-aware actions. For web work in Phoenix Desktop, prefer browser_inspect/browser_fill_form/browser_click_text/browser_login over coordinate typing when possible. browser_login obtains credentials through a Phoenix-only prompt or the local vault, fills recognized sign-in fields, never submits the form, and never returns credential values. Never put passwords, account names, or credential values in Computer arguments. browser_forget_credentials removes saved credentials for one HTTPS origin. browser_inspect returns labels/indexes but never current field values. Other browser_* actions command Phoenix's embedded WebView2 directly through the native desktop channel and never intentionally launch the system browser. Then use screenshot/click/type/key/scroll against the Phoenix window for full visual control. Before controlling any other external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot, except credential operations. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Desktop operation. browser_inspect reads visible text/form metadata without values; browser_fill_form fills non-secret inspected indexes; browser_click_text clicks visible button/link text; browser_login privately fills recognized sign-in fields without submitting; browser_forget_credentials removes the current origin credential.",
+      "enum": [
+        "screenshot",
+        "windows",
+        "focus",
+        "browser_open",
+        "browser_close",
+        "browser_back",
+        "browser_forward",
+        "browser_reload",
+        "browser_focus",
+        "browser_inspect",
+        "browser_fill_form",
+        "browser_click_text",
+        "browser_login",
+        "browser_forget_credentials",
+        "move",
+        "click",
+        "double_click",
+        "drag",
+        "type",
+        "key",
+        "scroll"
+      ]
+    },
+    "target": {
+      "type": "string",
+      "description": "Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus; embedded browser actions do not need it."
+    },
+    "url": {
+      "type": "string",
+      "description": "URL or search text for browser_open. Phoenix validates it and navigates the embedded WebView2 directly."
+    },
+    "origin": {
+      "type": "string",
+      "description": "Expected live page origin for browser_fill_form/browser_click_text; HTTPS origin for browser_login/browser_forget_credentials."
+    },
+    "fields": {
+      "type": "array",
+      "description": "For browser_fill_form: visible field indexes from browser_inspect and one value or checked state each. Password/file inputs are protected and rejected.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "integer"
+          },
+          "value": {
+            "type": "string"
+          },
+          "checked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "field"
+        ]
+      }
+    },
+    "submit": {
+      "type": "boolean",
+      "description": "Submit the containing form after browser_fill_form. Defaults to false; browser_login never submits."
+    },
+    "x": {
+      "type": "integer",
+      "description": "Screen X coordinate. Required for move/click/double_click/drag; optional with scroll."
+    },
+    "y": {
+      "type": "integer",
+      "description": "Screen Y coordinate. Required for move/click/double_click/drag; optional with scroll."
+    },
+    "x2": {
+      "type": "integer",
+      "description": "Drag destination X coordinate."
+    },
+    "y2": {
+      "type": "integer",
+      "description": "Drag destination Y coordinate."
+    },
+    "button": {
+      "type": "string",
+      "description": "Mouse button; defaults to left.",
+      "enum": [
+        "left",
+        "right",
+        "middle"
+      ]
+    },
+    "text": {
+      "type": "string",
+      "description": "Unicode text for the type action."
+    },
+    "keys": {
+      "type": "string",
+      "description": "Key or combo such as ENTER, CTRL+L, ALT+TAB, F5, or SHIFT+F10."
+    },
+    "delta": {
+      "type": "integer",
+      "description": "Mouse-wheel delta for scroll; positive scrolls up and negative scrolls down."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/shell/tool-pwsh/src/index.ts`](../packages/shell/tool-pwsh/src/index.ts)
 
 ### `pwsh`
 
@@ -671,6 +790,30 @@ Edit an existing UTF-8 text file by replacing literal text.
 
 Source: [`packages/fs/tool-fs/src/index.ts`](../packages/fs/tool-fs/src/index.ts)
 
+### `fs_status`
+
+Check up to 64 exact filesystem paths in one cheap call. Returns existence, type, and size when known; never reads file contents and never recursively searches.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "paths": {
+      "type": "array",
+      "description": "Exact file or directory paths. Relative paths resolve against the session workspace.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "paths"
+  ]
+}
+```
+
+Source: [`packages/fs/tool-fs/src/index.ts`](../packages/fs/tool-fs/src/index.ts)
+
 ### `read`
 
 Read a UTF-8 text file and return line-numbered content.
@@ -755,7 +898,7 @@ The read-before-write/edit policy is added by `@phoenix-ai/dsh-fs-observation-po
 
 ### `glob`
 
-Find files whose paths match a glob pattern. Returns matching file paths — never directories — including hidden and ignored files (VCS metadata directories are excluded). Up to 100 paths come back in modification-time order; a larger result instead returns 100 paths sampled across top-level entries, says so, and reports where the complete sorted list was saved. This tool does not enumerate directory entries.
+Find files whose paths match a glob pattern. Returns matching file paths — never directories — including hidden files while respecting normal ignore rules (VCS metadata directories are always excluded). Up to 100 paths come back in modification-time order; a larger result instead returns 100 paths sampled across top-level entries, says so, and reports where the complete sorted list was saved. This tool does not enumerate directory entries.
 
 ```json
 {
@@ -768,6 +911,10 @@ Find files whose paths match a glob pattern. Returns matching file paths — nev
     "path": {
       "type": "string",
       "description": "Directory to search in. Defaults to the session workspace; a relative path resolves against it."
+    },
+    "includeIgnored": {
+      "type": "boolean",
+      "description": "Include ignored/generated files. Defaults false; enable only when explicitly needed."
     }
   },
   "required": [
@@ -1729,9 +1876,29 @@ Explicitly delete Phoenix’s durable relationship to one creation and detach it
 
 Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
 
+### `living_get_connector_kit`
+
+Return the provisioned Phoenix control descriptor plus drop-in JavaScript and Python sidecar modules for one non-static creation. Keep the bearer token in a local/server-side secret; never commit it or ship it in a public browser bundle.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
 ### `living_inspect_creation`
 
-Inspect one remembered creation and verify its live provider achieved the target integration level before delivery.
+Inspect one remembered creation and report its live integration state. Treat connectivity as advisory unless it is an explicit acceptance criterion.
 
 ```json
 {
@@ -1802,7 +1969,6 @@ Remember any user-facing artifact or runnable system Phoenix creates or material
     "target_level": {
       "type": "string",
       "enum": [
-        "static",
         "connected",
         "reactive",
         "controllable",
@@ -1858,7 +2024,7 @@ Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/
 
 ### `living_verify_creation`
 
-Fail unless a creation has reached its declared target integration level. Use this immediately before claiming a created artifact or system is complete.
+Fail unless a creation has reached its declared target integration level. Use only when Phoenix connectivity is an explicit acceptance criterion, not as a universal task-completion gate.
 
 ```json
 {
@@ -1985,6 +2151,35 @@ Source: [`packages/skill/tool-skill/src/index.ts`](../packages/skill/tool-skill/
 <a id="phoenix-aidsh-tool-session-learning"></a>
 
 ## `@phoenix-ai/dsh-tool-session-learning`
+
+### `computer_learning`
+
+Review or forget verified Computer flows and preferences. Only safe browser action names and canonical HTTPS origins are shown; credentials, form values, page text, screenshots, paths, queries, and tokens are never returned.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Review safe learned Computer metadata or forget one exact reviewed memory id.",
+      "enum": [
+        "review",
+        "forget"
+      ]
+    },
+    "memory_id": {
+      "type": "string",
+      "description": "Exact id returned by review when action is forget."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/session-learning/tool-session-learning/src/index.ts`](../packages/session-learning/tool-session-learning/src/index.ts)
 
 ### `memory_remember`
 
@@ -2360,7 +2555,7 @@ The five read-only tools hide provider cursors and authorize every result from t
 
 ### `subagent`
 
-Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.
+Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`. Presupuesto Phoenix de subagentes: usa 1 como norma. Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, marcando hard_parallelism=true. Abre un tercero solo en un caso extremo donde tres frentes independientes sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, el contexto, la identidad y la síntesis final en el agente principal.
 
 ```json
 {
@@ -2373,6 +2568,14 @@ Orquestar una tarea independiente con un subagente en contexto limpio para desca
     "prompt": {
       "type": "string",
       "description": "Describe en español la tarea autónoma del subagente, con archivos relevantes, límites y evidencia esperada. Devuelve solo el resultado verificable."
+    },
+    "hard_parallelism": {
+      "type": "boolean",
+      "description": "Second active slot only. Set true ONLY when one subagent is insufficient and the task has two genuinely independent difficult workstreams."
+    },
+    "extreme_parallelism": {
+      "type": "boolean",
+      "description": "Third active slot only. Set true ONLY in an extreme case that truly requires three independent workstreams. It never permits a fourth child."
     },
     "run_in_background": {
       "type": "boolean",
