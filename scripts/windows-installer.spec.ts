@@ -66,6 +66,10 @@ describe('PHOENIX managed Windows installation', () => {
     expect(smokeScript).toContain('/TASKS=desktopicon,autostart')
     expect(smokeScript).toContain('--prepare-runtime')
     expect(smokeScript).toContain('--prepare-webview')
+    expect(smokeScript).toContain("'Phoenix WebView2 profile pre-warm completed=True;'")
+    expect(read('apps/desktop-windows/Program.cs')).toContain(
+      'Phoenix WebView2 profile pre-warm completed={completed};',
+    )
     expect(smokeScript).toContain('--enable-autostart')
     expect(smokeScript).toContain('--smoke-webview-loopback')
     expect(smokeScript).toContain('--smoke-window')

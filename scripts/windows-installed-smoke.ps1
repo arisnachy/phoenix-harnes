@@ -368,7 +368,7 @@ try {
         'Bundled production runtime seed installed successfully.'
     )
     Invoke-InstalledCommand -Executable $phoenixExe -Argument '--prepare-webview' -TimeoutSeconds 60 -ExpectedLogMarkers @(
-        'Phoenix WebView2 profile pre-warm completed=True.'
+        'Phoenix WebView2 profile pre-warm completed=True;'
     )
     Invoke-InstalledCommand -Executable $phoenixExe -Argument '--enable-autostart' -TimeoutSeconds 30
     Invoke-InstalledCommand -Executable $phoenixExe -Argument '--smoke-webview-loopback' -TimeoutSeconds 30 -ExpectedLogMarkers @(
