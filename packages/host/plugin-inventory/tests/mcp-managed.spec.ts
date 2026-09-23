@@ -128,8 +128,8 @@ describe('ManagedMcpController', () => {
         headers: {},
         oauth: false,
         bearerTokenRef: 'JEV_API_KEY',
-        toolCallTimeoutMs: 1800,
-        startupTimeoutMs: 1200,
+        toolCallTimeoutMs: 30_000,
+        startupTimeoutMs: 5_000,
         failOnStartupError: false,
         reconnect: {
           enabled: true,
@@ -144,6 +144,47 @@ describe('ManagedMcpController', () => {
     expect(persisted).not.toContain('Authorization')
     await expect(controller.configureJev()).resolves.toMatchObject({ status: 'already-installed' })
     expect(live.create).toHaveBeenCalledTimes(1)
+  })
+
+
+  it('upgrades an existing legacy Jev row without reinstalling the live connector', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{
+      insert: [{
+        id: 'legacy-jev',
+        name: '@phoenix-ai/dsh-mcp-client',
+        config: {
+          transport: 'streamable-http',
+          serverName: 'jev',
+          url: 'https://www.jevai.org/api/mcp',
+          headers: {},
+          oauth: false,
+          bearerTokenRef: 'JEV_API_KEY',
+          toolCallTimeoutMs: 1800,
+          startupTimeoutMs: 1200,
+          failOnStartupError: false,
+          reconnect: {
+            enabled: true,
+            initialDelayMs: 1000,
+            maxDelayMs: 30_000,
+            maxAttempts: 3,
+          },
+        },
+      }],
+    }]))
+
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(controller.configureJev()).resolves.toMatchObject({
+      status: 'already-installed',
+      connector: { entryId: 'legacy-jev', serverName: 'jev' },
+    })
+    expect(live.create).not.toHaveBeenCalled()
+
+    const persisted = readFileSync(patchPath, 'utf8')
+    expect(persisted).toContain('"toolCallTimeoutMs": 30000')
+    expect(persisted).toContain('"startupTimeoutMs": 5000')
   })
 
   it('fails closed when registry identity, status, or transport is not installable', async () => {
