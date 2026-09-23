@@ -55,8 +55,7 @@
     "@phoenix-ai/dsh-typert-protocol": "workspace:^"
   },
   "dependencies": {
-    "@phoenix-ai/schemastery": "workspace:^",
-    "zod": "^4.4.3"
+    "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
