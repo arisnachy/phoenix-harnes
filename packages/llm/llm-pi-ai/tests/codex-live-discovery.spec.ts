@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { CodexModelListTransport } from '../src/codex-discovery.ts'
-import { encodeCodexWireFrame, readCodexModelPage } from '../src/codex-discovery.ts'
+import { codexDiscoveryArgs, encodeCodexWireFrame, readCodexModelPage } from '../src/codex-discovery.ts'
 import { discoverModels } from '../src/discovery.ts'
 
 describe('openai-codex live model discovery', () => {
@@ -48,6 +48,18 @@ describe('openai-codex live model discovery', () => {
 })
 
 describe('Codex app-server wire protocol', () => {
+  it('keeps metadata probes away from plugin and bundled-skill installation', () => {
+    expect(codexDiscoveryArgs()).toEqual([
+      '-c',
+      'features.plugins=false',
+      '-c',
+      'skills.bundled.enabled=false',
+      'app-server',
+      '--listen',
+      'stdio://',
+    ])
+  })
+
   it('writes JSONL requests without the jsonrpc member Codex omits on its wire', () => {
     const frame = encodeCodexWireFrame({
       id: 2,
