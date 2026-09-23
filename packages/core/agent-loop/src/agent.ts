@@ -121,6 +121,8 @@ export class ReactLoopAgent implements Agent {
   readonly inbox: Inbox
   private phase: Phase
   private activityDone: Promise<void> = Promise.resolve()
+  /** True only while the current step is waiting on model-requested tool work. */
+  private toolBoundaryActive = false
 
   /** The agent-scoped registration boundary; the lifecycle owner unwinds it after the driver exits. */
   readonly scope: Scope
@@ -181,7 +183,18 @@ export class ReactLoopAgent implements Agent {
   }
 
   steer(input: UserMessage): void {
+    const shouldInterruptTool = this.phase.kind === 'running'
+      && this.toolBoundaryActive
+      && !this.phase.abort.signal.aborted
     this.send(input, 'next-step', true)
+    if (!shouldInterruptTool || this.phase.kind !== 'running' || this.phase.abort.signal.aborted) return
+
+    // "Steer" is the interactive path, distinct from Queue. A user message
+    // must not sit behind an unbounded Blender/PowerShell/browser call. Keep
+    // the steering inbox item, cooperatively abort the active tool boundary,
+    // and latch a fresh turn; the normal abort drain still owns cleanup.
+    this.phase.wakeRequested = true
+    this.phase.abort.abort({ kind: 'user' })
   }
 
   inject(input: UserMessage): void {
@@ -494,10 +507,16 @@ export class ReactLoopAgent implements Agent {
       const toolCalls = message.content.filter(block => block.type === 'tool-call')
       if (toolCalls.length === 0) return { kind: 'completed' }
       const hasVisibleProgress = message.content.some(block => block.type === 'text' && block.text.trim().length > 0)
-      const { concluded } = await executeToolCalls(
-        this.loopCtx, turn, step, toolCalls, signal,
-        context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
-      )
+      let concluded = false
+      this.toolBoundaryActive = true
+      try {
+        ;({ concluded } = await executeToolCalls(
+          this.loopCtx, turn, step, toolCalls, signal,
+          context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
+        ))
+      } finally {
+        this.toolBoundaryActive = false
+      }
       // Some providers jump straight from hidden reasoning into tool calls.
       // Nudge the next model step to narrate safe, user-visible progress instead
       // of letting a long tool chain remain opaque. This is an internal prompt,
