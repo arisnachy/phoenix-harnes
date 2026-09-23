@@ -230,6 +230,7 @@ export class ManagedMcpController {
    * @returns true when a legacy Jev row was retired.
    */
   async retireJev(): Promise<boolean> {
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
       const rows = await readManagedRows(this.path)
       const retired = rows.filter(isRetiredJevManagedRow)
