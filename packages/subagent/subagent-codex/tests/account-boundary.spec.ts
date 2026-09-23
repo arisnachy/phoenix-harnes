@@ -17,6 +17,13 @@ describe('native Codex managed-account boundary', () => {
     expect(accountSource).toContain('account/usage/read')
   })
 
+  it('isolates native account probes and coalesces repeated inspection work', () => {
+    expect(accountSource).toContain('codexAccountEnvironment(config.env)')
+    expect(accountSource).toContain('ACCOUNT_INSPECTION_TTL_MS')
+    expect(accountSource).toContain('ACCOUNT_FAILURE_COOLDOWN_MS')
+    expect(accountSource).toContain('inFlightSnapshot')
+  })
+
   it('uses Codex Apps RPCs only as an optional connector catalog', () => {
     expect(accountSource).toContain('app/list')
     expect(accountSource).toContain('app/installed')
