@@ -8,6 +8,12 @@ export type SnapshotMode = 'replay' | 'record' | 'refresh'
 
 const root = resolve(import.meta.dirname, '..')
 const builtAgent = resolve(root, 'packages/examples/acp-demo/lib/bin.js')
+const requiredRuntimeArtifacts = [
+  resolve(root, 'vendor/cordis/lib/index.js'),
+  resolve(root, 'packages/voice/voice/lib/typert.host.js'),
+  resolve(root, 'packages/interaction/commands/lib/typert.host.js'),
+  resolve(root, 'packages/goal/goal/lib/typert.host.js'),
+] as const
 
 /** Resolve the snapshot mode from the public package command. */
 export function snapshotMode(raw: string | undefined): SnapshotMode {
@@ -56,6 +62,11 @@ function main(args: string[]): void {
     // bundle suite. CI opts into lib mode explicitly after its complete build;
     // automatic Windows lib mode only replaces slow source subprocess boots.
     ...(automaticWindowsLib ? { DSH_SNAPSHOT_SKIP_WEB: '1' } : {}),
+  }
+
+  if (requiredRuntimeArtifacts.some(artifact => !existsSync(artifact))) {
+    console.log('snapshot runner: runtime artifacts are missing; building Host contracts before replay.')
+    runPnpm(['run', 'build:lib:host'], env)
   }
 
   if (useBuilt && !existsSync(builtAgent)) {
