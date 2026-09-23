@@ -21,6 +21,7 @@ import {
   type ArtifactRuntime,
 } from './artifact-runtime.ts'
 import type { AcquisitionRegistry } from './acquisition-registry.ts'
+import { createDeterministicMissionJudge } from './mission-local-judge.ts'
 import {
   MissionPersistenceKernel,
   createMissionKernelWriter,
@@ -85,7 +86,7 @@ export type HardnessMissionResult =
   }
 
 /** Fixed safety bound preventing automatic recovery from becoming an unbounded loop. */
-const MAX_AUTOMATIC_RECOVERY_ATTEMPTS = 3
+const MAX_AUTOMATIC_RECOVERY_ATTEMPTS = 2
 
 function evidenceFor(
   input: HardnessMissionInput,
@@ -228,6 +229,21 @@ function missionGoal(input: HardnessMissionInput): MissionGoalLock {
  * @param input - Mission request and optional live session context.
  * @returns Stable mission identity for the current goal, or the call identity.
  */
+function activeGoalOwnsCompletion(input: HardnessMissionInput): boolean {
+  const events = input.context.agent?.session.events as readonly { readonly type: string; readonly data: unknown }[] | undefined
+  const goalChange = events?.findLast(event => event.type === 'goal/change') as
+    | { readonly type: string
+      readonly data: {
+        readonly operation?: string
+        readonly goal?: { readonly phase?: string }
+      }
+    }
+    | undefined
+  return goalChange?.data.operation !== 'clear'
+    && goalChange?.data.goal?.phase !== undefined
+    && goalChange.data.goal.phase !== 'complete'
+}
+
 function missionId(input: HardnessMissionInput): string {
   const events = input.context.agent?.session.events as readonly { readonly type: string; readonly data: unknown }[] | undefined
   const goalChange = events?.findLast(event => event.type === 'goal/change') as
@@ -261,19 +277,28 @@ async function judgeMission(
   rendered: ArtifactRenderModel,
   evidenceId: string,
 ): Promise<MissionJudgeDecision> {
+  const judgeInput = {
+    need: input.need,
+    goal: lockedGoal,
+    criteria,
+    artifactId: artifact.id,
+    artifactMime: artifact.mime,
+    rendered,
+    evidenceId,
+    context: input.context,
+  }
+  if (activeGoalOwnsCompletion(input)) {
+    // The Goal completion gate is the single semantic authority for the whole
+    // user mission. HARDNESS still proves mechanical artifact/evidence
+    // integrity locally, avoiding a redundant model judge over the same work.
+    return await createDeterministicMissionJudge()(judgeInput)
+  }
   if (input.judge === undefined) {
     return blockedJudge('HARDNESS completion requires an independent judge')
   }
   try {
     return await input.judge({
-      need: input.need,
-      goal: lockedGoal,
-      criteria,
-      artifactId: artifact.id,
-      artifactMime: artifact.mime,
-      rendered,
-      evidenceId,
-      context: input.context,
+      ...judgeInput,
     })
   } catch {
     return blockedJudge('HARDNESS independent judge could not complete')

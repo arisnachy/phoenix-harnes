@@ -38,10 +38,10 @@ export const name = 'mcp-client'
 export const inject = ['tools']
 
 /** Default timeout for individual MCP tool calls (ms). */
-const DEFAULT_TOOL_CALL_TIMEOUT_MS = 60_000
+const DEFAULT_TOOL_CALL_TIMEOUT_MS = 15_000
 
 /** Default startup budget; slow or unavailable optional MCP servers do not block the Web UI. */
-const DEFAULT_STARTUP_TIMEOUT_MS = 5_000
+const DEFAULT_STARTUP_TIMEOUT_MS = 2_000
 
 /** Valid `serverName`, kept below the public tool-name budget. */
 const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/

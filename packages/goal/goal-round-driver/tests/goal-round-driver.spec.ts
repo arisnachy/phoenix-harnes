@@ -264,6 +264,31 @@ describe('same-session goal driving', () => {
     expect(requestText(test.adapter.requests[1]!)).toContain('Round: 2/2')
   })
 
+  it('stops after one recovery window instead of rotating goal revisions forever', async () => {
+    const test = await harness([
+      textResponse('window one, round one'),
+      textResponse('window one, round two'),
+      textResponse('window two, round one'),
+      textResponse('window two, round two'),
+    ])
+    test.ctx.goals.create(test.agent, { objective: 'bound autonomous recovery', maxGoalRounds: 2 })
+
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+
+    expect(goal).toMatchObject({
+      phase: 'blocked',
+      roundsStarted: 2,
+      activation: 'disarmed',
+      blockedReason: {
+        code: 'execution-budget-exhausted',
+      },
+    })
+    expect(goal?.blockedReason?.message).toContain('2 windows')
+    expect(test.adapter.requests).toHaveLength(4)
+    const continuations = test.agent.session.events.filter(event => event.type === 'goal/continuation')
+    expect(continuations).toHaveLength(1)
+  })
+
   it('includes a persisted non-passing judge result in the next round', async () => {
     const test = await harness([textResponse('repair round')])
     const continued = stopAfterContinuation(test.ctx, test.agent)
