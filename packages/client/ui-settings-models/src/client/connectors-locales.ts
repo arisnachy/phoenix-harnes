@@ -196,7 +196,7 @@ export const connectorZh: { [Key in ConnectorKey]: string } = {
   chatgptWebBusy: '正在应用…',
   chatgptWebSetupHint: '先打开一次 Codex Web GPT 并完成 Setup > Browser-only，然后再次开启此开关。',
   jevSetupTitle: '配置 Jev MCP',
-  jevSetupDescription: '添加或替换 Jev API Key。若已配置，可留空并直接重新连接。Phoenix 不会把密钥写入 MCP 配置；Jev 不可用时会回退到原生路由。'
+  jevSetupDescription: '添加或替换 Jev API Key。若已配置，可留空并直接重新连接。Phoenix 不会把密钥写入 MCP 配置；Jev 不可用时会回退到原生路由。',
   jevApiKeyLabel: 'Jev API Key',
   jevKeyPlaceholder: '粘贴 Jev API Key',
   jevSave: '保存并连接',
