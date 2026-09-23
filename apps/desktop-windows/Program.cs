@@ -852,9 +852,15 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     {
         try
         {
+            var firstListener = DesktopRuntimeProcessIdentity.FindListeningProcessIdentity(DesktopRuntimeLaunchContract.DesktopPort);
+            if (firstListener is null || !DesktopRuntimeProcessIdentity.IsStillAlive(firstListener.Value))
+            {
+                DesktopLog.Write("Phoenix identity probe found no live loopback listener before the HTTP request.");
+                return null;
+            }
+
             // Identify Phoenix through its own HTML shell and then validate the owning process
-            // without starting a shell command. This proves that the web UI, not merely a TCP
-            // listener, is actually ready for WebView2.
+            // after the HTTP request. The listener must not change while the response is read.
             using var response = await http.GetAsync(Program.PhoenixUri, HttpCompletionOption.ResponseContentRead);
             if (!response.IsSuccessStatusCode)
             {
@@ -873,15 +879,38 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             var listener = DesktopRuntimeProcessIdentity.FindListeningProcessIdentity(DesktopRuntimeLaunchContract.DesktopPort);
             if (listener is null)
             {
-                DesktopLog.Write("Phoenix identity probe found the Phoenix shell but no owning listener PID.");
+                DesktopLog.Write("Phoenix identity probe found the Phoenix shell but no owning listener PID after the HTTP request.");
                 return null;
             }
 
-            var processAlive = DesktopRuntimeProcessIdentity.IsStillAlive(listener.Value);
-            var commandLine = DesktopRuntimeProcessIdentity.TryGetCommandLine(listener.Value.ProcessId);
-            var processCompatible = DesktopRuntimeLaunchContract.CanAdoptListener(commandLine);
-            DesktopLog.Write($"Phoenix identity probe compatible=true; listenerPid={listener.Value.ProcessId}; processAlive={processAlive}; processCompatible={processCompatible}; bytes={html.Length}.");
-            return processAlive && processCompatible ? listener : null;
+            var stableIdentity = DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                firstListener.Value.ProcessId,
+                firstListener.Value.CreationTimeUtcTicks,
+                listener.Value.ProcessId,
+                listener.Value.CreationTimeUtcTicks);
+            var processAlive = stableIdentity && DesktopRuntimeProcessIdentity.IsStillAlive(listener.Value);
+            var supervisor = ownedRuntime;
+            var processCompatible = false;
+            if (supervisor is not null)
+            {
+                try
+                {
+                    processCompatible = !supervisor.HasExited
+                        && DesktopRuntimeProcessIdentity.IsSameOrDescendantOf(listener.Value.ProcessId, supervisor.Id);
+                }
+                catch (InvalidOperationException)
+                {
+                    processCompatible = false;
+                }
+            }
+            else
+            {
+                var commandLine = DesktopRuntimeProcessIdentity.TryGetCommandLine(listener.Value.ProcessId);
+                processCompatible = DesktopRuntimeLaunchContract.CanAdoptListener(commandLine);
+            }
+
+            DesktopLog.Write($"Phoenix identity probe compatible={stableIdentity && processAlive && processCompatible}; listenerPid={listener.Value.ProcessId}; processAlive={processAlive}; processCompatible={processCompatible}; ownedRuntime={supervisor is not null}; bytes={html.Length}.");
+            return stableIdentity && processAlive && processCompatible ? listener : null;
         }
         catch (Exception ex)
         {

@@ -1380,6 +1380,9 @@ importers:
       '@phoenix-ai/dsh-app-boot':
         specifier: workspace:^
         version: link:../../boot/app-boot
+      '@phoenix-ai/dsh-chrome-connector':
+        specifier: workspace:^
+        version: link:../../mcp/chrome-connector
       '@phoenix-ai/dsh-client-connection':
         specifier: workspace:^
         version: link:../../client/connection
