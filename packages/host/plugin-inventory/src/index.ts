@@ -251,13 +251,36 @@ export class PluginInventoryGateway extends TypertRemoteService {
    */
   @Remote('configureJevMcp')
   async configureJevMcp(request: JevMcpConfigureRequest): Promise<McpRegistryInstallReceipt> {
-    const apiKey = request.apiKey.trim()
-    if (apiKey.length < 8) throw new Error('Jev API key is missing or too short')
     const credentials = (this.ctx.get as (name: string) => unknown)('credentials') as
-      | { set(ref: string, value: string): Promise<void> }
+      | {
+          describe(ref: string): Promise<{ configured: boolean; writable: boolean }>
+          set(ref: string, value: string): Promise<void>
+        }
       | undefined
     if (credentials === undefined) throw new Error('PHOENIX credential storage is unavailable')
-    await credentials.set(JEV_API_KEY_REF, apiKey)
+
+    const info = await credentials.describe(JEV_API_KEY_REF)
+    let apiKey = request.apiKey.trim()
+    if (/^Bearer\s+/i.test(apiKey)) apiKey = apiKey.replace(/^Bearer\s+/i, '').trim()
+    if (apiKey.length >= 2) {
+      const first = apiKey[0]
+      const last = apiKey[apiKey.length - 1]
+      if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+        apiKey = apiKey.slice(1, -1).trim()
+      }
+    }
+
+    if (apiKey.length === 0) {
+      if (!info.configured) throw new Error('Jev API key is not configured')
+      // The user already has a key (file, .env, or launching environment).
+      // Reuse it without asking them to paste a secret into the UI again.
+    } else {
+      if (apiKey.length < 8) throw new Error('Jev API key is missing or too short')
+      if (!info.writable) {
+        throw new Error('JEV_API_KEY is supplied by the launching environment; reuse the existing key or change it in that environment')
+      }
+      await credentials.set(JEV_API_KEY_REF, apiKey)
+    }
     const receipt = await this.managedMcp.configureJev()
     const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
       | { reconnect(serverName: string): boolean }
