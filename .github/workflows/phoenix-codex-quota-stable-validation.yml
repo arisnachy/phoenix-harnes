@@ -1,0 +1,45 @@
+name: PHOENIX Codex quota stable validation
+
+on:
+  push:
+    branches:
+      - 'repair/codex-quota-nonblocking-stable-20260923'
+
+permissions:
+  contents: read
+
+env:
+  CI: '1'
+  DSH_TELEMETRY_DISABLED: '1'
+  OPENAI_API_KEY: ''
+  ANTHROPIC_API_KEY: ''
+  DEEPSEEK_API_KEY: ''
+  GOOGLE_API_KEY: ''
+  GEMINI_API_KEY: ''
+  GROQ_API_KEY: ''
+  OPENROUTER_API_KEY: ''
+  XAI_API_KEY: ''
+
+jobs:
+  quota-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Codex quota regressions
+        run: >-
+          pnpm exec vitest run
+          packages/client/ui-model-selection/tests/codex-quota-remaining.client.spec.tsx
+          packages/host/apiproxy/tests/api-proxy-authorization.spec.ts
+          packages/subagent/subagent-codex/tests/account-boundary.spec.ts
+          --maxWorkers=1
+      - name: Build host and client
+        run: pnpm run build:lib
