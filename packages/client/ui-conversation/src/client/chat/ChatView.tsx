@@ -243,6 +243,19 @@ export function ChatView({
       ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt }
       : undefined
   ), [pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
+  // Enter is a local UX boundary: show PHOENIX as preparing in the same render
+  // as the optimistic bubble instead of waiting for Host admission/running
+  // propagation. Authoritative turn progress replaces this placeholder as soon
+  // as the session stream exposes it.
+  const visibleProgress = progress ?? (pendingSubmit === undefined
+    ? null
+    : { phase: 'preparing' as const, activity: 'preparing' as const, startedAt: pendingSubmit.startedAt })
+  const visibleTurnStatus = running || pendingSubmit !== undefined
+    ? {
+        startTime: progress?.startedAt ?? runningTurnStart ?? pendingSubmit?.startedAt ?? null,
+        progress: visibleProgress,
+      }
+    : undefined
 
   useEffect(() => {
     const finished = previousRunning.current && !running
@@ -472,7 +485,7 @@ export function ChatView({
           <ToolActivityFlow
             nodes={chatNodes}
             optimisticSubmit={optimisticSubmit}
-            turnStatus={running ? { startTime: progress?.startedAt ?? runningTurnStart, progress } : undefined}
+            turnStatus={visibleTurnStatus}
             useSession={useSession}
             selectedCallId={selectedCallId}
             cwd={cwd}
