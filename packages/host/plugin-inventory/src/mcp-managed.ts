@@ -14,6 +14,10 @@ import type {
 
 const MCP_CLIENT_PACKAGE = '@phoenix-ai/dsh-mcp-client'
 const SERVER_NAME_MAX = 32
+const JEV_TOOL_TIMEOUT_MS = 30_000
+const JEV_STARTUP_TIMEOUT_MS = 5_000
+const JEV_LEGACY_TOOL_TIMEOUT_MS = 1_800
+const JEV_LEGACY_STARTUP_TIMEOUT_MS = 1_200
 
 interface ManagedMcpConfig {
   transport: 'streamable-http'
@@ -89,8 +93,8 @@ function validConfig(value: unknown): value is ManagedMcpConfig {
   if (value.serverName !== JEV_MCP_SERVER_NAME
     || value.url !== JEV_MCP_URL
     || value.bearerTokenRef !== JEV_API_KEY_REF
-    || value.toolCallTimeoutMs !== 1800
-    || value.startupTimeoutMs !== 1200
+    || (value.toolCallTimeoutMs !== JEV_TOOL_TIMEOUT_MS && value.toolCallTimeoutMs !== JEV_LEGACY_TOOL_TIMEOUT_MS)
+    || (value.startupTimeoutMs !== JEV_STARTUP_TIMEOUT_MS && value.startupTimeoutMs !== JEV_LEGACY_STARTUP_TIMEOUT_MS)
     || value.failOnStartupError !== false) return false
   const reconnect = value.reconnect
   return isRecord(reconnect)
@@ -215,8 +219,8 @@ export class ManagedMcpController {
       headers: {},
       oauth: false,
       bearerTokenRef: JEV_API_KEY_REF,
-      toolCallTimeoutMs: 1800,
-      startupTimeoutMs: 1200,
+      toolCallTimeoutMs: JEV_TOOL_TIMEOUT_MS,
+      startupTimeoutMs: JEV_STARTUP_TIMEOUT_MS,
       failOnStartupError: false,
       reconnect: {
         enabled: true,
@@ -231,6 +235,23 @@ export class ManagedMcpController {
       const existing = rows.find(row =>
         row.config.serverName === JEV_MCP_SERVER_NAME || row.config.url === JEV_MCP_URL)
       if (existing !== undefined) {
+        // Upgrade the persisted Jev budgets in place. Legacy 1.8s/1.2s rows
+        // remain readable above so an existing install never looks corrupt,
+        // while the next Host load receives the corrected budgets.
+        if (existing.config.serverName === JEV_MCP_SERVER_NAME
+          && (existing.config.toolCallTimeoutMs !== JEV_TOOL_TIMEOUT_MS
+            || existing.config.startupTimeoutMs !== JEV_STARTUP_TIMEOUT_MS)) {
+          const upgraded: ManagedMcpRow = {
+            ...existing,
+            config: {
+              ...existing.config,
+              toolCallTimeoutMs: JEV_TOOL_TIMEOUT_MS,
+              startupTimeoutMs: JEV_STARTUP_TIMEOUT_MS,
+            },
+          }
+          await writeManagedRows(this.path, rows.map(row => row === existing ? upgraded : row))
+          return { status: 'already-installed', connector: connectorOf(upgraded) }
+        }
         return { status: 'already-installed', connector: connectorOf(existing) }
       }
       const entryId = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
