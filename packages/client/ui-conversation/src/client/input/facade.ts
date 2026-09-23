@@ -536,7 +536,10 @@ export class SessionInputShell implements SessionInput {
     pending.then(
       (outcome) => {
         if (this.dead(attempt)) return
-        if (outcome.kind !== 'success' && this.pendingSubmit?.seq === attempt.seq) {
+        // The optimistic submit exists only while Host admission is unresolved.
+        // Retire it on every terminal settlement, including success; otherwise a
+        // completed answer can leave the UI stuck in a fake "preparing" state.
+        if (this.pendingSubmit?.seq === attempt.seq) {
           this.pendingSubmit = undefined
         }
         if (outcome.kind === 'success' && imageIds.length > 0) {
