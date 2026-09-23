@@ -5,8 +5,13 @@ import type { SessionId } from '@phoenix-ai/dsh-client-runtime/client'
 import { ModelDirectoryResolver } from '../src/client/service.ts'
 
 const sid = 'optional-plugin-inventory' as SessionId
+const CLOUD_GROUP = {
+  id: 'cloud',
+  name: 'Cloud',
+  models: [{ id: 'model', name: 'Cloud Model' }],
+}
 
-it('keeps the composer model directory available when pluginInventory remote is absent', async () => {
+it('keeps the composer cloud catalog available when pluginInventory remote is absent', async () => {
   const ctx = new Context()
   const scopes = new Map<SessionId, Context>()
 
@@ -19,7 +24,7 @@ it('keeps the composer model directory available when pluginInventory remote is 
             value: {
               current: { provider: 'cloud', model: 'model' },
               routable: true,
-              groups: [],
+              groups: [CLOUD_GROUP],
               failures: [],
             },
           },
@@ -50,7 +55,13 @@ it('keeps the composer model directory available when pluginInventory remote is 
   const scope = createScope(ctx, sid)
   scopes.set(sid, scope.ctx)
 
-  expect(() => ctx.modelDirectories.directoryFor(sid)).not.toThrow()
+  const directory = ctx.modelDirectories.directoryFor(sid)
+  await expect(directory.load()).resolves.toMatchObject({ groups: [CLOUD_GROUP] })
+  expect(directory.store.getSnapshot()).toMatchObject({
+    status: 'ready',
+    current: { provider: 'cloud', model: 'model' },
+    groups: [CLOUD_GROUP],
+  })
 })
 
 
