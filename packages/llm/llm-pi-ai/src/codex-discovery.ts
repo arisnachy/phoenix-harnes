@@ -212,11 +212,15 @@ function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
     // also handles npm's `codex.cmd` shim, which cannot be execFile'd directly.
     return finishProcessSetup(spawn(
       shell,
-      ['/d', '/s', '/c', 'codex app-server --listen stdio://'],
+      ['/d', '/s', '/c', 'codex -c features.plugins=false app-server --listen stdio://'],
       common,
     ))
   }
-  return finishProcessSetup(spawn('codex', ['app-server', '--listen', 'stdio://'], common))
+  return finishProcessSetup(spawn(
+    'codex',
+    ['-c', 'features.plugins=false', 'app-server', '--listen', 'stdio://'],
+    common,
+  ))
 }
 
 function writeFrame(
