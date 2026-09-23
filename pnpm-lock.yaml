@@ -1141,6 +1141,9 @@ importers:
       '@phoenix-ai/dsh-pwsh-sandbox':
         specifier: workspace:^
         version: link:../../shell/pwsh-sandbox
+      '@phoenix-ai/dsh-quality-policy':
+        specifier: workspace:^
+        version: link:../../guard/quality-policy
       '@phoenix-ai/dsh-repeat-tool-reminder':
         specifier: workspace:^
         version: link:../../guard/repeat-tool-reminder
@@ -1174,6 +1177,9 @@ importers:
       '@phoenix-ai/dsh-session-query-sqlite':
         specifier: workspace:^
         version: link:../../session-query/session-query-sqlite
+      '@phoenix-ai/dsh-session-telemetry':
+        specifier: workspace:^
+        version: link:../../session/session-telemetry
       '@phoenix-ai/dsh-session-telemetry-otel':
         specifier: workspace:^
         version: link:../../session/session-telemetry-otel
@@ -1183,6 +1189,9 @@ importers:
       '@phoenix-ai/dsh-session-title-first-prompt-llm':
         specifier: workspace:^
         version: link:../../session/session-title-first-prompt-llm
+      '@phoenix-ai/dsh-session-title-llm':
+        specifier: workspace:^
+        version: link:../../session/session-title-llm
       '@phoenix-ai/dsh-settings-file':
         specifier: workspace:^
         version: link:../../settings/settings-file

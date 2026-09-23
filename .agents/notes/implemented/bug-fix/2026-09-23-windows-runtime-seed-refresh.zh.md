@@ -12,6 +12,8 @@
 
 `DesktopRuntimeSeedInstaller` 会比较随安装包提供的 `.phoenix-managed-install` 标记 commit 与已安装运行时标记中的 commit。种子一致的 ready 运行时会立即启动。如果 commit 不同，程序会先把新种子解压到暂存目录，再替换运行时。旧运行时会移动到名称唯一的同级目录并保留，以便恢复本地自修改内容。安装程序未附带种子时，已有的 ready 运行时仍可使用。
 
+base bundle 会把 `@phoenix-ai/dsh-session-title-llm` 和 `@phoenix-ai/dsh-session-telemetry` 声明为生产依赖，使运行时种子包含已挂载标题和遥测插件导入的软件包。
+
 桌面程序会在工作线程上完成必要的刷新，然后启动受管理的主机；安装新种子期间，原生窗口仍保持响应。
 
 ## 考虑过的方案

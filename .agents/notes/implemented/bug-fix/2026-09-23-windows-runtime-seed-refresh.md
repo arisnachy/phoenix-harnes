@@ -12,6 +12,8 @@ The desktop runtime marker can say `ready` even when the installed runtime came 
 
 `DesktopRuntimeSeedInstaller` compares the commit in the bundled `.phoenix-managed-install` marker with the installed runtime marker. A matching ready runtime launches immediately. A mismatch extracts the new seed to a staging directory before replacing the runtime. The old runtime moves to a uniquely named sibling directory and remains available for recovery of local self-modifications. When an installer has no bundled seed, an existing ready runtime remains usable.
 
+The base bundle declares `@phoenix-ai/dsh-session-title-llm` and `@phoenix-ai/dsh-session-telemetry` as production dependencies so the seed contains the packages imported by its mounted title and telemetry plugins.
+
 The desktop performs a required refresh on a worker thread before launching the managed host and keeps the native window responsive while the new seed is installed.
 
 ## Alternatives considered
