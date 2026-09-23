@@ -44,6 +44,9 @@ const JEV_FAILURE_THRESHOLD = 3
 const JEV_CIRCUIT_OPEN_MS = 5 * 60_000
 const JEV_MAX_TASK_CHARS = 4_000
 const JEV_MAX_CANDIDATES = 10
+// Automatic routing must stay cheap even though explicit Jev review tools may
+// legitimately need the full remote-tool timeout.
+const JEV_ROUTE_BUDGET_MS = 3_000
 
 /** Premium Codex tiers that should spend one step planning before Luna executes. */
 const CODEX_PLANNER_MODEL = /^gpt-(\d+(?:\.\d+)?)-(?:sol|astra|terra)(?:$|-)/i
@@ -403,16 +406,27 @@ export function installModelSelection(
         ],
       }
       const callId = CallId(`phoenix-jev-model-route-${payload.turn}-${payload.step}-${jevCallSequence++}`)
-      const raw = await routeTool.execute(args, {
-        callId,
-        rootCallId: callId,
-        name: JEV_MODEL_ROUTE_TOOL,
-        arguments: args,
-        agent: payload.agent,
-        signal: payload.signal,
-        deferContext() {},
-        concludeTurn() {},
-      })
+      const routeController = new AbortController()
+      const abortRoute = (): void => { routeController.abort() }
+      payload.signal.addEventListener('abort', abortRoute, { once: true })
+      const routeTimer = setTimeout(() => { routeController.abort() }, JEV_ROUTE_BUDGET_MS)
+      routeTimer.unref?.()
+      let raw: unknown
+      try {
+        raw = await routeTool.execute(args, {
+          callId,
+          rootCallId: callId,
+          name: JEV_MODEL_ROUTE_TOOL,
+          arguments: args,
+          agent: payload.agent,
+          signal: routeController.signal,
+          deferContext() {},
+          concludeTurn() {},
+        })
+      } finally {
+        clearTimeout(routeTimer)
+        payload.signal.removeEventListener('abort', abortRoute)
+      }
       const chosen = jevSelectedModelId(raw, [...candidates.keys()])
       if (chosen === undefined) throw new Error('Jev returned no valid same-family model id')
       jevFailures = 0
