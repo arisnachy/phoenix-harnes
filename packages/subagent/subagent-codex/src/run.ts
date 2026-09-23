@@ -207,8 +207,8 @@ export function codexAccountEnvironment(
     : ambientCodexSqlite && ambientCodexSqlite.length > 0
       ? resolve(ambientCodexSqlite)
       : undefined
-  const env = { ...explicit, CODEX_HOME: home }
-  delete env.CODEX_SQLITE_HOME
+  const env: Record<string, string> = { ...explicit, CODEX_HOME: home }
+  Reflect.deleteProperty(env, 'CODEX_SQLITE_HOME')
   if (sqliteHome !== undefined) env.CODEX_SQLITE_HOME = sqliteHome
   return env
 }
