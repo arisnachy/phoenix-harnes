@@ -21,6 +21,11 @@ describe('connector catalog', () => {
     expect(ids.size).toBe(CONNECTOR_CATALOG.length)
   })
 
+  it('keeps retired Jev out of the connector catalog', () => {
+    expect(CONNECTOR_CATALOG.some(connector => connector.id === 'jev')).toBe(false)
+    expect(CONNECTOR_CATALOG.some(connector => connector.providerFamily === 'jev')).toBe(false)
+  })
+
   it('keeps native presets separate from external authentication', () => {
     const presetIds = new Set(CONNECTOR_PRESETS.map(preset => preset.id))
     for (const id of REQUIRED_PRESETS) expect(presetIds.has(id), id).toBe(true)
