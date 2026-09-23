@@ -300,16 +300,21 @@ export class ReactLoopAgent implements Agent {
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
     const claimed = this.inbox.claim(target, position.turn)
-    const assembled = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal))
-    signal.throwIfAborted()
     const firstTurnBoundary = target === 'next-turn' && position.step === 1
     const userSteeringBoundary = target === 'next-step'
     const fastConversation = (firstTurnBoundary || userSteeringBoundary)
       && isTextOnlyHumanBatch(claimed)
       && isConversationalFastPathText(directUserText(claimed))
-    // Hundreds of MCP schemas can dominate a trivial request before the model
-    // emits its first token. Social/meta turns cannot need tools by definition,
-    // so omit them from this one request without changing registry state.
+    // Decide the fast path before prompt assembly. Otherwise a one-word social
+    // turn still enumerates and structured-clones the complete MCP/tool catalog
+    // before throwing those schemas away.
+    const assembled = await this.loopCtx.systemPrompt.assemble({
+      ...assembleContextFor(this, signal),
+      ...fastConversation ? { omitTools: true } : {},
+    })
+    signal.throwIfAborted()
+    // A waterfall listener may deliberately add a schema even when providers
+    // were skipped. Keep the conversational boundary strictly tool-free.
     const assembly = fastConversation && assembled.tools.length > 0
       ? { ...assembled, tools: [] }
       : assembled

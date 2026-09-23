@@ -67,7 +67,7 @@ function isGpt6LunaModel(model: string): boolean {
   return generation !== undefined && /^6(?:\.|$)/u.test(generation)
 }
 
-/** Pin every GPT-6 Luna route to Max, regardless of the route that selected it. */
+/** Pin substantive GPT-6 Luna routes to Max; the explicit conversational fast path stays low-latency. */
 function pinGpt6LunaMax(selection: ModelSelection): ModelSelection {
   if (selection.provider !== 'openai-codex' || !isGpt6LunaModel(selection.model)) return selection
   return { ...selection, reasoningEffort: ReasoningEffortId('max') }
@@ -77,6 +77,8 @@ function pinGpt6LunaMax(selection: ModelSelection): ModelSelection {
  * Whether one Codex model is expensive/capable enough to act as planner.
  * The rule is deliberately explicit: unknown future tiers keep the user's
  * normal configuration until Phoenix learns their place in the family.
+ * @param model - Codex model identifier to classify.
+ * @returns true when the model belongs to a planner tier.
  */
 export function isCodexPlannerModel(model: string): boolean {
   return codexPlannerGeneration(model) !== undefined
@@ -205,6 +207,8 @@ function isToolAcquisitionRequest(text: string): boolean {
 }
 
 const FAST_SOCIAL_TURN = /^(?:[¡!¿?.,\s]*(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|gracias|thanks|thank\s+you)[¡!¿?.,\s]*)$/iu
+/** Short first-person/social state replies that are clearly small talk, not action approvals. */
+const FAST_SOCIAL_REPLY = /^(?:[¡!¿?.,\s]*(?:(?:a\s+m[ií]|yo)\s+(?:estoy\s+)?(?:s[uú]per|muy\s+bien|bien|genial|excelente|fenomenal|tranquil[oa]|mal|regular)|(?:estoy|ando|me\s+siento)\s+(?:s[uú]per|muy\s+bien|bien|genial|excelente|fenomenal|tranquil[oa]|mal|regular)|todo\s+(?:bien|genial|excelente))[¡!¿?.,\s]*)$/iu
 /**
  * Bare confirmations/continuations are not self-contained social turns.
  *
@@ -224,6 +228,8 @@ const FAST_CASUAL_REACTION = /(?:\b(?:jaj+a+|jeje+|jiji+|lol)\b|\b(?:eso|esto)\s
  * Only social acknowledgements and simple runtime-meta questions enter this
  * path. Factual questions, external-data requests, artifact work, URLs, code,
  * and operational verbs deliberately remain on the normal Phoenix path.
+ * @param text - Direct human text for the candidate turn.
+ * @returns true when the turn is safe for the tool-free low-latency path.
  */
 export function isConversationalFastPathText(text: string): boolean {
   const candidate = text.trim()
@@ -233,7 +239,7 @@ export function isConversationalFastPathText(text: string): boolean {
   // A one-word approval is a continuation command, not chit-chat. Keep normal
   // history, tool schemas, and the user's selected reasoning route.
   if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
-  if (FAST_SOCIAL_TURN.test(candidate) || FAST_RUNTIME_META.test(candidate)) return true
+  if (FAST_SOCIAL_TURN.test(candidate) || FAST_SOCIAL_REPLY.test(candidate) || FAST_RUNTIME_META.test(candidate)) return true
   // Feedback such as "eso parece un pollo ... jaja" should not reload hundreds
   // of tools or a multi-megabyte work transcript. Keep questions on the normal
   // path: even a short "¿eso parece X?" can be a real factual request.
@@ -491,13 +497,14 @@ export function installModelSelection(
         && isToolAcquisitionRequest(directText)
         ? defaultToolAcquisitionSelection(selected)
         : undefined
-      const routed = pinGpt6LunaMax(
-        conversation
-          ?? acquisition
-          ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
-            ? resolvedHandoff.selection
-            : selected),
-      )
+      const candidateRoute = conversation
+        ?? acquisition
+        ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
+          ? resolvedHandoff.selection
+          : selected)
+      // The social fast path deliberately trades unnecessary reasoning for
+      // latency. Do not let GPT-6 Luna's substantive-task Max pin overwrite it.
+      const routed = conversation ?? pinGpt6LunaMax(candidateRoute)
       const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
       const nativeRoute: LlmCallConfig = {
         ...withoutInheritedEffort,

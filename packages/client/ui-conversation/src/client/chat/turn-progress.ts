@@ -65,12 +65,29 @@ function toolProgress(tool: RunningToolCall): TurnProgress {
   }
 }
 
+function nodeTurn(node: ChatConversationViewNode): number | undefined {
+  return node.location.kind === 'turn' || node.location.kind === 'step'
+    ? node.location.turn.turn
+    : undefined
+}
+
+function hasAssistantSurface(data: AssistantChatData): boolean {
+  if (data.status === 'interrupted') return true
+  return data.blocks.some((block) => {
+    if (block.kind === 'reasoning' || block.kind === 'tool-call') return false
+    if (block.kind === 'text') return block.text.trim() !== ''
+    return true
+  })
+}
+
 /**
  * Derive a safe progress label from the existing chat projection.
- * Tool arguments and result payloads are intentionally never inspected.
+ * Tool arguments and result payloads are intentionally never inspected. Once
+ * user-visible assistant output is the latest work in the open turn, technical
+ * host settlement must not keep a stale preparing/thinking indicator alive.
  * @param timeline - current conversation timeline snapshot.
  * @param nodes - visible conversation nodes to classify.
- * @returns the current safe phase, or null when no turn is open.
+ * @returns the current safe phase, or null when no turn is open or visible assistant output owns the tail.
  */
 export function turnProgress(
   timeline: ConversationTimelineSnapshot,
@@ -79,9 +96,8 @@ export function turnProgress(
   const turn = [...timeline.turns.values()].find(candidate => candidate.status === 'open')
   if (turn === undefined) return null
 
-  const stepNodes = nodes.filter(node => node.location.kind === 'step'
-    && node.location.turn.turn === turn.turn)
-  const tools = stepNodes.filter(node => node.kind === 'tool-call')
+  const turnNodes = nodes.filter(node => nodeTurn(node) === turn.turn)
+  const tools = turnNodes.filter(node => node.kind === 'tool-call')
 
   let runningTool: RunningToolCall | null = null
   for (const node of tools) {
@@ -92,13 +108,22 @@ export function turnProgress(
   }
   if (runningTool !== null) return toolProgress(runningTool)
 
-  const assistant = [...stepNodes].reverse().find(node => node.kind === 'assistant-step')
-  if (assistant !== undefined) {
+  let assistantIndex = -1
+  let toolIndex = -1
+  for (let index = turnNodes.length - 1; index >= 0 && (assistantIndex < 0 || toolIndex < 0); index -= 1) {
+    const node = turnNodes[index]
+    if (node?.kind === 'assistant-step' && assistantIndex < 0) assistantIndex = index
+    if (node?.kind === 'tool-call' && toolIndex < 0) toolIndex = index
+  }
+
+  const assistant = assistantIndex < 0 ? undefined : turnNodes[assistantIndex]
+  if (assistant?.kind === 'assistant-step') {
     const data = assistant.data as AssistantChatData
     const lastBlock = data.blocks.at(-1)
     if (data.status === 'running' && lastBlock?.kind === 'reasoning') {
       return { phase: 'thinking', activity: 'thinking' }
     }
+    if (assistantIndex > toolIndex && hasAssistantSurface(data)) return null
   }
 
   if (tools.length > 0) return { phase: 'verifying', activity: 'verifying' }

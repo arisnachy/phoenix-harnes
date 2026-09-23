@@ -8,7 +8,7 @@
 
 ## 组装上下文
 
-`AssembleContext` 标识一次组装所解析的作用域层，并可携带该请求的显式控制信号。它可合并扩展：`dsh-agent` 添加可选字段 `agent`，用于携带当前的 agent（智能体）实例；`assembleContextFor(agent, signal)` 则一起设置这些显式字段。裸组装既没有作用域，也没有信号。
+`AssembleContext` 标识一次组装所解析的作用域层，并可携带该请求的显式控制信号。它可合并扩展：`dsh-agent` 添加可选字段 `agent`，用于携带当前的 agent（智能体）实例；`assembleContextFor(agent, signal)` 则一起设置这些显式字段。`omitTools` 是面向已确定无需工具请求的显式优化提示：它跳过工具提供方求值，同时保留其余提示组装流程。裸组装既没有作用域、信号，也不会省略工具。
 
 ```ts type-equiv
 /** Merge-extensible context for one prompt assembly. */
@@ -20,6 +20,13 @@ interface AssembleContext {
   scope?: ScopeKey
   /** Explicit control signal for the turn that requested this assembly, when any. */
   signal?: AbortSignal
+  /**
+   * Skip tool-schema provider evaluation for a request that is already known
+   * to be tool-free (for example a bounded conversational fast path).
+   * Waterfall listeners still run; callers that require a hard tool-free
+   * boundary should also clear any tools a listener deliberately adds.
+   */
+  omitTools?: boolean
 }
 ```
 

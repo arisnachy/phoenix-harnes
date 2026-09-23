@@ -111,6 +111,30 @@ describe('request stability across the loop', () => {
     expectPrefixExtension(adapter.requests[0]!, adapter.requests[1]!)
   })
 
+  it('skips tool-schema provider work for a trivial conversational turn', async () => {
+    const adapter = new MockAdapter([textResponse('¡Hola! ¿Qué tal?')])
+    const ctx = await harness(adapter)
+    let providerCalls = 0
+    ctx.systemPrompt.tools(() => {
+      providerCalls += 1
+      return {
+        schemas: [{
+          name: 'expensive-social-noop',
+          description: 'must not be assembled for a greeting',
+          parameters: { type: 'object', properties: {} },
+        }],
+      }
+    })
+    const agent = ctx.agentLoop.create(SessionId('fast-social-tools'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'hola')
+    await waitForIdle(ctx, agent)
+
+    expect(providerCalls).toBe(0)
+    expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]?.tools).toBeUndefined()
+  })
+
   it('keeps contextual acknowledgements on the full-history, tool-capable path', async () => {
     const adapter = new MockAdapter([
       textResponse('Puedo mostrarte el adelanto ahora. ¿Quieres que lo haga?'),

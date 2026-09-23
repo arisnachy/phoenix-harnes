@@ -263,12 +263,15 @@ export function ChatView({
         activity: 'preparing' as const,
         startedAt: visiblePendingSubmit.startedAt,
       })
-  const visibleTurnStatus = running || progress !== null || visiblePendingSubmit !== undefined
-    ? {
+  // Session.running can remain true while Host-side settlement, logging, or
+  // verification finishes after user-visible assistant output has arrived.
+  // Render status only for an observable activity, never from running alone.
+  const visibleTurnStatus = visibleProgress === null
+    ? undefined
+    : {
         startTime: progress?.startedAt ?? runningTurnStart ?? visiblePendingSubmit?.startedAt ?? null,
         progress: visibleProgress,
       }
-    : undefined
 
   useEffect(() => {
     const finished = previousRunning.current && !running

@@ -143,16 +143,19 @@ describe('turnProgress', () => {
       .toEqual({ phase: 'thinking', activity: 'thinking' })
   })
 
-  it('does not call settled or visible text reasoning', () => {
+  it('hides technical progress while visible assistant text owns the turn tail', () => {
     expect(turnProgress(openTimeline(4), [assistantNode(4, 'settled', 'reasoning')]))
       .toEqual({ phase: 'preparing', activity: 'preparing' })
-    expect(turnProgress(openTimeline(4), [assistantNode(4, 'running', 'text')]))
-      .toEqual({ phase: 'preparing', activity: 'preparing' })
+    expect(turnProgress(openTimeline(4), [assistantNode(4, 'running', 'text')])).toBeNull()
+    expect(turnProgress(openTimeline(4), [assistantNode(4, 'settled', 'text')])).toBeNull()
   })
 
-  it('returns verifying after tool roots settle but before turn/end', () => {
-    expect(turnProgress(openTimeline(4), [toolNode(4, { running: false })]))
+  it('returns verifying after a settled tool until later visible assistant output arrives', () => {
+    const tool = toolNode(4, { running: false })
+    const answer = assistantNode(4, 'settled', 'text')
+    expect(turnProgress(openTimeline(4), [answer, tool]))
       .toEqual({ phase: 'verifying', activity: 'verifying' })
+    expect(turnProgress(openTimeline(4), [tool, answer])).toBeNull()
   })
 
   it('ignores tools belonging to older turns', () => {
