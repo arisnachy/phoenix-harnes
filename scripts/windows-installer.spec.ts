@@ -13,7 +13,7 @@ describe('PHOENIX managed Windows installation', () => {
     const installerVersion = read('installer/windows/Phoenix.iss').match(
       /^AppVersion=(.+)$/mu,
     )?.[1]
-    expect(desktopVersion).toBe('1.0.21')
+    expect(desktopVersion).toBe('1.0.22')
     expect(installerVersion).toBe(desktopVersion)
   })
 

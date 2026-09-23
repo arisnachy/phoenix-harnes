@@ -508,4 +508,23 @@ internal static class ManagedRuntimeMarker
             && content.Contains("state=ready", StringComparison.OrdinalIgnoreCase)
             && content.Contains("installedAt=", StringComparison.OrdinalIgnoreCase);
     }
+
+    internal static string? ReadCommit(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return null;
+
+        foreach (var line in content.Split('\n'))
+        {
+            var separator = line.IndexOf('=');
+            if (separator > 0
+                && line[..separator].Trim().Equals("commit", StringComparison.OrdinalIgnoreCase))
+            {
+                var commit = line[(separator + 1)..].Trim();
+                return string.IsNullOrWhiteSpace(commit) ? null : commit;
+            }
+        }
+
+        return null;
+    }
 }

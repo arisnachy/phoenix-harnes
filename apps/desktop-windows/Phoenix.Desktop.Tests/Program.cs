@@ -803,6 +803,76 @@ finally
     }
 }
 
+// A ready runtime can still be older than the seed shipped by an upgraded desktop installer.
+// Replacing that runtime must retain its previous tree so local self-modifications remain recoverable.
+var replacementAppRoot = Path.Combine(Path.GetTempPath(), $"phoenix-seed-replacement-app-{Guid.NewGuid():N}");
+var replacementSourceRoot = Path.Combine(Path.GetTempPath(), $"phoenix-seed-replacement-source-{Guid.NewGuid():N}");
+var replacementRuntimeRoot = Path.Combine(Path.GetTempPath(), $"phoenix-seed-replacement-runtime-{Guid.NewGuid():N}");
+try
+{
+    Directory.CreateDirectory(replacementAppRoot);
+    Directory.CreateDirectory(Path.Combine(replacementSourceRoot, ".git"));
+    Directory.CreateDirectory(Path.Combine(replacementRuntimeRoot, ".git"));
+    File.WriteAllText(
+        Path.Combine(replacementSourceRoot, ManagedRuntimeMarker.ReadyMarkerName),
+        "schema=1\nstate=ready\nchannel=stable\ncommit=new-seed\ninstalledAt=2026-09-23T00:00:00Z\n");
+    File.WriteAllText(Path.Combine(replacementSourceRoot, "fresh-package.txt"), "fresh-runtime");
+    File.WriteAllText(
+        Path.Combine(replacementRuntimeRoot, ManagedRuntimeMarker.ReadyMarkerName),
+        "schema=1\nstate=ready\nchannel=stable\ncommit=old-seed\ninstalledAt=2026-09-20T00:00:00Z\n");
+    File.WriteAllText(Path.Combine(replacementRuntimeRoot, "local-work.txt"), "keep-me");
+    ZipFile.CreateFromDirectory(
+        replacementSourceRoot,
+        DesktopRuntimeSeedInstaller.ArchivePath(replacementAppRoot),
+        CompressionLevel.Fastest,
+        includeBaseDirectory: false);
+
+    True(
+        DesktopRuntimeSeedInstaller.EnsureInstalled(replacementAppRoot, replacementRuntimeRoot),
+        "runtime seed installer refreshes an older ready runtime",
+        failures);
+    True(
+        File.Exists(Path.Combine(replacementRuntimeRoot, "fresh-package.txt")),
+        "runtime seed refresh installs files from the newer seed",
+        failures);
+    var retainedRuntime = Directory.GetDirectories(
+        Path.GetDirectoryName(replacementRuntimeRoot)!,
+        Path.GetFileName(replacementRuntimeRoot) + ".replaced-*");
+    True(retainedRuntime.Length == 1, "runtime seed refresh retains the previous runtime", failures);
+    True(
+        retainedRuntime.Length == 1 && File.Exists(Path.Combine(retainedRuntime[0], "local-work.txt")),
+        "runtime seed refresh keeps local runtime work recoverable",
+        failures);
+    True(
+        DesktopRuntimeSeedInstaller.IsCurrent(replacementAppRoot, replacementRuntimeRoot),
+        "runtime seed refresh records the bundled seed commit",
+        failures);
+    True(
+        DesktopRuntimeSeedInstaller.EnsureInstalled(replacementAppRoot, replacementRuntimeRoot),
+        "runtime seed installer leaves a matching ready runtime in place",
+        failures);
+    True(
+        Directory.GetDirectories(
+            Path.GetDirectoryName(replacementRuntimeRoot)!,
+            Path.GetFileName(replacementRuntimeRoot) + ".replaced-*").Length == 1,
+        "matching runtime seed does not create another backup",
+        failures);
+}
+finally
+{
+    foreach (var path in new[] { replacementAppRoot, replacementSourceRoot, replacementRuntimeRoot })
+    {
+        if (Directory.Exists(path))
+            Directory.Delete(path, recursive: true);
+    }
+
+    var replacementParent = Path.GetDirectoryName(replacementRuntimeRoot)!;
+    foreach (var path in Directory.GetDirectories(
+                 replacementParent,
+                 Path.GetFileName(replacementRuntimeRoot) + ".replaced-*"))
+        Directory.Delete(path, recursive: true);
+}
+
 if (failures.Count == 0)
 {
     Console.WriteLine("Embedded browser and desktop startup contract checks passed.");

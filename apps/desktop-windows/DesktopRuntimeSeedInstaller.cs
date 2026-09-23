@@ -13,20 +13,55 @@ internal static class DesktopRuntimeSeedInstaller
     internal static string ArchivePath(string applicationBaseDirectory) =>
         Path.Combine(applicationBaseDirectory, ArchiveName);
 
+    internal static bool IsCurrent(string applicationBaseDirectory, string runtimeRoot)
+    {
+        if (ManagedRuntimeMarker.Inspect(runtimeRoot) != ManagedRuntimeState.Ready)
+            return false;
+
+        var archive = ArchivePath(applicationBaseDirectory);
+        if (!File.Exists(archive))
+            return true;
+
+        try
+        {
+            using var seed = ZipFile.OpenRead(archive);
+            var marker = seed.GetEntry(ManagedRuntimeMarker.ReadyMarkerName);
+            if (marker is null)
+                return false;
+
+            using var markerStream = marker.Open();
+            using var markerReader = new StreamReader(markerStream);
+            var seedCommit = ManagedRuntimeMarker.ReadCommit(markerReader.ReadToEnd());
+            var installedCommit = ManagedRuntimeMarker.ReadCommit(
+                File.ReadAllText(Path.Combine(runtimeRoot, ManagedRuntimeMarker.ReadyMarkerName)));
+            return string.Equals(seedCommit, installedCommit, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     internal static bool EnsureInstalled(
         string applicationBaseDirectory,
         string runtimeRoot,
         Action<string>? log = null)
     {
-        if (ManagedRuntimeMarker.Inspect(runtimeRoot) == ManagedRuntimeState.Ready)
+        var archive = ArchivePath(applicationBaseDirectory);
+        if (IsCurrent(applicationBaseDirectory, runtimeRoot))
         {
             log?.Invoke("Managed runtime seed already installed and ready.");
             return true;
         }
 
-        var archive = ArchivePath(applicationBaseDirectory);
         if (!File.Exists(archive))
         {
+            if (ManagedRuntimeMarker.Inspect(runtimeRoot) == ManagedRuntimeState.Ready)
+            {
+                log?.Invoke("Bundled runtime seed is missing; keeping the verified managed runtime.");
+                return true;
+            }
+
             log?.Invoke($"Bundled runtime seed is missing: {archive}");
             return false;
         }
@@ -68,7 +103,7 @@ internal static class DesktopRuntimeSeedInstaller
 
             if (Directory.Exists(runtimeRoot))
             {
-                quarantine = $"{runtimeRoot}.replaced-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}";
+                quarantine = $"{runtimeRoot}.replaced-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
                 Directory.Move(runtimeRoot, quarantine);
             }
 
@@ -78,8 +113,8 @@ internal static class DesktopRuntimeSeedInstaller
 
             if (quarantine is not null && Directory.Exists(quarantine))
             {
-                try { Directory.Delete(quarantine, recursive: true); }
-                catch (Exception cleanupEx) { log?.Invoke($"Could not remove replaced runtime immediately: {cleanupEx.Message}"); }
+                // Managed runtimes can contain self-modifications; keep the replaced tree recoverable.
+                log?.Invoke($"Previous managed runtime retained for recovery: {quarantine}");
             }
 
             log?.Invoke("Bundled production runtime seed installed successfully.");

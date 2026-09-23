@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Phoenix</AssemblyName>
     <RootNamespace>Phoenix.Desktop</RootNamespace>
-    <Version>1.0.21</Version>
+    <Version>1.0.22</Version>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

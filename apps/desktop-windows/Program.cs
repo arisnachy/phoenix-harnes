@@ -527,14 +527,19 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     {
         var state = ManagedRuntimeMarker.Inspect(Program.RuntimeRoot);
         DesktopLog.Write($"Managed runtime state: {state}");
+        var bundledSeed = DesktopRuntimeSeedInstaller.ArchivePath(AppContext.BaseDirectory);
 
-        if (state == ManagedRuntimeState.Ready)
+        if (state == ManagedRuntimeState.Ready
+            && (!File.Exists(bundledSeed)
+                || DesktopRuntimeSeedInstaller.IsCurrent(AppContext.BaseDirectory, Program.RuntimeRoot)))
         {
             // A verified runtime should boot immediately. The Windows supervisor already owns
             // background stable updates after the Host is healthy, so doing a network/update
             // check here only makes every desktop launch slower and can strand the shell on a
-            // blank startup screen when GitHub or the updater is slow.
-            DesktopLog.Write("Managed runtime is ready; launching immediately and leaving stable updates to the supervised background watcher.");
+            // blank startup screen when GitHub or the updater is slow. A bundled seed with a
+            // different commit is refreshed before launch so an older ready marker cannot hide
+            // missing production packages after a desktop upgrade.
+            DesktopLog.Write("Managed runtime is ready and its bundled seed is current or unavailable; launching immediately and leaving stable updates to the supervised background watcher.");
             return true;
         }
 
@@ -542,11 +547,11 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         // Runtime-seed extraction can involve hundreds of MB and thousands of files, so it must
         // never execute on the WinForms thread. The installer normally pre-warms this path; this
         // worker-thread fallback keeps direct EXE launches responsive too.
-        var bundledSeed = DesktopRuntimeSeedInstaller.ArchivePath(AppContext.BaseDirectory);
         if (File.Exists(bundledSeed))
         {
-            window.SetStartupStatus("Preparando el runtime de Phoenix…");
-            tray.Text = "Phoenix · preparando";
+            var updating = state == ManagedRuntimeState.Ready;
+            window.SetStartupStatus(updating ? "Actualizando el runtime de Phoenix…" : "Preparando el runtime de Phoenix…");
+            tray.Text = updating ? "Phoenix · actualizando" : "Phoenix · preparando";
             DesktopLog.Write($"Installing bundled runtime seed without blocking the UI: {bundledSeed}");
             var installed = await Task.Run(() => DesktopRuntimeSeedInstaller.EnsureInstalled(
                 AppContext.BaseDirectory,
