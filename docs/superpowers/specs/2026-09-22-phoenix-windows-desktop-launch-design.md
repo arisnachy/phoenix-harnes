@@ -46,7 +46,7 @@ Al 22-09-2026 existen PR abiertos que se solapan con el trabajo: #302/#304 para 
 
 El modo fuente solo se activa con `PHOENIX_SOURCE_ROOT`; una preferencia de consola muestra u oculta diagnósticos, pero nunca elige el runtime. El arranque instalado usa únicamente el supervisor, Node y la semilla administrados por Phoenix, sin PowerShell, pnpm, tsx ni un checkout del usuario.
 
-El instalador por usuario configura el acceso directo y el inicio de sesión para abrir el EXE instalado. Tras instalar, Phoenix queda abierto. Un inicio válido requiere que el supervisor de esa instancia siga vivo y que el endpoint responda con identidad Phoenix. Un listener externo nunca se adopta ni se termina.
+El instalador por usuario configura el acceso directo y el inicio de sesión para abrir el EXE instalado. Tras instalar, Phoenix queda abierto. Un inicio válido requiere un supervisor propio vivo o un runtime Phoenix compatible validado por PID, línea de comando e identidad del endpoint. Un listener ajeno o incompatible nunca se adopta ni se termina; al cerrar el shell, un runtime compatible que ya existía sigue vivo.
 
 La reparación prepara y valida una copia nueva, detiene solo el árbol de procesos que Phoenix posee y conserva la última copia sana si falla. La ventana muestra progreso o un error recuperable mientras mantiene la interfaz nativa; WebView2 ausente no deja una ventana en blanco.
 
@@ -81,7 +81,7 @@ Un recuerdo puede contener una secuencia de acciones abstractas y un origen web 
 ## Aceptación
 
 1. En un perfil Windows limpio, el instalador configura acceso directo e inicio de sesión y abre la copia instalada; después de cerrar o minimizar a la bandeja, ambos caminos vuelven a abrir Phoenix.
-2. Un checkout convencional sin `tsx` no altera el runtime instalado. El estado “listo” requiere identidad y supervisor vivo; un listener externo no cambia de dueño ni se detiene.
+2. Un checkout convencional sin `tsx` no altera el runtime instalado. El estado “listo” requiere identidad y un proceso Phoenix compatible vivo; un listener ajeno o incompatible no cambia de dueño ni se detiene.
 3. El workflow instala y ejecuta el instalador generado en un perfil temporal de Windows, comprueba la ventana, la navegación local de WebView2, reabrir desde bandeja y los diagnósticos de fallo.
 4. Una medición Windows reproduce las mismas acciones de Computer antes y después, en frío y en caliente, y compara el mismo equipo con Codex. Publica percentiles y desglose por etapa; ninguna espera fija o compilación por acción permanece en la ruta caliente.
 5. Un sitio HTTPS de prueba comprueba que una credencial nueva se pide fuera del composer, queda fuera de todos los datos visibles al modelo y se almacena mediante el broker. El runtime Node y el protocolo general nunca reciben sus valores. En la segunda visita, solo el origen autorizado recibe autofill; una redirección u otro puerto/origen se rechaza y la página no se envía automáticamente.
