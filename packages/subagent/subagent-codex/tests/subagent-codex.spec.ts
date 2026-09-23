@@ -23,6 +23,7 @@ import {
   CODEX_PERMISSION_MODES,
   DEFAULT_CODEX_PERMISSION_MODE,
   codexAppServerArgv,
+  codexMetadataAppServerArgv,
   DEFAULT_DISPOSE_GRACE_MS,
   disposeCodexChild,
   startCodexRun,
@@ -391,6 +392,15 @@ describe('task admission and package contracts', () => {
     expect(codexAppServerArgv()).toEqual([
       process.execPath,
       resolve(dirname(codexPackageJson), codexManifest.bin.codex),
+      'app-server',
+      '--stdio',
+    ])
+
+    expect(codexMetadataAppServerArgv()).toEqual([
+      process.execPath,
+      resolve(dirname(codexPackageJson), codexManifest.bin.codex),
+      '-c',
+      'features.plugins=false',
       'app-server',
       '--stdio',
     ])
