@@ -31,6 +31,13 @@
   height: 24px;
 }
 
+.monogram {
+  color: var(--dsw-alias-label-primary);
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1;
+}
+
 .copy {
   display: flex;
   min-width: 0;
