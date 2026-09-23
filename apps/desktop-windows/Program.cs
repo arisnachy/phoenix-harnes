@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -856,8 +857,25 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
             var html = await response.Content.ReadAsStringAsync();
             var compatible = DesktopPhoenixIdentity.LooksLikePhoenixHtml(html);
-            DesktopLog.Write($"Phoenix identity probe compatible={compatible}; bytes={html.Length}.");
-            return compatible;
+            if (!compatible)
+            {
+                DesktopLog.Write($"Phoenix identity probe compatible=false; bytes={html.Length}.");
+                return false;
+            }
+
+            var listenerPid = DesktopRuntimeProcessIdentity.FindListeningProcessId(DesktopRuntimeLaunchContract.DesktopPort);
+            if (listenerPid is null)
+            {
+                DesktopLog.Write("Phoenix identity probe found the Phoenix shell but no owning listener PID.");
+                return false;
+            }
+
+            using var listener = Process.GetProcessById(listenerPid.Value);
+            var processAlive = !listener.HasExited;
+            var commandLine = DesktopRuntimeProcessIdentity.TryGetCommandLine(listener.Id);
+            var processCompatible = DesktopRuntimeLaunchContract.CanAdoptListener(commandLine);
+            DesktopLog.Write($"Phoenix identity probe compatible=true; listenerPid={listener.Id}; processAlive={processAlive}; processCompatible={processCompatible}; bytes={html.Length}.");
+            return processAlive && processCompatible;
         }
         catch (Exception ex)
         {
@@ -949,7 +967,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             if (await IsReadyAsync())
             {
                 consecutiveReady++;
-                if (consecutiveReady >= DesktopRuntimeLaunchContract.ReadyConsecutiveSamples)
+                if (DesktopRuntimeLaunchContract.CanMarkReady(ownedRuntime.HasExited, consecutiveReady))
                 {
                     if (sourceCheckoutRuntime)
                     {
@@ -1191,6 +1209,249 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         http.Dispose();
         ExitThread();
     }
+}
+
+internal static class DesktopRuntimeProcessIdentity
+{
+    private const uint ProcessQueryInformation = 0x0400;
+    private const uint ProcessVmRead = 0x0010;
+    private const uint ErrorInsufficientBuffer = 122;
+    private const int AddressFamilyInterNetwork = 2;
+    private const int TcpTableOwnerPidAll = 5;
+    private const int TcpStateListen = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MibTcpRowOwnerPid
+    {
+        internal uint State;
+        internal uint LocalAddress;
+        internal uint LocalPort;
+        internal uint RemoteAddress;
+        internal uint RemotePort;
+        internal uint OwningPid;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessBasicInformation
+    {
+        internal nint Reserved1;
+        internal nint PebBaseAddress;
+        internal nint Reserved2;
+        internal nint Reserved3;
+        internal nint UniqueProcessId;
+        internal nint Reserved4;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UnicodeString
+    {
+        internal ushort Length;
+        internal ushort MaximumLength;
+        internal nint Buffer;
+    }
+
+    [DllImport("iphlpapi.dll", SetLastError = true)]
+    private static extern uint GetExtendedTcpTable(
+        nint tcpTable,
+        ref int size,
+        [MarshalAs(UnmanagedType.Bool)] bool order,
+        int addressFamily,
+        int tableClass,
+        uint reserved);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern nint OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool ReadProcessMemory(
+        nint process,
+        nint address,
+        nint buffer,
+        nuint size,
+        out nuint bytesRead);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(nint handle);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtQueryInformationProcess(
+        nint process,
+        int informationClass,
+        out ProcessBasicInformation information,
+        int informationLength,
+        out int returnLength);
+
+    internal static int? FindListeningProcessId(int port)
+    {
+        if (!OperatingSystem.IsWindows())
+            return null;
+
+        var size = 0;
+        var status = GetExtendedTcpTable(
+            nint.Zero,
+            ref size,
+            order: false,
+            AddressFamilyInterNetwork,
+            TcpTableOwnerPidAll,
+            reserved: 0);
+        if (status != ErrorInsufficientBuffer || size <= 0)
+            return null;
+
+        var table = Marshal.AllocHGlobal(size);
+        try
+        {
+            status = GetExtendedTcpTable(
+                table,
+                ref size,
+                order: false,
+                AddressFamilyInterNetwork,
+                TcpTableOwnerPidAll,
+                reserved: 0);
+            if (status != 0)
+                return null;
+
+            var rowCount = Marshal.ReadInt32(table);
+            var rowSize = Marshal.SizeOf<MibTcpRowOwnerPid>();
+            for (var index = 0; index < rowCount; index++)
+            {
+                var row = Marshal.PtrToStructure<MibTcpRowOwnerPid>(
+                    IntPtr.Add(table, sizeof(int) + index * rowSize));
+                if (row.State == TcpStateListen
+                    && NetworkPort(row.LocalPort) == port
+                    && row.OwningPid > 0)
+                    return checked((int)row.OwningPid);
+            }
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(table);
+        }
+
+        return null;
+    }
+
+    internal static string? TryGetCommandLine(int processId)
+    {
+        if (!OperatingSystem.IsWindows())
+            return null;
+
+        var process = OpenProcess(ProcessQueryInformation | ProcessVmRead, inheritHandle: false, checked((uint)processId));
+        if (process == nint.Zero)
+            return null;
+
+        try
+        {
+            var status = NtQueryInformationProcess(
+                process,
+                informationClass: 0,
+                out var basicInformation,
+                Marshal.SizeOf<ProcessBasicInformation>(),
+                out _);
+            if (status != 0 || basicInformation.PebBaseAddress == nint.Zero)
+                return null;
+
+            var processParametersOffset = IntPtr.Size == 8 ? 0x20 : 0x10;
+            if (!TryReadPointer(
+                    process,
+                    IntPtr.Add(basicInformation.PebBaseAddress, processParametersOffset),
+                    out var processParameters)
+                || processParameters == nint.Zero)
+                return null;
+
+            var commandLineOffset = IntPtr.Size == 8 ? 0x70 : 0x40;
+            if (!TryReadStruct(
+                    process,
+                    IntPtr.Add(processParameters, commandLineOffset),
+                    out UnicodeString commandLine)
+                || commandLine.Buffer == nint.Zero
+                || commandLine.Length == 0)
+                return string.Empty;
+
+            var bytes = new byte[commandLine.Length];
+            var nativeBuffer = Marshal.AllocHGlobal(bytes.Length);
+            try
+            {
+                if (!ReadProcessMemory(
+                        process,
+                        commandLine.Buffer,
+                        nativeBuffer,
+                        (nuint)bytes.Length,
+                        out var bytesRead)
+                    || bytesRead != (nuint)bytes.Length)
+                    return null;
+                Marshal.Copy(nativeBuffer, bytes, 0, bytes.Length);
+                return Encoding.Unicode.GetString(bytes);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(nativeBuffer);
+            }
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
+    }
+
+    private static bool TryReadPointer(nint process, nint address, out nint value)
+    {
+        var bytes = new byte[IntPtr.Size];
+        var nativeBuffer = Marshal.AllocHGlobal(bytes.Length);
+        try
+        {
+            if (!ReadProcessMemory(process, address, nativeBuffer, (nuint)bytes.Length, out var bytesRead)
+                || bytesRead != (nuint)bytes.Length)
+            {
+                value = nint.Zero;
+                return false;
+            }
+
+            Marshal.Copy(nativeBuffer, bytes, 0, bytes.Length);
+            value = IntPtr.Size == 8
+                ? (nint)BitConverter.ToInt64(bytes, 0)
+                : (nint)BitConverter.ToInt32(bytes, 0);
+            return true;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(nativeBuffer);
+        }
+    }
+
+    private static bool TryReadStruct<T>(nint process, nint address, out T value)
+        where T : struct
+    {
+        var size = Marshal.SizeOf<T>();
+        var nativeBuffer = Marshal.AllocHGlobal(size);
+        try
+        {
+            if (!ReadProcessMemory(process, address, nativeBuffer, (nuint)size, out var bytesRead)
+                || bytesRead != (nuint)size)
+            {
+                value = default;
+                return false;
+            }
+
+            value = Marshal.PtrToStructure<T>(nativeBuffer);
+            return true;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(nativeBuffer);
+        }
+    }
+
+    private static int NetworkPort(uint value) =>
+        (int)(((value & 0xff) << 8) | ((value >> 8) & 0xff));
 }
 
 internal static class DesktopLog

@@ -11,6 +11,12 @@ static void Equal(string? expected, string? actual, string name, List<string> fa
         failures.Add($"{name}: expected '{expected}', got '{actual}'");
 }
 
+static void EqualBool(bool expected, bool actual, string name, List<string> failures)
+{
+    if (expected != actual)
+        failures.Add($"{name}: expected '{expected}', got '{actual}'");
+}
+
 static void True(bool value, string name, List<string> failures)
 {
     if (!value) failures.Add($"{name}: expected true");
@@ -515,6 +521,26 @@ True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node scri
 True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"node C:\Users\me\Phoenix\phoenix-harnes\apps\cli\lib\bin.js web"), "source checkout listener is recognized as Phoenix", failures);
 True(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"powershell -Command corepack pnpm phoenix -- --no-open"), "PowerShell pnpm Phoenix listener is recognized", failures);
 False(DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine(@"python -m http.server 3080"), "unrelated local HTTP listener is rejected", failures);
+
+var runtimeContractType = typeof(DesktopRuntimeLaunchContract);
+var canMarkReady = runtimeContractType.GetMethod(
+    "CanMarkReady",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+var canAdoptListener = runtimeContractType.GetMethod(
+    "CanAdoptListener",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+True(canMarkReady is not null, "runtime readiness decision exists", failures);
+True(canAdoptListener is not null, "listener adoption decision exists", failures);
+if (canMarkReady is not null)
+    EqualBool(false, (bool)canMarkReady.Invoke(null, new object?[] { true, 2 })!,
+        "an exited owned supervisor cannot mark Phoenix ready", failures);
+if (canAdoptListener is not null)
+{
+    EqualBool(false, (bool)canAdoptListener.Invoke(null, new object?[] { "python -m http.server 3080" })!,
+        "an unrelated listener is never adopted", failures);
+    EqualBool(true, (bool)canAdoptListener.Invoke(null, new object?[] { "node scripts/phoenix-windows-supervisor.mjs" })!,
+        "a compatible Phoenix listener may serve the desktop without becoming owned", failures);
+}
 
 var consolePrefRoot = Path.Combine(Path.GetTempPath(), $"phoenix-console-test-{Guid.NewGuid():N}");
 var previousConsoleEnv = Environment.GetEnvironmentVariable("PHOENIX_DESKTOP_CONSOLE");

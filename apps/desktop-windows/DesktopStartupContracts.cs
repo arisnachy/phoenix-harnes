@@ -93,6 +93,12 @@ internal static class DesktopRuntimeLaunchContract
             || commandLine.Contains("pnpm phoenix", StringComparison.OrdinalIgnoreCase)
             || commandLine.Contains(@"\Phoenix\runtime", StringComparison.OrdinalIgnoreCase);
     }
+
+    internal static bool CanMarkReady(bool supervisorExited, int consecutiveReady) =>
+        !supervisorExited && consecutiveReady >= ReadyConsecutiveSamples;
+
+    internal static bool CanAdoptListener(string? commandLine) =>
+        LooksLikePhoenixProcessCommandLine(commandLine);
 }
 
 
