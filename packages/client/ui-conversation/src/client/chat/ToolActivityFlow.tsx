@@ -78,7 +78,8 @@ function isActionableConnectorRecovery(node: OrderedChatNode): boolean {
     if (parsed.kind !== 'connector_list' || !Array.isArray(parsed.connectors)) return false
     return parsed.connectors.some(value => {
       if (typeof value !== 'object' || value === null) return false
-      return (value as { recommended_action?: unknown }).recommended_action === 'connect-or-reconnect'
+      const candidate = value as { recommended_action?: unknown; relevant?: unknown }
+      return candidate.relevant === true && candidate.recommended_action === 'connect-or-reconnect'
     })
   } catch {
     return false
