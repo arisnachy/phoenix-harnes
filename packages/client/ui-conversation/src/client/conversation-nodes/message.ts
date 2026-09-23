@@ -10,7 +10,7 @@ import { chatNode } from './common.ts'
 
 interface ReferencedUserMessageNode extends UserMessageNode {
   /** Stable durable identity used to reconcile transient/optimistic copies. */
-  readonly messageId: string
+  readonly messageId?: string
   /** Labels cited by the immediately following session-reference context. */
   readonly referenceLabels?: readonly string[]
 }
