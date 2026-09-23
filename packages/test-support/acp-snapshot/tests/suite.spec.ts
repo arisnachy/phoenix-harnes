@@ -482,6 +482,7 @@ describe('stdoutExpectedVariants', () => {
 describe('scenarioSkipped', () => {
   const authored: Scenario = { name: 'authored', hasModelTurn: true, recorded: false }
   const posix: Scenario = { name: 'posix-cancel', hasModelTurn: true, recorded: false, posixOnly: true }
+  const windows: Scenario = { name: 'windows-terminal', hasModelTurn: true, recorded: false, windowsOnly: true }
   const pwsh: Scenario = { name: 'pwsh-tool', hasModelTurn: true, recorded: false, pwshOnly: true }
 
   it('skips authored scenarios only while recording', () => {
@@ -494,6 +495,12 @@ describe('scenarioSkipped', () => {
     expect(scenarioSkipped(posix, false, 'linux')).toBe(false)
     expect(scenarioSkipped(posix, false, 'darwin')).toBe(false)
     expect(scenarioSkipped(authored, false, 'win32')).toBe(false)
+  })
+
+  it('skips windowsOnly scenarios off Windows and runs them on Windows', () => {
+    expect(scenarioSkipped(windows, false, 'linux', true)).toBe(true)
+    expect(scenarioSkipped(windows, false, 'darwin', true)).toBe(true)
+    expect(scenarioSkipped(windows, false, 'win32', true)).toBe(false)
   })
 
   it('skips pwshOnly scenarios when the host lacks pwsh, and runs them otherwise', () => {
