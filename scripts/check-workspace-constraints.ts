@@ -166,6 +166,10 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@phoenix-ai/dsh-chrome-connector': ['lib/server-*.js'],
   // SQLite loads every statement from immutable package resources at runtime.
   '@phoenix-ai/dsh-session-persistence-sqlite': ['resources/sql/**/*.sql'],
+  // The learning ledger is a public runtime subpath and must ship beside the package entry.
+  '@phoenix-ai/dsh-session-learning': ['lib/ledger.js'],
+  // Natural voice providers include command-backed Python/runtime assets loaded at execution time.
+  '@phoenix-ai/dsh-voice-local': ['runtime/**'],
   '@phoenix-ai/dsh-skill-badge': ['assets'],
   '@phoenix-ai/dsh-subprocess-local': ['scripts/ensure-spawn-helper.mjs'],
 }
