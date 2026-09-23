@@ -113,6 +113,9 @@ export function CodexQuotaRemaining({
 }: CodexQuotaRemainingProps) {
   const cacheKey = quotaCacheKey ?? authorization
   const [quota, setQuota] = useState<QuotaState | undefined>(() => quotaCache.get(cacheKey))
+  const [accountPresent, setAccountPresent] = useState<boolean | undefined>(
+    () => quotaCache.has(cacheKey) ? true : undefined,
+  )
   const [clockMs, setClockMs] = useState(() => Date.now())
   const authorizationRef = useRef(authorization)
   authorizationRef.current = authorization
@@ -137,8 +140,10 @@ export function CodexQuotaRemaining({
           schedule(QUOTA_STARTUP_RETRY_MS)
           return
         }
-        const telemetry = (response.result.value.entries as AuthorizationEntry[])
+        const accountEntries = (response.result.value.entries as AuthorizationEntry[])
           .filter(isOpenAIAccount)
+        setAccountPresent(accountEntries.length > 0)
+        const telemetry = accountEntries
           .map(entry => entry.telemetry)
           .find((candidate): candidate is AccountTelemetry => candidate !== undefined
             && (isValidRateLimit(candidate.primaryLimit) || isValidRateLimit(candidate.secondaryLimit)))
@@ -179,7 +184,42 @@ export function CodexQuotaRemaining({
     return () => { window.clearInterval(timer) }
   }, [quota, wide])
 
-  if (quota === undefined) return null
+  if (quota === undefined) {
+    // A known Codex account whose native telemetry is still warming (for
+    // example while Codex performs a state-db backfill) keeps a quiet visible
+    // seat instead of disappearing. No percentage or window is invented.
+    if (accountPresent !== true) return null
+    if (!wide) {
+      return (
+        <span
+          className={css.railRoot}
+          role="status"
+          aria-label="OpenAI Codex usage limits loading"
+          data-codex-quota-loading="true"
+        >
+          <span className={css.railWindow}>
+            <span className={css.railLabel}>Codex</span>
+            <strong className={css.railValue}>…</strong>
+          </span>
+        </span>
+      )
+    }
+    return (
+      <span
+        className={css.root}
+        role="status"
+        aria-label="OpenAI Codex usage limits loading"
+        data-codex-quota-loading="true"
+      >
+        <span className={css.window}>
+          <span className={css.copy}>
+            <span className={css.label}>Codex</span>
+            <span className={css.reset}>…</span>
+          </span>
+        </span>
+      </span>
+    )
+  }
 
   const windows = [
     quota.primaryLimit === undefined ? undefined : {
