@@ -283,6 +283,9 @@ if (stableListenerIdentity is not null)
 }
 
 var processIdentityType = typeof(DesktopRuntimeLaunchContract).Assembly.GetType("Phoenix.Desktop.DesktopRuntimeProcessIdentity");
+var matchesLoopbackListener = processIdentityType?.GetMethod(
+    "MatchesLoopbackListener",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
 var findListenerIdentity = processIdentityType?.GetMethod(
     "FindListeningProcessIdentity",
     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
@@ -291,6 +294,20 @@ var readProcessCommandLine = processIdentityType?.GetMethod(
     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
 True(findListenerIdentity is not null, "listener PID identity lookup exists", failures);
 True(readProcessCommandLine is not null, "process command-line lookup exists", failures);
+True(matchesLoopbackListener is not null, "listener lookup filters to the loopback endpoint", failures);
+if (matchesLoopbackListener is not null)
+{
+    var loopbackAddress = BitConverter.ToUInt32(IPAddress.Loopback.GetAddressBytes());
+    var wildcardAddress = BitConverter.ToUInt32(IPAddress.Any.GetAddressBytes());
+    var testPort = 3080;
+    var encodedPort = (uint)IPAddress.HostToNetworkOrder((short)testPort);
+    EqualBool(true, (bool)matchesLoopbackListener.Invoke(null, new object?[] { loopbackAddress, encodedPort, testPort })!,
+        "Phoenix loopback endpoint matches", failures);
+    EqualBool(false, (bool)matchesLoopbackListener.Invoke(null, new object?[] { wildcardAddress, encodedPort, testPort })!,
+        "wildcard listener does not match the Phoenix loopback endpoint", failures);
+    EqualBool(false, (bool)matchesLoopbackListener.Invoke(null, new object?[] { loopbackAddress, encodedPort, testPort + 1 })!,
+        "listener on a different port does not match", failures);
+}
 if (OperatingSystem.IsWindows() && findListenerIdentity is not null && readProcessCommandLine is not null)
 {
     var currentCommandLine = readProcessCommandLine.Invoke(null, new object?[] { Environment.ProcessId })?.ToString();
@@ -380,7 +397,26 @@ try
     DesktopSourceCheckout.ForgetVerified(sourceInstallRoot);
     False(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)), "failed source fallback clears verified backend pointer", failures);
     False(File.Exists(DesktopSourceCheckout.LegacyPointerPath(sourceInstallRoot)), "failed source fallback clears legacy backend pointer", failures);
-    DesktopSourceCheckout.RememberVerified(sourceInstallRoot, sourceTestRoot);
+
+    var rememberVerifiedIfReady = typeof(DesktopSourceCheckout).GetMethod(
+        "RememberVerifiedIfReady",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    True(rememberVerifiedIfReady is not null, "verified source persistence is readiness-gated", failures);
+    if (rememberVerifiedIfReady is not null)
+    {
+        EqualBool(false, (bool)rememberVerifiedIfReady.Invoke(
+            null,
+            new object?[] { sourceInstallRoot, sourceTestRoot, false })!,
+            "failed final readiness does not persist the verified source", failures);
+        False(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)),
+            "failed final readiness leaves verified source pointer absent", failures);
+        EqualBool(true, (bool)rememberVerifiedIfReady.Invoke(
+            null,
+            new object?[] { sourceInstallRoot, sourceTestRoot, true })!,
+            "successful readiness persists the verified source", failures);
+        True(File.Exists(DesktopSourceCheckout.VerifiedPointerPath(sourceInstallRoot)),
+            "successful readiness creates verified source pointer", failures);
+    }
 
     var conventionalRoots = DesktopSourceCheckout.ConventionalRoots(@"C:\Users\arisn");
     True(

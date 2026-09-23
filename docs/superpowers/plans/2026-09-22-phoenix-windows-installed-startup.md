@@ -104,7 +104,7 @@ Confirmar que el cambio no altera el launcher de desarrollo cuando PHOENIX_SOURC
 - Consume: el Process guardado por StartOwnedRuntimeAsync y DesktopRuntimeLaunchContract.LooksLikePhoenixProcessCommandLine.
 - Produce: MarkRuntimeReady solo ocurre si el proceso supervisor iniciado por esta instancia sigue vivo y dos respuestas consecutivas identifican Phoenix, o si el listener existente pertenece a un proceso Phoenix compatible que sigue vivo; StopOwnedRuntime termina únicamente el árbol que esta instancia inició.
 
-- [ ] **Paso 1: añadir pruebas para salida del supervisor y listener ajeno**
+- [x] **Paso 1: añadir pruebas para salida del supervisor y listener ajeno**
 
 ~~~csharp
 var runtimeContractType = typeof(DesktopRuntimeLaunchContract);
@@ -128,23 +128,23 @@ if (canAdoptListener is not null)
 }
 ~~~
 
-- [ ] **Paso 2: ejecutar la prueba C# antes de implementar el contrato**
+- [x] **Paso 2: ejecutar la prueba C# antes de implementar el contrato**
 
 Ejecutar: dotnet run --project apps/desktop-windows/Phoenix.Desktop.Tests/Phoenix.Desktop.Tests.csproj -c Release.
 
 Esperado antes del cambio: la prueba compila y falla con las aserciones de contrato ausente; una excepción de compilación o de ejecución no cuenta como RED válido.
 
-- [ ] **Paso 3: validar proceso, identidad y propiedad inmediatamente antes de readiness**
+- [x] **Paso 3: validar proceso, identidad y propiedad inmediatamente antes de readiness**
 
 Mantén el Process asociado al árbol iniciado por Phoenix; tras la segunda respuesta HTTP y justo antes de MarkRuntimeReady, confirma HasExited == false y la identidad Phoenix. Si el puerto ya lo sirve una instancia Phoenix compatible, verifica su PID, línea de comando y endpoint dos veces; permite que el shell se conecte, pero no registra ese árbol como propio ni lo termina. Ante listener incompatible, conserva la pantalla de recuperación y ejecuta solo el fallback administrado.
 
-- [ ] **Paso 4: verificar la matriz de propiedad**
+- [x] **Paso 4: verificar la matriz de propiedad**
 
 Ejecutar: dotnet run --project apps/desktop-windows/Phoenix.Desktop.Tests/Phoenix.Desktop.Tests.csproj -c Release.
 
 Esperado: una identidad HTTP no Phoenix y un supervisor terminado nunca producen readiness ni provocan que Phoenix termine el listener ajeno; un servicio Phoenix compatible puede atender el shell sin ceder la propiedad de su árbol.
 
-- [ ] **Paso 5: revisar el ciclo de reparación**
+- [x] **Paso 5: revisar el ciclo de reparación**
 
 Ejecutar: dotnet run --project apps/desktop-windows/Phoenix.Desktop.Tests/Phoenix.Desktop.Tests.csproj -c Release.
 

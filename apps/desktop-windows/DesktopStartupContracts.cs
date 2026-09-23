@@ -344,6 +344,15 @@ internal static class DesktopSourceCheckout
         }
     }
 
+    internal static bool RememberVerifiedIfReady(string stateRoot, string root, bool startupReady)
+    {
+        if (!startupReady)
+            return false;
+
+        RememberVerified(stateRoot, root);
+        return true;
+    }
+
     internal static void ForgetVerified(string stateRoot)
     {
         foreach (var path in new[] { VerifiedPointerPath(stateRoot), LegacyPointerPath(stateRoot) })

@@ -970,27 +970,29 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                 if (DesktopRuntimeLaunchContract.CanMarkReady(ownedRuntime.HasExited, consecutiveReady))
                 {
                     var finalReady = await IsReadyAsync();
-                    if (finalReady is null
-                        || !DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                    var finalReadinessValidated = finalReady is not null
+                        && DesktopRuntimeLaunchContract.HasStableListenerIdentity(
                             currentReady.Value.ProcessId,
                             currentReady.Value.CreationTimeUtcTicks,
                             finalReady.Value.ProcessId,
                             finalReady.Value.CreationTimeUtcTicks)
-                        || !DesktopRuntimeLaunchContract.CanMarkReady(ownedRuntime.HasExited, consecutiveReady))
+                        && DesktopRuntimeLaunchContract.CanMarkReady(ownedRuntime.HasExited, consecutiveReady);
+                    if (!finalReadinessValidated)
                     {
                         previousReady = finalReady;
                         consecutiveReady = finalReady is null ? 0 : 1;
                         continue;
                     }
 
-                    if (sourceCheckoutRuntime)
-                    {
-                        DesktopSourceCheckout.RememberVerified(Program.InstallRoot, runtimeRoot);
+                    window.MarkRuntimeReady();
+                    if (sourceCheckoutRuntime
+                        && DesktopSourceCheckout.RememberVerifiedIfReady(
+                            Program.InstallRoot,
+                            runtimeRoot,
+                            finalReadinessValidated))
                         DesktopLog.Write($"Verified backend root persisted: {runtimeRoot}");
-                    }
 
                     tray.Text = "Phoenix · activo";
-                    window.MarkRuntimeReady();
                     if (openWhenReady)
                         ShowWindow();
                     DesktopLog.Write($"Phoenix runtime is stable and ready from {runtimeRoot}; desktop WebView is navigating to Phoenix.");
@@ -1233,7 +1235,7 @@ internal static class DesktopRuntimeProcessIdentity
 {
     private const uint ErrorInsufficientBuffer = 122;
     private const int AddressFamilyInterNetwork = 2;
-    private const int TcpTableOwnerPidAll = 5;
+    private const int TcpTableOwnerPidListener = 3;
     private const int TcpStateListen = 2;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1267,12 +1269,13 @@ internal static class DesktopRuntimeProcessIdentity
             ref size,
             order: false,
             AddressFamilyInterNetwork,
-            TcpTableOwnerPidAll,
+            TcpTableOwnerPidListener,
             reserved: 0);
         if (status != ErrorInsufficientBuffer || size <= 0)
             return null;
 
-        var table = Marshal.AllocHGlobal(size);
+        var allocatedSize = size;
+        var table = Marshal.AllocHGlobal(allocatedSize);
         try
         {
             status = GetExtendedTcpTable(
@@ -1280,19 +1283,22 @@ internal static class DesktopRuntimeProcessIdentity
                 ref size,
                 order: false,
                 AddressFamilyInterNetwork,
-                TcpTableOwnerPidAll,
+            TcpTableOwnerPidListener,
                 reserved: 0);
             if (status != 0)
                 return null;
 
             var rowCount = Marshal.ReadInt32(table);
             var rowSize = Marshal.SizeOf<MibTcpRowOwnerPid>();
+            if (rowCount < 0 || allocatedSize < sizeof(int) || rowCount > (allocatedSize - sizeof(int)) / rowSize)
+                return null;
+
             for (var index = 0; index < rowCount; index++)
             {
                 var row = Marshal.PtrToStructure<MibTcpRowOwnerPid>(
                     IntPtr.Add(table, sizeof(int) + index * rowSize));
                 if (row.State == TcpStateListen
-                    && NetworkPort(row.LocalPort) == port
+                    && MatchesLoopbackListener(row.LocalAddress, row.LocalPort, port)
                     && row.OwningPid > 0)
                     return checked((int)row.OwningPid);
             }
@@ -1401,6 +1407,10 @@ internal static class DesktopRuntimeProcessIdentity
 
     private static int NetworkPort(uint value) =>
         (int)(((value & 0xff) << 8) | ((value >> 8) & 0xff));
+
+    private static bool MatchesLoopbackListener(uint localAddress, uint localPort, int port) =>
+        localAddress == BitConverter.ToUInt32(IPAddress.Loopback.GetAddressBytes())
+        && NetworkPort(localPort) == port;
 }
 
 internal static class DesktopLog
