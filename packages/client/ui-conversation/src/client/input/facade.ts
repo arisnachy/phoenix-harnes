@@ -464,14 +464,20 @@ export class SessionInputShell implements SessionInput {
    */
   private sinkSerialized(attempt: SubmitAttempt, draft: string, mode: InputSubmitMode): void {
     const imageIds = [...this.imageIds]
-    // Publish before any serializer/Host await: Enter must be visibly accepted
-    // on the same browser frame even while the agent is already working.
+    // Snapshot references before clearing the visible composer: serializers
+    // still need the entered table, and the machine keeps its own copy for an
+    // exact rollback if Host admission fails.
+    const occurrences = this.core.state.occurrences
+    // Enter is a UI commit, not a network acknowledgement. Publish the
+    // optimistic bubble and clear the composer synchronously before any
+    // serializer/Host await so a slow admission can never look like a frozen
+    // Send button. The submitting phase remains the single-flight guard.
     this.pendingSubmit = {
       seq: attempt.seq,
       text: draft.trim(),
       startedAt: Date.now(),
     }
-    const occurrences = this.core.state.occurrences
+    this.run(this.core.dispatch({ type: 'send-committed' }))
     if (occurrences.length === 0) {
       const modelText = draft.trim()
       if (this.pendingSubmit?.seq === attempt.seq) {

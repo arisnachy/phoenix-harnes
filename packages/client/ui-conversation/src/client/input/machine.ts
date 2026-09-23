@@ -124,6 +124,8 @@ export class InputMachine {
   private inflight: {
     readonly attempt: SubmitAttempt
     readonly controller: AbortController
+    /** Structured-reference table captured at Enter for exact optimistic rollback. */
+    readonly occurrencesSnapshot: readonly Occurrence[]
   } | undefined
   private log: Transaction[] = []
   private redoStack: Transaction[] = []
@@ -476,7 +478,7 @@ export class InputMachine {
     const controller = new AbortController()
     this.seq += 1
     const attempt: SubmitAttempt = { seq: this.seq, signal: controller.signal, draftSnapshot: this.draft, mode }
-    this.inflight = { attempt, controller }
+    this.inflight = { attempt, controller, occurrencesSnapshot: this.occurrences }
     return attempt
   }
 
@@ -563,6 +565,16 @@ export class InputMachine {
         : []
     }
     const text = ev.message ?? ev.outcome?.text
+    // Ordinary prompts are cleared optimistically as soon as the browser
+    // accepts Enter. A Host/serialization refusal restores the exact draft
+    // (including structured references) while the locked composer is still
+    // untouched.
+    if (this.claim === undefined && this.draft === '') {
+      this.phase = 'plain'
+      this.occurrences = flight.occurrencesSnapshot
+      this.adopt(flight.attempt.draftSnapshot)
+      return text === undefined ? [] : [{ type: 'notice', level: 'error', text }]
+    }
     // Keep the same command claim only while the live draft still equals the
     // enter-time draft; user input typed during flight wins.
     // Claimed re-entry additionally requires the watch to hold — an
@@ -577,9 +589,12 @@ export class InputMachine {
     return text === undefined ? [] : [{ type: 'notice', level: 'error', text }]
   }
 
-  /** Cut undo state after an accepted image-only send. */
+  /** Cut undo state after an optimistic ordinary send or accepted image-only send. */
   private onSendCommitted(): InputEffect[] {
-    if (this.phase !== 'plain') return []
+    const ordinarySubmitting = this.phase === 'submitting'
+      && this.inflight !== undefined
+      && this.claim === undefined
+    if (this.phase !== 'plain' && !ordinarySubmitting) return []
     this.claim = undefined
     this.occurrences = []
     this.adopt('')
