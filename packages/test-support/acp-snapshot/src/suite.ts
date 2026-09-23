@@ -179,6 +179,12 @@ export interface Scenario {
    */
   posixOnly?: boolean
   /**
+   * Whether the scenario requires the Windows runtime rather than merely a
+   * cross-platform executable. The run test is skipped off win32 while fixture
+   * inventory remains guarded everywhere.
+   */
+  windowsOnly?: boolean
+  /**
    * Whether the scenario boots a composition that needs a usable `pwsh`
    * (the pwsh-tool-turn scenario). The run test is skipped when the suite's
    * {@link SnapshotSuiteOptions.hasPwsh} probe is false; fixtures stay guarded
@@ -190,8 +196,9 @@ export interface Scenario {
 /**
  * Whether a scenario's run test is skipped for this mode and host: record mode
  * skips authored (non-`recorded`) scenarios, {@link Scenario.posixOnly}
- * scenarios skip on Windows, and {@link Scenario.pwshOnly} scenarios skip
- * when the caller's `hasPwsh` probe is false.
+ * scenarios skip on Windows, {@link Scenario.windowsOnly} scenarios skip off
+ * Windows, and {@link Scenario.pwshOnly} scenarios skip when the caller's
+ * `hasPwsh` probe is false.
  *
  * @param scenario The scenario whose run test is being registered.
  * @param recording Whether the suite runs in record mode.
@@ -208,6 +215,7 @@ export function scenarioSkipped(
 ): boolean {
   if (recording && !scenario.recorded) return true
   if (scenario.posixOnly === true && platform === 'win32') return true
+  if (scenario.windowsOnly === true && platform !== 'win32') return true
   return scenario.pwshOnly === true && hasPwsh !== true
 }
 
