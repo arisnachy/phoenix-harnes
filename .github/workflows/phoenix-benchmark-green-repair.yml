@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: phoenix-benchmark-green-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CI: '1'
   DSH_TELEMETRY_DISABLED: '1'
