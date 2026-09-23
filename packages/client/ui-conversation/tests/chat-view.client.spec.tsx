@@ -662,6 +662,33 @@ describe('ChatView', () => {
     expect(h.forkAt).toHaveBeenCalledWith(1)
   })
 
+  it('does not double-render when a claimed steer is briefly classified as a durable user node', () => {
+    const pending = {
+      id: 'steer-user-race-occurrence' as never,
+      messageId: 'steer-user-race-message' as never,
+      placement: 'steering' as const,
+      content: [{ type: 'text' as const, text: 'same message during tool handoff' }],
+      preview: 'same message during tool handoff',
+      text: 'same message during tool handoff',
+    }
+    const h = makeHarness({
+      queue: [pending],
+      nodes: [{
+        kind: 'user',
+        messageId: pending.messageId,
+        seq: 2,
+        time: 2_000,
+        content: pending.content,
+        source: null,
+      } as never],
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getAllByText('same message during tool handoff')).toHaveLength(1)
+    expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+  })
+
   it('keeps a later pending occurrence visible when it reuses a durable MessageId', () => {
     const pending = {
       id: 'steer-occurrence-later' as never,
