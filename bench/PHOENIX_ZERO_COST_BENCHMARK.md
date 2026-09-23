@@ -4,11 +4,18 @@ This benchmark is designed to measure Phoenix itself without spending model toke
 
 ## What it runs
 
+Fast mode is the default on branch pushes and pull requests:
+
 1. Local mock-LLM contract and fault-injection tests.
 2. Agent-loop request reconstruction tests.
 3. Adversarial judge/completion-gate tests.
+
+Deep mode adds:
+
 4. Snapshot/replay regression tests.
 5. Host + client library build.
+
+Set `PHOENIX_BENCH_DEEP=1` when invoking the script for the isolated deep battery. The repository CI already covers build/snapshot gates, so the default benchmark avoids duplicating those expensive lanes on every commit.
 
 All provider API keys are explicitly blanked for the benchmark process.
 
