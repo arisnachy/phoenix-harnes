@@ -257,9 +257,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
   /**
    * Store the Jev key in PHOENIX credentials and activate the pinned optional MCP.
    * The secret never enters the managed loader overlay.
-   * @param request - Jev setup request containing the user-supplied API key.
-   * @returns Installation receipt for the pinned Jev connector.
-   * @param _request - The request value.
+   * @param _request - Retired Jev setup request retained for wire compatibility.
+   * @returns This method never returns; Jev integration is retired.
    */
   @Remote('configureJevMcp')
   async configureJevMcp(_request: JevMcpConfigureRequest): Promise<McpRegistryInstallReceipt> {
