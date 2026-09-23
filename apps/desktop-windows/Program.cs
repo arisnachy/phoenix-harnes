@@ -445,9 +445,16 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         try
         {
             window.SetStartupStatus("Iniciando Phoenix…");
-            if (await IsStableReadyAsync())
+            var stableListener = await IsStableReadyAsync();
+            if (stableListener is not null)
             {
-                if (await IsCompatiblePhoenixListenerAsync())
+                var finalListener = await IsReadyAsync();
+                if (finalListener is not null
+                    && DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                        stableListener.Value.ProcessId,
+                        stableListener.Value.CreationTimeUtcTicks,
+                        finalListener.Value.ProcessId,
+                        finalListener.Value.CreationTimeUtcTicks))
                 {
                     externallyManaged = true;
                     runtimeOwnerPid = finalListener.Value.ProcessId;
@@ -460,12 +467,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
                     return;
                 }
 
-                tray.Text = "Phoenix · puerto 3080 ocupado";
-                window.SetStartupStatus(
-                    "El puerto normal de Phoenix (3080) está ocupado por otro programa.\n\nCierra ese proceso y vuelve a abrir Phoenix.",
-                    isError: true);
-                DesktopLog.Write("Refused to attach because 127.0.0.1:3080 answered but its listener did not look like Phoenix.");
-                return;
+                DesktopLog.Write("Phoenix listener identity changed during the final readiness check; continuing with owned runtime startup.");
             }
 
             // Phoenix.exe is the desktop supervisor. If the user has a real Phoenix source
@@ -841,18 +843,18 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         return true;
     }
 
-    private async Task<bool> IsCompatiblePhoenixListenerAsync()
+    private async Task<DesktopRuntimeListenerIdentity?> IsCompatiblePhoenixListenerAsync()
     {
         try
         {
-            // Identify Phoenix through its own HTML shell instead of asking PowerShell/WMI which
-            // process owns port 3080. This keeps normal EXE startup shell-free and also proves that
-            // the web UI, not merely a TCP listener, is actually ready for WebView2.
+            // Identify Phoenix through its own HTML shell and then validate the owning process
+            // without starting a shell command. This proves that the web UI, not merely a TCP
+            // listener, is actually ready for WebView2.
             using var response = await http.GetAsync(Program.PhoenixUri, HttpCompletionOption.ResponseContentRead);
             if (!response.IsSuccessStatusCode)
             {
                 DesktopLog.Write($"Phoenix identity probe returned HTTP {(int)response.StatusCode}.");
-                return false;
+                return null;
             }
 
             var html = await response.Content.ReadAsStringAsync();
@@ -860,27 +862,26 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             if (!compatible)
             {
                 DesktopLog.Write($"Phoenix identity probe compatible=false; bytes={html.Length}.");
-                return false;
+                return null;
             }
 
-            var listenerPid = DesktopRuntimeProcessIdentity.FindListeningProcessId(DesktopRuntimeLaunchContract.DesktopPort);
-            if (listenerPid is null)
+            var listener = DesktopRuntimeProcessIdentity.FindListeningProcessIdentity(DesktopRuntimeLaunchContract.DesktopPort);
+            if (listener is null)
             {
                 DesktopLog.Write("Phoenix identity probe found the Phoenix shell but no owning listener PID.");
-                return false;
+                return null;
             }
 
-            using var listener = Process.GetProcessById(listenerPid.Value);
-            var processAlive = !listener.HasExited;
-            var commandLine = DesktopRuntimeProcessIdentity.TryGetCommandLine(listener.Id);
+            var processAlive = DesktopRuntimeProcessIdentity.IsStillAlive(listener.Value);
+            var commandLine = DesktopRuntimeProcessIdentity.TryGetCommandLine(listener.Value.ProcessId);
             var processCompatible = DesktopRuntimeLaunchContract.CanAdoptListener(commandLine);
-            DesktopLog.Write($"Phoenix identity probe compatible=true; listenerPid={listener.Id}; processAlive={processAlive}; processCompatible={processCompatible}; bytes={html.Length}.");
-            return processAlive && processCompatible;
+            DesktopLog.Write($"Phoenix identity probe compatible=true; listenerPid={listener.Value.ProcessId}; processAlive={processAlive}; processCompatible={processCompatible}; bytes={html.Length}.");
+            return processAlive && processCompatible ? listener : null;
         }
         catch (Exception ex)
         {
             DesktopLog.Write("Phoenix identity probe failed.", ex);
-            return false;
+            return null;
         }
     }
 
@@ -961,14 +962,38 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             : DesktopRuntimeLaunchContract.ManagedStartupWaitSeconds);
         var wait = Stopwatch.StartNew();
         var consecutiveReady = 0;
+        DesktopRuntimeListenerIdentity? previousReady = null;
 
         while (wait.Elapsed < maxWait && !shuttingDown)
         {
-            if (await IsReadyAsync())
+            var currentReady = await IsReadyAsync();
+            if (currentReady is not null)
             {
-                consecutiveReady++;
+                consecutiveReady = previousReady is not null
+                    && DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                        previousReady.Value.ProcessId,
+                        previousReady.Value.CreationTimeUtcTicks,
+                        currentReady.Value.ProcessId,
+                        currentReady.Value.CreationTimeUtcTicks)
+                    ? consecutiveReady + 1
+                    : 1;
+                previousReady = currentReady;
                 if (DesktopRuntimeLaunchContract.CanMarkReady(ownedRuntime.HasExited, consecutiveReady))
                 {
+                    var finalReady = await IsReadyAsync();
+                    if (finalReady is null
+                        || !DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                            currentReady.Value.ProcessId,
+                            currentReady.Value.CreationTimeUtcTicks,
+                            finalReady.Value.ProcessId,
+                            finalReady.Value.CreationTimeUtcTicks)
+                        || !DesktopRuntimeLaunchContract.CanMarkReady(ownedRuntime.HasExited, consecutiveReady))
+                    {
+                        previousReady = finalReady;
+                        consecutiveReady = finalReady is null ? 0 : 1;
+                        continue;
+                    }
+
                     if (sourceCheckoutRuntime)
                     {
                         DesktopSourceCheckout.RememberVerified(Program.InstallRoot, runtimeRoot);
@@ -985,6 +1010,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
             }
             else
             {
+                previousReady = null;
                 consecutiveReady = 0;
             }
 
@@ -1127,20 +1153,32 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
     }
 
 
-    private async Task<bool> IsStableReadyAsync()
+    private async Task<DesktopRuntimeListenerIdentity?> IsStableReadyAsync()
     {
+        DesktopRuntimeListenerIdentity? first = null;
         for (var sample = 0; sample < DesktopRuntimeLaunchContract.ReadyConsecutiveSamples; sample++)
         {
-            if (!await IsReadyAsync())
-                return false;
+            var current = await IsReadyAsync();
+            if (current is null)
+                return null;
+
+            if (first is not null
+                && !DesktopRuntimeLaunchContract.HasStableListenerIdentity(
+                    first.Value.ProcessId,
+                    first.Value.CreationTimeUtcTicks,
+                    current.Value.ProcessId,
+                    current.Value.CreationTimeUtcTicks))
+                return null;
+
+            first ??= current;
 
             if (sample + 1 < DesktopRuntimeLaunchContract.ReadyConsecutiveSamples)
                 await Task.Delay(DesktopRuntimeLaunchContract.ReadySampleDelayMilliseconds);
         }
-        return true;
+        return first;
     }
 
-    private Task<bool> IsReadyAsync()
+    private Task<DesktopRuntimeListenerIdentity?> IsReadyAsync()
     {
         // Readiness means the Phoenix application shell is actually being served, not just that
         // something answered on port 3080. This avoids racing WebView2 against a half-started host.
@@ -1154,15 +1192,8 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
         try
         {
             if (!ownedRuntime.HasExited)
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "taskkill.exe",
-                    Arguments = $"/PID {ownedRuntime.Id} /T /F",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                })?.WaitForExit(5000);
-            }
+                ownedRuntime.Kill(entireProcessTree: true);
+            ownedRuntime.WaitForExit(5000);
         }
         catch (Exception ex)
         {
@@ -1213,8 +1244,6 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
 internal static class DesktopRuntimeProcessIdentity
 {
-    private const uint ProcessQueryInformation = 0x0400;
-    private const uint ProcessVmRead = 0x0010;
     private const uint ErrorInsufficientBuffer = 122;
     private const int AddressFamilyInterNetwork = 2;
     private const int TcpTableOwnerPidAll = 5;
@@ -1231,25 +1260,6 @@ internal static class DesktopRuntimeProcessIdentity
         internal uint OwningPid;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ProcessBasicInformation
-    {
-        internal nint Reserved1;
-        internal nint PebBaseAddress;
-        internal nint Reserved2;
-        internal nint Reserved3;
-        internal nint UniqueProcessId;
-        internal nint Reserved4;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct UnicodeString
-    {
-        internal ushort Length;
-        internal ushort MaximumLength;
-        internal nint Buffer;
-    }
-
     [DllImport("iphlpapi.dll", SetLastError = true)]
     private static extern uint GetExtendedTcpTable(
         nint tcpTable,
@@ -1258,29 +1268,6 @@ internal static class DesktopRuntimeProcessIdentity
         int addressFamily,
         int tableClass,
         uint reserved);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern nint OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool ReadProcessMemory(
-        nint process,
-        nint address,
-        nint buffer,
-        nuint size,
-        out nuint bytesRead);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(nint handle);
-
-    [DllImport("ntdll.dll")]
-    private static extern int NtQueryInformationProcess(
-        nint process,
-        int informationClass,
-        out ProcessBasicInformation information,
-        int informationLength,
-        out int returnLength);
 
     internal static int? FindListeningProcessId(int port)
     {
@@ -1335,62 +1322,76 @@ internal static class DesktopRuntimeProcessIdentity
         return null;
     }
 
+    internal static DesktopRuntimeListenerIdentity? FindListeningProcessIdentity(int port)
+    {
+        var processId = FindListeningProcessId(port);
+        if (processId is null)
+            return null;
+
+        try
+        {
+            using var process = Process.GetProcessById(processId.Value);
+            if (process.HasExited)
+                return null;
+
+            return new DesktopRuntimeListenerIdentity(
+                process.Id,
+                process.StartTime.ToUniversalTime().Ticks);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static bool IsStillAlive(DesktopRuntimeListenerIdentity identity)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(identity.ProcessId);
+            return !process.HasExited
+                && process.StartTime.ToUniversalTime().Ticks == identity.CreationTimeUtcTicks;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     internal static string? TryGetCommandLine(int processId)
     {
         if (!OperatingSystem.IsWindows())
             return null;
 
-        var process = OpenProcess(ProcessQueryInformation | ProcessVmRead, inheritHandle: false, checked((uint)processId));
-        if (process == nint.Zero)
-            return null;
-
+        object? locator = null;
+        object? services = null;
+        object? results = null;
+        object? current = null;
         try
         {
-            var status = NtQueryInformationProcess(
-                process,
-                informationClass: 0,
-                out var basicInformation,
-                Marshal.SizeOf<ProcessBasicInformation>(),
-                out _);
-            if (status != 0 || basicInformation.PebBaseAddress == nint.Zero)
+            var locatorType = Type.GetTypeFromProgID("WbemScripting.SWbemLocator");
+            if (locatorType is null)
                 return null;
 
-            var processParametersOffset = IntPtr.Size == 8 ? 0x20 : 0x10;
-            if (!TryReadPointer(
-                    process,
-                    IntPtr.Add(basicInformation.PebBaseAddress, processParametersOffset),
-                    out var processParameters)
-                || processParameters == nint.Zero)
+            locator = Activator.CreateInstance(locatorType);
+            if (locator is null)
                 return null;
 
-            var commandLineOffset = IntPtr.Size == 8 ? 0x70 : 0x40;
-            if (!TryReadStruct(
-                    process,
-                    IntPtr.Add(processParameters, commandLineOffset),
-                    out UnicodeString commandLine)
-                || commandLine.Buffer == nint.Zero
-                || commandLine.Length == 0)
-                return string.Empty;
+            services = ((dynamic)locator).ConnectServer(".", "root\\cimv2");
+            results = ((dynamic)services).ExecQuery(
+                $"SELECT CommandLine FROM Win32_Process WHERE ProcessId = {processId}");
+            if (results is not System.Collections.IEnumerable enumerable)
+                return null;
 
-            var bytes = new byte[commandLine.Length];
-            var nativeBuffer = Marshal.AllocHGlobal(bytes.Length);
-            try
+            string? commandLine = null;
+            foreach (var item in enumerable)
             {
-                if (!ReadProcessMemory(
-                        process,
-                        commandLine.Buffer,
-                        nativeBuffer,
-                        (nuint)bytes.Length,
-                        out var bytesRead)
-                    || bytesRead != (nuint)bytes.Length)
-                    return null;
-                Marshal.Copy(nativeBuffer, bytes, 0, bytes.Length);
-                return Encoding.Unicode.GetString(bytes);
+                current = item;
+                commandLine = (string?)((dynamic)item).CommandLine;
+                break;
             }
-            finally
-            {
-                Marshal.FreeHGlobal(nativeBuffer);
-            }
+
+            return commandLine;
         }
         catch
         {
@@ -1398,56 +1399,17 @@ internal static class DesktopRuntimeProcessIdentity
         }
         finally
         {
-            CloseHandle(process);
+            ReleaseComObject(current);
+            ReleaseComObject(results);
+            ReleaseComObject(services);
+            ReleaseComObject(locator);
         }
     }
 
-    private static bool TryReadPointer(nint process, nint address, out nint value)
+    private static void ReleaseComObject(object? value)
     {
-        var bytes = new byte[IntPtr.Size];
-        var nativeBuffer = Marshal.AllocHGlobal(bytes.Length);
-        try
-        {
-            if (!ReadProcessMemory(process, address, nativeBuffer, (nuint)bytes.Length, out var bytesRead)
-                || bytesRead != (nuint)bytes.Length)
-            {
-                value = nint.Zero;
-                return false;
-            }
-
-            Marshal.Copy(nativeBuffer, bytes, 0, bytes.Length);
-            value = IntPtr.Size == 8
-                ? (nint)BitConverter.ToInt64(bytes, 0)
-                : (nint)BitConverter.ToInt32(bytes, 0);
-            return true;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(nativeBuffer);
-        }
-    }
-
-    private static bool TryReadStruct<T>(nint process, nint address, out T value)
-        where T : struct
-    {
-        var size = Marshal.SizeOf<T>();
-        var nativeBuffer = Marshal.AllocHGlobal(size);
-        try
-        {
-            if (!ReadProcessMemory(process, address, nativeBuffer, (nuint)size, out var bytesRead)
-                || bytesRead != (nuint)size)
-            {
-                value = default;
-                return false;
-            }
-
-            value = Marshal.PtrToStructure<T>(nativeBuffer);
-            return true;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(nativeBuffer);
-        }
+        if (value is not null && Marshal.IsComObject(value))
+            Marshal.FinalReleaseComObject(value);
     }
 
     private static int NetworkPort(uint value) =>

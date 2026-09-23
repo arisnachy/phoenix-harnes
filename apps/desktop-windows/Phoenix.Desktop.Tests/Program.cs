@@ -1,5 +1,7 @@
 using System.IO.Compression;
 using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using Phoenix.Desktop;
 
@@ -529,8 +531,12 @@ var canMarkReady = runtimeContractType.GetMethod(
 var canAdoptListener = runtimeContractType.GetMethod(
     "CanAdoptListener",
     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+var stableListenerIdentity = runtimeContractType.GetMethod(
+    "HasStableListenerIdentity",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
 True(canMarkReady is not null, "runtime readiness decision exists", failures);
 True(canAdoptListener is not null, "listener adoption decision exists", failures);
+True(stableListenerIdentity is not null, "stable listener identity decision exists", failures);
 if (canMarkReady is not null)
     EqualBool(false, (bool)canMarkReady.Invoke(null, new object?[] { true, 2 })!,
         "an exited owned supervisor cannot mark Phoenix ready", failures);
@@ -540,6 +546,44 @@ if (canAdoptListener is not null)
         "an unrelated listener is never adopted", failures);
     EqualBool(true, (bool)canAdoptListener.Invoke(null, new object?[] { "node scripts/phoenix-windows-supervisor.mjs" })!,
         "a compatible Phoenix listener may serve the desktop without becoming owned", failures);
+}
+if (stableListenerIdentity is not null)
+{
+    EqualBool(true, (bool)stableListenerIdentity.Invoke(null, new object?[] { 700, 1234L, 700, 1234L })!,
+        "matching listener PID and creation time remain stable", failures);
+    EqualBool(false, (bool)stableListenerIdentity.Invoke(null, new object?[] { 700, 1234L, 701, 1234L })!,
+        "a changed listener PID breaks stable identity", failures);
+    EqualBool(false, (bool)stableListenerIdentity.Invoke(null, new object?[] { 700, 1234L, 700, 1235L })!,
+        "a reused listener PID with a changed creation time breaks stable identity", failures);
+}
+
+var processIdentityType = typeof(DesktopRuntimeLaunchContract).Assembly.GetType("Phoenix.Desktop.DesktopRuntimeProcessIdentity");
+var findListenerIdentity = processIdentityType?.GetMethod(
+    "FindListeningProcessIdentity",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+var readProcessCommandLine = processIdentityType?.GetMethod(
+    "TryGetCommandLine",
+    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+True(findListenerIdentity is not null, "listener PID identity lookup exists", failures);
+True(readProcessCommandLine is not null, "process command-line lookup exists", failures);
+if (OperatingSystem.IsWindows() && findListenerIdentity is not null && readProcessCommandLine is not null)
+{
+    var currentCommandLine = readProcessCommandLine.Invoke(null, new object?[] { Environment.ProcessId })?.ToString();
+    True(!string.IsNullOrWhiteSpace(currentCommandLine), "current Windows process command line is readable", failures);
+
+    using var identityListener = new TcpListener(IPAddress.Loopback, 0);
+    identityListener.Start();
+    var identityPort = ((IPEndPoint)identityListener.LocalEndpoint).Port;
+    var listenerIdentity = findListenerIdentity.Invoke(null, new object?[] { identityPort });
+    True(listenerIdentity is not null, "loopback listener resolves to a process identity", failures);
+    if (listenerIdentity is not null)
+    {
+        var identityType = listenerIdentity.GetType();
+        var processId = (int)identityType.GetProperty("ProcessId")!.GetValue(listenerIdentity)!;
+        var creationTicks = (long)identityType.GetProperty("CreationTimeUtcTicks")!.GetValue(listenerIdentity)!;
+        EqualInt(Environment.ProcessId, processId, "loopback listener belongs to the test process", failures);
+        True(creationTicks > 0, "loopback listener exposes process creation time", failures);
+    }
 }
 
 var consolePrefRoot = Path.Combine(Path.GetTempPath(), $"phoenix-console-test-{Guid.NewGuid():N}");
