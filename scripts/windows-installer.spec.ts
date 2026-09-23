@@ -6,6 +6,17 @@ const root = resolve(import.meta.dirname, '..')
 const read = (file: string): string => readFileSync(resolve(root, file), 'utf8')
 
 describe('PHOENIX managed Windows installation', () => {
+  it('keeps the desktop and installer versions synchronized at the next release', () => {
+    const desktopVersion = read('apps/desktop-windows/Phoenix.Desktop.csproj').match(
+      /<Version>([^<]+)<\/Version>/,
+    )?.[1]
+    const installerVersion = read('installer/windows/Phoenix.iss').match(
+      /^AppVersion=(.+)$/mu,
+    )?.[1]
+    expect(desktopVersion).toBe('1.0.22')
+    expect(installerVersion).toBe(desktopVersion)
+  })
+
   it('offers the public one-line installer without requiring global pnpm', () => {
     const installer = read('install-phoenix.ps1')
     const oneClick = read('install-phoenix.cmd')
