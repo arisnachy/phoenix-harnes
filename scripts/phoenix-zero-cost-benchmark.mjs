@@ -136,23 +136,38 @@ lanes.push(targetLane(
   180_000,
 ))
 
-{
-  const result = run('pnpm', ['run', 'test:snapshot'], 240_000)
-  writeLog('snapshot-replay', result)
+const deepMode = process.env.PHOENIX_BENCH_DEEP === '1'
+
+if (deepMode) {
+  const snapshot = run('pnpm', ['run', 'test:snapshot'], 240_000)
+  writeLog('snapshot-replay', snapshot)
   lanes.push(summarizeResult(
     'snapshot-replay',
     'Deterministic snapshot/replay',
-    result,
+    snapshot,
   ))
-}
 
-{
-  const result = run('pnpm', ['run', 'build:lib'], 420_000)
-  writeLog('build-lib', result)
+  const build = run('pnpm', ['run', 'build:lib'], 420_000)
+  writeLog('build-lib', build)
   lanes.push(summarizeResult(
     'build-lib',
     'Host + client library build',
-    result,
+    build,
+  ))
+} else {
+  lanes.push(summarizeResult(
+    'snapshot-replay',
+    'Deterministic snapshot/replay',
+    null,
+    true,
+    'Fast mode: covered by repository CI; set PHOENIX_BENCH_DEEP=1 for an isolated deep run.',
+  ))
+  lanes.push(summarizeResult(
+    'build-lib',
+    'Host + client library build',
+    null,
+    true,
+    'Fast mode: covered by repository CI; set PHOENIX_BENCH_DEEP=1 for an isolated deep run.',
   ))
 }
 
@@ -257,6 +272,7 @@ priority(
 const report = {
   schemaVersion: 1,
   benchmark: 'phoenix-zero-cost-harness',
+  mode: deepMode ? 'deep' : 'fast',
   generatedAt: new Date().toISOString(),
   commit: process.env.GITHUB_SHA ?? null,
   ref: process.env.GITHUB_REF ?? null,
@@ -307,6 +323,7 @@ Generated: ${report.generatedAt}
 
 ## Executive summary
 
+- Mode: **${deepMode ? 'deep' : 'fast'}**
 - Provider API tokens consumed by this benchmark: **0**
 - Expected provider API cost: **$0**
 - Passed lanes: **${passed}**
