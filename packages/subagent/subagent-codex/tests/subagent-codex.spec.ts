@@ -22,6 +22,7 @@ import * as invariant from '../src/invariant.ts'
 import {
   CODEX_PERMISSION_MODES,
   DEFAULT_CODEX_PERMISSION_MODE,
+  codexAccountEnvironment,
   codexAppServerArgv,
   codexMetadataAppServerArgv,
   DEFAULT_DISPOSE_GRACE_MS,
@@ -425,6 +426,43 @@ describe('task admission and package contracts', () => {
       name: '@phoenix-ai/dsh-subagent-codex',
     }])
     expect(JSON.stringify(rows)).not.toContain('tool-subagent')
+  })
+
+  it('reuses Codex native SQLite selection for account metadata probes', () => {
+    const previousCodexSqlite = process.env.CODEX_SQLITE_HOME
+    const previousPhoenixSqlite = process.env.PHOENIX_CODEX_SQLITE_HOME
+    const home = resolve('test-codex-home')
+    const nativeSqlite = resolve('test-codex-native-sqlite')
+    const phoenixSqlite = resolve('test-phoenix-sqlite')
+
+    try {
+      process.env.CODEX_SQLITE_HOME = nativeSqlite
+      process.env.PHOENIX_CODEX_SQLITE_HOME = phoenixSqlite
+
+      expect(codexAccountEnvironment({ CODEX_HOME: home })).toEqual({
+        CODEX_HOME: home,
+        CODEX_SQLITE_HOME: nativeSqlite,
+      })
+
+      delete process.env.CODEX_SQLITE_HOME
+      expect(codexAccountEnvironment({ CODEX_HOME: home })).toEqual({
+        CODEX_HOME: home,
+      })
+
+      const explicitSqlite = resolve('test-codex-explicit-sqlite')
+      expect(codexAccountEnvironment({
+        CODEX_HOME: home,
+        CODEX_SQLITE_HOME: explicitSqlite,
+      })).toEqual({
+        CODEX_HOME: home,
+        CODEX_SQLITE_HOME: explicitSqlite,
+      })
+    } finally {
+      if (previousCodexSqlite === undefined) delete process.env.CODEX_SQLITE_HOME
+      else process.env.CODEX_SQLITE_HOME = previousCodexSqlite
+      if (previousPhoenixSqlite === undefined) delete process.env.PHOENIX_CODEX_SQLITE_HOME
+      else process.env.PHOENIX_CODEX_SQLITE_HOME = previousPhoenixSqlite
+    }
   })
 
   it('accepts one or more text blocks and rejects empty or non-text tasks', () => {

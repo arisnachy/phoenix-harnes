@@ -25,8 +25,13 @@ export const CODEX_ACCOUNT_KEY = credentialKey('subagent-codex', 'account')
 
 /** Keep Settings/telemetry re-renders from spawning a Codex app-server storm. */
 const ACCOUNT_INSPECTION_TTL_MS = 60_000
-/** A failed native probe is retried later, not once per UI subscriber/render. */
-const ACCOUNT_FAILURE_COOLDOWN_MS = 30_000
+/**
+ * A failed native probe is retried later, not once per UI subscriber/render.
+ * Native Codex can spend its whole 30 s startup gate on a state-db backfill;
+ * leave a larger quiet interval so Phoenix never turns that failure into a
+ * self-sustaining app-server restart loop.
+ */
+const ACCOUNT_FAILURE_COOLDOWN_MS = 120_000
 /** Shared probe must outlive Codex's own 30 s state-db startup/backfill window. */
 const ACCOUNT_PROBE_TIMEOUT_MS = 45_000
 
