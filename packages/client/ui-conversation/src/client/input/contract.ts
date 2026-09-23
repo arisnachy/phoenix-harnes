@@ -213,10 +213,11 @@ export interface InputMachineOptions {
 export interface InputState {
   readonly draft: string
   /**
-   * Optimistic copy of the ordinary message currently crossing the Host
-   * admission boundary. Durable transcript truth still comes from the session
-   * log; this projection only makes Enter visible immediately and gives the
-   * shell an attempt identity for admission recovery.
+   * Local visual receipt for the latest ordinary submission. It is published
+   * synchronously on Enter and may intentionally outlive Host admission:
+   * ChatView suppresses it only when the durable transcript or steering queue
+   * has taken ownership. This removes the admission-to-stream visual gap while
+   * durable transcript truth remains authoritative.
    */
   readonly pendingSubmit?: {
     /** Display text echoed immediately in the transcript. */
