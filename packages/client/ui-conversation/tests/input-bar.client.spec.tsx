@@ -483,8 +483,8 @@ describe('Enter semantics', () => {
     const { textarea, sink } = bench({ draft: 'hello' })
     fireEvent.keyDown(textarea, { key: 'Enter' })
     expect(sink).toHaveBeenCalledWith('hello', [], 'queue', expect.any(AbortSignal))
-    // The submitting-phase lock, not draft emptiness, suppresses the repeat:
-    // the draft is still uncleared while the sink round-trip is in flight.
+    // Enter clears the visible composer immediately; the submitting-phase
+    // single-flight lock, not stale draft text, suppresses the repeat.
     fireEvent.keyDown(textarea, { key: 'Enter', repeat: true })
     fireEvent.keyDown(textarea, { key: 'Enter' })
     expect(sink).toHaveBeenCalledTimes(1)
@@ -507,6 +507,8 @@ describe('Enter semantics', () => {
       fireEvent.keyDown(send.textarea, { key: 'Enter' })
       expect(send.shell.snapshot.pendingSubmit?.text).toBe('slow admission')
       expect(send.shell.snapshot.phase).toBe('submitting')
+      expect(send.shell.snapshot.draft).toBe('')
+      expect(send.textarea.value).toBe('')
       expect(send.sink).toHaveBeenCalledTimes(1)
 
       act(() => { vi.advanceTimersByTime(9_000) })

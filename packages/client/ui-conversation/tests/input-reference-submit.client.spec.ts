@@ -194,6 +194,7 @@ describe('submit transaction hardening', () => {
     shell.submit('queue')
 
     expect(shell.snapshot.phase).toBe('submitting')
+    expect(shell.snapshot.draft).toBe('')
     expect(shell.snapshot.pendingSubmit).toMatchObject({ text: 'mensaje inmediato' })
     expect(shell.snapshot.pendingSubmit?.startedAt).toBeTypeOf('number')
     expect(sink).toHaveBeenCalledTimes(1)
@@ -224,6 +225,7 @@ describe('submit transaction hardening', () => {
       shell.submit('steer')
       expect(shell.snapshot).toMatchObject({
         phase: 'submitting',
+        draft: '',
         pendingSubmit: { text: 'interrumpe esto', modelText: 'interrumpe esto' },
       })
       expect(signal?.aborted).toBe(false)
