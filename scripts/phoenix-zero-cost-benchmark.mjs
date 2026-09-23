@@ -336,7 +336,7 @@ It is intended to expose harness regressions in request reconstruction, provider
 
 ## Raw evidence
 
-Per-lane logs are stored under `logs/` beside this report. The machine-readable result is `benchmark-report.json`.
+Per-lane logs are stored under **logs/** beside this report. The machine-readable result is **benchmark-report.json**.
 `
 
 writeFileSync(path.join(outputDir, 'benchmark-report.md'), markdown)
