@@ -115,6 +115,31 @@ describe('SystemPrompt', () => {
     expect(renderContextSnapshot(assembly)).toBe(`${CONTEXT_HEADER}\n\ncontext 1\n\ncontext 2`)
   })
 
+  it('can omit tool schemas without evaluating tool providers', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, { persona: 'You are PHOENIX.' })
+    let providerCalls = 0
+    ctx.systemPrompt.tools(() => {
+      providerCalls += 1
+      return {
+        schemas: [{
+          name: 'expensive',
+          description: 'schema should not be materialized on a tool-free request',
+          parameters: { type: 'object', properties: { value: { type: 'string' } } },
+        }],
+      }
+    })
+
+    const fast = await ctx.systemPrompt.assemble({ omitTools: true })
+    expect(providerCalls).toBe(0)
+    expect(fast.tools).toEqual([])
+    expect(renderPrompt(fast)).toContain('You are PHOENIX.')
+
+    const normal = await ctx.systemPrompt.assemble()
+    expect(providerCalls).toBe(1)
+    expect(normal.tools.map(tool => tool.name)).toEqual(['expensive'])
+  })
+
   it('resolves section text providers against the assemble context, at each assemble call', async () => {
     // The context is HOW per-agent sections work (the loop passes { agent });
     // this spec stays agent-agnostic and smuggles a marker through a plain field.
