@@ -130,7 +130,7 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(activityKeyOf(working)).toBe('activity.working')
   })
 
-  it('floats above the conversation and renders only the currently live agent', () => {
+  it('opens the structural side workspace for the currently live agent', () => {
     const root = summary({ id: sid('root') })
     const supervisor = summary({
       id: sid('supervisor-live'), parentId: root.id, origin: 'subagent', running: true,
@@ -146,20 +146,24 @@ describe('approved KIRA compact live-agent dock', () => {
     const setWorkspaceOccupant = vi.fn()
     const props = {
       list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      useSessions: (selector: (value: SessionListState) => unknown) => selector(state),
       layout: { setWorkspaceOccupant },
       openChild: vi.fn(),
       refresh: vi.fn(),
       t: translate,
     } as unknown as KiraTeamsDockProps
 
-    const { container } = render(<KiraTeamsDock {...props} />)
+    const { container, unmount } = render(<KiraTeamsDock {...props} />)
 
-    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('floating-live')
-    expect(setWorkspaceOccupant).toHaveBeenCalledWith('subagent', false)
+    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('workspace-live')
+    expect(setWorkspaceOccupant).toHaveBeenCalledWith('subagent', true)
     expect(container.querySelectorAll('[data-kira-agent-card]')).toHaveLength(1)
     expect(screen.getByText('Supervisor')).toBeTruthy()
     expect(screen.getByText('Preparando')).toBeTruthy()
     expect(screen.getByText('Supervisando misión')).toBeTruthy()
+
+    unmount()
+    expect(setWorkspaceOccupant).toHaveBeenLastCalledWith('subagent', false)
   })
 })
 
