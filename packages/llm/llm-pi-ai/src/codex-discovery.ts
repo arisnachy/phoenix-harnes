@@ -8,7 +8,7 @@
  * @module dsh-llm-pi-ai/codex-discovery
  */
 
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -21,6 +21,8 @@ import type { LlmDiscoveredModel } from '@phoenix-ai/dsh-llm'
 // Cold Codex catalog refreshes can spend tens of seconds in the upstream models manager.
 // Stay bounded, but do not abort the app-server before its own refresh path can settle.
 const RPC_TIMEOUT_MS = 45_000
+/** Failed metadata probes cool down globally so Settings cannot spawn a process storm. */
+const DISCOVERY_FAILURE_COOLDOWN_MS = 30_000
 const PAGE_LIMIT = 100
 const MAX_PAGES = 50
 
@@ -307,7 +309,18 @@ async function readResponse(
 function terminate(child: ChildProcessWithoutNullStreams, lines: ReadlineInterface): void {
   lines.close()
   child.stdin.end()
-  if (child.exitCode === null && child.signalCode === null) child.kill()
+  if (child.exitCode !== null || child.signalCode !== null) return
+  if (process.platform === 'win32' && child.pid !== undefined) {
+    // Discovery is launched through cmd.exe on Windows. Killing only that shell
+    // can orphan the Codex app-server grandchild, which then keeps SQLite state
+    // and model-refresh workers alive. Terminate the complete process tree.
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+    })
+    return
+  }
+  child.kill()
 }
 
 /**
@@ -373,5 +386,62 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
   }
 }
 
+let sharedDiscovery: Promise<readonly LlmDiscoveredModel[]> | undefined
+let lastDiscoveryFailure: { readonly at: number; readonly error: unknown } | undefined
+
+function waitForSharedDiscovery(
+  pending: Promise<readonly LlmDiscoveredModel[]>,
+  signal?: AbortSignal,
+): Promise<readonly LlmDiscoveredModel[]> {
+  if (signal === undefined) return pending
+  if (signal.aborted) {
+    return Promise.reject(new LlmError('Codex model discovery aborted by caller', 'ABORTED'))
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      reject(new LlmError('Codex model discovery aborted by caller', 'ABORTED'))
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    void pending.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort)
+    })
+  })
+}
+
+/**
+ * Production metadata transport. Concurrent callers share one app-server and
+ * a failed probe opens a short process-wide cooldown. Success is not cached
+ * here: CodexLiveCatalog owns its longer freshness policy, while an explicit
+ * later discovery can still fetch new account-visible models.
+ */
+async function listSharedCodexModels(signal?: AbortSignal): Promise<readonly LlmDiscoveredModel[]> {
+  const now = Date.now()
+  if (lastDiscoveryFailure !== undefined
+    && now - lastDiscoveryFailure.at < DISCOVERY_FAILURE_COOLDOWN_MS) {
+    const error = lastDiscoveryFailure.error
+    throw error instanceof Error
+      ? error
+      : new LlmError('Codex model discovery is temporarily unavailable', 'DISCOVERY_FAILED')
+  }
+
+  if (sharedDiscovery === undefined) {
+    const job = listCodexModels().then(
+      (models) => {
+        lastDiscoveryFailure = undefined
+        return models
+      },
+      (error: unknown) => {
+        lastDiscoveryFailure = { at: Date.now(), error }
+        throw error
+      },
+    )
+    const tracked = job.finally(() => {
+      if (sharedDiscovery === tracked) sharedDiscovery = undefined
+    })
+    sharedDiscovery = tracked
+  }
+  return await waitForSharedDiscovery(sharedDiscovery, signal)
+}
+
 /** Production transport exposed separately so discovery.ts can inject a fake in tests. */
-export const codexModelListTransport: CodexModelListTransport = { list: listCodexModels }
+export const codexModelListTransport: CodexModelListTransport = { list: listSharedCodexModels }
