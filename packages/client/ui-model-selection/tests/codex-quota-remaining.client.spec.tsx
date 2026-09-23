@@ -205,12 +205,19 @@ describe('CodexQuotaRemaining', () => {
     auth.list
       .mockResolvedValueOnce({
         rpcId: 'authorization-list-starting' as never,
-        result: { ok: true as const, value: { entries: [] } },
+        result: {
+          ok: true as const,
+          value: {
+            entries: [{ key: 'subagent-codex/account', label: 'ChatGPT / Codex' }],
+          },
+        },
       })
 
-    render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
+    const view = render(<CodexQuotaRemaining {...propsFor(d.fake, auth)} />)
     await act(async () => { await Promise.resolve() })
     expect(screen.queryByText('86%')).toBeNull()
+    expect(view.container.querySelector('[data-codex-quota-loading="true"]')).not.toBeNull()
+    expect(screen.getByText('Codex')).toBeTruthy()
 
     await act(async () => {
       vi.advanceTimersByTime(2_000)
