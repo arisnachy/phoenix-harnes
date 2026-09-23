@@ -12,6 +12,8 @@ Status: implemented
 
 `DesktopSourceCheckout.ShouldUseSourceCheckout` 仅在明确设置 `PHOENIX_SOURCE_ROOT` 时启用源码模式。`DesktopStartupContract.ResolveSourceRoot` 只接受可运行的显式路径；路径无效时会继续使用安装包中的运行时。正常安装启动使用随包提供的 Node 运行时和受管 supervisor。base bundle 将 `@phoenix-ai/dsh-session-title-llm` 和 `@phoenix-ai/dsh-session-telemetry` 声明为生产依赖，因为已挂载的标题与 telemetry 插件会导入它们。web-app bundle 声明 `@phoenix-ai/dsh-chrome-connector`，因为其 Windows MCP 行会启动该包。受管启动使用随包的 Node 可执行文件和连接器编译后的 `lib/bin.js`；源码启动保留 `tsx` 入口。[Windows 桌面文档](../../../../docs/phoenix-windows.zh.md) 说明了面向用户的安装与启动选项。
 
+桌面程序集和 Inno Setup 元数据使用版本 `1.0.21`，这是 `windows-v1.0.20` 之后的下一个 Windows 版本。[安装程序契约测试](../../../../scripts/windows-installer.spec.ts)会保证两个版本值一致。
+
 每次 readiness 探测都会在 HTTP 请求前后分别获取 loopback listener PID 和进程创建时间。只有 Phoenix HTML 响应前后都属于同一个仍在运行的进程，探测才会通过。对于由桌面程序启动的 runtime，Toolhelp32 进程快照必须证明 listener 是仍然存活的 supervisor 的后代；这样每次探测都无需查询 WMI 命令行。只有命令行和稳定进程身份都匹配时，程序才会采用兼容的外部 listener；它不会声称拥有或停止该进程。关闭应用时，程序只会终止由其持有的 `Process` 句柄对应的进程树。源码根目录只有在 readiness 成功后才会持久化。
 
 Windows smoke 使用允许共享读写与删除的文件句柄读取桌面日志，并对暂时的 I/O 错误进行有限重试，避免活动中的追加操作遮蔽启动诊断。Windows 工作流会先在干净的当前用户配置中安装生成的 Inno 安装包，再运行独立可执行文件检查。它会显式运行静默安装跳过的命令，验证快捷方式和当前用户的启动项，启动已安装的可执行文件，确认实时 HTTP listener 属于其进程树，并运行卸载程序。如果测试无法确认它启动的所有进程都已停止，就会保留安装和应用数据；失败诊断会作为 CI 产物保存。
