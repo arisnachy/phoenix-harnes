@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Context } from '@phoenix-ai/cordis'
 import type { IApiClient, ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
-import { IconApiOutline14, StateDot } from '@phoenix-ai/dsh-client-ui-primitives'
+import { StateDot } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'
 import { resultText } from '../models/tool-call-model.ts'
@@ -49,7 +49,7 @@ function strings() {
   return spanish
     ? {
         title: 'Conector requerido',
-        needs: 'necesita autorización para continuar.',
+        needs: 'Necesita autorización para continuar.',
         connect: 'Conectar',
         reconnect: 'Reconectar',
         connecting: 'Conectando…',
@@ -60,7 +60,7 @@ function strings() {
       }
     : {
         title: 'Connector required',
-        needs: 'needs authorization to continue.',
+        needs: 'Needs authorization to continue.',
         connect: 'Connect',
         reconnect: 'Reconnect',
         connecting: 'Connecting…',
@@ -153,6 +153,7 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
     }
   }
 
+  const displayLabel = connector.label.replace(/^MCP\s+/i, '')
   const actionLabel = phase === 'pending'
     ? copy.connecting
     : phase === 'authorized'
@@ -164,15 +165,17 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
       ? copy.cancelled
       : phase === 'authorized'
         ? copy.connected
-        : `${connector.label} ${copy.needs}`
+        : copy.needs
 
   return (
     <div className={css.card} data-connector-auth-card>
       <div className={css.icon} aria-hidden="true">
-        {phase === 'failed' ? <StateDot state="error" /> : <IconApiOutline14 />}
+        {phase === 'failed'
+          ? <StateDot state="error" />
+          : <span className={css.monogram}>{displayLabel.slice(0, 1).toUpperCase()}</span>}
       </div>
       <div className={css.copy}>
-        <strong>{connector.label}</strong>
+        <strong>{displayLabel}</strong>
         <span>{statusText}</span>
         {error === undefined ? null : <span className={css.error}>{error}</span>}
       </div>
