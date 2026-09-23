@@ -57,6 +57,14 @@ export const Config: z<Config> = z.object({
 const DEFAULT_MAX_RECORDS = 10_000
 const MAX_SESSION_COGNITIVE_RECORDS = 128
 const MAX_SUMMARY_CHARS = 4_096
+const COMPLETION_CHECK_KEYS = [
+  'requirements',
+  'builderTests',
+  'adversarialTests',
+  'startup',
+  'artifactIntegrity',
+  'cleanRoom',
+] as const
 
 /**
  * Event-backed memory service. Every source event is deduplicated by the
@@ -380,15 +388,23 @@ interface Observation {
   occurredAt: number
 }
 
+interface CompletionGateLike {
+  readonly checks?: unknown
+  readonly evidenceLedger?: unknown
+  readonly proceduralLessons?: unknown
+  readonly artifactFingerprint?: unknown
+}
+
 function cognitiveObservationFor(session: Session, event: SessionEvent): CognitiveMemoryInput {
   const content = eventText(event)
   const durable = durableFact(content)
   const projectId = projectIdFor(session)
   const entities = entitiesFor(content, projectId, event.type)
+  const success = isVerifiedSuccessEvent(event)
   const error = isErrorEvent(event, content)
-  const success = isSuccessEvent(event)
   const prospective = /\b(?:goal|mission|pending|blocked|blocker|unfinished|follow[- ]?up|pendiente|misión|bloqueo)\b/iu.test(content)
   const procedural = String(event.type) === 'goal/false-pass'
+    || String(event.type) === 'goal/completion-gate'
     || event.type.startsWith('tool/')
     || error
     || /\b(?:strategy|workflow|skill|estrategia|flujo|habilidad)\b/iu.test(content)
@@ -416,8 +432,8 @@ function cognitiveObservationFor(session: Session, event: SessionEvent): Cogniti
     ...projectId === undefined ? {} : { projectId },
     ...durable === undefined ? {} : { subject: durable.subject, value: durable.value },
     entities,
-    confidence: durable === undefined ? error ? 0.9 : 0.7 : 0.95,
-    importance: durable === undefined ? prospective || error ? 0.9 : success ? 0.65 : 0.5 : 0.95,
+    confidence: durable === undefined ? success ? 0.98 : error ? 0.9 : 0.7 : 0.95,
+    importance: durable === undefined ? success ? 0.98 : prospective || error ? 0.9 : 0.5 : 0.95,
   }
 }
 
@@ -443,6 +459,10 @@ function explicitCognitiveInput(input: MemoryRecordInput, projectId: string | un
 }
 
 function eventText(event: SessionEvent): string {
+  if (String(event.type) === 'goal/completion-gate') {
+    const data = event.data as unknown
+    return safeJsonText(data) || 'goal completion gate'
+  }
   switch (event.type) {
     case 'user/message':
     case 'assistant/message': return messageText(event.data) ?? event.type
@@ -463,14 +483,30 @@ function safeJsonText(value: unknown): string {
 }
 
 function isErrorEvent(event: SessionEvent, content: string): boolean {
+  if (String(event.type) === 'goal/false-pass') return true
+  if (String(event.type) === 'goal/completion-gate') return !isVerifiedSuccessEvent(event)
   if (event.type === 'turn/end') return event.data.reason.kind === 'error'
   if (event.type === 'tool/result') return event.data.message.content[0].isError === true
-  return /\b(?:error|failed|failure|timeout|timed out|falló|fallido|bloqueado)\b/iu.test(content)
+  return /\b(?:error|fail|failed|failure|timeout|timed out|falló|fallido|bloqueado)\b/iu.test(content)
 }
 
-function isSuccessEvent(event: SessionEvent): boolean {
-  if (event.type === 'turn/end') return event.data.reason.kind === 'completed'
-  return event.type === 'tool/result' && event.data.message.content[0].isError !== true
+/** Only independent completion-gate evidence may become automatic success memory. */
+function isVerifiedSuccessEvent(event: SessionEvent): boolean {
+  if (String(event.type) !== 'goal/completion-gate') return false
+  const data = event.data as unknown
+  if (typeof data !== 'object' || data === null) return false
+  const gate = data as CompletionGateLike
+  if (typeof gate.checks !== 'object' || gate.checks === null) return false
+  const checks = gate.checks as Record<string, unknown>
+  if (!COMPLETION_CHECK_KEYS.every(key => checks[key] === 'pass')) return false
+  if (typeof gate.artifactFingerprint !== 'string' || gate.artifactFingerprint.trim() === '') return false
+  if (!Array.isArray(gate.evidenceLedger)) return false
+  return gate.evidenceLedger.every((entry: unknown) => {
+    if (typeof entry !== 'object' || entry === null) return false
+    const item = entry as { mandatory?: unknown; status?: unknown; evidence?: unknown }
+    if (item.mandatory !== true) return true
+    return item.status === 'verified' && Array.isArray(item.evidence) && item.evidence.length > 0
+  })
 }
 
 function durableFact(text: string): { subject: string; value: string } | undefined {
@@ -524,6 +560,17 @@ function tokenizeForEntities(value: string): string[] {
 }
 
 function observationFor(session: Session, event: SessionEvent): Observation | undefined {
+  if (String(event.type) === 'goal/completion-gate') {
+    const verified = isVerifiedSuccessEvent(event)
+    const detail = eventText(event)
+    return observation(
+      session,
+      event,
+      verified ? 'success' : 'error',
+      verified ? `Verified completion gate passed: ${detail}` : `Completion gate did not pass: ${detail}`,
+      verified ? 0.98 : 0.95,
+    )
+  }
   switch (event.type) {
     case 'user/message': {
       const text = messageText(event.data)
@@ -536,7 +583,7 @@ function observationFor(session: Session, event: SessionEvent): Observation | un
     case 'turn/end': {
       const reason = event.data.reason
       if (reason.kind === 'completed') {
-        return observation(session, event, 'success', `Task completed in session ${String(session.id)}`, 0.85)
+        return observation(session, event, 'interaction', `Turn completed in session ${String(session.id)}; outcome not independently verified`, 0.65)
       }
       if (reason.kind === 'error') {
         const detail = errorText(reason.error)
@@ -549,7 +596,7 @@ function observationFor(session: Session, event: SessionEvent): Observation | un
       if (result.isError === true) {
         return observation(session, event, 'error', `Tool failed: ${toolResultText(event.data.message)}`, 0.9)
       }
-      return observation(session, event, 'success', `Tool completed: ${toolResultText(event.data.message)}`, 0.8)
+      return observation(session, event, 'interaction', `Tool completed: ${toolResultText(event.data.message)}; outcome not independently verified`, 0.65)
     }
     default:
       return undefined

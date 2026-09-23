@@ -14,7 +14,7 @@ afterEach(async () => {
 })
 
 describe('LearningMemoryService', () => {
-  it('learns from user interactions, successes, and failures in the durable session stream', async () => {
+  it('learns from user interactions and failures without promoting bare completion as verified success', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-service-'))
     roots.push(root)
     const ctx = new Context()
@@ -54,10 +54,10 @@ describe('LearningMemoryService', () => {
 
     await ctx.learningMemory.ready()
     expect((await ctx.learningMemory.search('concise'))[0]?.kind).toBe('preference')
-    expect((await ctx.learningMemory.search('completed'))[0]?.kind).toBe('success')
+    expect((await ctx.learningMemory.search('completed'))[0]?.kind).toBe('interaction')
     expect((await ctx.learningMemory.search('sandbox failed'))[0]?.kind).toBe('error')
     expect((await ctx.learningMemory.search('provider disconnected'))[0]?.kind).toBe('error')
-    expect((await ctx.learningMemory.search('created requested artifact'))[0]?.kind).toBe('success')
+    expect((await ctx.learningMemory.search('created requested artifact'))[0]?.kind).toBe('interaction')
     expect((await ctx.learningMemory.search('sandbox timed out'))[0]?.kind).toBe('error')
   })
 
