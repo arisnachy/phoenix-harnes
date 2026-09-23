@@ -29,3 +29,9 @@ The classification still depends on the failure reaching the supervisor as a rej
 `packages/mcp/mcp-client/tests/apply.spec.ts` covers the SDK form of the rejection (`code: 401`) as `auth-required` and a non-numeric network code as `connection-failed`, alongside the existing `status: 401` case; the file passes with 24 tests.
 
 `packages/llm/llm-pi-ai/tests/login.spec.ts` gains a grant case and an api-key case asserting the inspection telemetry, including the empty answer before any credential is stored. The pi-ai package tests could not be executed in the authoring environment because its dependency tree holds incomplete copies of `typebox` and `zod-to-json-schema`; the cases are written to fail against the previous implementation.
+
+## Alternatives considered
+
+- **Treat every transport failure as an authorization failure** — rejected because network errors such as `ECONNREFUSED` must remain distinguishable from HTTP 401/403.
+- **Infer provider connection state from configured methods without inspecting stored credentials** — rejected because a configured flow is not evidence that the user has authenticated it.
+- **Expose credential material in authorization telemetry** — rejected because connected-state telemetry only needs provider identity and credential kind, never the secret itself.
