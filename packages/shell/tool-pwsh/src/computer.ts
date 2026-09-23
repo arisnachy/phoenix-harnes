@@ -12,6 +12,7 @@
  * @module @phoenix-ai/dsh-tool-pwsh/computer
  */
 
+import { randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { createConnection } from 'node:net'
@@ -23,8 +24,6 @@ import type { SandboxMode } from '@phoenix-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@phoenix-ai/dsh-sandbox-policy'
 import { normalizeCredentialOrigin, originCredentialRef } from '@phoenix-ai/dsh-credentials'
 import { defineTool, type ToolRunContext } from '@phoenix-ai/dsh-tools'
-
-const POST_ACTION_SETTLE_MS = 250
 
 /** Desktop authority derived from the session's existing permission policy. */
 export type ComputerMode = 'off' | 'observe' | 'interact'
@@ -44,6 +43,7 @@ export type ComputerAction =
   | 'browser_fill_form'
   | 'browser_click_text'
   | 'browser_login'
+  | 'browser_forget_credentials'
   | 'move'
   | 'click'
   | 'double_click'
@@ -59,7 +59,7 @@ export type ComputerButton = 'left' | 'right' | 'middle'
 export interface BrowserFormValue {
   /** Zero-based visible-field index returned by browser_inspect. */
   field: number
-  /** Text/select value. Never use this for password fields; browser_login owns vault secrets. */
+  /** Text/select value. Password and file controls are rejected by the native browser. */
   value?: string
   /** Checkbox/radio state. */
   checked?: boolean
@@ -79,7 +79,7 @@ export interface ComputerToolArgs {
   origin?: string
   /** Visible form values produced from browser_inspect field indexes. */
   fields?: BrowserFormValue[]
-  /** Whether browser_fill_form/browser_login should submit after filling. */
+  /** Whether browser_fill_form should submit after filling. */
   submit?: boolean
   x?: number
   y?: number
@@ -115,40 +115,53 @@ function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
 
 /** Current desktop-control discovery document written by Phoenix.exe. */
 export interface DesktopBrowserControlDescriptor {
-  schema: 1
+  schema: 2
   pipeName: string
 }
 
-const DESKTOP_CONTROL_SCHEMA = 1
+const DESKTOP_CONTROL_SCHEMA = 2
 const DESKTOP_CONTROL_PIPE_PREFIX = 'PhoenixDesktop.Browser.'
 const DESKTOP_CONTROL_DESCRIPTOR_ENV = 'PHOENIX_DESKTOP_CONTROL_DESCRIPTOR'
-const DESKTOP_CONTROL_TIMEOUT_MS = 3_000
+const DESKTOP_CONTROL_TIMEOUT_MS = 10_000
 
-type EmbeddedBrowserAction =
-  | 'browser_open'
-  | 'browser_close'
-  | 'browser_back'
-  | 'browser_forward'
-  | 'browser_reload'
-  | 'browser_focus'
-  | 'browser_inspect'
-  | 'browser_fill_form'
-  | 'browser_click_text'
-  | 'browser_login'
-
-interface DesktopBrowserCommand {
-  type: string
+interface DesktopComputerRequest {
+  schema: 2
+  requestId: string
+  type: ComputerAction
+  target?: string
   url?: string
   origin?: string
   fields?: readonly BrowserFormValue[]
   text?: string
+  keys?: string
+  button?: ComputerButton
+  x?: number
+  y?: number
+  x2?: number
+  y2?: number
+  delta?: number
   submit?: boolean
-  account?: string
-  secret?: string
+  capture?: boolean
 }
 
+interface DesktopComputerReply {
+  schema: 2
+  requestId: string
+  ok: boolean
+  details?: string
+  screenshotBase64?: string
+  error?: string
+}
+
+interface ComputerActionResult {
+  details: string
+  screenshotBase64?: string
+}
+
+const MAX_DESKTOP_REPLY_BYTES = 64 * 1024 * 1024
+
 /** Whether this action must travel over the native Phoenix Desktop browser channel. */
-function isEmbeddedBrowserAction(action: ComputerAction): action is EmbeddedBrowserAction {
+function isEmbeddedBrowserAction(action: ComputerAction): boolean {
   return action === 'browser_open'
     || action === 'browser_close'
     || action === 'browser_back'
@@ -159,12 +172,13 @@ function isEmbeddedBrowserAction(action: ComputerAction): action is EmbeddedBrow
     || action === 'browser_fill_form'
     || action === 'browser_click_text'
     || action === 'browser_login'
+    || action === 'browser_forget_credentials'
 }
 
 /**
  * Parse and validate the current-user desktop-control descriptor before connecting.
  * @param raw - JSON descriptor written by Phoenix Desktop.
- * @returns Validated schema-1 desktop-control descriptor.
+ * @returns Validated schema-2 desktop-control descriptor.
  */
 export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowserControlDescriptor {
   let value: unknown
@@ -188,53 +202,7 @@ export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowse
     || !/^[A-Za-z0-9._-]+$/u.test(pipeName)) {
     throw new Error('Phoenix Desktop control descriptor contains an invalid pipe name')
   }
-  return { schema: 1, pipeName }
-}
-
-/**
- * Map model-facing browser actions onto the native WebView command vocabulary.
- * @param args - Validated computer-tool browser action.
- * @returns Native Phoenix Desktop browser command.
- */
-export function browserCommandForAction(args: ComputerToolArgs): DesktopBrowserCommand {
-  validateComputerArgs(args)
-  switch (args.action) {
-    case 'browser_open':
-      return { type: 'phoenix.browser.open', url: args.url as string }
-    case 'browser_close':
-      return { type: 'phoenix.browser.close' }
-    case 'browser_back':
-      return { type: 'phoenix.browser.back' }
-    case 'browser_forward':
-      return { type: 'phoenix.browser.forward' }
-    case 'browser_reload':
-      return { type: 'phoenix.browser.reload' }
-    case 'browser_focus':
-      return { type: 'phoenix.browser.focus' }
-    case 'browser_inspect':
-      return { type: 'phoenix.browser.inspect' }
-    case 'browser_fill_form':
-      return {
-        type: 'phoenix.browser.fill-form',
-        origin: normalizeCredentialOrigin(args.origin as string),
-        fields: args.fields as BrowserFormValue[],
-        submit: args.submit === true,
-      }
-    case 'browser_click_text':
-      return {
-        type: 'phoenix.browser.click-text',
-        origin: normalizeCredentialOrigin(args.origin as string),
-        text: args.text as string,
-      }
-    case 'browser_login':
-      return {
-        type: 'phoenix.browser.login',
-        origin: normalizeCredentialOrigin(args.origin as string),
-        submit: args.submit !== false,
-      }
-    default:
-      throw new TypeError(`computer action "${args.action}" is not an embedded-browser action`)
-  }
+  return { schema: 2, pipeName }
 }
 
 function desktopControlDescriptorPath(): string {
@@ -247,87 +215,206 @@ function desktopControlDescriptorPath(): string {
   return join(localAppData, 'Phoenix', 'desktop-control.json')
 }
 
-function requestNamedPipeLine(pipePath: string, line: string, signal?: AbortSignal): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let settled = false
-    let buffer = ''
-    const socket = createConnection(pipePath)
-    socket.setEncoding('utf8')
-
-    const cleanup = (): void => {
-      clearTimeout(timer)
-      signal?.removeEventListener('abort', onAbort)
-    }
-    const fail = (error: unknown): void => {
-      if (settled) return
-      settled = true
-      cleanup()
-      socket.destroy()
-      reject(error instanceof Error ? error : new Error(String(error)))
-    }
-    const succeed = (value: string): void => {
-      if (settled) return
-      settled = true
-      cleanup()
-      socket.end()
-      resolve(value)
-    }
-    const onAbort = (): void => {
-      fail(signal?.reason ?? new Error('Phoenix Desktop browser control aborted'))
-    }
-    const timer = setTimeout(() => {
-      fail(new Error('Phoenix Desktop browser control timed out'))
-    }, DESKTOP_CONTROL_TIMEOUT_MS)
-
-    if (signal?.aborted === true) {
-      onAbort()
-      return
-    }
-    signal?.addEventListener('abort', onAbort, { once: true })
-
-    socket.once('connect', () => {
-      socket.write(`${line}\n`)
-    })
-    socket.on('data', (chunk: string) => {
-      buffer += chunk
-      const newline = buffer.indexOf('\n')
-      if (newline >= 0) succeed(buffer.slice(0, newline).trim())
-    })
-    socket.once('error', fail)
-    socket.once('close', () => {
-      if (!settled) fail(new Error('Phoenix Desktop browser control closed before replying'))
-    })
-  })
+async function isDesktopControlPublished(): Promise<boolean> {
+  let descriptorPath: string
+  try {
+    descriptorPath = desktopControlDescriptorPath()
+  } catch {
+    return false
+  }
+  try {
+    parseDesktopBrowserControlDescriptor(await readFile(descriptorPath, 'utf8'))
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    if (error instanceof Error && error.message.includes('unsupported schema 1')) return false
+    throw error
+  }
 }
 
-async function runEmbeddedBrowserAction(
-  args: ComputerToolArgs,
-  signal?: AbortSignal,
-  login?: { account: string; secret: string },
-): Promise<string> {
-  const rawDescriptor = await readFile(desktopControlDescriptorPath(), 'utf8')
-  const descriptor = parseDesktopBrowserControlDescriptor(rawDescriptor)
-  const baseCommand = browserCommandForAction(args)
-  const command: DesktopBrowserCommand = login === undefined ? baseCommand : { ...baseCommand, ...login }
-  const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
-  const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(command), signal)
+/** One resident schema-2 Computer client shared by all actions in this Node process. */
+class ResidentDesktopClient {
+  private socket: ReturnType<typeof createConnection> | undefined
+  private connectTask: Promise<ReturnType<typeof createConnection>> | undefined
+  private queue = Promise.resolve()
+  private buffer = ''
+  private pending = new Map<string, {
+    resolve: (reply: DesktopComputerReply) => void
+    reject: (error: Error) => void
+  }>()
+  request(request: DesktopComputerRequest, signal?: AbortSignal): Promise<DesktopComputerReply> {
+    if (signal?.aborted === true) {
+      return Promise.reject(signal.reason ?? new Error('Phoenix Desktop Computer request aborted'))
+    }
+    const run = this.queue.then(async () => await this.requestOne(request, signal))
+    this.queue = run.then(() => undefined, () => undefined)
+    return run
+  }
 
-  let reply: unknown
-  try {
-    reply = JSON.parse(rawReply)
-  } catch {
-    throw new Error('Phoenix Desktop browser control returned invalid JSON')
+  private async requestOne(request: DesktopComputerRequest, signal?: AbortSignal): Promise<DesktopComputerReply> {
+    const socket = await this.ensureConnected(signal)
+    return await new Promise<DesktopComputerReply>((resolve, reject) => {
+      let settled = false
+      const fail = (error: unknown): void => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', onAbort)
+        this.pending.delete(request.requestId)
+        this.destroySocket()
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
+      const onAbort = (): void => fail(signal?.reason ?? new Error('Phoenix Desktop Computer request aborted'))
+      const timer = setTimeout(() => fail(new Error('Phoenix Desktop Computer request timed out')), DESKTOP_CONTROL_TIMEOUT_MS)
+      this.pending.set(request.requestId, {
+        resolve: (reply) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          signal?.removeEventListener('abort', onAbort)
+          this.pending.delete(request.requestId)
+          resolve(reply)
+        },
+        reject: fail,
+      })
+      if (signal?.aborted === true) {
+        onAbort()
+        return
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
+      socket.write(`${JSON.stringify(request)}\n`, (error) => {
+        if (error !== undefined) fail(error)
+      })
+    })
   }
-  if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
-    throw new Error('Phoenix Desktop browser control returned an invalid reply')
+
+  private async ensureConnected(signal?: AbortSignal): Promise<ReturnType<typeof createConnection>> {
+    if (this.socket !== undefined && !this.socket.destroyed) return this.socket
+    if (this.connectTask !== undefined) return await this.connectTask
+    this.connectTask = (async () => {
+      const descriptor = parseDesktopBrowserControlDescriptor(await readFile(desktopControlDescriptorPath(), 'utf8'))
+      const socket = createConnection(`\\\\.\\pipe\\${descriptor.pipeName}`)
+      socket.setEncoding('utf8')
+      socket.on('data', (chunk: string) => this.onData(chunk))
+      socket.on('error', error => this.onSocketError(error))
+      socket.on('close', () => this.onSocketError(new Error('Phoenix Desktop Computer pipe closed')))
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = (): void => {
+          socket.destroy()
+          reject(signal?.reason ?? new Error('Phoenix Desktop Computer connection aborted'))
+        }
+        if (signal?.aborted === true) {
+          onAbort()
+          return
+        }
+        signal?.addEventListener('abort', onAbort, { once: true })
+        socket.once('connect', () => {
+          signal?.removeEventListener('abort', onAbort)
+          resolve()
+        })
+        socket.once('error', (error) => {
+          signal?.removeEventListener('abort', onAbort)
+          reject(error)
+        })
+      })
+      this.socket = socket
+      return socket
+    })().finally(() => { this.connectTask = undefined })
+    return await this.connectTask
   }
-  const response = reply as Record<string, unknown>
-  if (response.ok !== true) {
-    throw new Error(`Phoenix Desktop browser control rejected the command: ${String(response.error ?? 'unknown error')}`)
+
+  private onData(chunk: string): void {
+    this.buffer += chunk
+    if (Buffer.byteLength(this.buffer, 'utf8') > MAX_DESKTOP_REPLY_BYTES) {
+      this.onSocketError(new Error('Phoenix Desktop Computer reply exceeded the size limit'))
+      return
+    }
+    for (;;) {
+      const newline = this.buffer.indexOf('\n')
+      if (newline < 0) return
+      const line = this.buffer.slice(0, newline).trim()
+      this.buffer = this.buffer.slice(newline + 1)
+      if (line.length === 0) continue
+      let value: unknown
+      try { value = JSON.parse(line) } catch { this.onSocketError(new Error('Phoenix Desktop Computer returned invalid JSON')); return }
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        this.onSocketError(new Error('Phoenix Desktop Computer returned an invalid reply'))
+        return
+      }
+      const reply = value as Partial<DesktopComputerReply>
+      if (reply.schema !== DESKTOP_CONTROL_SCHEMA
+        || typeof reply.requestId !== 'string'
+        || typeof reply.ok !== 'boolean'
+        || (reply.details !== undefined && typeof reply.details !== 'string')
+        || (reply.screenshotBase64 !== undefined && typeof reply.screenshotBase64 !== 'string')
+        || (reply.error !== undefined && typeof reply.error !== 'string')) {
+        this.onSocketError(new Error('Phoenix Desktop Computer returned an unsupported reply'))
+        return
+      }
+      const pending = this.pending.get(reply.requestId)
+      if (pending === undefined) {
+        this.onSocketError(new Error('Phoenix Desktop Computer returned an unknown request id'))
+        return
+      }
+      if (reply.ok !== true) {
+        pending.reject(new Error(reply.error ?? 'Phoenix Desktop Computer rejected the request'))
+        continue
+      }
+      pending.resolve(reply as DesktopComputerReply)
+    }
   }
-  return typeof response.details === 'string'
-    ? response.details
-    : `embedded browser command accepted: ${command.type}`
+
+  private onSocketError(error: unknown): void {
+    const normalized = error instanceof Error ? error : new Error(String(error))
+    for (const pending of this.pending.values()) pending.reject(normalized)
+    this.pending.clear()
+    this.destroySocket()
+  }
+
+  private destroySocket(): void {
+    const socket = this.socket
+    this.socket = undefined
+    this.buffer = ''
+    if (socket !== undefined && !socket.destroyed) socket.destroy()
+  }
+}
+
+const residentDesktopClient = new ResidentDesktopClient()
+
+/** Map a validated Computer action onto schema-2 without allowing credential fields. */
+export function desktopComputerRequestForAction(
+  args: ComputerToolArgs,
+  requestId = randomUUID(),
+): DesktopComputerRequest {
+  validateComputerArgs(args)
+  const request: DesktopComputerRequest = {
+    schema: DESKTOP_CONTROL_SCHEMA,
+    requestId,
+    type: args.action,
+    ...(args.target === undefined ? {} : { target: args.target }),
+    ...(args.url === undefined ? {} : { url: args.url }),
+    ...(args.origin === undefined ? {} : { origin: normalizeCredentialOrigin(args.origin) }),
+    ...(args.fields === undefined ? {} : { fields: args.fields }),
+    ...(args.text === undefined ? {} : { text: args.text }),
+    ...(args.keys === undefined ? {} : { keys: args.keys }),
+    ...(args.button === undefined ? {} : { button: args.button }),
+    ...(args.x === undefined ? {} : { x: args.x }),
+    ...(args.y === undefined ? {} : { y: args.y }),
+    ...(args.x2 === undefined ? {} : { x2: args.x2 }),
+    ...(args.y2 === undefined ? {} : { y2: args.y2 }),
+    ...(args.delta === undefined ? {} : { delta: args.delta }),
+    ...(args.submit === undefined ? {} : { submit: args.submit }),
+    ...(shouldCaptureAfterAction(args.action) ? { capture: true } : {}),
+  }
+  return request
+}
+
+async function runResidentComputerAction(args: ComputerToolArgs, signal?: AbortSignal): Promise<ComputerActionResult> {
+  const reply = await residentDesktopClient.request(desktopComputerRequestForAction(args), signal)
+  return {
+    details: reply.details ?? `resident desktop command accepted: ${args.action}`,
+    ...(reply.screenshotBase64 === undefined ? {} : { screenshotBase64: reply.screenshotBase64 }),
+  }
 }
 
 /**
@@ -374,6 +461,14 @@ function requiredCredentialOrigin(origin: string | undefined, action: string): s
     throw new TypeError(`computer ${action} requires a non-empty origin`)
   }
   return normalizeCredentialOrigin(origin)
+}
+
+function requiredHttpsCredentialOrigin(origin: string | undefined, action: string): string {
+  const normalized = requiredCredentialOrigin(origin, action)
+  if (!normalized.startsWith('https://')) {
+    throw new TypeError(`computer ${action} requires an HTTPS origin`)
+  }
+  return normalized
 }
 
 function validateBrowserFields(fields: BrowserFormValue[] | undefined): void {
@@ -425,6 +520,10 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
     case 'browser_focus':
     case 'browser_inspect':
       return
+    case 'browser_login':
+    case 'browser_forget_credentials':
+      requiredHttpsCredentialOrigin(args.origin, args.action)
+      return
     case 'browser_fill_form':
       requiredCredentialOrigin(args.origin, args.action)
       validateBrowserFields(args.fields)
@@ -437,9 +536,6 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
       if (args.text.length > 512) {
         throw new RangeError('computer browser_click_text text exceeds 512 UTF-16 code units')
       }
-      return
-    case 'browser_login':
-      requiredCredentialOrigin(args.origin, args.action)
       return
     case 'browser_open':
       if (args.url === undefined || args.url.trim().length === 0) {
@@ -499,6 +595,7 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
  * @returns True when the action can change desktop/application state in a way the model must re-observe.
  */
 export function shouldCaptureAfterAction(action: ComputerAction): boolean {
+  if (action === 'browser_login' || action === 'browser_forget_credentials') return false
   return action === 'focus'
     || (isEmbeddedBrowserAction(action) && action !== 'browser_inspect')
     || action === 'click'
@@ -1042,19 +1139,27 @@ function executeComputerInvocation(invocation: ComputerInvocation, signal?: Abor
  * @param signal - Optional cancellation signal forwarded to the PowerShell process.
  * @returns Trimmed stdout; screenshots return base64 PNG bytes.
  */
-export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: AbortSignal): Promise<string> {
+async function runWindowsComputerActionResult(args: ComputerToolArgs, signal?: AbortSignal): Promise<ComputerActionResult> {
   if (process.platform !== 'win32') {
     throw new Error(`Computer Use Windows driver is unavailable on ${process.platform}`)
   }
   signal?.throwIfAborted()
-  if (args.action === 'browser_login') {
-    throw new Error('browser_login requires the origin-bound credential broker')
-  }
-  if (isEmbeddedBrowserAction(args.action)) {
-    return await runEmbeddedBrowserAction(args, signal)
+  if (isEmbeddedBrowserAction(args.action) || await isDesktopControlPublished()) {
+    return await runResidentComputerAction(args, signal)
   }
   const invocation = windowsComputerInvocation(args)
-  return await executeComputerInvocation(invocation, signal)
+  return { details: await executeComputerInvocation(invocation, signal) }
+}
+
+/**
+ * Execute one Windows desktop action and return the textual driver result.
+ * @param args - Validated Windows Computer operation.
+ * @param signal - Optional cancellation signal.
+ * @returns Trimmed driver details; screenshots return base64 PNG bytes.
+ */
+export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: AbortSignal): Promise<string> {
+  const result = await runWindowsComputerActionResult(args, signal)
+  return result.details
 }
 
 async function resolveOriginGrant(ctx: Context, origin: string): Promise<boolean> {
@@ -1066,9 +1171,9 @@ async function resolveOriginGrant(ctx: Context, origin: string): Promise<boolean
 
 async function browserActionPreauthorized(ctx: Context, args: ComputerToolArgs): Promise<boolean> {
   if (args.action === 'browser_inspect') return true
-  if (args.action === 'browser_login'
-    || args.action === 'browser_fill_form'
-    || args.action === 'browser_click_text') {
+  if (args.action === 'browser_fill_form'
+    || args.action === 'browser_click_text'
+    || args.action === 'browser_login') {
     return await resolveOriginGrant(ctx, requiredCredentialOrigin(args.origin, args.action))
   }
   if (args.action === 'browser_open' && args.url !== undefined) {
@@ -1079,30 +1184,6 @@ async function browserActionPreauthorized(ctx: Context, args: ComputerToolArgs):
     }
   }
   return false
-}
-
-async function runOriginBoundBrowserLogin(
-  ctx: Context,
-  args: ComputerToolArgs,
-  signal?: AbortSignal,
-): Promise<string> {
-  const origin = requiredCredentialOrigin(args.origin, args.action)
-  const credentials = ctx.get('credentials')
-  if (credentials === undefined) {
-    throw new Error('browser_login requires the Phoenix credential vault')
-  }
-  const [account, secret, grant] = await Promise.all([
-    credentials.resolve(originCredentialRef(origin, 'account')),
-    credentials.resolve(originCredentialRef(origin, 'secret')),
-    credentials.resolve(originCredentialRef(origin, 'autonomous')),
-  ])
-  if (grant?.value !== '1' || account === undefined || secret === undefined) {
-    throw new Error(`No unattended login is configured for ${origin}; use /secret login-set once.`)
-  }
-  return await runEmbeddedBrowserAction(args, signal, {
-    account: account.value,
-    secret: secret.value,
-  })
 }
 
 function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; reversible: boolean } {
@@ -1157,18 +1238,6 @@ async function authorizeComputerAction(
   }
 }
 
-function delay(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.reject(signal.reason)
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms)
-    if (signal === undefined) return
-    signal.addEventListener('abort', () => {
-      clearTimeout(timer)
-      reject(signal.reason)
-    }, { once: true })
-  })
-}
-
 async function attachDesktopScreenshot(
   ctx: Context,
   exec: ToolRunContext,
@@ -1211,22 +1280,22 @@ export function registerComputerTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
     order: 106,
-    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. A /secret login-set grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values.',
+    text: 'On Windows Phoenix Desktop, use browser_open/browser_inspect/browser_fill_form/browser_click_text for structured work in the embedded WebView2 pane. Use browser_login to request saved credentials or show Phoenix’s private credential prompt; the native host fills recognized sign-in fields without submitting the form. Never put passwords, account names, or credential values in Computer arguments. browser_forget_credentials removes saved credentials for the current HTTPS origin. browser_inspect is read-only and never returns current field values.',
   })
 
   ctx.tools.register(defineTool({
     name: 'computer',
-    description: 'Control the Windows desktop with window-aware actions. For web work in Phoenix Desktop, prefer browser_inspect/browser_fill_form/browser_click_text/browser_login over coordinate typing when possible. browser_login uses the origin-bound vault internally and never exposes the stored account secret to the model; browser_inspect returns labels/indexes but never current field values. An origin configured with /secret login-set is a one-time grant for unattended open/login/form/click work on that exact origin. The other browser_* actions command Phoenix\'s embedded WebView2 pane directly through the native desktop channel and never intentionally launch the system browser. Then use screenshot/click/type/key/scroll against the Phoenix window for full visual control. Before controlling any other external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
+    description: 'Control the Windows desktop with window-aware actions. For web work in Phoenix Desktop, prefer browser_inspect/browser_fill_form/browser_click_text/browser_login over coordinate typing when possible. browser_login obtains credentials through a Phoenix-only prompt or the local vault, fills recognized sign-in fields, never submits the form, and never returns credential values. Never put passwords, account names, or credential values in Computer arguments. browser_forget_credentials removes saved credentials for one HTTPS origin. browser_inspect returns labels/indexes but never current field values. Other browser_* actions command Phoenix\'s embedded WebView2 directly through the native desktop channel and never intentionally launch the system browser. Then use screenshot/click/type/key/scroll against the Phoenix window for full visual control. Before controlling any other external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot, except credential operations. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
     parameters: {
       action: {
         type: 'string',
         required: true,
-        enum: ['screenshot', 'windows', 'focus', 'browser_open', 'browser_close', 'browser_back', 'browser_forward', 'browser_reload', 'browser_focus', 'browser_inspect', 'browser_fill_form', 'browser_click_text', 'browser_login', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
-        description: 'Desktop operation. browser_inspect reads visible text/form metadata without values; browser_fill_form fills inspected indexes; browser_click_text clicks visible button/link text; browser_login uses the origin-bound vault. Other browser_* actions control Phoenix\'s embedded WebView2 directly.',
+        enum: ['screenshot', 'windows', 'focus', 'browser_open', 'browser_close', 'browser_back', 'browser_forward', 'browser_reload', 'browser_focus', 'browser_inspect', 'browser_fill_form', 'browser_click_text', 'browser_login', 'browser_forget_credentials', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
+        description: 'Desktop operation. browser_inspect reads visible text/form metadata without values; browser_fill_form fills non-secret inspected indexes; browser_click_text clicks visible button/link text; browser_login privately fills recognized sign-in fields without submitting; browser_forget_credentials removes the current origin credential.',
       },
       target: { type: 'string', description: 'Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus; embedded browser actions do not need it.' },
       url: { type: 'string', description: 'URL or search text for browser_open. Phoenix validates it and navigates the embedded WebView2 directly.' },
-      origin: { type: 'string', description: 'Expected HTTPS page origin for browser_login/browser_fill_form/browser_click_text. It must match the live WebView origin.' },
+      origin: { type: 'string', description: 'Expected live page origin for browser_fill_form/browser_click_text; HTTPS origin for browser_login/browser_forget_credentials.' },
       fields: {
         type: 'array',
         description: 'For browser_fill_form: visible field indexes from browser_inspect and one value or checked state each. Password/file inputs are protected and rejected.',
@@ -1240,7 +1309,7 @@ export function registerComputerTool(ctx: Context): void {
           },
         },
       },
-      submit: { type: 'boolean', description: 'Submit the containing form after browser_fill_form/browser_login. browser_login defaults true; browser_fill_form defaults false.' },
+      submit: { type: 'boolean', description: 'Submit the containing form after browser_fill_form. Defaults to false; browser_login never submits.' },
       x: { type: 'integer', description: 'Screen X coordinate. Required for move/click/double_click/drag; optional with scroll.' },
       y: { type: 'integer', description: 'Screen Y coordinate. Required for move/click/double_click/drag; optional with scroll.' },
       x2: { type: 'integer', description: 'Drag destination X coordinate.' },
@@ -1271,9 +1340,9 @@ export function registerComputerTool(ctx: Context): void {
               ? `Phoenix embedded browser inspection:\n${value.details ?? '{}'}`
               : value.action.startsWith('browser_')
                 ? `Phoenix embedded browser command ${value.action} completed.${value.details === undefined ? '' : `\n${value.details}`}${value.postScreenshot ? '\nA fresh desktop screenshot was attached; verify the visible outcome.' : ''}`
-              : value.postScreenshot
-                ? `Desktop ${value.action} input sent and a fresh post-action screenshot was attached. Verify the visible result before proceeding.`
-                : `Desktop ${value.action} input sent.`,
+                : value.postScreenshot
+                  ? `Desktop ${value.action} input sent and a fresh post-action screenshot was attached. Verify the visible result before proceeding.`
+                  : `Desktop ${value.action} input sent.`,
       }],
     },
     async execute(args: ComputerToolArgs, exec) {
@@ -1283,17 +1352,16 @@ export function registerComputerTool(ctx: Context): void {
       const sandboxMode = policy?.mode ?? deploymentDefault
       await authorizeComputerAction(ctx, exec, args, sandboxMode)
 
-      const output = args.action === 'browser_login'
-        ? await runOriginBoundBrowserLogin(ctx, args, exec.signal)
-        : await runWindowsComputerAction(args, exec.signal)
+      const output = await runWindowsComputerActionResult(args, exec.signal)
       let postScreenshot = false
 
       if (args.action === 'screenshot') {
-        await attachDesktopScreenshot(ctx, exec, output, 'PHOENIX desktop screenshot')
+        await attachDesktopScreenshot(ctx, exec, output.screenshotBase64 ?? output.details, 'PHOENIX desktop screenshot')
         postScreenshot = true
       } else if (shouldCaptureAfterAction(args.action)) {
-        await delay(POST_ACTION_SETTLE_MS, exec.signal)
-        const fresh = await runWindowsComputerAction({ action: 'screenshot' }, exec.signal)
+        const fresh = output.screenshotBase64
+          ?? (await runWindowsComputerActionResult({ action: 'screenshot' }, exec.signal)).screenshotBase64
+          ?? ''
         await attachDesktopScreenshot(ctx, exec, fresh, `PHOENIX post-${args.action} desktop screenshot`)
         postScreenshot = true
       }
@@ -1301,7 +1369,7 @@ export function registerComputerTool(ctx: Context): void {
       return {
         action: args.action,
         status: 'ok' as const,
-        ...output.length > 0 && args.action !== 'screenshot' ? { details: output } : {},
+        ...output.details.length > 0 && args.action !== 'screenshot' ? { details: output.details } : {},
         postScreenshot,
       }
     },

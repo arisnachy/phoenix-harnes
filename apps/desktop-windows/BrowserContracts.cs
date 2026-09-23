@@ -108,8 +108,6 @@ public sealed record BrowserCommand(
     string Type,
     string? Url = null,
     string? Origin = null,
-    string? Account = null,
-    string? Secret = null,
     string? Text = null,
     bool Submit = false,
     IReadOnlyList<BrowserFormValue>? Fields = null)
@@ -132,6 +130,7 @@ public sealed record BrowserCommand(
         "phoenix.browser.fill-form",
         "phoenix.browser.click-text",
         "phoenix.browser.login",
+        "phoenix.browser.forget-credentials",
     };
 
     public static bool TryParse(string json, out BrowserCommand command, bool allowAutomation = false)
@@ -141,6 +140,8 @@ public sealed record BrowserCommand(
         {
             using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
+            if (doc.RootElement.TryGetProperty("account", out _) || doc.RootElement.TryGetProperty("secret", out _))
+                return false;
             if (!doc.RootElement.TryGetProperty("type", out var typeNode)) return false;
             var type = typeNode.GetString();
             if (type is null) return false;
@@ -173,6 +174,9 @@ public sealed record BrowserCommand(
             if (!TryGetString(doc.RootElement, "origin", out var rawOrigin)) return false;
             var origin = BrowserNavigation.NormalizeCredentialOrigin(rawOrigin);
             if (origin is null) return false;
+            if (type is "phoenix.browser.login" or "phoenix.browser.forget-credentials"
+                && !origin.StartsWith("https://", StringComparison.Ordinal))
+                return false;
 
             if (type == "phoenix.browser.click-text")
             {
@@ -183,27 +187,17 @@ public sealed record BrowserCommand(
                 return true;
             }
 
-            var submit = type == "phoenix.browser.login";
+            if (type is "phoenix.browser.login" or "phoenix.browser.forget-credentials")
+            {
+                command = new BrowserCommand(type, Origin: origin);
+                return true;
+            }
+
+            var submit = false;
             if (doc.RootElement.TryGetProperty("submit", out var submitNode))
             {
                 if (submitNode.ValueKind is not JsonValueKind.True and not JsonValueKind.False) return false;
                 submit = submitNode.GetBoolean();
-            }
-
-            if (type == "phoenix.browser.login")
-            {
-                if (!TryGetString(doc.RootElement, "account", out var account)
-                    || account.Length > 4096
-                    || !TryGetString(doc.RootElement, "secret", out var secret)
-                    || secret.Length > 16384)
-                    return false;
-                command = new BrowserCommand(
-                    type,
-                    Origin: origin,
-                    Account: account,
-                    Secret: secret,
-                    Submit: submit);
-                return true;
             }
 
             if (!doc.RootElement.TryGetProperty("fields", out var fieldsNode)
@@ -257,4 +251,202 @@ public sealed record BrowserCommand(
         value = node.GetString()?.Trim() ?? string.Empty;
         return value.Length > 0;
     }
+}
+
+/// <summary>
+/// Versioned request sent over the resident Phoenix Desktop Computer channel. The protocol never
+/// carries account or secret values. Credential entry is a separate host-owned operation that
+/// asks through Phoenix's native UI and reads from the credential broker.
+/// </summary>
+public sealed record DesktopComputerRequest(
+    int Schema,
+    string RequestId,
+    string Type,
+    string? Target = null,
+    string? Url = null,
+    string? Origin = null,
+    IReadOnlyList<BrowserFormValue>? Fields = null,
+    string? Text = null,
+    string? Keys = null,
+    string? Button = null,
+    int? X = null,
+    int? Y = null,
+    int? X2 = null,
+    int? Y2 = null,
+    int? Delta = null,
+    bool Submit = false,
+    bool Capture = false)
+{
+    public const int CurrentSchema = 2;
+
+    private static readonly HashSet<string> Types = new(StringComparer.Ordinal)
+    {
+        "screenshot", "windows", "focus", "browser_open", "browser_close", "browser_back",
+        "browser_forward", "browser_reload", "browser_focus", "browser_inspect",
+        "browser_fill_form", "browser_click_text", "browser_login", "browser_forget_credentials", "move", "click",
+        "double_click", "drag", "type", "key", "scroll",
+    };
+
+    /// <summary>Parse and validate the resident Computer request without accepting secrets.</summary>
+    public static bool TryParse(string json, out DesktopComputerRequest request)
+    {
+        request = new DesktopComputerRequest(0, string.Empty, string.Empty);
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !TryGetString(root, "requestId", out var requestId)
+                || requestId.Length > 128
+                || !root.TryGetProperty("schema", out var schemaNode)
+                || !schemaNode.TryGetInt32(out var schema)
+                || schema != CurrentSchema
+                || !TryGetString(root, "type", out var type)
+                || !Types.Contains(type))
+                return false;
+
+            var target = OptionalString(root, "target", 512);
+            var url = OptionalString(root, "url", 4096);
+            var origin = OptionalString(root, "origin", 2048);
+            var text = OptionalString(root, "text", 16_384);
+            var keys = OptionalString(root, "keys", 128);
+            var button = OptionalString(root, "button", 16)?.ToLowerInvariant();
+            var submit = OptionalBool(root, "submit");
+            var capture = OptionalBool(root, "capture");
+            var x = OptionalInt(root, "x");
+            var y = OptionalInt(root, "y");
+            var x2 = OptionalInt(root, "x2");
+            var y2 = OptionalInt(root, "y2");
+            var delta = OptionalInt(root, "delta");
+
+            if (root.TryGetProperty("account", out _) || root.TryGetProperty("secret", out _)) return false;
+            if (capture && (type is "browser_login" or "browser_forget_credentials")) return false;
+            if (button is not null && button is not ("left" or "right" or "middle")) return false;
+            if (type == "focus" && string.IsNullOrWhiteSpace(target)) return false;
+            if (type is "move" or "click" or "double_click"
+                && (x is null || y is null)) return false;
+            if (type == "drag" && (x is null || y is null || x2 is null || y2 is null)) return false;
+            if (type == "type" && string.IsNullOrEmpty(text)) return false;
+            if (type == "key" && string.IsNullOrWhiteSpace(keys)) return false;
+            if (type == "scroll" && (delta is null || delta == 0)) return false;
+            if ((x is null) != (y is null)) return false;
+            if (type == "browser_open"
+                && (string.IsNullOrWhiteSpace(url) || BrowserNavigation.NormalizeAddress(url) is null)) return false;
+
+            IReadOnlyList<BrowserFormValue>? fields = null;
+            if (type == "browser_fill_form")
+            {
+                if (!TryGetFields(root, out fields)) return false;
+                origin = NormalizeOrigin(origin);
+                if (origin is null) return false;
+            }
+            else if (type == "browser_click_text")
+            {
+                origin = NormalizeOrigin(origin);
+                if (origin is null) return false;
+                if (string.IsNullOrWhiteSpace(text)) return false;
+            }
+            else if (type is "browser_login" or "browser_forget_credentials")
+            {
+                origin = NormalizeOrigin(origin);
+                if (origin is null || !origin.StartsWith("https://", StringComparison.Ordinal)) return false;
+            }
+
+            request = new DesktopComputerRequest(
+                schema, requestId, type, target, url, origin, fields, text, keys, button, x, y, x2, y2,
+                delta, submit, capture);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string? NormalizeOrigin(string? origin) =>
+        BrowserNavigation.NormalizeCredentialOrigin(origin);
+
+    private static string? OptionalString(JsonElement root, string name, int maxLength)
+    {
+        if (!root.TryGetProperty(name, out var node)) return null;
+        if (node.ValueKind != JsonValueKind.String) throw new JsonException();
+        var value = node.GetString()?.Trim() ?? string.Empty;
+        if (value.Length > maxLength) throw new JsonException();
+        return value;
+    }
+
+    private static bool OptionalBool(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var node)) return false;
+        if (node.ValueKind is not JsonValueKind.True and not JsonValueKind.False) throw new JsonException();
+        return node.GetBoolean();
+    }
+
+    private static int? OptionalInt(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var node)) return null;
+        if (!node.TryGetInt32(out var value)) throw new JsonException();
+        return value;
+    }
+
+    private static bool TryGetFields(JsonElement root, out IReadOnlyList<BrowserFormValue>? fields)
+    {
+        fields = null;
+        if (!root.TryGetProperty("fields", out var fieldsNode)
+            || fieldsNode.ValueKind != JsonValueKind.Array
+            || fieldsNode.GetArrayLength() is < 1 or > 100)
+            return false;
+
+        var values = new List<BrowserFormValue>(fieldsNode.GetArrayLength());
+        foreach (var node in fieldsNode.EnumerateArray())
+        {
+            if (node.ValueKind != JsonValueKind.Object
+                || !node.TryGetProperty("field", out var fieldNode)
+                || !fieldNode.TryGetInt32(out var field)
+                || field < 0)
+                return false;
+            var hasValue = node.TryGetProperty("value", out var valueNode);
+            var hasChecked = node.TryGetProperty("checked", out var checkedNode);
+            if (hasValue == hasChecked) return false;
+            if (hasValue)
+            {
+                if (valueNode.ValueKind != JsonValueKind.String) return false;
+                var value = valueNode.GetString() ?? string.Empty;
+                if (value.Length > 16_384) return false;
+                values.Add(new BrowserFormValue(field, value, null));
+            }
+            else
+            {
+                if (checkedNode.ValueKind is not JsonValueKind.True and not JsonValueKind.False) return false;
+                values.Add(new BrowserFormValue(field, null, checkedNode.GetBoolean()));
+            }
+        }
+        fields = values;
+        return true;
+    }
+
+    private static bool TryGetString(JsonElement root, string property, out string value)
+    {
+        value = string.Empty;
+        if (!root.TryGetProperty(property, out var node) || node.ValueKind != JsonValueKind.String)
+            return false;
+        value = node.GetString()?.Trim() ?? string.Empty;
+        return value.Length > 0;
+    }
+}
+
+/// <summary>Reply correlated to one resident Computer request.</summary>
+internal sealed record DesktopComputerReply(
+    int Schema,
+    string RequestId,
+    bool Ok,
+    string? Details = null,
+    string? ScreenshotBase64 = null);
+
+/// <summary>Pure checks for replies that must remain correlated to one request.</summary>
+internal static class DesktopComputerProtocol
+{
+    internal static bool MatchesReply(string requestId, string replyRequestId) =>
+        !string.IsNullOrWhiteSpace(requestId)
+        && string.Equals(requestId, replyRequestId, StringComparison.Ordinal);
 }

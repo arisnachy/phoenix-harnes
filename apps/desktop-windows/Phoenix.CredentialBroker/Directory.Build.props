@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Keep generated files outside the parent desktop project's wildcard compile items. -->
+    <BaseOutputPath Condition="'$(BaseOutputPath)' == ''">$(MSBuildThisFileDirectory)..\..\..\.artifacts\credential-broker\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath Condition="'$(BaseIntermediateOutputPath)' == ''">$(MSBuildThisFileDirectory)..\..\..\.artifacts\credential-broker\obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>
