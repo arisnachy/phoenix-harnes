@@ -351,7 +351,7 @@ export interface Config {
   maxFileBytes?: number
   /** Maximum arbitrary files accepted in one submitted message. */
   maxFilesPerMessage?: number
-  /** Maximum aggregate arbitrary-file bytes accepted in one submitted message. */
+  /** Optional deployment aggregate-byte override. Omit to delegate byte size to the selected model/provider route. */
   maxMessageFileBytes?: number
 }
 ```
@@ -381,6 +381,8 @@ export interface Config {
   graceMs?: number
   /** Explicit bash executable; Windows otherwise prefers a native Git Bash installation. */
   bashPath?: string
+  /** Maximum duration of the Windows Git Bash startup health check. */
+  healthCheckTimeoutMs?: number
 }
 ```
 
@@ -772,16 +774,32 @@ Source: [`packages/goal/goal/src/index.ts:130`](../packages/goal/goal/src/index.
 Requires: `hardness` · `tools` · `skills` · `agents` · `approval` · `systemPrompt` · `authorization`
 
 ```ts config-catalog
-/** HARDNESS mission completion judge configuration. */
+/** HARDNESS mission and durable proactivity configuration. */
 export interface Config {
   /** Structured subagent provider used for independent completion review. */
   judgeProvider?: string
   /** Register model-facing HARDNESS tools in this scope. */
   modelTools?: boolean
+  /** Independently review verified substantive ordinary mutations before turn completion. */
+  judgeOrdinaryMutations?: boolean
+  /** Maximum independent ordinary-task judge passes before deterministic gates take over. */
+  maxOrdinaryJudgePasses?: number
+  /** Durable proactive-task ledger. Empty/omitted uses ~/.dsh/phoenix-tasks.json; :memory: is test-only. */
+  taskLedgerPath?: string
+  /** How often the host checks for due scheduled work. */
+  taskPollMs?: number
+  /** One-shot subagent provider used for private preparation and scheduled office work. */
+  privateWorkProvider?: string
+  /** Maximum retained characters from one private preparation result. */
+  privateWorkResultChars?: number
+  /** Configured mail identity reference used for office mail sent on the user's behalf. */
+  userMailIdentity?: string
+  /** Configured mail identity reference Phoenix uses when communicating as itself. */
+  harnessMailIdentity?: string
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:89`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:130`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
@@ -933,7 +951,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/host/apiproxy/src/index.ts:41`](../packages/host/apiproxy/src/index.ts)
+Source: [`packages/host/apiproxy/src/index.ts:44`](../packages/host/apiproxy/src/index.ts)
 
 <a id="phoenix-aidsh-host-directory-picker-browse"></a>
 
@@ -1036,7 +1054,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/living-local/src/index.ts:27`](../packages/core/living-local/src/index.ts)
+Source: [`packages/core/living-local/src/index.ts:28`](../packages/core/living-local/src/index.ts)
 
 <a id="phoenix-aidsh-llm-deepseek"></a>
 
@@ -1066,7 +1084,7 @@ export interface Config {
   maxTokens?: number
   /** Positive context capacity used when the selected model has no exact value (default 1,000,000). */
   defaultContextWindow?: number
-  /** Advisory models shown by discovery consumers; defaults to V4 Flash, V4 Pro, and V4 Flash Vision Exp. */
+  /** Advisory models shown by discovery consumers; defaults to canonical V4.1 Flash, its legacy Flash aliases, and V4 Pro. */
   models?: DeepSeekCatalogModel[]
   /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
   streamIdleTimeoutMs?: number
@@ -1074,7 +1092,7 @@ export interface Config {
   maxRequestFilesBytes?: number
   /** Maximum accumulated base64 image payload after Files API fallback (default 20 MiB). */
   maxInlineRequestImageBytes?: number
-  /** Maximum arbitrary-file bytes projected into one text request per attachment (default 256 KiB). */
+  /** Optional arbitrary-file projection cap. Default leaves bytes model/context-owned rather than imposing a Phoenix truncation. */
   maxInlineFileBytes?: number
   /** Maximum number of represented images per chat request (default 600). */
   maxImagesPerRequest?: number
@@ -1121,13 +1139,13 @@ export interface DeepSeekCatalogModel {
 
 Depends on: [`ModelModality`](../packages/llm/llm/src/index.ts) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
 
-Source: [`packages/llm/llm-deepseek/src/index.ts:108`](../packages/llm/llm-deepseek/src/index.ts)
+Source: [`packages/llm/llm-deepseek/src/index.ts:132`](../packages/llm/llm-deepseek/src/index.ts)
 
 <a id="phoenix-aidsh-llm-pi-ai"></a>
 
 ## `@phoenix-ai/dsh-llm-pi-ai`
 
-Requires: `llm` · `tools` · `subprocess` · `attachments`
+Requires: `llm`
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
@@ -1234,7 +1252,7 @@ export interface PiAiProviderProfile {
   requestImagePixelBudget?: number
   /** Raw encoded-byte cap for each deterministic inline request version. */
   requestImageMaxBytes?: number
-  /** Maximum bytes of one text attachment projected into a pi-ai request. */
+  /** Optional provider-route cap for one text attachment projected into a pi-ai request; default delegates to the selected model context. */
   maxInlineFileBytes?: number
   /** Provider-owned model-request retry policy; omission uses normal mode with two retries. */
   retryPolicy?: RetryPolicyConfig
@@ -1537,6 +1555,8 @@ export interface StdioConfig {
   env: Record<string, string>
   /** Working directory for the child process. */
   cwd: string
+  /** Host platforms on which this stdio server may run; omission is cross-platform unless Phoenix knows the server is platform-bound. */
+  supportedPlatforms?: SupportedPlatform[]
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -1561,6 +1581,12 @@ export interface StreamableHttpConfig {
   url: string
   /** Additional headers attached to MCP requests. */
   headers: Record<string, string>
+  /**
+   * Optional PHOENIX credential reference used as a Bearer token.
+   * The persisted MCP config stores only the reference name; the secret is
+   * resolved by the credential service when a transport generation connects.
+   */
+  bearerTokenRef?: string
   /** Whether to attach the host-managed OAuth provider when available. */
   oauth?: boolean
   /** Per-tool-call timeout in milliseconds. */
@@ -1572,6 +1598,11 @@ export interface StreamableHttpConfig {
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
 }
+
+/**
+ * Public supported platform shape.
+ */
+export type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number]
 
 /** Automatic reconnect policy for one MCP server connection. */
 export interface ReconnectConfig {
@@ -1586,7 +1617,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:111`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:139`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 
@@ -1929,7 +1960,7 @@ export interface Config {
 export type JsonlCompression = 'zstd' | 'none'
 ```
 
-Source: [`packages/session/session-persistence-jsonl/src/index.ts:60`](../packages/session/session-persistence-jsonl/src/index.ts)
+Source: [`packages/session/session-persistence-jsonl/src/index.ts:69`](../packages/session/session-persistence-jsonl/src/index.ts)
 
 <a id="phoenix-aidsh-session-persistence-sqlite"></a>
 
@@ -2600,7 +2631,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:190`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:197`](../packages/core/system-prompt/src/index.ts)
 
 <a id="phoenix-aidsh-terminal-bash"></a>
 
@@ -2801,7 +2832,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/fs/tool-fs/src/index.ts:25`](../packages/fs/tool-fs/src/index.ts)
+Source: [`packages/fs/tool-fs/src/index.ts:26`](../packages/fs/tool-fs/src/index.ts)
 
 <a id="phoenix-aidsh-tool-fs-search"></a>
 
@@ -2828,15 +2859,16 @@ export interface Config {
   graceMs?: number
   /** Max bytes retained for one search's stderr tail; the excerpt is embedded in `SEARCH_*` error messages, never shown on success. */
   stderrMaxBytes?: number
-  /**
-   * Cooperative tool-call timeout budget (ms) on both tools, enforced by
-   * `@phoenix-ai/dsh-tool-call-timeout-policy` through `exec.signal`.
-   */
+  /** Cooperative timeout for glob discovery. Defaults to a short 8-second budget. */
+  globTimeoutMs?: number
+  /** Cooperative timeout for grep discovery. Defaults to 15 seconds. */
+  grepTimeoutMs?: number
+  /** Legacy shared override for both tools. When present, it wins over the per-tool defaults. */
   timeoutMs?: number
 }
 ```
 
-Source: [`packages/fs/tool-fs-search/src/index.ts:73`](../packages/fs/tool-fs-search/src/index.ts)
+Source: [`packages/fs/tool-fs-search/src/index.ts:75`](../packages/fs/tool-fs-search/src/index.ts)
 
 <a id="phoenix-aidsh-tool-goal"></a>
 
@@ -2986,7 +3018,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/session-learning/tool-session-learning/src/index.ts:21`](../packages/session-learning/tool-session-learning/src/index.ts)
+Source: [`packages/session-learning/tool-session-learning/src/index.ts:27`](../packages/session-learning/tool-session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-tool-session-query"></a>
 
@@ -3126,7 +3158,7 @@ type ConfiguredAgentOptions = Omit<AgentOptions, 'reasoningEffort'> & {
 
 Depends on: [`AgentOptions`](subsystems/core.md)
 
-Source: [`packages/subagent/tool-subagent/src/index.ts:35`](../packages/subagent/tool-subagent/src/index.ts)
+Source: [`packages/subagent/tool-subagent/src/index.ts:107`](../packages/subagent/tool-subagent/src/index.ts)
 
 <a id="phoenix-aidsh-tool-subagent-report"></a>
 
@@ -3270,7 +3302,7 @@ export interface Config {
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:655`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:776`](../packages/core/tools/src/index.ts)
 
 <a id="phoenix-aidsh-typert-loader"></a>
 
@@ -3357,7 +3389,7 @@ export interface VoiceRuntimeConfig {
 }
 ```
 
-Source: [`packages/voice/voice/src/index.ts:114`](../packages/voice/voice/src/index.ts)
+Source: [`packages/voice/voice/src/index.ts:124`](../packages/voice/voice/src/index.ts)
 
 <a id="phoenix-aidsh-voice-local"></a>
 
@@ -3368,6 +3400,20 @@ Requires: `voice`
 ```ts config-catalog
 /** Local voice plugin configuration. */
 export interface Config {
+  /** Use the packaged CosyVoice daemon with the platform Python executable. */
+  readonly naturalBundledCosyVoice?: boolean
+  /** Persistent neural speech daemon; absence leaves PHOENIX Natural unavailable. */
+  readonly naturalCommand?: string
+  /** Arguments for the persistent neural daemon. */
+  readonly naturalArgs?: string[]
+  /** Warm the configured neural engine asynchronously during host startup. */
+  readonly naturalPrewarm?: boolean
+  /** Maximum resident-engine startup time. */
+  readonly naturalStartupTimeoutMs?: number
+  /** Maximum time for one natural speech request. */
+  readonly naturalRequestTimeoutMs?: number
+  /** Maximum characters per semantic neural synthesis chunk. */
+  readonly naturalMaxChunkChars?: number
   /** Optional local Kokoro command; absence leaves Kokoro unavailable. */
   readonly kokoroCommand?: string
   /** Arguments for the Kokoro command. */
@@ -3376,12 +3422,12 @@ export interface Config {
   readonly sttCommand?: string
   /** Arguments for the STT command. */
   readonly sttArgs?: string[]
-  /** Whether to register the platform fallback after Kokoro. */
+  /** Whether to register the platform fallback after neural TTS and Kokoro. */
   readonly systemTts?: boolean
 }
 ```
 
-Source: [`packages/voice/voice-local/src/index.ts:149`](../packages/voice/voice-local/src/index.ts)
+Source: [`packages/voice/voice-local/src/index.ts:151`](../packages/voice/voice-local/src/index.ts)
 
 <a id="phoenix-aidsh-web"></a>
 
