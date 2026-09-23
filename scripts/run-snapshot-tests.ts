@@ -13,6 +13,8 @@ const requiredRuntimeArtifacts = [
   resolve(root, 'packages/voice/voice/lib/typert.host.js'),
   resolve(root, 'packages/interaction/commands/lib/typert.host.js'),
   resolve(root, 'packages/goal/goal/lib/typert.host.js'),
+  resolve(root, 'packages/typert/registry/lib/index.js'),
+  resolve(root, 'packages/api/gateway/lib/index.js'),
 ] as const
 
 /** Resolve the snapshot mode from the public package command. */
@@ -65,8 +67,8 @@ function main(args: string[]): void {
   }
 
   if (requiredRuntimeArtifacts.some(artifact => !existsSync(artifact))) {
-    console.log('snapshot runner: runtime artifacts are missing; building Host contracts before replay.')
-    runPnpm(['run', 'build:lib:host'], env)
+    console.log('snapshot runner: runtime artifacts are missing; building Host + Client library contracts before replay.')
+    runPnpm(['run', 'build:lib'], env)
   }
 
   if (useBuilt && !existsSync(builtAgent)) {
