@@ -491,13 +491,14 @@ export function installModelSelection(
         && isToolAcquisitionRequest(directText)
         ? defaultToolAcquisitionSelection(selected)
         : undefined
-      const routed = pinGpt6LunaMax(
-        conversation
-          ?? acquisition
-          ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
-            ? resolvedHandoff.selection
-            : selected),
-      )
+      const candidateRoute = conversation
+        ?? acquisition
+        ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
+          ? resolvedHandoff.selection
+          : selected)
+      // The conversational fast path is a one-request latency override. It must
+      // not mutate the selector or inherit GPT-6 Luna's substantive-task Max pin.
+      const routed = conversation ?? pinGpt6LunaMax(candidateRoute)
       const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
       const nativeRoute: LlmCallConfig = {
         ...withoutInheritedEffort,
