@@ -222,6 +222,26 @@ describe('apply (plugin lifecycle)', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('startup timeout'))
   })
 
+  it('waits for MCP process quiescence before plugin disposal completes', async () => {
+    const closeGate: PromiseWithResolvers<void> = Promise.withResolvers()
+    mockClose.mockImplementation(function (this: { onclose?: () => void }) {
+      this.onclose?.()
+      return closeGate.promise
+    })
+
+    const fiber = ctx.plugin({ name: 'mcp-client-quiescent-dispose', inject, apply }, stdioConfig)
+    await fiber
+
+    let disposed = false
+    const disposal = fiber.dispose().then(() => { disposed = true })
+    await Promise.resolve()
+    expect(disposed).toBe(false)
+
+    closeGate.resolve()
+    await disposal
+    expect(disposed).toBe(true)
+  })
+
   it('rejects a duplicate serverName at load and leaves the first instance intact', async () => {
     await apply(ctx, stdioConfig)
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
