@@ -18,7 +18,7 @@ import type { AuthorizationConnectorTelemetry } from '@phoenix-ai/dsh-authorizat
 import { credentialKey } from '@phoenix-ai/dsh-credentials'
 import { JsonRpcLineTransport } from '@phoenix-ai/dsh-sdk-protocol'
 import type { SubprocessHandle } from '@phoenix-ai/dsh-subprocess'
-import { codexAppServerArgv } from './run.ts'
+import { codexMetadataAppServerArgv } from './run.ts'
 
 /** Credential marker for the Codex-managed ChatGPT account session. */
 export const CODEX_ACCOUNT_KEY = credentialKey('subagent-codex', 'account')
@@ -331,7 +331,7 @@ async function openConnection(
   experimentalApi = false,
 ): Promise<CodexAccountConnection> {
   const child = ctx.subprocess.spawn({
-    argv: codexAppServerArgv(),
+    argv: codexMetadataAppServerArgv(),
     cwd: process.cwd(),
     stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' },
     graceMs: config.disposeGraceMs,
