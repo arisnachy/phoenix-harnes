@@ -205,6 +205,8 @@ function isToolAcquisitionRequest(text: string): boolean {
 }
 
 const FAST_SOCIAL_TURN = /^(?:[¡!¿?.,\s]*(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|gracias|thanks|thank\s+you)[¡!¿?.,\s]*)$/iu
+/** Short first-person/social state replies that are clearly small talk, not action approvals. */
+const FAST_SOCIAL_REPLY = /^(?:[¡!¿?.,\s]*(?:(?:a\s+m[ií]|yo)\s+(?:estoy\s+)?(?:s[uú]per|muy\s+bien|bien|genial|excelente|fenomenal|tranquil[oa]|mal|regular)|(?:estoy|ando|me\s+siento)\s+(?:s[uú]per|muy\s+bien|bien|genial|excelente|fenomenal|tranquil[oa]|mal|regular)|todo\s+(?:bien|genial|excelente))[¡!¿?.,\s]*)$/iu
 /**
  * Bare confirmations/continuations are not self-contained social turns.
  *
@@ -233,7 +235,7 @@ export function isConversationalFastPathText(text: string): boolean {
   // A one-word approval is a continuation command, not chit-chat. Keep normal
   // history, tool schemas, and the user's selected reasoning route.
   if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
-  if (FAST_SOCIAL_TURN.test(candidate) || FAST_RUNTIME_META.test(candidate)) return true
+  if (FAST_SOCIAL_TURN.test(candidate) || FAST_SOCIAL_REPLY.test(candidate) || FAST_RUNTIME_META.test(candidate)) return true
   // Feedback such as "eso parece un pollo ... jaja" should not reload hundreds
   // of tools or a multi-megabyte work transcript. Keep questions on the normal
   // path: even a short "¿eso parece X?" can be a real factual request.
