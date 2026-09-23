@@ -131,6 +131,30 @@ describe('authorization API domain', () => {
     expect(entries.entries[0]?.stored).toBeUndefined()
   })
 
+  it('does not block the authorization catalog behind slow provider telemetry', async () => {
+    const ctx = new Context()
+    const { service } = fakeAuthorization()
+    const slow = service as unknown as {
+      inspect: (key: AuthorizationEntry['key'], signal?: AbortSignal) => Promise<undefined>
+    }
+    slow.inspect = (_key, signal) => new Promise((resolve) => {
+      if (signal?.aborted === true) {
+        resolve(undefined)
+        return
+      }
+      signal?.addEventListener('abort', () => { resolve(undefined) }, { once: true })
+    })
+    ctx.provide('authorization', service)
+    ctx.provide('userQuestions', { registerProvider: () => () => {} } as never)
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const startedAt = Date.now()
+    const entries = ok(await api.authorization.list(request({})))
+    expect(Date.now() - startedAt).toBeLessThan(2_500)
+    expect(entries.entries).toHaveLength(1)
+    expect(entries.entries[0]?.telemetry).toBeUndefined()
+  }, 3_000)
+
   it('projects live connector telemetry and forwards provider-owned disconnect', async () => {
     const ctx = new Context()
     const { service, key, wasDisconnected } = fakeAuthorization()

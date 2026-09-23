@@ -27,8 +27,8 @@ export const CODEX_ACCOUNT_KEY = credentialKey('subagent-codex', 'account')
 const ACCOUNT_INSPECTION_TTL_MS = 60_000
 /** A failed native probe is retried later, not once per UI subscriber/render. */
 const ACCOUNT_FAILURE_COOLDOWN_MS = 30_000
-/** Shared background probe ceiling; individual callers may stop waiting sooner. */
-const ACCOUNT_PROBE_TIMEOUT_MS = 20_000
+/** Shared probe must outlive Codex's own 30 s state-db startup/backfill window. */
+const ACCOUNT_PROBE_TIMEOUT_MS = 45_000
 
 /** Runtime configuration required to open and dispose the native Codex account bridge. */
 export interface CodexAccountBridgeConfig {
@@ -588,10 +588,13 @@ export function registerCodexAccountFlow(
       inFlightSnapshot = tracked
     }
 
+    // Once Phoenix has one good account snapshot, never make UI telemetry wait
+    // behind a refresh/backfill. Serve the last sanitized snapshot immediately
+    // while the single shared native probe refreshes it in the background.
+    if (cached !== undefined) return cached.snapshot
     if (inFlightSnapshot !== undefined) {
       return await waitForSharedSnapshot(inFlightSnapshot, signal)
     }
-    if (cached !== undefined) return cached.snapshot
     if (failed?.error instanceof Error) throw failed.error
     throw new Error('subagent-codex account: native account inspection is temporarily unavailable')
   }

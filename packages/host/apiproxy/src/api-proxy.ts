@@ -97,6 +97,9 @@ import { SessionTitleInvalidError } from '@phoenix-ai/dsh-session-title'
 import type { CallId } from '@phoenix-ai/dsh-llm/brand'
 import type { ScopeKey } from '@phoenix-ai/dsh-scope'
 import type { ApprovalDeadline, ApprovalOutcome, ApprovalRequestId } from '@phoenix-ai/dsh-user-approval'
+
+/** Browser catalog reads must never wait behind a provider's native startup/migration work. */
+const AUTHORIZATION_INSPECTION_UI_BUDGET_MS = 1_000
 // Side-effect type import: resolves the `approval/request` waterfall and
 // `ctx.get('approval')` without a value dependency on the seam (optional composition).
 import type {} from '@phoenix-ai/dsh-user-approval'
@@ -3742,7 +3745,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }
           let telemetry
           try {
-            telemetry = await authorization.inspect(entry.key)
+            // Provider account inspection may start a native runtime (Codex in
+            // particular can spend tens of seconds on state-db backfill). Give
+            // this catalog request a short wait budget; provider-owned
+            // single-flight refreshes may continue in the background and the
+            // next UI poll will pick up their cached sanitized telemetry.
+            telemetry = await authorization.inspect(
+              entry.key,
+              AbortSignal.timeout(AUTHORIZATION_INSPECTION_UI_BUDGET_MS),
+            )
           } catch {
             // Live provider inspection is optional; the flow itself remains usable.
           }
