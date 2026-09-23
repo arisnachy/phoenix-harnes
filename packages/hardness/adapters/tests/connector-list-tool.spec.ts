@@ -185,6 +185,33 @@ describe('connector_list tool', () => {
     })
   })
 
+
+  it('marks only the requested connector family as relevant and never promotes unrelated auth debt', async () => {
+    const disconnectedGoogle = service({ inspect: vi.fn(async () => undefined) })
+    const tool = createConnectorListTool(disconnectedGoogle)
+
+    await expect(tool.execute({ target: 'Hostinger email' }, {} as never)).resolves.toMatchObject({
+      kind: 'connector_list',
+      requested_target: 'Hostinger email',
+      has_relevant_match: false,
+      connectors: [{
+        label: 'Google Workspace',
+        status: 'not-connected',
+        recommended_action: 'connect-or-reconnect',
+        relevant: false,
+      }],
+    })
+
+    await expect(tool.execute({ target: 'Google Workspace' }, {} as never)).resolves.toMatchObject({
+      requested_target: 'Google Workspace',
+      has_relevant_match: true,
+      connectors: [{
+        label: 'Google Workspace',
+        relevant: true,
+      }],
+    })
+  })
+
   it('registers the inventory with only the MCP registry', async () => {
     const tool = createConnectorListTool(undefined, { list: () => [] })
     await expect(tool.execute({}, {} as never)).resolves.toEqual({ kind: 'connector_list', connectors: [] })
