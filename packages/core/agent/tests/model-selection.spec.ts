@@ -111,6 +111,63 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('restores the selector route after a conversational fast turn', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selected = {
+      provider: 'openai-codex',
+      model: 'gpt-6-sol',
+      reasoningEffort: ReasoningEffortId('max'),
+    } as const
+    const selection: ModelSelectionRef = {
+      current: selected,
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'hola' }],
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = { ...selected }
+
+    await ctx.systemPrompt.assemble()
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('low'),
+    })
+    expect(selection.current).toEqual(selected)
+
+    events.push(
+      { type: 'turn/start', data: { turn: 2 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Analiza este problema con detalle.' }],
+        },
+      },
+    )
+    await ctx.systemPrompt.assemble()
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 2, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(seed)
+    expect(selection.current).toEqual(selected)
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('pins a directly selected GPT-6 Luna route to Max even when the stored selection says medium', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
