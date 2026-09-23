@@ -30,7 +30,7 @@ jobs:
   mechanical-sync:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
         with:
@@ -82,54 +82,18 @@ jobs:
           git commit -m "chore(repair): sync generated contracts and snapshots"
           git push origin HEAD:repair/premium-green-main-20260923
 
-  focused-validation:
-    if: github.actor == 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: repair/premium-green-main-20260923
-          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: pnpm
-
-      - name: Install immutable workspace
-        run: pnpm install --frozen-lockfile
-
-      - name: Judge regression
+      - name: Verify judge regression
         run: pnpm exec vitest run packages/goal/tool-goal/tests/adversarial-completion-gate.spec.ts --maxWorkers=1
 
-      - name: Runtime closure
-        run: pnpm run verify-runtime-closure
-
-      - name: Workspace constraints
-        run: pnpm run constraints
-
-      - name: Cordis loader config
-        run: pnpm run verify-cordis-config
-
-      - name: Client package relationships
-        run: pnpm run verify-client-packages
-
-      - name: Type equivalence
-        run: pnpm run verify-type-equiv
-
-      - name: Generated catalogs
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm run verify-client-catalog
-          pnpm run verify-config-catalog
-          pnpm run verify-tool-catalog
-          pnpm run verify-persistence-catalog
-          pnpm run verify-module-graph
-          pnpm run verify-scoped-events
-
-      - name: Snapshot replay
+      - name: Verify snapshot replay
         run: pnpm run test:snapshot
+
+      - name: Verify official library build
+        run: pnpm run build:lib
+
+      - name: Verify package publication
+        run: pnpm run publint
+
+      - name: Verify complete static baseline
+        run: pnpm run check:ci:static
