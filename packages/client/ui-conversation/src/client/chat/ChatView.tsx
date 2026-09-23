@@ -193,17 +193,20 @@ export function ChatView({
     [nodeStore, order],
   )
   // Session events and the transient queue arrive on independent streams.
-  // A durable steering node can therefore render one snapshot before the
-  // queue mirror retires its matching transient row. Suppress by stable
-  // message identity, never by text: repeated user text is legitimate.
-  const durableSteeringMessageIds = useMemo(() => new Set(
-    chatNodes.flatMap(node => node.kind === 'steering'
-      ? [String((node.data as SteeringMessageNode).messageId)]
-      : []),
+  // A claimed steer can briefly be projected as either a durable steering node
+  // or an ordinary durable user node before the queue mirror retires. Suppress
+  // only by the stable MessageId carried by both durable forms — never by text,
+  // because repeated human text is legitimate.
+  const durableUserMessageIds = useMemo(() => new Set(
+    chatNodes.flatMap((node) => {
+      if (node.kind !== 'user' && node.kind !== 'steering') return []
+      const messageId = (node.data as { messageId?: unknown }).messageId
+      return messageId === undefined ? [] : [String(messageId)]
+    }),
   ), [chatNodes])
   const pendingSteering = useMemo(
-    () => transientSteering.filter(item => !durableSteeringMessageIds.has(String(item.messageId))),
-    [durableSteeringMessageIds, transientSteering],
+    () => transientSteering.filter(item => !durableUserMessageIds.has(String(item.messageId))),
+    [durableUserMessageIds, transientSteering],
   )
   const progress = useMemo(() => turnProgress(timeline, chatNodes), [chatNodes, timeline])
   // Optimistic bubble lives only until a durable user message appears after
