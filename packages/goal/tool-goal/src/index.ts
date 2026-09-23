@@ -482,9 +482,13 @@ export function apply(ctx: Context, config: Config): void {
             ? renderWrapupContext(goal.objective, undefined, judge === undefined ? undefined : {
               judgeSummary: judge.summary,
               findings: judge.findings,
-              knownLimitations: judge.completionReport?.knownLimitations,
-              unverifiedItems: judge.completionReport?.unverifiedItems,
-              verificationIncidents: judge.verificationIncidents,
+              ...(judge.completionReport === undefined ? {} : {
+                knownLimitations: judge.completionReport.knownLimitations,
+                unverifiedItems: judge.completionReport.unverifiedItems,
+              }),
+              ...(judge.verificationIncidents === undefined ? {} : {
+                verificationIncidents: judge.verificationIncidents,
+              }),
             })
             : renderWrapupContext(goal.objective, args.blocked_reason as string),
           source: {
