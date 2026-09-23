@@ -253,10 +253,12 @@ function settledGoalPass(parent: Agent, objective: string): SettledGoalPass | un
       summary: judge.data.summary,
       findings: [...judge.data.findings],
       requiredChanges: [],
-      completionReport: gate.data.completionReport === undefined ? undefined : {
-        unverifiedItems: [...gate.data.completionReport.unverifiedItems],
-        knownLimitations: [...gate.data.completionReport.knownLimitations],
-      },
+      ...(gate.data.completionReport === undefined ? {} : {
+        completionReport: {
+          unverifiedItems: [...gate.data.completionReport.unverifiedItems],
+          knownLimitations: [...gate.data.completionReport.knownLimitations],
+        },
+      }),
       verificationIncidents: [...(gate.data.verificationIncidents ?? [])],
     },
   }
@@ -324,10 +326,12 @@ function recordCompletionGate(parent: Agent, objective: string, round: number, g
     cleanRoomEvidence: gate.cleanRoomEvidence,
     findings: [...gate.findings],
     proceduralLessons: [...gate.proceduralLessons],
-    completionReport: gate.completionReport === undefined ? undefined : {
-      unverifiedItems: [...gate.completionReport.unverifiedItems],
-      knownLimitations: [...gate.completionReport.knownLimitations],
-    },
+    ...(gate.completionReport === undefined ? {} : {
+      completionReport: {
+        unverifiedItems: [...gate.completionReport.unverifiedItems],
+        knownLimitations: [...gate.completionReport.knownLimitations],
+      },
+    }),
     verificationIncidents: [...(gate.verificationIncidents ?? [])],
   })
 }
@@ -367,8 +371,8 @@ export async function judgeGoalCompletion(input: {
       ? settled.result
       : enforceGate({
         ...unavailable(),
-        completionReport: gate.completionReport,
-        verificationIncidents: gate.verificationIncidents,
+        ...(gate.completionReport === undefined ? {} : { completionReport: gate.completionReport }),
+        ...(gate.verificationIncidents === undefined ? {} : { verificationIncidents: gate.verificationIncidents }),
       }, gate)
   }
   const history = durableMissionReviewHistory(input.parent, input.objective)
@@ -419,8 +423,8 @@ export async function judgeGoalCompletion(input: {
   if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) return settled.result
   return enforceGate({
     ...judged,
-    completionReport: gate.completionReport,
-    verificationIncidents: gate.verificationIncidents,
+    ...(gate.completionReport === undefined ? {} : { completionReport: gate.completionReport }),
+    ...(gate.verificationIncidents === undefined ? {} : { verificationIncidents: gate.verificationIncidents }),
   }, gate)
 }
 
