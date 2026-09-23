@@ -1,0 +1,40 @@
+name: PHOENIX benchmark green repair
+
+on:
+  push:
+    branches:
+      - 'repair/benchmark-green-20260923'
+
+permissions:
+  contents: read
+
+env:
+  CI: '1'
+  DSH_TELEMETRY_DISABLED: '1'
+  OPENAI_API_KEY: ''
+  ANTHROPIC_API_KEY: ''
+  DEEPSEEK_API_KEY: ''
+  GOOGLE_API_KEY: ''
+  GEMINI_API_KEY: ''
+  GROQ_API_KEY: ''
+  OPENROUTER_API_KEY: ''
+  XAI_API_KEY: ''
+
+jobs:
+  replay-diagnosis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Judge gate
+        run: pnpm exec vitest run packages/goal/tool-goal/tests/adversarial-completion-gate.spec.ts --maxWorkers=1
+      - name: Snapshot replay after runtime preparation fix
+        run: pnpm run test:snapshot
