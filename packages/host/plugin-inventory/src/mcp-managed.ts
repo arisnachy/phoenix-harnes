@@ -220,11 +220,6 @@ export class ManagedMcpController {
   }
 
   /**
-   * Configure the pinned Jev MCP without ever persisting its API key.
-   * The managed overlay contains only JEV_API_KEY as a credential reference.
-   * @returns Installation receipt for the active or already-installed Jev connector.
-   */
-  /**
    * Remove a legacy PHOENIX-managed Jev connector from persistence and the live Loader.
    * Generic registry-managed MCPs are left untouched.
    * @returns true when a legacy Jev row was retired.
