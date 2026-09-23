@@ -48,6 +48,7 @@ import type {
 } from './domain.ts'
 import { SpecialistLedger } from './specialist.ts'
 import { OrganizationForgeLedger } from './organization-forge.ts'
+import { goalQualityLedger, qualityReadiness } from './quality.ts'
 
 // The pure payload outlet (./types.ts, ONE home of the `goal` projection-key
 // declaration) re-exported onto the package root keeps the module edge in
@@ -56,6 +57,7 @@ import { OrganizationForgeLedger } from './organization-forge.ts'
 export type * from './types.ts'
 export type * from './domain.ts'
 export type * from './organization-forge.ts'
+export * from './quality.ts'
 export { SpecialistLedger, foldSpecialists } from './specialist.ts'
 export { OrganizationForgeLedger, foldOrganizationForge, nextOrganizationForgeAction } from './organization-forge.ts'
 export type {
@@ -397,9 +399,8 @@ export class GoalService extends TypertRemoteService {
 
   /**
    * Mark a current non-complete goal complete and disarm it. Completion is
-   * fail-closed on the latest executable/adversarial certification while a
-   * settled semantic PASS is monotonic for the exact revision: a later
-   * provider outage cannot erase evidence that already passed.
+   * fail-closed on executable/adversarial certification, independent semantic
+   * review, and the exact-revision durable Quality/Foresight assessment.
    * @param agent - owning live agent.
    * @param ref - expected current revision.
    * @returns the completed view.
@@ -431,6 +432,19 @@ export class GoalService extends TypertRemoteService {
       throw new GoalError(
         `goal "${current.id}" requires an independent passing judge before completion`,
         'GOAL_COMPLETION_NOT_VERIFIED',
+      )
+    }
+    const quality = goalQualityLedger(this).get(agent)
+    const readiness = quality === undefined ? undefined : qualityReadiness(quality)
+    const qualityReady = quality !== undefined
+      && quality.goalId === current.id
+      && quality.goalRevision === current.revision
+      && readiness?.ready === true
+    if (!qualityReady) {
+      const blockers = readiness?.blockers.join('; ') ?? 'quality assessment is missing'
+      throw new GoalError(
+        `goal "${current.id}" requires a ready Quality/Foresight assessment for revision ${current.revision}: ${blockers}`,
+        'GOAL_QUALITY_NOT_READY',
       )
     }
     return this.transition(
