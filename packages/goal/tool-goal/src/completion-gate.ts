@@ -59,7 +59,8 @@ type CompletionRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
 
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 32
-const VERIFIER_STAGE_TIMEOUT_MS = 10 * 60_000
+const VERIFIER_DESIGN_TIMEOUT_MS = 5 * 60_000
+const VERIFIER_EXECUTION_TIMEOUT_MS = 40 * 60_000
 const EXECUTION_TOOLS = ['bash', 'read', 'read_image', 'glob', 'grep'] as const
 const EVIDENCE_STATUSES = ['pending', 'implemented', 'tested', 'verified', 'failed', 'blocked_external'] as const
 const EXPECTED_SOURCES = ['specification', 'reference_oracle', 'standard', 'mathematical_invariant', 'metamorphic_property', 'fixture_or_external_evidence', 'implementation_observed', 'unknown'] as const
@@ -449,7 +450,10 @@ async function runStructured(
   const label = typeof request.label === 'string' && request.label.length > 0
     ? request.label
     : 'completion-verifier'
-  const timeout = AbortSignal.timeout(VERIFIER_STAGE_TIMEOUT_MS)
+  const timeoutMs = label === 'goal-adversarial-test-design'
+    ? VERIFIER_DESIGN_TIMEOUT_MS
+    : VERIFIER_EXECUTION_TIMEOUT_MS
+  const timeout = AbortSignal.timeout(timeoutMs)
   const signal = AbortSignal.any([request.signal, timeout])
   let run
   let outcome: StructuredRunOutcome = {}
