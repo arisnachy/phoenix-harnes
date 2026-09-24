@@ -65,6 +65,23 @@ jobs:
         if: steps.freshness.outputs.publish == 'true'
         run: node scripts/phoenix-auto-update.mjs --self-test
 
+      - name: Promote stable release pointer
+        if: steps.freshness.outputs.publish == 'true'
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin stable --quiet
+          stable_sha="$(git rev-parse origin/stable)"
+          if [[ "$stable_sha" == "$TARGET_SHA" ]]; then
+            echo "Stable release pointer already points to $TARGET_SHA"
+            exit 0
+          fi
+          git cat-file -e "$TARGET_SHA^{commit}"
+          git push origin "$TARGET_SHA:refs/heads/stable" \
+            --force-with-lease="refs/heads/stable:$stable_sha"
+
       - name: Publish stable manifest
         if: steps.freshness.outputs.publish == 'true'
         shell: bash
