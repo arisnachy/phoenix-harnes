@@ -116,9 +116,22 @@ export const PROFILE_TEMPLATES: Record<string, readonly string[]> = {
   headless: ['@phoenix-ai/dsh-base', '@phoenix-ai/dsh-headless'],
 }
 
-/** Installation-owned bundle tuples normalized to the shipped template. */
-const INSTALLATION_OWNED_PROFILE_TUPLES: Record<string, readonly string[]> = {
-  headless: ['@phoenix-ai/dsh-base', '@phoenix-ai/dsh-web-app', '@phoenix-ai/dsh-headless'],
+/**
+ * Historical installation-owned bundle tuples normalized to the current
+ * Phoenix template. Exact-match only: any profile with user-added layers is
+ * left untouched. The DeepSeek tuples are the pre-Phoenix shipped defaults;
+ * keeping them here lets a persisted profile cross the namespace migration
+ * before bundle resolution, so it cannot silently keep an obsolete runtime.
+ */
+const INSTALLATION_OWNED_PROFILE_TUPLES: Record<string, readonly (readonly string[])[]> = {
+  web: [
+    ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
+  ],
+  headless: [
+    ['@phoenix-ai/dsh-base', '@phoenix-ai/dsh-web-app', '@phoenix-ai/dsh-headless'],
+    ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'],
+    ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless'],
+  ],
 }
 
 /** The bundle list a `dsh plugin` init uses for a name with no shipped template. */
@@ -299,7 +312,7 @@ function normalizeShippedProfile(name: string, dir: string, manifest: ProfileMan
   const current = PROFILE_TEMPLATES[name]
   const bundles = manifest.dsh?.profile?.bundles
   if (installationOwned === undefined || current === undefined || bundles === undefined
-    || !sameBundles(bundles, installationOwned)) return manifest
+    || !installationOwned.some(tuple => sameBundles(bundles, tuple))) return manifest
   const normalized: ProfileManifest = {
     ...manifest,
     dsh: {
