@@ -8,8 +8,15 @@ const managedUpdater = readFileSync(resolve('scripts/phoenix-managed-update.mjs'
 const updatePowerShell = readFileSync(resolve('update-phoenix.ps1'), 'utf8')
 const desktop = readFileSync(resolve('apps/desktop-windows/Program.cs'), 'utf8')
 const build = readFileSync(resolve('scripts/build.ts'), 'utf8')
+const stableWorkflow = readFileSync(resolve('.github/workflows/phoenix-stable-update-channel.yml'), 'utf8')
 
 describe('PHOENIX supervised updater runtime isolation', () => {
+  it('promotes each green current main SHA to the stable release pointer', () => {
+    expect(stableWorkflow).toContain('Promote stable release pointer')
+    expect(stableWorkflow).toContain('"$TARGET_SHA:refs/heads/stable"')
+    expect(stableWorkflow).toContain('--force-with-lease="refs/heads/stable:$stable_sha"')
+  })
+
   it('shares updater control markers through the common Git directory across worktrees', () => {
     expect(updater).toContain('function controlDirectory(root)')
     expect(updater).toContain('return gitCommonDirectory(root) ?? gitDirectory(root)')
