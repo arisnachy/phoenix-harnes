@@ -442,6 +442,20 @@ interface StructuredRunOutcome {
   readonly incident?: string
 }
 
+async function awaitAbortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted()
+  let onAbort: (() => void) | undefined
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(signal.reason ?? new Error('operation aborted'))
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    return await Promise.race([operation, aborted])
+  } finally {
+    if (onAbort !== undefined) signal.removeEventListener('abort', onAbort)
+  }
+}
+
 async function runStructured(
   runtime: CompletionRuntime,
   provider: string,
@@ -457,14 +471,21 @@ async function runStructured(
   const signal = AbortSignal.any([request.signal, timeout])
   let run
   let outcome: StructuredRunOutcome = {}
+  const startPromise = runtime.start(provider, { ...request, signal })
   try {
-    run = await runtime.start(provider, { ...request, signal })
-    const result = await run.result
+    run = await awaitAbortable(startPromise, signal)
+    const result = await awaitAbortable(run.result, signal)
     outcome = result.stopReason === 'completed'
       ? { structured: result.structured }
       : { incident: `${label}:stop-${result.stopReason}` }
   } catch (error) {
     const phase = run === undefined ? 'start' : 'result'
+    if (run === undefined && signal.aborted) {
+      void startPromise.then(
+        lateRun => lateRun.dispose().catch(() => undefined),
+        () => undefined,
+      )
+    }
     const kind = timeout.aborted && !request.signal.aborted
       ? 'timeout'
       : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
