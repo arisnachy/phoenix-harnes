@@ -50,6 +50,7 @@ const READ_ONLY_TOOLS = ['read', 'read_image', 'glob', 'grep', 'session_search',
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 16
 const MAX_HISTORY_ROUNDS = 8
+const FINAL_JUDGE_TIMEOUT_MS = 10 * 60_000
 const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
 type GoalJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
@@ -82,8 +83,14 @@ function readStructured(value: unknown): GoalJudgeResult | undefined {
   return result
 }
 
-function unavailable(): GoalJudgeResult {
-  return { verdict: 'blocked', summary: WAITING_SUMMARY, findings: [], requiredChanges: [] }
+function unavailable(verificationIncidents: readonly string[] = []): GoalJudgeResult {
+  return {
+    verdict: 'blocked',
+    summary: WAITING_SUMMARY,
+    findings: [],
+    requiredChanges: [],
+    ...(verificationIncidents.length === 0 ? {} : { verificationIncidents: [...verificationIncidents].slice(0, MAX_ITEMS) }),
+  }
 }
 
 function canReview(runtime: GoalJudgeRuntime, name: string): boolean {
@@ -203,11 +210,17 @@ function enforceGate(result: GoalJudgeResult, gate: GoalCompletionGateResult): G
     ...failures.map(failure => `Repair and re-run the full adversarial completion gate: ${failure}.`),
     ...result.requiredChanges,
   ].slice(0, MAX_ITEMS)
+  const verificationIncidents = [
+    ...(result.verificationIncidents ?? []),
+    ...(gate.verificationIncidents ?? []),
+  ].filter((incident, index, all) => all.indexOf(incident) === index).slice(0, MAX_ITEMS)
   return {
     verdict: result.verdict === 'blocked' ? 'blocked' : 'needs_changes',
     summary: `Adversarial completion workflow failed; DONE is forbidden until the clean-room gate passes. ${result.summary}`.slice(0, MAX_TEXT),
     findings: blockerFindings.length > 0 ? blockerFindings : ['BLOCKER: completion gate did not produce complete passing evidence.'],
     requiredChanges: required.length > 0 ? required : ['Repair the candidate and repeat the complete adversarial gate from the original requirement.'],
+    ...(result.completionReport === undefined ? {} : { completionReport: result.completionReport }),
+    ...(verificationIncidents.length === 0 ? {} : { verificationIncidents }),
   }
 }
 
@@ -353,7 +366,9 @@ export async function judgeGoalCompletion(input: {
 }): Promise<GoalJudgeResult> {
   const settled = settledGoalPass(input.parent, input.objective)
   const subagents = input.subagents
-  if (subagents === undefined) return settled?.result ?? unavailable()
+  if (subagents === undefined) {
+    return settled?.result ?? unavailable(['goal-completion-judge:runtime-unavailable'])
+  }
   const gate = await runAdversarialCompletionGate({
     subagents,
     ...input.llm === undefined ? {} : { llm: input.llm },
@@ -370,9 +385,11 @@ export async function judgeGoalCompletion(input: {
     return mayReuseSettledPass(settled, gate)
       ? settled.result
       : enforceGate({
-        ...unavailable(),
+        ...unavailable([
+          ...(gate.verificationIncidents ?? []),
+          'goal-completion-judge:provider-unavailable',
+        ]),
         ...(gate.completionReport === undefined ? {} : { completionReport: gate.completionReport }),
-        ...(gate.verificationIncidents === undefined ? {} : { verificationIncidents: gate.verificationIncidents }),
       }, gate)
   }
   const history = durableMissionReviewHistory(input.parent, input.objective)
@@ -397,34 +414,66 @@ export async function judgeGoalCompletion(input: {
       + '</goal_judge>',
   }]
 
+  const timeout = AbortSignal.timeout(FINAL_JUDGE_TIMEOUT_MS)
+  const signal = AbortSignal.any([input.signal, timeout])
   let run
   let judged: GoalJudgeResult = unavailable()
+  const judgeIncidents: string[] = []
   try {
     run = await subagents.start(provider, {
       label: 'goal-completion-judge',
       prompt,
       parent: input.parent,
-      signal: input.signal,
+      signal,
       agentOptions: await resolveGoalJudgeAgentOptions({
         parent: input.parent,
         ...input.llm === undefined ? {} : { llm: input.llm },
-        signal: input.signal,
+        signal,
       }),
       outputSchema: GOAL_JUDGE_OUTPUT_SCHEMA,
       toolFilter: { allow: [...READ_ONLY_TOOLS] },
     })
     const result = await run.result
-    if (result.stopReason === 'completed') judged = readStructured(result.structured) ?? unavailable()
-  } catch {
-    judged = unavailable()
+    if (result.stopReason === 'completed') {
+      const structured = readStructured(result.structured)
+      if (structured === undefined) {
+        judgeIncidents.push('goal-completion-judge:invalid-output')
+      } else {
+        judged = structured
+      }
+    } else {
+      judgeIncidents.push(`goal-completion-judge:stop-${result.stopReason}`)
+    }
+  } catch (error) {
+    const phase = run === undefined ? 'start' : 'result'
+    const kind = timeout.aborted && !input.signal.aborted
+      ? 'timeout'
+      : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+    judgeIncidents.push(`goal-completion-judge:${phase}-${kind}`)
   } finally {
-    if (run !== undefined) await run.dispose()
+    if (run !== undefined) {
+      try {
+        await run.dispose()
+      } catch (error) {
+        const kind = error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+        judgeIncidents.push(`goal-completion-judge:dispose-${kind}`)
+      }
+    }
+  }
+  if (judged.verdict === 'blocked' && judgeIncidents.length > 0) {
+    judged = unavailable(judgeIncidents)
+  } else if (judgeIncidents.length > 0) {
+    judged = { ...judged, verificationIncidents: [...judgeIncidents] }
   }
   if (judged.verdict === 'blocked' && mayReuseSettledPass(settled, gate)) return settled.result
+  const verificationIncidents = [
+    ...(gate.verificationIncidents ?? []),
+    ...(judged.verificationIncidents ?? []),
+  ].filter((incident, index, all) => all.indexOf(incident) === index).slice(0, MAX_ITEMS)
   return enforceGate({
     ...judged,
     ...(gate.completionReport === undefined ? {} : { completionReport: gate.completionReport }),
-    ...(gate.verificationIncidents === undefined ? {} : { verificationIncidents: gate.verificationIncidents }),
+    ...(verificationIncidents.length === 0 ? {} : { verificationIncidents }),
   }, gate)
 }
 
