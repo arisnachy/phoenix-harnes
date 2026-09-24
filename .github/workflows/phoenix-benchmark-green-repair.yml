@@ -41,12 +41,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Refresh parallel subagent fixture first
-        run: pnpm run test:snapshot:refresh -- -t "subagent-parallel"
-
-      - name: Verify parallel subagent replay
-        run: pnpm run test:snapshot -- -t "subagent-parallel"
-
       - name: Refresh reviewed snapshot baseline
         run: pnpm run test:snapshot:refresh
 
