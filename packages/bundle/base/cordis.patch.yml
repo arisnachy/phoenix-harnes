@@ -621,9 +621,9 @@
         transport: stdio
         command: node
         args:
-          - --input-type=module
-          - --eval
-          - "import('@phoenix-ai/dsh-chrome-connector').then(({ startChromeConnector }) => startChromeConnector())"
+          - --import
+          - tsx/esm
+          - packages/mcp/chrome-connector/src/server.ts
         cwd: !!js process.cwd()
         env:
           PHOENIX_BROWSER_CDP_URL: !!js process.env.PHOENIX_BROWSER_CDP_URL ?? ''
