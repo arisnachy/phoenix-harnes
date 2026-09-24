@@ -407,6 +407,19 @@ describe('task admission and package contracts', () => {
       'app-server',
       '--stdio',
     ])
+    const metadataHome = resolve('test-codex-metadata-home')
+    expect(codexMetadataAppServerArgv(metadataHome)).toEqual([
+      process.execPath,
+      resolve(dirname(codexPackageJson), codexManifest.bin.codex),
+      '-c',
+      'features.plugins=false',
+      '-c',
+      'skills.bundled.enabled=false',
+      '-c',
+      `sqlite_home=${JSON.stringify(metadataHome)}`,
+      'app-server',
+      '--stdio',
+    ])
 
     const lockfile = readFileSync(resolve(root, '../../../pnpm-lock.yaml'), 'utf8')
     for (const packageName of CODEX_PLATFORM_PACKAGES) {
@@ -428,34 +441,30 @@ describe('task admission and package contracts', () => {
     expect(JSON.stringify(rows)).not.toContain('tool-subagent')
   })
 
-  it('reuses Codex native SQLite selection for account metadata probes', () => {
+  it('forces account metadata probes off stale Phoenix SQLite overrides', () => {
     const previousCodexSqlite = process.env.CODEX_SQLITE_HOME
     const previousPhoenixSqlite = process.env.PHOENIX_CODEX_SQLITE_HOME
     const home = resolve('test-codex-home')
-    const nativeSqlite = resolve('test-codex-native-sqlite')
+    const staleAccountSqlite = resolve(home, 'phoenix-runtime', 'sqlite', 'account')
     const phoenixSqlite = resolve('test-phoenix-sqlite')
 
     try {
-      process.env.CODEX_SQLITE_HOME = nativeSqlite
+      process.env.CODEX_SQLITE_HOME = staleAccountSqlite
       process.env.PHOENIX_CODEX_SQLITE_HOME = phoenixSqlite
 
       expect(codexAccountEnvironment({ CODEX_HOME: home })).toEqual({
         CODEX_HOME: home,
-        CODEX_SQLITE_HOME: nativeSqlite,
+        CODEX_SQLITE_HOME: home,
       })
 
-      delete process.env.CODEX_SQLITE_HOME
-      expect(codexAccountEnvironment({ CODEX_HOME: home })).toEqual({
-        CODEX_HOME: home,
-      })
-
-      const explicitSqlite = resolve('test-codex-explicit-sqlite')
+      const explicitStaleSqlite = resolve(home, 'phoenix-runtime', 'sqlite', 'account-explicit')
       expect(codexAccountEnvironment({
         CODEX_HOME: home,
-        CODEX_SQLITE_HOME: explicitSqlite,
+        CODEX_SQLITE_HOME: explicitStaleSqlite,
+        PHOENIX_CODEX_SQLITE_HOME: phoenixSqlite,
       })).toEqual({
         CODEX_HOME: home,
-        CODEX_SQLITE_HOME: explicitSqlite,
+        CODEX_SQLITE_HOME: home,
       })
     } finally {
       if (previousCodexSqlite === undefined) delete process.env.CODEX_SQLITE_HOME
