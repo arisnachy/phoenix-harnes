@@ -93,6 +93,20 @@ function unavailable(verificationIncidents: readonly string[] = []): GoalJudgeRe
   }
 }
 
+async function awaitAbortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted()
+  let onAbort: (() => void) | undefined
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(signal.reason ?? new Error('operation aborted'))
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    return await Promise.race([operation, aborted])
+  } finally {
+    if (onAbort !== undefined) signal.removeEventListener('abort', onAbort)
+  }
+}
+
 function canReview(runtime: GoalJudgeRuntime, name: string): boolean {
   const provider = runtime.getProvider(name)
   return provider !== undefined
@@ -419,8 +433,7 @@ export async function judgeGoalCompletion(input: {
   let run
   let judged: GoalJudgeResult = unavailable()
   const judgeIncidents: string[] = []
-  try {
-    run = await subagents.start(provider, {
+  const startPromise = subagents.start(provider, {
       label: 'goal-completion-judge',
       prompt,
       parent: input.parent,
@@ -433,7 +446,9 @@ export async function judgeGoalCompletion(input: {
       outputSchema: GOAL_JUDGE_OUTPUT_SCHEMA,
       toolFilter: { allow: [...READ_ONLY_TOOLS] },
     })
-    const result = await run.result
+  try {
+    run = await awaitAbortable(startPromise, signal)
+    const result = await awaitAbortable(run.result, signal)
     if (result.stopReason === 'completed') {
       const structured = readStructured(result.structured)
       if (structured === undefined) {
@@ -446,6 +461,12 @@ export async function judgeGoalCompletion(input: {
     }
   } catch (error) {
     const phase = run === undefined ? 'start' : 'result'
+    if (run === undefined && signal.aborted) {
+      void startPromise.then(
+        lateRun => lateRun.dispose().catch(() => undefined),
+        () => undefined,
+      )
+    }
     const kind = timeout.aborted && !input.signal.aborted
       ? 'timeout'
       : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
