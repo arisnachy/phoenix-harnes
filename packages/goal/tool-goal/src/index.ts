@@ -445,7 +445,10 @@ export function apply(ctx: Context, config: Config): void {
           round: currentGoal.roundsStarted,
           verdict: judge.verdict,
           summary: judge.summary,
-          findings: judge.findings,
+          findings: [
+            ...judge.findings,
+            ...(judge.verificationIncidents ?? []).map(incident => `VERIFIER_INCIDENT: ${incident}`),
+          ].slice(0, 16),
           requiredChanges: judge.requiredChanges,
         })
         if (judge.verdict !== 'pass') {
