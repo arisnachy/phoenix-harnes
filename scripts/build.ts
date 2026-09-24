@@ -31,7 +31,7 @@ const HOST_REMOTE_SENTINEL = resolve(
 function projectPnpmSpecifier(root: string): string {
   const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { packageManager?: unknown }
   const configured = typeof manifest.packageManager === 'string' ? manifest.packageManager.trim() : ''
-  if (!/^pnpm@[^\\s]+$/u.test(configured)) {
+  if (!/^pnpm@[^\s]+$/u.test(configured)) {
     throw new Error(`build: package.json must pin packageManager to pnpm@<version>; got ${JSON.stringify(manifest.packageManager)}`)
   }
   return configured
