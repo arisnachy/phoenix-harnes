@@ -1545,6 +1545,9 @@ importers:
       '@phoenix-ai/dsh-message-feedback':
         specifier: workspace:^
         version: link:../../feedback/message-feedback
+      '@phoenix-ai/dsh-mcp-client':
+        specifier: workspace:^
+        version: link:../../mcp/mcp-client
       '@phoenix-ai/dsh-session-log-export':
         specifier: workspace:^
         version: link:../../session-query/session-log-export
@@ -9415,6 +9418,9 @@ importers:
       '@phoenix-ai/dsh-goal-round-driver':
         specifier: workspace:^
         version: link:../../packages/goal/goal-round-driver
+      '@phoenix-ai/dsh-hardness-adapters':
+        specifier: workspace:^
+        version: link:../../packages/hardness/adapters
       '@phoenix-ai/dsh-home-paths':
         specifier: workspace:^
         version: link:../../packages/util/home-paths
@@ -9610,6 +9616,9 @@ importers:
       '@phoenix-ai/dsh-tool-ralph':
         specifier: workspace:^
         version: link:../../packages/workflow/tool-ralph
+      '@phoenix-ai/dsh-tool-session-learning':
+        specifier: workspace:^
+        version: link:../../packages/session-learning/tool-session-learning
       '@phoenix-ai/dsh-tool-skill':
         specifier: workspace:^
         version: link:../../packages/skill/tool-skill
