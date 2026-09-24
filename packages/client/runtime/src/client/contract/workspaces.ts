@@ -7,8 +7,18 @@
  * widening what features may do to the workspaces domain.
  */
 import type { DirectoryListing, SessionId, WorkspaceId, WorkspaceView } from '@phoenix-ai/dsh-api-remotes/client'
-import type { WorkspaceListState } from '../workspaces/service.ts'
 import type { ObservableSnapshot } from './store.ts'
+
+/** Workspace list plus baseline readiness and default-target projection. */
+export interface WorkspaceListState {
+  items: readonly WorkspaceView[]
+  archivedSessionIds: readonly SessionId[]
+  state: 'idle' | 'loading' | 'error'
+  phase: 'pending' | 'ready'
+  error: import('@phoenix-ai/dsh-api-remotes/client').RpcError | null
+  baselinesReady: boolean
+  recentWorkspaceId: WorkspaceId | undefined
+}
 
 /** The workspaces-service face injected as `ctx.workspaces`. */
 export interface IWorkspaces {

@@ -11,7 +11,7 @@
 import type { ClientContext, ISessions, SessionBinding, SessionFace, SessionId } from '@phoenix-ai/dsh-client-runtime/client'
 import type { InputTriggerController, SubmitImageAttachment, SubmitOutcome } from '@phoenix-ai/dsh-client-ui-input-trigger/client'
 import type { TranslateNS } from '@phoenix-ai/dsh-client-locale/client'
-import { queueReadFaceOf } from '../queue/store.ts'
+import { queueReadFaceOf } from '../queue-store.ts'
 import type { ComposerKeyboard, DraftAttachmentId, SessionInputResolver, SessionInput } from './contract.ts'
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import type { PopupDismissFace } from './facade.ts'

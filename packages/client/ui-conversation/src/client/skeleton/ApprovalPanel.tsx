@@ -16,7 +16,7 @@ import { useMemo, useState } from 'react'
 import { Button } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { RunningToolCall } from '@phoenix-ai/dsh-client-runtime/client'
 import { PendingApproval, type ApprovalComposerProps } from '../contract/slots.ts'
-import { rootToolCall } from '../chat/tool-node-reader.ts'
+import { rootToolCall } from '../tool-node-reader.ts'
 import { ApprovalCountdown } from './ApprovalCountdown.tsx'
 import css from './ApprovalPanel.module.css'
 

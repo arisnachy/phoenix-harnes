@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react'
 import type { ChatNodeViewProps } from '../contract/slots.ts'
-import { normalizeHardnessArtifact } from '../conversation-nodes/hardness-artifact.ts'
+import { normalizeHardnessArtifact } from '../artifact.ts'
 import { UniversalArtifactSurface } from './UniversalArtifactSurface.tsx'
 import styles from './HardnessArtifactNodeView.module.css'
 

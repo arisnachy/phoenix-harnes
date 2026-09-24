@@ -286,6 +286,7 @@ function ciSharedStaticGates(): Gate[] {
       label: 'optional dependency imports',
     }),
     pnpmScript('client-packages', 'verify-client-packages', { label: 'client packages' }),
+    pnpmScript('client-domain-graph', 'verify-client-domain-graph', { label: 'client domain graph' }),
     pnpmScript('issue-management', 'test:issue-management', { label: 'Issue management policy' }),
   ]
 }

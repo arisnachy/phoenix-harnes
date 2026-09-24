@@ -211,6 +211,13 @@ jobs:
       - name: Install immutable workspace
         shell: pwsh
         run: pnpm install --frozen-lockfile
+      - name: Run complete native Windows Vitest suite
+        shell: pwsh
+        run: >-
+          pnpm exec vitest run
+          --maxWorkers=2
+          --testTimeout=30000
+          --expect.poll.timeout=30000
       - name: Run Full Access and embedded-browser regressions
         shell: pwsh
         run: >-

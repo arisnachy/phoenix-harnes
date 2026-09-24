@@ -17,8 +17,7 @@ import type { SubmitImageAttachment, SubmitOutcome } from '@phoenix-ai/dsh-clien
 import type { ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
 import type { ComposerAttachment } from './contract/slots.ts'
 import type { QueueAction, QueueItemId } from './contract/queue.ts'
-import type { ComposerBlocks } from './input/blocks.ts'
-import type { DraftAttachmentId, SessionInputResolver } from './input/contract.ts'
+import type { ComposerBlocks, DraftAttachmentId, SessionInputResolver } from './contract/input.ts'
 import type { InputSubmitMode } from './contract/composer-submission.ts'
 
 /**
