@@ -41,6 +41,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      - name: Verify snapshot normalizer
+        run: pnpm exec vitest run packages/test-support/acp-snapshot/tests/normalize.spec.ts --maxWorkers=1
+
       - name: Refresh reviewed snapshot baseline
         run: pnpm run test:snapshot:refresh
 
