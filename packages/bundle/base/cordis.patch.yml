@@ -331,7 +331,7 @@
         # Phoenix Desktop Computer is still experimental. Keep the stable
         # browser route primary and expose native desktop control only when
         # explicitly opted in for testing.
-        enableComputerUse: !!js process.env.PHOENIX_DESKTOP_COMPUTER === '1' || process.env.PHOENIX_DESKTOP_COMPUTER === 'true'
+        enableComputerUse: !!js "['1', 'true', 'on'].includes((process.env.PHOENIX_DESKTOP_COMPUTER ?? '').trim().toLowerCase())"
 
     - id: tool-jobs
       name: '@phoenix-ai/dsh-tool-jobs'
