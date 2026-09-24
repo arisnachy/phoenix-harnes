@@ -142,7 +142,7 @@ export function codexAppServerArgv(): string[] {
  * Windows cache walks and file-lock noise while preserving the real Codex
  * home, managed ChatGPT auth, model catalog, quotas and account state.
  */
-export function codexMetadataAppServerArgv(): string[] {
+export function codexMetadataAppServerArgv(sqliteHome?: string): string[] {
   return [
     process.execPath,
     CODEX_PACKAGE_BIN,
@@ -150,6 +150,9 @@ export function codexMetadataAppServerArgv(): string[] {
     'features.plugins=false',
     '-c',
     'skills.bundled.enabled=false',
+    ...(sqliteHome === undefined
+      ? []
+      : ['-c', `sqlite_home=${JSON.stringify(sqliteHome)}`]),
     'app-server',
     '--stdio',
   ]
@@ -191,25 +194,24 @@ export function codexSubagentEnvironment(
 }
 
 /**
- * Preserve ChatGPT auth and reuse Codex's native SQLite selection for metadata
- * probes. A Phoenix-private account DB would need to backfill the user's full
- * rollout history before account/rateLimits RPCs can initialize, which can
- * exceed Codex's fixed startup gate and prevent the quota meter from loading.
+ * Preserve ChatGPT auth while forcing metadata probes away from every
+ * Phoenix-owned SQLite root. Older Phoenix runtimes injected
+ * CODEX_SQLITE_HOME=<CODEX_HOME>/phoenix-runtime/sqlite/account; that inherited
+ * value can survive a Host handoff on Windows and keep a fresh DB trapped in
+ * Codex's 30 s rollout-backfill gate. Metadata probes always use CODEX_HOME as
+ * their SQLite fallback, and the app-server argv repeats that choice as a
+ * highest-priority CLI config override.
  */
 export function codexAccountEnvironment(
   explicit: Readonly<Record<string, string>>,
 ): Record<string, string> {
   const home = resolvedCodexHome(explicit)
-  const explicitConfiguredSqlite = explicit.CODEX_SQLITE_HOME?.trim()
-  const ambientCodexSqlite = process.env.CODEX_SQLITE_HOME?.trim()
-  const sqliteHome = explicitConfiguredSqlite && explicitConfiguredSqlite.length > 0
-    ? resolve(explicitConfiguredSqlite)
-    : ambientCodexSqlite && ambientCodexSqlite.length > 0
-      ? resolve(ambientCodexSqlite)
-      : undefined
-  const env: Record<string, string> = { ...explicit, CODEX_HOME: home }
-  Reflect.deleteProperty(env, 'CODEX_SQLITE_HOME')
-  if (sqliteHome !== undefined) env.CODEX_SQLITE_HOME = sqliteHome
+  const env: Record<string, string> = {
+    ...explicit,
+    CODEX_HOME: home,
+    CODEX_SQLITE_HOME: home,
+  }
+  Reflect.deleteProperty(env, 'PHOENIX_CODEX_SQLITE_HOME')
   return env
 }
 
