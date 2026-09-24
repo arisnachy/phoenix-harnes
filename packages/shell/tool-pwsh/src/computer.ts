@@ -13,6 +13,7 @@
  */
 
 import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createConnection } from 'node:net'
 import { join } from 'node:path'
@@ -115,11 +116,12 @@ function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
 
 /** Current desktop-control discovery document written by Phoenix.exe. */
 export interface DesktopBrowserControlDescriptor {
-  schema: 1
+  schema: 1 | 2
   pipeName: string
 }
 
-const DESKTOP_CONTROL_SCHEMA = 1
+const LEGACY_DESKTOP_CONTROL_SCHEMA = 1
+const RESIDENT_DESKTOP_CONTROL_SCHEMA = 2
 const DESKTOP_CONTROL_PIPE_PREFIX = 'PhoenixDesktop.Browser.'
 const DESKTOP_CONTROL_DESCRIPTOR_ENV = 'PHOENIX_DESKTOP_CONTROL_DESCRIPTOR'
 const DESKTOP_CONTROL_TIMEOUT_MS = 3_000
@@ -164,7 +166,7 @@ function isEmbeddedBrowserAction(action: ComputerAction): action is EmbeddedBrow
 /**
  * Parse and validate the current-user desktop-control descriptor before connecting.
  * @param raw - JSON descriptor written by Phoenix Desktop.
- * @returns Validated schema-1 desktop-control descriptor.
+ * @returns Validated schema-1 or schema-2 desktop-control descriptor.
  */
 export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowserControlDescriptor {
   let value: unknown
@@ -177,8 +179,9 @@ export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowse
     throw new Error('Phoenix Desktop control descriptor must be an object')
   }
   const candidate = value as Record<string, unknown>
-  if (candidate.schema !== DESKTOP_CONTROL_SCHEMA) {
-    throw new Error(`Phoenix Desktop control descriptor has unsupported schema ${String(candidate.schema)}`)
+  const schema = candidate.schema
+  if (schema !== LEGACY_DESKTOP_CONTROL_SCHEMA && schema !== RESIDENT_DESKTOP_CONTROL_SCHEMA) {
+    throw new Error(`Phoenix Desktop control descriptor has unsupported schema ${String(schema)}`)
   }
   const pipeName = candidate.pipeName
   if (typeof pipeName !== 'string'
@@ -188,7 +191,7 @@ export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowse
     || !/^[A-Za-z0-9._-]+$/u.test(pipeName)) {
     throw new Error('Phoenix Desktop control descriptor contains an invalid pipe name')
   }
-  return { schema: 1, pipeName }
+  return { schema, pipeName }
 }
 
 /**
@@ -300,6 +303,79 @@ function requestNamedPipeLine(pipePath: string, line: string, signal?: AbortSign
   })
 }
 
+/**
+ * Build a schema-2 request for the resident Phoenix Desktop Computer driver.
+ * @param args - Validated model-facing Computer action.
+ * @param requestId - Correlation identifier returned unchanged by the native host.
+ * @returns Credential-free request envelope for the authenticated native control pipe.
+ */
+export function residentComputerRequestForAction(args: ComputerToolArgs, requestId = randomUUID()): Record<string, unknown> {
+  validateComputerArgs(args)
+  return {
+    schema: RESIDENT_DESKTOP_CONTROL_SCHEMA,
+    requestId,
+    type: args.action,
+    ...(args.target === undefined ? {} : { target: args.target }),
+    ...(args.url === undefined ? {} : { url: args.url }),
+    ...(args.origin === undefined ? {} : { origin: normalizeCredentialOrigin(args.origin) }),
+    ...(args.fields === undefined ? {} : { fields: args.fields }),
+    ...(args.text === undefined ? {} : { text: args.text }),
+    ...(args.keys === undefined ? {} : { keys: args.keys }),
+    ...(args.button === undefined ? {} : { button: args.button }),
+    ...(args.x === undefined ? {} : { x: args.x }),
+    ...(args.y === undefined ? {} : { y: args.y }),
+    ...(args.x2 === undefined ? {} : { x2: args.x2 }),
+    ...(args.y2 === undefined ? {} : { y2: args.y2 }),
+    ...(args.delta === undefined ? {} : { delta: args.delta }),
+    ...(args.submit === undefined ? {} : { submit: args.submit }),
+  }
+}
+
+async function readDesktopControlDescriptorIfAvailable(): Promise<DesktopBrowserControlDescriptor | undefined> {
+  try {
+    return parseDesktopBrowserControlDescriptor(await readFile(desktopControlDescriptorPath(), 'utf8'))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+async function runResidentComputerAction(
+  args: ComputerToolArgs,
+  descriptor: DesktopBrowserControlDescriptor,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (descriptor.schema !== RESIDENT_DESKTOP_CONTROL_SCHEMA) {
+    throw new Error('Phoenix Desktop resident Computer requires schema 2')
+  }
+  const request = residentComputerRequestForAction(args)
+  const requestId = request.requestId as string
+  const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
+  const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(request), signal)
+  let reply: unknown
+  try {
+    reply = JSON.parse(rawReply)
+  } catch {
+    throw new Error('Phoenix Desktop resident Computer returned invalid JSON')
+  }
+  if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
+    throw new Error('Phoenix Desktop resident Computer returned an invalid reply')
+  }
+  const response = reply as Record<string, unknown>
+  if (response.schema !== RESIDENT_DESKTOP_CONTROL_SCHEMA || response.requestId !== requestId) {
+    throw new Error('Phoenix Desktop resident Computer returned an incompatible or uncorrelated reply')
+  }
+  if (response.ok !== true) {
+    throw new Error(`Phoenix Desktop resident Computer rejected the command: ${String(response.error ?? 'unknown error')}`)
+  }
+  if (args.action === 'screenshot') {
+    return typeof response.screenshotBase64 === 'string' ? response.screenshotBase64 : ''
+  }
+  return typeof response.details === 'string'
+    ? response.details
+    : `resident desktop command accepted: ${args.action}`
+}
+
 async function runEmbeddedBrowserAction(
   args: ComputerToolArgs,
   signal?: AbortSignal,
@@ -307,9 +383,14 @@ async function runEmbeddedBrowserAction(
 ): Promise<string> {
   const rawDescriptor = await readFile(desktopControlDescriptorPath(), 'utf8')
   const descriptor = parseDesktopBrowserControlDescriptor(rawDescriptor)
+  const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
+
+  if (descriptor.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
+    return await runResidentComputerAction(args, descriptor, signal)
+  }
+
   const baseCommand = browserCommandForAction(args)
   const command: DesktopBrowserCommand = login === undefined ? baseCommand : { ...baseCommand, ...login }
-  const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
   const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(command), signal)
 
   let reply: unknown
@@ -1050,9 +1131,31 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
   if (args.action === 'browser_login') {
     throw new Error('browser_login requires the origin-bound credential broker')
   }
+
+  const descriptor = await readDesktopControlDescriptorIfAvailable()
+  if (descriptor?.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
+    try {
+      const resident = await runResidentComputerAction(args, descriptor, signal)
+      if (args.action === 'windows' && resident.trim() === '<no visible top-level windows>') {
+        const fallback = await executeComputerInvocation(windowsComputerInvocation(args), signal)
+        if (fallback.trim().length > 0 && fallback.trim() !== '<no visible top-level windows>') return fallback
+        return resident
+      }
+      if (args.action !== 'screenshot' || resident.length > 0) return resident
+    } catch (error) {
+      // Observation calls are safe to retry through the fixed PowerShell driver.
+      // Never replay mutations: a lost reply does not prove the input was not sent.
+      if (args.action !== 'screenshot' && args.action !== 'windows') throw error
+    }
+  }
+
   if (isEmbeddedBrowserAction(args.action)) {
+    if (descriptor === undefined) {
+      throw new Error('Phoenix Desktop browser control is unavailable; start/restart Phoenix Desktop and retry.')
+    }
     return await runEmbeddedBrowserAction(args, signal)
   }
+
   const invocation = windowsComputerInvocation(args)
   return await executeComputerInvocation(invocation, signal)
 }
@@ -1086,6 +1189,15 @@ async function runOriginBoundBrowserLogin(
   args: ComputerToolArgs,
   signal?: AbortSignal,
 ): Promise<string> {
+  const descriptor = parseDesktopBrowserControlDescriptor(
+    await readFile(desktopControlDescriptorPath(), 'utf8'),
+  )
+  if (descriptor.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
+    // Schema 2 owns credential prompting/fill in the native host. Do not resolve
+    // or put account/secret values on the general Computer pipe.
+    return await runEmbeddedBrowserAction(args, signal)
+  }
+
   const origin = requiredCredentialOrigin(args.origin, args.action)
   const credentials = ctx.get('credentials')
   if (credentials === undefined) {
@@ -1179,6 +1291,10 @@ async function attachDesktopScreenshot(
   if (base64Png.length === 0) throw new Error('Computer screenshot driver returned no image bytes')
   const bytes = Buffer.from(base64Png, 'base64')
   if (bytes.length === 0) throw new Error('Computer screenshot decoded to an empty image')
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+  if (bytes.length < pngSignature.length || !bytes.subarray(0, pngSignature.length).equals(pngSignature)) {
+    throw new Error('Computer screenshot driver returned invalid PNG bytes')
+  }
   const attachments = attachmentWriter(ctx)
   if (attachments === undefined) throw new Error('Computer screenshot requires the attachment service')
   const attachment = await attachments.saveImage({
