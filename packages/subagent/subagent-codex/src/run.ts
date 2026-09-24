@@ -204,7 +204,7 @@ export function codexSubagentEnvironment(
  */
 export function codexAccountEnvironment(
   explicit: Readonly<Record<string, string>>,
-): Record<string, string> {
+): Record<string, string> & { CODEX_HOME: string; CODEX_SQLITE_HOME: string } {
   const home = resolvedCodexHome(explicit)
   const env: Record<string, string> = {
     ...explicit,
