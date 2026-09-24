@@ -1,0 +1,54 @@
+name: HARDNESS live proof
+
+on:
+  push:
+    branches:
+      - 'experiment/hardness-live-proof-20260923'
+
+permissions:
+  contents: read
+
+env:
+  CI: '1'
+  DSH_TELEMETRY_DISABLED: '1'
+  OPENAI_API_KEY: ''
+  ANTHROPIC_API_KEY: ''
+  DEEPSEEK_API_KEY: ''
+  GOOGLE_API_KEY: ''
+  GEMINI_API_KEY: ''
+  GROQ_API_KEY: ''
+  OPENROUTER_API_KEY: ''
+  XAI_API_KEY: ''
+
+jobs:
+  live-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run live governed HARDNESS mission
+        run: pnpm exec vitest run packages/hardness/adapters/tests/hardness-live-proof.live.spec.ts --maxWorkers=1
+      - name: Show HARDNESS evidence
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/hardness-live-proof/hardness-live-proof-report.md ]]; then
+            cat artifacts/hardness-live-proof/hardness-live-proof-report.md
+            cat artifacts/hardness-live-proof/hardness-live-proof-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload live evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardness-live-proof-${{ github.run_id }}
+          path: artifacts/hardness-live-proof/
+          if-no-files-found: error
+          retention-days: 30
