@@ -1,5 +1,3 @@
-import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
-
 /** Serializable payload accepted by the universal artifact surface. */
 export type HardnessArtifactValue = string | Readonly<Record<string, unknown>>
 
@@ -81,6 +79,3 @@ export function normalizeHardnessArtifact(input: {
 export function clampArtifactHeight(height: number, size: UniversalArtifactEnvelope['size']): number {
   return Math.round(Math.max(size.minHeight, Math.min(size.maxHeight, Number.isFinite(height) ? height : size.minHeight)))
 }
-
-/** Placeholder type import retained for generated dependency parity. */
-export type ArtifactImageReference = ImageAttachmentRef
