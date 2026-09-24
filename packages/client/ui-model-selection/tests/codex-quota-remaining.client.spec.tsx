@@ -341,6 +341,50 @@ describe('CodexQuotaRemaining', () => {
     expect(screen.getByText('↻ 4d 6h')).toBeTruthy()
   })
 
+  it('keeps persisted 5h/7d quota when the authorization catalog is transiently empty', async () => {
+    const d = directory('openai-codex')
+    const nowMs = Date.parse('2026-08-27T12:00:00.000Z')
+    vi.spyOn(Date, 'now').mockReturnValue(nowMs)
+    const connected = {
+      list: vi.fn(() => Promise.resolve({
+        rpcId: 'authorization-list-persist-before-empty' as never,
+        result: {
+          ok: true as const,
+          value: {
+            entries: [{
+              key: 'subagent-codex/account',
+              label: 'ChatGPT / Codex',
+              telemetry: {
+                kind: 'account' as const,
+                provider: 'Codex',
+                primaryLimit: { usedPercent: 14, windowDurationMins: 300, resetsAt: nowMs / 1000 + 2 * 60 * 60 },
+                secondaryLimit: { usedPercent: 9, windowDurationMins: 10080, resetsAt: nowMs / 1000 + 4 * 86400 },
+              },
+            }],
+          },
+        },
+      })),
+    }
+    const first = render(<CodexQuotaRemaining {...propsFor(d.fake, connected, {})} />)
+    expect(await screen.findByText('86%')).toBeTruthy()
+    expect(screen.getByText('91%')).toBeTruthy()
+    first.unmount()
+
+    const emptyDuringStartup = {
+      list: vi.fn(() => Promise.resolve({
+        rpcId: 'authorization-list-transient-empty' as never,
+        result: { ok: true as const, value: { entries: [] } },
+      })),
+    }
+    render(<CodexQuotaRemaining {...propsFor(d.fake, emptyDuringStartup, {})} />)
+
+    await waitFor(() => { expect(emptyDuringStartup.list).toHaveBeenCalledOnce() })
+    expect(screen.getByText('86%')).toBeTruthy()
+    expect(screen.getByText('91%')).toBeTruthy()
+    expect(screen.getByText('5h')).toBeTruthy()
+    expect(screen.getByText('7d')).toBeTruthy()
+  })
+
   it('hides unknown telemetry instead of inventing a context percentage', async () => {
     const d = directory('openai-codex')
     const auth = {
