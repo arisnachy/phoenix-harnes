@@ -53,11 +53,17 @@ export const inject = ['tools', 'shell', 'systemPrompt', 'shellEnv']
 export interface Config {
   /** Expose `run_in_background` (default true); disabled calls are also rejected. */
   enableRunInBackground?: boolean
+  /**
+   * Expose the experimental Windows Desktop `computer` tool. Disabled by
+   * default so normal browser work stays on the isolated Chrome/Edge connector.
+   */
+  enableComputerUse?: boolean
 }
 
 /** Runtime configuration schema for the pwsh tool plugin. */
 export const Config: z<Config> = z.object({
   enableRunInBackground: z.boolean().default(true),
+  enableComputerUse: z.boolean().default(false),
 })
 
 /** Parsed tool args; execute validates value constraints absent from ParameterSchemaSpec. */
@@ -196,6 +202,7 @@ const BACKGROUND_OUTPUT_PROPERTIES = {
 /* jscpd:ignore-start -- deliberate mirror of dsh-tool-bash's apply() preamble (pwsh-tool-and-executor Agent Note). */
 export function apply(ctx: Context, config: Config = {}): void {
   const backgroundEnabled = config.enableRunInBackground ?? true
+  const computerEnabled = config.enableComputerUse ?? false
   const defaultMode = ctx.shell.sandboxMode
   const escalationModes: readonly SandboxMode[] = defaultMode === undefined ? [] : ESCALATION_TARGETS
   const sandboxPolicy: SandboxPolicyService | undefined = defaultMode === undefined ? undefined : ctx.get('sandboxPolicy')
@@ -247,7 +254,10 @@ export function apply(ctx: Context, config: Config = {}): void {
     order: 105,
     text: 'Non-zero exits are reported as `[exit code: N]` markers; investigate failures before moving on. '
       + 'On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure. '
-      + 'For browser work, prefer a healthy registered PHOENIX Chrome/Chromium MCP connector as the primary browser route. Use the Phoenix Desktop embedded-browser channel as fallback while the EXE route is unavailable or unhealthy; do not spend the task repairing the desktop browser when Chrome can complete it.',
+      + 'For browser work, use the registered PHOENIX Chrome/Edge connector as the primary route. '
+      + (computerEnabled
+        ? 'Phoenix Desktop Computer is enabled as an experimental fallback; use it only when the browser connector cannot complete the task.'
+        : 'Phoenix Desktop Computer is experimental and disabled in this deployment; do not attempt to repair or depend on it.'),
   })
 
   ctx.tools.register(defineTool({
@@ -445,5 +455,5 @@ export function apply(ctx: Context, config: Config = {}): void {
     /* jscpd:ignore-end */
   }))
 
-  registerComputerTool(ctx)
+  if (computerEnabled) registerComputerTool(ctx)
 }
