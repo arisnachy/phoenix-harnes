@@ -173,7 +173,9 @@ function guidance(blockedAfter: number, requireJudge: boolean): string {
     + 'create a goal for routine single-turn work. Call get_goal before update_goal and copy its '
     + 'exact goal_id and revision. After session resume or fork, the driver restores an active durable '
     + 'goal and continues it automatically; blocked goals wait for their external condition or an '
-    + 'explicit resume. Mark complete only when the objective is actually achieved. Mark '
+    + 'explicit human resume in any wording. Never require a magic or exact phrase to resume. '
+    + 'Judge/verifier transport failures are attempt-level recovery events and must not be converted into a human pause. '
+    + 'Mark complete only when the objective is actually achieved. Mark '
     + `blocked only after the same blocking condition persists for at least ${blockedAfter} `
     + 'consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, '
     + 'or useful remaining work is not blocked. The goal domain independently rejects completion unless '
@@ -243,7 +245,10 @@ function goalValue(goal: GoalView | undefined, judge?: GoalJudgeResult): GoalToo
       judge: {
         verdict: judge.verdict,
         summary: judge.summary,
-        findings: [...judge.findings],
+        findings: [
+          ...judge.findings,
+          ...(judge.verificationIncidents ?? []).map(incident => `VERIFIER_INCIDENT: ${incident}`),
+        ].slice(0, 16),
         requiredChanges: [...judge.requiredChanges],
       },
     },
@@ -445,7 +450,10 @@ export function apply(ctx: Context, config: Config): void {
           round: currentGoal.roundsStarted,
           verdict: judge.verdict,
           summary: judge.summary,
-          findings: judge.findings,
+          findings: [
+            ...judge.findings,
+            ...(judge.verificationIncidents ?? []).map(incident => `VERIFIER_INCIDENT: ${incident}`),
+          ].slice(0, 16),
           requiredChanges: judge.requiredChanges,
         })
         if (judge.verdict !== 'pass') {
@@ -455,8 +463,12 @@ export function apply(ctx: Context, config: Config): void {
               text: '<goal_judge_result>\n'
                 + `Verdict: ${judge.verdict}\n`
                 + `Summary: ${judge.summary}\n`
+                + `Findings: ${JSON.stringify(judge.findings)}\n`
                 + `Required changes: ${JSON.stringify(judge.requiredChanges)}\n`
-                + 'Keep the goal active, address these changes with a materially different or improved strategy, '
+                + `Verification incidents: ${JSON.stringify(judge.verificationIncidents ?? [])}\n`
+                + 'Keep the goal active. A judge/verifier infrastructure failure is an attempt-level failure, not a human pause: '
+                + 'retry automatically with a fresh verifier after other pending work settles. '
+                + 'Do not ask for a magic resume phrase. For needs_changes, address the concrete findings with a materially different or improved strategy '
                 + 'and request another independent review only after verifying the result.\n'
                 + '</goal_judge_result>',
             }],
