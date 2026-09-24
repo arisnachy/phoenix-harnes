@@ -602,6 +602,24 @@
         fetch: false
         searchTimeoutMs: 60000
 
+    # Original visual artwork is a first-class capability rather than a CSS/SVG
+    # fallback. Auto mode prefers configured Cloudflare Workers AI and otherwise
+    # falls back to AI Horde's anonymous community generation. Optional provider
+    # credentials resolve only through the credential seam.
+    - id: image-generation
+      name: '@phoenix-ai/dsh-image-generation'
+      config:
+        provider: auto
+        accountId: !!js process.env.CLOUDFLARE_ACCOUNT_ID ?? ''
+        apiTokenEnv: CLOUDFLARE_API_TOKEN
+        model: '@cf/black-forest-labs/flux-1-schnell'
+        aihordeApiKeyEnv: AIHORDE_API_KEY
+        steps: 6
+        requestTimeoutMs: 60000
+        hordeTimeoutMs: 120000
+        toolTimeoutMs: 135000
+        visualQualityPolicy: true
+
     # ── rows every mode mounts, whose values each overlay may state ──────────────
 
     # Secret-free lifecycle state for MCP servers. MCP client overlays publish their

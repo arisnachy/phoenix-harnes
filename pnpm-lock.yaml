@@ -1120,6 +1120,9 @@ importers:
       '@phoenix-ai/dsh-living-local':
         specifier: workspace:^
         version: link:../../core/living-local
+      '@phoenix-ai/dsh-image-generation':
+        specifier: workspace:^
+        version: link:../../llm/image-generation
       '@phoenix-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
@@ -5894,6 +5897,34 @@ importers:
       '@phoenix-ai/dsh-timeout':
         specifier: workspace:^
         version: link:../../util/timeout
+
+  packages/llm/image-generation:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-attachment':
+        specifier: workspace:^
+        version: link:../../attachment/attachment
+      '@phoenix-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../llm
+      '@phoenix-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/llm/llm-deepseek:
     dependencies:
