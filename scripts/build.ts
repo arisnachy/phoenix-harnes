@@ -1,7 +1,7 @@
 /** Run repository builds and bind client artifacts to their public environment. */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
@@ -27,18 +27,30 @@ const HOST_REMOTE_SENTINEL = resolve(
   'typert.remote-client.d.ts',
 )
 
+/** Resolve the repository-pinned pnpm package-manager specifier. */
+function projectPnpmSpecifier(root: string): string {
+  const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { packageManager?: unknown }
+  const configured = typeof manifest.packageManager === 'string' ? manifest.packageManager.trim() : ''
+  if (!/^pnpm@[^\\s]+$/u.test(configured)) {
+    throw new Error(`build: package.json must pin packageManager to pnpm@<version>; got ${JSON.stringify(manifest.packageManager)}`)
+  }
+  return configured
+}
+
 /** Resolve pnpm even when the stable updater launches this script outside a pnpm lifecycle. */
 function buildPnpmInvocation(args: readonly string[], environment: NodeJS.ProcessEnv): { command: string; args: string[] } {
   if (environment.npm_execpath !== undefined && environment.npm_execpath !== '') {
     return pnpmInvocation(args, environment)
   }
+  const root = resolve(import.meta.dirname, '..')
+  const pnpmSpecifier = projectPnpmSpecifier(root)
   if (process.platform === 'win32') {
     return {
       command: environment.ComSpec ?? process.env.ComSpec ?? 'cmd.exe',
-      args: ['/d', '/s', '/c', 'corepack.cmd', 'pnpm', ...args],
+      args: ['/d', '/s', '/c', 'corepack.cmd', pnpmSpecifier, ...args],
     }
   }
-  return { command: 'corepack', args: ['pnpm', ...args] }
+  return { command: 'corepack', args: [pnpmSpecifier, ...args] }
 }
 
 /** Keep the user's real Codex home while isolating only build-time SQLite state. */
