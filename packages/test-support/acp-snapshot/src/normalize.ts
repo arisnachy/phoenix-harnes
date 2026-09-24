@@ -12,6 +12,9 @@ const SYSTEM = '{{system}}'
 const TOOLS = '{{tools}}'
 const EVENT_TIME = '{{eventTime}}'
 const EVENT_OMITTED_BYTES = '{{eventOmittedBytes}}'
+const REALITY_TIME = '{{realityTime}}'
+const REALITY_CONTEXT_OPEN = '<phoenix_reality_context>'
+const REALITY_CONTEXT_CLOSE = '</phoenix_reality_context>'
 const PACKED_CHUNK_ROW_TYPES = new Set(['text-chunks', 'reasoning-chunks', 'tool-call-chunks'])
 
 function isPackedFixtureRow(record: Record<string, unknown>): boolean {
@@ -150,9 +153,87 @@ function replaceCwd(value: string, ctx: NormalizeContext, replacement: string): 
   return out
 }
 
+/** Normalize only the host measurements that are expected to change between equivalent runs. */
+function normalizeRealityValue(value: unknown, path: readonly string[] = []): unknown {
+  if (Array.isArray(value)) return value.map(item => normalizeRealityValue(item, path))
+  if (value === null || typeof value !== 'object') return value
+
+  const out: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if ((key === 'generatedAt' || key === 'observedAt' || key === 'expiresAt')
+      && typeof item === 'string') {
+      out[key] = REALITY_TIME
+      continue
+    }
+    if (path.length === 1 && path[0] === 'time') {
+      if ((key === 'wallClockLocal' || key === 'wallClockUtc') && typeof item === 'string') {
+        out[key] = REALITY_TIME
+        continue
+      }
+      if ((key === 'monotonicMilliseconds' || key === 'processUptimeSeconds') && typeof item === 'number') {
+        out[key] = 0
+        continue
+      }
+    }
+    if (path.length === 1 && path[0] === 'runtime' && key === 'pid' && typeof item === 'number') {
+      out[key] = 0
+      continue
+    }
+    if (path.length === 1 && path[0] === 'device' && key === 'memoryFreeBytes' && typeof item === 'number') {
+      out[key] = 0
+      continue
+    }
+    if (path.length === 2 && path[0] === 'device' && path[1] === 'disk' && key === 'freeBytes'
+      && (typeof item === 'string' || typeof item === 'number')) {
+      out[key] = typeof item === 'string' ? '0' : 0
+      continue
+    }
+    out[key] = normalizeRealityValue(item, [...path, key])
+  }
+  return out
+}
+
+/**
+ * Stabilize the JSON payload inside Phoenix's reality-context envelope without
+ * hiding changes to its schema, capabilities, status, provenance, or policies.
+ * Malformed/unexpected envelopes pass through unchanged so a real format bug
+ * remains visible to the snapshot.
+ */
+function normalizeRealityContexts(value: string): string {
+  let cursor = 0
+  let out = ''
+  while (cursor < value.length) {
+    const open = value.indexOf(REALITY_CONTEXT_OPEN, cursor)
+    if (open < 0) return out + value.slice(cursor)
+    const bodyStart = open + REALITY_CONTEXT_OPEN.length
+    const close = value.indexOf(REALITY_CONTEXT_CLOSE, bodyStart)
+    if (close < 0) return out + value.slice(cursor)
+
+    const body = value.slice(bodyStart, close)
+    const jsonStart = body.indexOf('{')
+    const jsonEnd = body.lastIndexOf('}')
+    let normalizedBody = body
+    if (jsonStart >= 0 && jsonEnd >= jsonStart) {
+      try {
+        const parsed = JSON.parse(body.slice(jsonStart, jsonEnd + 1)) as unknown
+        normalizedBody = body.slice(0, jsonStart)
+          + JSON.stringify(normalizeRealityValue(parsed))
+          + body.slice(jsonEnd + 1)
+      } catch {
+        // Preserve malformed model-facing context verbatim: snapshots should expose it.
+      }
+    }
+
+    out += value.slice(cursor, bodyStart) + normalizedBody + REALITY_CONTEXT_CLOSE
+    cursor = close + REALITY_CONTEXT_CLOSE.length
+  }
+  return out
+}
+
 /** Replace cwd, session ids, and any stray UUID with stable tokens in a string. */
 function scrubString(value: string, ctx: NormalizeContext, cwdPathMode: CwdPathMode): string {
-  let out = replaceCwd(value, ctx, CWD)
+  let out = normalizeRealityContexts(value)
+  out = replaceCwd(out, ctx, CWD)
   // Filesystem APIs can report one directory with several spellings. Replace
   // every known spelling longest-first so a shorter alias cannot corrupt a
   // longer one before it is tokenized. macOS additionally symlinks
