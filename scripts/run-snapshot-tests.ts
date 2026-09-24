@@ -77,7 +77,7 @@ function main(args: string[]): void {
   }
 
   const vitestArgs = ['exec', 'vitest', 'run', '--config', 'vitest.snapshot.config.ts']
-  if (mode === 'record') vitestArgs.push('--update')
+  if (mode === 'record' || mode === 'refresh') vitestArgs.push('--update')
   vitestArgs.push(...forwarded)
   runPnpm(vitestArgs, env)
 }
