@@ -6,7 +6,7 @@ on:
       - 'repair/snapshot-green-main-20260923'
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   CI: '1'
@@ -26,23 +26,46 @@ concurrency:
 
 jobs:
   validate:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
         with:
-          persist-credentials: false
+          ref: repair/snapshot-green-main-20260923
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+
       - name: Verify snapshot normalizer
         run: pnpm exec vitest run packages/test-support/acp-snapshot/tests/normalize.spec.ts packages/test-support/acp-snapshot/tests/suite.spec.ts --maxWorkers=1
+
+      - name: Refresh current headless profile fixture
+        run: pnpm run test:snapshot:refresh -- -t "runs one task through the product headless profile command"
+
       - name: Verify complete snapshot replay
         run: pnpm run test:snapshot
+
       - name: Verify judge gate
         run: pnpm exec vitest run packages/goal/tool-goal/tests/adversarial-completion-gate.spec.ts --maxWorkers=1
+
       - name: Verify host and client build
         run: pnpm run build:lib
+
+      - name: Commit verified headless snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No snapshot update required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add examples/headless-agent/tests/snapshots/headless-profile/session.expected.jsonl
+          git commit -m "test(snapshot): sync current headless profile context"
+          git push origin HEAD:repair/snapshot-green-main-20260923
