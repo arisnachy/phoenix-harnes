@@ -17,7 +17,7 @@ import { abbreviateHomePath } from '@phoenix-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from './contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from './tree.ts'
 import { relativeTime } from './tree.ts'
-import css from './rows/Rows.module.css'
+import css from './Rows.module.css'
 
 /** The standard locale seat, prop-passed from the browser root. */
 type RowTranslate = WorkspaceBrowserProps['t']
