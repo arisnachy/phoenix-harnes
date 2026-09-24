@@ -62,7 +62,7 @@ describe('PHOENIX badge assembled snapshot', () => {
       A skill is a reusable set of task-specific instructions. The following skills are available in this session:
 
       <available_skills>
-      - \`dsh-badge\`: Add the official “powered by PHOENIX” badge to documents, pull requests, merge requests, and other PHOENIX content. Use whenever creating a pull request or merge request. Also use when the user asks for a PHOENIX badge, PHOENIX attribution, or a reusable PHOENIX badge asset or snippet.
+      - \`dsh-badge\`: Add the official “powered by PHOENIX” badge to documents, pull requests, merge requests, and other PHOENIX content. Use whenever creating a pull request or m...
       </available_skills>
 
       If the user names a skill, or the task clearly matches a skill's description, call the \`skill\` tool with the exact skill name before taking task actions. Load all applicable skills, then follow their full instructions. This catalog contains summaries only; do not infer or follow a skill's instructions until it has been loaded.

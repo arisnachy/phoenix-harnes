@@ -8,6 +8,14 @@ export type SnapshotMode = 'replay' | 'record' | 'refresh'
 
 const root = resolve(import.meta.dirname, '..')
 const builtAgent = resolve(root, 'packages/examples/acp-demo/lib/bin.js')
+const requiredRuntimeArtifacts = [
+  resolve(root, 'vendor/cordis/lib/index.js'),
+  resolve(root, 'packages/voice/voice/lib/typert.host.js'),
+  resolve(root, 'packages/interaction/commands/lib/typert.host.js'),
+  resolve(root, 'packages/goal/goal/lib/typert.host.js'),
+  resolve(root, 'packages/typert/registry/lib/index.js'),
+  resolve(root, 'packages/api/gateway/lib/index.js'),
+] as const
 
 /** Resolve the snapshot mode from the public package command. */
 export function snapshotMode(raw: string | undefined): SnapshotMode {
@@ -58,13 +66,18 @@ function main(args: string[]): void {
     ...(automaticWindowsLib ? { DSH_SNAPSHOT_SKIP_WEB: '1' } : {}),
   }
 
+  if (requiredRuntimeArtifacts.some(artifact => !existsSync(artifact))) {
+    console.log('snapshot runner: runtime artifacts are missing; building Host + Client library contracts before replay.')
+    runPnpm(['run', 'build:lib'], env)
+  }
+
   if (useBuilt && !existsSync(builtAgent)) {
     console.log('snapshot runner: compiled examples are missing; building once before replay.')
     runPnpm(['run', 'build'], env)
   }
 
   const vitestArgs = ['exec', 'vitest', 'run', '--config', 'vitest.snapshot.config.ts']
-  if (mode === 'record') vitestArgs.push('--update')
+  if (mode === 'record' || mode === 'refresh') vitestArgs.push('--update')
   vitestArgs.push(...forwarded)
   runPnpm(vitestArgs, env)
 }

@@ -158,7 +158,12 @@ describe('same-session goal snapshot through the ACP automation driver', () => {
     const session = normalizeGoalLog(log.content, context)
     const wrapupStdoutExpected = join(wrapupDir, 'stdout.expected.jsonl')
     const wrapupSessionExpected = join(wrapupDir, 'session.expected.jsonl')
-    if (refreshing) await writeFile(wrapupStdoutExpected, stdout)
+    if (refreshing) {
+      await Promise.all([
+        writeFile(wrapupStdoutExpected, stdout),
+        writeFile(wrapupSessionExpected, session),
+      ])
+    }
     expect(stdout).toBe(await readFile(wrapupStdoutExpected, 'utf8'))
     const expectedSession = await readFile(wrapupSessionExpected, 'utf8')
     const continuationMarkers = [

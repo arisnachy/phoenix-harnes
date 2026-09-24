@@ -48,6 +48,133 @@ describe('normalizeStdout', () => {
     expect(out).not.toContain(ctx.sessionIds[0] as string)
   })
 
+  it('stabilizes only volatile measurements inside Phoenix reality context', () => {
+    const reality = (input: {
+      generatedAt: string
+      wallClockLocal: string
+      wallClockUtc: string
+      observedAt: string
+      expiresAt: string
+      monotonicMilliseconds: number
+      processUptimeSeconds: number
+      memoryFreeBytes: number
+      diskFreeBytes: string
+      pid: number
+    }): string => [
+      '<phoenix_reality_context>',
+      'Fresh machine snapshot.',
+      JSON.stringify({
+        schema: 1,
+        generatedAt: input.generatedAt,
+        time: {
+          wallClockLocal: input.wallClockLocal,
+          wallClockUtc: input.wallClockUtc,
+          timezone: 'UTC',
+          monotonicMilliseconds: input.monotonicMilliseconds,
+          processUptimeSeconds: input.processUptimeSeconds,
+          ntpSynchronized: {
+            value: null,
+            source: 'not-probed',
+            observedAt: input.observedAt,
+            expiresAt: input.expiresAt,
+            stale: true,
+          },
+        },
+        device: {
+          memoryFreeBytes: input.memoryFreeBytes,
+          memoryTotalBytes: 16_000,
+          disk: {
+            freeBytes: input.diskFreeBytes,
+            totalBytes: '32_000',
+            source: 'node:fs.statfs',
+          },
+        },
+        runtime: { pid: input.pid, cwd: ctx.cwd, ci: true },
+        capabilities: { activeServices: ['tools', 'llm'] },
+      }),
+      '</phoenix_reality_context>',
+    ].join('\n')
+
+    const normalize = (content: string): string => normalizeStdout(JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'session/update',
+      params: { content },
+    }), ctx)
+
+    const first = normalize(reality({
+      generatedAt: '2026-09-24T01:08:01.034Z',
+      wallClockLocal: '2026-09-24T01:08:01.034+00:00',
+      wallClockUtc: '2026-09-24T01:08:01.034Z',
+      observedAt: '2026-09-24T01:08:00.991Z',
+      expiresAt: '2026-09-24T01:08:00.992Z',
+      monotonicMilliseconds: 6_440,
+      processUptimeSeconds: 149,
+      memoryFreeBytes: 14_747_377_664,
+      diskFreeBytes: '90185719808',
+      pid: 2_450,
+    }))
+    const second = normalize(reality({
+      generatedAt: '2026-09-24T01:13:30.040Z',
+      wallClockLocal: '2026-09-24T01:13:30.040+00:00',
+      wallClockUtc: '2026-09-24T01:13:30.040Z',
+      observedAt: '2026-09-24T01:13:29.913Z',
+      expiresAt: '2026-09-24T01:13:29.914Z',
+      monotonicMilliseconds: 15_517,
+      processUptimeSeconds: 478,
+      memoryFreeBytes: 14_007_861_248,
+      diskFreeBytes: '90182856704',
+      pid: 4_527,
+    }))
+
+    expect(second).toBe(first)
+    const frame = JSON.parse(first) as { params: { content: string } }
+    const body = frame.params.content
+    const jsonStart = body.indexOf('{')
+    const jsonEnd = body.lastIndexOf('}')
+    const snapshot = JSON.parse(body.slice(jsonStart, jsonEnd + 1)) as {
+      generatedAt: string
+      time: {
+        wallClockLocal: string
+        wallClockUtc: string
+        monotonicMilliseconds: number
+        processUptimeSeconds: number
+        ntpSynchronized: { observedAt: string; expiresAt: string; source: string }
+      }
+      device: {
+        memoryFreeBytes: number
+        memoryTotalBytes: number
+        disk: { freeBytes: string; totalBytes: string; source: string }
+      }
+      runtime: { pid: number; cwd: string; ci: boolean }
+      capabilities: { activeServices: string[] }
+    }
+    expect(snapshot).toMatchObject({
+      generatedAt: '{{realityTime}}',
+      time: {
+        wallClockLocal: '{{realityTime}}',
+        wallClockUtc: '{{realityTime}}',
+        monotonicMilliseconds: 0,
+        processUptimeSeconds: 0,
+        ntpSynchronized: {
+          observedAt: '{{realityTime}}',
+          expiresAt: '{{realityTime}}',
+          source: 'not-probed',
+        },
+      },
+      device: {
+        memoryFreeBytes: 0,
+        memoryTotalBytes: 16_000,
+        disk: {
+          freeBytes: '0',
+          totalBytes: '32_000',
+          source: 'node:fs.statfs',
+        },
+      },
+      runtime: { pid: 0, cwd: '{{cwd}}', ci: true },
+      capabilities: { activeServices: ['tools', 'llm'] },
+    })
+  })
+
   it('scrubs cwd at file URI and chained-punctuation boundaries', () => {
     const raw = JSON.stringify({
       jsonrpc: '2.0',
