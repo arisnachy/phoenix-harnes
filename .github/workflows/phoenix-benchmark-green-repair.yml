@@ -1,4 +1,4 @@
-name: PHOENIX benchmark green repair
+name: PHOENIX deep zero-cost benchmark
 
 on:
   push:
@@ -23,11 +23,12 @@ env:
   GROQ_API_KEY: ''
   OPENROUTER_API_KEY: ''
   XAI_API_KEY: ''
+  PHOENIX_BENCH_DEEP: '1'
 
 jobs:
-  replay-diagnosis:
+  deep-benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
         with:
@@ -38,7 +39,20 @@ jobs:
           node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Judge gate
-        run: pnpm exec vitest run packages/goal/tool-goal/tests/adversarial-completion-gate.spec.ts --maxWorkers=1
-      - name: Snapshot replay after runtime preparation fix
-        run: pnpm run test:snapshot
+      - name: Run deep zero-cost benchmark
+        run: node scripts/phoenix-zero-cost-benchmark.mjs
+      - name: Publish summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/phoenix-zero-cost-benchmark/benchmark-report.md ]]; then
+            cat artifacts/phoenix-zero-cost-benchmark/benchmark-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-zero-cost-benchmark-${{ github.run_id }}
+          path: artifacts/phoenix-zero-cost-benchmark/
+          if-no-files-found: warn
+          retention-days: 30
