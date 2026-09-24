@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import { Button } from '@phoenix-ai/dsh-client-ui-primitives'
-import type { UniversalArtifactEnvelope } from '../conversation-nodes/hardness-artifact.ts'
+import type { UniversalArtifactEnvelope } from '../artifact.ts'
 import { HardnessArtifactBody } from './HardnessArtifactBody.tsx'
 import type { RenderMessageImages } from '../contract/slots.ts'
 import css from './UniversalArtifactSurface.module.css'
