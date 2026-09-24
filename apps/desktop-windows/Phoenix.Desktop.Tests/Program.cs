@@ -400,6 +400,12 @@ using (var control = new DesktopBrowserControlServer(
     Equal("phoenix.browser.open", receivedControlCommand?.Type, "desktop control dispatches browser command", failures);
     Equal("https://example.com", receivedControlCommand?.Url, "desktop control preserves browser URL", failures);
 
+    await writer.WriteLineAsync("{\"type\":\"phoenix.browser.inspect\"}");
+    Equal("{\"ok\":true}", await reader.ReadLineAsync(), "desktop control accepts schema-1 inspection during rolling upgrade", failures);
+    for (var attempt = 0; attempt < 30 && receivedControlCommand?.Type != "phoenix.browser.inspect"; attempt++)
+        await Task.Delay(10);
+    Equal("phoenix.browser.inspect", receivedControlCommand?.Type, "schema-1 inspection reaches the authenticated runtime pipe", failures);
+
     await writer.WriteLineAsync("{\"schema\":2,\"requestId\":\"resident-1\",\"type\":\"browser_inspect\"}");
     var residentReply = await reader.ReadLineAsync();
     True(residentReply?.Contains("\"schema\":2", StringComparison.Ordinal) == true,
