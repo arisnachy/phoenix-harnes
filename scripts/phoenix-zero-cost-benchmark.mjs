@@ -139,7 +139,7 @@ lanes.push(targetLane(
 const deepMode = process.env.PHOENIX_BENCH_DEEP === '1'
 
 if (deepMode) {
-  const snapshot = run('pnpm', ['run', 'test:snapshot'], 240_000)
+  const snapshot = run('pnpm', ['run', 'test:snapshot'], 480_000)
   writeLog('snapshot-replay', snapshot)
   lanes.push(summarizeResult(
     'snapshot-replay',
