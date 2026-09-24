@@ -470,9 +470,10 @@ async function runStructured(
   const timeout = AbortSignal.timeout(timeoutMs)
   const signal = AbortSignal.any([request.signal, timeout])
   let run
+  let startPromise: ReturnType<CompletionRuntime['start']> | undefined
   let outcome: StructuredRunOutcome = {}
-  const startPromise = runtime.start(provider, { ...request, signal })
   try {
+    startPromise = runtime.start(provider, { ...request, signal })
     run = await awaitAbortable(startPromise, signal)
     const result = await awaitAbortable(run.result, signal)
     outcome = result.stopReason === 'completed'
@@ -480,7 +481,7 @@ async function runStructured(
       : { incident: `${label}:stop-${result.stopReason}` }
   } catch (error) {
     const phase = run === undefined ? 'start' : 'result'
-    if (run === undefined && signal.aborted) {
+    if (run === undefined && signal.aborted && startPromise !== undefined) {
       void startPromise.then(
         lateRun => lateRun.dispose().catch(() => undefined),
         () => undefined,
@@ -532,11 +533,21 @@ export async function runAdversarialCompletionGate(input: {
       : 'No independent tester provider is available for the active non-Codex model; Luna fallback is forbidden.')
   }
   const contract = buildVerificationContract(input.objective)
-  const agentOptions = await resolveGoalJudgeAgentOptions({
-    parent: input.parent,
-    ...input.llm === undefined ? {} : { llm: input.llm },
-    signal: input.signal,
-  })
+  const routeTimeout = AbortSignal.timeout(60_000)
+  const routeSignal = AbortSignal.any([input.signal, routeTimeout])
+  let agentOptions
+  try {
+    agentOptions = await awaitAbortable(resolveGoalJudgeAgentOptions({
+      parent: input.parent,
+      ...input.llm === undefined ? {} : { llm: input.llm },
+      signal: routeSignal,
+    }), routeSignal)
+  } catch (error) {
+    const kind = routeTimeout.aborted && !input.signal.aborted
+      ? 'timeout'
+      : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+    return unavailable(`Independent verifier route resolution failed. Incident: goal-verifier-route:${kind}.`)
+  }
   const designPrompt: ContentBlock[] = [{
     type: 'text',
     text: '<adversarial_test_design>\n'
