@@ -233,6 +233,97 @@ describe('goal completion judge', () => {
     expect(start).toHaveBeenCalledWith('luna', expect.anything())
   })
 
+  it('distinguishes a judge that never started from one that stopped after launch', async () => {
+    const startFailure = vi.fn(async (_name: string, request: Record<string, unknown>) => {
+      const structured = structuredGateResponse(request.label)
+      if (structured !== undefined) {
+        return {
+          result: Promise.resolve({ output: [], stopReason: 'completed' as const, structured }),
+          dispose: async () => {},
+        }
+      }
+      const error = new Error('judge transport unavailable')
+      error.name = 'TransportError'
+      throw error
+    })
+    const neverStarted = await judgeGoalCompletion({
+      subagents: { getProvider: () => provider() as never, start: startFailure as never },
+      provider: 'spawn',
+      parent: {
+        id: SessionId('judge-never-started'),
+        session: Session.create(SessionId('judge-never-started-session')),
+        options: {},
+      } as never,
+      objective: 'Finish the feature',
+      round: 1,
+      signal: new AbortController().signal,
+    })
+    expect(neverStarted.verdict).toBe('blocked')
+    expect(neverStarted.verificationIncidents).toContain('goal-completion-judge:start-TransportError')
+
+    const stopped = await judgeGoalCompletion({
+      subagents: {
+        getProvider: () => provider() as never,
+        start: vi.fn(async (_name: string, request: Record<string, unknown>) => ({
+          result: Promise.resolve(request.label === 'goal-completion-judge'
+            ? { output: [], stopReason: 'aborted' as const }
+            : { output: [], stopReason: 'completed' as const, structured: structuredGateResponse(request.label) }),
+          dispose: async () => {},
+        })) as never,
+      },
+      provider: 'spawn',
+      parent: {
+        id: SessionId('judge-stopped-after-start'),
+        session: Session.create(SessionId('judge-stopped-after-start-session')),
+        options: {},
+      } as never,
+      objective: 'Finish the feature',
+      round: 1,
+      signal: new AbortController().signal,
+    })
+    expect(stopped.verdict).toBe('blocked')
+    expect(stopped.verificationIncidents).toContain('goal-completion-judge:stop-aborted')
+  })
+
+  it('records cleanup failure without throwing away a completed judge verdict', async () => {
+    const result = await judgeGoalCompletion({
+      subagents: {
+        getProvider: () => provider() as never,
+        start: vi.fn(async (_name: string, request: Record<string, unknown>) => ({
+          result: Promise.resolve({
+            output: [],
+            stopReason: 'completed' as const,
+            structured: structuredGateResponse(request.label) ?? {
+              verdict: 'pass',
+              summary: 'Verified before cleanup.',
+              findings: [],
+              required_changes: [],
+            },
+          }),
+          dispose: async () => {
+            if (request.label === 'goal-completion-judge') {
+              const error = new Error('cleanup transport closed')
+              error.name = 'TransportError'
+              throw error
+            }
+          },
+        })) as never,
+      },
+      provider: 'spawn',
+      parent: {
+        id: SessionId('judge-cleanup-failure'),
+        session: Session.create(SessionId('judge-cleanup-failure-session')),
+        options: {},
+      } as never,
+      objective: 'Finish the feature',
+      round: 1,
+      signal: new AbortController().signal,
+    })
+
+    expect(result.verdict).toBe('pass')
+    expect(result.verificationIncidents).toContain('goal-completion-judge:dispose-TransportError')
+  })
+
   it('keeps verification pending without exposing provider details when no judge service is mounted', async () => {
     const result = await judgeGoalCompletion({
       subagents: undefined,
