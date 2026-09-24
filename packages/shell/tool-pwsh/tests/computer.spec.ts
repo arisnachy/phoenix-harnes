@@ -4,6 +4,7 @@ import {
   computerActionNeedsApproval,
   computerModeForSandbox,
   desktopComputerRequestForAction,
+  legacyBrowserCommandForAction,
   parseDesktopBrowserControlDescriptor,
   runWindowsComputerAction,
   shouldCaptureAfterAction,
@@ -160,10 +161,12 @@ describe('Computer Use argument contract', () => {
       })
   })
 
-  it('validates the current-user desktop control descriptor before connecting', () => {
+  it('accepts adjacent desktop-control schemas during rolling upgrades', () => {
     expect(parseDesktopBrowserControlDescriptor('{"schema":2,"pipeName":"PhoenixDesktop.Browser.abc-123"}'))
       .toEqual({ schema: 2, pipeName: 'PhoenixDesktop.Browser.abc-123' })
-    expect(() => parseDesktopBrowserControlDescriptor('{"schema":1,"pipeName":"PhoenixDesktop.Browser.abc"}'))
+    expect(parseDesktopBrowserControlDescriptor('{"schema":1,"pipeName":"PhoenixDesktop.Browser.abc"}'))
+      .toEqual({ schema: 1, pipeName: 'PhoenixDesktop.Browser.abc' })
+    expect(() => parseDesktopBrowserControlDescriptor('{"schema":3,"pipeName":"PhoenixDesktop.Browser.abc"}'))
       .toThrow(/schema/i)
     expect(() => parseDesktopBrowserControlDescriptor('{"schema":2,"pipeName":"..\\\\evil"}'))
       .toThrow(/pipe/i)
@@ -175,12 +178,17 @@ describe('Computer Use argument contract', () => {
     expect(source).not.toContain('await delay(')
   })
 
-  it('keeps credentials out of Computer arguments and legacy browser transport', async () => {
+  it('keeps credentials out of Computer arguments and schema-1 compatibility transport', async () => {
     const source = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../src/computer.ts', import.meta.url), 'utf8'))
-    expect(source).not.toContain('requestLegacy')
     expect(source).not.toContain('account?: string')
     expect(source).not.toContain('secret?: string')
     expect(source).toContain('never returns credential values')
+    expect(legacyBrowserCommandForAction({ action: 'browser_inspect' }))
+      .toEqual({ type: 'phoenix.browser.inspect' })
+    expect(() => legacyBrowserCommandForAction({ action: 'browser_login', origin: 'https://example.com' }))
+      .toThrow(/schema 2/i)
+    expect(() => legacyBrowserCommandForAction({ action: 'browser_forget_credentials', origin: 'https://example.com' }))
+      .toThrow(/schema 2/i)
     const login = desktopComputerRequestForAction({ action: 'browser_login', origin: 'https://example.com' })
     expect(JSON.stringify(login)).not.toMatch(/account|secret|password|synthetic/i)
   })
