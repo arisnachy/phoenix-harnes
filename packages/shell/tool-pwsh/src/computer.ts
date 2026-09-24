@@ -303,18 +303,71 @@ function requestNamedPipeLine(pipePath: string, line: string, signal?: AbortSign
   })
 }
 
-function residentBrowserRequestForAction(args: ComputerToolArgs, requestId = randomUUID()): Record<string, unknown> {
+export function residentComputerRequestForAction(args: ComputerToolArgs, requestId = randomUUID()): Record<string, unknown> {
   validateComputerArgs(args)
   return {
     schema: RESIDENT_DESKTOP_CONTROL_SCHEMA,
     requestId,
     type: args.action,
+    ...(args.target === undefined ? {} : { target: args.target }),
     ...(args.url === undefined ? {} : { url: args.url }),
     ...(args.origin === undefined ? {} : { origin: normalizeCredentialOrigin(args.origin) }),
     ...(args.fields === undefined ? {} : { fields: args.fields }),
     ...(args.text === undefined ? {} : { text: args.text }),
+    ...(args.keys === undefined ? {} : { keys: args.keys }),
+    ...(args.button === undefined ? {} : { button: args.button }),
+    ...(args.x === undefined ? {} : { x: args.x }),
+    ...(args.y === undefined ? {} : { y: args.y }),
+    ...(args.x2 === undefined ? {} : { x2: args.x2 }),
+    ...(args.y2 === undefined ? {} : { y2: args.y2 }),
+    ...(args.delta === undefined ? {} : { delta: args.delta }),
     ...(args.submit === undefined ? {} : { submit: args.submit }),
   }
+}
+
+async function readDesktopControlDescriptorIfAvailable(): Promise<DesktopBrowserControlDescriptor | undefined> {
+  try {
+    return parseDesktopBrowserControlDescriptor(await readFile(desktopControlDescriptorPath(), 'utf8'))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+async function runResidentComputerAction(
+  args: ComputerToolArgs,
+  descriptor: DesktopBrowserControlDescriptor,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (descriptor.schema !== RESIDENT_DESKTOP_CONTROL_SCHEMA) {
+    throw new Error('Phoenix Desktop resident Computer requires schema 2')
+  }
+  const request = residentComputerRequestForAction(args)
+  const requestId = request.requestId as string
+  const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
+  const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(request), signal)
+  let reply: unknown
+  try {
+    reply = JSON.parse(rawReply)
+  } catch {
+    throw new Error('Phoenix Desktop resident Computer returned invalid JSON')
+  }
+  if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
+    throw new Error('Phoenix Desktop resident Computer returned an invalid reply')
+  }
+  const response = reply as Record<string, unknown>
+  if (response.schema !== RESIDENT_DESKTOP_CONTROL_SCHEMA || response.requestId !== requestId) {
+    throw new Error('Phoenix Desktop resident Computer returned an incompatible or uncorrelated reply')
+  }
+  if (response.ok !== true) {
+    throw new Error(`Phoenix Desktop resident Computer rejected the command: ${String(response.error ?? 'unknown error')}`)
+  }
+  if (args.action === 'screenshot') {
+    return typeof response.screenshotBase64 === 'string' ? response.screenshotBase64 : ''
+  }
+  return typeof response.details === 'string'
+    ? response.details
+    : `resident desktop command accepted: ${args.action}`
 }
 
 async function runEmbeddedBrowserAction(
@@ -327,28 +380,7 @@ async function runEmbeddedBrowserAction(
   const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
 
   if (descriptor.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
-    const request = residentBrowserRequestForAction(args)
-    const requestId = request.requestId as string
-    const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(request), signal)
-    let reply: unknown
-    try {
-      reply = JSON.parse(rawReply)
-    } catch {
-      throw new Error('Phoenix Desktop resident browser control returned invalid JSON')
-    }
-    if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
-      throw new Error('Phoenix Desktop resident browser control returned an invalid reply')
-    }
-    const response = reply as Record<string, unknown>
-    if (response.schema !== RESIDENT_DESKTOP_CONTROL_SCHEMA || response.requestId !== requestId) {
-      throw new Error('Phoenix Desktop resident browser control returned an incompatible or uncorrelated reply')
-    }
-    if (response.ok !== true) {
-      throw new Error(`Phoenix Desktop resident browser control rejected the command: ${String(response.error ?? 'unknown error')}`)
-    }
-    return typeof response.details === 'string'
-      ? response.details
-      : `resident embedded browser command accepted: ${args.action}`
+    return await runResidentComputerAction(args, descriptor, signal)
   }
 
   const baseCommand = browserCommandForAction(args)
@@ -1093,9 +1125,26 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
   if (args.action === 'browser_login') {
     throw new Error('browser_login requires the origin-bound credential broker')
   }
+
+  const descriptor = await readDesktopControlDescriptorIfAvailable()
+  if (descriptor?.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
+    try {
+      const resident = await runResidentComputerAction(args, descriptor, signal)
+      if (args.action !== 'screenshot' || resident.length > 0) return resident
+    } catch (error) {
+      // Observation calls are safe to retry through the fixed PowerShell driver.
+      // Never replay mutations: a lost reply does not prove the input was not sent.
+      if (args.action !== 'screenshot' && args.action !== 'windows') throw error
+    }
+  }
+
   if (isEmbeddedBrowserAction(args.action)) {
+    if (descriptor === undefined) {
+      throw new Error('Phoenix Desktop browser control is unavailable; start/restart Phoenix Desktop and retry.')
+    }
     return await runEmbeddedBrowserAction(args, signal)
   }
+
   const invocation = windowsComputerInvocation(args)
   return await executeComputerInvocation(invocation, signal)
 }
@@ -1231,6 +1280,10 @@ async function attachDesktopScreenshot(
   if (base64Png.length === 0) throw new Error('Computer screenshot driver returned no image bytes')
   const bytes = Buffer.from(base64Png, 'base64')
   if (bytes.length === 0) throw new Error('Computer screenshot decoded to an empty image')
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+  if (bytes.length < pngSignature.length || !bytes.subarray(0, pngSignature.length).equals(pngSignature)) {
+    throw new Error('Computer screenshot driver returned invalid PNG bytes')
+  }
   const attachments = attachmentWriter(ctx)
   if (attachments === undefined) throw new Error('Computer screenshot requires the attachment service')
   const attachment = await attachments.saveImage({
