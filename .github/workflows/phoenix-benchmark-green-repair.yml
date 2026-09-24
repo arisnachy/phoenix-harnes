@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: phoenix-benchmark-green-${{ github.ref }}
+  group: phoenix-benchmark-green-${{ github.ref }}-${{ github.actor }}
   cancel-in-progress: true
 
 env:
@@ -44,6 +44,15 @@ jobs:
       - name: Refresh reviewed snapshot baseline
         run: pnpm run test:snapshot:refresh
 
+      - name: Verify complete replay
+        run: pnpm run test:snapshot
+
+      - name: Verify judge gate
+        run: pnpm exec vitest run packages/goal/tool-goal/tests/adversarial-completion-gate.spec.ts --maxWorkers=1
+
+      - name: Verify host and client build
+        run: pnpm run build:lib
+
       - name: Commit refreshed snapshot contracts
         shell: bash
         run: |
@@ -58,11 +67,3 @@ jobs:
             git push origin HEAD:repair/benchmark-green-20260923
           fi
 
-      - name: Verify complete replay
-        run: pnpm run test:snapshot
-
-      - name: Verify judge gate
-        run: pnpm exec vitest run packages/goal/tool-goal/tests/adversarial-completion-gate.spec.ts --maxWorkers=1
-
-      - name: Verify host and client build
-        run: pnpm run build:lib
