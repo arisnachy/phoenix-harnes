@@ -327,6 +327,11 @@
     - id: tool-pwsh
       name: '@phoenix-ai/dsh-tool-pwsh'
       disabled: !!js process.platform !== 'win32'
+      config:
+        # Phoenix Desktop Computer is still experimental. Keep the stable
+        # browser route primary and expose native desktop control only when
+        # explicitly opted in for testing.
+        enableComputerUse: !!js "['1', 'true', 'on'].includes((process.env.PHOENIX_DESKTOP_COMPUTER ?? '').trim().toLowerCase())"
 
     - id: tool-jobs
       name: '@phoenix-ai/dsh-tool-jobs'
@@ -603,6 +608,39 @@
     # current connection and public-tool generation through this shared registry.
     - id: mcp-connector-registry
       name: '@phoenix-ai/dsh-mcp-connector-registry'
+
+    # Stable browser automation path. This connector is isolated from Phoenix
+    # Desktop and can start its own temporary Chrome/Edge profile over loopback
+    # CDP. Failure is non-fatal: the Host keeps running and the connector
+    # retries independently. Mutating browser actions are automatic in Full
+    # access, or can be enabled explicitly with PHOENIX_BROWSER_ALLOW_ACTIONS.
+    - id: phoenix-browser
+      name: '@phoenix-ai/dsh-mcp-client'
+      disabled: !!js "['0', 'false', 'off'].includes((process.env.PHOENIX_BROWSER_CONNECTOR ?? '').trim().toLowerCase())"
+      config:
+        serverName: phoenix_browser
+        transport: stdio
+        command: node
+        args:
+          - --import
+          - tsx/esm
+          - packages/mcp/chrome-connector/src/server.ts
+        cwd: !!js process.cwd()
+        env:
+          PHOENIX_BROWSER_CDP_URL: !!js process.env.PHOENIX_BROWSER_CDP_URL ?? ''
+          PHOENIX_BROWSER_EXECUTABLE: !!js process.env.PHOENIX_BROWSER_EXECUTABLE ?? ''
+          PHOENIX_BROWSER_PREFERRED_ENGINE: !!js process.env.PHOENIX_BROWSER_PREFERRED_ENGINE ?? 'chrome'
+          PHOENIX_BROWSER_HEADLESS: !!js process.env.PHOENIX_BROWSER_HEADLESS ?? 'false'
+          PHOENIX_BROWSER_AUTOSTART: !!js process.env.PHOENIX_BROWSER_AUTOSTART ?? 'true'
+          PHOENIX_BROWSER_ALLOW_ACTIONS: !!js "process.env.PHOENIX_BROWSER_ALLOW_ACTIONS ?? ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'true' : 'false')"
+        failOnStartupError: false
+        startupTimeoutMs: 1500
+        toolCallTimeoutMs: 60000
+        reconnect:
+          enabled: true
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+          maxAttempts: 20
 
     # The tool registry. Presentation mode is a deployment choice; omitting it here
     # keeps the schema default (native).
