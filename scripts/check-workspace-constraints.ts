@@ -155,9 +155,13 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@phoenix-ai/dsh-client-ui-theme': ['lib/styles'],
   // The CPython side ships as source .py files, published as-is rather than built.
   '@phoenix-ai/dsh-code-runtime-python': ['py/**/*.py'],
+  // These packages expose or execute artifacts outside the generic index/invariant shape.
+  '@phoenix-ai/dsh-acp-demo': ['bin/dsh-acp-demo.js'],
+  '@phoenix-ai/dsh-session-learning': ['lib/ledger.js'],
+  '@phoenix-ai/dsh-voice-local': ['runtime/**'],
   // The Python runtime uses a distinct closed-resolution bin; the public CLI
   // keeps config-owned bare-package resolution through lib/bin.js.
-  '@phoenix-ai/dsh-sdk-jsonrpc-demo': ['lib/packaged-bin.js'],
+  '@phoenix-ai/dsh-sdk-jsonrpc-demo': ['lib/packaged-bin.js', 'bin/dsh-jsonrpc-agent.js'],
   // The argv-prefix runner entry ships beside the lib as its own bundle;
   // sandbox-local resolves it through the package's ./runner export. tsdown
   // also shares its generated FFI code through a hashed runtime chunk.
