@@ -303,6 +303,12 @@ function requestNamedPipeLine(pipePath: string, line: string, signal?: AbortSign
   })
 }
 
+/**
+ * Build a schema-2 request for the resident Phoenix Desktop Computer driver.
+ * @param args - Validated model-facing Computer action.
+ * @param requestId - Correlation identifier returned unchanged by the native host.
+ * @returns Credential-free request envelope for the authenticated native control pipe.
+ */
 export function residentComputerRequestForAction(args: ComputerToolArgs, requestId = randomUUID()): Record<string, unknown> {
   validateComputerArgs(args)
   return {
