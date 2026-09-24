@@ -110,6 +110,32 @@ async function runWithStructured(objective: string, executeStructured: Record<st
 }
 
 describe('adversarial completion tester', () => {
+  it('reports verifier launch failures instead of collapsing them into a generic block', async () => {
+    const start = vi.fn(async () => {
+      const error = new Error('transport did not launch')
+      error.name = 'TransportError'
+      throw error
+    })
+    const result = await runAdversarialCompletionGate({
+      subagents: {
+        getProvider: () => provider() as never,
+        list: () => ['spawn'],
+        start: start as never,
+      },
+      provider: 'spawn',
+      parent: {
+        id: SessionId('tester-launch-failure'),
+        options: { provider: 'anthropic', model: 'claude-opus' },
+      } as never,
+      objective: 'Ship a verified artifact.',
+      round: 1,
+      signal: new AbortController().signal,
+    })
+
+    expect(result.checks.requirements).toBe('blocked')
+    expect(result.verificationIncidents?.join(' ')).toMatch(/goal-adversarial-test-design:start-TransportError/)
+  })
+
   it('locks literal requirements before workspace inspection and verifies edge obligations', async () => {
     const objective = 'Ship a regex CLI using argparse. It must report the exact error position.'
     const { result, starts } = await runWithStructured(objective, structuredPass(objective))
