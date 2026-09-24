@@ -631,7 +631,7 @@
           PHOENIX_BROWSER_PREFERRED_ENGINE: !!js process.env.PHOENIX_BROWSER_PREFERRED_ENGINE ?? 'chrome'
           PHOENIX_BROWSER_HEADLESS: !!js process.env.PHOENIX_BROWSER_HEADLESS ?? 'false'
           PHOENIX_BROWSER_AUTOSTART: !!js process.env.PHOENIX_BROWSER_AUTOSTART ?? 'true'
-          PHOENIX_BROWSER_ALLOW_ACTIONS: !!js process.env.PHOENIX_BROWSER_ALLOW_ACTIONS ?? ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'true' : 'false')
+          PHOENIX_BROWSER_ALLOW_ACTIONS: !!js "process.env.PHOENIX_BROWSER_ALLOW_ACTIONS ?? ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'true' : 'false')"
         failOnStartupError: false
         startupTimeoutMs: 1500
         toolCallTimeoutMs: 60000
