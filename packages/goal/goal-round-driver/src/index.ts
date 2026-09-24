@@ -10,7 +10,7 @@ import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
 import type { GoalJudgeAuditEntry, GoalMessageSource, GoalRef, GoalView } from '@phoenix-ai/dsh-goal'
 import { createUserMessage, isHarnessError, QUOTA_EXCEEDED_CODE } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
-import type { Session, SessionEvent, UserMessage } from '@phoenix-ai/dsh-session'
+import type { Session, SessionEvent, TurnEndCancelCause, UserMessage } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
 import { measureGoalVerificationProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
@@ -37,6 +37,7 @@ interface RoundAttempt extends RoundIdentity {
   readonly content: ContentBlock[]
   phase: 'queued' | 'claimed' | 'admitted'
   cancelled: boolean
+  cancelReason?: TurnEndCancelCause
   stale: boolean
 }
 
@@ -82,6 +83,21 @@ function renderThrown(value: unknown): string {
 /** Provider quota cannot be repaired by another automatic goal round. */
 export function isTerminalGoalQuota(error: unknown): boolean {
   return isHarnessError(error) && error.code === QUOTA_EXCEEDED_CODE
+}
+
+/**
+ * Decide whether a cancelled goal attempt is an intentional human pause.
+ * Interactive steering also aborts the current turn with a user cause, but it
+ * first queues replacement input; that must not strand the durable mission.
+ * @param reason - durable reason recorded on the aborted goal turn.
+ * @param hasPendingInput - whether replacement user/steering work is queued.
+ * @returns true only for an explicit user stop with no replacement work.
+ */
+export function shouldPauseGoalAfterCancellation(
+  reason: TurnEndCancelCause | undefined,
+  hasPendingInput: boolean,
+): boolean {
+  return reason?.kind === 'user' && !hasPendingInput
 }
 
 /** Install automatic same-session continuation and its race fences. */
@@ -375,21 +391,35 @@ export function apply(ctx: Context): void {
     ctx.on('agent/status', ({ agent, status }) => {
       const state = stateFor(agent)
       if (status === 'idle') {
-        state.competingQueued = false
+        const hasPendingInput = agent.inbox.hasPending
+        state.competingQueued = hasPendingInput
         const attempt = state.attempt
         const goal = currentGoal(state)
         if ((attempt?.phase === 'queued' || attempt?.phase === 'claimed' || attempt?.cancelled)
           && goal?.phase === 'active' && goal.activation === 'armed') {
           state.attempt = undefined
-          // An explicit cancellation is a user lifecycle decision, not a
-          // failed mission. Preserve the durable goal and disarm only the
-          // process-local driver until the user resumes it. Provider errors
-          // and token limits use their dedicated automatic recovery paths.
-          try {
-            ctx.goals.pause(agent, goalRef(goal))
-          } catch (error: unknown) {
-            ctx.logger.warn(`goal-round-driver: could not pause cancelled goal for agent "${agent.id}": ${renderThrown(error)}`)
-            disarm(state)
+          if (attempt.cancelled && shouldPauseGoalAfterCancellation(attempt.cancelReason, hasPendingInput)) {
+            // A deliberate user stop with no replacement input remains a real
+            // lifecycle decision. Ordinary steering, verifier failures, hook
+            // aborts, parent cancellation, and stale reservations are
+            // attempt-level events and recover automatically.
+            try {
+              ctx.goals.pause(agent, goalRef(goal))
+            } catch (error: unknown) {
+              ctx.logger.warn(`goal-round-driver: could not pause cancelled goal for agent "${agent.id}": ${renderThrown(error)}`)
+              disarm(state)
+            }
+          } else {
+            state.needsCheckpoint = true
+            checkpoint(
+              state,
+              goal,
+              'retrying',
+              'continue',
+              attempt.cancelled
+                ? `Goal attempt was interrupted (${attempt.cancelReason?.kind ?? 'unknown'}); retrying without requiring human resume.`
+                : 'Goal reservation did not finish; retrying without requiring human resume.',
+            )
           }
         }
         requestDrive(state)
@@ -473,8 +503,13 @@ export function apply(ctx: Context): void {
           if (event.data.reason.kind !== 'aborted') return
           if (state.attempt?.phase === 'claimed' || state.attempt?.phase === 'admitted') {
             state.attempt.cancelled = true
+            state.attempt.cancelReason = event.data.reason.reason
+          } else if (event.data.reason.reason.kind === 'user' && !agent.inbox.hasPending) {
+            // A user stopped work outside a reserved goal attempt. Preserve the
+            // existing conservative behavior by removing process-local
+            // continuation authority; internal aborts are not human intent.
+            disarm(state)
           }
-          else disarm(state)
           return
         default:
           return
