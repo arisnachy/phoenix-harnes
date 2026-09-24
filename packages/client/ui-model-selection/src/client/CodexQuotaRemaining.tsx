@@ -96,10 +96,6 @@ function persistQuota(quota: QuotaState): void {
   window.localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(quota))
 }
 
-function clearPersistedQuota(): void {
-  window.localStorage.removeItem(QUOTA_STORAGE_KEY)
-}
-
 function remaining(limit: RateLimitWindow): number {
   return Math.max(0, Math.min(100, Math.round(100 - limit.usedPercent)))
 }
