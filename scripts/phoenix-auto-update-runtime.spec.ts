@@ -82,6 +82,16 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
 
+  it('pins updater and nested builds to the pnpm version declared by the project', () => {
+    expect(updater).toContain('function projectPnpmSpecifier(root)')
+    expect(updater).toContain('[projectPnpmSpecifier(root), ...args.slice(1)]')
+    expect(managedUpdater).toContain('const pnpmSpecifier = projectPnpmSpecifier(root)')
+    expect(managedUpdater).toContain('command(corepackBin, [pnpmSpecifier, ...args]')
+    expect(build).toContain('function projectPnpmSpecifier(root: string)')
+    expect(build).toContain("'corepack.cmd', pnpmSpecifier")
+    expect(build).toContain("args: [pnpmSpecifier, ...args]")
+  })
+
   it('fails desktop startup closed after a newer stable target is known but cannot be activated', () => {
     expect(managedUpdater).toContain("const STARTUP_CHECK = process.argv.includes('--startup')")
     expect(managedUpdater).toContain('let staleTargetDiscovered = false')
