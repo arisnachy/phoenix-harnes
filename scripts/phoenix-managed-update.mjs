@@ -76,12 +76,22 @@ function node(root, args, options = {}) {
   return command(process.execPath, args, { cwd: root, ...options })
 }
 
+function projectPnpmSpecifier(root) {
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  const configured = typeof manifest.packageManager === 'string' ? manifest.packageManager.trim() : ''
+  if (!/^pnpm@[^\\s]+$/u.test(configured)) {
+    throw new Error(`package.json must pin packageManager to pnpm@<version>; got ${JSON.stringify(manifest.packageManager)}`)
+  }
+  return configured
+}
+
 function pnpm(root, args, options = {}) {
+  const pnpmSpecifier = projectPnpmSpecifier(root)
   const corepackBin = process.platform === 'win32' ? 'corepack.cmd' : 'corepack'
   const probe = command(corepackBin, ['--version'], { cwd: root, allowFailure: true })
-  if (probe.ok) return command(corepackBin, ['pnpm', ...args], { cwd: root, ...options })
+  if (probe.ok) return command(corepackBin, [pnpmSpecifier, ...args], { cwd: root, ...options })
   const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-  return command(npmBin, ['exec', '--yes', 'corepack@0.34.6', 'pnpm', '--', ...args], { cwd: root, ...options })
+  return command(npmBin, ['exec', '--yes', pnpmSpecifier, '--', ...args], { cwd: root, ...options })
 }
 
 function repositoryRoot() {
