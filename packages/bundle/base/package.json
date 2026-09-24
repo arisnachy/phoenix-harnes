@@ -132,7 +132,9 @@
     "@phoenix-ai/dsh-living": "workspace:^",
     "@phoenix-ai/dsh-living-local": "workspace:^",
     "@phoenix-ai/dsh-tool-living": "workspace:^",
-    "@phoenix-ai/dsh-quality-policy": "workspace:^"
+    "@phoenix-ai/dsh-quality-policy": "workspace:^",
+    "@phoenix-ai/dsh-mcp-client": "workspace:^",
+    "@phoenix-ai/dsh-chrome-connector": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",
