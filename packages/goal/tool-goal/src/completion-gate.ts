@@ -59,6 +59,7 @@ type CompletionRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
 
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 32
+const VERIFIER_STAGE_TIMEOUT_MS = 10 * 60_000
 const EXECUTION_TOOLS = ['bash', 'read', 'read_image', 'glob', 'grep'] as const
 const EVIDENCE_STATUSES = ['pending', 'implemented', 'tested', 'verified', 'failed', 'blocked_external'] as const
 const EXPECTED_SOURCES = ['specification', 'reference_oracle', 'standard', 'mathematical_invariant', 'metamorphic_property', 'fixture_or_external_evidence', 'implementation_observed', 'unknown'] as const
@@ -445,19 +446,40 @@ async function runStructured(
   provider: string,
   request: Parameters<CompletionRuntime['start']>[1],
 ): Promise<StructuredRunOutcome> {
+  const label = typeof request.label === 'string' && request.label.length > 0
+    ? request.label
+    : 'completion-verifier'
+  const timeout = AbortSignal.timeout(VERIFIER_STAGE_TIMEOUT_MS)
+  const signal = AbortSignal.any([request.signal, timeout])
   let run
+  let outcome: StructuredRunOutcome = {}
   try {
-    run = await runtime.start(provider, request)
+    run = await runtime.start(provider, { ...request, signal })
     const result = await run.result
-    return result.stopReason === 'completed'
+    outcome = result.stopReason === 'completed'
       ? { structured: result.structured }
-      : { incident: 'tester-stop:' + result.stopReason }
+      : { incident: `${label}:stop-${result.stopReason}` }
   } catch (error) {
-    const kind = error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
-    return { incident: 'tester-error:' + kind }
+    const phase = run === undefined ? 'start' : 'result'
+    const kind = timeout.aborted && !request.signal.aborted
+      ? 'timeout'
+      : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+    outcome = { incident: `${label}:${phase}-${kind}` }
   } finally {
-    if (run !== undefined) await run.dispose()
+    if (run !== undefined) {
+      try {
+        await run.dispose()
+      } catch (error) {
+        const kind = error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+        const disposal = `${label}:dispose-${kind}`
+        outcome = {
+          ...outcome,
+          incident: outcome.incident === undefined ? disposal : `${outcome.incident};${disposal}`,
+        }
+      }
+    }
   }
+  return outcome
 }
 
 /**
@@ -558,7 +580,19 @@ export async function runAdversarialCompletionGate(input: {
     toolFilter: { allow: [...EXECUTION_TOOLS] },
   })
   const executed = readExecution(executionRun.structured, contract)
-  if (executed !== undefined) return executed
+  if (executed !== undefined) {
+    const incidents = [designRun.incident, executionRun.incident]
+      .filter((incident): incident is string => incident !== undefined)
+    return incidents.length === 0
+      ? executed
+      : {
+        ...executed,
+        verificationIncidents: [
+          ...(executed.verificationIncidents ?? []),
+          ...incidents,
+        ].slice(0, MAX_ITEMS),
+      }
+  }
   const incident = executionRun.incident === undefined ? '' : ' Incident: ' + executionRun.incident + '.'
   return unavailable('Independent adversarial execution did not return valid clean-room evidence.' + incident)
 }
