@@ -404,6 +404,24 @@ describe('same-session goal driving', () => {
     expect(test.adapter.requests).toHaveLength(1)
   })
 
+  it('retries an admitted round after an internal hook cancellation without pausing the mission', async () => {
+    const test = await harness(['hang', textResponse('recovered after verifier interruption')])
+    const continued = stopAfterContinuation(test.ctx, test.agent)
+    test.ctx.goals.create(test.agent, { objective: 'recover verifier interruption', maxGoalRounds: 2 })
+    await waitForRequests(test.adapter, 1)
+
+    test.agent.cancel({ kind: 'hook', reason: 'verifier transport reset' })
+
+    await waitForRequests(test.adapter, 2)
+    const goal = await continued
+
+    expect(test.adapter.requests).toHaveLength(2)
+    expect(requestText(test.adapter.requests[1]!)).toContain('Round: 2/2')
+    expect(goal).toMatchObject({ phase: 'active', revision: 2, roundsStarted: 0 })
+    expect(test.agent.session.events.some(event =>
+      event.type === 'goal/change' && event.data.operation === 'pause')).toBe(false)
+  })
+
   it('lets already-queued human work finish before reserving the next round', async () => {
     const test = await harness([textResponse('human answer'), textResponse('goal answer')])
     const continued = stopAfterContinuation(test.ctx, test.agent)
